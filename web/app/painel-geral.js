@@ -50,7 +50,7 @@ function vDashboard(){
   const podes=cartaoPodes();
   if(souSoColaborador()&&!scope().length)return podes+proximasVisitasColab();
   const nColab=scope().filter(p=>!souDono(p.id)).length;
-  const colabHint=nColab?`<div class="hint u-m-n4px-0-12px">Inclui ${nColab} ${nColab===1?'imóvel':'imóveis'} onde és colaborador (valores por inteiro).</div>`:'';
+  const colabHint=nColab?`<div class="hint u-m-n4px-0-12px">Inclui ${nColab} ${nColab===1?'imóvel':'imóveis'} onde colaboras (valores por inteiro).</div>`:'';
   /* com imóveis e sem movimentos, quando a jornada não é a vista (dispensada,
      ou sem passos por fazer): um vazio que diz porque não há números e leva
      aos Movimentos, mais o portefólio — e não quatro indicadores a 0 € e dois

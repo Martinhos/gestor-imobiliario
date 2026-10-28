@@ -783,7 +783,7 @@ function desfechoDoGrupo(r, prev) {
   var casas = nomesDeCasas(r.houses || prev.houses || []);
   openModal((r.jaEstava ? 'Já estás' : 'Agora estás') + ' no grupo «' + nome + '»',
     '<div class="form"><div class="hint u-fs-14px">Grupo de <b>' + esc(dono) + '</b>. ' +
-    (casas ? 'És comproprietário de <b>' + esc(casas) + '</b>: vês e editas contratos, movimentos e pessoas.'
+    (casas ? 'Tens <b>' + esc(casas) + '</b> em compropriedade: vês e editas contratos, movimentos e pessoas.'
       : 'O grupo ainda não tem imóveis — os que os membros adicionarem passam a ser partilhados contigo.') + '</div>' +
     '<div class="hint">Podes adicionar ao grupo imóveis teus e sair quando quiseres, em Casas → Grupos.</div></div>',
     '<button class="btn primary" data-toca="ecra" data-click="closeAllModals();go(\'properties\')">Ver os imóveis</button>');

@@ -579,7 +579,7 @@ CW.pedidoCancelar = function (id) {
 /* ---------------- aterragem: aceitar um convite, pedir uma partilha ---------------- */
 
 /* Aceita um convite (POST /api/convite/:token/aceitar) — só aqui se gasta a
-   ligação. Com sucesso, sincroniza e mostra «Agora és colaborador de…» com
+   ligação. Com sucesso, sincroniza e mostra «Agora colaboras com…» com
    «Ver os imóveis». Um erro definitivo (ligação usada, expirada, minha)
    esquece o token guardado, para não voltar a perguntar.
    Recebe: token — o token da ligação de convite (64 hex).
@@ -600,11 +600,11 @@ CW.aceitarConvite = function (token) {
       var perms = permsFechadas(prev.perms || []);
       var pode = perms.map(rotuloDe).map(function (t) { return t.charAt(0).toLowerCase() + t.slice(1); });
       var saltadas = (r.saltadas || []).map(function (s) { return s.name || s; });
-      openModal('Agora és colaborador de ' + (r.ownerName || prev.ownerName || ''),
+      openModal('Agora colaboras com ' + (r.ownerName || prev.ownerName || ''),
         '<div class="form"><div class="hint u-fs-14px"><b>' + esc(r.roleName || prev.roleName || 'Colaborador') + '</b> em ' +
         esc(nomesDeCasas(r.houses || prev.houses || [])) + '.</div>' +
         (pode.length ? '<div class="hint">Podes: ' + esc(pode.join(', ')) + '.</div>' : '') +
-        (saltadas.length ? '<div class="hint">Já eras comproprietário de ' + esc(saltadas.join(', ')) + ' — aí fica tudo como estava.</div>' : '') +
+        (saltadas.length ? '<div class="hint">Já tinhas ' + esc(saltadas.join(', ')) + ' em compropriedade — aí fica tudo como estava.</div>' : '') +
         '<div class="hint">Os cartões desses imóveis levam o selo «de ' + esc(r.ownerName || prev.ownerName || '') + ' · ' + esc(r.roleName || prev.roleName || '') +
         '». Podes sair quando quiseres em Pessoas → Colaboradores.</div></div>',
         '<button class="btn primary" data-toca="ecra" data-click="closeAllModals();go(\'properties\')">Ver os imóveis</button>');

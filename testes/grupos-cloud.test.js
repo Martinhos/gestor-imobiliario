@@ -282,7 +282,7 @@ describe('a porta ?grupo=<token>', () => {
     assert.match(j.b, /Pediste para entrar no grupo <b>«Casas do Porto»<\/b>\. <b>Rui<\/b> tem de aceitar: quando aceitar, os imóveis do grupo aparecem-te e passas a comproprietário deles\./);
     assert.match(j.b, /Vês o pedido, e podes cancelá-lo, em Casas → Grupos\./);
     assert.match(j.f, /^<button class="btn primary" data-toca="camada" data-click="closeModal\(\)">Fechar<\/button>$/);
-    assert.ok(!/Agora estás no grupo|És comproprietário|Ver os imóveis/.test(j.t + j.b + j.f), 'ainda não está no grupo');
+    assert.ok(!/Agora estás no grupo|em compropriedade:|Ver os imóveis/.test(j.t + j.b + j.f), 'ainda não está no grupo');
     assert.ok(!/on[a-z]+=|style=/.test(j.b + j.f), 'nada em linha');
     assert.deepEqual(esp.toasts, []);
   });
@@ -306,7 +306,7 @@ describe('a porta ?grupo=<token>', () => {
     assert.equal(app.modalStack.length, 1, 'o modal da chegada fechou');
     const j = esp.abertas[esp.abertas.length - 1];
     assert.equal(j.t, 'Já estás no grupo «Casas do Porto»');
-    assert.match(j.b, /Grupo de <b>Rui<\/b>\. És comproprietário de <b>Do Rui, Minha<\/b>: vês e editas contratos, movimentos e pessoas\./);
+    assert.match(j.b, /Grupo de <b>Rui<\/b>\. Tens <b>Do Rui, Minha<\/b> em compropriedade: vês e editas contratos, movimentos e pessoas\./);
     assert.match(j.b, /sair quando quiseres, em Casas → Grupos\./);
     assert.match(j.f, /data-toca="ecra" data-click="closeAllModals\(\);go\('properties'\)">Ver os imóveis</);
     assert.ok(!j.b.includes('tem de aceitar'), 'sem pedido nenhum');

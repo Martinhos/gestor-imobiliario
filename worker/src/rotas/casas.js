@@ -92,7 +92,7 @@ async function sairComoComproprietario(env, me, houseId, ownerId) {
   catch (e) { if (casaMudou(e)) return err(409, FRASE_CASA_MUDOU); throw e; }
   await auditar(env, quemSou(me), 'casa.sair', houseId,
     ownerId + (r.porGrupo ? ' · grupo' : '') + ' · ' + (r.quotas ? JSON.stringify(r.quotas) : 'partes iguais'));
-  // um pedido para passar o controlo desta casa que só esperava por mim passa já
+  // um pedido para transferir o controlo desta casa que só esperava por mim passa já
   await passarSeTodosAceitaram(env, [houseId]);
   return json({ ok: true, como: 'comproprietario', ownerShares: r.quotas });
 }
@@ -123,7 +123,7 @@ async function sairDaCasaUmaVez(env, me, houseId, ownerId) {
   const t = now();
   const stmts = [
     // só as partilhas que ME dão a casa (owner_id <> eu): uma que eu dou a
-    // outro nesta casa — herdada de quando a controlava e passei o controlo
+    // outro nesta casa — herdada de quando a controlava e transferi o controlo
     // (partilhasDoNovoCriador) — continua a dar-lha
     env.DB.prepare(
       `DELETE FROM shares WHERE house_id = ?1 AND owner_id <> ?2
@@ -346,8 +346,8 @@ export async function rotasCasas(c) {
   }
 }
 
-/* ===================== Passar o controlo de uma casa =====================
-   O criador de uma ou várias casas pede para passar o controlo delas a um
+/* ===================== Transferir o controlo de uma casa =====================
+   O criador de uma ou várias casas pede para transferir o controlo delas a um
    comproprietário (migração 0021, house_transfers: uma linha por casa, o
    lote junta as do mesmo pedido). A casa continua a ser de todos, e por isso
    todos os comproprietários dela aceitam (migração 0022, approvals): os
@@ -369,7 +369,7 @@ const FRASE_NAO_COMPROPRIETARIO = 'Só podes passar o imóvel a um comproprietá
 const FRASE_NAO_PENDENTE = 'Esta transferência já não está pendente.';
 const FRASE_CORPO_TRANSF = 'Corpo inválido — envia { houseIds: [...], toUserId }.';
 const FRASE_JA_NAO_E_DONO = 'Quem pediu já não é o dono deste imóvel.';
-const FRASE_JA_NAO_COMPROPRIETARIO = 'Já não és comproprietário deste imóvel.';
+const FRASE_JA_NAO_COMPROPRIETARIO = 'Já não és parte da compropriedade deste imóvel.';
 const FRASE_QUEM_RECEBE_SAIU = 'Quem ia receber já não é comproprietário deste imóvel.';
 const FRASE_SEM_CAMINHO = 'Não foi possível manter quem pediu como comproprietário deste imóvel.';
 const FRASE_FALHOU = 'Não foi possível aceitar este imóvel. Tenta outra vez.';
@@ -487,7 +487,7 @@ async function progressoDaCasa(env, row, parts) {
   };
 }
 
-/* Pedir para passar o controlo (POST /api/transfers): as casas têm de
+/* Pedir para transferir o controlo (POST /api/transfers): as casas têm de
    existir e ser minhas, quem recebe tem de ser comproprietário de todas
    (acesso.js:participantsOf, e não eu), e nenhuma pode ter outro pedido
    pendente. Uma linha por casa num lote, e um aviso 'transf.pedido' por casa

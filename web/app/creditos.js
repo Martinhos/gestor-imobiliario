@@ -387,7 +387,7 @@ function newMort(){
   if(!db.properties.length)return toast('Cria primeiro um imóvel.');
   const casas=casasComo('house.edit');
   if(!casas.length)return toast(fraseSemPerm('house.edit'));
-  pickModal('Hipoteca de que imóvel?',casas.map(p=>({v:p.id,label:p.name,sub:loansOf(p).length?loansOf(p).length+' hipoteca(s)':'sem hipotecas',icon:'building'})),
+  pickModal('Hipoteca de que imóvel?',casas.map(p=>({v:p.id,label:p.name,sub:loansOf(p).length?loansOf(p).length+(loansOf(p).length===1?' hipoteca':' hipotecas'):'sem hipotecas',icon:'building'})),
     o=>{closeAllModals();
       pForm=normProp(JSON.parse(JSON.stringify(prop(o.v))));
       const l=normLoan({name:pForm.loans.length?'':'Aquisição'});

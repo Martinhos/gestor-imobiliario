@@ -737,6 +737,19 @@ describe('o kit das maquetes', () => {
     assert.ok(!/João Silva/.test(JSON.stringify(ex)), 'nada de nomes de fachada');
   });
 
+  test('as datas dos contratos do APR_EXEMPLO contam-se a partir de hoje: começaram antes e acabam depois, e não envelhecem', () => {
+    const iso = (d) => d.split('/').reverse().join('-');
+    const hoje = app.today();
+    for (const c of app.APR_EXEMPLO.contratos) {
+      assert.match(c.desde, /^01\/\d{2}\/\d{4}$/, c.id + ': começa no dia 1');
+      assert.ok(iso(c.desde) < hoje, c.id + ': já começou');
+      if (c.ate) assert.ok(iso(c.ate) > hoje, c.id + ': ainda está em vigor');
+    }
+    assert.equal(app.aprMes(0), '01/' + hoje.slice(5, 7) + '/' + hoje.slice(0, 4));
+    assert.equal(app.aprMes(-12).slice(3), hoje.slice(5, 7) + '/' + (Number(hoje.slice(0, 4)) - 1));
+    assert.ok(app.aprMes(1, true).slice(0, 2) > '27', 'o último dia de um mês');
+  });
+
   test('os textos das boas-vindas seguem a casa: sem «pôr»/«tirar», sem «(s)», sem «Bem-vindo», sem ponto de exclamação e sem emojis', () => {
     montar();
     const textos = app.aprImagensDe('boas-vindas').map((x) => x.titulo + ' ' + x.texto + ' ' + x.html.replace(/<[^>]*>/g, ' ')).join(' ');

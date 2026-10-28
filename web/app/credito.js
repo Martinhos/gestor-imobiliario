@@ -123,14 +123,20 @@ function loanCalc(l){
    Devolve: euros (número). */
 const loanCost=l=>{const a=amort(l);return a.totInt+a.totStamp};
 // A taxa em palavras, para as listas: "fixa X%", a Euribor com o spread e a
-// soma, ou as duas fases da mista.
+// soma, ou as duas fases da mista. A soma arredonda às milésimas (taxa3),
+// como no credDetalhe: 2,15 + 0,95 dá 3,1 e não 3,0999999999999996.
 // Recebe: l — o crédito.
 // Devolve: string com a taxa por extenso, conforme o tipo.
 function rateLabel(l){
   if(l.type==='fixa')return `fixa ${dec(l.rate)}%`;
-  if(l.type==='variavel')return `Euribor ${l.index} ${dec(l.euribor)}% + ${dec(l.spread)}% = ${dec(rateAt(l,0))}%`;
-  return `${dec(l.rate)}% durante ${dec(l.fixedYears)} anos, depois ${dec((Number(l.euribor)||0)+(Number(l.spread)||0))}%`;
+  if(l.type==='variavel')return `Euribor ${l.index} ${dec(l.euribor)}% + ${dec(l.spread)}% = ${dec(taxa3(rateAt(l,0)))}%`;
+  return `${dec(l.rate)}% durante ${dec(l.fixedYears)} anos, depois ${dec(taxa3((Number(l.euribor)||0)+(Number(l.spread)||0)))}%`;
 }
+// Uma taxa somada, arredondada às milésimas de ponto (a vírgula flutuante
+// deixa restos como 3,0999999999999996).
+// Recebe: v — a taxa em percentagem (número).
+// Devolve: número com três casas no máximo.
+function taxa3(v){return Math.round((Number(v)||0)*1000)/1000}
 
 /* ---- o capital em dívida: derivado, e não guardado ----
    O capital que se escreve no formulário é o da DATA DE INÍCIO, e cada

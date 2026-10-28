@@ -1102,7 +1102,7 @@ function aprADefinicoesApp() {
   return aprCena(aprColuna([
     aprCartao('<span class="apr-m-cartao-cab"><b>Tema</b><span class="apr-m-sub">Vale só neste aparelho</span></span>' + aprSegmentado(['Automático', 'Claro', 'Escuro'], nomeTema)),
     aprCartao(aprLinha({ icone: 'down', titulo: 'Importar e cópias', sub: 'Cópia de segurança, CSV, Splitwise', seta: true }) +
-      aprLinha({ icone: 'ajuda', titulo: 'Ajuda e sugestões', sub: 'Como se faz, perguntas e pedidos', seta: true, alvo: true }) +
+      aprLinha({ icone: 'ajuda', titulo: 'Ajuda e sugestões', sub: 'Como se faz, apresentações e pedidos', seta: true, alvo: true }) +
       aprLinha({ icone: 'info', titulo: 'Novidades', sub: 'O que mudou' + versao, seta: true }), { flutua: true }),
   ]), { tom: 't3', arranjo: 'coluna' });
 }

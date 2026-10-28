@@ -48,18 +48,27 @@ var AVISOS = [
           'No iPhone, para o ver no ecrã principal, remove a app de lá e adiciona-a de novo. Na app Android, descarrega o APK nas Definições e instala por cima.',
         ],
       },
+      {
+        titulo: 'Pequenas correções',
+        afeta: ['app', 'anexos', 'creditos', 'colaboradores'],
+        itens: [
+          'Na janela de uma foto, o botão que a leva para o aparelho chama-se «Descarregar».',
+          'A taxa de uma hipoteca variável ou mista mostra a soma arredondada: «2,15% + 0,95% = 3,1%», sem casas a mais.',
+          'As frases que falam contigo já não presumem o género: «Colaboras com Maria em 3 imóveis», «Tens dispensa dos recibos de renda eletrónicos».',
+        ],
+      },
     ],
   },
   {
     v: 42,
     data: '2026-10-25',
-    titulo: 'Passar o controlo, e as fotos a chegar',
+    titulo: 'Transferir o controlo, e as fotos a chegar',
     seccoes: [
       {
-        titulo: 'Passar o controlo de um imóvel',
+        titulo: 'Transferir o controlo de um imóvel',
         afeta: ['imoveis', 'partilha'],
         itens: [
-          'Num imóvel que criaste e que tem comproprietários, podes passar o controlo na app a um deles: no ⋯ da ficha, ou selecionando vários nas Casas. Ele passa a gerir as partilhas, os colaboradores e o apagar; tu continuas comproprietário, e nada muda nas quotas, nos grupos nem nos outros comproprietários.',
+          'Num imóvel que criaste e que tem comproprietários, podes transferir o controlo na app a um deles: no ⋯ da ficha, ou selecionando vários nas Casas. Quem recebe passa a gerir as partilhas, os colaboradores e o apagar; tu continuas comproprietário, e nada muda nas quotas, nos grupos nem nos outros comproprietários.',
           'Todos os comproprietários têm de aceitar, no sino: o imóvel só passa quando todos aceitarem, e uma recusa faz cair o pedido. Até lá nada muda e podes cancelar. Os teus colaboradores nesse imóvel ficam com o mesmo cargo e passam a ser geridos por quem recebe.',
           'Quem ainda não estiver ligado a quem recebe fica ligado a ele ao aceitar.',
         ],
@@ -270,7 +279,7 @@ var AVISOS = [
         titulo: 'A Declaração sabe a tua situação',
         afeta: ['contratos', 'movimentos'],
         itens: [
-          'Diz no cartão «A tua situação» se entregas em conjunto (e quem é o titular A ou B) e se estás dispensado dos recibos: cada linha mostra o titular, e as Obrigações ganham o Modelo 44.',
+          'Diz no cartão «A tua situação» se entregas em conjunto (e quem é o titular A ou B) e se tens dispensa dos recibos: cada linha mostra o titular, e as Obrigações ganham o Modelo 44.',
           'Os quadros 4.2B, 4.2C, 6D e 9 (AIMI) aparecem quando se aplicam, e o 4.2A diz contrato a contrato se a comunicação de fevereiro foi feita.',
           'Escreve os outros rendimentos do agregado e a página simula se compensa englobar as rendas.',
         ],
@@ -778,10 +787,10 @@ var AVISOS = [
         ],
       },
       {
-        titulo: 'Se és colaborador',
+        titulo: 'Se colaboras',
         afeta: ['colaboradores'],
         itens: [
-          'Ao entrar, a app diz de quem és colaborador, em que imóveis e com que cargo. Os cartões desses imóveis levam o selo «de Maria · Contabilista», e a vista geral avisa que os inclui, por inteiro.',
+          'Ao entrar, a app diz com quem colaboras, em que imóveis e com que cargo. Os cartões desses imóveis levam o selo «de Maria · Contabilista», e a vista geral avisa que os inclui, por inteiro.',
         ],
       },
     ],

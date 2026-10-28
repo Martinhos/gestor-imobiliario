@@ -320,7 +320,7 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     // a frase de quem liga o serviço vai para onde se vem procurar o id: por baixo dos Proprietários
     const donos = app.vOwners();
     assert.match(donos, /O serviço Colaboradores está desligado nesta conta\. A partilha entre contas fica disponível quando o suporte o ligar\./);
-    for (const t of ['Ligar a outro utilizador', 'Utilizadores ligados', 'Ainda não estás ligado', 'CW.ligacaoRodar()', 'CW.ligacaoCriar()', 'Pedidos de partilha', 'CW.pedidoAceitar', 'CW.copyId()']) {
+    for (const t of ['Ligar a outro utilizador', 'Utilizadores ligados', 'Ainda não tens ligações', 'CW.ligacaoRodar()', 'CW.ligacaoCriar()', 'Pedidos de partilha', 'CW.pedidoAceitar', 'CW.copyId()']) {
       assert.ok(!conta.includes(t), 'a Segurança sem ' + t);
       assert.ok(!donos.includes(t), 'os Proprietários sem ' + t);
     }

@@ -5,7 +5,7 @@ import { connectionForUser, limparSaida } from '../lib/acesso.js';
 import { servicosDesligados, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
 import { passarSeTodosAceitaram } from './casas.js';
 
-/* Os pedidos pendentes para passar o controlo de uma destas casas depois de
+/* Os pedidos pendentes para transferir o controlo de uma destas casas depois de
    alguém deixar de ser comproprietário delas (cortar uma ligação leva as
    partilhas dela; deixar de partilhar uma casa numa ligação também): os que
    deixaram de valer porque quem recebe já não é comproprietário ficam
@@ -21,7 +21,7 @@ async function pedidosSemComproprietario(env, casas) {
 
 /* Rotas das conexões: convidar outro utilizador pelo id curto, aceitar o
    convite, cortar a ligação (leva as partilhas com ela; os pedidos
-   pendentes para passar o controlo dessas casas acertam-se:
+   pendentes para transferir o controlo dessas casas acertam-se:
    pedidosSemComproprietario) e escolher que casas minhas ficam
    partilhadas nessa conexão (as que deixam de estar acertam-se da mesma
    maneira). Todas escrevem: com os
@@ -82,7 +82,7 @@ export async function rotasConexoes(c) {
   if (seg[1] === 'connections' && seg.length === 3 && method === 'DELETE') {
     const conn = await connectionForUser(env, seg[2], me.id);
     if (!conn) return err(404, 'Conexão não encontrada.');
-    // um pedido para passar o controlo de uma casa cai se quem recebe deixar
+    // um pedido para transferir o controlo de uma casa cai se quem recebe deixar
     // de ser comproprietário dela, e passa se só faltava o sim de quem saiu
     // (rotas/casas.js:rotasTransferencias): as casas com partilha nesta
     // ligação leem-se antes de ela sair
@@ -108,7 +108,7 @@ export async function rotasConexoes(c) {
     // só posso partilhar casas minhas: uma consulta por cada 50, não uma por
     // casa. A primeira traz também as casas das minhas partilhas nesta
     // ligação que já são de outra pessoa (herdadas de quando as controlava,
-    // antes de passar o controlo — casas.js:aceitarCasaUmaVez): essas ficam,
+    // antes de transferir o controlo — casas.js:aceitarCasaUmaVez): essas ficam,
     // continuam a dar a casa ao outro, e eu não as vejo na lista, que é só
     // das minhas casas
     const minhas = new Set(), herdadas = new Set();

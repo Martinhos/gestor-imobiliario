@@ -357,14 +357,14 @@ describe('as ações da nuvem falam com a API do contrato', () => {
     assert.match(esp.toasts[0], /^Partilha aceite: passas a comproprietário de T2 Porto, de Ana\./);
   });
 
-  test('aceitar convite: POST /api/convite/:token/aceitar e o modal «Agora és colaborador de…»', async () => {
+  test('aceitar convite: POST /api/convite/:token/aceitar e o modal «Agora colaboras com…»', async () => {
     const tok = 'c'.repeat(64);
     app.CW._convitePrev = { ownerName: 'Rui', roleName: 'Contabilista', perms: ['tx.add'], houses: [{ name: 'Do Rui' }] };
     esp.resposta = () => ({ ownerName: 'Rui', roleName: 'Contabilista', houses: [{ id: 'H2', name: 'Do Rui' }], saltadas: [] });
     app.CW.aceitarConvite(tok);
     await espera();
     assert.equal(esp.api[0].method + ' ' + esp.api[0].path, 'POST /api/convite/' + tok + '/aceitar');
-    assert.equal(esp.modais[0].titulo, 'Agora és colaborador de Rui');
+    assert.equal(esp.modais[0].titulo, 'Agora colaboras com Rui');
     assert.match(esp.modais[0].corpo, /Contabilista/);
     assert.match(esp.modais[0].corpo, /ver movimentos/);
     assert.match(esp.modais[0].rodape, /Ver os imóveis/);
@@ -448,7 +448,7 @@ describe('a página Segurança', () => {
     }
     const donos = app.vOwners();
     for (const t of ['A minha ligação de partilha', 'Pedidos de partilha', 'Ana quer partilhar T2 Porto contigo',
-      'Ligar a outro utilizador', 'Ainda não estás ligado a ninguém.', 'Pedidos chegados por aqui', 'CW.ligacaoRodar()', 'O teu id', 'CW.copyId()']) {
+      'Ligar a outro utilizador', 'Ainda não tens ligações.', 'Pedidos chegados por aqui', 'CW.ligacaoRodar()', 'O teu id', 'CW.copyId()']) {
       assert.ok(donos.includes(t), 'os Proprietários têm: ' + t);
       assert.ok(!h.includes(t), 'a Segurança não tem: ' + t);
     }

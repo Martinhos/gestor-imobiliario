@@ -173,7 +173,7 @@ function openFileMeta(meta,doFormulario){
       const url=URL.createObjectURL(blob);
       const L=openModal(meta.name||'Imagem',`<div class="form"><img src="${url}" alt="" class="u-w-100pc u-br-12px">
         <div class="hint">${kb(meta.size)}${meta.added?' · '+dPT(meta.added):''}</div></div>`,
-        `<button class="btn" data-click="closeModal()">Voltar</button><button class="btn primary" data-click="downloadMeta('${jsq(meta.id)}')">Guardar</button>`);
+        `<button class="btn" data-click="closeModal()">Voltar</button><button class="btn primary" data-click="downloadMeta('${jsq(meta.id)}')">Descarregar</button>`);
       if(L)L.aoFechar=()=>{try{URL.revokeObjectURL(url)}catch(e){}};
     }else downloadMeta(meta.id);
   }).catch(()=>toast('Não foi possível abrir o anexo.'));
@@ -258,7 +258,7 @@ function fotoCarrossel(fotos,fid,blob){
       <button type="button" class="fc-seta fc-seta-ant" aria-label="Foto anterior" data-click="fotoPassar(-1)">${ic('chev',20)}</button>
       <button type="button" class="fc-seta fc-seta-seg" aria-label="Foto seguinte" data-click="fotoPassar(1)">${ic('chevR',20)}</button></div>
     <div class="hint fc-info"><b class="fc-pos" aria-live="polite"></b><span class="fc-meta"></span></div></div>`,
-    `<button class="btn" data-click="closeModal()">Voltar</button><button class="btn primary" data-click="fotoGuardar()">Guardar</button>`);
+    `<button class="btn" data-click="closeModal()">Voltar</button><button class="btn primary" data-click="fotoDescarregar()">Descarregar</button>`);
   if(!L)return;
   const c={lista,i,L,urls:{},pedidos:{},anim:null,fimAnim:null,animD:0,animW:0,fechado:false};
   if(blob)c.urls[lista[i].id]=URL.createObjectURL(blob);else fotoUrl(c,lista[i]);
@@ -447,9 +447,9 @@ function fotoPassar(d){
   fotoCorrer(c,d>0?1:-1,fotoParar(c),false);
 }
 
-/* O «Guardar» da janela: descarrega a foto que está à vista.
+/* O «Descarregar» da janela: descarrega a foto que está à vista.
    Devolve: nada. */
-function fotoGuardar(){
+function fotoDescarregar(){
   const c=fotoAtual();if(c)downloadMeta(c.lista[c.i].id);
 }
 

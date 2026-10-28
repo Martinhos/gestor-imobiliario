@@ -175,7 +175,7 @@ describe('a ficha do imóvel', () => {
     casas(app, [['house.edit', 'contract.add'], GESTOR, ['tx.view']]);
     const f1 = app.propFicha('P1');
     assert.doesNotMatch(f1, /só de leitura/);
-    assert.match(f1, /És colaborador como <b>Cargo P1<\/b>\./);
+    assert.match(f1, /Colaboras como <b>Cargo P1<\/b>\./);
     assert.match(f1, /Neste imóvel podes: adicionar e confirmar planeados, adicionar contratos e editar a ficha do imóvel\./);
     assert.match(f1, /data-click="ctModal\(null,'P1'\)"[^>]*>.*Novo contrato/);
     assert.match(f1, /data-click="closeAllModals\(\);go\('recurring'\)"/, 'mudar de ecrã fecha a ficha');
@@ -196,7 +196,7 @@ describe('a ficha do imóvel', () => {
   test('a ficha do dono fica como era', () => {
     casas(app, [null, GESTOR, GESTOR]);
     const f = app.propFicha('P1');
-    assert.doesNotMatch(f, /És colaborador|Neste imóvel podes|colab-acoes/);
+    assert.doesNotMatch(f, /Colaboras|Neste imóvel podes|colab-acoes/);
     assert.ok(f.startsWith('<div class="imv-ficha">'), 'a ficha do dono começa pela capa, sem nota de colaborador');
   });
 });
@@ -206,7 +206,7 @@ describe('a vista geral', () => {
     casas(app, [GESTOR, GESTOR, GESTOR]);
     const html = app.vDashboard();
     assert.match(html, /O que podes fazer/);
-    assert.match(html, /És colaborador de Rui em 3 imóveis como Cargo P1, Cargo P2 e Cargo P3\./);
+    assert.match(html, /Colaboras com Rui em 3 imóveis como Cargo P1, Cargo P2 e Cargo P3\./);
     assert.match(html, /class="btn primary" data-toca="camada" data-click="visitModal\(\)">.*Marcar visita/);
     assert.match(html, /personModal\('tenant'\)/);
     assert.match(html, /Ver os imóveis/);

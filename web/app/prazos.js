@@ -229,7 +229,7 @@ function prazosDe(hoje){
   if(dispensa&&houveRendasEmY){
     const fev=pzIso(new Date(ano,2,0)),alvo=fev>=PZ_MODELO44.fevereiroDesde?fev:ano+'-01-31';
     poe('modelo44',String(Y),alvo,'Modelo 44 — as rendas de '+Y,
-      'Quem está dispensado do recibo de renda eletrónico entrega, até '+dPT(alvo)+', a declaração anual das rendas (Modelo 44) no Portal das Finanças: as rendas recebidas em '+Y+', discriminadas. É ela que faz as vezes dos recibos que não se emitiram.',
+      'Quem tem dispensa do recibo de renda eletrónico entrega, até '+dPT(alvo)+', a declaração anual das rendas (Modelo 44) no Portal das Finanças: as rendas recebidas em '+Y+', discriminadas. É ela que faz as vezes dos recibos que não se emitiram.',
       servicoLigado('fisco')?"go('fisco')":'',true);
   }
   if(houveRendasEmY){

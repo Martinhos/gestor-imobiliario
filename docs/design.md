@@ -1556,14 +1556,14 @@ lê primeiro): a faixa das despesas sem imóvel guardou a do cartão de antes
 («card:Despesas sem imóvel»), e uma ordem guardada não a perde.
 
 
-Os pedidos para passar o controlo chegam a todos os comproprietários das
+Os pedidos para transferir o controlo chegam a todos os comproprietários das
 casas (CW.state.transfers.incoming, notificacoes.js:notifTransfRecebidas),
 não só a quem recebe. Enquanto me falta responder (porResponder,
 notificacoes.js:notifTransfPorResponder) são pedidos por responder: contam no
 crachá, têm linha no telemóvel e entram no cartão dos pedidos
 (cloud/partilha.js:pedidoDeTransferenciaHtml) com «Ver» e «Recusar» — o
-Aceitar não está na linha: passar o controlo lê-se antes. A linha diz quem
-pede, de quê e a quem: «Alice quer passar o controlo de T2 Benfica a Bruno»
+Aceitar não está na linha: transferir o controlo lê-se antes. A linha diz quem
+pede, de quê e a quem: «Alice quer transferir o controlo de T2 Benfica a Bruno»
 ou «… a ti» (notificacoes.js:notifTransfTitulo), e por baixo quem passa a
 gerir se todos aceitarem e, com um imóvel, quem já aceitou e quem falta
 (notificacoes.js:notifTransfSub). O «Ver» (notificacoes.js:notifTransfVer)
@@ -1600,12 +1600,12 @@ crachá. Sem o campo no estado (um servidor de antes), não há nenhum; um
 pedido sem `to`, `aceitaram`, `faltam` nem `porResponder` lê-se como dantes
 (é para mim, e só eu aceito).
 
-Pelo mesmo caminho chegam os avisos dos pedidos para passar o controlo,
+Pelo mesmo caminho chegam os avisos dos pedidos para transferir o controlo,
 cada um com a sua frase (notificacoes.js:notifFraseDoAviso): «Todos
 aceitaram: Bruno passou a gerir T2 Benfica.» (a quem pediu, quando o último
 aceita; o ator é quem recebeu o controlo), «Carlos recusou o pedido para
-passar o controlo de …» (a quem pediu e aos outros comproprietários dessa
-casa: o pedido caiu nela), «Alice cancelou o pedido para passar o controlo
+transferir o controlo de …» (a quem pediu e aos outros comproprietários dessa
+casa: o pedido caiu nela), «Alice cancelou o pedido para transferir o controlo
 de …» (aos comproprietários, recebam ou não), «Bruno passou a gerir … na
 app.» (aos outros comproprietários, 'casa.novo_dono') e «Bruno passou a
 gerir …: continuas com o mesmo cargo.» (aos colaboradores de quem o geria,
@@ -2239,8 +2239,9 @@ lado passa à seguinte ou à anterior das fotos desse imóvel, com volta:
 depois da última vem a primeira, e antes da primeira a última
 (web/app/anexos.js:fotoCarrossel, web/app/anexos.js:fotoVolta). O «3 de 8»
 fica por baixo da foto, antes do tamanho e da data, e o título da janela é o
-nome da foto de agora («Foto 3» sem nome); o «Guardar» guarda a que está à
-vista (web/app/anexos.js:fotoGuardar). Entram as fotos do imóvel a que a foto
+nome da foto de agora («Foto 3» sem nome); o «Descarregar» descarrega para o
+aparelho a que está à vista (web/app/anexos.js:fotoDescarregar) — não se diz
+«Guardar», que na app é gravar um formulário. Entram as fotos do imóvel a que a foto
 pertence, só as imagens, pela ordem dele — a primeira é a capa
 (web/app/anexos.js:fotosDoImovel); vinda do formulário do imóvel (as
 miniaturas do componentes.js:fileBlock, que chamam `openMeta(id,true)`), a
@@ -4432,8 +4433,8 @@ As páginas que a nuvem pendura na raiz vestem o mesmo:
   dar o meu e escrever o do outro no mesmo cartão
   (partilha.js:comproprietariosCorpo); os pedidos e a ligação de partilha. As
   ligações ativas não se repetem lá, que já estão na lista de cima
-  (pessoas.js:donosComPartilha), e o vazio só diz «Ainda não estás ligado a
-  ninguém.» quando não há ligação nenhuma. Com o serviço Colaboradores
+  (pessoas.js:donosComPartilha), e o vazio só diz «Ainda não tens
+  ligações.» quando não há ligação nenhuma. Com o serviço Colaboradores
   desligado nesta conta, no lugar da secção fica a frase «O serviço
   Colaboradores está desligado nesta conta. A partilha entre contas fica
   disponível quando o suporte o ligar.» O «Copiar» diz «Id copiado. Dá-o ao
@@ -4722,7 +4723,7 @@ O bloco «O que aceitar uma casa faz» (:4600-4656) fica quase igual: muda o
 título, entra a ligação nova e o autor dos avisos (abaixo, em «O que passar
 uma casa faz»). «O que cada um gere a seguir» (:4658-4672) fica como está.
 
-**Passar o controlo de um imóvel.** A casa é de todos os comproprietários; o
+**Transferir o controlo de um imóvel.** A casa é de todos os comproprietários; o
 criador (`houses.owner_id`) é só quem a controla na app — apaga-a, partilha-a
 nas ligações dele, põe-na nos grupos, gere os colaboradores dela. O criador
 de uma ou várias casas pede para passar esse controlo a quem já é
@@ -4781,7 +4782,7 @@ volta a faltar, e aceitar outra vez liga-os de novo.
   (`UPDATE … WHERE approvals = <o lido>`), como as aprovações das propostas
   de quotas: dois sins ao mesmo tempo não se perdem — o segundo relê e
   junta-se. Uma casa que já não vale — apagada, com outro criador, ou quem
-  recebe já não é comproprietário dela («Já não és comproprietário deste
+  recebe já não é comproprietário dela («Já não és parte da compropriedade deste
   imóvel.» a quem recebe; «Quem ia receber já não é comproprietário deste
   imóvel.» aos outros) — fica `cancelled` e vai em `falhadas` com a frase; uma
   que outra escrita mudou três vezes seguidas fica como estava e vai em
@@ -4852,7 +4853,7 @@ com as casas que se perderam). Apagar a conta de um comproprietário que
 faltava não passa logo: o aceitar trata-o (a casa falha com a frase, ou
 passa — o `porResponder` acende-se para quem a vê com o sim de todos).
 
-Quem criou um imóvel em compropriedade pode passar o controlo dele na app a
+Quem criou um imóvel em compropriedade pode transferir o controlo dele na app a
 um dos comproprietários; só isso muda (a casa continua a ser de todos), e
 todos os comproprietários têm de aceitar. O ⋯ da ficha tem «Passar o
 controlo» antes do «Apagar imóvel» (imovel.js:imvMenuDaFicha), só a quem o
@@ -4860,13 +4861,13 @@ criou, com sessão, com um servidor que já sabe destes pedidos (o estado traz
 `transfers`: notificacoes.js:notifTransfSabe — num de antes a ação não
 aparece, levava a um 404), sem um pedido pendente dessa casa e com pelo menos
 um comproprietário a quem o passar (imovel.js:imvPossoTransferir). Na seleção
-das Casas, com a ação disponível, a barra ganha o «Passar o controlo» ao lado
+das Casas, com a ação disponível, a barra ganha o «Transferir o controlo» ao lado
 do Apagar, na barra de duas linhas (cloud/selecao-listas.js:selLComAcoes,
 CW.selLTransferir); a razão ao lado da contagem diz quantos ficam de fora
 (selLPintarTransferir), e a folha diz quais e porquê.
 
-A folha (imovel.js:imvTransferir) chama-se «Passar o controlo» com um imóvel
-e «Passar o controlo de N imóveis» com vários. Vão só os que criei, sem
+A folha (imovel.js:imvTransferir) chama-se «Transferir o controlo» com um imóvel
+e «Transferir o controlo de N imóveis» com vários. Vão só os que criei, sem
 pedido pendente e com comproprietários; os outros dizem-se no cimo, uma frase
 por razão (imovel.js:imvTrfFora), e sem nenhum que vá é um aviso, sem folha.
 «Para quem» é obrigatório, com os comproprietários do imóvel — os
@@ -4906,7 +4907,7 @@ quem recebe (já não é comproprietário) vai para o «Para quem»; os outros,
 num aviso, com a folha aberta.
 
 A ficha mostra o pedido pendente por baixo dos donos
-(imovel.js:imvTrfNaFicha): «Pediste para passar o controlo a Bruno», quem já
+(imovel.js:imvTrfNaFicha): «Pediste para transferir o controlo a Bruno», quem já
 aceitou e quem falta nesse imóvel (notificacoes.js:notifTransfProgresso:
 «Já aceitou: Ana. Falta responder: Bruno.»), que até todos aceitarem nada
 muda, as outras casas do mesmo pedido (cancelar cancela o pedido todo) e o
@@ -4914,12 +4915,12 @@ Cancelar (notificacoes.js:notifTransfCancelar, sem perguntar: não muda nada
 e pode-se voltar a pedir). Quando só quem recebe tem de aceitar, sem lista:
 «Até Bruno aceitar, nada muda.». Num imóvel de que sou comproprietário com
 um pedido que me chegou, o mesmo cartão diz quem pede e a quem vai («Rui quer
-passar o controlo deste imóvel a Bruno», ou «… a ti»), quem já aceitou e
+transferir o controlo deste imóvel a Bruno», ou «… a ti»), quem já aceitou e
 quem falta (eu sou «tu»), e tem o «Ver» — primário enquanto me falta
 responder, secundário depois de aceitar.
 
 A ficha mostra o pedido pendente por baixo dos donos
-(imovel.js:imvTrfNaFicha): «Pediste para passar o controlo a Bruno», que
+(imovel.js:imvTrfNaFicha): «Pediste para transferir o controlo a Bruno», que
 até ele aceitar nada muda, as outras casas do mesmo pedido (cancelar
 cancela o pedido todo) e o Cancelar (notificacoes.js:notifTransfCancelar,
 sem perguntar: não muda nada e pode-se voltar a pedir). Num imóvel cujo

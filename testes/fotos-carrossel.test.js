@@ -99,7 +99,7 @@ describe('a janela do carrossel', () => {
     assert.match(L.b, /aria-label="Foto seguinte" data-click="fotoPassar\(1\)"/);
     assert.match(L.b, /class="fc-pos" aria-live="polite"/);
     assert.match(L.b, /draggable="false"/);
-    assert.match(L.f, /data-click="fotoGuardar\(\)"/);
+    assert.match(L.f, /data-click="fotoDescarregar\(\)"/);
     assert.equal(pos(L), '2 de 3');
     assert.equal(L.el.querySelector('.head h2').textContent, 'Foto 2', 'sem nome, «Foto 2»');
     assert.ok(L.fotos && L.fotos.lista.length === 3);

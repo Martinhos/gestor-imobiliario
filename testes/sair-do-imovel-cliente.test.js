@@ -130,7 +130,7 @@ describe('o «Apagar imóvel» de quem não criou o imóvel', () => {
     app.delProp('H2');
     const q = esp.confirmados[0];
     assert.equal(q.t, 'Apagar «Partilhada»');
-    assert.match(q.txt, /^Deixas de ser comproprietário de <b>Partilhada<\/b>: as tuas permissões são retiradas e ele sai da tua lista\./);
+    assert.match(q.txt, /^Sais da compropriedade de <b>Partilhada<\/b>: as tuas permissões são retiradas e ele sai da tua lista\./);
     assert.match(q.txt, / A tua quota \(30%\) é dividida por Rui e Ana na proporção das quotas deles\. /);
     assert.match(q.txt, /Os saldos e o IRS do imóvel passam a contar com as quotas novas, também nos movimentos já registados\. O que registaste fica\./);
     assert.match(q.txt, /Não se desfaz: para voltares, Rui tem de voltar a partilhá-lo contigo\.$/);
@@ -216,7 +216,7 @@ describe('a seleção das Casas', () => {
     const q = esp.confirmados[0];
     assert.equal(q.t, 'Apagar 2 imóveis');
     assert.match(q.txt, /^Sais de <b>Partilhada<\/b> e <b>Colab<\/b>: as tuas permissões neles são retiradas e saem da tua lista\./);
-    assert.match(q.txt, /Em <b>Partilhada<\/b>, de que és comproprietário, a tua quota é dividida pelos restantes na proporção das quotas deles/);
+    assert.match(q.txt, /Em <b>Partilhada<\/b>, que tens em compropriedade, a tua quota é dividida pelos restantes na proporção das quotas deles/);
     assert.match(q.txt, /Não se desfaz: para voltares a um deles, o dono tem de te enviar um convite novo ou voltar a partilhá-lo contigo\.$/);
     assert.ok(!/Anular/.test(q.txt));
     assert.deepEqual(esp.api.sort(), ['DELETE /api/houses/H2/participacao', 'DELETE /api/houses/H3/participacao']);

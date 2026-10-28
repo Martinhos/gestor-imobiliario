@@ -7,7 +7,7 @@
    isso a confirmação diz os números e o Anular repõe tudo. Dos imóveis que
    não criei (colaborados ou partilhados comigo) apagar é sair, no servidor e
    sem Anular, na mesma confirmação (selLApagarImoveis). Com passar o
-   controlo disponível, a barra dos imóveis tem também o «Passar o controlo»,
+   controlo disponível, a barra dos imóveis tem também o «Transferir o controlo»,
    que abre a folha com os que criei (CW.selLTransferir). As opções de um só
    ficam no ⋯ da ficha (e na folha do lpMenu, com o «Selecionar vários»).
 
@@ -421,7 +421,7 @@ function selLDecorar() {
    (a .sel-l-quebra; estilos.css:.sel-l-duas) — numa só não cabiam a 375px.
    Nos planeados, o Silenciar ou o Reativar (#selLMudo, que o selLPintarMudo
    acerta); nas visitas, o Realizada e o Falta (selLPintarVisitas). Nos
-   imóveis, com passar o controlo disponível (selLComAcoes), o «Passar o
+   imóveis, com transferir o controlo disponível (selLComAcoes), o «Passar o
    controlo» (#selLTransferir, que o selLPintarTransferir acerta). As ações
    com data-sel-l-precisa desligam-se sem nada marcado (selLPintar).
    Recebe: tipo — 'prop', 'ct', 'ten', 'vis', 'rec' ou 'tpl'.
@@ -433,7 +433,7 @@ function selLBarraHtml(tipo) {
   var acoes = tipo === 'rec'
     ? '<button type="button" class="btn" id="selLMudo" hidden data-toca="dados" data-click="CW.selLMudo()"></button>'
     : tipo === 'prop'
-    ? '<button type="button" class="btn" id="selLTransferir" data-sel-l-precisa data-toca="camada" data-click="CW.selLTransferir()">' + ic('swap', 15) + ' Passar o controlo</button>'
+    ? '<button type="button" class="btn" id="selLTransferir" data-sel-l-precisa data-toca="camada" data-click="CW.selLTransferir()">' + ic('swap', 15) + ' Transferir o controlo</button>'
     : '<button type="button" class="btn" id="selLRealizada" data-sel-l-precisa data-toca="dados" data-click="CW.selLVisEstado(\'realizada\')">' + ic('check', 15) + ' Realizada</button>' +
       '<button type="button" class="btn" id="selLFalta" data-sel-l-precisa data-toca="dados" data-click="CW.selLVisEstado(\'faltou\')">' + ic('x', 15) + ' Falta</button>';
   return cancelar +
@@ -497,10 +497,10 @@ function selLTransferiveis(ids) {
   return { vao: vao, fora: fora };
 }
 
-/* O «Passar o controlo» da barra dos imóveis, conforme os marcados
+/* O «Transferir o controlo» da barra dos imóveis, conforme os marcados
    (selLTransferiveis): ligado com pelo menos um cujo controlo posso
    passar; a razão dita ao lado da contagem quando algum fica de fora
-   («Passar o controlo deixa 1 de fora.»), ou quando nenhum vai.
+   («Transferir o controlo deixa 1 de fora.»), ou quando nenhum vai.
    Devolve: nada — mexe na barra já posta. */
 function selLPintarTransferir() {
   var b = document.getElementById('selLTransferir'), pq = document.getElementById('selLPorque');
@@ -508,11 +508,11 @@ function selLPintarTransferir() {
   if (b) b.disabled = !r.vao.length;
   if (!pq) return;
   if (!ids.length || !r.fora.length) { pq.textContent = ''; return; }
-  pq.textContent = !r.vao.length ? 'Só passas o controlo dos que criaste, com comproprietários e sem um pedido pendente.'
-    : 'Passar o controlo deixa ' + r.fora.length + ' de fora.';
+  pq.textContent = !r.vao.length ? 'Só transferes o controlo dos que criaste, com comproprietários e sem um pedido pendente.'
+    : 'Transferir o controlo deixa ' + r.fora.length + ' de fora.';
 }
 
-/* Passar o controlo dos imóveis marcados: abre a folha com eles
+/* Transferir o controlo dos imóveis marcados: abre a folha com eles
    (imovel.js:imvTransferir, que deixa de fora — e diz — os que não criei,
    os que já têm um pedido pendente e os que não têm comproprietários). Com
    o pedido feito, sai da seleção.
@@ -664,7 +664,7 @@ function selLSaidaFrase(ps) {
   var co = ps.filter(function (p) { return souDono(p.id); }), col = ps.length - co.length;
   var f = 'Sais de ' + nomes + ': as tuas permissões neles são retiradas e saem da tua lista. O que lá registaste fica.';
   if (co.length) {
-    f += ' ' + (co.length === 1 ? 'Em <b>' + esc(co[0].name || 'Sem nome') + '</b>, de que és comproprietário,' : 'Nos ' + co.length + ' de que és comproprietário,') +
+    f += ' ' + (co.length === 1 ? 'Em <b>' + esc(co[0].name || 'Sem nome') + '</b>, que tens em compropriedade,' : 'Nos ' + co.length + ' que tens em compropriedade,') +
       ' a tua quota é dividida pelos restantes na proporção das quotas deles, e os saldos e o IRS passam a contar com as quotas novas, também nos movimentos já registados.';
   }
   return f + ' Não se desfaz: para voltares a um deles, ' + (co.length && col ? 'o dono tem de te enviar um convite novo ou voltar a partilhá-lo contigo.'

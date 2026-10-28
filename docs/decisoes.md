@@ -61,6 +61,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-26 · Passar o controlo pede a ligação a todos os comproprietários
 - 2026-10-26 · Passar o controlo precisa do sim de todos os comproprietários
 - 2026-10-27 · A app apresenta-se, e o ícone passa a cobalto
+- 2026-10-28 · «Transferir o controlo», «Descarregar» e as frases sem género
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2425,3 +2426,35 @@ os mipmaps citam a cor pelo nome, é por esse nome que o flavor dev a troca
 pelo âmbar, e uma segunda cópia da cor era o que deixava a PWA e o APK com
 verdes diferentes. O dev continua âmbar. O versionCode não sobe: o Android
 instala por cima com o mesmo número, como quando o nome passou a Rendorium.
+
+## 2026-10-28 · «Transferir o controlo», «Descarregar» e as frases sem género
+
+O Martinho pediu (2026-10-28) que o botão de passar o controlo dissesse
+«Transferir controlo». Ficou «Transferir o controlo», com o artigo, como as
+outras ações da app, e o verbo mudou em todo o lado onde a app o diz: o ⋯ da
+ficha, a barra da seleção, a folha, o sino, a ficha com o pedido pendente e as
+novidades da v42 (ainda não publicadas). O porquê de 2026-10-25 continua: o
+que se transfere é o controlo na app, não a propriedade, e por isso não é
+«Transferir propriedade». As rotas, as tabelas e os nomes no código já eram
+transfer/transferir e não mudaram.
+
+Na janela de uma foto, o «Guardar» passou a «Descarregar»
+(web/app/anexos.js:fotoDescarregar), também pedido dele: na app, «Guardar» é
+gravar um formulário, e ali o botão leva a foto para o aparelho.
+
+As frases que falavam com quem lê no masculino passaram a neutras, pela regra
+de não presumir o género: «És colaborador de Rui…» → «Colaboras com Rui…»
+(web/app/acessos.js:fraseColaborador, web/app/imovel.js:imvNotaDeColaborador),
+«Agora és colaborador de…» → «Agora colaboras com…», «Deixas de ser
+comproprietário de…» → «Sais da compropriedade de…», «És comproprietário
+de…» → «Tens … em compropriedade», «Já não és comproprietário deste imóvel»
+→ «Já não és parte da compropriedade deste imóvel», «Ainda não estás ligado
+a ninguém» → «Ainda não tens ligações», e «Estou dispensado dos recibos…» →
+«Tenho dispensa dos recibos…». Falar de terceiros («um comproprietário»)
+fica como estava.
+
+A taxa de uma hipoteca variável ou mista escrevia a soma crua
+(«3,0999999999999996%»); agora arredonda às milésimas
+(web/app/credito.js:taxa3), como a ficha da hipoteca já fazia. As datas dos
+contratos das maquetes das apresentações contam-se a partir deste mês
+(web/cloud/apresentacao.js:aprMes), para não ficarem no passado.

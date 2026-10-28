@@ -4667,7 +4667,7 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 /* === miniaturas na nuvem (folha 2.2) === */
 /* === fim: miniaturas na nuvem (folha 2.2) === */
 /* === transferir propriedade (folha 1.2) === */
-/* A folha de passar o controlo (imovel.js:imvTransferir): o «Para quem» e,
+/* A folha de transferir o controlo (imovel.js:imvTransferir): o «Para quem» e,
    por baixo, a frase do que acontece num bloco calmo (os nomes das casas
    longos partem-se, sem empurrar a folha para o lado). */
 .trf-frase{margin:0;padding:12px 14px;border-radius:14px;background:var(--chip);color:var(--ink);font-size:14px;line-height:1.5;overflow-wrap:anywhere}

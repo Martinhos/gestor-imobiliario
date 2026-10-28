@@ -1162,6 +1162,16 @@ function aprDia(dias) { return addDays(today(), Number(dias) || 0); }
    Devolve: o texto, ex.: «08/11». */
 function aprData(iso) { return dPT(iso).slice(0, 5); }
 
+/* O primeiro ou o último dia de um mês contado a partir deste — as datas
+   dos contratos do APR_EXEMPLO, que assim não envelhecem.
+   Recebe: meses — quantos meses a partir deste (negativo, para trás); fim
+   (opcional) — verdadeiro para o último dia desse mês (senão, o dia 1).
+   Devolve: a data em dd/mm/aaaa, ex.: «01/09/2025». */
+function aprMes(meses, fim) {
+  var hoje = today(), y = Number(hoje.slice(0, 4)), m = Number(hoje.slice(5, 7)) - 1 + meses;
+  return dPT(new Date(Date.UTC(y, fim ? m + 1 : m, fim ? 0 : 1)).toISOString().slice(0, 10));
+}
+
 /* A próxima vez que um dia do mês chega, a partir de amanhã — a data de um
    planeado mensal (formato.js:dayInMonth prende ao último dia do mês).
    Recebe: dia — o dia do mês (1 a 31).
@@ -1206,15 +1216,16 @@ var APR_EXEMPLO = {
     { id: 'sousa', nome: 'Marta Sousa', email: 'marta.sousa@exemplo.pt', imovel: 'paranhos', parte: 'Imóvel inteiro' },
     { id: 'tiago', nome: 'Tiago Lopes', email: 'tiago.lopes@exemplo.pt', imovel: 'campanha', parte: 'Imóvel inteiro' },
   ],
-  /* dia — o dia de pagamento; desde e ate — dd/mm/aaaa; terminaEm — dias que
-     faltam (o da Inês acaba daqui a pouco, e é o prazo que a app avisa);
-     atraso — a renda deste mês ficou por confirmar */
+  /* dia — o dia de pagamento; desde e ate — dd/mm/aaaa, contados a partir
+     deste mês (aprMes), para não envelhecerem; terminaEm — dias que faltam
+     (o da Inês acaba daqui a pouco, e é o prazo que a app avisa); atraso — a
+     renda deste mês ficou por confirmar */
   contratos: [
-    { id: 'c1', imovel: 'bonfim', inquilino: 'Ana Ribeiro', parte: 'Quarto 1', renda: 350, dia: 1, desde: '01/09/2025', ate: '31/08/2027' },
-    { id: 'c2', imovel: 'bonfim', inquilino: 'Tomás Matos', parte: 'Quarto 2', renda: 350, dia: 1, desde: '01/09/2025', ate: '31/08/2027', atraso: true },
-    { id: 'c3', imovel: 'bonfim', inquilino: 'Inês Costa', parte: 'Quarto 3', renda: 350, dia: 1, desde: '01/12/2025', terminaEm: 25 },
-    { id: 'c4', imovel: 'paranhos', inquilino: 'Marta Sousa', parte: 'Imóvel inteiro', renda: 950, dia: 8, desde: '01/03/2025', ate: '29/02/2028' },
-    { id: 'c5', imovel: 'campanha', inquilino: 'Tiago Lopes', parte: 'Imóvel inteiro', renda: 425, dia: 5, desde: '01/10/2024', ate: '30/09/2027' },
+    { id: 'c1', imovel: 'bonfim', inquilino: 'Ana Ribeiro', parte: 'Quarto 1', renda: 350, dia: 1, desde: aprMes(-13), ate: aprMes(10, true) },
+    { id: 'c2', imovel: 'bonfim', inquilino: 'Tomás Matos', parte: 'Quarto 2', renda: 350, dia: 1, desde: aprMes(-13), ate: aprMes(10, true), atraso: true },
+    { id: 'c3', imovel: 'bonfim', inquilino: 'Inês Costa', parte: 'Quarto 3', renda: 350, dia: 1, desde: aprMes(-10), terminaEm: 25 },
+    { id: 'c4', imovel: 'paranhos', inquilino: 'Marta Sousa', parte: 'Imóvel inteiro', renda: 950, dia: 8, desde: aprMes(-19), ate: aprMes(16, true) },
+    { id: 'c5', imovel: 'campanha', inquilino: 'Tiago Lopes', parte: 'Imóvel inteiro', renda: 425, dia: 5, desde: aprMes(-24), ate: aprMes(11, true) },
   ],
   // a hipoteca do T3 Bonfim: o capital pedido, o que falta, a prestação e o dia
   creditos: [

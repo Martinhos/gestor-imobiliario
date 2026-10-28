@@ -784,7 +784,7 @@ function modalConvite(token, prev) {
     '<div class="cv">' +
     '<p class="disp cv-tit">' + esc(prev.ownerName || 'Alguém') + ' convida-te para ajudar a gerir ' +
       (n === 1 ? '1 imóvel' : n ? n + ' imóveis' : 'os seus imóveis') + '.</p>' +
-    '<p class="small">Com o cargo <b>' + esc(prev.roleName || 'colaborador') + '</b>. Não ficas comproprietário: não entras nas quotas nem nas contas entre donos.</p>' +
+    '<p class="small">Com o cargo <b>' + esc(prev.roleName || 'colaborador') + '</b>. Não entras na compropriedade: nem nas quotas nem nas contas entre donos.</p>' +
     casasDaChegada(prev.houses) +
     (pode.length
       ? '<section class="cv-pode" aria-labelledby="cvPode"><p class="lbl" id="cvPode">O que vais poder fazer</p><ul>' +

@@ -725,13 +725,13 @@ describe('a ligação ativa só na lista de cima, e o «Remover ligação» na f
     assert.ok(app.donosComPartilha().some((o) => o.id === 'RUI'), 'controlo: o Rui está na lista dos Proprietários');
   });
 
-  test('o vazio do cartão: sem ligação nenhuma diz que não estás ligado; com ativas e sem convites não diz nada; antes do sync diz que ainda não chegaram', () => {
+  test('o vazio do cartão: sem ligação nenhuma diz que ainda não há ligações; com ativas e sem convites não diz nada; antes do sync diz que ainda não chegaram', () => {
     const { app } = comEstado();
     const comAtiva = app.comproprietariosHtml();
-    assert.ok(!comAtiva.includes('pt-vazio') && !comAtiva.includes('Ainda não estás ligado'), 'o Rui está ligado: o cartão começa no meu id');
+    assert.ok(!comAtiva.includes('pt-vazio') && !comAtiva.includes('Ainda não tens ligações'), 'o Rui está ligado: o cartão começa no meu id');
     assert.match(comAtiva, /<div class="card pt-cartao"><div class="pt-linha pt-meu">[\s\S]*?<\/div><div class="pt-linha pt-ligar">/);
     const { app: sem } = comEstado((st) => { st.connections = []; });
-    assert.match(sem.comproprietariosHtml(), /<div class="pt-linha pt-vazio"><span class="small">Ainda não estás ligado a ninguém\.<\/span><\/div>/);
+    assert.match(sem.comproprietariosHtml(), /<div class="pt-linha pt-vazio"><span class="small">Ainda não tens ligações\.<\/span><\/div>/);
     // só um convite enviado: há uma linha, e o vazio não se diz
     const { app: so } = comEstado((st) => { st.connections = []; ENVIADO(st); });
     assert.ok(!so.comproprietariosHtml().includes('pt-vazio'));

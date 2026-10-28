@@ -88,7 +88,7 @@ registarAnoIrs({
     'O Anexo F destes rendimentos ainda não foi aprovado e deve trazer um campo para a taxa de 10 % e outro para o RSAA. Até a portaria sair, esta versão é provisória — e esta página di-lo.'],
   passos:[
     {titulo:'Antes de abrir o Portal',
-      texto:'Confirma nesta página que não falta nada: cada contrato com o número que a AT lhe deu, cada imóvel com o código da freguesia, o tipo e o artigo, cada inquilino com NIF ou país. O que falta está em «Obrigações», e cada ponto abre o sítio onde se trata.'},
+      texto:'Confirma nesta página que não falta nada: cada contrato com o número que a AT lhe deu, cada imóvel com o código da freguesia, o tipo e o artigo, cada inquilino com NIF ou país. O que falta está em «A tratar antes de entregar», e cada ponto abre o sítio onde se trata.'},
     {titulo:'O rosto da declaração',
       texto:'No Portal das Finanças, IRS › Entregar declaração, ano {ano}. Confirma o estado civil e se vais em tributação conjunta ou separada: é isso que decide o titular de cada linha do Anexo F — A és tu, B o cônjuge (só em conjunta). Com rendas não há IRS Automático.'},
     {titulo:'Quadros 4.1 e 4.2: uma linha por contrato',
