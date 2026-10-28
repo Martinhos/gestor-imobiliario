@@ -424,10 +424,12 @@ export function textoDoTicket(t, local) {
   const linhas = [];
   const grav = t.severity ? t.severity.toUpperCase() : 'sem gravidade';
   linhas.push('== ' + t.id + ' · ' + grav + ' · ' + estadoLegivel(t.status));
-  // numa conta de teste, o autor é a conta do Discord que pediu o /test
+  // numa conta de teste, o autor é a conta do Discord que pediu o /test; no
+  // back office (user_id 'equipa:…', rotas/qa.js:autorDaEquipa), a pessoa da equipa
   const d = t.autor && t.autor.discord;
+  const doBackOffice = /^equipa:/.test(String((t.autor && t.autor.id) || ''));
   const quem = d
-    ? (d.nome ? d.nome + ' (Discord ' + d.id + ')' : 'Discord ' + d.id) + ', com uma conta de teste'
+    ? (d.nome ? d.nome + ' (Discord ' + d.id + ')' : 'Discord ' + d.id) + (doBackOffice ? ', no back office' : ', com uma conta de teste')
     : [t.autor && t.autor.nome, t.autor && t.autor.email ? '<' + t.autor.email + '>' : ''].filter(Boolean).join(' ');
   linhas.push('Quem: ' + (quem || 'conta desconhecida' + (t.autor && t.autor.id ? ' (' + t.autor.id + ')' : '')));
   linhas.push('Quando: ' + (quando(t.created_at) || '?') + (t.updated_at && t.updated_at !== t.created_at ? ' (atualizado a ' + quando(t.updated_at) + ')' : ''));

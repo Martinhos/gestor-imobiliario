@@ -240,12 +240,17 @@ export default {
       const { rotasEquipa, getEquipa } = await import('./equipa.js');
       const c = { env, request, ctx, url, path: url.pathname.replace(/\/+$/, ''), method: request.method };
       try {
+        // a pílula do QA no back office do dev (equipa-qa.js): o guião e o CSS dela
+        if (url.pathname === '/equipa/qa.js' || url.pathname === '/equipa/qa.css') {
+          const { recursoDoQa } = await import('./equipa-qa.js');
+          return harden(await recursoDoQa(env, url, request.method, await getEquipa(env, request)));
+        }
         const r = await rotasEquipa(c);
         if (r) { r.headers.set('Cache-Control', 'no-store'); return harden(r); }
         if (url.pathname === '/equipa' || url.pathname === '/equipa/') {
           const { paginaEquipa } = await import('./equipa-vista.js');
           const eu = await getEquipa(env, request);
-          return harden(paginaEquipa(eu));
+          return harden(paginaEquipa(eu, { qa: env.ENV_NAME || '' }));
         }
         // a documentação da casa: gerada do código no deploy, para a equipa
         if (url.pathname === '/equipa/docs') {

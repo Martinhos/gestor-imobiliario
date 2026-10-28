@@ -232,11 +232,17 @@ const ACOES_DE_CONTA = {
    verificado; tudo o que devolve passa primeiro pelo filtro das categorias
    do papel, e as ações sensíveis pelo eMaster. Devolve a Response, ou null
    quando a rota não é daqui.
+   Os tickets de QA (/api/equipa/qa…, só no dev) vêm antes das categorias:
+   a pílula do QA é de toda a equipa, seja qual for o cargo.
    Recebe: c — o contexto do pedido ({ env, request, path, method, url, eu, ctx }),
    com a sessão de equipa em eu já verificada.
    Devolve: promessa da Response da rota, ou de null quando o caminho não é daqui. */
 export async function rotasEquipaApi(c) {
   const { env, request, path, method, url, eu, ctx } = c;
+  if (path === '/api/equipa/qa' || path.startsWith('/api/equipa/qa/')) {
+    const { rotasQaDaEquipa } = await import('./rotas/qa.js');
+    return (await rotasQaDaEquipa(c)) || err(404, 'Rota desconhecida.');
+  }
   const cats = categoriasDe(eu);
   if (!cats.length) return err(403, 'O teu papel não vê pedidos.');
 

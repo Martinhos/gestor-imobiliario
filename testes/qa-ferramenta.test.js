@@ -280,6 +280,8 @@ describe('o texto do listar', () => {
     assert.match(deTeste({ discord_id: '4242', discord_nome: 'Martinho' }), /^Quem: Martinho \(Discord 4242\), com uma conta de teste$/m,
       'numa conta de teste, quem escreveu é a conta do Discord que pediu o /test');
     assert.match(deTeste({ discord_id: '4242', discord_nome: null, autor_nome: null }), /^Quem: Discord 4242, com uma conta de teste$/m);
+    assert.match(deTeste({ user_id: 'equipa:4242', discord_id: '4242', discord_nome: 'Dina', autor_nome: null }), /^Quem: Dina \(Discord 4242\), no back office$/m,
+      'um ticket do back office é da pessoa da equipa');
   });
 
   test('reaberto mostra a resolução anterior; resolvido mostra a resolução e a data', () => {

@@ -77,7 +77,7 @@ const MAPA = [
       'scripts/discord-comandos-lista.js', 'scripts/discord-comandos.js'] },
   { id: 'equipa', titulo: 'Back office (/equipa)',
     ficheiros: ['worker/src/equipa.js', 'worker/src/equipa-api.js', 'worker/src/equipa-vista.js',
-      'worker/src/equipa-guiao.js', 'worker/src/docs-vista.js'] },
+      'worker/src/equipa-guiao.js', 'worker/src/equipa-qa.js', 'worker/src/docs-vista.js'] },
   { id: 'teste', titulo: 'Ambiente de teste (/test)',
     ficheiros: ['worker/src/teste.js', 'worker/src/sessoes-teste.js'] },
   { id: 'limites', titulo: 'Travões contra abuso',

@@ -42,8 +42,11 @@ function naoExiste() {
    POST /api/qa cria; GET /api/qa lista; DELETE /api/qa/:id remove (brando,
    para o Anular); POST …/repor desfaz a remoção; POST …/reabrir volta a pôr
    um resolvido nos novos; PUT e GET …/imagem gravam e servem a captura.
+   O back office do dev chega aqui pelo rotasQaDaEquipa, com a sessão de
+   equipa no lugar da conta.
    Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
-   ctx, path, method, seg e o utilizador em c.me).
+   ctx, path, method, seg e o utilizador em c.me), ou o do rotasQaDaEquipa
+   (com c.autor já feito e sem c.me).
    Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
    para o encaminhador tentar a seguinte. */
 export async function rotasQa(c) {
@@ -52,7 +55,7 @@ export async function rotasQa(c) {
   if (!env.ENV_NAME) return err(404, 'Rota desconhecida.');
 
   if (seg.length === 2) {
-    if (method === 'POST') return criarTicket(env, request, me);
+    if (method === 'POST') return criarTicket(env, request, c.autor || (await autorDaConta(env, me)));
     if (method === 'GET') return listarTickets(env);
     return err(404, 'Rota desconhecida.');
   }
@@ -68,18 +71,55 @@ export async function rotasQa(c) {
   return err(404, 'Rota desconhecida.');
 }
 
+/* As mesmas rotas para o back office do dev (/api/equipa/qa…, a pílula
+   que o worker/src/equipa-qa.js lá põe), com a sessão de equipa no lugar
+   da conta: o autor é a pessoa da equipa, pelo Discord — user_id
+   'equipa:<id do Discord>' (sem chave estrangeira, como os outros),
+   discord_id e discord_nome da sessão. Em produção, 404 como as da app.
+   Recebe: c — o contexto do pedido do back office ({env, request, method,
+   path, eu}, com eu a sessão de equipa de getEquipa).
+   Devolve: a Response, ou nada (undefined) quando o caminho não é do QA. */
+export async function rotasQaDaEquipa(c) {
+  const path = c.path, eu = c.eu;
+  if (path !== '/api/equipa/qa' && !path.startsWith('/api/equipa/qa/')) return;
+  const seg = ['api', 'qa'].concat(path.slice('/api/equipa/qa'.length).split('/').filter(Boolean).map((s) => {
+    try { return decodeURIComponent(s); } catch (e) { return s; }
+  }));
+  const autor = { id: autorDaEquipa(eu), discordId: String(eu.discordId), discordNome: eu.nome ? String(eu.nome) : null };
+  return rotasQa(Object.assign({}, c, { seg, me: null, autor }));
+}
+
+/* O user_id de um ticket escrito no back office: 'equipa:' e o id do
+   Discord da sessão. É também o CW.user.id que a camada da pílula do back
+   office dá ao qa.js, para o «(eu)» das linhas bater certo.
+   Recebe: eu — a sessão de equipa ({discordId, …}).
+   Devolve: o texto. */
+export function autorDaEquipa(eu) {
+  return 'equipa:' + String(eu.discordId);
+}
+
+/* O autor de um ticket escrito numa conta da app: o id da conta e, numa
+   conta de teste, a conta do Discord que pediu o /test (discordDoAutor).
+   Recebe: env — o ambiente do worker; me — o utilizador com sessão.
+   Devolve: promessa de {id, discordId, discordNome}. */
+async function autorDaConta(env, me) {
+  const d = await discordDoAutor(env, me);
+  return { id: me.id, discordId: d.id, discordNome: d.nome };
+}
+
 /* POST /api/qa: grava um ticket novo de quem tem a sessão. A descrição é
    aparada e tem de ter de 1 a 4000 caracteres; uma gravidade fora das três
    fica nula; o contexto, se for um objeto, guarda-se em JSON cortado aos
    16 KB (contextoParaGuardar). Trava aos 30 por hora por pessoa e leva de
    passagem os removidos há mais de 24 h.
    Recebe: env — o ambiente do worker (D1 em env.DB, R2 em env.FILES);
-   request — o pedido, com o corpo {body, severity?, context}; me — o
-   utilizador com sessão.
+   request — o pedido, com o corpo {body, severity?, context}; autor — quem
+   o escreve ({id, discordId, discordNome}: autorDaConta, ou o do back office
+   em rotasQaDaEquipa).
    Devolve: promessa da Response — 201 {ok, id}, 400 sem descrição ou com
    descrição longa de mais, 429 com o travão. */
-async function criarTicket(env, request, me) {
-  if (!(await rateLimit(env, 'qa:' + me.id, TETO_HORA, 3600))) {
+async function criarTicket(env, request, autor) {
+  if (!(await rateLimit(env, 'qa:' + autor.id, TETO_HORA, 3600))) {
     return err(429, 'Já enviaste muitos tickets seguidos. Espera um pouco.');
   }
   const b = await body(request);
@@ -90,13 +130,12 @@ async function criarTicket(env, request, me) {
   }
   const gravidade = GRAVIDADES.includes(b.severity) ? b.severity : null;
   const contexto = contextoParaGuardar(b.context);
-  const discord = await discordDoAutor(env, me);
   await limparRemovidos(env);
   const id = crypto.randomUUID(), t = now();
   await env.DB.prepare(
     `INSERT INTO qa_tickets (id, user_id, discord_id, discord_nome, body, severity, context, status, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'aberto', ?, ?)`
-  ).bind(id, me.id, discord.id, discord.nome, texto, gravidade, contexto, t, t).run();
+  ).bind(id, autor.id, autor.discordId || null, autor.discordNome || null, texto, gravidade, contexto, t, t).run();
   return json({ ok: true, id }, 201);
 }
 

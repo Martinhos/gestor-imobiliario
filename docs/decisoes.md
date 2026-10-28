@@ -68,6 +68,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-28 · Trinta sessões numa conta de teste
 - 2026-10-28 · A segunda ronda de tickets de QA: o ano inteiro, os donos no seletor, os grupos nos filtros
 - 2026-10-28 · Os tickets de QA com três estados: novos, em resolução, resolvidos
+- 2026-10-28 · A pílula do QA no back office, com o qa.js da app
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2650,3 +2651,27 @@ nenhum caminho para marcar em resolução: seria um botão a mais na app para um
 coisa que é de quem programa. O comecar confere todos os ids antes de mexer em
 algum, e recusa um resolvido (esse reabre-se primeiro), para nunca tirar um
 ticket dos resolvidos sem se ver.
+
+## 2026-10-28 · A pílula do QA no back office, com o qa.js da app
+
+Um ticket de QA do Martinho (fb92f4ba): o back office do dev deve ter a mesma
+pílula de QA, com as mesmas funções. Perguntado entre uma versão própria do
+back office e reaproveitar o qa.js da app, escolheu reaproveitar.
+
+O back office não carrega a app, de propósito (equipa-vista.js), e o guião
+dele tem um esc e um ic globais com outras assinaturas que os da app. Por isso
+o qa.js não entra solto ao lado do guião: o worker embrulha-o numa função com
+uma camada que faz de app (worker/src/equipa-qa.js), e os nomes não se tocam.
+O qa.js, o icones.js e o formato.js vão tal e qual, lidos dos assets a cada
+pedido, para a pílula do back office nunca ficar para trás da da app; o CSS
+do QA corta-se do estilos.css pelos marcadores do bloco, e o teste falha se
+eles mudarem. As ações data-click não correm pelo eventos.js da app (que
+carregaria mais app); a camada lê a mesma gramática curta e só chama a tabela
+das funções do QA.
+
+As rotas são as mesmas, por um caminho da equipa (/api/equipa/qa), porque a
+sessão é outra (o cookie da equipa) e uma sessão de equipa não deve abrir a
+API de quem usa a app. O autor é a pessoa da equipa pelo Discord, nos campos
+que os tickets das contas de teste já tinham. Qualquer cargo vê a pílula: o
+QA é de quem testa, e não depende do que o cargo vê no back office.
+

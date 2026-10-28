@@ -5864,6 +5864,27 @@ apaga-se de vez com a captura, de passagem nas rotas
 (worker/src/rotas/qa.js:limparRemovidos). Reabrir guarda a resolução. A
 ordem do GET é a dos três estados (worker/src/rotas/qa.js:listarTickets).
 
+No back office do dev (/equipa) há a mesma pílula, com as mesmas funções, e é o
+próprio cloud/qa.js que corre lá: o worker serve um /equipa/qa.js que junta,
+numa função só, a camada do worker/src/equipa-qa.js (CAMADA_QA: as janelas,
+o aviso com o Anular, o menu, a dobra, o api() e o despacho das ações
+data-click), o app/icones.js, o app/formato.js e o cloud/qa.js, lidos dos
+assets tal e qual (worker/src/equipa-qa.js:montarGuiaoDoQa). Os nomes ficam
+dentro da função — o guião do back office tem um esc e um ic com outras
+assinaturas — e para o window só vai o CW. As ações correm por uma gramática
+pequena, sem eval, e só chamam as funções da tabela QA_ACOES (as qa… do
+qa.js e as da camada). O /equipa/qa.css junta os tokens que faltam ao back
+office, os componentes da camada (CSS_QA_EQUIPA, presos às classes do QA) e o
+bloco do QA do estilos.css, cortado pelos marcadores
+(worker/src/equipa-qa.js:cortarCssDoQa); mudar o desenho da pílula na app
+muda-o nos dois sítios. Os pedidos vão às /api/equipa/qa
+(worker/src/rotas/qa.js:rotasQaDaEquipa), de toda a equipa seja qual for o
+cargo, e o autor é a pessoa da equipa pelo Discord (user_id 'equipa:<id>',
+worker/src/rotas/qa.js:autorDaEquipa). O contexto diz a secção do back office
+(«Back office › Erros») no lugar do separador. Só no dev: em produção a
+página não leva nada disto (worker/src/equipa-vista.js:htmlDoQa) e os dois
+recursos e as rotas respondem 404.
+
 Quem programa lê e fecha os tickets com `node scripts/qa.mjs listar | imagem |
 comecar | resolver | reabrir` (o uso está na cabeça do ficheiro), e a skill qa
 (.claude/skills/qa, na pasta acima do repositório) ensina o fluxo inteiro. O
