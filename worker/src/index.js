@@ -23,10 +23,14 @@ import { CAMINHOS_DE_IDENTIDADE, identidadeDeDev } from './lib/identidade.js';
    ficheiro, aqui e no web/_headers, que tem de ficar igual. */
 const HASHES_EM_LINHA = "'sha256-c4UA1V+48Fe1JESBNvW0EoXCeYe6ELM2ka4toVHOtm4=' " +
   "'sha256-dOWyPmDWCNjOauaFadEMzAWiQMAhldb2MQT5bP86V3A='";
-// A app não carrega nada de fora, tirando o botão de entrada com Google.
+/* A app não carrega nada de fora, tirando o botão de entrada com Google e as
+   estatísticas do Cloudflare Web Analytics: o Cloudflare injeta em cada página
+   o beacon.min.js (static.cloudflareinsights.com), que manda as visitas para
+   cloudflareinsights.com. Sem cookies; recusado aqui, não registava nada e
+   ainda disparava a cura do arranque (index.html:deFora). */
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' " + HASHES_EM_LINHA + " https://accounts.google.com/gsi/client",
+  "script-src 'self' " + HASHES_EM_LINHA + " https://accounts.google.com/gsi/client https://static.cloudflareinsights.com",
   /* O sha256 não é nosso: é da folha que o botão de entrada com Google injeta
      na página (accounts.google.com/gsi/client). Sem ele, o browser recusa-a e
      o botão passa de 72px para 357px de altura — medido —, que é mudar o que a
@@ -37,7 +41,7 @@ const CSP = [
      não seja das duas conhecidas (testes/ui/percorrer.js:RUIDO_DE_FORA). */
   "style-src 'self' 'sha256-RU4sU0AaS8IBGZx8XrGt/pa9A5SLA3dQszGeqT5L3Kw=' https://accounts.google.com",
   "img-src 'self' data: blob: https://*.googleusercontent.com",
-  "connect-src 'self' https://accounts.google.com",
+  "connect-src 'self' https://accounts.google.com https://cloudflareinsights.com",
   "frame-src https://accounts.google.com",
   "font-src 'self'",
   "object-src 'none'",
