@@ -5,7 +5,9 @@
 # contadores). O rasto fica: o audit_log e o op_log não se tocam — a história
 # do que a equipa fez não se apaga com os dados de quem testou. E fica o que é
 # da equipa e não de uma conta: as reply_templates (as respostas-tipo) e as
-# team_links (as ligações de entrada no /equipa, que expiram sozinhas).
+# team_links (as ligações de entrada no /equipa, que expiram sozinhas). E os
+# qa_tickets: os tickets de QA por resolver não se perdem numa limpeza (a
+# decisão do Martinho, 2026-10-28); o autor fica «Conta apagada».
 #
 # A lista das tabelas é conferida contra as migrações por um teste
 # (testes/correcao-entrega.test.js): uma tabela nova que não esteja nem na

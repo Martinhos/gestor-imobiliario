@@ -62,6 +62,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-26 · Passar o controlo precisa do sim de todos os comproprietários
 - 2026-10-27 · A app apresenta-se, e o ícone passa a cobalto
 - 2026-10-28 · «Transferir o controlo», «Descarregar» e as frases sem género
+- 2026-10-28 · Os tickets de QA
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2458,3 +2459,56 @@ A taxa de uma hipoteca variável ou mista escrevia a soma crua
 (web/app/credito.js:taxa3), como a ficha da hipoteca já fazia. As datas dos
 contratos das maquetes das apresentações contam-se a partir deste mês
 (web/cloud/apresentacao.js:aprMes), para não ficarem no passado.
+
+## 2026-10-28 · Os tickets de QA
+
+O Martinho pediu um botão no dev para escrever tickets de QA no momento em que
+vê o problema, e que o Claude os fosse buscar quando lhe pedisse para os
+resolver. As escolhas dele: guardar na D1 do dev, numa tabela nova; o ticket
+leva o texto, a gravidade, o contexto automático e uma captura de ecrã; todas
+as contas do dev veem a lista inteira; um resolvido fica numa secção
+«Resolvidos» e pode reabrir-se; a pílula com a pega, «QA» e o número de
+abertos, com a etiqueta na primeira vez; ao largar, cola à borda mais perto e
+lembra-se do sítio. Depois de ver a primeira versão: a pílula sobe acima das
+janelas abertas, o ícone é um inseto, e os tickets sobrevivem à limpeza do dev
+e à conta de quem os escreveu.
+
+Uma tabela própria, e não a dos pedidos de ajuda: um ticket de QA é trabalho
+de quem programa, escrito por quem testa; um pedido de ajuda é suporte, vai ao
+Discord, manda email e aparece no back office. Misturá-los enchia a fila do
+suporte de notas de teste.
+
+As rotas dão 404 em produção antes de lerem o corpo: não dizem que a
+funcionalidade existe e nada de um pedido de produção chega à base. Remover é
+brando por 24 h para o Anular da app poder desfazer sem a app guardar o
+ticket; a limpeza corre de passagem nas rotas e apaga primeiro a captura,
+para nunca ficar um objeto órfão no R2. Reabrir guarda a resolução, para quem
+pega outra vez no ticket ver o que já se tentou. O tipo da captura lê-se dos
+bytes, e não só do Content-Type, porque a imagem é escrita por uma conta e
+aberta por todas na mesma origem (worker/src/rotas/qa.js:tipoDaImagem).
+
+O user_id não tem chave estrangeira para users. Com ela, o DELETE FROM users da
+limpeza do dev falhava, ou os tickets tinham de sair primeiro, e o Martinho
+quer que fiquem. A app mostra «Conta apagada» quando o autor já não existe ou
+foi anonimizado (web/cloud/qa.js:qaAutor).
+
+A pílula sobe acima das janelas para se poder reportar a janela que está
+aberta, que é muitas vezes onde está o problema, e o contexto passa a trazer o
+título dela. Enquanto uma janela do próprio QA está aberta, a pílula volta para
+baixo, para não tapar o formulário (web/cloud/qa.js:qaMarcarJanela).
+
+O Claude lê os tickets com um script direto na D1 e no R2 do dev, e não pelas
+rotas: as rotas pedem a sessão de uma conta da app, e o Claude não tem conta
+nem deve guardar um token. O script só escreve com resolver e reabrir; remover
+é do Martinho, na app.
+
+Depois, no mesmo dia, o Martinho pediu que o autor de um ticket escrito numa
+conta de teste fosse a conta do Discord que criou a ligação do /test, e não a
+conta de teste (que se chama sempre «Conta de teste» e que o /test limpar
+apaga). O id do Discord já estava em users.test_owner; o nome não chegava ao
+dev, por isso passou a viajar assinado na ligação (worker/src/teste.js:ligacaoTeste).
+A assinatura só conta o nome quando ele vem, para as ligações emitidas por um
+worker ainda sem esta versão (o bot de produção, até à promoção) continuarem a
+valer; essas aparecem como «Discord <id>». O ticket copia o id e o nome ao
+ser criado (worker/src/rotas/qa.js:discordDoAutor), para o autor sobreviver à
+conta de teste.

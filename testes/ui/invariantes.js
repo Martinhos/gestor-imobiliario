@@ -37,14 +37,18 @@ function dentroDaPagina() {
 
   /* O que corta um elemento. Um `position:fixed` só é preso por um
      antepassado com transform/filter — o overflow dos outros não lhe toca.
-     Ignorar isto dava-me dez falsos positivos numa varredura anterior. */
+     Ignorar isto dava-me dez falsos positivos numa varredura anterior. E o
+     contrário também: um transform não corta nada, só muda o bloco de quem é
+     fixo; um elemento que não é fixo só é cortado pelo overflow. A pílula do
+     QA (cloud/qa.js) põe-se no sítio com um transform, e o menu dela, por
+     ser maior do que a pílula, contava como «cortado» por ela. */
   function limite(el) {
     const fixo = getComputedStyle(el).position === 'fixed';
     for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
       const cs = getComputedStyle(a);
       const prende = cs.transform !== 'none' || cs.filter !== 'none';
       const corta = /hidden|auto|scroll/.test(cs.overflow + cs.overflowX + cs.overflowY);
-      if (fixo ? prende : (corta || prende)) {
+      if (fixo ? prende : corta) {
         const r = a.getBoundingClientRect();
         return {
           top: Math.max(0, r.top), bottom: Math.min(innerHeight, r.bottom),
@@ -134,7 +138,11 @@ function dentroDaPagina() {
          um ecrã de aviso, o cartão de um tutorial. Mas quem passa por cima
          tem de deixar os botões do modal alcançáveis — senão está a tapar
          precisamente aquilo que se pede à pessoa para carregar. */
-      const avisa = /toast|tip/.test(el.className) || el.id === 'cwDoc' ||
+      /* A pílula do QA (só fora de produção) sobe acima das janelas de
+         propósito, para se escrever um ticket sobre a que está à frente (a
+         decisão do Martinho, 2026-10-28) — e, como os avisos, não pode tapar
+         os botões do rodapé. */
+      const avisa = /toast|tip/.test(el.className) || el.id === 'cwDoc' || el.id === 'qaPilula' ||
         /^cw(Legal|Terms|Upd|Auth|Guia)/.test(el.id || '');
       /* Uma coisa invisivel e que nao recebe toques nao tapa nada. O aviso
          esconde-se com opacidade zero e um empurrao de 80px para baixo — a

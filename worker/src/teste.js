@@ -70,13 +70,25 @@ async function chave(env) {
 // milissegundos de época como texto; dados — '1' com dados de exemplo, '0'
 // sem; manter (opcional) — '1' para conta extra; quem (opcional) — o id do
 // dev dono; limpar (opcional) — '1' para lavar as contas do dono; email
-// (opcional) — o email do dev para o correio das contas de teste.
+// (opcional) — o email do dev para o correio das contas de teste; nome
+// (opcional) — o nome do dev no Discord. O nome só entra na assinatura
+// quando vem: uma ligação sem nome assina-se como antes dele existir, e as
+// ligações de um worker ainda sem esta versão continuam a valer.
 // Devolve: promessa da assinatura em hexadecimal (64 caracteres).
-export async function assinarTeste(env, exp, dados, manter, quem, limpar, email) {
+export async function assinarTeste(env, exp, dados, manter, quem, limpar, email, nome) {
   const sig = await crypto.subtle.sign('HMAC', await chave(env),
     new TextEncoder().encode(exp + ':' + dados + ':' + (manter || '0') + ':' + (quem || '') +
-      ':' + (limpar || '0') + ':' + (email || '')));
+      ':' + (limpar || '0') + ':' + (email || '') + (nome ? ':' + nome : '')));
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/* O nome do dev no Discord como viaja na ligação: sem caracteres de
+   controlo, aparado, até 64 caracteres. É só para mostrar (o autor de um
+   ticket de QA): a afinidade das contas continua a ser o id (quem).
+   Recebe: v — o nome (texto; null e undefined contam como vazio).
+   Devolve: o nome limpo, ou '' quando não sobra nada. */
+export function nomeDoDev(v) {
+  return String(v || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 64);
 }
 
 /* A ligação completa, para o bot e para o back office. `base` é o worker de
@@ -93,10 +105,11 @@ export async function assinarTeste(env, exp, dados, manter, quem, limpar, email)
    exemplo; manter (opcional) — verdadeiro para uma conta extra; quem
    (opcional) — o id do dev dono; limpar (opcional) — verdadeiro para apagar
    as contas do dono; email (opcional) — o email do dev (ignorado se não
-   parecer um email).
+   parecer um email); nome (opcional) — o nome do dev no Discord, que fica
+   como autor dos tickets de QA das contas dele (só vai com um dono).
    Devolve: promessa do URL de /t/entrar, assinado e válido 10 minutos;
    rejeita com SEM_CHAVE quando o worker não tem com que assinar. */
-export async function ligacaoTeste(env, base, comExemplo, manter, quem, limpar, email) {
+export async function ligacaoTeste(env, base, comExemplo, manter, quem, limpar, email, nome) {
   const exp = String(now() + VALIDADE_MIN * 60000);
   const dados = comExemplo ? '1' : '0';
   const m = manter ? '1' : '0';
@@ -104,15 +117,21 @@ export async function ligacaoTeste(env, base, comExemplo, manter, quem, limpar, 
   const q = String(quem || '').replace(/[^\w.-]/g, '').slice(0, 32);
   let e = String(email || '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) || e.length > 254) e = '';
-  const sig = await assinarTeste(env, exp, dados, m, q, l, e);
+  const n = q ? nomeDoDev(nome) : '';
+  const sig = await assinarTeste(env, exp, dados, m, q, l, e, n);
   return base + '/t/entrar?exp=' + exp + '&dados=' + dados + '&m=' + m + '&l=' + l + '&q=' + q +
-    (e ? '&e=' + encodeURIComponent(e) : '') + '&sig=' + sig;
+    (e ? '&e=' + encodeURIComponent(e) : '') + (n ? '&n=' + encodeURIComponent(n) : '') + '&sig=' + sig;
 }
 
 // o correio das contas deste dev vai para aqui (gravado pela ligação)
 // Recebe: quem — o dev que pediu a ligação (o identificador que ela traz assinado).
 // Devolve: a chave no KV (SESSIONS) onde fica o email dele (texto).
 export const chaveEmailDev = (quem) => 'teste:email:' + quem;
+
+// o nome do dev no Discord (gravado pela ligação), para o autor dos tickets de QA
+// Recebe: quem — o id de Discord do dev (o test_owner das contas dele).
+// Devolve: a chave no KV (SESSIONS) onde fica o nome dele (texto).
+export const chaveNomeDev = (quem) => 'teste:nome:' + quem;
 
 /* A conta de teste em si: email no subdomínio, palavra-passe impossível,
    termos aceites, e o dono (o dev que a pediu) gravado para o seletor.
@@ -235,6 +254,7 @@ export async function rotaTeste(c) {
   const limpar = url.searchParams.get('l') === '1' ? '1' : '0';
   const quem = String(url.searchParams.get('q') || '').replace(/[^\w.-]/g, '').slice(0, 32);
   const emailDev = String(url.searchParams.get('e') || '').trim().toLowerCase().slice(0, 254);
+  const nomeDev = quem ? nomeDoDev(url.searchParams.get('n')) : '';
   const sig = url.searchParams.get('sig') || '';
   if (!/^\d{10,16}$/.test(exp) || !/^[a-f0-9]{64}$/.test(sig)) {
     return pagina(400, 'Ligação inválida', 'Falta-lhe um pedaço. Pede uma nova com /test no Discord.');
@@ -242,7 +262,7 @@ export async function rotaTeste(c) {
   if (Number(exp) < now()) {
     return pagina(410, 'Esta ligação expirou', 'Valem ' + VALIDADE_MIN + ' minutos. Corre /test outra vez e usa a nova.');
   }
-  const esperada = await assinarTeste(env, exp, dados, manter, quem, limpar, emailDev);
+  const esperada = await assinarTeste(env, exp, dados, manter, quem, limpar, emailDev, nomeDev);
   /* transição: a produção ainda assina à moda antiga (só exp:dados). Uma
      ligação antiga só vale como "retomar sem dono" — a mesma chave, os
      mesmos campos. Tirar este ramo quando a produção souber assinar o resto. */
@@ -258,6 +278,10 @@ export async function rotaTeste(c) {
   // produção, mas o correio das contas de teste decide-se aqui
   if (quem && emailDev) {
     try { await env.SESSIONS.put(chaveEmailDev(quem), emailDev); } catch (e) {}
+  }
+  // e o nome dele no Discord, que os tickets de QA das contas dele levam como autor
+  if (quem && nomeDev) {
+    try { await env.SESSIONS.put(chaveNomeDev(quem), nomeDev); } catch (e) {}
   }
 
   /* limpar é a única coisa que apaga — e é por dono: cada dev limpa as SUAS

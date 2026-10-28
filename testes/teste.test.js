@@ -202,6 +202,32 @@ describe('o email do dev viaja assinado na ligação', () => {
   });
 });
 
+describe('o nome do dev no Discord viaja assinado na ligação', () => {
+  test('abrir a ligação grava o nome no KV; mexer no nome rebenta a assinatura; sem dono não vai', async () => {
+    const env = ambienteDoTeste();
+    const lig = await ligacaoTeste(env, 'https://dev.x.pt', false, false, 'alice', false, '', '  Alice\u0007 Abreu ');
+    assert.match(lig, /&n=Alice%20Abreu&/, 'limpo dos caracteres de controlo e aparado');
+    const r = await rotaTeste({ env, url: new URL(lig), request: new Request(lig) });
+    assert.equal(r.status, 302);
+    assert.equal(await env.SESSIONS.get('teste:nome:alice'), 'Alice Abreu');
+
+    const trocado = await rotaTeste({ env, url: new URL(lig.replace('n=Alice', 'n=Outra')), request: new Request(lig) });
+    assert.equal(trocado.status, 403, 'o nome não se troca sem assinar');
+
+    const semDono = await ligacaoTeste(env, 'https://dev.x.pt', false, false, '', false, '', 'Alice');
+    assert.doesNotMatch(semDono, /&n=/, 'sem dono o nome não serve para nada e não vai');
+  });
+
+  test('uma ligação sem nome assina-se como antes: as de um worker sem esta versão continuam a valer', async () => {
+    const env = ambienteDoTeste();
+    const lig = await ligacaoTeste(env, 'https://dev.x.pt', false, false, 'bruno', false, 'bruno@rendorium.test');
+    assert.doesNotMatch(lig, /&n=/);
+    const r = await rotaTeste({ env, url: new URL(lig), request: new Request(lig) });
+    assert.equal(r.status, 302);
+    assert.equal(await env.SESSIONS.get('teste:nome:bruno'), null, 'sem nome, nada no KV');
+  });
+});
+
 describe('cada dev tem as suas contas', () => {
   test('o dono fica gravado, e a lavagem de um não toca nas do outro', async () => {
     const env = ambienteDoTeste();

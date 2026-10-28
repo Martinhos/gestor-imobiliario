@@ -470,7 +470,7 @@ describe('limpar o dev', () => {
   /* O que fica de propósito numa limpeza: o rasto da equipa e o que é da
      equipa, não de uma conta. Uma tabela nova nas migrações tem de entrar na
      lista do workflow ou aqui — e, aqui, com a razão no cabeçalho dele. */
-  const FICAM = ['audit_log', 'op_log', 'team_links', 'reply_templates'];
+  const FICAM = ['audit_log', 'op_log', 'team_links', 'reply_templates', 'qa_tickets'];
 
   // achado A.7-10
   test('a lista de tabelas do limpar-dev é a do esquema menos o que fica, por ordem das chaves estrangeiras', () => {

@@ -74,6 +74,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Navegação
 - Fora da app: a montra, os emails e o back office
 - A app em serviços
+- Os tickets de QA
 - A CSP sem «unsafe-inline»
 - Os eventos declaram-se, e uma ação é uma gramática
 - Os estilos vivem na folha, e nunca no HTML
@@ -5632,6 +5633,96 @@ nucleo.js cria e embrulham a base e os serviços por reatribuição
 o servidor (nucleo, anexos, utilizadores, partilha, colaboradores, ajuda,
 entrada, novidades); o painel, os filtros, a seleção e o guia estão lá pela
 ordem de carregamento.
+
+## Os tickets de QA
+
+Fora de produção há uma pílula «QA» que quem testa arrasta para onde estorvar
+menos e que abre «Novo ticket» e «Ver tickets». Os tickets ficam na D1 do
+ambiente e quem programa lê-os e fecha-os com scripts/qa.mjs. Em produção nada
+disto existe: nem a pílula (cloud/qa.js:qaDeveExistir pede um CW.ambiente que
+não seja 'producao', e sessão) nem as rotas (worker/src/rotas/qa.js:rotasQa
+responde 404 sem env.ENV_NAME, antes de ler o corpo).
+
+A pílula vive no body, fora do #view, e aparece no render que traz o ambiente
+do servidor (cloud/qa.js:qaSincronizar). É a pega de pontos, o inseto
+(icones.js:ic, 'inseto'), «QA» e o número de abertos
+(cloud/qa.js:qaHtmlPilula), em --loan para não se confundir com o cobalto das
+ações, com o contorno na cor da frente para o escurecimento forçado. Na
+primeira vez, a etiqueta «Arrasta para mudar de sítio» fica ao lado até ao
+primeiro arrasto ou à primeira seta neste aparelho
+(cloud/qa.js:qaMarcarArrastado). Fica por cima do conteúdo, da barra de baixo
+e do tutorial (z 60); com uma janela aberta sobe acima dela (z 71), para se
+escrever um ticket sobre o que está à frente, e fica acima do rodapé dela,
+para nunca tapar os botões (cloud/qa.js:qaLimites, e qaJanelaMudou reencaixa
+quando uma janela abre ou fecha); volta para baixo enquanto uma janela do
+próprio QA está aberta (cloud/qa.js:qaMarcarJanela, a classe .qa-janela). O
+aviso fica sempre por cima.
+
+Arrasta-se com o rato, o dedo e a caneta (cloud/qa.js:qaPousar). Até 10px é um
+toque e o clique abre o menu; daí em diante é um arrasto, e o clique a seguir
+engole-se (cloud/qa.js:qaEngoleClique). Ao largar cola à borda esquerda ou
+direita mais perto, à altura do largar, presa a uma altura útil que acaba
+acima da barra de baixo e da barra da seleção e que, no computador, começa à
+esquerda a seguir à barra lateral (cloud/qa.js:qaEncaixe, qaLimites). Guarda-se
+no aparelho como lado e fração da altura útil (cloud/qa.js:qaGuardarPosicao),
+o que a mantém no sítio ao rodar o telemóvel ou encolher a janela. As setas
+fazem o mesmo sem rato (cloud/qa.js:qaTecla). O arrasto não anima (é
+manipulação direta); o encaixe anima o transform no --medio, ou no --lento
+quando atravessa o ecrã, e de uma vez sem movimento (cloud/qa.js:qaDeslizar).
+
+O menu é o menu de ações da casa (data-menu="acoes"). Abri-lo guarda o ecrã
+de agora (cloud/qa.js:qaMenuAbriu): o contexto do ticket é o de quando se
+tocou na pílula. O contexto (cloud/qa.js:qaContexto) leva o separador, a
+página, a ficha aberta, o título da janela de cima, o endereço, a versão, o
+ambiente, o tamanho do ecrã, o tema, o browser, o ponteiro, o fim do rasto e
+a hora; o que não se sabe fica de fora. Lê-se escrito para pessoas em «O que
+vai junto» e no ticket aberto (cloud/qa.js:qaHtmlContexto).
+
+O novo ticket (cloud/qa.js:qaNovoTicket) pede a descrição (obrigatória), a
+gravidade (bloqueia, incomoda, detalhe, ou nenhuma) e uma captura de ecrã,
+escolhida ou colada com Ctrl+V e encolhida no cliente
+(cloud/qa.js:qaEncolherImagem). Enviar é o POST e depois o PUT da captura; se
+só a captura falha, a janela fica aberta e o botão passa a «Enviar a imagem»,
+sem repetir o ticket (cloud/qa.js:qaEnviar). A lista (cloud/qa.js:qaVerTickets)
+tem os abertos e depois «Resolvidos»; tocar abre o ticket para ler, com a
+captura, o contexto e a resolução (ou a «Resolução anterior» de um reaberto).
+«Remover» não pergunta: o aviso traz o Anular (cloud/qa.js:qaRemover).
+«Reabrir» devolve um resolvido aos abertos (cloud/qa.js:qaReabrir).
+
+Quem escreveu um ticket numa conta de teste é a conta do Discord que pediu a
+ligação do /test, e não a conta de teste: a ligação leva o nome do Discord
+assinado (teste.js:ligacaoTeste, o parâmetro n; a assinatura só o conta
+quando vem, por isso as ligações de um worker sem esta versão continuam a
+valer), abri-la guarda-o no KV (teste.js:chaveNomeDev), e criar o ticket
+copia o id (users.test_owner) e o nome para o próprio ticket
+(worker/src/rotas/qa.js:discordDoAutor), porque o /test limpar apaga as
+contas de teste. A app mostra «Nome (Discord)», ou «Discord <id>» quando a
+ligação não trouxe o nome (cloud/qa.js:qaAutor). Numa conta normal é o nome
+da conta, e uma conta normal apagada aparece como «Conta apagada».
+
+No servidor, os tickets vivem na tabela qa_tickets
+(migrations/0023_qa_tickets.sql), à parte dos pedidos de ajuda: não são
+suporte, não vão ao Discord nem ao back office. Todas as contas do ambiente
+veem e mexem em todos; o user_id é só quem escreveu, sem chave estrangeira,
+para o ticket sobreviver à conta e à limpeza do dev (os qa_tickets ficam em
+.github/workflows/limpar-dev.yml). A descrição vai até 4000 caracteres; o
+contexto até 16 KB, cortado pelo rasto mais antigo
+(worker/src/rotas/qa.js:contextoParaGuardar); a captura até 3 MB, no R2 em
+qa/<id>, e só PNG, JPEG ou WebP pelos próprios bytes
+(worker/src/rotas/qa.js:tipoDaImagem), servida com a CSP dos anexos. Trava aos
+30 tickets por hora por pessoa. Remover é brando
+(worker/src/rotas/qa.js:removerTicket), para o Anular; passadas 24 h a linha
+apaga-se de vez com a captura, de passagem nas rotas
+(worker/src/rotas/qa.js:limparRemovidos). Reabrir guarda a resolução.
+
+Quem programa lê e fecha os tickets com `node scripts/qa.mjs listar | imagem |
+resolver | reabrir` (o uso está na cabeça do ficheiro), e a skill qa
+(.claude/skills/qa, na pasta acima do repositório) ensina o fluxo inteiro. O
+script só fala com a base e o bucket do dev, ou com a base isolada do 8788
+(--local), e recusa qualquer outro alvo antes de chamar o wrangler; corre o
+wrangler sem shell e escapa o SQL, porque as notas trazem texto livre. Só
+escreve com resolver (a nota e uma linha «Commit: <sha>») e reabrir. Remover
+não existe no script: é de quem testa, na app.
 
 ## A CSP sem «unsafe-inline»
 A política da app não deixa correr nada que esteja escrito dentro do HTML.

@@ -68,6 +68,8 @@ const MAPA = [
   { id: 'pedidos', titulo: 'Pedidos de ajuda e erros',
     ficheiros: ['worker/src/rotas/tickets.js', 'worker/src/rotas/relatos.js',
       'worker/src/lib/relatos.js', 'worker/src/lib/medidas.js', 'worker/src/notify.js', 'web/cloud/ajuda.js'] },
+  { id: 'qa', titulo: 'Tickets de QA (só fora de produção)',
+    ficheiros: ['worker/src/rotas/qa.js', 'web/cloud/qa.js', 'scripts/qa.mjs'] },
   { id: 'correio', titulo: 'Correio (Resend e Email Routing)',
     ficheiros: ['worker/src/lib/correio.js', 'worker/src/lib/enderecos.js'] },
   { id: 'discord', titulo: 'Discord (bot e papéis)',

@@ -62,6 +62,8 @@ function ic(n,s){s=s||20;const I={
   ajuda:'<path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01"/>',
   menu:'<path d="M4 7h16M4 12h16M4 17h10"/>',
   aviso:'<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  /* o inseto da pílula de QA (cloud/qa.js): a cabeça, o corpo e as patas */
+  inseto:'<path d="M9 7.2V6a3 3 0 0 1 6 0v1.2"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6z"/><path d="M12 20v-9M6 13H3M21 13h-3M6.3 9.5 4 8M17.7 9.5 20 8M6.3 17 4 18.5M17.7 17l2.3 1.5"/>',
   filter:'<path d="M22 4H2l8 9.2V19l4 2.4v-8.2z"/>',
   sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/>',
   moon:'<path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/>',

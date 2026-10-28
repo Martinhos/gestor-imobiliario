@@ -124,6 +124,28 @@ const CENAS = [
     fazer: () => { toast('Guardado.', { rotulo: 'Anular', fn() {}, ms: 60000 }); propModal(); },
   },
   {
+    /* A pilula dos tickets de QA (cloud/qa.js): o percurso corre com
+       ENV_NAME, por isso ela esta em todas as cenas, por cima do conteudo.
+       Aqui prova-se que existe, que o menu dela abre, e as duas janelas
+       dela; e com uma ficha aberta, que ela sobe acima da janela. */
+    nome: 'qa-menu-da-pilula',
+    fazer: () => {
+      const b = document.querySelector('#qaPilula .qa-botao');
+      if (!b) throw new Error('sem a pilula de QA fora de producao');
+      b.click();
+    },
+  },
+  { nome: 'qa-novo-ticket', fazer: () => { qaNovoTicket(); } },
+  { nome: 'qa-ver-tickets', fazer: () => { qaVerTickets(); } },
+  {
+    nome: 'qa-pilula-sobre-uma-ficha',
+    fazer: () => {
+      propView(db.properties[0].id);
+      const p = document.getElementById('qaPilula');
+      if (!p || getComputedStyle(p).zIndex !== '71') throw new Error('a pilula de QA nao subiu acima da ficha');
+    },
+  },
+  {
     nome: 'primeiros-passos',
     fazer: () => { localStorage.removeItem('gi_passos_fora'); go('dashboard'); render(); },
   },

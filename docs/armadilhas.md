@@ -371,3 +371,15 @@ removendo-a do ecrã principal e adicionando-a de novo; no Android, o Chrome
 atualiza a app instalada quando volta a ler o manifesto, ao seu ritmo, e o
 APK só muda reinstalando o das Definições. Mudar o ícone pede uma linha nas
 novidades a dizer como o ver.
+
+## O wrangler r2 object get deixa um ficheiro vazio quando falha
+Com uma chave que não existe escreve «The specified key does not exist.»,
+sai com 1, e o --file fica criado com 0 bytes (wrangler 4.148, local e
+remoto). Quem só confirma que o ficheiro existe dá por boa uma imagem vazia:
+o scripts/qa.mjs olha para o código de saída e para o tamanho.
+
+## O npx no Windows passa pelo cmd, e o cmd come o texto
+O Node não lança um .cmd sem shell, e com shell os argumentos passam pelo cmd
+(aspas, %, ^, quebras de linha). Para texto livre, como as notas do
+scripts/qa.mjs, lança-se o node_modules/wrangler/bin/wrangler.js com o
+process.execPath e os argumentos em lista, sem shell.
