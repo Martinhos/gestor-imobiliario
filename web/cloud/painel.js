@@ -232,11 +232,14 @@ CW.fillMissed = function (id) {
     if (!n) return toast('Não há períodos por preencher.');
     var val0 = Number(r.tx.amount) || 0;
     var per = EVERY_WORD[r.every] || 'período';
+    // o plano começa antes da compra da casa: as datas começam nela, e diz-se porquê
+    var compra = planoAntesDaCompra(r);
     body = '<div class="form">' +
       '<div class="hint">Vais registar <b>' + n + '</b> movimento' + (n === 1 ? '' : 's') +
       ' de <b>' + esc(r.name) + '</b>, de <b>' + dPT(dates[0]) + '</b> a <b>' + dPT(dates[n - 1]) + '</b>, ' +
       'todos com o valor atual de <b>' + euro2(val0) + '</b> por ' + per + '.</div>' +
       planoQuem(r) +
+      (compra ? '<div class="hint">O imóvel foi comprado a <b>' + compra + '</b>: antes disso não há nada a registar.</div>' : '') +
       '<div class="hint u-bl-3px-solid-v-warn u-pl-10px">' +
       '<b>Isto é uma estimativa.</b> O valor de cada período pode não corresponder ao que foi realmente pago: ' +
       'não entra em conta com aumentos de renda, meses em falta, atrasos nem valores diferentes. ' +
@@ -300,9 +303,11 @@ CW.doFillMissed = function (id) {
     (reg && reg.partes ? reg.partes : [t]).forEach(function (x) { db.transactions.push(x); });
     n++;
   }
-  // as ocorrências já vencidas ficam saldadas: empurra o plano para a frente
+  // as ocorrências já vencidas ficam saldadas: empurra o plano para a frente.
+  // O guarda é largo: o cursor de uma renda pode estar 600 meses atrás (sem
+  // data de compra na casa), e parar aos 600 deixava-o um ou dois meses aquém
   var live = r, guard = 0;
-  while (live && live.next && live.next <= today() && guard++ < 600) {
+  while (live && live.next && live.next <= today() && guard++ < 100000) {
     recAdvance(live);
     live = (db.recurring || []).find(function (x) { return x.id === id; });
   }

@@ -28,6 +28,9 @@ function propModal(id){
        grupo das hipotecas está sempre aberto, e o falhaCampo chega ao campo */
     const semCapital=servicoLigado('credits')?(pForm.loans||[]).find(l=>!(capitalDoInicio(l,db.transactions)>0)):null;
     if(semCapital)return falhaCampo('l_out_'+semCapital.id,'Indica o capital em dívida.');
+    /* nenhuma hipoteca começa antes da compra (a data do próprio formulário) */
+    const cedo=servicoLigado('credits')?creditoAntesDaCompra(pForm,prop(pForm.id)):null;
+    if(cedo)return falhaCampo('l_start_'+cedo.id,cedo.msg);
     (pForm.loans||[]).forEach(l=>{l.name=l.name||l.bank||'Hipoteca'});   /* a recorrência identifica-se pelo nome */
     /* a pergunta pelas prestações desde o início (creditos.js) cria movimentos numa hipoteca:
        corre com os Créditos e os Movimentos ligados nesta conta; o planeado da prestação só
@@ -46,6 +49,54 @@ function propModal(id){
     if(id)toast('Imóvel atualizado.');
     else avisoComVer('Imóvel adicionado.','properties',()=>propView(casa.id));
   };
+}
+/* ---- a data de compra: o dia antes do qual a casa não tem história ----
+   Um contrato, um movimento ou uma hipoteca de uma casa não começam antes de
+   ela ser comprada (decisão do Martinho, ticket de QA a3a6d2d4: um contrato
+   «desde 1870» numa casa comprada em 2020 pedia 600 rendas em atraso). Sem
+   data de compra na ficha não há limite. A regra vive aqui, com a casa; quem
+   a usa fora dos serviços que requerem os Imóveis (os Movimentos, os
+   Planeados) perguntam primeiro se os Imóveis estão ligados. */
+/* A data de compra de um imóvel, já validada.
+   Recebe: casa — o imóvel (objeto, o do formulário) ou o id dele.
+   Devolve: 'AAAA-MM-DD' (texto), ou '' sem imóvel ou sem data de compra. */
+function dataDeCompra(casa){
+  const p=casa&&typeof casa==='object'?casa:(casa?prop(casa):null);
+  const d=String((p||{}).purchaseDate||'');
+  return /^\d{4}-\d{2}-\d{2}$/.test(d)?d:'';
+}
+/* A pergunta que os formulários fazem: esta data é antes da compra da casa?
+   Recebe: casa — o imóvel (objeto) ou o id dele; dataISO — a data a conferir
+   ('AAAA-MM-DD'; vazia não se confere).
+   Devolve: a data de compra como se escreve em Portugal (DD/MM/AAAA) quando
+   dataISO é anterior a ela; '' quando vale (igual ou depois, sem data, sem
+   data de compra). */
+function antesDaCompra(casa,dataISO){
+  const c=dataDeCompra(casa),d=String(dataISO||'').slice(0,10);
+  return c&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&d<c?dPT(c):'';
+}
+/* A primeira hipoteca do formulário que começa antes da compra da casa. Só
+   conta o início novo ou mudado: uma hipoteca antiga que já estava antes
+   (gravada antes da regra, ou cuja data de compra mudou depois) continua a
+   gravar-se quando se mexe noutro campo.
+   Recebe: p — o imóvel do formulário (pForm, com as hipotecas e a data de
+   compra que estão no ecrã); antes — o mesmo imóvel como está na base (null
+   num imóvel novo).
+   Devolve: {id, msg} — o id da hipoteca e a frase do erro —, ou null. */
+function creditoAntesDaCompra(p,antes){
+  const velhos={};((antes||{}).loans||[]).forEach(l=>{velhos[l.id]=l.start||''});
+  const l=((p||{}).loans||[]).find(x=>x.start&&x.start!==velhos[x.id]&&antesDaCompra(p,x.start));
+  return l?{id:l.id,msg:'O imóvel foi comprado a '+antesDaCompra(p,l.start)+': a hipoteca não pode começar antes.'}:null;
+}
+/* O atributo min de um campo de data, a data de compra: o calendário do
+   browser deixa de oferecer os dias de antes. Não se põe quando o valor
+   gravado já está antes (um registo antigo): o campo não nasce inválido.
+   Recebe: casa — o imóvel (objeto) ou o id dele; valor — o que o campo
+   mostra ('AAAA-MM-DD' ou '').
+   Devolve: ' min="AAAA-MM-DD"' (texto, com o espaço à frente), ou ''. */
+function minDaCompra(casa,valor){
+  const c=dataDeCompra(casa);
+  return c&&!(valor&&String(valor)<c)?` min="${c}"`:'';
 }
 /* O corpo da ficha de um imóvel: o que se sabe sobre ele, para ler, como a
    prancheta M-Imovel — a capa (a primeira foto, ou o mosaico) com quantas
@@ -446,10 +497,10 @@ function fixasSect(){
   return `<div class="sect imv-grupo">
       ${imvCab('Despesas fixas do imóvel','<span class="small">viram planeados</span>')}
       <div class="imv-2col">
-        <label>IMI (€/ano)<input id="p_imi" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.imi)}" placeholder="Opcional" data-input="imvImiMudou(this.value)"></label>
-        <label>Condomínio (€/mês)<input id="p_condominio" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.condominio)}" placeholder="Opcional"></label></div>
+        <label>IMI (€/ano)<input id="p_imi" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.imi)}" placeholder="Opcional" data-input="imvImiMudou(this.value)" autocomplete="off"></label>
+        <label>Condomínio (€/mês)<input id="p_condominio" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.condominio)}" placeholder="Opcional" autocomplete="off"></label></div>
       <div class="imv-2col imv-2col-largo">
-        <label>Seguro (€/ano)<input id="p_seguro" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.seguro)}" placeholder="Opcional"></label>
+        <label>Seguro (€/ano)<input id="p_seguro" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.seguro)}" placeholder="Opcional" autocomplete="off"></label>
         <label>Mês do seguro${sel('p_seguroMes',p.seguroMes||0,meses,'','rascunho')}</label></div>
       <p class="imv-frase num${frase?'':' u-d-none'}" id="imv_imi_frase" aria-live="polite">${esc(frase)}</p>
       <div class="hint">Cada valor cria um planeado que pede confirmação na data, e o valor vive aqui: apagar o planeado apaga-o daqui.
@@ -484,7 +535,7 @@ function donosSect(){
     ${imvCab('Proprietários e quota-parte')}
     ${owners.length?`<div class="imv-donos-lista">${owners.map(o=>`<div class="imv-dono">
         <span class="imv-dono-nome">${esc(o.name)}</span>
-        <span class="imv-pct"><input id="p_share_${o.id}" type="text" inputmode="decimal" value="${(p.ownerShares||{})[o.id]!=null?dec(p.ownerShares[o.id]):''}" placeholder="Ex: ${dec(Math.round(shares[o.id]*1000)/10)}" aria-label="Quota de ${esc(o.name)} (%, opcional)" data-input="liveShares()"><span aria-hidden="true">%</span></span>
+        <span class="imv-pct"><input id="p_share_${o.id}" type="text" inputmode="decimal" value="${(p.ownerShares||{})[o.id]!=null?dec(p.ownerShares[o.id]):''}" placeholder="Ex: ${dec(Math.round(shares[o.id]*1000)/10)}" aria-label="Quota de ${esc(o.name)} (%, opcional)" data-input="liveShares()" autocomplete="off"><span aria-hidden="true">%</span></span>
         <button type="button" class="btn ghost so-icone" aria-label="Remover ${esc(o.name)}" data-toca="rascunho" data-click="delPropOwner('${o.id}')">${ic('x',18)}</button></div>`).join('')}</div>`:''}
     <div class="hint" id="shareHint">${shareHint(owners,custom,sumSh)}</div>
     <div class="imv-botoes">
@@ -535,8 +586,8 @@ function propBody(){
     <div class="sect imv-grupo">
       ${imvCab('Valores')}
       <div class="imv-2col">
-        <label>Valor de mercado (€)<input id="p_value" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.value)}" placeholder="Opcional"></label>
-        <label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.purchase)}" placeholder="Opcional"></label></div>
+        <label>Valor de mercado (€)<input id="p_value" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.value)}" placeholder="Opcional" autocomplete="off"></label>
+        <label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.purchase)}" placeholder="Opcional" autocomplete="off"></label></div>
       <label>Data de aquisição<input id="p_purchaseDate" type="date" value="${p.purchaseDate||''}"></label>
       <div class="hint imv-colado">Serve para o Anexo G, se um dia venderes.</div>
     </div>
@@ -561,7 +612,7 @@ function propBody(){
         <label>Tipo de prédio${sel('p_tipoPredio',p.tipoPredio||'',[{v:'',label:'—'},{v:'U',label:'Urbano'},{v:'R',label:'Rústico'}],'','rascunho')}</label></div>
       <div class="row">
         <label>Tipologia${sel('p_tipologia',p.tipologia||'',[{v:'',label:'—'}].concat(['T0','T1','T2','T3','T4','T5','T6'].map(x=>({v:x,label:x}))),'','rascunho')}</label>
-        <label>VPT (€)<input id="p_vpt" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.vpt)}" placeholder="Opcional"></label></div>
+        <label>VPT (€)<input id="p_vpt" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.vpt)}" placeholder="Opcional" autocomplete="off"></label></div>
       <div class="row3">
         <label>Fração autónoma (opcional)<input id="p_fraction" value="${esc(p.fraction||'')}" placeholder="Ex: A"></label>
         <label>Andar (opcional)<input id="p_floor" value="${esc(p.floor||'')}" placeholder="Ex: 2.º"></label>
@@ -601,27 +652,27 @@ function loanSect(l,i){
       <label>Finalidade<input id="l_name_${l.id}" value="${esc(l.name)}" placeholder="Opcional" autocomplete="off" data-input="liveLoan('${l.id}')"></label>
       <label>Banco<input id="l_bank_${l.id}" value="${esc(l.bank)}" placeholder="Opcional" autocomplete="off"></label></div>
     <div class="row3">
-      <label>Capital em dívida (€) <span class="req">*</span><input id="l_out_${l.id}" type="text" inputmode="decimal" value="${imvEurosNoCampo(capitalDoInicio(l,db.transactions))}" placeholder="Ex: 150000" data-input="liveLoan('${l.id}')"></label>
-      <label>Prazo (anos)<input id="l_years_${l.id}" type="text" inputmode="numeric" value="${esc(l.years||'')}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
-      <label>Início<input id="l_start_${l.id}" type="date" value="${esc(l.start||'')}"></label></div>
+      <label>Capital em dívida (€) <span class="req">*</span><input id="l_out_${l.id}" type="text" inputmode="decimal" value="${imvEurosNoCampo(capitalDoInicio(l,db.transactions))}" placeholder="Ex: 150000" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
+      <label>Prazo (anos)<input id="l_years_${l.id}" type="text" inputmode="numeric" value="${esc(l.years||'')}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
+      <label>Início<input id="l_start_${l.id}" type="date" value="${esc(l.start||'')}"${minDaCompra(pForm,l.start)}></label></div>
     <div class="hint u-mt-n4px">À data de início: as prestações registadas abatem-no, e a caixa abaixo diz o que falta hoje. Se o crédito já vem de trás, ao guardar a app propõe registar as prestações desde então — e o capital desce com elas. Prazo em branco: 30 anos.</div>
     <div><div class="flabel">Tipo de taxa</div>
       <div class="seg c3">${[['fixa','lock','Fixa','não muda'],['mista','split','Mista','fixa e depois variável'],['variavel','wave','Variável','Euribor + spread']]
         .map(([k,ico,lb,sb])=>`<button type="button" class="opt ${l.type===k?'on':''}" data-toca="rascunho" data-click="setLType('${l.id}','${k}')"><span class="ic">${ic(ico,18)}</span><b>${lb}</b><small>${sb}</small></button>`).join('')}</div></div>
     ${l.type==='fixa'?`<div class="row">
-      <label>Taxa anual TAN (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
-      <label>Comissão de amortização (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional"></label></div>`:''}
+      <label>Taxa anual TAN (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
+      <label>Comissão de amortização (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional" autocomplete="off"></label></div>`:''}
     ${l.type==='mista'?`<div class="row">
-        <label>Anos com taxa fixa<input id="l_fy_${l.id}" type="text" inputmode="numeric" value="${l.fixedYears||''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
-        <label>Taxa fixa (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label></div>
+        <label>Anos com taxa fixa<input id="l_fy_${l.id}" type="text" inputmode="numeric" value="${l.fixedYears||''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
+        <label>Taxa fixa (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label></div>
       <div class="hint u-mt-n4px">Anos com taxa fixa em branco: 5.</div>`:''}
     ${l.type!=='fixa'?`<div class="row3">
       <label>Indexante${sel('l_index_'+l.id,l.index,['3m','6m','12m'].map(x=>({v:x,label:'Euribor '+x})),'liveLoanAll','rascunho')}</label>
-      <label>Indexante (%)<input id="l_eur_${l.id}" type="text" inputmode="decimal" value="${l.euribor?dec(l.euribor):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label>
-      <label>Spread (%)<input id="l_spr_${l.id}" type="text" inputmode="decimal" value="${l.spread?dec(l.spread):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')"></label></div>
+      <label>Indexante (%)<input id="l_eur_${l.id}" type="text" inputmode="decimal" value="${l.euribor?dec(l.euribor):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
+      <label>Spread (%)<input id="l_spr_${l.id}" type="text" inputmode="decimal" value="${l.spread?dec(l.spread):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label></div>
     <div class="row">
-      ${l.type==='mista'?`<label>Comissão amort. — fase fixa (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional"></label>`:''}
-      <label>Comissão amort. — taxa variável (%)<input id="l_fvar_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeVar!=null?dec(l.amortFeeVar):''}" placeholder="Opcional"></label></div>`:''}
+      ${l.type==='mista'?`<label>Comissão amort. — fase fixa (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional" autocomplete="off"></label>`:''}
+      <label>Comissão amort. — taxa variável (%)<input id="l_fvar_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeVar!=null?dec(l.amortFeeVar):''}" placeholder="Opcional" autocomplete="off"></label></div>`:''}
     <label class="check"><input type="checkbox" id="l_stamp_${l.id}" ${l.stampTax?'checked':''} data-change="toggleStamp('${l.id}')">
       Pagar imposto do selo sobre os juros (${dec(db.settings.stampPct??4)}%)</label>
     <div class="hint u-mt-n4px">Créditos mais antigos podem não o ter. Desliga se a tua prestação não o inclui.</div>

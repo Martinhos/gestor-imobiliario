@@ -161,6 +161,68 @@ export async function acessoACasa(env, userId, houseId) {
   };
 }
 
+/* A compropriedade de várias casas numa consulta só: as mesmas duas portas
+   do COMPROPRIETARIO_SQL, com as casas numa lista JSON (?1) em vez de uma. */
+const COMPROPRIETARIO_EM_LOTE_SQL = `
+  SELECT s.house_id FROM shares s
+    JOIN connections c ON c.id = s.connection_id
+   WHERE s.house_id IN (SELECT value FROM json_each(?1)) AND c.status = 'accepted'
+     AND (c.requester_id = ?2 OR c.target_id = ?2) AND s.owner_id <> ?2
+  UNION
+  SELECT gh.house_id FROM shared_group_houses gh
+    JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
+    JOIN shared_group_members m ON m.group_id = gh.group_id
+   WHERE gh.house_id IN (SELECT value FROM json_each(?1)) AND m.user_id = ?2 AND ${SAIU_DA_CASA}`;
+
+/* O acesso a várias casas de uma vez, com o grau e as mesmas regras de
+   acessoACasa — é o que o /api/sync usa para um pedido com muitas
+   operações gastar as mesmas consultas que um com uma (lib/escritas.js:
+   aplicarOps). As linhas das casas já vêm lidas; daqui saem no máximo duas
+   consultas: a compropriedade das que não são minhas, e o cargo das que
+   sobram.
+   Recebe: env — o ambiente do worker (a base D1); userId — o id do
+   utilizador, vindo da sessão; houseIds — os ids das casas; linhas — Map
+   id → linha de houses ({owner_id, deleted}) ou null quando não existe.
+   Devolve: promessa de um Map id → o objeto de acessoACasa. */
+export async function acessosACasas(env, userId, houseIds, linhas) {
+  const out = new Map();
+  const nada = { ok: false, owner: false, coowner: false, collab: null, ownerId: null };
+  const base = (h) => ({ ok: true, owner: false, coowner: false, collab: null, ownerId: h.owner_id });
+  const outros = [];
+  houseIds.forEach((id) => {
+    const h = linhas.get(id);
+    if (!h || h.deleted) out.set(id, nada);
+    else if (h.owner_id === userId) out.set(id, { ...base(h), owner: true });
+    else outros.push(id);
+  });
+  if (!outros.length) return out;
+  const co = new Set((await env.DB.prepare(COMPROPRIETARIO_EM_LOTE_SQL)
+    .bind(JSON.stringify(outros), userId).all()).results.map((r) => r.house_id));
+  const resto = outros.filter((id) => !co.has(id));
+  co.forEach((id) => out.set(id, { ...base(linhas.get(id)), coowner: true }));
+  if (!resto.length) return out;
+  const cargos = (await env.DB.prepare(
+    `SELECT ch.house_id, r.id, r.name, r.perms
+       FROM collaborators c
+       JOIN collaborator_houses ch ON ch.collaborator_id = c.id
+       JOIN roles r ON r.id = c.role_id
+       JOIN houses h ON h.id = ch.house_id
+      WHERE c.user_id = ?1 AND ch.house_id IN (SELECT value FROM json_each(?2))
+        AND c.owner_id = h.owner_id AND r.deleted = 0`
+  ).bind(userId, JSON.stringify(resto)).all()).results;
+  resto.forEach((id) => {
+    const cargo = cargos.find((r) => r.house_id === id);
+    if (!cargo) { out.set(id, { ...nada, ownerId: linhas.get(id).owner_id }); return; }
+    let perms = [];
+    try { perms = JSON.parse(cargo.perms); } catch (e) {}
+    out.set(id, {
+      ...base(linhas.get(id)),
+      collab: { roleId: cargo.id, roleName: cargo.name, perms: new Set(normalizarPerms(perms)) },
+    });
+  });
+  return out;
+}
+
 // A pergunta única das escritas: com este acesso, pode fazer isto? Dono e
 // comproprietário podem tudo; um colaborador só o que o cargo diz.
 // Recebe: acesso — o objeto de acessoACasa; perm — a permissão ('tx.add', ...).
@@ -218,17 +280,16 @@ export async function casasDeColaborador(env, userId) {
 // passa o fim) é apagá-lo no cliente — esse del passa também
 // (planeadoTermina); noutro caso apagar o de outrem continua 403. Um
 // planeado já apagado não se confirma nem se ressuscita por esta exceção.
-// Os anexos que a escrita junta têm regra própria (regraDosAnexos, files.js).
-// Recebe: env — o ambiente do worker; me — o utilizador com sessão; acesso —
-// o objeto de acessoACasa; houseId, kind, recordId — a linha; put — true a
-// gravar, false a apagar.
-// Devolve: promessa de null quando pode, { gone: true } quando não há nada a
-// apagar, ou { status, error } com o 403 e a frase para o cliente.
-export async function regraDoRegisto(env, me, acesso, houseId, kind, recordId, put) {
+// Os anexos que a escrita junta têm regra própria (escritas.js:recusaDosAnexos).
+// Não lê a base: a linha do registo vem lida por quem chama (o /api/sync lê
+// as de um pedido inteiro numa consulta, escritas.js:lerLinhas).
+// Recebe: me — o utilizador com sessão; acesso — o objeto de acessoACasa;
+// kind — o kind do registo; row — a linha de records ({deleted, created_by,
+// data}) ou null quando não existe; put — true a gravar, false a apagar.
+// Devolve: null quando pode, { gone: true } quando não há nada a apagar, ou
+// { status, error } com o 403 e a frase para o cliente.
+export function regraDoRegisto(me, acesso, kind, row, put) {
   if (!acesso.ok) return put ? { status: 403, error: fraseRecusa('acesso') } : { gone: true };
-  const row = await env.DB.prepare(
-    'SELECT deleted, created_by, data FROM records WHERE house_id = ? AND kind = ? AND id = ?'
-  ).bind(houseId, kind, recordId).first();
   if (acesso.collab) {
     const perms = acesso.collab.perms;
     if (!permDoKind(kind)) return { status: 403, error: fraseRecusa('kind') };
@@ -249,17 +310,15 @@ export async function regraDoRegisto(env, me, acesso, houseId, kind, recordId, p
 // existe e não é dele, o que vem funde-se sobre o guardado (fundirPlaneado —
 // só next, until e muted mudam); o seu próprio, ou um novo, grava-se como
 // veio. Donos e comproprietários gravam sempre o que mandam. Corre depois de
-// regraDoRegisto dizer que sim e antes de regraDosAnexos, do UPSERT e do
-// linkFiles, para os três olharem para o que fica mesmo na base.
-// Recebe: env — o ambiente do worker; me — o utilizador com sessão; acesso —
-// o objeto de acessoACasa; houseId, kind, recordId — a linha; data — o
-// registo que o cliente mandou (já passado por cleanData).
-// Devolve: promessa do objeto a gravar — o próprio data, ou o planeado fundido.
-export async function planeadoAGravar(env, me, acesso, houseId, kind, recordId, data) {
+// regraDoRegisto dizer que sim e antes da regra dos anexos, da escrita e do
+// linkFiles, para os três olharem para o que fica mesmo na base. Como
+// regraDoRegisto, recebe a linha já lida.
+// Recebe: me — o utilizador com sessão; acesso — o objeto de acessoACasa;
+// kind — o kind do registo; row — a linha de records ({created_by, data}) ou
+// null; data — o registo que o cliente mandou (já passado por cleanData).
+// Devolve: o objeto a gravar — o próprio data, ou o planeado fundido.
+export function planeadoAGravar(me, acesso, kind, row, data) {
   if (!acesso.collab || kind !== 'rec') return data;
-  const row = await env.DB.prepare(
-    'SELECT created_by, data FROM records WHERE house_id = ? AND kind = ? AND id = ?'
-  ).bind(houseId, kind, recordId).first();
   if (!row || row.created_by === me.id) return data;
   return fundirPlaneado(row.data, data);
 }

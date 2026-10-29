@@ -1647,10 +1647,470 @@ var SINAIS_RASTO = [
 // os tipos de evento por extenso
 var TIPOS_RASTO = {
   toque: 'Toque', ecra: 'Ecrã', 'janela-abre': 'Abriu a janela', 'janela-fecha': 'Fechou a janela', guardar: 'Guardou',
-  'erro-campo': 'Erro num campo', erro: 'Erro', pagina: 'Página', secao: 'Secção',
+  'erro-campo': 'Erro num campo', erro: 'Erro', pagina: 'Página', secao: 'Secção', dados: 'Dados',
 };
 // as origens por extenso
 var ORIGENS_RASTO = { app: 'App', montra: 'Montra' };
+
+/* ------------------------------ o rasto em palavras ------------------------------
+   O cliente manda descritores (click:<ação>, a:<destino>, <etiqueta>#<id>,
+   <etiqueta>.<classe>) e ids de ecrãs e de janelas, nunca o texto da página
+   (web/cloud/rasto.js:rstDescritor, landing.js:GUIAO_RASTO_MONTRA). Aqui
+   traduzem-se para os textos da app com os dicionários de baixo: um botão
+   pelo nome que a app lhe escreve, sem posição; um toque fora de botões pelo
+   nome do sítio, com a posição. O que nenhum dicionário conhece aparece cru
+   e discreto (rs-cru), e o testes/rasto-dicionario.test.js falha quando uma
+   ação dos data-click da app fica sem rótulo. */
+
+// os separadores da app (web/app/navegacao.js:TABS)
+var ECRAS_RASTO = {
+  dashboard: 'Visão geral', properties: 'Imóveis', groups: 'Grupos', contracts: 'Contratos', visits: 'Visitas',
+  tenants: 'Inquilinos', owners: 'Proprietários', colaboradores: 'Colaboradores', transactions: 'Movimentos',
+  recurring: 'Planeados', calendar: 'Calendário', credits: 'Créditos', projections: 'Projeções', reports: 'Avaliação',
+  fisco: 'IRS · Anexo F', settings: 'Definições',
+};
+// as subpáginas das Definições (navegacao.js:SUBPAGE e as linhas de definicoes.js e da nuvem)
+var SUBPAGINAS_RASTO = {
+  tema: 'Tema', defaults: 'Valores por omissão', cats: 'Categorias, etiquetas e IRS', tags: 'Etiquetas', irs: 'IRS e dedução',
+  groups: 'Grupos', filtros: 'Filtros comuns', dados: 'Importar e cópias', novidades: 'Novidades', cloud: 'Segurança',
+  legal: 'Aviso legal', ajuda: 'Ajuda e sugestões', faq: 'Perguntas frequentes', termos: 'Termos e Condições',
+  privacidade: 'Política de Privacidade',
+};
+// as páginas da montra e dos documentos, pelo caminho
+var PAGINAS_RASTO = { '/': 'Início da montra', '/privacidade': 'Política de Privacidade', '/termos': 'Termos e Condições' };
+// as secções da montra, pelo id (worker/src/landing.js)
+var SECCOES_RASTO = {
+  inicio: 'Início', ligado: 'Do imóvel à renda, tudo ligado', imoveis: 'Imóveis', contratos: 'Contratos',
+  planeados: 'Planeados', computador: 'No computador', resto: 'O resto da gestão', contas: 'Contas entre donos',
+  dados: 'Os dados são teus', comecar: 'Começa pelo primeiro imóvel', 'rasto-de-utilizacao': 'Rasto de utilização',
+};
+// as janelas e os portões com nome próprio (web/cloud/rasto.js:rstIdDaCamada e rstPortao), já com as aspas
+var JANELAS_RASTO = {
+  'sair-sem-guardar': '«Sair sem guardar?»', 'rst-pergunta': '«Ajudas-nos a melhorar o Rendorium?»',
+  'apr-pergunta': 'da pergunta da apresentação', janela: 'sem nome', cwAuth: 'da entrada', cwLegal: 'do aviso inicial',
+  cwTerms: 'dos termos novos', cwUpd: 'da versão nova', cwUpd2: 'da versão nova', cwRepor: 'da palavra-passe nova',
+  cwDoc: 'de um documento legal', cwGuia: 'do tutorial',
+};
+// os botões da app pelo nome da ação do data-click, com o texto que a app lhes escreve
+var ACOES_RASTO = {
+  closeModal: 'Fechar', closeAllModals: 'Fechar as janelas', closePops: 'Fechar o menu', menuOpen: 'Abrir o menu',
+  onSave: 'Guardar', _ok: 'Confirmar', _pick: 'Escolher uma opção', _pm: 'Guardar', _sairSemGuardar: 'Sair sem guardar',
+  cwSairParaColaboradores: 'Sair sem guardar', go: 'Ir para um separador', goBarra: 'Ir para um separador',
+  goSet: 'Abrir uma página das Definições', gavetaAlternar: 'Abrir ou fechar a gaveta', abrirOMeuPerfil: 'Abrir o meu perfil',
+  abrirAdicionar: 'Adicionar', criarEscolha: 'Escolher o que adicionar', fabAlternarMenu: 'Adicionar',
+  fabFecharMenu: 'Escolher o que adicionar', novoGrupoEscolher: 'Grupo', recarregarApp: 'Recarregar',
+  selOpen: 'Abrir uma lista de escolha', selPick: 'Escolher uma opção', toggleFold: 'Abrir ou fechar uma secção',
+  abrirSeletorFicheiros: 'Escolher ficheiros', selecionarCampo: 'Selecionar a ligação',
+  // imóveis
+  propModal: 'Adicionar ou editar imóvel', propView: 'Abrir o imóvel', delProp: 'Apagar o imóvel', seed: 'Carregar exemplo',
+  imvGaleria: 'Ver as fotografias', marcarVisitaNoImovel: 'Marcar visita', contratoNoQuarto: 'Novo contrato',
+  delPropOwner: 'Remover proprietário', addPropOwner: 'Adicionar proprietário', delRoom: 'Remover quarto', addRoom: 'Adicionar quarto',
+  addLoan: 'Adicionar crédito', delLoan: 'Remover crédito', setLType: 'Escolher o tipo de crédito',
+  imvTrfLigar: 'Ir para os proprietários', imvTrfPedir: 'Enviar pedido', imvTransferir: 'Transferir o controlo',
+  verMovimentosDoImovel: 'Ver os movimentos do imóvel', pagamentoNoImovel: 'Pagamento', despesaNoImovel: 'Despesa',
+  openMeta: 'Abrir um anexo', fotoPassar: 'Passar de fotografia', fotoDescarregar: 'Descarregar', downloadMeta: 'Descarregar',
+  delFileConfirm: 'Remover o anexo', pesEscolherDocs: 'Adicionar documentos',
+  // contratos
+  ctModal: 'Adicionar ou editar contrato', ctView: 'Abrir o contrato', ctAbrirDaLista: 'Abrir o contrato',
+  ctFiltroRapido: 'Ver terminados', delContract: 'Apagar o contrato', reactivateContract: 'Reativar o contrato',
+  ctPdfJanela: 'Gerar contrato em PDF', ctPdfDescarregar: 'Descarregar o PDF', ctRenovar: 'Renovar', ctRenovarOk: 'Renovar',
+  endContract: 'Terminar', ctRegistarRenda: 'Registar renda', ctVerMovimentos: 'Ver movimentos', ctVerAnexos: 'Ver os anexos',
+  ctFimResposta: 'É uma correção ou uma renovação', ctMarcarComunicada: 'Marcar como comunicada',
+  ctEscolheQuarto: 'Escolher o quarto', ctComecaNoFim: 'Escolher o quarto', setFiscoEstado: 'Escolher o estado na AT',
+  delInv: 'Remover artigo', delInvSelected: 'Remover selecionados', addInv: 'Adicionar artigo', addInvBulk: 'Adicionar vários',
+  doInvBulk: 'Adicionar', togCtPhoto: 'Selecionar uma fotografia', allCtPhotos: 'Selecionar todas',
+  delKey: 'Remover tipo de chave', delKeySelected: 'Remover selecionadas', addKey: 'Adicionar tipo de chave',
+  addKeyBulk: 'Adicionar várias', doKeyBulk: 'Adicionar', delRenov: 'Remover renovação', addRenov: 'Adicionar renovação',
+  newTenantFromCt: 'Criar inquilino novo', pzSilencia: 'Silenciar o prazo',
+  // pessoas
+  personModal: 'Adicionar ou editar pessoa', personView: 'Abrir a pessoa', delPerson: 'Apagar a pessoa',
+  abrirFicha: 'Abrir a ficha', settleModal: 'Acertar contas', doSettle: 'Registar pagamentos',
+  balancesDetail: 'Como se chega aos saldos', visConverte: 'Converter em inquilino',
+  // movimentos
+  txModal: 'Adicionar ou editar movimento', txView: 'Abrir o movimento', 'CW.openTx': 'Abrir o movimento',
+  newTxPick: 'Adicionar movimento', anaApply: 'Adicionar movimento', editarMovimento: 'Editar o movimento', delTx: 'Apagar o movimento',
+  clearTxFilters: 'Limpar', txLimparFiltro: 'Limpar o filtro', txPorEtiqueta: 'Filtrar por etiqueta', txFilterFechar: 'Fechar',
+  txPorTipo: 'Filtrar por tipo', txVerTipo: 'Ver o tipo', onTxNoPayer: 'Só os sem pagador', txqLimpar: 'Limpar a pesquisa',
+  txFiltrosAlternar: 'Filtros', txEtiqAbrir: 'Etiquetas', aplicarFiltroComum: 'Aplicar um filtro comum',
+  newTplForTx: 'Criar modelo novo', newTagFromTx: 'Criar etiqueta nova', setKind: 'Escolher o tipo de movimento',
+  txMudaTipo: 'Mudar o tipo', txPagoPor: 'Escolher quem pagou', setPayType: 'Escolher a forma de pagamento',
+  onAmtReset: 'Repor', onLoanReset: 'Repor', pagarCredor: 'Pagar', 'CW.kpiToTx': 'Ver nos movimentos',
+  dashVerSemImovel: 'Ver movimentos sem imóvel',
+  // planeados
+  newRec: 'Novo planeado', editRec: 'Editar o planeado', recView: 'Abrir o planeado', delRec: 'Apagar o planeado',
+  confirmRec: 'Rever', quickConfirmRec: 'Confirmar', skipRec: 'Silenciar', 'CW.rejectRec': 'Rejeitar o planeado',
+  newTpl: 'Novo modelo', editTpl: 'Editar o modelo', tplView: 'Abrir o modelo', delTpl: 'Apagar o modelo',
+  newFromTemplate: 'Usar o modelo', pendToggle: 'Mostrar ou esconder os pendentes', recRetroAgoraNao: 'Agora não',
+  'CW.fillMissed': 'Registar os em falta', 'CW.doFillMissed': 'Registar estimativa', 'CW.fillNext': 'Cancelar',
+  // visitas e calendário
+  visitModal: 'Adicionar ou editar visita', visView: 'Abrir a visita', visLimparChip: 'Limpar o filtro',
+  calNav: 'Mudar de mês', calSel: 'Escolher um dia', calMarcarVisita: 'Marcar visita', calNovoPlaneado: 'Recorrente',
+  calPendAlternar: 'Mostrar ou esconder os pendentes',
+  // créditos
+  amortModal: 'Plano de amortização', mortView: 'Abrir a hipoteca', mortModal: 'Editar', newMort: 'Nova hipoteca',
+  delMort: 'Apagar a hipoteca', delMortFrom: 'Apagar a hipoteca', associarOrfaos: 'Associar',
+  credPagasAlternar: 'Liquidadas', pagarCreditoDaHipoteca: 'Pagamento',
+  // visão geral, avaliação, projeções e IRS
+  kpiModal: 'Ver a evolução', kpiPorque: 'Como se calcula', repFoco: 'Abrir a avaliação do imóvel', donutDrill: 'Abrir ou voltar no gráfico',
+  anaChipFocar: 'Escolher o imóvel', repAnaLimpar: 'Voltar a todos os imóveis', projAnaLimpar: 'Voltar a todos os imóveis',
+  dashPersonalizarPainel: 'Personalizar painel', 'CW.backToDash': 'Visão geral', 'CW.resetDashOrder': 'Repor ordem',
+  'CW.exitEdit': 'Concluir', fiscoEscolherAno: 'Escolher o ano', limparAmbito: 'Limpar o titular',
+  hdrFiltToggle: 'Todos · por inteiro', fiscoPartilhar: 'Partilhar resumo', fiscoCsv: 'Exportar CSV',
+  fiscoVerGuia: 'Guia de preenchimento', fiscoSetIrs: 'Escolher a coluna do IRS', fiscoSetTitular: 'Escolher o titular',
+  // listas, filtros e seleção
+  lpMenu: 'Opções', lfClear: 'Limpar', lfToggle: 'Filtros', lfApply: 'Fechar', lfLimparCampo: 'Limpar o campo',
+  lqLimpar: 'Limpar a pesquisa', limparFiltroAtual: 'Limpar filtros',
+  'CW.selTodos': 'Selecionar todos os movimentos', 'CW.selEntrar': 'Selecionar', 'CW.selEntrarTodos': 'Selecionar todos',
+  'CW.selSair': 'Cancelar', 'CW.selTagToggle': 'Marcar uma etiqueta', 'CW.selGravar': 'Aplicar',
+  'CW.selEditar': 'Editar os selecionados', 'CW.selApagar': 'Apagar os selecionados', 'CW.selLTodos': 'Selecionar todos',
+  'CW.selLVisEstado': 'Realizada ou falta', 'CW.selLSair': 'Cancelar', 'CW.selLApagar': 'Apagar',
+  'CW.selLMudo': 'Mudar os selecionados', 'CW.selLTransferir': 'Transferir o controlo',
+  // tarefas
+  tfAbrir: 'Abrir as tarefas', tfFechar: 'Fechar', tfGuardar: 'Guardar', tfNovaTarefa: 'Adicionar tarefa',
+  tfLimparPesquisa: 'Limpar a pesquisa', tfDobrar: 'Abrir ou fechar uma secção', tfPegaClique: 'Arrastar a tarefa',
+  tfEditarTarefa: 'Editar a tarefa', tfRemoverTarefa: 'Remover a tarefa', tfNovaSeccao: 'Nova secção',
+  tfRemoverSeccao: 'Remover a secção', tfMudarNomeSeccao: 'Mudar o nome da secção',
+  // notificações
+  notifModal: 'Abrir as notificações', notifLido: 'Marcar tudo como lido', notifTransfVer: 'Ver',
+  notifTransfAceitar: 'Aceitar', notifTransfRecusar: 'Recusar', notifTransfCancelar: 'Cancelar',
+  // definições
+  addCat: 'Nova categoria', delCat: 'Apagar a categoria', addSub: 'Nova subcategoria', delSub: 'Apagar a subcategoria',
+  renameSub: 'Mudar o nome', mudarNomeCategoria: 'Mudar o nome da categoria', defCatAbrir: 'Abrir uma categoria',
+  defArvoreEscolher: 'Escolher na árvore de categorias', resetCats: 'Repor as de origem',
+  resetIrsMapa: 'Repor as colunas do Anexo F', addTag: 'Nova etiqueta', delTag: 'Apagar a etiqueta',
+  groupModal: 'Novo grupo', delGroup: 'Apagar o grupo', grupoTipoEscolher: 'Escolher o tipo de grupo',
+  fcModal: 'Novo filtro comum', fcGuardar: 'Guardar', delFiltroComum: 'Apagar o filtro comum',
+  temaEscolher: 'Escolher o tema', setTheme: 'Escolher o tema', exportarSoMeu: 'Guardar cópia', driveOpen: 'Repor uma cópia',
+  bkPasteBox: 'Colar cópia', bkReporColado: 'Repor', undoImport: 'Desfazer a importação', swEscolherFicheiro: 'Escolher ficheiro',
+  swPasteBox: 'Colar o texto do CSV', swParseColado: 'Continuar', swDo: 'Importar', wipe: 'Apagar todos os dados',
+  aveMudarNasDefinicoes: 'Mudar os avisos por email', rstMudarNasDefinicoes: 'Mudar nas Definições',
+  // ajuda, apresentações, tutorial, novidades e QA
+  aprResponder: 'Não mostrar mais ou voltar à apresentação', aprPassar: 'Anterior', aprSeguinte: 'Seguinte',
+  aprRever: 'Rever uma apresentação', aprMarcarTodasVistas: 'Marcar todas como vistas',
+  'CW.guiaAbrir': 'Abrir o tutorial', 'CW.guiaFechar': 'Fechar o tutorial', 'CW.guiaAnterior': 'Anterior',
+  'CW.guiaSeguinte': 'Seguinte', 'CW.passosFora': 'Dispensar os primeiros passos', 'CW.novToggle': 'Abrir ou fechar uma novidade',
+  'CW.novFechar': 'Continuar', 'CW.atualizarAgora': 'Atualizar agora', fecharFaixaAtualizar: 'Depois',
+  'CW.newTicket': 'Novo pedido', 'CW.ticketTipo': 'Escolher o tipo de pedido', 'CW.sendTicket': 'Enviar',
+  'CW.ticketsDeNovo': 'Tentar de novo', 'CW.perguntaAbrir': 'Abrir uma pergunta frequente',
+  rstResponder: 'Aceitar ou Recusar o rasto', qaEnviar: 'Enviar ticket', qaGravidade: 'Escolher a gravidade',
+  qaRemoverImagem: 'Remover a imagem', qaNovoTicket: 'Novo ticket', qaCarregarDeNovo: 'Tentar de novo',
+  qaDobrar: 'Abrir ou fechar um ticket', qaAbrirTicket: 'Abrir o ticket', qaRemover: 'Remover', qaReabrir: 'Reabrir',
+  qaImagemDeNovo: 'Tentar de novo',
+  // conta, entrada, termos e documentos
+  'CW.showAuth': 'Iniciar sessão', 'CW.submitAuth': 'Entrar ou criar conta', 'CW.modoDaEntrada': 'Entrar ou criar conta',
+  'CW.verPalavraPasse': 'Mostrar a palavra-passe', 'CW.esqueci': 'Esqueci-me da palavra-passe', fecharRepor: 'Cancelar',
+  'CW.reporConfirmar': 'Guardar a palavra-passe nova', 'CW.naoSouEu': 'Não sou eu', 'CW.chegadaDepois': 'Agora não',
+  'CW.logout': 'Terminar sessão', 'CW.deleteAccount': 'Apagar a conta', 'CW.doDeleteAccount': 'Apagar definitivamente',
+  'CW.savePassword': 'Guardar a palavra-passe', 'CW.editProfile': 'Editar o perfil', 'CW.copyId': 'Copiar o id',
+  'CW.readDoc': 'Ler os Termos ou a Privacidade', 'CW.closeDoc': 'Voltar', 'CW.acceptLegal': 'Começar',
+  'CW.acceptTerms': 'Aceitar e continuar', 'CW.refuseTerms': 'Recusar e apagar a conta', 'CW.doRefuseTerms': 'Apagar definitivamente',
+  // partilha, proprietários, colaboradores e grupos
+  'CW.addConn': 'Ligar', 'CW.acceptConn': 'Aceitar a ligação', 'CW.delConn': 'Recusar ou cancelar a ligação',
+  'CW.sharesModal': 'Casas partilhadas', 'CW.shareResponder': 'Responder à proposta de divisão',
+  'CW.answerProposal': 'Responder à proposta de divisão', 'CW.proposeShares': 'Propor nova divisão',
+  'CW.shareProporAbrir': 'Propor nova divisão', 'CW.shareProporFechar': 'Não propor',
+  'CW.ligacaoCopiar': 'Copiar', 'CW.ligacaoRodar': 'Rodar', 'CW.ligacaoDesativar': 'Desativar', 'CW.ligacaoCriar': 'Criar ligação',
+  'CW.pedidoAceitar': 'Aceitar', 'CW.pedidoRecusar': 'Recusar', 'CW.pedidoCancelar': 'Cancelar pedido',
+  'CW.cargoModal': 'Editar o cargo', 'CW.cargoExemplo': 'Escolher um cargo de exemplo', 'CW.cargoPermissoes': 'Permissões',
+  'CW.apagarCargo': 'Apagar o cargo', 'CW.conviteModal': 'Convidar', 'CW.conviteCargo': 'Escolher o cargo do convite',
+  'CW.conviteGrupo': 'Escolher o grupo do convite', 'CW.criarConvite': 'Criar ligação de convite',
+  'CW.partilharLigacao': 'Partilhar…', 'CW.copiar': 'Copiar ligação', 'CW.mudarColaborador': 'Mudar cargo ou imóveis',
+  cwGerirColaboradores: 'Gerir', 'CW.removerColaborador': 'Remover', 'CW.revogarConvite': 'Revogar', 'CW.sairDeImovel': 'Deixar de colaborar',
+  'CW.aceitarConvite': 'Aceitar convite', 'CW.enviarPedido': 'Enviar pedido', 'CW.entrarNoGrupo': 'Pedir para entrar',
+  'CW.grupoModal': 'Abrir o grupo', 'CW.grupoPartilhar': 'Partilhar este grupo', 'CW.grupoImoveis': 'Adicionar imóveis ao grupo',
+  'CW.grupoRemoverImovel': 'Remover o imóvel do grupo', 'CW.grupoRemoverMembro': 'Remover do grupo', 'CW.grupoSair': 'Sair do grupo',
+  'CW.grupoRenomear': 'Mudar o nome do grupo', 'CW.grupoApagar': 'Apagar o grupo', 'CW.casasDoGrupoCom': 'Casas partilhadas',
+  'CW.grupoAceitarPedido': 'Aceitar', 'CW.grupoRecusarPedido': 'Recusar', 'CW.grupoCancelarPedido': 'Cancelar pedido',
+  'CW.grupoLigacaoCopiar': 'Copiar', 'CW.grupoLigacaoRodar': 'Rodar', 'CW.grupoLigacaoDesativar': 'Desativar',
+  'CW.grupoLigacaoCriar': 'Criar ligação',
+};
+// os elementos que respondem ao toque sem data-click, pela classe ou pelo id
+var BOTOES_RASTO = { 'escolha-botao': 'Aceitar ou Recusar o rasto', bg: 'Fora da janela' };
+// os campos e os outros elementos que respondem ao toque, pela etiqueta (com o artigo, para a frase)
+var CAMPOS_RASTO = {
+  input: 'num campo', textarea: 'numa caixa de texto', select: 'numa lista de escolha', label: 'no rótulo de um campo',
+  summary: 'numa secção que abre e fecha', button: 'num botão', a: 'numa ligação',
+};
+// os sítios sem nada para carregar, pelo id ou pela classe (com a preposição: «Tocou num cartão»)
+var SITIOS_RASTO = {
+  view: 'no fundo do ecrã', raiz: 'no fundo do ecrã', nav: 'na gaveta', tabbar: 'na barra de baixo', abasArea: 'nas abas',
+  pageTitle: 'no título do ecrã', pageSub: 'no subtítulo do ecrã', top: 'no cabeçalho', toast: 'num aviso',
+  modalBody: 'no corpo de uma janela', modalTitle: 'no título de uma janela', modalFoot: 'no rodapé de uma janela',
+  sheet: 'numa janela', body: 'no corpo de uma janela', head: 'no cabeçalho de uma janela', foot: 'no rodapé de uma janela',
+  card: 'num cartão', cartao: 'num cartão', small: 'num texto pequeno', hint: 'num texto de ajuda', badge: 'num selo', form: 'num formulário',
+  req: 'na marca de obrigatório', stat: 'numa linha de valores', flabel: 'no rótulo de um campo', lbl: 'num rótulo',
+  toolbar: 'numa barra de botões', empty: 'numa mensagem de lista vazia', num: 'num número', n: 'num número',
+  title: 'num título', 'section-title': 'num título de secção', 'card-tit': 'no título de um cartão', list: 'numa lista',
+  row: 'numa linha', 'row-between': 'numa linha', row3: 'numa linha', linha: 'numa linha', sect: 'numa secção',
+  ic: 'num ícone', 'chips-fila': 'numa fila de filtros', chip: 'num filtro', avatar: 'nas iniciais de uma pessoa',
+  disp: 'num valor', check: 'numa caixa de escolha', segm: 'num seletor', seg: 'num seletor', table: 'numa tabela',
+  tablewrap: 'numa tabela', cols: 'numa grelha', grid: 'numa grelha', txt: 'num texto', chartbox: 'num gráfico',
+  legend: 'na legenda de um gráfico', kpi: 'num indicador', neg: 'num valor negativo', amber: 'num aviso',
+  'imv-linha': 'no cartão de um imóvel', 'mov-linha': 'num movimento', txrow: 'num movimento', calday: 'num dia do calendário',
+  espera: 'numa espera', 'atencao-linha': 'num aviso', 'atencao-txt': 'num aviso',
+  // a montra
+  hero: 'no topo da montra', wrap: 'no fundo da página', tile: 'num cartão', 'm-cartao': 'num cartão da maquete',
+  telemovel: 'na maquete do telemóvel', ecra: 'na maquete do telemóvel', 'm-sub': 'num texto da maquete',
+  sub: 'num texto', tit: 'num título', chapeu: 'num título', valor: 'num valor', mark: 'num destaque',
+  'banda-noite': 'na secção das contas entre donos', faz: 'na secção do resto da gestão', ligado: 'na secção «tudo ligado»',
+  'faixa-topo': 'no cabeçalho', 'rodape-marca': 'no rodapé', computador: 'na maquete do computador',
+};
+// as famílias de classes da app, pelo prefixo (quando a classe exata não está em SITIOS_RASTO)
+var FAMILIAS_RASTO = [
+  ['apr-', 'na apresentação'], ['imv-', 'na ficha de um imóvel'], ['ct-', 'num contrato'], ['mov-', 'num movimento'],
+  ['tx', 'num movimento'], ['cred-', 'num crédito'], ['pes-', 'na ficha de uma pessoa'], ['vg-', 'na visão geral'],
+  ['def-', 'nas Definições'], ['fis-', 'no IRS'], ['cal', 'no calendário'], ['tf-', 'nas tarefas'], ['qa-', 'nos tickets de QA'],
+  ['grp-', 'num grupo'], ['colab-', 'nos colaboradores'], ['ava-', 'na avaliação'], ['ana-', 'numa análise'],
+  ['vis-', 'numa visita'], ['pt-', 'na apresentação'], ['upd-', 'na versão nova'], ['nov-', 'nas novidades'],
+  ['pc-', 'na maquete do computador'], ['m-', 'na maquete do telemóvel'], ['escolha-', 'na faixa do rasto'],
+];
+// as etiquetas, quando nem o id nem a classe dizem nada
+var ETIQUETAS_RASTO = {
+  html: 'no fundo do ecrã', body: 'no fundo do ecrã', main: 'no fundo do ecrã', header: 'no cabeçalho', footer: 'no rodapé',
+  nav: 'na navegação', aside: 'na barra lateral', section: 'numa secção', svg: 'num gráfico', img: 'numa imagem',
+  h1: 'num título', h2: 'num título', h3: 'num título', h4: 'num título', p: 'num texto', span: 'num texto', b: 'num texto',
+  strong: 'num texto', small: 'num texto pequeno', li: 'numa linha de uma lista', ul: 'numa lista', ol: 'numa lista',
+  table: 'numa tabela', td: 'numa tabela', th: 'numa tabela', tr: 'numa tabela', dl: 'numa lista', dt: 'numa lista', dd: 'numa lista',
+};
+// os tipos de registo do evento «dados» (worker/src/lib/rasto.js:KINDS_DOS_DADOS), pela ordem em que se dizem
+var DADOS_RASTO = [
+  ['house', 'imóvel', 'imóveis'], ['contract', 'contrato', 'contratos'], ['tx', 'movimento', 'movimentos'],
+  ['rec', 'planeado', 'planeados'], ['tpl', 'modelo', 'modelos'], ['visit', 'visita', 'visitas'],
+  ['tenant', 'inquilino', 'inquilinos'], ['group', 'grupo', 'grupos'], ['profile', 'o perfil'], ['settings', 'as definições'],
+];
+// as três operações do evento «dados», pelo sinal no alvo e pela ordem em que se dizem
+var OPERACOES_RASTO = [['+', 'Adicionou'], ['~', 'Editou'], ['-', 'Removeu']];
+
+/* Um nome do rasto em HTML: em palavras quando um dicionário o conhece; o
+   descritor cru e discreto quando não.
+   Recebe: p — { txt, cru } (txt vazio quando não se sabe).
+   Devolve: string HTML ('—' quando não há nada). */
+function palavraRastoHtml(p) {
+  if (p && p.txt) return esc(p.txt);
+  return p && p.cru ? '<code class="rs-cru">' + esc(p.cru) + '</code>' : '—';
+}
+/* O ecrã de um evento em palavras: um separador da app, uma subpágina das
+   Definições («Definições › Tema»), uma página da montra ou uma secção dela.
+   Recebe: ecra — o ecrã guardado (string ou null).
+   Devolve: { txt, cru, seccao } (seccao true numa secção da montra). */
+function ecraRasto(ecra) {
+  var e = String(ecra || '');
+  if (!e) return { txt: '', cru: '' };
+  if (e.charAt(0) === '#') return { txt: SECCOES_RASTO[e.slice(1)] ? '«' + SECCOES_RASTO[e.slice(1)] + '»' : '', cru: e, seccao: true };
+  if (e.charAt(0) === '/') return { txt: PAGINAS_RASTO[e] || '', cru: e };
+  var partes = e.split('/');
+  if (partes[0] === 'settings' && partes.length > 1) {
+    return { txt: SUBPAGINAS_RASTO[partes[1]] ? 'Definições › ' + SUBPAGINAS_RASTO[partes[1]] : '', cru: e };
+  }
+  return { txt: ECRAS_RASTO[e] || '', cru: e };
+}
+/* Uma janela em palavras, para ir depois de «janela»: as de nome próprio,
+   a apresentação de um separador, ou a da ação que a abriu («de «Adicionar
+   ou editar imóvel»»).
+   Recebe: janela — o id guardado (string ou null).
+   Devolve: { txt, cru }. */
+function janelaRasto(janela) {
+  var j = String(janela || '');
+  if (!j) return { txt: '', cru: '' };
+  if (JANELAS_RASTO[j]) return { txt: JANELAS_RASTO[j], cru: j };
+  if (j.indexOf('apresentacao/') === 0) {
+    var de = ECRAS_RASTO[j.slice(13)];
+    return { txt: de ? 'da apresentação de ' + de : 'de uma apresentação', cru: j };
+  }
+  return { txt: ACOES_RASTO[j] ? 'de «' + ACOES_RASTO[j] + '»' : '', cru: j };
+}
+/* O destino de uma ligação em palavras: a app (entrar ou criar conta), os
+   documentos, uma secção da montra, um email ou um telefone.
+   Recebe: d — o que vem depois de «a:» (o host de fora, o caminho e as chaves).
+   Devolve: o nome (texto), ou '' quando não se conhece. */
+function ligacaoRasto(d) {
+  d = String(d || '');
+  if (d === 'mailto' || d === 'mailto:') return 'Enviar um email';
+  if (d === 'tel' || d === 'tel:') return 'Telefonar';
+  if (d.charAt(0) === '#') return SECCOES_RASTO[d.slice(1)] ? 'Ir à secção «' + SECCOES_RASTO[d.slice(1)] + '»' : '';
+  var m = /^([a-z0-9.-]*)(\/[^?]*)?(?:\?(.*))?$/.exec(d);
+  if (!m) return '';
+  var host = m[1], caminho = m[2] || '/', chaves = (m[3] || '').split('&');
+  if (/^(?:app|dev)\.rendorium\.com$/.test(host) && caminho === '/') return chaves.indexOf('criar') > -1 ? 'Criar conta' : 'Entrar na app';
+  if (host && !/(?:^|\.)rendorium\.com$/.test(host)) return '';
+  if (caminho.indexOf('/privacidade') === 0) return 'Política de Privacidade';
+  if (caminho.indexOf('/termos') === 0) return 'Termos e Condições';
+  if (caminho === '/' && !host) return chaves.indexOf('criar') > -1 ? 'Criar conta' : 'Início';
+  return '';
+}
+/* Um descritor em palavras: se responde ao toque (um botão, uma ligação, um
+   campo) e o nome dele como a app o escreve; ou o sítio onde se tocou, com a
+   preposição («num cartão»). Nunca há texto da página para mostrar: o
+   descritor não o leva.
+   Recebe: alvo — o descritor guardado (string ou null).
+   Devolve: { interativo: true|false|null, rotulo, sitio, exato, cru } —
+   rotulo é o nome de um botão («Guardar»), sitio o de um sítio ou de um
+   elemento genérico («num campo»), exato se o sítio se conhece pelo nome (e
+   não pela família ou pela etiqueta), cru o descritor tal e qual. */
+function alvoRasto(alvo) {
+  var a = String(alvo || '');
+  var r = { interativo: null, rotulo: '', sitio: '', exato: false, cru: a };
+  if (!a) return r;
+  if (a.indexOf('click:') === 0) { r.interativo = true; r.rotulo = ACOES_RASTO[a.slice(6)] || ''; r.cru = a.slice(6); return r; }
+  if (a.indexOf('a:') === 0) { r.interativo = true; r.rotulo = ligacaoRasto(a.slice(2)); r.sitio = r.rotulo ? '' : 'numa ligação'; return r; }
+  var m = /^([a-z][a-z0-9-]*)(?:([#.])(.+))?$/.exec(a);
+  if (!m) return r;
+  var tag = m[1], nome = m[3] || '';
+  if (CAMPOS_RASTO[tag]) {
+    r.interativo = true;
+    if (BOTOES_RASTO[nome]) r.rotulo = BOTOES_RASTO[nome];
+    else r.sitio = CAMPOS_RASTO[tag];
+    return r;
+  }
+  r.interativo = false;
+  if (BOTOES_RASTO[nome]) { r.interativo = true; r.rotulo = BOTOES_RASTO[nome]; return r; }
+  if (nome && SITIOS_RASTO[nome]) { r.sitio = SITIOS_RASTO[nome]; r.exato = true; return r; }
+  for (var i = 0; !r.sitio && nome && i < FAMILIAS_RASTO.length; i++) {
+    if (nome.indexOf(FAMILIAS_RASTO[i][0]) === 0) r.sitio = FAMILIAS_RASTO[i][1];
+  }
+  if (!r.sitio) r.sitio = ETIQUETAS_RASTO[tag] || '';
+  // a etiqueta sozinha diz tudo; uma família ou uma classe que não se conhece leva o descritor ao lado
+  r.exato = !nome && !!r.sitio;
+  return r;
+}
+/* Se um toque caiu num botão (ou noutra coisa que responde). O cliente
+   decide: marca em-vao o que não respondia, e um toque sem sinal respondeu;
+   só num toque repetido, que tapa o em-vao, decide o descritor.
+   Recebe: e — o evento (tipo toque); a — o alvoRasto(e.alvo).
+   Devolve: true/false. */
+function toqueEmBotaoRasto(e, a) {
+  if (e.sinal === 'em-vao') return false;
+  if (e.sinal === 'repetido') return a.interativo === true;
+  return true;
+}
+/* Onde, na janela, caiu um toque: só para os toques fora de botões.
+   Recebe: e — o evento (x, y em permilagem; vw, vh em px).
+   Devolve: string HTML ('' sem posição). */
+function posicaoRastoHtml(e) {
+  if (e.x == null || e.y == null) return '';
+  return '<span class="sub n">a ' + Math.round(e.x / 10) + '% da esquerda e ' + Math.round(e.y / 10) + '% do cimo' +
+    (e.vw && e.vh ? ' · janela ' + esc(e.vw) + '×' + esc(e.vh) : '') + '</span>';
+}
+/* Um toque em palavras. Num botão, o nome dele como a app o escreve, sem
+   posição: «Tocou em «Guardar»». Fora de botões, o nome do sítio e a
+   posição: «Tocou num cartão», a 51% da esquerda. O que o dicionário não
+   conhece vai cru, discreto, ao lado.
+   Recebe: e — o evento (tipo toque).
+   Devolve: string HTML. */
+function rastoToqueHtml(e) {
+  var a = alvoRasto(e.alvo);
+  var cru = '<code class="rs-cru">' + esc(a.cru) + '</code>';
+  if (toqueEmBotaoRasto(e, a)) {
+    if (a.rotulo) return '<span>Tocou em <span class="rs-rotulo">«' + esc(a.rotulo) + '»</span></span>';
+    if (a.sitio) return '<span>Tocou ' + esc(a.sitio) + '</span>' + cru;
+    return '<span>Tocou ' + (a.cru ? 'num botão' : 'sem alvo') + '</span>' + (a.cru ? cru : '');
+  }
+  if (a.sitio) return '<span>Tocou ' + esc(a.sitio) + '</span>' + (a.exato ? '' : cru) + posicaoRastoHtml(e);
+  return '<span>Tocou ' + (a.cru ? 'em ' + cru : 'num sítio sem nome') + '</span>' + posicaoRastoHtml(e);
+}
+/* As contagens de um evento «dados», lidas do alvo («dados:house+1,tx-3»):
+   só os tipos e as operações conhecidos.
+   Recebe: alvo — o alvo guardado; soma (opcional) — um objeto a que somar.
+   Devolve: { 'house+': 1, 'tx-': 3, … } (o objeto da soma, quando veio). */
+function contagensRasto(alvo, soma) {
+  var c = soma || {};
+  var s = String(alvo || '');
+  if (s.indexOf('dados:') !== 0) return c;
+  s.slice(6).split(',').forEach(function (p) {
+    var m = /^([a-z]+)([+~-])(\d{1,6})$/.exec(p);
+    if (m) c[m[1] + m[2]] = (c[m[1] + m[2]] || 0) + Number(m[3]);
+  });
+  return c;
+}
+/* Uma lista em português: «a», «a e b», «a, b e c».
+   Recebe: l — a lista de textos.
+   Devolve: o texto. */
+function juntarRasto(l) {
+  return l.length < 2 ? (l[0] || '') : l.slice(0, -1).join(', ') + ' e ' + l[l.length - 1];
+}
+/* As contagens como uma frase: «Adicionou 1 imóvel e 36 movimentos; editou
+   2 contratos; removeu 3 movimentos», com os plurais certos.
+   Recebe: c — as contagens (contagensRasto).
+   Devolve: o texto ('' sem nada contado). */
+function fraseDadosRasto(c) {
+  var frases = [];
+  OPERACOES_RASTO.forEach(function (op) {
+    var partes = [];
+    DADOS_RASTO.forEach(function (k) {
+      var n = c[k[0] + op[0]];
+      if (!n) return;
+      partes.push(k.length === 2 ? k[1] : contadoRasto(n, k[1], k[2]));
+    });
+    if (partes.length) frases.push((frases.length ? op[1].toLowerCase() : op[1]) + ' ' + juntarRasto(partes));
+  });
+  return frases.join('; ');
+}
+/* O que se fez num evento, em palavras: o toque (rastoToqueHtml), o ecrã, a
+   página e a secção que se abriram, as janelas, o guardar, os erros, e os
+   registos que mudaram.
+   Recebe: e — o evento.
+   Devolve: string HTML. */
+function rastoFezHtml(e) {
+  var t = e.tipo;
+  if (t === 'toque') return rastoToqueHtml(e);
+  if (t === 'dados') {
+    var f = fraseDadosRasto(contagensRasto(e.alvo));
+    return f ? '<span class="rs-rotulo">' + esc(f) + '</span>' : '<code class="rs-cru">' + esc(e.alvo || '') + '</code>';
+  }
+  if (t === 'ecra') return '<span>Abriu o ecrã ' + palavraRastoHtml(ecraRasto(e.ecra)) + '</span>';
+  if (t === 'pagina') return '<span>Abriu a página ' + palavraRastoHtml(ecraRasto(e.ecra)) + '</span>';
+  if (t === 'secao') return '<span>Viu a secção ' + palavraRastoHtml(ecraRasto(e.ecra)) + '</span>';
+  if (t === 'janela-abre' || t === 'janela-fecha') {
+    return '<span>' + (t === 'janela-abre' ? 'Abriu' : 'Fechou') + ' a janela ' + palavraRastoHtml(janelaRasto(e.janela)) + '</span>';
+  }
+  if (t === 'guardar') return '<span>Guardou</span>';
+  if (t === 'erro-campo') return '<span>Um campo deu erro ao guardar</span>' + (e.alvo ? '<code class="rs-cru">' + esc(e.alvo) + '</code>' : '');
+  if (t === 'erro') return '<span>A app deu um erro</span>';
+  return esc(TIPOS_RASTO[t] || t || '—');
+}
+/* Onde aconteceu um evento: o ecrã e, por cima dele, a janela.
+   Recebe: e — o evento.
+   Devolve: string HTML ('—' sem ecrã nem janela). */
+function rastoOndeHtml(e) {
+  var ec = e.tipo === 'secao' ? { txt: '', cru: '' } : ecraRasto(e.ecra);
+  var j = janelaRasto(e.janela);
+  var partes = [];
+  if (ec.txt || ec.cru) partes.push(palavraRastoHtml(ec));
+  if (j.txt || j.cru) partes.push('janela ' + palavraRastoHtml(j));
+  return partes.length ? partes.join(' › ') : '—';
+}
+/* O alvo de uma linha do resumo por ecrã em palavras: o nome do botão, ou o
+   sítio; o desconhecido cru.
+   Recebe: alvo — o descritor.
+   Devolve: string HTML. */
+function rastoAlvoHtml(alvo) {
+  var a = alvoRasto(alvo);
+  if (a.rotulo) return '«' + esc(a.rotulo) + '»';
+  if (a.sitio) return maiuscula(esc(a.sitio)) + (a.exato ? '' : ' <code class="rs-cru">' + esc(a.cru) + '</code>');
+  return a.cru ? '<code class="rs-cru">' + esc(a.cru) + '</code>' : '—';
+}
+/* O topo de uma sessão: as páginas visitadas, pela ordem e sem repetir a
+   mesma seguida («Visão geral › Imóveis › Contratos»), e os registos que
+   mudaram nela, numa frase.
+   Recebe: evs — os eventos da sessão, pela ordem em que aconteceram.
+   Devolve: string HTML ('' quando não há nem uma coisa nem outra). */
+function rastoSessaoResumoHtml(evs) {
+  var paginas = [], ultima = null, soma = {};
+  evs.forEach(function (e) {
+    if (e.tipo === 'dados') { contagensRasto(e.alvo, soma); return; }
+    if (e.tipo === 'secao' || !e.ecra) return;
+    var p = ecraRasto(e.ecra);
+    var chave = p.txt || p.cru;
+    if (chave === ultima) return;
+    ultima = chave;
+    paginas.push(palavraRastoHtml(p));
+  });
+  var dados = fraseDadosRasto(soma);
+  if (!paginas.length && !dados) return '';
+  return '<div class="rs-sessao-resumo">' +
+    (paginas.length ? '<p><span class="forte">Páginas visitadas:</span> ' + paginas.join(' › ') + '</p>' : '') +
+    (dados ? '<p><span class="forte">Dados:</span> ' + esc(dados) + '</p>' : '') + '</div>';
+}
 
 /* O sinal de um id, ou null quando o id não é um dos cinco.
    Recebe: id — o id do sinal (string, como vem do servidor).
@@ -1879,8 +2339,8 @@ function verRastoResumo(dias) {
 function rastoResumoHtml(linhas) {
   var corpo = linhas.map(function (l) {
     var s = l.sinais || {};
-    return '<tr><td data-rot="Ecrã">' + (l.ecra ? '<code class="rs-alvo">' + esc(l.ecra) + '</code>' : '—') + '</td>' +
-      '<td data-rot="Alvo">' + (l.alvo ? '<code class="rs-alvo">' + esc(l.alvo) + '</code>' : '—') + '</td>' +
+    return '<tr><td data-rot="Ecrã">' + palavraRastoHtml(ecraRasto(l.ecra)) + '</td>' +
+      '<td data-rot="Alvo">' + rastoAlvoHtml(l.alvo) + '</td>' +
       SINAIS_RASTO.map(function (x) {
         var n = Number(s[x.id]) || 0;
         return '<td class="r n' + (n ? ' rs-n ' + x.tom : ' sub') + '" data-rot="' + x.nomes + '">' + (n ? esc(numero(n)) : '—') + '</td>';
@@ -1982,9 +2442,11 @@ function passagemRasto(de, para) {
   return (de === 'app' || de === 'montra' ? 'd' + nome(de) : 'de ' + nome(de)) + ' para ' + nome(para);
 }
 /* Uma sessão da linha do tempo: uma secção que abre e fecha, com o início,
-   a duração, as origens, quantos eventos e quantos sinais; aberta, a tabela
-   dos eventos, com a linha de cada sinal marcada no contorno e na letra, e a
-   passagem de uma origem para a outra dita numa linha.
+   a duração, as origens, quantos eventos e quantos sinais; aberta, as
+   páginas visitadas e os registos que mudou (rastoSessaoResumoHtml) e a
+   tabela dos eventos em palavras (o que fez e onde), com a linha de cada
+   sinal marcada no contorno e na letra, e a passagem de uma origem para a
+   outra dita numa linha.
    Recebe: s — a sessão ({sessao, inicio, fim, origens, eventos}); aberta — se abre já aberta.
    Devolve: string HTML. */
 function rastoSessaoHtml(s, aberta) {
@@ -1994,20 +2456,15 @@ function rastoSessaoHtml(s, aberta) {
   var linhas = '', anterior = '';
   evs.forEach(function (e) {
     if (anterior && e.origem && e.origem !== anterior) {
-      linhas += '<tr class="rs-passa"><td colspan="7">' + ic('seta', 'i-sm') + 'Passou ' + passagemRasto(anterior, e.origem) + '</td></tr>';
+      linhas += '<tr class="rs-passa"><td colspan="5">' + ic('seta', 'i-sm') + 'Passou ' + passagemRasto(anterior, e.origem) + '</td></tr>';
     }
     if (e.origem) anterior = e.origem;
     var sn = sinalRasto(e.sinal);
-    var posicao = e.x != null && e.y != null
-      ? '<span class="sub n">a ' + Math.round(e.x / 10) + '% da esquerda e ' + Math.round(e.y / 10) + '% do cimo' +
-        (e.vw && e.vh ? ' · janela ' + esc(e.vw) + '×' + esc(e.vh) : '') + '</span>' : '';
     linhas += '<tr' + (sn ? ' class="rs-sinal ' + sn.tom + '"' : '') + '>' +
       '<td class="n nw" data-rot="Hora">' + horaRasto(e.at) + '</td>' +
       '<td data-rot="Origem">' + rastoOrigensHtml([e.origem]) + '</td>' +
-      '<td class="nw" data-rot="Tipo">' + esc(TIPOS_RASTO[e.tipo] || e.tipo || '—') + '</td>' +
-      '<td data-rot="Ecrã">' + (e.ecra ? '<code class="rs-alvo">' + esc(e.ecra) + '</code>' : '—') + '</td>' +
-      '<td data-rot="Janela">' + (e.janela ? '<code class="rs-alvo">' + esc(e.janela) + '</code>' : '—') + '</td>' +
-      '<td data-rot="Alvo"><span class="rs-alvo-bloco">' + (e.alvo ? '<code class="rs-alvo">' + esc(e.alvo) + '</code>' : '—') + posicao + '</span></td>' +
+      '<td data-rot="O que fez"><span class="rs-alvo-bloco">' + rastoFezHtml(e) + '</span></td>' +
+      '<td data-rot="Onde">' + rastoOndeHtml(e) + '</td>' +
       '<td data-rot="Sinal">' + (sn ? '<span class="badge rs-s ' + sn.tom + '">' + sn.nome + '</span>' : '<span class="sub">—</span>') + '</td></tr>';
   });
   return '<details class="card rs-sessao"' + (aberta ? ' open' : '') + '>' +
@@ -2016,8 +2473,9 @@ function rastoSessaoHtml(s, aberta) {
     '<span class="sub n">' + duracaoRasto(fimRasto(s) - inicioRasto(s)) + ' · ' + contadoRasto(evs.length, 'evento', 'eventos') + '</span>' +
     '<span class="rs-sessao-selos">' + rastoOrigensHtml(origens) +
     (nSinais ? '<span class="badge rs-s wa">' + contadoRasto(nSinais, 'sinal', 'sinais') + '</span>' : '') + '</span></summary>' +
-    '<div class="tb-rola"><table class="tb empilha rs-tb rs-ev"><thead><tr><th>Hora</th><th>Origem</th><th>Tipo</th><th>Ecrã</th><th>Janela</th>' +
-    '<th>Alvo</th><th>Sinal</th></tr></thead><tbody>' + linhas + '</tbody></table></div></details>';
+    rastoSessaoResumoHtml(evs) +
+    '<div class="tb-rola"><table class="tb empilha rs-tb rs-ev"><thead><tr><th>Hora</th><th>Origem</th><th>O que fez</th><th>Onde</th>' +
+    '<th>Sinal</th></tr></thead><tbody>' + linhas + '</tbody></table></div></details>';
 }
 
 /* O «Ver o rasto» no detalhe de um pedido: pergunta ao servidor o pseudónimo

@@ -973,7 +973,7 @@ function fiscoEnglobamentoCard(r){
     :e.compensa?'<b>Englobar compensa</b>: menos '+euro2(e.diferenca)+' de imposto.'
     :'<b>Não englobar compensa</b>: menos '+euro2(-e.diferenca)+' de imposto.';
   return fisCartao('Englobar ou não?','quadro '+esc(Q)+' · simulação para '+A+(e.conjunta?' · tributação conjunta':''),
-    `<label class="fis-outros">Outros rendimentos coletáveis do agregado em ${A}<span class="fis-eur"><input id="fiscoOutros" type="text" inputmode="decimal" class="num" value="${e.temOutros?esc(dec(e.outros)):''}" placeholder="Ex: 18000" data-change="fiscoSetOutros(this.value)"><span aria-hidden="true">€</span></span></label>
+    `<label class="fis-outros">Outros rendimentos coletáveis do agregado em ${A}<span class="fis-eur"><input id="fiscoOutros" type="text" inputmode="decimal" class="num" value="${e.temOutros?esc(dec(e.outros)):''}" placeholder="Ex: 18000" data-change="fiscoSetOutros(this.value)" autocomplete="off"><span aria-hidden="true">€</span></span></label>
     <p class="hint">O que os outros rendimentos dão depois das deduções específicas — o salário ou a pensão menos a dedução específica, por exemplo; a nota de liquidação do ano anterior mostra-o. Vazio conta como zero.</p>
     <div><div class="stat"><span>Sem englobar — taxa especial de cada contrato</span><b>${euro2(e.especial)}</b></div>
     <div class="stat"><span>Englobando — escalões do art. 68.º de ${e.anoEscaloes}</span><b>${euro2(e.englobando)}</b></div></div>

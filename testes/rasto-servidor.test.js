@@ -31,6 +31,7 @@ import { tabelasDaBase } from '../worker/src/salvaguarda.js';
 import {
   cookieDoRasto, dominioDoCookie, lerCookiesDoRasto, caminhoDeVolta, limparLote, novoPid, novoVid,
   podarRasto, PID_RE, MAX_EVENTOS, descritorDeLigacao,
+  TIPOS, TIPOS_DO_CLIENTE, KINDS_DOS_DADOS, alvoDosDados, registarDados, sessaoDoPedido,
 } from '../worker/src/lib/rasto.js';
 
 /* ------------------------------ armações ------------------------------- */
@@ -390,6 +391,101 @@ describe('a recolha e a escolha na API da app', () => {
     assert.ok(cookiesDe(nao).some((c) => /^rd_vis=;.*Max-Age=0/.test(c)));
     assert.equal(await um(env, 'SELECT rasto_escolha FROM users WHERE id = ?', A.id), 'nao');
     assert.equal((await pedir(env, A, '/api/rasto/escolha', 'POST', { escolha: 'talvez' })).status, 400);
+  });
+});
+
+/* Os dados que se guardam (o ticket de QA 03f1d309): por pedido de sync,
+   QUANTOS registos de que tipo, nunca o conteúdo, num evento «dados» que só
+   o servidor escreve — e só com a conta em sim. */
+describe('os dados que se guardam, contados pelo servidor', () => {
+  test('o «dados» é um tipo do servidor: um cliente que o mande vê-o deitado fora', async () => {
+    assert.ok(TIPOS.includes('dados') && !TIPOS_DO_CLIENTE.includes('dados'));
+    assert.deepEqual(TIPOS_DO_CLIENTE, TIPOS.filter((x) => x !== 'dados'));
+    const lote = limparLote({ sessao: SESSAO, eventos: [ev({ tipo: 'dados', alvo: 'dados:house+999' }), ev()] });
+    assert.deepEqual(lote.eventos.map((e) => e.tipo), ['toque']);
+    const env = ambiente();
+    const A = await conta(env, 'Ana');
+    await escolher(env, A, 'sim');
+    await pedir(env, A, '/api/rasto', 'POST', { sessao: SESSAO, eventos: [ev({ tipo: 'dados', alvo: 'dados:tx+5' })] });
+    assert.equal(await um(env, "SELECT COUNT(*) FROM rasto_eventos WHERE tipo = 'dados'"), 0, 'nem pela API da app');
+  });
+
+  test('o alvo: kind, operação e número, pela ordem dos kinds, só os conhecidos e só a partir de 1', () => {
+    assert.equal(alvoDosDados({ tx: { criado: 36, removido: 3 }, house: { criado: 1 }, contract: { editado: 2 } }),
+      'dados:house+1,contract~2,tx+36,tx-3');
+    assert.equal(alvoDosDados({ house: { criado: 0, editado: -2, removido: 'x' }, nada: { criado: 4 }, tx: { apagado: 3 } }), null,
+      'nada a contar: nem zeros, nem negativos, nem kinds ou operações desconhecidos');
+    assert.equal(alvoDosDados({ tx: { criado: 2.7 } }), 'dados:tx+2');
+    assert.equal(alvoDosDados({ tx: { criado: 1e9 } }), 'dados:tx+99999', 'um número enorme fica no teto');
+    assert.equal(alvoDosDados(null), null);
+    assert.equal(alvoDosDados('house+1'), null);
+    const tudo = {};
+    for (const k of KINDS_DOS_DADOS) tudo[k] = { criado: 1 };
+    assert.equal(alvoDosDados(tudo).split(',').length, KINDS_DOS_DADOS.length);
+  });
+
+  test('registarDados só grava com a conta em sim: um evento por pedido, origem app, no pid dela, sem nada do conteúdo', async () => {
+    const env = ambiente();
+    const A = await conta(env, 'Ana');
+    const contagens = { house: { criado: 1 }, tx: { criado: 36 }, contract: { editado: 2 } };
+    assert.equal(await registarDados(env, A.id, contagens), false, 'sem escolha');
+    await escolher(env, A, 'nao');
+    assert.equal(await registarDados(env, A.id, contagens), false, 'com não');
+    assert.equal(await um(env, 'SELECT COUNT(*) FROM rasto_eventos'), 0);
+    assert.equal(await um(env, 'SELECT COUNT(*) FROM rasto_ids'), 0, 'e sem criar pid');
+    await escolher(env, A, 'sim');
+    assert.equal(await registarDados(env, A.id, {}), false, 'sem contagens não grava');
+    assert.equal(await registarDados(env, A.id, contagens, SESSAO), true);
+    const pid = await um(env, 'SELECT pid FROM rasto_ids WHERE user_id = ?', A.id);
+    const rows = await linhas(env, 'SELECT pid, sessao, origem, tipo, ecra, janela, alvo, x, y, sinal FROM rasto_eventos');
+    assert.deepEqual(rows, [{ pid, sessao: SESSAO, origem: 'app', tipo: 'dados', ecra: null, janela: null,
+      alvo: 'dados:house+1,contract~2,tx+36', x: null, y: null, sinal: null }]);
+  });
+
+  test('sem sessão dada, junta-se à da app desta pessoa nos últimos 30 min; sem nenhuma, abre uma', async () => {
+    const env = ambiente();
+    const A = await conta(env, 'Ana');
+    await escolher(env, A, 'sim');
+    assert.equal(await registarDados(env, A.id, { tx: { removido: 3 } }), true);
+    const primeira = await um(env, "SELECT sessao FROM rasto_eventos WHERE tipo = 'dados'");
+    assert.match(primeira, /^s-[a-z0-9]{10}$/, 'uma sessão nova, com a forma do contrato');
+    const pid = await um(env, 'SELECT pid FROM rasto_ids WHERE user_id = ?', A.id);
+    await env.DB.prepare('DELETE FROM rasto_eventos').run();
+    await eventos(env, pid, [{ sessao: 's-recente11', at: Date.now() - 60000 }, { sessao: 's-velhaaaaa', at: Date.now() - 2 * 3600000 },
+      { sessao: 's-montra111', at: Date.now() - 1000, origem: 'montra' }]);
+    assert.equal(await registarDados(env, A.id, { group: { criado: 1 } }, 'não-é-sessão'), true);
+    assert.equal(await um(env, "SELECT sessao FROM rasto_eventos WHERE alvo = 'dados:group+1'"), 's-recente11');
+  });
+
+  test('a sessão do pedido lê-se do cabeçalho X-Rasto-Sessao, só com a forma certa', () => {
+    const com = (v) => new Request('https://x', { headers: v == null ? {} : { 'X-Rasto-Sessao': v } });
+    assert.equal(sessaoDoPedido(com(SESSAO)), SESSAO);
+    assert.equal(sessaoDoPedido(com('s-ABC')), null);
+    assert.equal(sessaoDoPedido(com(null)), null);
+    assert.equal(sessaoDoPedido(null), null);
+  });
+
+  test('nunca lança: uma base que falha devolve false', async () => {
+    const env = ambiente();
+    const A = await conta(env, 'Ana');
+    await escolher(env, A, 'sim');
+    const partida = { ...env, DB: { prepare() { throw new Error('a base caiu'); } } };
+    const erro = console.error;
+    console.error = () => {};
+    try {
+      assert.equal(await registarDados(partida, A.id, { house: { criado: 1 } }), false);
+    } finally { console.error = erro; }
+  });
+
+  test('o back office recebe-o na linha do tempo, como os outros eventos', async () => {
+    const env = ambiente();
+    const A = await conta(env, 'Ana');
+    await escolher(env, A, 'sim');
+    await registarDados(env, A.id, { house: { criado: 1 } }, SESSAO);
+    const pid = await um(env, 'SELECT pid FROM rasto_ids WHERE user_id = ?', A.id);
+    const d = await corpoDe(await chamar(env, MASTER, 'GET', '/api/equipa/rasto/pessoa/' + pid));
+    assert.equal(d.status, 200);
+    assert.deepEqual(d.sessoes.map((s) => s.eventos.map((e) => [e.tipo, e.alvo])), [[['dados', 'dados:house+1']]]);
   });
 });
 

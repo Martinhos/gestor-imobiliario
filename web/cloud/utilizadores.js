@@ -246,7 +246,7 @@ CW.proposeShares = function (hid, fromShare) {
     parts.map(function (u) {
       var o = owner(u) || { name: u };
       return '<label>' + esc(o.name) + (CW.user && u === CW.user.id ? ' (tu)' : '') + ' (%)' +
-        '<input id="cw_pp_' + u + '" type="text" inputmode="decimal" value="' + dec(Math.round((cur[u] || 0) * 1000) / 10) + '"></label>';
+        '<input id="cw_pp_' + u + '" type="text" inputmode="decimal" value="' + dec(Math.round((cur[u] || 0) * 1000) / 10) + '" autocomplete="off"></label>';
     }).join('') + '</div>';
   openModal(fromShare ? 'Divisão de quotas · ' + (live.name || '') : 'Propor nova divisão', body);
   onSave = function () {

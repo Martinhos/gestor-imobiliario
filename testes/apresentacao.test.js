@@ -625,7 +625,7 @@ const pergunta = () => {
 };
 
 describe('a pergunta a quem fecha antes do fim (ticket de QA 61dee982)', () => {
-  test('o ✕ antes da última imagem pergunta, e a marca espera; «Continuar a mostrar» marca esta e a resposta, e as outras abrem sem voltar a perguntar', () => {
+  test('o ✕ antes da última imagem pergunta, com dois botões — «Não mostrar mais» e, primário em baixo, «Voltar à apresentação» — e o «?» no texto; a marca espera (ticket de QA 0c010410)', () => {
     montar();
     registarDeBrincar('contracts', 3);
     app.tab = 'contracts';
@@ -635,33 +635,62 @@ describe('a pergunta a quem fecha antes do fim (ticket de QA 61dee982)', () => {
     assert.ok(P, 'fechada a meio, pergunta');
     assert.equal(P.t, 'Não queres ver as apresentações?');
     assert.ok(P.classes.has('apr-pergunta'), 'com os botões em coluna');
-    assert.match(P.b, /<b>Ajuda → Apresentações<\/b>/, 'diz onde se reveem');
+    assert.match(P.b, /a de cada ecrã continua no <b>\?<\/b>, lá em cima\./, 'diz que o «?» reabre a de cada ecrã');
     const botoes = [...P.f.matchAll(/<button[^>]*class="([^"]*)"[^>]*data-click="aprResponder\('(\w+)'\)">([^<]*)</g)].map((m) => [m[3], m[2], /primary/.test(m[1])]);
-    igual(botoes, [['Voltar à apresentação', 'voltar', false], ['Não mostrar mais', 'nenhuma', false], ['Continuar a mostrar', 'mostrar', true]]);
+    igual(botoes, [['Não mostrar mais', 'nenhuma', false], ['Voltar à apresentação', 'voltar', true]]);
+    assert.equal((P.f.match(/<button/g) || []).length, 2, 'só os dois');
+    assert.doesNotMatch(P.f, /Continuar a mostrar|'mostrar'/, 'o «Continuar a mostrar» saiu');
     igual(vistas(), {}, 'ainda nada marcado');
     app.aprTentar();
     assert.equal(app.modalStack.length, 1, 'com a pergunta aberta, nada abre por cima');
+  });
+
+  test('a resposta «mostrar» já não existe: não marca nada e a pergunta fica aberta (ticket de QA 0c010410)', () => {
+    montar();
+    registarDeBrincar('contracts', 3);
+    const avisos = [];
+    app.toast = (m) => { avisos.push(m); };
+    app.tab = 'contracts';
+    app.aprTentar();
+    app.closeModal('x');
+    const P = pergunta();
     app.aprResponder('mostrar');
-    assert.equal(app.modalStack.length, 0);
-    igual(vistas(), { contracts: 1, perguntou: 1 });
+    assert.equal(app.modalStack.length, 1, 'a pergunta continua aberta');
+    assert.equal(pergunta(), P);
+    assert.equal(P.aprPergunta.feito, false, 'e ainda por responder');
+    igual(vistas(), {}, 'nada marcado');
+    igual(avisos, []);
+    assert.doesNotMatch(ler('web/cloud/apresentacao.js'), /'mostrar'/, 'nem o ramo ficou no código');
+  });
+
+  test('uma conta que respondeu «Continuar a mostrar» antes da v46 (só perguntou) vê as outras e não volta a ouvir a pergunta', () => {
+    montar({ respondida: true });
     registarDeBrincar('transactions', 3);
     app.tab = 'transactions';
     app.aprTentar();
     assert.equal(app.modalStack.length, 1, 'as outras abrem na primeira visita');
     app.closeModal('fundo');
     assert.equal(app.modalStack.length, 0, 'e já não pergunta');
-    assert.ok(vistas().transactions);
+    igual(vistas(), { perguntou: 1, transactions: 1 });
   });
 
-  test('«Não mostrar mais»: nenhuma abre sozinha, nem as boas-vindas, e a Ajuda continua a reabri-las', () => {
+  test('«Não mostrar mais»: nenhuma abre sozinha, nem as boas-vindas, um aviso diz, já com a pergunta fechada, que a de cada ecrã fica no «?», e a Ajuda continua a reabri-las', () => {
     montar();
     registarDeBrincar('contracts', 2);
     registarDeBrincar('transactions', 2);
+    const avisos = [];
+    app.toast = (m, op) => { avisos.push({ m, ms: op && op.ms, abertas: app.modalStack.length }); };
     app.tab = 'contracts';
     app.aprTentar();
     app.closeModal('arrasto');
+    igual(avisos, [], 'a pergunta ainda não diz nada');
     app.aprResponder('nenhuma');
+    assert.equal(app.modalStack.length, 0);
     igual(vistas(), { contracts: 1, perguntou: 1, nenhuma: 1 });
+    igual(avisos, [{ m: 'As apresentações não voltam a abrir sozinhas. A de cada ecrã fica no «?», lá em cima.', ms: 4500, abertas: 0 }],
+      'um aviso, com tempo de se ler, depois de a pergunta fechar');
+    app.aprResponder('nenhuma');
+    assert.equal(avisos.length, 1, 'sem pergunta aberta, outra resposta não avisa outra vez');
     app.tab = 'transactions';
     assert.equal(app.aprQueAbrir(), '', 'o separador seguinte não abre');
     app.aprContaNova('EU');
@@ -676,11 +705,14 @@ describe('a pergunta a quem fecha antes do fim (ticket de QA 61dee982)', () => {
   test('«Voltar à apresentação» reabre na mesma imagem, sem marcar nem gastar a pergunta', () => {
     montar();
     registarDeBrincar('contracts', 4);
+    const avisos = [];
+    app.toast = (m) => { avisos.push(m); };
     app.tab = 'contracts';
     app.aprTentar();
     app.aprSeguinte();
     app.closeModal('esc');
     app.aprResponder('voltar');
+    igual(avisos, [], 'voltar não avisa');
     assert.equal(app.modalStack.length, 1);
     const L = app.modalStack[0];
     assert.ok(L.apr && L.apr.marcar, 'a mesma apresentação, ainda a marcar');
@@ -696,11 +728,14 @@ describe('a pergunta a quem fecha antes do fim (ticket de QA 61dee982)', () => {
     montar();
     registarDeBrincar('contracts', 2);
     registarDeBrincar('transactions', 2);
+    const avisos = [];
+    app.toast = (m) => { avisos.push(m); };
     app.tab = 'contracts';
     app.aprTentar();
     app.closeModal('x');
     app.closeModal('x');
     igual(vistas(), { contracts: 1 });
+    igual(avisos, [], 'sem resposta, sem aviso');
     app.tab = 'transactions';
     app.aprTentar();
     app.closeModal('x');
@@ -735,16 +770,26 @@ describe('a pergunta a quem fecha antes do fim (ticket de QA 61dee982)', () => {
     assert.ok(!vistas().visits);
   });
 
-  test('as boas-vindas também perguntam; «Continuar a mostrar» marca-as com a Visão geral e os Imóveis e larga o sinal', () => {
+  test('as boas-vindas também perguntam; «Voltar à apresentação» reabre-as, e «Não mostrar mais» marca-as com a Visão geral e os Imóveis, larga o sinal e avisa do «?»', () => {
     montar();
+    const avisos = [];
+    app.toast = (m) => { avisos.push(m); };
     app.aprContaNova('EU');
     app.aprTentar();
     app.closeModal('x');
     assert.ok(pergunta(), 'as boas-vindas fechadas na primeira imagem perguntam');
     assert.equal(app.localStorage.getItem('gi_apr_nova'), 'EU', 'o sinal espera pela resposta');
-    app.aprResponder('mostrar');
-    igual(Object.keys(vistas()).sort(), ['boas-vindas', 'dashboard', 'perguntou', 'properties']);
+    app.aprResponder('voltar');
+    assert.equal(app.modalStack.length, 1);
+    assert.equal(app.modalStack[0].apr.id, 'boas-vindas', 'as mesmas, outra vez');
+    assert.equal(app.localStorage.getItem('gi_apr_nova'), 'EU', 'o sinal continua à espera');
+    app.closeModal('x');
+    assert.ok(pergunta(), 'voltar não gastou a pergunta');
+    app.aprResponder('nenhuma');
+    igual(Object.keys(vistas()).sort(), ['boas-vindas', 'dashboard', 'nenhuma', 'perguntou', 'properties']);
     assert.equal(app.localStorage.getItem('gi_apr_nova'), null);
+    assert.equal(avisos.length, 1);
+    assert.match(avisos[0], /«\?»/);
   });
 
   test('o closeModal a sério passa a origem do fecho ao aoFechar', () => {

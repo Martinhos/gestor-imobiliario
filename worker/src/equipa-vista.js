@@ -547,8 +547,14 @@ dialog.janela::backdrop{background:var(--veu)}
 .badge.rs-s{border:1px solid currentColor}
 .badge.rs-s b{font-weight:700}
 .rs-tb td{vertical-align:top}
-.rs-alvo{font-size:12.5px;overflow-wrap:anywhere}
 .rs-alvo-bloco{display:flex;flex-direction:column;gap:2px;min-width:0}
+/* o que se fez, em palavras (rastoFezHtml): o rótulo do botão a forte, e o
+   descritor que o dicionário não conhece cru e discreto, em monoespaçado */
+.rs-rotulo{font-weight:600}
+.rs-cru{font-family:var(--letra-mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+/* o topo de cada sessão: as páginas visitadas e os registos que mudou */
+.rs-sessao-resumo{display:flex;flex-direction:column;gap:4px;padding:12px 18px 0;font-size:13.5px}
+.rs-sessao-resumo p{margin:0}
 .rs-tb td.rs-n{font-weight:700}
 .rs-tb td.rs-n.wa{color:var(--warn)}
 .rs-tb td.rs-n.dg{color:var(--danger)}
@@ -579,7 +585,7 @@ dialog.janela::backdrop{background:var(--veu)}
 .rs-legenda dd{margin:0}
 abbr[title]{text-decoration:none}
 @media(hover:hover) and (pointer:fine){.rs-sessao>summary:hover,.rs-legenda>summary:hover{background:var(--tint)}}
-@media(max-width:899px){.rs-sessao>summary,.rs-legenda>summary{padding:12px 14px}.rs-legenda dl{padding:0 14px 14px}.rs-passa-entre{padding:2px 14px}}
+@media(max-width:899px){.rs-sessao>summary,.rs-legenda>summary{padding:12px 14px}.rs-legenda dl{padding:0 14px 14px}.rs-passa-entre{padding:2px 14px}.rs-sessao-resumo{padding:12px 14px 0}}
 @media(max-width:640px){
   .rs-ev tr.rs-sinal{box-shadow:inset 3px 0 0 var(--warn)}
   .rs-ev tr.rs-sinal.dg{box-shadow:inset 3px 0 0 var(--danger)}

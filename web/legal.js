@@ -22,7 +22,7 @@
 window.LEGAL = (function () {
   'use strict';
 
-  var VERSION = '2026-10-29';
+  var VERSION = '2026-10-30';
   var OPERADOR = 'Martinho Fé Santos';
   var MORADA = '';                       // apartado, escritório virtual ou sede
   var NIF = '';                          // obrigatório quando houver cobrança
@@ -298,6 +298,8 @@ window.LEGAL = (function () {
       '<b>o que abres:</b> os ecrãs, as janelas e as páginas que abres e fechas, e as partes de ' +
       'rendorium.com que chegas a ver;',
       '<b>quando guardas</b>, e quando um campo dá erro ao guardar (qual o campo, nunca o valor);',
+      '<b>quantos registos adicionas, editas ou removes</b>, e de que tipo (um imóvel, três movimentos), ' +
+      'nunca o conteúdo deles;',
       '<b>o tamanho da janela</b> do aparelho.',
     ]) +
     p('<b>Nunca</b> registamos o que escreves, os valores dos campos nem os dados da tua conta e dos teus ' +

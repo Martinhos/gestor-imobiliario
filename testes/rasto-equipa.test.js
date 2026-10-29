@@ -96,17 +96,28 @@ const PESSOAS = [
     sinais: { ...SEM_SINAIS, repetido: 4, 'vai-e-volta': 1, desistencia: 2, 'erro-campo': 3 } },
   { pid: 'P-MNT777', conta: false, teste: false, ultimo: Date.now() - 3 * 86400000, sessoes: 1, eventos: 4, origens: ['montra'], sinais: SEM_SINAIS },
 ];
+// um evento da app no telemóvel do Martinho (384×785), com o que se troca
+const evApp = (at, o) => ({ at, origem: 'app', tipo: 'toque', ecra: 'properties', janela: null, alvo: null, x: null, y: null,
+  vw: 384, vh: 785, sinal: null, ...o });
 const PESSOA = {
   pid: 'P-ABC234', userId: 'U1', teste: false,
   sessoes: [
-    { sessao: 's-novaaaaaa', inicio: t(28, 14, 2, 5), fim: t(28, 14, 9, 40), origens: ['app'], eventos: [
-      { at: t(28, 14, 2, 5), origem: 'app', tipo: 'ecra', ecra: 'casas', janela: null, alvo: null, x: null, y: null, vw: 390, vh: 844, sinal: null },
-      { at: t(28, 14, 3, 17), origem: 'app', tipo: 'toque', ecra: 'casas', janela: null, alvo: 'div.cartao', x: 512, y: 300, vw: 390, vh: 844, sinal: 'em-vao' },
-      { at: t(28, 14, 9, 40), origem: 'app', tipo: 'erro-campo', ecra: 'casas', janela: 'modal-casa', alvo: 'click:guardarCasa', x: null, y: null, vw: 390, vh: 844, sinal: 'erro-campo' },
+    { sessao: 's-novaaaaaa', inicio: t(28, 14, 2, 5), fim: t(28, 14, 9, 55), origens: ['app'], eventos: [
+      evApp(t(28, 14, 2, 5), { tipo: 'ecra', ecra: 'dashboard' }),
+      evApp(t(28, 14, 2, 30), { ecra: 'dashboard', alvo: 'click:go', x: 120, y: 960 }),
+      evApp(t(28, 14, 2, 31), { tipo: 'ecra' }),
+      evApp(t(28, 14, 3, 17), { alvo: 'div.card', x: 512, y: 300, sinal: 'em-vao' }),
+      evApp(t(28, 14, 4, 0), { alvo: 'click:propModal', x: 870, y: 930 }),
+      evApp(t(28, 14, 4, 1), { tipo: 'janela-abre', janela: 'propModal' }),
+      evApp(t(28, 14, 9, 40), { tipo: 'erro-campo', janela: 'propModal', alvo: 'input#p_name', sinal: 'erro-campo' }),
+      evApp(t(28, 14, 9, 50), { tipo: 'ecra', ecra: 'settings/tema' }),
+      evApp(t(28, 14, 9, 55), { tipo: 'dados', ecra: null, alvo: 'dados:house+1,contract~2,tx+36', vw: null, vh: null }),
     ] },
     { sessao: 's-velhaaaaa', inicio: t(28, 13, 50, 0), fim: t(28, 13, 51, 30), origens: ['montra'], eventos: [
       { at: t(28, 13, 50, 0), origem: 'montra', tipo: 'pagina', ecra: '/', janela: null, alvo: null, sinal: null },
-      { at: t(28, 13, 51, 30), origem: 'montra', tipo: 'toque', ecra: '/', janela: null, alvo: 'a:/entrar', x: 400, y: 900, vw: 390, vh: 844, sinal: null },
+      { at: t(28, 13, 50, 40), origem: 'montra', tipo: 'secao', ecra: '#contratos', janela: null, alvo: null, sinal: null },
+      { at: t(28, 13, 51, 0), origem: 'montra', tipo: 'toque', ecra: '/', janela: null, alvo: 'p.m-sub', x: 300, y: 450, vw: 384, vh: 785, sinal: 'em-vao' },
+      { at: t(28, 13, 51, 30), origem: 'montra', tipo: 'toque', ecra: '/', janela: null, alvo: 'a:app.rendorium.com/?criar', x: 400, y: 900, vw: 384, vh: 785, sinal: null },
     ] },
   ],
 };
@@ -262,18 +273,20 @@ describe('a vista Pessoas', () => {
     assert.match(sessoes[0], /^ open>/, 'a mais recente abre já aberta');
     assert.doesNotMatch(sessoes[1], /^ open>/, 'as outras fechadas');
     assert.match(sessoes[0], /28\/10\/2026 14:02/);
-    assert.match(sessoes[0], /8 min · 3 eventos/);
+    assert.match(sessoes[0], /8 min · 9 eventos/);
     assert.match(sessoes[0], /2 sinais/);
     assert.match(sessoes[1], /28\/10\/2026 13:50/);
-    assert.match(sessoes[1], /2 min · 2 eventos/);
-    // cada evento: hora com segundos, origem, tipo, ecrã, janela, alvo e o sinal
+    assert.match(sessoes[1], /2 min · 4 eventos/);
+    // cada evento: hora com segundos, origem, o que fez em palavras, onde e o sinal
+    for (const rot of ['Hora', 'Origem', 'O que fez', 'Onde', 'Sinal']) assert.match(sessoes[0], new RegExp('<th>' + rot + '</th>'), rot);
+    assert.doesNotMatch(sessoes[0], /<th>(?:Tipo|Ecrã|Janela|Alvo)<\/th>/, 'sem as colunas cruas de antes');
     assert.match(sessoes[0], /data-rot="Hora">14:02:05</);
     assert.match(sessoes[0], /data-rot="Hora">14:03:17</);
-    assert.match(sessoes[0], /data-rot="Tipo">Ecrã</);
-    assert.match(sessoes[0], /data-rot="Tipo">Erro num campo</);
-    assert.match(sessoes[0], /<code class="rs-alvo">div\.cartao<\/code>/);
-    assert.match(sessoes[0], /<code class="rs-alvo">modal-casa<\/code>/);
-    assert.match(sessoes[0], /a 51% da esquerda e 30% do cimo · janela 390×844/);
+    assert.match(sessoes[0], /Abriu o ecrã Visão geral/);
+    assert.match(sessoes[0], /Abriu o ecrã Definições › Tema/);
+    assert.match(sessoes[0], /Abriu a janela de «Adicionar ou editar imóvel»/);
+    assert.match(sessoes[0], /Um campo deu erro ao guardar<\/span><code class="rs-cru">input#p_name<\/code>/, 'o campo, cru e discreto');
+    assert.match(sessoes[0], /data-rot="Onde">Imóveis › janela de «Adicionar ou editar imóvel»</);
     assert.match(sessoes[0], /<tr class="rs-sinal wa">[\s\S]*?<span class="badge rs-s wa">Toque em vão<\/span>/, 'o toque em vão destacado');
     assert.match(sessoes[0], /<tr class="rs-sinal dg">[\s\S]*?Erro ao guardar/, 'o erro ao guardar destacado a vermelho');
     // a passagem da montra para a app, entre as sessões
@@ -281,6 +294,83 @@ describe('a vista Pessoas', () => {
     assert.match(html, /Com conta/);
     assert.ok(acao(html, 'verPessoa', 'U1'), 'o master vai à ficha');
     assert.ok(acao(html, 'ir', 'rasto'), 'e volta às pessoas');
+  });
+
+  /* Os dois tickets de QA do Martinho (1895e0a9 e 03f1d309): num botão, o
+     nome dele como a app o escreve e sem posição; fora de botões, o nome do
+     sítio e a posição; as páginas visitadas no topo de cada sessão; e os
+     registos que mudaram numa frase. */
+  test('um toque num botão diz o nome dele, sem posição', async () => {
+    const g = await correr(MASTER, (rota) => (rota === '/api/equipa/rasto/pessoa/P-ABC234' ? PESSOA : {}));
+    g.ctx.verRastoPessoa('P-ABC234'); await assentar();
+    const linha = (hora) => (new RegExp('<tr[^>]*><td class="n nw" data-rot="Hora">' + hora + '</td>[\\s\\S]*?</tr>').exec(g.conteudo()) || [''])[0];
+    const botao = linha('14:04:00');
+    assert.match(botao, /Tocou em <span class="rs-rotulo">«Adicionar ou editar imóvel»<\/span>/, 'o nome do botão');
+    assert.doesNotMatch(botao, /% da esquerda|% do cimo|click:|propModal/, 'sem posição nem o descritor cru');
+    assert.match(linha('14:02:30'), /Tocou em <span class="rs-rotulo">«Ir para um separador»<\/span>/);
+    assert.doesNotMatch(linha('14:02:30'), /% da esquerda/);
+    const ligacao = linha('13:51:30');
+    assert.match(ligacao, /Tocou em <span class="rs-rotulo">«Criar conta»<\/span>/, 'uma ligação pelo destino');
+    assert.doesNotMatch(ligacao, /% da esquerda|app\.rendorium\.com/);
+  });
+
+  test('um toque fora de botões diz o sítio em palavras e onde caiu', async () => {
+    const g = await correr(MASTER, (rota) => (rota === '/api/equipa/rasto/pessoa/P-ABC234' ? PESSOA : {}));
+    g.ctx.verRastoPessoa('P-ABC234'); await assentar();
+    const html = g.conteudo();
+    assert.match(html, /<span>Tocou num cartão<\/span><span class="sub n">a 51% da esquerda e 30% do cimo · janela 384×785<\/span>/);
+    assert.match(html, /<span>Tocou num texto da maquete<\/span><span class="sub n">a 30% da esquerda e 45% do cimo/, 'também na montra');
+    assert.doesNotMatch(html, /<code class="rs-cru">div\.card<\/code>/, 'um sítio que se conhece não leva o descritor');
+  });
+
+  test('um descritor que nenhum dicionário conhece aparece cru e discreto', async () => {
+    const uma = { pid: 'P-CRU222', userId: null, teste: false, sessoes: [{ sessao: 's-cru', inicio: t(27, 9, 0, 0), fim: t(27, 9, 0, 9), origens: ['app'], eventos: [
+      evApp(t(27, 9, 0, 0), { tipo: 'ecra', ecra: 'novidade' }),
+      evApp(t(27, 9, 0, 3), { ecra: 'novidade', alvo: 'click:acaoQueAindaNaoExiste', x: 10, y: 10 }),
+      evApp(t(27, 9, 0, 6), { ecra: 'novidade', alvo: 'div.coisa-nova', x: 200, y: 700, sinal: 'em-vao' }),
+      evApp(t(27, 9, 0, 9), { ecra: 'novidade', janela: 'janelaNova', tipo: 'janela-abre' }),
+    ] }] };
+    const g = await correr(MASTER, (rota) => (rota.startsWith('/api/equipa/rasto/pessoa/') ? uma : {}));
+    g.ctx.verRastoPessoa('P-CRU222'); await assentar();
+    const html = g.conteudo();
+    semEmLinha(html, 'o cru');
+    assert.match(html, /Abriu o ecrã <code class="rs-cru">novidade<\/code>/);
+    assert.match(html, /<span>Tocou num botão<\/span><code class="rs-cru">acaoQueAindaNaoExiste<\/code>/, 'o botão sem rótulo, sem posição');
+    assert.doesNotMatch(html, /a 1% da esquerda/);
+    assert.match(html, /<span>Tocou em <code class="rs-cru">div\.coisa-nova<\/code><\/span><span class="sub n">a 20% da esquerda e 70% do cimo/);
+    assert.match(html, /Abriu a janela <code class="rs-cru">janelaNova<\/code>/);
+  });
+
+  test('cada sessão abre com as páginas visitadas, por ordem e sem repetir seguidas, e os dados numa frase', async () => {
+    const g = await correr(MASTER, (rota) => (rota === '/api/equipa/rasto/pessoa/P-ABC234' ? PESSOA : {}));
+    g.ctx.verRastoPessoa('P-ABC234'); await assentar();
+    const sessoes = g.conteudo().split('<details class="card rs-sessao"').slice(1);
+    assert.match(sessoes[0], /<summary>[\s\S]*?<\/summary><div class="rs-sessao-resumo"><p><span class="forte">Páginas visitadas:<\/span> Visão geral › Imóveis › Definições › Tema<\/p>/,
+      'logo por baixo do cabeçalho da sessão');
+    assert.match(sessoes[0], /<span class="forte">Dados:<\/span> Adicionou 1 imóvel e 36 movimentos; editou 2 contratos<\/p>/);
+    assert.match(sessoes[1], /Páginas visitadas:<\/span> Início da montra<\/p>/, 'a secção vista não é uma página, e o mesmo ecrã não se repete');
+    assert.match(sessoes[1], /Viu a secção «Contratos»/);
+    assert.doesNotMatch(sessoes[1], /Dados:/, 'sem registos, sem a linha');
+  });
+
+  test('um evento de dados lê-se como uma frase, com os plurais certos, e nunca com «(s)»', async () => {
+    const dados = (at, alvo) => evApp(at, { tipo: 'dados', ecra: null, alvo });
+    const uma = { pid: 'P-DAD222', userId: 'U9', teste: false, sessoes: [{ sessao: 's-dad', inicio: t(27, 9, 0, 0), fim: t(27, 9, 0, 3), origens: ['app'], eventos: [
+      dados(t(27, 9, 0, 0), 'dados:house+1'),
+      dados(t(27, 9, 0, 1), 'dados:tx-36,visit+1,visit+2'),
+      dados(t(27, 9, 0, 2), 'dados:contract~2,tenant~1,group-1,profile~1,settings~1'),
+      dados(t(27, 9, 0, 3), 'dados:rec+2,tpl+1,nada+4,tx*9'),
+    ] }] };
+    const g = await correr(MASTER, (rota) => (rota.startsWith('/api/equipa/rasto/pessoa/') ? uma : {}));
+    g.ctx.verRastoPessoa('P-DAD222'); await assentar();
+    const html = g.conteudo();
+    assert.match(html, /data-rot="O que fez"><span class="rs-alvo-bloco"><span class="rs-rotulo">Adicionou 1 imóvel<\/span>/);
+    assert.match(html, /<span class="rs-rotulo">Adicionou 3 visitas; removeu 36 movimentos<\/span>/, 'as contagens do mesmo tipo somam-se');
+    assert.match(html, /<span class="rs-rotulo">Editou 2 contratos, 1 inquilino, o perfil e as definições; removeu 1 grupo<\/span>/);
+    assert.match(html, /<span class="rs-rotulo">Adicionou 2 planeados e 1 modelo<\/span>/, 'um tipo ou uma operação desconhecidos deitam-se fora');
+    assert.match(html, /Dados:<\/span> Adicionou 1 imóvel, 2 planeados, 1 modelo e 3 visitas; editou 2 contratos, 1 inquilino, o perfil e as definições; removeu 36 movimentos e 1 grupo<\/p>/,
+      'e a sessão soma-os todos');
+    assert.doesNotMatch(html, /\(s\)/);
   });
 
   test('a passagem da montra para a app dentro de uma sessão também se lê', async () => {
@@ -291,7 +381,7 @@ describe('a vista Pessoas', () => {
     const g = await correr(ADMIN, (rota) => (rota.startsWith('/api/equipa/rasto/pessoa/') ? uma : {}));
     g.ctx.verRastoPessoa('P-UNA222'); await assentar();
     const html = g.conteudo();
-    assert.match(html, /<tr class="rs-passa"><td colspan="7">[\s\S]*?Passou da montra para a app<\/td><\/tr>/);
+    assert.match(html, /<tr class="rs-passa"><td colspan="5">[\s\S]*?Passou da montra para a app<\/td><\/tr>/);
     assert.ok(html.indexOf('09:00:00') < html.indexOf('09:01:00'), 'os eventos pela ordem em que aconteceram');
     assert.match(html, /Só montra, sem conta/);
     assert.match(html, /Conta de teste/);
@@ -306,8 +396,9 @@ describe('a vista Pessoas', () => {
 
   test('o resumo por ecrã: ecrã, alvo, um número por sinal, total e pessoas, do total maior para o menor', async () => {
     const linhas = [
-      { ecra: '/', alvo: 'div.hero', sinais: { ...SEM_SINAIS, 'em-vao': 2 }, total: 2, pessoas: 2 },
-      { ecra: 'casas/fotos', alvo: 'click:abrirFoto', sinais: { ...SEM_SINAIS, repetido: 5, 'vai-e-volta': 4 }, total: 9, pessoas: 3 },
+      { ecra: '/', alvo: 'p.m-sub', sinais: { ...SEM_SINAIS, 'em-vao': 2 }, total: 2, pessoas: 2 },
+      { ecra: 'properties', alvo: 'click:imvGaleria', sinais: { ...SEM_SINAIS, repetido: 5, 'vai-e-volta': 4 }, total: 9, pessoas: 3 },
+      { ecra: 'settings/novo', alvo: 'div.coisa', sinais: { ...SEM_SINAIS, 'em-vao': 1 }, total: 1, pessoas: 1 },
     ];
     const g = await correr(MASTER, (rota) => (rota.startsWith('/api/equipa/rasto/resumo') ? { linhas } : {}));
     g.ctx.verRastoResumo(90); await assentar();
@@ -315,7 +406,11 @@ describe('a vista Pessoas', () => {
     const html = g.conteudo();
     semEmLinha(html, 'o resumo');
     assert.match(html, /Onde as pessoas se perdem/);
-    assert.ok(html.indexOf('click:abrirFoto') < html.indexOf('div.hero'), 'o total maior primeiro');
+    assert.ok(html.indexOf('«Ver as fotografias»') > -1 && html.indexOf('«Ver as fotografias»') < html.indexOf('Num texto da maquete'), 'o total maior primeiro');
+    assert.match(html, /data-rot="Ecrã">Imóveis<\/td><td data-rot="Alvo">«Ver as fotografias»<\/td>/, 'o ecrã e o botão em palavras');
+    assert.match(html, /data-rot="Ecrã">Início da montra<\/td><td data-rot="Alvo">Num texto da maquete<\/td>/, 'e o sítio');
+    assert.match(html, /data-rot="Ecrã"><code class="rs-cru">settings\/novo<\/code><\/td><td data-rot="Alvo"><code class="rs-cru">div\.coisa<\/code>/, 'o que não se conhece, cru');
+    assert.doesNotMatch(html, /click:imvGaleria/);
     for (const rot of ['Ecrã', 'Alvo', 'Toques em vão', 'Toques repetidos', 'Vai-e-volta', 'Desistências', 'Erros ao guardar', 'Total', 'Pessoas']) {
       assert.match(html, new RegExp('data-rot="' + rot + '"'), rot);
     }

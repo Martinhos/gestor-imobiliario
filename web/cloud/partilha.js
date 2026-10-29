@@ -803,7 +803,7 @@ function quotasHtml(hid, peer, valores, nota) {
   return '<div class="pt-quotas"><div class="pt-quotas-cab small" aria-hidden="true"><span>Pessoa</span><span>Quota</span></div>' + quem.map(function (u) {
     var v = valores && valores[u.id] != null ? valores[u.id] : igual;
     return '<label class="pt-quota"><span class="pt-quota-nome">' + esc(u.nome) + '</span>' +
-      '<input id="cw_q_' + hid + '_' + u.id + '" type="text" inputmode="decimal" value="' + esc(v) + '" aria-label="' + esc(u.nome) + ', quota em %">' +
+      '<input id="cw_q_' + hid + '_' + u.id + '" type="text" inputmode="decimal" value="' + esc(v) + '" aria-label="' + esc(u.nome) + ', quota em %" autocomplete="off">' +
       '<span class="pt-pct" aria-hidden="true">%</span></label>';
   }).join('') +
     '<p class="hint">' + (nota || 'A divisão só entra em vigor depois de o outro confirmar; até lá fica em partes iguais.') + '</p></div>';

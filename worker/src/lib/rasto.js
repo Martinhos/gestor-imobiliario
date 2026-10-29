@@ -8,6 +8,13 @@
    nunca O QUÊ: os campos de texto cortam-se aos tamanhos do contrato e os
    tipos e campos desconhecidos deitam-se fora.
 
+   Os dados que se guardam contam-se aqui, no servidor, e nunca vêm do
+   cliente (a emenda do Martinho, 2026-10-29): por cada pedido de sync de uma
+   conta em sim, um evento «dados» com QUANTOS registos se adicionaram,
+   editaram ou removeram, e de que tipo (registarDados) — nunca o conteúdo
+   deles. O back office lê-o como uma frase: «Adicionou 1 imóvel e 36
+   movimentos; editou 2 contratos».
+
    Um só consentimento para a montra e para a app, e a última escolha ganha.
    O aparelho guarda-o em dois cookies HttpOnly que só este ficheiro escreve
    e lê: rd_escolha (sim.<ms> | nao.<ms>, a escolha e a hora dela; o valor
@@ -51,7 +58,15 @@ const ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const PID_RE = /^P-[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/;
 const SESSAO_RE = /^s-[a-z0-9]{10}$/;
 
-export const TIPOS = ['toque', 'ecra', 'janela-abre', 'janela-fecha', 'guardar', 'erro-campo', 'erro', 'pagina', 'secao'];
+export const TIPOS = ['toque', 'ecra', 'janela-abre', 'janela-fecha', 'guardar', 'erro-campo', 'erro', 'pagina', 'secao', 'dados'];
+// Os que o cliente pode mandar: o «dados» só o servidor o escreve (registarDados).
+export const TIPOS_DO_CLIENTE = TIPOS.filter((t) => t !== 'dados');
+/* Os tipos de registo que o evento «dados» conta, pela ordem em que se dizem
+   (os kinds do web/cloud/nucleo.js:exportEntities e do lib/servicos.js, e o
+   'house' das casas); os outros deitam-se fora. */
+export const KINDS_DOS_DADOS = ['house', 'contract', 'tx', 'rec', 'tpl', 'visit', 'tenant', 'group', 'profile', 'settings'];
+// As três operações e o sinal de cada uma no alvo: house+1 adicionou, contract~2 editou, tx-3 removeu.
+export const OPERACOES_DOS_DADOS = { criado: '+', editado: '~', removido: '-' };
 export const SINAIS = ['em-vao', 'repetido', 'vai-e-volta', 'desistencia', 'erro-campo'];
 
 // Os únicos hosts em que os cookies levam Domain (os de produção).
@@ -418,7 +433,8 @@ export function descritorDeLigacao(s) {
    Devolve: o evento limpo, ou null quando não é um evento (sem tipo conhecido). */
 export function limparEvento(e, agora) {
   if (!e || typeof e !== 'object' || Array.isArray(e)) return null;
-  if (TIPOS.indexOf(e.tipo) < 0) return null;
+  // o «dados» é do servidor: um cliente que o mande não inventa contagens
+  if (TIPOS_DO_CLIENTE.indexOf(e.tipo) < 0) return null;
   const t = inteiro(e.t, agora - 2 * DIA, agora + 600000);
   let alvo = texto(e.alvo, 80);
   if (alvo && alvo.startsWith('a:')) alvo = 'a:' + descritorDeLigacao(alvo.slice(2));
@@ -494,6 +510,84 @@ export async function recolher(env, lote, pid, origem) {
   if (!lote || !pid) return 0;
   if (!(await travao(env, pid))) return 0;
   return guardarLote(env, pid, origem, lote);
+}
+
+/* ------------------------------- os dados ------------------------------- */
+
+// Quanto pode valer uma contagem (um sync enorme diz «99999», não parte nada).
+const MAX_CONTAGEM = 99999;
+// A sessão de um evento «dados» sem sessão dada: a da app desta pessoa nos últimos 30 min.
+const SESSAO_RECENTE_MS = 30 * 60000;
+
+/* O alvo de um evento «dados»: «dados:» e as contagens, cada uma kind,
+   operação (+ adicionou, ~ editou, - removeu) e número, separadas por
+   vírgulas, pela ordem de KINDS_DOS_DADOS e, em cada kind, adicionou, editou,
+   removeu — «dados:house+1,contract~2,tx+36,tx-3». Só os kinds e as
+   operações conhecidos, só inteiros a partir de 1 (cortados a 99999); o
+   resto deita-se fora. Fica quase sempre abaixo dos 80 caracteres dos
+   descritores (um sync é uma ação, um ou dois tipos), mas não é cortado: é o
+   servidor que o escreve, e a coluna não tem tamanho.
+   Recebe: contagens — { house: { criado: 1 }, tx: { criado: 36, removido: 3 }, … }.
+   Devolve: o alvo (texto), ou null quando não há nada a contar. */
+export function alvoDosDados(contagens) {
+  if (!contagens || typeof contagens !== 'object') return null;
+  const partes = [];
+  for (const kind of KINDS_DOS_DADOS) {
+    const c = contagens[kind];
+    if (!c || typeof c !== 'object') continue;
+    for (const op of Object.keys(OPERACOES_DOS_DADOS)) {
+      const n = Math.min(MAX_CONTAGEM, Math.floor(Number(c[op])));
+      if (Number.isFinite(n) && n >= 1) partes.push(kind + OPERACOES_DOS_DADOS[op] + n);
+    }
+  }
+  return partes.length ? 'dados:' + partes.join(',') : null;
+}
+
+/* A sessão do rasto que a app manda num pedido (o cabeçalho X-Rasto-Sessao,
+   o rstSessao do web/cloud/rasto.js), só com a forma do contrato.
+   Recebe: request — o pedido.
+   Devolve: a sessão (texto), ou null. */
+export function sessaoDoPedido(request) {
+  const s = String((request && request.headers && request.headers.get('X-Rasto-Sessao')) || '');
+  return SESSAO_RE.test(s) ? s : null;
+}
+
+/* Regista, por um pedido de sync, QUANTOS registos a pessoa adicionou,
+   editou ou removeu, e de que tipo — nunca o conteúdo deles: um evento
+   «dados» (origem 'app', o alvo de alvoDosDados) no pid da conta. Só quando
+   a escolha da conta é «sim»; sem contagens não grava nada. A sessão é a
+   que vier (sessaoDoPedido), ou a da app desta pessoa nos últimos 30 min, ou
+   uma nova. Nunca lança: o rasto não é motivo para um sync falhar.
+   Recebe: env — o ambiente do worker; userId — o id da conta; contagens —
+   { house: { criado: 1 }, tx: { criado: 36 }, contract: { editado: 2 }, … }
+   (os kinds de KINDS_DOS_DADOS e as operações criado, editado e removido);
+   sessao (opcional) — a sessão do rasto da app.
+   Devolve: promessa de true quando gravou, false quando não (sem sim, sem
+   contagens, ou falhou). */
+export async function registarDados(env, userId, contagens, sessao) {
+  try {
+    const alvo = alvoDosDados(contagens);
+    if (!alvo || !userId) return false;
+    if ((await escolhaDaConta(env, userId)).escolha !== 'sim') return false;
+    const pid = await pidDaConta(env, userId, true);
+    if (!pid) return false;
+    const agora = now();
+    let s = SESSAO_RE.test(String(sessao || '')) ? sessao : null;
+    if (!s) {
+      const r = await env.DB.prepare(
+        "SELECT sessao FROM rasto_eventos WHERE pid = ? AND origem = 'app' AND at >= ? ORDER BY at DESC, id DESC LIMIT 1"
+      ).bind(pid, agora - SESSAO_RECENTE_MS).first();
+      s = r ? r.sessao : 's-' + novoVid().slice(0, 10);
+    }
+    await env.DB.prepare(
+      `INSERT INTO rasto_eventos (pid, sessao, at, origem, tipo, ecra, janela, alvo, x, y, vw, vh, sinal)
+       VALUES (?, ?, ?, 'app', 'dados', NULL, NULL, ?, NULL, NULL, NULL, NULL, NULL)`
+    ).bind(pid, s, agora, alvo).run();
+    return true;
+  } catch (e) {
+    console.error('rasto: dados', e && e.message);
+    return false;
+  }
 }
 
 // A resposta de toda a recolha: 204, sempre — o cliente nunca reage.

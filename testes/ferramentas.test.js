@@ -182,22 +182,22 @@ describe('as peças estão ligadas', () => {
     assert.match(h, /versao: typeof VERSAO/, 'a armadilha do arranque também');
   });
 
-  /* A linha automática de invocação dos Workers Logs grava o URL em bruto —
-     e as ligações que se entregam às pessoas levam o segredo no endereço
-     (/?convite=…, /?ligar=…). O código mascara tokens em tudo o que escreve;
-     esta linha passava por fora e deixava-os em claro três dias. */
-  test('os logs não guardam a linha por pedido, nos dois ambientes', () => {
-    const w = ler('wrangler.toml');
-    const prod = w.slice(w.indexOf('[observability]'), w.indexOf('[env.dev'));
-    assert.match(prod, /\[observability\.logs\]\s*\ninvocation_logs = false/, 'produção');
-    const dev = w.slice(w.indexOf('[env.dev.observability]'));
-    assert.match(dev, /\[env\.dev\.observability\.logs\]\s*\ninvocation_logs = false/,
-      'e dev — a observabilidade não é herdável, e sem isto o dev continuava a guardar os tokens');
+  /* Os registos da Cloudflare passam a ser pagos, e o Martinho não os quer
+     (ticket de QA 1fddf7b8): nenhum ambiente os declara. Sem o bloco, o
+     wrangler deploy desliga-os no painel (manda enabled:false quando a
+     configuração não diz nada) — por isso basta não haver o bloco, em
+     produção nem no dev, nem nada que o volte a pôr (logs, traces, logpush,
+     tail consumers). */
+  test('nenhum ambiente liga os registos pagos da Cloudflare', () => {
+    const w = ler('wrangler.toml').split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+    assert.doesNotMatch(w, /observability/i, 'nem o bloco, nem o do dev');
+    assert.doesNotMatch(w, /^\s*(logpush|tail_consumers)\b/m);
+    assert.doesNotMatch(w, /invocation_logs|head_sampling_rate/);
   });
 
-  /* Desligar sem substituir trocava uma fuga por cegueira: o worker tem cinco
-     console.* e todos em ramos de erro. Cada relato passa a deixar um registo
-     estruturado, já mascarado, pesquisável por campo nos Workers Logs. */
+  /* O worker tem poucos console.*, todos em ramos de erro. Cada relato
+     escreve um registo estruturado, já mascarado: é o que o wrangler tail
+     mostra a quem estiver a ver, e o relato fica na D1 e no Discord. */
   test('cada relato deixa um registo estruturado e mascarado nos logs', async () => {
     const vistos = [];
     const antes = console.error;

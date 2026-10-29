@@ -194,7 +194,8 @@ describe('o script do rasto na montra', () => {
     const morto = g.el('p', { attrs: { class: 'm-sub outra' }, texto: 'Segredo do inquilino', pai: mapa });
     const ligacao = g.el('a', { interativo: true, attrs: { href: 'https://app.rendorium.com/?criar=1#registo', class: 'btn primary' } });
     const dentro = g.el('span', { pai: ligacao, texto: 'Criar conta grátis' });
-    const acao = g.el('button', { interativo: true, attrs: { 'data-click': 'abrirCasa' }, texto: 'Abrir' });
+    // a ação vai sem os argumentos, como na app (um nome, um id de registo não saem)
+    const acao = g.el('button', { interativo: true, attrs: { 'data-click': "abrirCasa('Ana Ribeiro', 'c_4821')" }, texto: 'Abrir' });
     const registo = g.el('li', { id: 'linha-4821', texto: 'Ana Ribeiro' });
     g.tocar(morto, 195, 422);
     g.tocar(dentro, 100, 300);
@@ -205,12 +206,12 @@ describe('o script do rasto na montra', () => {
     const toques = g.eventos().filter((e) => e.tipo === 'toque');
     assert.deepEqual(toques.map((e) => [e.alvo, e.sinal]), [
       ['p.m-sub', 'em-vao'], ['a:app.rendorium.com/?criar', null], ['click:abrirCasa', null], ['li#linha', 'em-vao'], ['click:abrirCasa', null],
-    ], 'o que é, sem o que diz; a ligação sem valores; o id de um registo cortado');
+    ], 'o que é, sem o que diz; a ação sem os argumentos; a ligação sem valores; o id de um registo cortado');
     assert.deepEqual([toques[0].x, toques[0].y, toques[0].vw, toques[0].vh, toques[0].ecra], [500, 500, 390, 844, '/'],
       'a posição em permilagem da janela');
     assert.deepEqual([toques[4].x, toques[4].y], [null, null], 'um clique de teclado não tem posição');
     const tudo = g.enviados.map((e) => e.corpo).join('');
-    for (const t of ['Segredo', 'inquilino', 'Criar conta', 'Abrir', 'Ana', '4821', 'criar=1', 'registo']) {
+    for (const t of ['Segredo', 'inquilino', 'Criar conta', 'Abrir', 'Ana', 'Ribeiro', '4821', 'c_', 'criar=1', 'registo']) {
       assert.ok(!tudo.includes(t), '«' + t + '» não sai da página');
     }
   });
@@ -346,9 +347,17 @@ describe('a Política de Privacidade do rasto', () => {
     assert.deepEqual(n, n.map((_, i) => i + 1));
   });
 
+  /* Os dados que se guardam contam-se (ticket de QA 03f1d309): a política
+     diz o quê e o que nunca, e a versão sobe — toda a gente volta a aceitar
+     (a 2026-10-29 foi a do rasto, e já estava no dev). */
+  test('diz que se contam os registos adicionados, editados e removidos, nunca o conteúdo deles', () => {
+    assert.match(texto, /quantos registos adicionas, editas ou removes, e de que tipo \(um imóvel, três movimentos\), nunca o conteúdo deles/);
+    assert.match(texto, /Nunca registamos o que escreves, os valores dos campos nem os dados da tua conta/, 'o «nunca» de antes fica');
+  });
+
   test('a versão dos documentos subiu junta nos dois lados', () => {
-    assert.equal(L.version, '2026-10-29');
+    assert.equal(L.version, '2026-10-30');
     assert.equal(TERMS_VERSION, L.version, 'a que o servidor compara');
-    assert.match(texto, /Em vigor desde 29\/10\/2026/);
+    assert.match(texto, /Em vigor desde 30\/10\/2026/);
   });
 });

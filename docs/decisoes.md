@@ -77,6 +77,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-29 · O rasto das pessoas, debaixo de um pseudónimo
 - 2026-10-29 · A quarta ronda de QA e o email dos planeados em atraso
 - 2026-10-29 · O «?» da Ajuda no lugar da nuvem
+- 2026-10-29 · A quinta ronda de QA: nada antes da compra, o sync em lote e o rasto em palavras
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2854,3 +2855,57 @@ definições». O «?» abre agora a apresentação do separador onde se está, 
 mesma que a Ajuda revê, sem mudar de ecrã; num separador sem apresentação
 para esta conta não aparece. A Ajuda continua fora da gaveta, nas Definições
 («Ajuda e sugestões»).
+
+## 2026-10-29 · A quinta ronda de QA: nada antes da compra, o sync em lote e o rasto em palavras
+
+**Um contrato desde 1870.** O Martinho criou, numa conta de teste, um contrato
+com início em 1870 numa casa comprada em 2020. A app propôs «Preencher 600
+períodos» — as rendas de 1870 a 1919, porque o teto do
+planeados.js:datasEmFalta guardava as 600 mais antigas —, e as 600 entraram «1
+a 1»: o servidor gastava três consultas sequenciais por operação, e um pedido
+de 200 batia no teto de 50 consultas por invocação do plano gratuito da D1
+perto da 15.ª; o resto era 500, o cliente reenviava de 30 em 30 segundos, e
+cada volta gastava o travão de ritmo e o plafond diário. Decisões dele: o chão
+é só a data de compra (sem ela não há limite); vale para o início de um
+contrato, de um crédito e para a data de um movimento, e o servidor também
+recusa; nos movimentos só as receitas («Despesas podem»: o sinal do
+contrato-promessa, a avaliação do banco e o IMT pagam-se antes da escritura).
+Só se confere o que é novo ou cuja data mudou, para os dados que já estão
+assim continuarem a sincronizar. O sync passou a ler tudo de uma vez e a
+gravar em db.batch, que a D1 conta como uma consulta: 7 consultas com 1
+operação e com 200, onde eram 8 e 605 (testes/sync-lote.test.js).
+
+**Os registos da Cloudflare.** Os Workers Logs passam a ser pagos, e o
+Martinho não os quer. Saíram os blocos dos dois ambientes do wrangler.toml; o
+wrangler deploy manda enabled:false quando a configuração não diz nada (lido
+no código do wrangler 4.148), e o testes/ferramentas.test.js garante que o
+bloco não volta. O relato estruturado de cada erro fica para o wrangler tail;
+o que conta continua na D1 e no Discord. A nota de 2026-09 sobre a linha de
+invocação dos logs deixa de valer.
+
+**A pergunta da apresentação.** Tinha três respostas, e «Continuar a mostrar»
+fazia o mesmo que fechar e seguir. Ficam duas, «Voltar à apresentação» (o
+primário) e «Não mostrar mais», e escolher a segunda diz que a de cada ecrã
+continua no «?». Quem já tinha respondido «Continuar a mostrar» não volta a
+ouvir a pergunta.
+
+**Sem sugestões nos números.** O Samsung Internet mostrava, ao lado do
+montante de uma despesa, os valores escritos antes. Os 38 campos de números
+levam autocomplete="off", como os de texto já levavam, e o
+testes/campos-numericos.test.js apanha um campo novo que o esqueça.
+
+**O rasto em palavras.** Dois tickets dele, a ler o rasto no telemóvel: a
+posição de cada toque não dizia nada quando o toque era num botão, e o rasto
+não dizia que páginas a pessoa visitou nem o que fez com os dados. Decidiu:
+só textos da app — num botão, o nome dele e sem posição; fora de botões, a
+posição e o nome do sítio. Nunca nomes, moradas, valores nem texto da página:
+o «nunca o quê» fica. O cliente continua a mandar só descritores e é o back
+office que os traduz com um dicionário, para nada mudar no que sai do
+aparelho e uma tradução melhor valer também para o rasto já guardado. O
+dicionário cobre todas as ações dos data-click (uma regra de reserva dava
+frases em meio inglês), e um teste falha quando aparece uma ação sem rótulo.
+Os dados contam-se no servidor, por tipo e por operação, só com o sim e nunca
+o conteúdo — contar por categoria («rendas em atraso») era ler um campo dos
+dados, e ele escolheu não ir aí. A Privacidade passou a dizê-lo e a versão
+dos termos subiu para 2026-10-30, como ele escolheu: quem tem conta volta a
+aceitar uma vez.

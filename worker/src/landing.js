@@ -1014,7 +1014,7 @@ ${alturasDasBarras()}
    - «pagina» ao carregar (e ao voltar da cache de avanço e recuo);
    - «secao» quando cada secção com id entra à vista, uma vez por secção
      (IntersectionObserver: nada de ouvir o scroll);
-   - «toque» em cada clique, com o DESCRITOR do alvo (click:<ação>,
+   - «toque» em cada clique, com o DESCRITOR do alvo (click:<ação sem os argumentos>,
      a:<host de fora><caminho>?<chaves sem valores>, <tag>#<id>,
      <tag>.<classe> ou <tag>) e a posição em permilagem da
      janela, e os sinais «em-vao» (nada interativo debaixo do dedo) e
@@ -1140,14 +1140,25 @@ export const GUIAO_RASTO_MONTRA = String.raw`(function () {
     return 'a:' + host + caminhoDela + (chaves.length ? '?' + chaves.join('&') : '');
   }
 
-  /* O descritor de um elemento: o que ele é, nunca o que diz. Uma ligação
-     pelo destino sem valores (ligacao); um id com dígitos corta-se ao
-     prefixo, que um id de registo não sai daqui.
+  /* O nome de uma ação, sem os argumentos (que podem levar um id ou um
+     nome), como a app faz (web/cloud/rasto.js:rstNomeDaAcao): um
+     «event.stopPropagation();» à frente não conta.
+     Recebe: acao — o data-click.
+     Devolve: o nome (até 60 caracteres), ou ''. */
+  function nomeDaAcao(acao) {
+    var m = /^[\s!(]*(?:event\.[A-Za-z]+\(\)\s*;?\s*)*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)/.exec(String(acao || ''));
+    return m ? m[1].slice(0, 60) : '';
+  }
+
+  /* O descritor de um elemento: o que ele é, nunca o que diz. Uma ação pelo
+     nome, sem os argumentos (nomeDaAcao); uma ligação pelo destino sem
+     valores (ligacao); um id com dígitos corta-se ao prefixo, que um id de
+     registo não sai daqui.
      Recebe: el — o elemento.
      Devolve: o descritor, até 80 caracteres. */
   function descritor(el) {
     var tag = String(el.tagName || '').toLowerCase();
-    var acao = el.getAttribute ? el.getAttribute('data-click') : null;
+    var acao = nomeDaAcao(el.getAttribute ? el.getAttribute('data-click') : null);
     var href = el.getAttribute ? el.getAttribute('href') : null;
     var id = el.id ? String(el.id).replace(/[-_]?[0-9].*$/, '') : '';
     var cls = String((el.getAttribute && el.getAttribute('class')) || '').replace(/^\s+/, '').split(/\s+/)[0];

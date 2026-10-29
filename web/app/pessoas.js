@@ -457,7 +457,7 @@ function personBody(){
     <div class="row">
       <label>N.º do Cartão de Cidadão (opcional)<input id="pe_cc" value="${esc(t.cc)}" placeholder="Ex: 12345678 9 ZX4" autocomplete="off"></label>
       <label>Validade do CC<input id="pe_ccv" type="date" value="${t.ccValid||''}"></label></div>
-    <label>NIF<input id="pe_nif" value="${esc(t.nif)}" placeholder="Opcional" inputmode="numeric" data-input="pessoaNifHint()"></label>
+    <label>NIF<input id="pe_nif" value="${esc(t.nif)}" placeholder="Opcional" inputmode="numeric" data-input="pessoaNifHint()" autocomplete="off"></label>
     <div class="hint u-mt-n4px" id="pe_nifHint"${pessoaNifHint(t.nif)?'':' hidden'}>${esc(pessoaNifHint(t.nif))}</div>
     <label>País (opcional; só sem NIF português)<input id="pe_pais" value="${esc(t.pais)}" placeholder="Ex: Espanha" autocomplete="off"></label>
     <div class="hint u-mt-n4px">Sem NIF português, o Anexo F identifica a pessoa pelo país.</div>

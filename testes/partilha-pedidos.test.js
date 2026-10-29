@@ -400,8 +400,8 @@ describe('as quotas ao escolher a casa a partilhar', () => {
     marcar(app, 'H5', true);
     const b = bloco(app, 'H5');
     // uma linha por pessoa (o canvas M-Quotas): o nome, o campo com nome para o leitor de ecrã, e o %
-    assert.match(b, /<label class="pt-quota"><span class="pt-quota-nome">Eu \(tu\)<\/span><input id="cw_q_H5_EU" type="text" inputmode="decimal" value="50" aria-label="Eu \(tu\), quota em %"><span class="pt-pct" aria-hidden="true">%<\/span><\/label>/);
-    assert.match(b, /<label class="pt-quota"><span class="pt-quota-nome">Rui<\/span><input id="cw_q_H5_RUI" type="text" inputmode="decimal" value="50" aria-label="Rui, quota em %">/);
+    assert.match(b, /<label class="pt-quota"><span class="pt-quota-nome">Eu \(tu\)<\/span><input id="cw_q_H5_EU" type="text" inputmode="decimal" value="50" aria-label="Eu \(tu\), quota em %" autocomplete="off"><span class="pt-pct" aria-hidden="true">%<\/span><\/label>/);
+    assert.match(b, /<label class="pt-quota"><span class="pt-quota-nome">Rui<\/span><input id="cw_q_H5_RUI" type="text" inputmode="decimal" value="50" aria-label="Rui, quota em %" autocomplete="off">/);
     assert.match(b, /A divisão só entra em vigor depois de o outro confirmar; até lá fica em partes iguais\./);
     assert.equal((b.match(/<input /g) || []).length, 2);
     marcar(app, 'H5', false);

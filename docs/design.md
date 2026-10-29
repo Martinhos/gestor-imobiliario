@@ -54,6 +54,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Entrar na seleção é como nas Casas
 - A fita da barra de baixo
 - A renda planeada e as rendas já lançadas
+- A data de compra é o chão das datas da casa
 - Os Contratos
 - As Pessoas e as Visitas
 - Os Movimentos
@@ -1781,30 +1782,35 @@ A janela é um openModal (apresentacao.js:aprAbrir): o ✕ da cabeça, o Esc, o
 voltar e o arrasto da folha fecham-na como a qualquer outra, e é o aoFechar da
 camada que a marca como vista, por qualquer caminho
 (apresentacao.js:aprAoFechar). Quem a fecha por um desses caminhos antes da
-última imagem pode estar a dizer que não quer nenhuma: a app pergunta-lhe,
-uma vez por conta, «Não queres ver as apresentações?»
+última imagem pode estar a dizer que não quer nenhuma: a app pergunta-lhe, uma
+vez por conta, «Não queres ver as apresentações?»
 (apresentacao.js:aprPerguntar), nas boas-vindas e nos separadores, e a marca
-espera pela resposta. Três botões em coluna, o primário em baixo
-(estilos.css:.apr-pergunta): «Voltar à apresentação» reabre-a na imagem onde
-estava e não gasta a pergunta; «Não mostrar mais» marca-a vista e nenhuma
-volta a abrir sozinha (a chave nenhuma); «Continuar a mostrar» marca-a vista
-e as outras abrem na primeira visita (apresentacao.js:aprResponder). As duas
-últimas guardam a resposta (a chave perguntou), e fechar a pergunta sem
-escolher é o fecho de sempre, que pergunta outra vez da próxima. O «Percebi»,
-a última imagem e a Ajuda nunca perguntam. Não há interruptor para as voltar
-a ligar: a Ajuda reabre cada uma. No corpo, o palco com as imagens lado a lado
-numa fita — cada uma é a maquete e, por baixo, o título e o texto, e viajam
-juntas —, os pontos e a frase do leitor de ecrã (apresentacao.js:aprCorpo); a
-imagem tem altura fixa (estilos.css:.apr-imagem) e a fita estica as folhas à
-altura da maior, por isso a janela não salta de tamanho entre elas. No rodapé,
-Anterior (sem ele na primeira) e Seguinte, primário; na última, o botão do
-fim — «Percebi» nos separadores, «Ir para os imóveis» nas boas-vindas
-(apresentacao.js:aprPintar, apresentacao.js:aprFimDe). O palco é uma região
-com nome, cada imagem um grupo «N de M», as de fora inertes, e a cada
-passagem o leitor de ecrã ouve «Imagem 2 de 7» e o título. Os pontos são só
-desenho, e o de agora é mais comprido: a forma diz qual é, também com o
-escurecimento forçado (estilos.css:.apr-pontos). No computador a janela tem
-620px e as peças crescem com ela (estilos.css:.apr-cena).
+espera pela resposta. O texto diz que a de cada ecrã continua no «?» do
+cabeçalho (navegacao.js:abrirAjuda). Dois botões em coluna, o primário em
+baixo, à mão do polegar (estilos.css:.apr-pergunta): «Não mostrar mais»
+marca-a vista, nenhuma volta a abrir sozinha (as chaves perguntou e nenhuma)
+e, com a pergunta já fechada, um aviso em baixo diz que a de cada ecrã fica no
+«?»; «Voltar à apresentação», o primário — o caminho que não muda nada —,
+reabre-a na imagem onde estava e não gasta a pergunta
+(apresentacao.js:aprResponder). O aviso não tapa as novidades que esperavam
+pela pergunta: a janela que abre levanta-o acima do rodapé dela
+(componentes.js:avisoAcimaDoRodape). Fechar a pergunta sem escolher é o fecho
+de sempre, que a dá por vista e pergunta outra vez da próxima. O «Percebi», a
+última imagem, o «?» e a Ajuda nunca perguntam. Não há interruptor para as
+voltar a ligar: o «?» reabre a de cada ecrã, e a Ajuda todas. No corpo, o
+palco com as imagens lado a lado numa fita — cada uma é a maquete e, por
+baixo, o título e o texto, e viajam juntas —, os pontos e a frase do leitor de
+ecrã (apresentacao.js:aprCorpo); a imagem tem altura fixa
+(estilos.css:.apr-imagem) e a fita estica as folhas à altura da maior, por
+isso a janela não salta de tamanho entre elas. No rodapé, Anterior (sem ele na
+primeira) e Seguinte, primário; na última, o botão do fim — «Percebi» nos
+separadores, «Ir para os imóveis» nas boas-vindas (apresentacao.js:aprPintar,
+apresentacao.js:aprFimDe). O palco é uma região com nome, cada imagem um grupo
+«N de M», as de fora inertes, e a cada passagem o leitor de ecrã ouve «Imagem
+2 de 7» e o título. Os pontos são só desenho, e o de agora é mais comprido: a
+forma diz qual é, também com o escurecimento forçado
+(estilos.css:.apr-pontos). No computador a janela tem 620px e as peças crescem
+com ela (estilos.css:.apr-cena).
 
 O gesto é o das fotos (web/app/anexos.js:fotoArrastar, o padrão copiado e não
 chamado): o eixo decide-se aos 10px (apresentacao.js:aprEixo), largar depois
@@ -3322,7 +3328,10 @@ mas nunca passa por cima de um mês que já tem renda deste contrato**
 corrigir um início de 2028 para 2025 traz o cursor de volta — mas ele pára no
 primeiro mês por confirmar, e não em janeiro. É a mesma regra que faz o
 confirmar não duplicar: o cursor nunca aterra num mês já lançado, e quando
-lá chega por outro caminho (uma renda lançada à mão), salta e di-lo.
+lá chega por outro caminho (uma renda lançada à mão), salta e di-lo. Nem recua
+para antes da compra da casa: o chão do cursor é o primeiro dia de pagamento
+desde a data de compra (planeados.js:primeiraDesdeACompra), mesmo num contrato
+com o início mais antigo; ver «A data de compra é o chão das datas da casa».
 
 Renda é o que é renda (irs.js:ehRenda): a caução e os empréstimos são passivo
 e não contam. E conta pelo mês a que respeita, não pelo dia em que entrou
@@ -3343,6 +3352,48 @@ Por isso os movimentos não se movem com o contrato — a app **aponta**. Ao
 guardar um contrato, os que caem fora das datas dele, de um lado e do outro,
 são contados e mostram-se um a um, para se abrir cada um e decidir
 (contrato.js:movimentosForaDoContrato, contrato.js:verMovimentosFora).
+
+## A data de compra é o chão das datas da casa
+Uma casa não tem história antes de ser comprada. O início de um contrato, a
+data de uma receita de uma casa só e o início de uma hipoteca recusam-se antes
+da data de compra da ficha (imovel.js:antesDaCompra, a regra num só sítio, com
+imovel.js:dataDeCompra), com o erro junto do campo e a data como se escreve em
+Portugal: «O imóvel foi comprado a 12/03/2020: o contrato não pode começar
+antes.» (contrato.js:ctInicioAntesDaCompra), «… uma receita não pode ser de
+antes.» (movimento.js:txDataAntesDaCompra), «… a hipoteca não pode começar
+antes.» (imovel.js:creditoAntesDaCompra, na janela da hipoteca e na ficha do
+imóvel, com a data de compra que está no formulário). Num contrato de um
+quarto, a casa é a do quarto. O calendário do browser também não oferece os
+dias de antes (o min do campo, imovel.js:minDaCompra). Sem data de compra na
+ficha não há limite. Só se confere a data nova ou mudada (ou a casa trocada):
+um registo antigo que já estava antes — gravado antes da regra, ou cuja casa
+mudou de data de compra depois — grava-se quando se mexe noutro campo, e o
+campo não nasce inválido. Mudar a data de compra para depois de registos que
+já existem não se recusa.
+
+Nos movimentos só se conferem as receitas (as rendas, as cauções): antes de a
+casa ser minha ninguém me pagou renda dela. As despesas, as prestações e os
+outros tipos entram com qualquer data — o sinal do contrato-promessa, o IMT,
+as obras antes da escritura. O min do campo da data só existe nas receitas e
+acompanha o tipo quando ele muda (o formulário repinta-se;
+movimento.js:txMinDaData), e o guardar confere na mesma — uma despesa que
+passa a receita com a data antes recusa-se. E só o que é de uma casa e tem
+data de facto: um planeado (a data é a próxima ocorrência) e um modelo que não
+regista o movimento ficam de fora; um movimento sem imóvel não tem compra; o
+de um grupo ou de «Todos os imóveis» também não — «Todos» já só parte pelos
+imóveis comprados nessa data (saldos.js:imoveisDeTodos), e num grupo a compra
+de uma casa não diz nada da data do movimento inteiro.
+
+O preenchimento das rendas em falta segue a mesma regra: a origem de um plano
+nunca é antes da compra da casa (planeados.js:origemDoPlano), o cursor da
+renda não recua para antes do primeiro dia de pagamento desde ela
+(planeados.js:cursorDaRenda, planeados.js:primeiraDesdeACompra), e a janela do
+preenchimento diz porque as datas começam ali e não no início do contrato
+(cloud/painel.js:CW.fillMissed, planeados.js:planoAntesDaCompra). O teto de
+600 períodos (planeados.js:datasEmFalta) fica com os mais recentes, até hoje.
+Andava da origem para a frente e parava aos 600: um contrato «desde 1870» numa
+casa comprada em 2020 propunha as rendas de 1870 a 1919, e registá-las era
+gravar 600 movimentos de uma vez (ticket de QA a3a6d2d4).
 
 ## Os Contratos
 A lista tem dois desenhos e um HTML só, como a dos Movimentos
@@ -4355,6 +4406,42 @@ fusão, e à terceira é um 409 que não mexeu em nada. O cliente funde da mesma
 maneira ao ler, com o mesmo código: o bloco da fusão vive igual, letra a
 letra, em worker/src/lib/permissoes.js e em web/cloud/nucleo.js, e o
 testes/fusao-da-casa.test.js compara-os.
+
+Em lote. Um POST /api/sync com N operações gasta as mesmas consultas à D1 que
+um com uma (worker/src/lib/escritas.js:aplicarOps): lê de uma vez as casas que
+o pedido toca e o acesso a elas (escritas.js:lerCasas,
+acesso.js:acessosACasas), as linhas dos registos (escritas.js:lerLinhas, com
+as chaves numa lista JSON e json_each) e os anexos que a regra dos anexos tem
+de ver (escritas.js:lerPresos); decide tudo em memória com as regras de sempre
+(regraDoRegisto, planeadoAGravar, a fusão a três, recusaDosAnexos,
+recusaPelaCompra) e grava com env.DB.batch — um lote para as fichas, um para
+os registos, um para prender os anexos (as instruções do files.js:linkFiles,
+apanhadas sem correr). As fases seguem a ordem em que o cliente manda: fichas,
+registos e dados globais, casas apagadas, anexos. Um lote que falha corre
+instrução a instrução, e só a má é o 500 da sua operação; uma escrita
+condicional que não pegou relê e funde na volta seguinte (até três, depois o
+409); a mesma linha duas vezes no pedido vai uma por volta, pela ordem. Medido
+(testes/sync-lote.test.js): 7 consultas com 1 movimento novo e com 200; 9 para
+uma comproprietária com anexos; 11 para um colaborador sem «Juntar anexos».
+
+O que cada operação fez. O resultado de aplicarOps diz `acao` ('criado',
+'editado', 'removido'), `scope` e `kind` ('house' numa ficha), e `igual: true`
+quando a fusão o deixou como estava. A resposta ao cliente continua com a
+forma de sempre (rotas/sync.js:paraOCliente tira estes campos); a contagem por
+kind e ação é rotas/sync.js:contarOps, tirada na rota antes de despir os
+resultados.
+
+O pedaço do cliente é web/cloud/nucleo.js:LOTE_SYNC = 200, o máximo do
+servidor (rotas/sync.js:MAX_OPS): com as consultas fixas, pedaços menores só
+gastavam mais pedidos do travão de ritmo (60 em 15 minutos).
+
+Recusa de validação (422). O servidor recusa por operação um contrato, uma
+receita de uma casa e um crédito com data antes da compra do imóvel
+(escritas.js:recusaPelaCompra). O cliente não reenvia
+(nucleo.js:recusaPorValidacao): um registo sai do aparelho e do retrato (o
+estado seguinte traz a versão do servidor, se havia); numa ficha só o crédito
+recusado sai (se é novo) ou volta à data da base; diz-se a frase do servidor
+uma vez por envio, com «Não foi guardado.».
 
 No aparelho guardam-se as bases das casas e as dos registos por enviar
 (nucleo.js:saveBases, nucleo.js:basesPorEnviar — gravadas no começo de cada
@@ -6105,11 +6192,13 @@ Desligar não pede confirmação e o aviso diz que o registado foi apagado.
 
 Um evento é `{t, tipo, ecra, janela, alvo, x, y, vw, vh, sinal}`. O alvo é um
 descritor, nunca texto, valores, aria-label, nomes nem ids de registos
-(cloud/rasto.js:rstDescritor): `click:<ação do data-click>`, `<tag>#<id>` com o
-id cortado ao prefixo quando tem algarismos, `<tag>.<1.ª classe>`, ou uma
-ligação pelo destino — o host só quando é de fora, o caminho e as chaves da
-pesquisa sem os valores (`a:app.rendorium.com/?criar`); um mailto: ou um tel:
-fica só o esquema. O servidor não confia no cliente e corta outra vez
+(cloud/rasto.js:rstDescritor): `click:<ação do data-click>` só com o nome —
+sem os argumentos, e um `event.stopPropagation();` à frente não conta
+(cloud/rasto.js:rstNomeDaAcao; a montra faz o mesmo, landing.js:nomeDaAcao) —,
+`<tag>#<id>` com o id cortado ao prefixo quando tem algarismos,
+`<tag>.<1.ª classe>`, ou uma ligação pelo destino — o host só quando é de
+fora, o caminho e as chaves da pesquisa sem os valores
+(`a:app.rendorium.com/?criar`); um mailto: ou um tel: fica só o esquema. O servidor não confia no cliente e corta outra vez
 (worker/src/lib/rasto.js:limparEvento, worker/src/lib/rasto.js:descritorDeLigacao).
 Os toques apanham-se num ouvinte no documento, na captura e passivo; um
 levantar a mais de 10px do pousar é um arrasto e não conta. Os sinais
@@ -6131,6 +6220,20 @@ app (o render, o go, o openModal, o closeModal, o falhaCampo, o CW.logout)
 chama primeiro a função de antes, e o que é dele vai num try/catch: uma falha
 do rasto nunca parte a app.
 
+Os dados que se guardam contam-se no servidor, nunca vêm do cliente: por cada
+pedido de sync de uma conta em sim, um evento `dados` (origem app) com quantos
+registos se adicionaram, editaram ou removeram, e de que tipo — nunca o
+conteúdo (rotas/sync.js:contarOps, worker/src/lib/rasto.js:registarDados,
+depois de responder, no waitUntil). As contagens vão no alvo,
+`dados:house+1,contract~2,tx+36,tx-3` (+ adicionou, ~ editou, - removeu), pela
+ordem dos tipos de worker/src/lib/rasto.js:KINDS_DOS_DADOS, só inteiros de 1 a
+99999 (worker/src/lib/rasto.js:alvoDosDados); um registo que a fusão deixou
+igual não conta. A sessão é a que o cliente manda no cabeçalho X-Rasto-Sessao
+quando o rasto está ligado (worker/src/lib/rasto.js:sessaoDoPedido), ou a da
+app desta pessoa nos últimos 30 minutos, ou uma nova. Um cliente que mande um
+evento `dados` vê-o deitado fora (worker/src/lib/rasto.js:TIPOS_DO_CLIENTE), e
+uma falha aqui nunca parte o sync.
+
 Ao criar conta, ao entrar e na ligação do /test, um aparelho que disse sim
 liga-se à conta: o rasto da montra de antes da conta junta-se ao dela
 (worker/src/lib/rasto.js:ligarVisitante); um aparelho que já era de outra conta
@@ -6150,12 +6253,36 @@ em selos com nome e contagem — «Toques em vão», «Toques repetidos»,
 mais recente ou pela que tem mais sinais (equipa-guiao.js:verRastoPessoas,
 equipa-guiao.js:ordenarRasto). A pessoa abre a linha do tempo
 (equipa-guiao.js:verRastoPessoa): uma secção por sessão, a mais recente
-primeiro e aberta, e cada evento com a hora ao segundo, a origem, o tipo, o
-ecrã, a janela, o alvo em código e a posição do toque; um evento com sinal
-destaca-se no contorno e na cor da letra, e a passagem da montra para a app
-lê-se na linha. O Resumo por ecrã soma os sinais de toda a gente por ecrã e
-alvo, do maior para o menor (equipa-guiao.js:verRastoResumo): é o quadro de onde
-a interface confunde mais gente. O suporte não tem o separador: no detalhe de
+primeiro e aberta, lida em palavras, com os textos da app. Cada sessão abre
+com as páginas visitadas, pela ordem e sem repetir a mesma seguida — «Visão
+geral › Imóveis › Contratos» — e, quando houve, os registos que mudaram numa
+frase — «Adicionou 1 imóvel e 36 movimentos; editou 2 contratos»
+(equipa-guiao.js:rastoSessaoResumoHtml). Cada evento tem a hora ao segundo, a
+origem, o que fez, onde e o sinal (equipa-guiao.js:rastoFezHtml,
+equipa-guiao.js:rastoOndeHtml). Um toque num botão, numa ligação ou noutra
+coisa que responde diz o nome dele como a app o escreve — «Tocou em
+«Guardar»» — e não diz a posição; um toque fora deles (um em vão, ou um
+repetido em nada que responda) diz o sítio em palavras e onde caiu — «Tocou
+num cartão», a 51% da esquerda e 30% do cimo, janela 384×785
+(equipa-guiao.js:rastoToqueHtml, equipa-guiao.js:toqueEmBotaoRasto). Os ecrãs
+dizem-se pelo nome do separador e, nas Definições, «Definições › Tema»; as
+janelas pelo nome próprio ou pelo botão que as abriu; a montra pelas páginas e
+pelas secções. Um evento com sinal destaca-se no contorno e na cor da letra, e
+a passagem da montra para a app lê-se na linha. O Resumo por ecrã soma os
+sinais de toda a gente por ecrã e alvo, com as mesmas palavras, do maior para
+o menor (equipa-guiao.js:verRastoResumo): é o quadro de onde a interface
+confunde mais gente.
+
+Os dicionários vivem no guião (ECRAS_RASTO, SUBPAGINAS_RASTO, PAGINAS_RASTO,
+SECCOES_RASTO, JANELAS_RASTO, ACOES_RASTO, BOTOES_RASTO, CAMPOS_RASTO,
+SITIOS_RASTO, FAMILIAS_RASTO, ETIQUETAS_RASTO, DADOS_RASTO). Um descritor que
+nenhum conhece aparece cru, em monoespaçado e discreto (.rs-cru), nunca
+inventado; um sítio que só se conhece pela família da classe (imv-, ct-,
+apr-…) ou pela etiqueta leva o descritor cru ao lado. O
+testes/rasto-dicionario.test.js lê todos os data-click escritos em web/app e
+web/cloud e falha quando uma ação não tem rótulo (diz qual e em que ficheiro);
+as que chegam por variáveis têm a lista das principais. Uma ação nova
+acrescenta-se a ACOES_RASTO com o texto que o botão mostra. O suporte não tem o separador: no detalhe de
 um pedido que vê, «Ver o rasto» aparece quando quem o escreveu aceitou
 (equipa-guiao.js:rastoDoPedido) e abre a linha do tempo dessa pessoa, com
 «Voltar ao pedido» e sem a lista nem a ficha. Na ficha de uma conta, o master

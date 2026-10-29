@@ -181,6 +181,9 @@ describe('o descritor: onde, nunca o quê', () => {
     assert.equal(d('button', { 'data-click': "openProp('p_8f3k2')", id: 'x', class: 'btn' }), 'click:openProp');
     assert.equal(d('button', { 'data-click': 'onSave&&onSave()' }), 'click:onSave');
     assert.equal(d('div', { 'data-click': "menuOpen(event,'qa');qaMenuAbriu(event)" }), 'click:menuOpen');
+    assert.equal(d('button', { 'data-click': "event.stopPropagation();lpMenu('t_9x8y')" }), 'click:lpMenu',
+      'um event.stopPropagation(); à frente não conta: é a ação de a seguir que o back office traduz');
+    assert.equal(d('a', { href: '#', 'data-click': 'event.preventDefault();cwGerirColaboradores()' }), 'click:cwGerirColaboradores');
     assert.equal(d('a', { href: '/t/entrar/ab12cd?email=maria@x.pt#y' }), 'a:/t/entrar/*?email', 'as chaves da pesquisa, sem os valores');
     assert.equal(d('a', { href: '/?entrar=tok123&entrar=x&volta=%2F' }), 'a:/?entrar&volta');
     assert.equal(d('a', { href: 'https://app.rendorium.com/?criar' }), 'a:app.rendorium.com/?criar', 'o host de fora fica');

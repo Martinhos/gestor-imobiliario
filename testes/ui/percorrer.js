@@ -562,28 +562,47 @@ async function responderAoRasto(pagina) {
 /* A conta acabou de nascer pelo formulário: as boas-vindas abrem sozinhas,
    com o ecrã livre e o estado do servidor já conhecido
    (cloud/apresentacao.js), e fecham-se como uma pessoa as fecha — pelo ✕ da
-   cabeça. Fechadas antes do fim, perguntam se se quer continuar a ver as
-   apresentações (cloud/apresentacao.js:aprPerguntar), e responde-se
-   «Continuar a mostrar», o caminho que não muda nada. Não abrirem, a
-   pergunta não vir, ou o ✕ não as dar por vistas, é uma falha: é a única
-   vez que o percurso passa por uma conta nova. Uma conta que já existia (o
-   percurso corrido outra vez, cá fora) não as vê, e não passa por aqui.
+   cabeça. Fechadas antes do fim, perguntam se ainda se querem ver as
+   apresentações (cloud/apresentacao.js:aprPerguntar), com dois botões:
+   «Não mostrar mais» e, primário em baixo, «Voltar à apresentação». O
+   percurso precisa das dos separadores a abrir (provarApresentacao), por
+   isso não diz «Não mostrar mais»: toca no primário, que reabre as
+   boas-vindas, fecha-as outra vez pelo ✕ — a pergunta volta, que voltar não
+   a gasta — e fecha a pergunta pelo ✕ dela, sem responder: o fecho de
+   sempre, que as dá por vistas e deixa as outras abrir. Não abrirem, a
+   pergunta não vir ou não ter os dois botões, o voltar não as reabrir, ou o
+   ✕ não as dar por vistas, é uma falha: é a única vez que o percurso passa
+   por uma conta nova. Uma conta que já existia (o percurso corrido outra
+   vez, cá fora) não as vê, e não passa por aqui.
    Recebe: pagina — a página, com sessão.
    Devolve: nada — ou rebenta a dizer o que faltou. */
 async function fecharBoasVindas(pagina) {
   const abriu = await pagina.waitForSelector('.modal.open.apr-boas-vindas', { timeout: 25000 }).catch(() => null);
   if (!abriu) throw new Error('a conta nova não viu as boas-vindas (cloud/apresentacao.js:aprTentar)');
-  await repouso(pagina);
-  await pagina.click('.modal.open.apr-boas-vindas .head .iconbtn');
-  await pagina.waitForFunction(() => !document.querySelector('.modal.open.apr-janela'), null, { timeout: 5000 });
-  const pergunta = await pagina.waitForSelector('.modal.open.apr-pergunta', { timeout: 5000 }).catch(() => null);
-  if (!pergunta) throw new Error('fechadas a meio, as boas-vindas não perguntaram (cloud/apresentacao.js:aprPerguntar)');
-  await repouso(pagina);
+  // fecha as boas-vindas pelo ✕ e espera pela pergunta; devolve se ela veio
+  const fecharEPerguntar = async () => {
+    await repouso(pagina);
+    await pagina.click('.modal.open.apr-boas-vindas .head .iconbtn');
+    await pagina.waitForFunction(() => !document.querySelector('.modal.open.apr-janela'), null, { timeout: 5000 });
+    const veio = await pagina.waitForSelector('.modal.open.apr-pergunta', { timeout: 5000 }).catch(() => null);
+    if (veio) await repouso(pagina);
+    return !!veio;
+  };
+  if (!(await fecharEPerguntar())) throw new Error('fechadas a meio, as boas-vindas não perguntaram (cloud/apresentacao.js:aprPerguntar)');
+  const botoes = await pagina.$$eval('.modal.open.apr-pergunta .foot .btn', (bs) => bs.map((b) => b.textContent.trim() + '|' + b.className));
+  if (botoes.join() !== 'Não mostrar mais|btn,Voltar à apresentação|btn primary') {
+    throw new Error('a pergunta das boas-vindas não tem «Não mostrar mais» e, primário, «Voltar à apresentação»: ' + botoes.join(', '));
+  }
   await pagina.click('.modal.open.apr-pergunta .foot .btn.primary');
+  const voltou = await pagina.waitForSelector('.modal.open.apr-boas-vindas', { timeout: 5000 }).catch(() => null);
+  if (!voltou) throw new Error('o «Voltar à apresentação» não reabriu as boas-vindas (cloud/apresentacao.js:aprResponder)');
+  if (!(await fecharEPerguntar())) throw new Error('fechadas a meio outra vez, as boas-vindas não perguntaram: o «Voltar» gastou a pergunta');
+  await pagina.click('.modal.open.apr-pergunta .head .iconbtn');
   await pagina.waitForFunction(() => !document.querySelector('.modal.open'), null, { timeout: 5000 });
   // a chave nasce com 0 («por ver», apresentacao.js:aprGuardarPorVer): vista é o 1
   const vistas = await pagina.evaluate(() => (db.settings || {}).apresentacoes || {});
   if (vistas['boas-vindas'] !== 1) throw new Error('o ✕ fechou as boas-vindas sem as dar por vistas: ' + JSON.stringify(vistas));
+  if (vistas.nenhuma) throw new Error('fechar a pergunta sem responder desligou as apresentações: ' + JSON.stringify(vistas));
 }
 
 /* As apresentações dos separadores não são o objeto das vistas nem das

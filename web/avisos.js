@@ -27,6 +27,38 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 47,
+    data: '2026-10-29',
+    titulo: 'Datas a partir da compra do imóvel',
+    seccoes: [
+      {
+        titulo: 'Contratos, receitas e créditos',
+        afeta: ['contratos', 'movimentos', 'creditos'],
+        itens: [
+          'Um contrato, uma receita ou uma hipoteca de um imóvel já não podem ter data antes da compra dele, quando a ficha tem a data de aquisição. As despesas continuam a poder ser de antes, como o sinal do contrato-promessa.',
+          'O preenchimento das rendas em falta começa na compra, e não no início do contrato.',
+          'Registar muitos movimentos de uma vez já não os envia aos poucos: vão todos no mesmo envio.',
+        ],
+      },
+      {
+        titulo: 'Apresentações',
+        afeta: ['app'],
+        itens: [
+          'Quem fecha uma apresentação a meio escolhe entre voltar a ela ou não ver mais nenhuma. Se escolheres não ver mais, a de cada ecrã continua no «?».',
+          'Os campos de valores e percentagens deixaram de mostrar sugestões de valores escritos antes.',
+        ],
+      },
+      {
+        titulo: 'O rasto de utilização',
+        afeta: ['app', 'conta'],
+        itens: [
+          'Se aceitaste ajudar a melhorar o Rendorium, o rasto passa a contar também quantos registos adicionas, editas ou removes, e de que tipo (um imóvel, três movimentos). Nunca o conteúdo deles.',
+          'A Política de Privacidade diz isto, e por isso os termos pedem uma nova aceitação.',
+        ],
+      },
+    ],
+  },
+  {
     v: 46,
     data: '2026-10-29',
     titulo: 'A apresentação de cada ecrã no «?»',

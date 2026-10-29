@@ -40,6 +40,23 @@ function rendaJaLancada(c,iso){
    Recebe: t — o movimento.
    Devolve: 'AAAA-MM' (texto; '' sem data nem periodo). */
 function mesDaRenda(t){return /^\d{4}-\d{2}$/.test(String(t.periodo||''))?t.periodo:String(t.date||'').slice(0,7)}
+/* A data de compra de uma casa, para os planeados. A regra vive com a casa
+   (imovel.js:dataDeCompra); os Planeados não requerem os Imóveis, e sem eles
+   ligados não há chão nenhum.
+   Recebe: id — o id do imóvel (vazio: sem imóvel).
+   Devolve: 'AAAA-MM-DD' (texto), ou ''. */
+function compraDaCasa(id){return id&&servicoLigado('properties')?dataDeCompra(id):''}
+/* O primeiro dia de pagamento (o dia `dia` de cada mês) no dia da compra da
+   casa ou depois: o chão do cursor da renda.
+   Recebe: id — o id do imóvel; dia — o dia do mês em que se paga (1–31,
+   preso ao último dia nos meses mais curtos).
+   Devolve: 'AAAA-MM-DD' (texto), ou '' sem data de compra. */
+function primeiraDesdeACompra(id,dia){
+  const compra=compraDaCasa(id);if(!compra)return '';
+  let y=Number(compra.slice(0,4)),m=Number(compra.slice(5,7))-1,d=dayInMonth(y,m,dia||1);
+  if(d<compra){m++;if(m>11){m=0;y++}d=dayInMonth(y,m,dia||1)}
+  return d;
+}
 /* Onde é que o cursor da renda deve estar.
 
    O cursor anda para onde tiver de andar — para a frente quando o contrato
@@ -48,14 +65,23 @@ function mesDaRenda(t){return /^\d{4}-\d{2}$/.test(String(t.periodo||''))?t.peri
    regra que faz as duas coisas ao mesmo tempo: acompanha o contrato nos dois
    sentidos, e não há duplicado nenhum a inventar, porque ele nunca aterra num
    mês já lançado.
+   Nem recua para antes da compra da casa (imovel.js:dataDeCompra): o chão é
+   o primeiro dia de pagamento desde ela, mesmo num contrato antigo com o
+   início antes — um contrato «desde 1870» numa casa comprada em 2020 pedia
+   600 rendas em atraso (ticket de QA a3a6d2d4).
    Recebe: c — o contrato; next — o cursor atual; minNext — a primeira
    ocorrência que o contrato permite; from — o dia de pagamento.
    Devolve: a data do cursor, ou '' se já passou do fim do contrato. */
 function cursorDaRenda(c,next,minNext,from){
   const passo=(iso,n)=>{const d=new Date(iso+'T00:00:00');let y=d.getFullYear(),m=d.getMonth()+n;
     y+=Math.floor(m/12);m=((m%12)+12)%12;return dayInMonth(y,m,from)};
+  const chao=primeiraDesdeACompra((c||{}).propertyId,from);
+  if(chao&&(!minNext||minNext<chao))minNext=chao;
   let x=next||minNext;
   if(!x)return '';
+  /* cedo de mais salta logo para o chão: um cursor velho décadas atrás não
+     chegava lá nas 600 voltas de um mês */
+  if(minNext&&x<minNext)x=minNext;
   /* para a frente: enquanto for cedo de mais, ou enquanto o mês já estiver
      lançado — é aqui que o confirmar deixa de poder duplicar */
   let guarda=0;
@@ -324,13 +350,29 @@ function repararRecsSemCredito(){
 /* De onde vem a história de um plano: o início do contrato ou da hipoteca.
    A recorrência criada por eles arranca no mês corrente, por isso os meses
    anteriores não aparecem em lado nenhum sem isto.
-   Recebe: r — o plano recorrente ({tx, next, …}) cuja origem se procura.
-   Devolve: uma data AAAA-MM-DD — o início do contrato ou da hipoteca; sem eles, r.next. */
-function origemDoPlano(r){
+   Nunca antes da compra da casa (a do contrato, ou a do plano): antes dela
+   não há história nenhuma a registar, mesmo com um início mais antigo.
+   Recebe: r — o plano recorrente ({tx, next, …}) cuja origem se procura;
+   cru (opcional) — true para a origem sem o chão da compra.
+   Devolve: uma data AAAA-MM-DD — o início do contrato ou da hipoteca; sem
+   eles, r.next; e a data de compra quando eles são antes dela. */
+function origemDoPlano(r,cru){
   const c=r.tx.contractId?contract(r.tx.contractId):null;
-  if(c&&c.start)return c.start;
-  if(r.tx.loanId){const x=anyLoan(r.tx.loanId);if(x&&x.l.start)return x.l.start}
-  return r.next;
+  let o=r.next;
+  if(c&&c.start)o=c.start;
+  else if(r.tx.loanId){const x=anyLoan(r.tx.loanId);if(x&&x.l.start)o=x.l.start}
+  if(cru)return o;
+  const compra=compraDaCasa(c?c.propertyId:r.tx.propertyId);
+  return compra&&o&&String(o)<compra?compra:o;
+}
+/* O plano começa antes da compra da casa? É o que a janela do preenchimento
+   explica, para as datas não parecerem erradas ao lado do início do contrato.
+   Recebe: r — o plano recorrente.
+   Devolve: a data de compra em DD/MM/AAAA quando a origem do plano é antes
+   dela (e o preenchimento começa nela), ou ''. */
+function planoAntesDaCompra(r){
+  const o=origemDoPlano(r,true),c=origemDoPlano(r);
+  return o&&c!==o?dPT(c):'';
 }
 /* Já existe o movimento deste plano nesse mês? Num contrato, a renda desse
    mês — pela mesma regra do rendaJaLancada (só renda, e pelo mês a que
@@ -364,8 +406,12 @@ function planoPrestacoesEmFalta(r){
 /* As datas do plano que já passaram sem movimento registado, da origem
    (início do contrato ou da hipoteca) até hoje, respeitando o fim do plano.
    Numa hipoteca são as datas da lista simulada (planoPrestacoesEmFalta);
-   nas outras, período a período a partir da origem, saltando os meses em que
-   já há movimento. O guarda de 600 períodos evita ciclos com datas estragadas.
+   nas outras, período a período a partir da origem (que nunca é antes da
+   compra da casa: origemDoPlano), saltando os meses em que já há movimento.
+   O teto de 600 períodos fica com os MAIS RECENTES, até hoje: andava da
+   origem para a frente e parava aos 600, e um contrato «desde 1870» propunha
+   as rendas de 1870 a 1919 (ticket de QA a3a6d2d4). O guarda das voltas
+   evita ciclos com datas estragadas.
    Recebe: r — o plano recorrente a analisar.
    Devolve: array de datas AAAA-MM-DD por ordem cronológica; vazio sem plano ou sem próxima data. */
 function datasEmFalta(r){
@@ -377,14 +423,19 @@ function datasEmFalta(r){
     d=dayInMonth(Number(origin.slice(0,4)),Number(origin.slice(5,7))-1,day);
     if(d<origin)d=nextDate(d,r.every);
   }else d=origin;
-  const out=[];let guard=0;
-  while(d&&d<=t&&guard++<600){
-    if(!jaRegistado(r,d))out.push(d);
+  /* primeiro as datas (só contas de calendário), guardando as 600 últimas;
+     só depois se pergunta a cada uma se já tem movimento */
+  const datas=[];let guard=0;
+  while(d&&d<=t&&guard++<100000){
+    datas.push(d);
+    if(datas.length>600)datas.shift();
     if(r.every==='once')break;
-    d=nextDate(d,r.every);
+    const seg=nextDate(d,r.every);
+    if(!(seg>d))break;
+    d=seg;
     if(r.end&&d>r.end)break;
   }
-  return out;
+  return datas.filter(x=>!jaRegistado(r,x));
 }
 /* recorrências vencidas (a data prevista já passou ou é hoje)
    Devolve: a lista dessas recorrências (array de objetos de db.recurring). */

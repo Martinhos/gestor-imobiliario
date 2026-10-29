@@ -174,10 +174,12 @@ function rstClasses(el) {
 
 /* O nome da ação de um data-click, sem os argumentos (que podem ser ids de
    registos): «openProp('x7')» dá «openProp», «onSave&&onSave()» dá «onSave».
+   Um «event.stopPropagation();» à frente não conta (é a ação de a seguir que
+   diz o que o botão faz, e é ela que o back office traduz).
    Recebe: acao — o texto do data-click.
    Devolve: o nome, ou ''. */
 function rstNomeDaAcao(acao) {
-  var m = /^[\s!(]*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)/.exec(String(acao || ''));
+  var m = /^[\s!(]*(?:event\.[A-Za-z]+\(\)\s*;?\s*)*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)/.exec(String(acao || ''));
   return m ? m[1].slice(0, 60) : '';
 }
 
