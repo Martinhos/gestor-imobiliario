@@ -1,8 +1,9 @@
-// O «?» da Ajuda no cabeçalho (navegacao.js:pintarBotaoAjuda, abrirAjuda,
-// ajudaBrilho…): a Ajuda tem uma porta só desde 2026-10-29, o botão
-// #hdrAjuda onde estava a nuvem, antes do sino. Pinta-se só com sessão
-// (sem ela fica vazio e o :empty esconde-o), acende com a Ajuda aberta, e o
-// toque fecha a gaveta e abre a Ajuda. A Ajuda saiu da gaveta e da barra
+// O «?» do cabeçalho (navegacao.js:pintarBotaoAjuda, abrirAjuda,
+// ajudaBrilho…): o botão #hdrAjuda onde estava a nuvem, antes do sino, abre a
+// apresentação do separador onde se está (cloud/apresentacao.js:aprRever) —
+// decisão do Martinho, 2026-10-29. Pinta-se só com sessão e num separador com
+// apresentação (sem isso fica vazio e o :empty esconde-o), nunca nas
+// Definições, e o toque fecha a gaveta e abre a apresentação. A Ajuda saiu da gaveta e da barra
 // lateral (gavetaFundo) e da ilustração do fundo do menu na apresentação das
 // Definições (cloud/apresentacao-analise.js:aprADefinicoesPerfil). Na
 // primeira abertura da app neste aparelho, com o ecrã livre (fechadas as
@@ -63,7 +64,20 @@ function montar(sessao) {
   app.modalStack.length = 0;
   app.tab = 'dashboard'; app.setPage = '';
   app.window.CW = Object.assign(app.window.CW || {}, { user: sessao ? { id: 'EU', name: 'Ana Silva' } : null });
+  apresentacoes(app);
   return botao(app);
+}
+
+/* As apresentações da nuvem, de mentira, numa app só da base: a Visão geral
+   e os Imóveis têm; o aprRever regista o que se abriu.
+   Recebe: a — a app; ids (opcional) — os separadores com apresentação.
+   Devolve: o array das apresentações abertas (o que o aprRever recebeu). */
+function apresentacoes(a, ids = ['dashboard', 'properties']) {
+  const abertas = [];
+  a.APRESENTACOES = Object.fromEntries(ids.map((id) => [id, { nome: id, imagens: [{}] }]));
+  a.aprImagensVisiveis = (id) => (a.APRESENTACOES[id] ? [{}] : []);
+  a.aprRever = (id) => { abertas.push(id); };
+  return abertas;
 }
 
 describe('o «?» pinta-se e acende', () => {
@@ -79,12 +93,12 @@ describe('o «?» pinta-se e acende', () => {
     assert.ok(!b.cls.has('on') && !b.cls.has('brilha'), 'nem aceso nem a brilhar');
   });
 
-  test('nas Definições (a raiz, as subpáginas e a própria Ajuda) não aparece; volta nos separadores — pelo goSet, pelo go e pelo voltar (só o render)', () => {
+  test('nas Definições (a raiz, as subpáginas e a Ajuda) não aparece; volta nos separadores — pelo goSet, pelo go e pelo voltar (só o render)', () => {
     const b = montar(true);
     const icone = app.ic('ajuda', 16);
     app.buildNav();
     assert.equal(b.innerHTML, icone, 'controlo: na Visão geral está lá');
-    app.abrirAjuda();
+    app.abrirDefinicoes('ajuda');
     assert.equal(app.tab, 'settings'); assert.equal(app.setPage, 'ajuda');
     assert.equal(b.innerHTML, '', 'na Ajuda, vazio (o :empty esconde-o)');
     assert.ok(!b.cls.has('on') && b.atr['aria-current'] === undefined, 'e nunca aceso');
@@ -100,6 +114,19 @@ describe('o «?» pinta-se e acende', () => {
     assert.equal(b.innerHTML, icone, 'noutro separador, de volta');
   });
 
+  test('só num separador com apresentação: sem ela (ou sem imagens para esta conta) fica vazio', () => {
+    const b = montar(true);
+    app.buildNav();
+    assert.equal(b.innerHTML, app.ic('ajuda', 16), 'controlo: a Visão geral tem');
+    app.go('contracts');
+    assert.equal(b.innerHTML, '', 'os Contratos, aqui sem apresentação, ficam sem o «?»');
+    app.go('properties');
+    assert.equal(b.innerHTML, app.ic('ajuda', 16), 'os Imóveis têm');
+    app.aprImagensVisiveis = () => [];
+    app.render();
+    assert.equal(b.innerHTML, '', 'sem imagens para esta conta (um serviço desligado), vazio');
+  });
+
   test('o ícone não se reescreve quando não muda (cada pintura passa por aqui)', () => {
     const b = montar(true);
     app.buildNav();
@@ -111,20 +138,25 @@ describe('o «?» pinta-se e acende', () => {
   });
 });
 
-describe('o toque no «?» abre a Ajuda', () => {
-  test('de outro separador e já nas Definições: fecha a gaveta, abre a Ajuda e tira o brilho', () => {
+describe('o toque no «?» abre a apresentação do ecrã', () => {
+  test('abre a apresentação do separador onde se está, sem mudar de ecrã, fecha a gaveta e tira o brilho', () => {
     const b = montar(true), c = corpo(app);
+    const abertas = apresentacoes(app);
     try {
       c.cls.add('open'); b.cls.add('brilha');
       app.abrirAjuda();
-      assert.equal(app.tab, 'settings'); assert.equal(app.setPage, 'ajuda');
-      assert.equal(c.cls.has('open'), false, 'de outro separador, a gaveta fecha');
+      assert.deepEqual(abertas, ['dashboard'], 'a da Visão geral');
+      assert.equal(app.tab, 'dashboard', 'fica no ecrã');
+      assert.equal(c.cls.has('open'), false, 'a gaveta fecha');
       assert.equal(b.cls.has('brilha'), false, 'o brilho sai');
-      app.setPage = '';
-      c.cls.add('open');
+      app.go('properties');
       app.abrirAjuda();
-      assert.equal(app.setPage, 'ajuda');
-      assert.equal(c.cls.has('open'), false, 'já nas Definições, a gaveta fecha também (o ticket e3e5cdab)');
+      assert.deepEqual(abertas, ['dashboard', 'properties'], 'noutro separador, a dele');
+      app.go('contracts');
+      app.abrirAjuda();
+      app.tab = 'settings';
+      app.abrirAjuda();
+      assert.deepEqual(abertas, ['dashboard', 'properties'], 'sem apresentação, ou nas Definições, não abre nada');
     } finally { c.repor(); }
   });
 
@@ -154,6 +186,7 @@ describe('o brilho da primeira abertura', () => {
     try {
       const b2 = botao(outra);
       outra.window.CW = { user: { id: 'EU', name: 'Ana Silva' } };
+      apresentacoes(outra);
       outra.buildNav();
       assert.equal(outra.ajudaBrilhoPorque(), 'feito');
       assert.equal(outra.ajudaBrilhoTentar(), false);
@@ -223,11 +256,12 @@ describe('o brilho da primeira abertura', () => {
       for (const a of [fecha, grava]) {
         const b = botao(a);
         a.window.CW = { user: { id: 'EU', name: 'Ana Silva' } };
+        const abertas = apresentacoes(a);
         assert.doesNotThrow(() => a.buildNav());
         assert.equal(a.ajudaBrilhoTentar(), false);
         assert.ok(!b.cls.has('brilha'), 'sem brilho');
-        assert.doesNotThrow(() => a.abrirAjuda(), 'e o toque abre a Ajuda na mesma');
-        assert.equal(a.setPage, 'ajuda');
+        assert.doesNotThrow(() => a.abrirAjuda(), 'e o toque abre a apresentação na mesma');
+        assert.deepEqual(abertas, ['dashboard']);
       }
       assert.equal(fecha.ajudaBrilhoPorque(), 'armazenamento');
     } finally { largarVigia(fecha); largarVigia(grava); }

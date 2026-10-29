@@ -31,8 +31,9 @@ const view=()=>document.getElementById('view');
 /* As secções da barra lateral (e do menu do telemóvel, que é a mesma): os
    cinco grupos do canvas de 2026-10. Ao cimo, sem título, a Visão geral; ao
    fundo, sem título, as Definições, a que o gavetaHtml junta o cartão da
-   conta (a Ajuda saiu daqui a 2026-10-29: a porta dela é o «?» do
-   cabeçalho, abrirAjuda). Sem título não se recolhem.
+   conta (a Ajuda saiu daqui a 2026-10-29: vive nas Definições, em «Ajuda e
+   sugestões», e o «?» do cabeçalho abre a apresentação do ecrã, abrirAjuda).
+   Sem título não se recolhem.
    «pessoas» não é um separador: é a porta única dos Inquilinos, dos
    Proprietários e dos Colaboradores (PESSOAS), que continuam a ser três
    serviços e três ecrãs, escolhidos lá dentro por um segmentado (abasDaArea).
@@ -211,8 +212,8 @@ function gavetaHtml(fora){
    é a sessão —, e sem sessão não aparece. Abre a janela do perfil
    (abrirOMeuPerfil), a mesma do cartão do perfil das Definições — o nome e o
    email que ele mostra são os que lá se mudam. A Ajuda esteve aqui até
-   2026-10-29: tem agora uma porta só, o «?» do cabeçalho (abrirAjuda), em
-   todos os ecrãs.
+   2026-10-29: vive nas Definições («Ajuda e sugestões»), e o «?» do
+   cabeçalho (abrirAjuda) abre a apresentação do ecrã onde se está.
    Devolve: o HTML (string), ou '' sem sessão. */
 function gavetaFundo(){
   const u=typeof window!=='undefined'&&window.CW&&CW.user;if(!u)return '';
@@ -836,29 +837,30 @@ document.addEventListener('pointerdown',sepArrastar);
 // Um goSet('groups') ou goSet('colaboradores') que sobre (um atalho, uma ação
 // antiga) leva ao separador — aqui na base e não só no embrulho da nuvem
 // (cloud/nucleo.js).
-// Refaz também a barra lateral e o «?» do cabeçalho: a Ajuda tem porta
-// própria (o «?», pintarBotaoAjuda), e entrar nela (ou sair dela para as
-// Perguntas frequentes) muda a porta acesa sem mudar de separador — e na
-// barra ficava aceso o «Definições». O buildNav só reescreve o #nav quando o
-// HTML muda.
+// Refaz também a barra lateral e o «?» do cabeçalho (pintarBotaoAjuda, que
+// nas Definições se esconde). O buildNav só reescreve o #nav quando o HTML
+// muda.
 // Recebe: p — a subpágina das Definições (uma chave de SUBPAGE; '' volta ao menu).
 // Devolve: nada — redesenha a vista e a barra lateral.
 function goSet(p){if(p==='groups'||p==='colaboradores')return go(p);setPage=p;if(p)pushHist();_entrar=1;buildNav();render();try{window.scrollTo(0,0)}catch(e){}}
-/* Leva a uma página das Definições a partir de qualquer sítio — a Ajuda,
-   pelo «?» do cabeçalho (abrirAjuda): muda de separador e abre a página. Fecha a gaveta
+/* Leva a uma página das Definições a partir de qualquer sítio (o cartão da
+   conta sem a nuvem, as ligações): muda de separador e abre a página. Fecha a gaveta
    do telemóvel: vindo de outro separador o go já a fechava, mas já nas
    Definições só corre o goSet, e a Ajuda abria por baixo da gaveta aberta.
    Recebe: p — a subpágina ('ajuda', 'cloud', …; '' a raiz).
    Devolve: nada — redesenha a vista. */
 function abrirDefinicoes(p){closeDrawer();if(tab!=='settings')go('settings');if(tab==='settings')goSet(p)}
-/* ---- o «?» da Ajuda, no cabeçalho ----
-   A Ajuda tem uma porta só desde 2026-10-29: o «?» do cabeçalho
-   (index.html:#hdrAjuda), onde estava a nuvem da sincronização, antes do
-   sino — no telemóvel e no computador. Saiu da gaveta e da barra lateral
-   (gavetaFundo). Na primeira abertura da app neste aparelho, fechadas as
-   boas-vindas e a apresentação do separador, o «?» brilha uma vez (a classe
-   `brilha`, estilos.css), para quem chega saber onde está a Ajuda; o brilho
-   sai quando se lhe toca (abrirAjuda). */
+/* ---- o «?» do cabeçalho: a apresentação do ecrã ----
+   O «?» do cabeçalho (index.html:#hdrAjuda), onde estava a nuvem da
+   sincronização, antes do sino — no telemóvel e no computador —, abre a
+   apresentação do separador onde se está (cloud/apresentacao.js:aprRever), a
+   mesma que se revê na Ajuda, em «Apresentações» (decisão do Martinho,
+   2026-10-29: «Quero que o ? abra o tutorial da página»). A Ajuda saiu da
+   gaveta e da barra lateral (gavetaFundo) e vive nas Definições. Na
+   primeira abertura da app neste aparelho, fechadas as boas-vindas e a
+   apresentação do separador, o «?» brilha uma vez (a classe `brilha`,
+   estilos.css), para quem chega saber que a pode rever; o brilho sai quando
+   se lhe toca (abrirAjuda). */
 /* a marca do aparelho: o «?» já brilhou (ou já foi tocado), e não brilha mais */
 const LS_AJUDA_BRILHO='gi_ajuda_brilho';
 /* de quanto em quanto a vigia olha para o ecrã à espera de ele ficar livre,
@@ -866,12 +868,20 @@ const LS_AJUDA_BRILHO='gi_ajuda_brilho';
 const AJUDA_BRILHO_PASSO=700,AJUDA_BRILHO_VOLTAS=400;
 // o temporizador da vigia, as olhadelas seguidas com o ecrã livre, as olhadelas desde a última pintura, e se acabou
 let _ajudaBrilhoTempo=null,_ajudaBrilhoLivre=0,_ajudaBrilhoVoltas=0,_ajudaBrilhoFim=false;
-/* Pinta o «?» do cabeçalho. Só com sessão: a Ajuda é da nuvem (os pedidos
-   ao suporte, os tutoriais, as apresentações), e sem sessão o botão fica
+/* O separador onde se está tem uma apresentação que esta conta pode ver?
+   As apresentações são da nuvem (cloud/apresentacao.js): sem ela carregada,
+   ou sem imagens para esta conta (um serviço desligado tira-as), não há.
+   Recebe: id — o id do separador.
+   Devolve: true se o «?» tem o que abrir. */
+function temApresentacao(id){
+  if(!id||typeof aprRever!=='function'||typeof APRESENTACOES==='undefined'||!APRESENTACOES[id])return false;
+  return typeof aprImagensVisiveis!=='function'||aprImagensVisiveis(id).length>0;
+}
+/* Pinta o «?» do cabeçalho. Só com sessão (as apresentações são da nuvem) e
+   só num separador com apresentação (temApresentacao); sem isso o botão fica
    vazio — o :empty da folha esconde-o — e sem brilho. Nas Definições não
-   aparece, em página nenhuma delas, a Ajuda incluída (decisão do Martinho:
-   o «?» é dos separadores, não das Definições nem das subpáginas); fica
-   vazio da mesma maneira, e o brilho espera por um separador. O ícone só se
+   aparece, em página nenhuma delas (decisão do Martinho: o «?» é dos
+   separadores, não das Definições nem das subpáginas). O ícone só se
    escreve quando muda: o buildNav e cada pintura do ecrã chamam isto, e
    reescrever o mesmo recriava o nó por nada. Com sessão e à vista, se o «?»
    ainda não brilhou neste aparelho, arma a vigia do brilho
@@ -880,20 +890,23 @@ let _ajudaBrilhoTempo=null,_ajudaBrilhoLivre=0,_ajudaBrilhoVoltas=0,_ajudaBrilho
 function pintarBotaoAjuda(){
   const b=typeof document!=='undefined'&&document.getElementById('hdrAjuda');if(!b||!b.classList)return;
   const u=typeof window!=='undefined'&&window.CW&&CW.user;
-  const ve=!!u&&tab!=='settings';
+  const ve=!!u&&tab!=='settings'&&temApresentacao(tab);
   const html=ve?ic('ajuda',16):'';
   if(b._ajudaHtml!==html){b.innerHTML=html;b._ajudaHtml=html}
   b.classList.remove('on');b.removeAttribute('aria-current');
   if(!ve){b.classList.remove('brilha');return}
   ajudaBrilhoVigiar();
 }
-/* O toque no «?» do cabeçalho: apaga o brilho (ajudaBrilhoApagar) e abre a
-   Ajuda pelo abrirDefinicoes, que fecha primeiro a gaveta do telemóvel —
-   vindo de outro separador e também já nas Definições (o ticket e3e5cdab).
-   Devolve: nada — abre a página da Ajuda. */
+/* O toque no «?» do cabeçalho: apaga o brilho (ajudaBrilhoApagar), fecha a
+   gaveta do telemóvel e abre a apresentação do separador onde se está, como
+   a Ajuda a revê (cloud/apresentacao.js:aprRever: sem marcar nada, a não ser
+   que se chegue ao fim). Sem apresentação (a nuvem por carregar), não faz
+   nada — e o botão nem está à vista (pintarBotaoAjuda).
+   Devolve: nada — abre a janela da apresentação. */
 function abrirAjuda(){
   ajudaBrilhoApagar();
-  abrirDefinicoes('ajuda');
+  closeDrawer();
+  if(tab!=='settings'&&temApresentacao(tab))aprRever(tab);
 }
 /* Porque é que o «?» não pode brilhar agora — ou '' quando pode. Param de
    vez: 'feito' (já brilhou neste aparelho) e 'armazenamento' (sem onde

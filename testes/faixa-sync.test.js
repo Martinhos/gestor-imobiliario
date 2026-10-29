@@ -94,10 +94,10 @@ describe('o cabeçalho (index.html)', () => {
     const a = m[1];
     assert.match(a, /type="button"/);
     assert.match(a, /class="btn filtbtn u-fx-0-0-auto ajuda-hdr"/);
-    assert.match(a, /data-toca="ecra"/);
+    assert.match(a, /data-toca="camada"/);
     assert.match(a, /data-click="abrirAjuda\(\)"/);
-    assert.match(a, /aria-label="Ajuda"/);
-    assert.match(a, /title="Ajuda"/);
+    assert.match(a, /aria-label="Apresentação deste ecrã"/);
+    assert.match(a, /title="Apresentação deste ecrã"/);
     assert.doesNotMatch(a, /\sstyle=|\son[a-z]+=/, 'CSP: nem style= nem on…=');
   });
 });

@@ -29,13 +29,14 @@ var AVISOS = [
   {
     v: 46,
     data: '2026-10-29',
-    titulo: 'A Ajuda no «?» do cabeçalho',
+    titulo: 'A apresentação de cada ecrã no «?»',
     seccoes: [
       {
-        titulo: 'Ajuda e ligação',
+        titulo: 'Apresentações e ligação',
         afeta: ['app'],
         itens: [
-          'A Ajuda tem agora um botão próprio, o «?» no cabeçalho, em todos os ecrãs. Saiu do fundo do menu, onde fica o cartão da tua conta.',
+          'O «?» no cabeçalho abre a apresentação do ecrã onde estás, para a reveres quando quiseres. Não aparece nas Definições.',
+          'A Ajuda saiu do fundo do menu, onde fica o cartão da tua conta: está nas Definições, em «Ajuda e sugestões».',
           'A nuvem da sincronização saiu do cabeçalho. Quando não há ligação ao servidor aparece uma faixa vermelha por cima do ecrã, com quantas alterações esperam para ser enviadas, e sai sozinha quando a ligação volta.',
         ],
       },

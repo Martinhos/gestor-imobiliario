@@ -4479,8 +4479,8 @@ Definições (definicoes.js:navDasDefinicoes, o canvas D-DefCategorias): as
 mesmas secções e linhas da raiz, com a página aberta acesa — o IRS e as
 etiquetas acendem as categorias, os termos e a política o aviso legal
 (definicoes.js:paginaDasDefinicoes) —, posta ao lado do conteúdo pela folha
-(estilos.css:.wrap:has(>.def-nav)). A Ajuda fica sem ela: a porta dela é o
-«?» do cabeçalho dos separadores. O navRow (definicoes.js:navRow) é uma função, com o
+(estilos.css:.wrap:has(>.def-nav)). A página da Ajuda fica sem ela, e o «?»
+do cabeçalho não aparece nas Definições. O navRow (definicoes.js:navRow) é uma função, com o
 desenho das linhas da raiz num cartão só dela (o aviso legal usa-a), e os
 títulos das subpáginas da base são os do canvas.
 
@@ -5430,8 +5430,7 @@ título, a Visão geral; Casas (Imóveis, Grupos, Contratos, Pessoas, Visitas); 
 (Movimentos, Planeados, Créditos); Análise (Avaliação, Projeções, IRS · Anexo
 F); Agenda (o Calendário); e ao fundo, sem título, as Definições e o cartão
 da conta (navegacao.js:gavetaFundo — a conta só com sessão). A Ajuda não está
-na gaveta nem na barra lateral: a porta dela é o «?» do cabeçalho
-(navegacao.js:abrirAjuda). O cartão da conta, com o avatar, o nome e «O
+na gaveta nem na barra lateral: vive nas Definições («Ajuda e sugestões»). O cartão da conta, com o avatar, o nome e «O
 meu perfil», abre a janela do perfil (navegacao.js:abrirOMeuPerfil →
 cloud/utilizadores.js:CW.editProfile, data-toca="camada"), a mesma do cartão
 do perfil das Definições: fecha primeiro a gaveta (como o «Criar»), e sem a
@@ -5542,12 +5541,16 @@ separador no computador, o da área no telemóvel (estilos.css:#pageTitle, o
 (navegacao.js:subtituloDoEcra: na Visão geral, o período dos indicadores,
 «Ano de 2026 · até hoje, 17/10/2026»; nos Colaboradores, quantas pessoas
 colaboram e quantos convites esperam,
-cloud/colaboradores.js:resumoDosColaboradores). Antes do sino, o «?» da
-Ajuda (index.html:#hdrAjuda, navegacao.js:pintarBotaoAjuda,
-navegacao.js:abrirAjuda): só com sessão e só nos separadores — nas
-Definições, em página nenhuma delas, a própria Ajuda incluída (decisão do
-Martinho), o botão fica vazio e o :empty esconde-o —, do tamanho do sino, e
-abre a Ajuda fechando primeiro a gaveta. Na primeira abertura da app num
+cloud/colaboradores.js:resumoDosColaboradores). Antes do sino, o «?»
+(index.html:#hdrAjuda, navegacao.js:pintarBotaoAjuda,
+navegacao.js:abrirAjuda) abre a apresentação do separador onde se está, a
+mesma que a Ajuda revê em «Apresentações» (cloud/apresentacao.js:aprRever:
+sem marcar nada, a não ser que se chegue ao fim), sem mudar de ecrã e
+fechando primeiro a gaveta. Só com sessão e só num separador com
+apresentação para esta conta (navegacao.js:temApresentacao) — nas
+Definições, em página nenhuma delas (decisões do Martinho), o botão fica
+vazio e o :empty esconde-o —, do tamanho do sino, e o nome dele é
+«Apresentação deste ecrã». Na primeira abertura da app num
 aparelho, quando o ecrã fica livre (sem janelas, boas-vindas nem
 apresentação por mostrar, duas olhadelas seguidas), o anel dele pulsa três
 vezes na --chama e pára (navegacao.js:ajudaBrilhoTentar, a marca

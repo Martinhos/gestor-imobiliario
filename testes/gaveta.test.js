@@ -290,7 +290,7 @@ describe('o que a gaveta mostra', () => {
     }
   });
 
-  test('o «?» da Ajuda fecha a gaveta também quando já se está nas Definições (o ticket e3e5cdab)', () => {
+  test('ir para a Ajuda fecha a gaveta também quando já se está nas Definições (o ticket e3e5cdab)', () => {
     /* o classList do arnês não guarda nada (contains dá sempre false): um de
        verdade, só para este teste, que o openDrawer e o closeDrawer leem */
     const body = app.document.body, antigo = body.classList, cls = new Set();
@@ -300,21 +300,16 @@ describe('o que a gaveta mostra', () => {
       app.tab = 'dashboard';
       app.setPage = '';
       corpo.add('open');
-      app.abrirAjuda();
+      app.abrirDefinicoes('ajuda');
       assert.equal(app.tab, 'settings');
       assert.equal(app.setPage, 'ajuda');
       assert.equal(corpo.contains('open'), false, 'controlo: de outro separador, a gaveta fecha');
       // o caso do ticket: já nas Definições só corria o goSet, e a gaveta ficava aberta por cima da Ajuda
       app.setPage = '';
       corpo.add('open');
-      app.abrirAjuda();
+      app.abrirDefinicoes('ajuda');
       assert.equal(app.setPage, 'ajuda', 'abre a Ajuda');
       assert.equal(corpo.contains('open'), false, 'e a gaveta fecha');
-      // e o abrirDefinicoes, por onde o «?» passa, continua a fechá-la sozinho
-      app.setPage = '';
-      corpo.add('open');
-      app.abrirDefinicoes('ajuda');
-      assert.equal(corpo.contains('open'), false, 'o abrirDefinicoes também');
     } finally {
       body.classList = antigo;
       app.setPage = '';

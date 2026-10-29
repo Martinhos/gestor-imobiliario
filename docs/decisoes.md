@@ -2847,3 +2847,10 @@ está nas Definições tem a Ajuda à mão. Brilha uma vez por aparelho, na
 primeira abertura, quando o ecrã fica livre das boas-vindas e da apresentação
 — não na primeira abertura da gaveta, como ele pensou primeiro, porque o «?»
 deixou de estar dentro dela.
+
+Nota do mesmo dia: o Martinho viu o «?» a levar à Ajuda e pediu outra coisa:
+«Quero que o ? abra o tutorial da página, não que leve à ajuda nas
+definições». O «?» abre agora a apresentação do separador onde se está, a
+mesma que a Ajuda revê, sem mudar de ecrã; num separador sem apresentação
+para esta conta não aparece. A Ajuda continua fora da gaveta, nas Definições
+(«Ajuda e sugestões»).
