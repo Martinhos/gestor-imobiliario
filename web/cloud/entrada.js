@@ -1,89 +1,113 @@
 /* Ecras de entrada: sessao, aviso inicial e ligacao com a Google. */
 'use strict';
 
-/* ---------------- indicador de sincronização ---------------- */
+/* ---------------- a faixa sem ligação ---------------- */
 
-/* O selo que diz onde estão as alterações.
+/* A faixa que diz que não há ligação ao servidor.
 
-   Falava só quando corria mal, e ficava calado no resto do tempo. Numa app que
-   guarda no aparelho e sincroniza depois, o silêncio quer dizer «está tudo
-   enviado» e também «ainda não tentei» — e são coisas diferentes. Quem acabou
-   de escrever alguma coisa não tinha como saber se já tinha subido.
+   Até 2026-10-29 era um selo com uma nuvem no cabeçalho, com quatro estados
+   («A ligar», «Guardado», «N por enviar», «Sem ligação»). O Martinho
+   decidiu que a nuvem sai e que, no lugar dela, fica o «?» da Ajuda
+   (index.html:#hdrAjuda): dos estados fica só o que pede atenção — não
+   haver ligação —, e o «N alterações por enviar» passa para dentro dele.
+   Com a ligação de pé a app guarda e envia calada, como antes do selo.
 
-   Quatro estados, e o que muda entre eles é quanto tempo ficam:
-     'liga' — «A ligar ao servidor…», desde a abertura com sessão até a
-              primeira conversa com o servidor acabar, e outra vez em cada
-              nova tentativa depois de uma falha (cloud/nucleo.js:tentarLigar).
-              Fica enquanto a tentativa durar — no máximo o tempo-limite do
-              pedido (cloud/nucleo.js:TEMPO_API).
-     'ok'   — «Guardado», e sai sozinho ao fim de dois segundos. É um recibo,
-              não um letreiro: se ficasse, deixava de se ler.
-     'pend' — «N por enviar», e FICA enquanto houver. É o estado que faltava.
-     'off'  — «Sem ligação ao servidor», e fica até a tentativa seguinte.
-   E um quinto que é não estar: '' esvazia o selo (a sessão acabou).
+   O núcleo continua a dizer os mesmos estados (cloud/nucleo.js:tentarLigar,
+   ligou, caiuALigacao, pushNow), e é aqui que se decide o que se vê:
+     'off'  — sem rede, ou sem resposta a tempo: a faixa vermelha «Sem
+              ligação ao servidor.», com «N alterações por enviar.» por
+              baixo quando as há. Fica até à tentativa seguinte.
+     'liga' — vindo de 'off' (ou de uma tentativa que ainda não acabou), é a
+              nova tentativa: a faixa fica, laranja, «A tentar ligar ao
+              servidor…», com a mesma contagem (a classe .tenta). Sem ela a
+              faixa entrava e saía de 30 em 30 segundos enquanto a rede não
+              voltasse. O 'liga' da abertura (a faixa vazia) não mostra nada.
+     'ok', 'pend' — o servidor respondeu: a faixa sai, a desvanecer (.sai).
+     ''     — a sessão acabou: esvazia já.
 
-   Vive no cabeçalho (index.html:#hdrSync), entre o título e o sino — o
-   canvas de 2026-10 põe-no lá, e deixou de ser um selo solto por cima da
-   página a disputar o canto com o sino. É um ícone de nuvem com a frase ao
-   lado: laranja com um relógio «A ligar», verde «Guardado», cobalto «N por
-   enviar», vermelho com uma cruz «Sem ligação». No telemóvel fica só o
-   ícone (a frase vai no aria-label e no title), menos o «Sem ligação», que
-   desce para uma faixa por baixo do cabeçalho; no computador a frase do
-   «Guardado» recolhe ao fim de dois segundos (a classe .recibo) e o ícone
-   fica — o recibo lê-se e sai, o estado vê-se. A nova tentativa depois de
-   uma falha (a classe .tenta) e o leitor de ecrã têm regras próprias, ditas
-   lá dentro.
+   A faixa vive fora do cabeçalho (index.html:#hdrSync, logo a seguir ao
+   header.top) e por cima do conteúdo, sem o empurrar
+   (estilos.css:.faixa-sync).
+
+   O leitor de ecrã (o #hdrSync é um role=status, aria-live=polite) ouve a
+   faixa a chegar, mas não a roda das tentativas: de 30 em 30 segundos sem
+   rede ela passa a «A tentar ligar» e volta a «Sem ligação», e anunciar isso
+   era repetir a mesma frase para sempre. A tentativa e a falha repetida (com
+   a mesma contagem) mudam a faixa com o aria-live desligado; uma contagem
+   nova diz-se.
    Recebe: state — 'liga', 'ok', 'pend', 'off' ou '' (esvazia); n
-   (opcional) — quantas alterações estão por enviar, para o 'pend' as poder
-   contar.
+   (opcional) — quantas alterações estão por enviar; no 'off' sem n
+   contam-se aqui (alteracoesPorEnviar).
    Devolve: nada — mexe só no elemento #hdrSync. */
 function setSyncBadge(state, n) {
   var el = document.getElementById('hdrSync');
   if (!el) return;
-  var q = Number(n) || 0;
   var antes = ' ' + (el.className || '') + ' ';
-  if (!state || (state === 'pend' && !q)) {
-    clearTimeout(setSyncBadge._t);
-    el.innerHTML = ''; el.className = '';
-    el.removeAttribute('title'); el.removeAttribute('aria-label'); el.setAttribute('aria-live', 'polite');
+  var aVista = /\s(fora|tenta)\s/.test(antes);
+  var tenta = state === 'liga' && aVista;
+  clearTimeout(setSyncBadge._t);
+  if (state !== 'off' && !tenta) {
+    /* a ligação voltou (ou nunca caiu): a faixa que estava à vista sai a
+       desvanecer (estilos.css:.faixa-sync.sai) e só depois se esvazia; sem
+       sessão, ou sem faixa, esvazia-se já */
+    var f = el.firstElementChild;
+    setSyncBadge._k = '';
+    if (state && aVista && f && f.classList) {
+      el.className = '';
+      el.setAttribute('aria-live', 'off');
+      f.classList.add('sai');
+      setSyncBadge._t = setTimeout(function () { esvaziarFaixa(el); }, 200);
+      return;
+    }
+    esvaziarFaixa(el);
     return;
   }
-  /* [classe, ícone, frase, frase à vista]. A do «Sem ligação» à vista é a
-     curta: a inteira (com o «sincroniza mais tarde») tinha 340px e, no
-     computador estreito, comia o título do ecrã; fica no aria-label e no
-     title */
-  var e = state === 'off' ? ['fora', 'nuvemFora', 'Sem ligação ao servidor — sincroniza mais tarde', 'Sem ligação ao servidor']
-    : state === 'liga' ? ['liga', 'nuvemLiga', 'A ligar ao servidor…']
-    : state === 'pend' ? ['pend', 'nuvemSobe', q === 1 ? '1 alteração por enviar' : q + ' alterações por enviar']
-    : ['ok', 'nuvemOk', 'Guardado'];
-  /* Uma tentativa depois de uma falha (o selo estava em «Sem ligação», ou
-     numa tentativa anterior que ainda não acabou) leva a classe .tenta; só
-     o 'liga' a leva, e só vindo de .fora ou de .tenta — nunca do 'pend'. No
-     telemóvel só o «Sem ligação» desce para a faixa por baixo do cabeçalho;
-     o «por enviar», o «Guardado» e o «A ligar» da abertura são só o ícone,
-     porque passam por ali a cada gravação ou a cada abertura e a faixa a
-     entrar e a sair fazia o cabeçalho saltar. A nova tentativa herda a
-     faixa que lá está, agora laranja: sem ela, o cabeçalho encolhia e
-     crescia de 30 em 30 segundos enquanto a rede não voltasse
-     (estilos.css:header.top .sync.tenta). */
-  var tenta = state === 'liga' && /\s(fora|tenta)\s/.test(antes);
-  var classe = 'sync ' + e[0] + (tenta ? ' tenta' : '');
-  // o mesmo selo outra vez (a abertura e o startSync dizem ambos «A ligar»): não se refaz nem se anuncia
-  if (el.className === classe && el.title === e[2]) return;
-  clearTimeout(setSyncBadge._t);
-  /* O leitor de ecrã (o #hdrSync é um role=status, aria-live=polite) ouve
-     as mudanças, mas não a roda das tentativas: de 30 em 30 segundos sem
-     rede o selo passa a «A ligar» e volta a «Sem ligação», e anunciar isso
-     era repetir a mesma frase para sempre. A tentativa e a falha repetida
-     mudam o selo com o aria-live desligado; o resto anuncia-se. */
-  var repete = tenta || (state === 'off' && / tenta /.test(antes));
+  // a tentativa fica com a contagem da falha que a trouxe
+  var q = state === 'off' ? (Number(n) || alteracoesPorEnviar()) : (setSyncBadge._n || 0);
+  setSyncBadge._n = q;
+  var frase = tenta ? 'A tentar ligar ao servidor…' : 'Sem ligação ao servidor.';
+  var conta = !q ? '' : q === 1 ? '1 alteração por enviar.' : q + ' alterações por enviar.';
+  var classe = tenta ? 'tenta' : 'fora';
+  var k = classe + '|' + conta, kAntes = setSyncBadge._k || '';
+  // a mesma faixa outra vez: não se refaz nem se anuncia
+  if (el.className === classe && kAntes === k) return;
+  var repete = tenta || (/\stenta\s/.test(antes) && kAntes.split('|')[1] === conta);
   el.setAttribute('aria-live', repete ? 'off' : 'polite');
   el.className = classe;
-  el.title = e[2];
-  el.setAttribute('aria-label', e[2]);
-  el.innerHTML = ic(e[1], 18) + '<span>' + (e[3] || e[2]) + '</span>';
-  /* um recibo, não um letreiro: a frase fica o tempo de se ler */
-  if (state === 'ok') setSyncBadge._t = setTimeout(function () { el.classList.add('recibo'); }, 2000);
+  setSyncBadge._k = k;
+  /* só a primeira entrada desliza (.entra): a roda das tentativas troca o
+     texto e a cor no sítio, sem a faixa voltar a entrar */
+  el.innerHTML = '<div class="faixa-sync' + (tenta ? ' tenta' : '') + (aVista ? '' : ' entra') + '">' +
+    ic(tenta ? 'nuvemLiga' : 'nuvemFora', 18) +
+    '<p><b>' + frase + '</b>' + (conta ? '<span>' + conta + '</span>' : '') + '</p></div>';
+}
+
+/* Esvazia a faixa: o :empty esconde-a (estilos.css:#hdrSync:empty), e o
+   aria-live volta a ouvir a próxima.
+   Recebe: el — o #hdrSync.
+   Devolve: nada. */
+function esvaziarFaixa(el) {
+  el.innerHTML = ''; el.className = '';
+  el.removeAttribute('title'); el.removeAttribute('aria-label');
+  el.setAttribute('aria-live', 'polite');
+  setSyncBadge._k = '';
+}
+
+/* Quantas alterações deste aparelho ainda não chegaram ao servidor, para a
+   faixa sem ligação as contar. O núcleo diz o número no 'pend' (as operações
+   do envio, cloud/nucleo.js:pushNow), mas a falha
+   (cloud/nucleo.js:caiuALigacao) chega sem ele — e, sem rede, o envio
+   seguinte passa logo a tentativa e nunca diz o 'pend'. Conta-se com o
+   critério com que o núcleo guarda o que está por enviar quando chega um
+   estado (cloud/nucleo.js:pendentesLocais): o que difere do retrato do
+   servidor, e o que lá está e aqui já não.
+   Recebe: nada.
+   Devolve: o número (0 se não há nada, ou se não se consegue contar). */
+function alteracoesPorEnviar() {
+  try {
+    if (typeof pendentesLocais === 'function') return pendentesLocais((CW && CW.state) || {}, {}).n || 0;
+  } catch (e) {}
+  return 0;
 }
 
 /* ---------------- ecrã de entrada ---------------- */

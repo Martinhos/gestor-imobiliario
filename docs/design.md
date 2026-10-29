@@ -2087,68 +2087,50 @@ requestAnimationFrame não corre — e aí a contagem nem começa, o que é o la
 bom da falha: o texto de partida já é o final.
 
 ## O que a app diz sobre o que guardou
-A app escreve no aparelho e sincroniza depois. Quem acaba de escrever alguma
-coisa tem de poder saber se ela já subiu, e o silêncio não serve para isso:
-o silêncio quer dizer «está tudo enviado» e quer dizer «ainda não tentei», e
-são coisas diferentes.
+A app escreve no aparelho e sincroniza depois. Com ligação, o que se escreve
+sobe em segundos, e não há nada para ver: o cabeçalho não tem selo nem
+nuvem, e no sítio onde ela estava, antes do sino, está o «?» da Ajuda
+(decisão do Martinho, 2026-10-29). O que a app diz é quando NÃO consegue
+guardar no servidor: uma faixa (cloud/entrada.js:setSyncBadge, o
+index.html:#hdrSync, que vive a seguir ao cabeçalho e não dentro dele) que
+aparece por cima do conteúdo, rente ao cabeçalho, sem o empurrar nem mexer
+com o scroll — o #hdrSync tem altura 0 e é a filha, a .faixa-sync, que é
+position:fixed —, com 16px de cada lado no telemóvel. Igual no telemóvel e
+no computador.
 
-O selo (cloud/entrada.js:setSyncBadge) tem quatro estados, e o que os separa
-é quanto tempo ficam. «A ligar ao servidor…» é laranja, com um relógio na
-base da nuvem: aparece desde a abertura com sessão, antes do primeiro
-/api/state, e outra vez em cada nova tentativa depois de uma falha, e fica o
-que a tentativa durar — no máximo o tempo-limite do pedido
-(cloud/nucleo.js:TEMPO_API). «Guardado» é verde e é um recibo: aparece e sai
-ao fim de dois segundos, porque um letreiro permanente deixa de se ler. «N
-alterações por enviar» é cobalto e fica enquanto houver — é o estado que
-faltava, e o número é o das operações que o próximo envio vai levar
-(cloud/nucleo.js:pushNow), não uma estimativa. «Sem ligação ao servidor» é
-vermelho, com uma cruz dentro da nuvem — sem rede, ou sem resposta a tempo —
-e fica até à tentativa seguinte. Uma recusa do servidor (um 429, um 5xx) não
-é falta de ligação: o servidor respondeu, fica «N alterações por enviar», e a
-frase do servidor diz-se num toast (cloud/nucleo.js:avisoDoServidor). Sem
-sessão o selo não existe: sair esvazia-o (cloud/nucleo.js:encerrarSessao).
-O laranja é o --out, e não o --warn, que é âmbar acastanhado e se
-confundia com o vermelho ao lado; os pares (--out sobre --out-soft,
---danger sobre --danger-soft) dão 4,5:1 ou mais nos dois temas. O relógio
-não roda: o estado diz-se pela cor e pelo desenho.
+O setSyncBadge continua a receber os mesmos estados do núcleo, e é só a
+maneira de os mostrar que mudou. «Sem ligação ao servidor.» é vermelha (o
+par cheio do perigo, --danger com a --danger-ink, que dá 4,5:1 nos dois
+temas), com o «N alterações por enviar.» na segunda linha quando as há —
+o número que o núcleo deu, ou, sem ele, o que difere do retrato do servidor
+(cloud/entrada.js:alteracoesPorEnviar). A nova tentativa depois de uma
+falha mantém a faixa, em laranja (--out), com «A tentar ligar ao
+servidor…» (a classe .tenta). O «A ligar» da abertura, o «Guardado» e o «N
+por enviar» com ligação esvaziam-na (cloud/entrada.js:esvaziarFaixa). A
+faixa entra a descer 8px com a opacidade, em --medio, só na primeira vez, e
+sai pelo mesmo caminho em --rapido. Uma recusa do servidor (um 429, um 5xx)
+não é falta de ligação: a frase do servidor diz-se num toast
+(cloud/nucleo.js:avisoDoServidor). Sem sessão a faixa não existe: sair
+esvazia-a (cloud/nucleo.js:encerrarSessao). Enquanto está à vista, tapa as
+abas da área no telemóvel e fica com os toques: é por pouco tempo, e o que
+ela diz é mais importante.
 
 Quem decide é o núcleo, em três sítios: cloud/nucleo.js:tentarLigar antes de
-cada conversa (só põe o «A ligar» se a última falhou, ou se ainda nenhuma
-acabou nesta sessão — com a ligação de pé, a leitura de três em três minutos
-não pisca nada), cloud/nucleo.js:ligou quando o servidor responde (com dados,
+cada conversa, cloud/nucleo.js:ligou quando o servidor responde (com dados,
 com um 304 ou com uma recusa) e cloud/nucleo.js:caiuALigacao quando não
-responde. Sem ligação, o ciclo de 30 segundos tenta outra vez a cada volta,
-sem esperar pelo intervalo de leitura (cloud/nucleo.js:syncCycle) — que
-depois de uma hora parada é de meia hora, e o selo ficava vermelho esse tempo
-todo com a rede já de volta —, e uma tentativa por ciclo: se o envio já
-tentou, a leitura não vai atrás dele. O voltar online e o voltar à frente
-também são tentativas. No arranque o selo nasce «A ligar» e quem o tira é a
-leitura do estado; o /api/me a falhar não o põe em «Sem ligação», porque
-isso o fazia piscar, e mentia se só o /api/me tivesse falhado.
+responde. Sem ligação, o ciclo de 30 segundos tenta outra vez a cada volta
+(cloud/nucleo.js:syncCycle), uma tentativa por ciclo. O voltar online e o
+voltar à frente também são tentativas. O /api/me a falhar no arranque não põe
+a faixa, porque isso a fazia piscar, e mentia se só o /api/me tivesse
+falhado.
 
 O leitor de ecrã ouve as mudanças (o #hdrSync é um role=status), mas não a
-roda das tentativas: sem rede, de 30 em 30 segundos, o selo passa a «A ligar»
-e volta a «Sem ligação», e a tentativa e a falha repetida mudam-no com o
-aria-live desligado. O mesmo selo duas vezes seguidas não se refaz nem se
-anuncia. À vista diz «Sem ligação ao servidor»; o «— sincroniza mais tarde»
-fica no aria-label e no title, porque com ele a frase comia o título do ecrã
-no computador estreito.
-
-E vive no cabeçalho ao lado do título, nunca em cima de outra peça dele:
-esteve no canto superior direito, que é onde o sino mora, e ninguém tinha
-dado por isso porque nenhuma cena do percurso o mostrava — só aparecia
-quando a ligação caía. Há uma cena por estado e uma regra que guarda o sítio
-(testes/ui/invariantes.js). No telemóvel o selo é o ícone, com a frase no
-aria-label e no title, e só o «Sem ligação» desce para uma faixa fina por
-baixo do cabeçalho, a toda a largura, com o cabeçalho a crescer o que ela
-ocupa (ver «Navegação»). O «N alterações por enviar» fica o ícone cobalto: a
-cada gravação o selo passa por ele e logo a seguir pelo «Guardado», e a faixa
-a entrar e a sair fazia o cabeçalho saltar a cada gravação. O «A ligar» da
-abertura também é só o ícone, pela mesma razão, a cada abertura. Mas uma nova
-tentativa depois de uma falha herda a faixa que lá está, agora laranja (a
-classe .tenta, estilos.css:header.top) — sem isso o cabeçalho encolhia e
-crescia de 30 em 30 segundos enquanto a rede não voltasse. A .tenta só nasce
-do «Sem ligação» ou de outra tentativa, nunca do «por enviar».
+roda das tentativas: sem rede, de 30 em 30 segundos, a faixa passa a «A
+tentar ligar» e volta a «Sem ligação», e a tentativa e a falha repetida
+mudam-na com o aria-live desligado; uma contagem nova anuncia-se. Há uma
+cena do percurso por estado da faixa (sem ligação e a tentar) e uma regra
+que guarda o sítio dela: abaixo do cabeçalho, dentro do ecrã, sem tapar o
+«?», o sino nem os filtros (testes/ui/invariantes.js).
 
 ## Uma porta, e nenhum beco
 As opções de um registo — editar, duplicar, apagar, selecionar vários —
@@ -4497,8 +4479,8 @@ Definições (definicoes.js:navDasDefinicoes, o canvas D-DefCategorias): as
 mesmas secções e linhas da raiz, com a página aberta acesa — o IRS e as
 etiquetas acendem as categorias, os termos e a política o aviso legal
 (definicoes.js:paginaDasDefinicoes) —, posta ao lado do conteúdo pela folha
-(estilos.css:.wrap:has(>.def-nav)). A Ajuda tem porta própria na barra
-lateral e fica sem ela. O navRow (definicoes.js:navRow) é uma função, com o
+(estilos.css:.wrap:has(>.def-nav)). A Ajuda fica sem ela: a porta dela é o
+«?» do cabeçalho dos separadores. O navRow (definicoes.js:navRow) é uma função, com o
 desenho das linhas da raiz num cartão só dela (o aviso legal usa-a), e os
 títulos das subpáginas da base são os do canvas.
 
@@ -5446,10 +5428,10 @@ app em serviços»). A barra lateral arruma-os nos cinco grupos do canvas de
 2026-10 (navegacao.js:NAV_GROUPS), iguais no menu do telemóvel: ao cimo, sem
 título, a Visão geral; Casas (Imóveis, Grupos, Contratos, Pessoas, Visitas); Dinheiro
 (Movimentos, Planeados, Créditos); Análise (Avaliação, Projeções, IRS · Anexo
-F); Agenda (o Calendário); e ao fundo, sem título, as Definições, a Ajuda e o
-cartão da conta (navegacao.js:gavetaFundo — a Ajuda e a conta só com
-sessão). A Ajuda leva à página dela nas Definições
-(navegacao.js:abrirDefinicoes); o cartão da conta, com o avatar, o nome e «O
+F); Agenda (o Calendário); e ao fundo, sem título, as Definições e o cartão
+da conta (navegacao.js:gavetaFundo — a conta só com sessão). A Ajuda não está
+na gaveta nem na barra lateral: a porta dela é o «?» do cabeçalho
+(navegacao.js:abrirAjuda). O cartão da conta, com o avatar, o nome e «O
 meu perfil», abre a janela do perfil (navegacao.js:abrirOMeuPerfil →
 cloud/utilizadores.js:CW.editProfile, data-toca="camada"), a mesma do cartão
 do perfil das Definições: fecha primeiro a gaveta (como o «Criar»), e sem a
@@ -5560,16 +5542,18 @@ separador no computador, o da área no telemóvel (estilos.css:#pageTitle, o
 (navegacao.js:subtituloDoEcra: na Visão geral, o período dos indicadores,
 «Ano de 2026 · até hoje, 17/10/2026»; nos Colaboradores, quantas pessoas
 colaboram e quantos convites esperam,
-cloud/colaboradores.js:resumoDosColaboradores). A sincronização
-(index.html:#hdrSync, cloud/entrada.js:setSyncBadge) é laranja «A ligar ao
-servidor…», com um relógio, enquanto tenta ligar; verde «Guardado», que
-recolhe ao ícone ao fim de dois segundos — um recibo, não um letreiro —;
-cobalto «N alterações por enviar»; e vermelho «Sem ligação ao servidor», com
-uma cruz; no telemóvel o «Guardado», o «N alterações por enviar» e o «A
-ligar» da abertura são só o ícone, e «sem ligação» e a nova tentativa depois
-de uma falha descem para uma faixa fina por baixo do cabeçalho, a toda a
-largura, com o ícone a ficar e o cabeçalho a crescer o que ela ocupa
-(estilos.css:header.top, o .sync dentro de estilos.css:@media(max-width:900px)). A ação secundária é a de um ecrã que a
+cloud/colaboradores.js:resumoDosColaboradores). Antes do sino, o «?» da
+Ajuda (index.html:#hdrAjuda, navegacao.js:pintarBotaoAjuda,
+navegacao.js:abrirAjuda): só com sessão e só nos separadores — nas
+Definições, em página nenhuma delas, a própria Ajuda incluída (decisão do
+Martinho), o botão fica vazio e o :empty esconde-o —, do tamanho do sino, e
+abre a Ajuda fechando primeiro a gaveta. Na primeira abertura da app num
+aparelho, quando o ecrã fica livre (sem janelas, boas-vindas nem
+apresentação por mostrar, duas olhadelas seguidas), o anel dele pulsa três
+vezes na --chama e pára (navegacao.js:ajudaBrilhoTentar, a marca
+gi_ajuda_brilho); com movimento reduzido fica só o anel; tocar-lhe apaga-o
+(navegacao.js:ajudaBrilhoApagar). O estado da sincronização já não está no
+cabeçalho: é a faixa de «O que a app diz sobre o que guardou». A ação secundária é a de um ecrã que a
 tem — o «Exportar CSV» dos Movimentos (index.html:#hdrSec,
 navegacao.js:ACAO_SECUNDARIA) —, e a principal, só no computador
 (index.html:#hdrAcao, navegacao.js:pintarAcaoDoCabecalho), é «Novo

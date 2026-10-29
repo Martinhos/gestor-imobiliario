@@ -170,9 +170,13 @@ const CENAS = [
       if (!c.classList.contains('a-ler')) throw new Error('arrastar nao poe o grafico a ler');
     },
   },
-  { nome: 'selo-por-enviar', fazer: () => { go('dashboard'); render(); setSyncBadge('pend', 3); } },
-  { nome: 'selo-sem-ligacao', fazer: () => { go('dashboard'); render(); setSyncBadge('off'); } },
-  { nome: 'selo-guardado', fazer: () => { go('dashboard'); render(); setSyncBadge('ok'); } },
+  /* A faixa sem ligação (cloud/entrada.js:setSyncBadge), o único estado da
+     sincronização que se vê desde 2026-10-29: vermelha com as alterações
+     por enviar, e laranja na nova tentativa que vem dela. O «Guardado» e o
+     «por enviar» com ligação já não se veem — não há cena. O limpar() tira a
+     faixa antes da cena seguinte. */
+  { nome: 'faixa-sem-ligacao', fazer: () => { go('dashboard'); render(); setSyncBadge('off', 3); } },
+  { nome: 'faixa-a-tentar', fazer: () => { go('dashboard'); render(); setSyncBadge('off', 1); setSyncBadge('liga'); } },
   {
     /* Andar no calendario, que e o gesto desta vista. O percurso passava por
        ca e nunca mudava de mes: tres defeitos seguidos nesta zona nao podiam
@@ -412,6 +416,8 @@ async function limpar(pagina) {
     try { closeAllModals(); } catch (e) {}
     try { closePops(); } catch (e) {}
     try { if (CW.editMode) CW.exitEdit(true); } catch (e) {}
+    // a faixa sem ligação de uma cena não fica por cima da seguinte
+    try { setSyncBadge(''); } catch (e) {}
     document.getElementById('cwUpdBar')?.remove();
     document.getElementById('cwLegal')?.remove();
     document.getElementById('cwTerms')?.remove();

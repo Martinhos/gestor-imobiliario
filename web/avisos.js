@@ -27,6 +27,21 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 46,
+    data: '2026-10-29',
+    titulo: 'A Ajuda no «?» do cabeçalho',
+    seccoes: [
+      {
+        titulo: 'Ajuda e ligação',
+        afeta: ['app'],
+        itens: [
+          'A Ajuda tem agora um botão próprio, o «?» no cabeçalho, em todos os ecrãs. Saiu do fundo do menu, onde fica o cartão da tua conta.',
+          'A nuvem da sincronização saiu do cabeçalho. Quando não há ligação ao servidor aparece uma faixa vermelha por cima do ecrã, com quantas alterações esperam para ser enviadas, e sai sozinha quando a ligação volta.',
+        ],
+      },
+    ],
+  },
+  {
     v: 45,
     data: '2026-10-29',
     titulo: 'Avisos por email dos movimentos em atraso',

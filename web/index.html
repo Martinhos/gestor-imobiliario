@@ -90,9 +90,11 @@
     <header class="top">
       <button class="burger" aria-expanded="false" data-click="openDrawer()" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
       <div class="u-minw-0 u-fx-1"><h1 id="pageTitle">Visão geral</h1><div class="sub" id="pageSub"></div></div>
-      <!-- o estado da sincronização (cloud/entrada.js:setSyncBadge); nasce
-           vazio e o :empty esconde-o -->
-      <span id="hdrSync" role="status" aria-live="polite"></span>
+      <!-- a porta da Ajuda, no sítio onde vivia a nuvem da sincronização
+           (navegacao.js:abrirAjuda); nasce vazio, só se pinta com sessão, e o
+           :empty esconde-o, como ao sino. A classe brilha (estilos.css) é o
+           anel da primeira abertura -->
+      <button type="button" class="btn filtbtn u-fx-0-0-auto ajuda-hdr" id="hdrAjuda" data-toca="ecra" data-click="abrirAjuda()" aria-label="Ajuda" title="Ajuda"></button>
       <!-- o display:none destes dois nasce do :empty (estilos.css, secção
            g05-vistas): quem os mostra escreve el.style.display='', que tira um
            style= mas não tira uma classe. -->
@@ -104,6 +106,10 @@
       <button class="btn u-fx-0-0-auto" id="hdrSec" data-toca="nada"></button>
       <button class="btn primary u-fx-0-0-auto" id="hdrAcao" data-toca="camada"></button>
     </header>
+    <!-- a faixa sem ligação (cloud/entrada.js:setSyncBadge): fora do
+         cabeçalho e por cima do conteúdo, sem o empurrar (estilos.css,
+         .faixa-sync); nasce vazia e o :empty esconde-a -->
+    <div id="hdrSync" role="status" aria-live="polite"></div>
     <!-- as abas da área no telemóvel (Imóveis, Contratos, Pessoas, Visitas;
          Movimentos, Planeados, Créditos), fora do #view: ficam paradas
          enquanto o painel desliza por baixo delas (navegacao.js:abasAssentar).

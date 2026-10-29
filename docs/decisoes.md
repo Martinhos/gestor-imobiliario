@@ -76,6 +76,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-28 · Os pedidos das pessoas decidem-se antes, e a resposta é da equipa
 - 2026-10-29 · O rasto das pessoas, debaixo de um pseudónimo
 - 2026-10-29 · A quarta ronda de QA e o email dos planeados em atraso
+- 2026-10-29 · O «?» da Ajuda no lugar da nuvem
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2830,3 +2831,19 @@ por dia» guarda-se na mesma tabela. Cada execução lê a tabela dos registos
 inteira (não há índice no kind): enquanto ela for pequena, as 15 execuções do
 dia cabem no teto de linhas lidas; quando crescer, uma marca de «dia feito»
 evita reler depois de não haver nada por enviar.
+
+## 2026-10-29 · O «?» da Ajuda no lugar da nuvem
+
+O Martinho quis a Ajuda num «?» e, vendo as opções, foi mais longe: a nuvem da
+sincronização sai do cabeçalho e o «?» fica no lugar dela. Com ligação, o que
+se escreve sobe em segundos, e o «Guardado», o «A ligar» e o «N por enviar»
+eram ruído a passar no canto a cada gravação; o que importa dizer é quando
+não se consegue guardar, e isso passou a ser uma faixa vermelha por cima do
+ecrã, com as alterações que esperam, que não empurra nada (a de antes fazia
+o cabeçalho crescer). Igual no telemóvel e no computador. A Ajuda tem uma
+porta só, o «?»: saiu da gaveta e da barra lateral. E o «?» não aparece nas
+Definições, em página nenhuma delas: é a porta dos separadores, e quem já
+está nas Definições tem a Ajuda à mão. Brilha uma vez por aparelho, na
+primeira abertura, quando o ecrã fica livre das boas-vindas e da apresentação
+— não na primeira abertura da gaveta, como ele pensou primeiro, porque o «?»
+deixou de estar dentro dela.

@@ -337,21 +337,33 @@ function dentroDaPagina() {
     if (!noMesDeHoje && !temBotao) falhar('o «Hoje» aparece fora do mês de hoje', mes + ' sem botão');
   }
 
-  /* 6b. O selo da sincronizacao nao se poe em cima do sino.
+  /* 6b. A faixa sem ligacao fica por baixo do cabecalho, dentro do ecra.
 
-     Vivia no canto superior direito, que e onde o sino esta, e ninguem tinha
-     dado por isso porque nenhuma cena o mostrava — ele so aparecia quando a
-     ligacao caia. Agora ha uma cena por estado, e esta regra guarda o sitio. */
-  const selo = document.getElementById('hdrSync');
-  if (selo && selo.innerHTML && getComputedStyle(selo).display !== 'none') {
-    const rs = selo.getBoundingClientRect();
-    ['hdrBell', 'hdrFilt'].forEach((id) => {
+     O selo da sincronizacao viveu no canto superior direito, que e onde o
+     sino esta, e ninguem tinha dado por isso porque nenhuma cena o mostrava —
+     so aparecia quando a ligacao caia. Desde 2026-10-29 e uma faixa fixa por
+     cima do conteudo (cloud/entrada.js:setSyncBadge, estilos.css:.faixa-sync),
+     posta pela posicao estatica logo abaixo do header.top: esta regra guarda
+     que nao sobe para cima dele (nem do «?», do sino, dos filtros) e que nao
+     sai pelos lados do ecra. */
+  const faixa = document.querySelector('#hdrSync > .faixa-sync');
+  if (faixa && getComputedStyle(faixa).display !== 'none') {
+    const rf = faixa.getBoundingClientRect();
+    const cab = document.querySelector('header.top');
+    const rc = cab ? cab.getBoundingClientRect() : null;
+    if (rc && rc.height && rf.top < rc.bottom - 1) {
+      falhar('a faixa sem ligacao fica por baixo do cabecalho', 'topo ' + N(rf.top) + ' < cabecalho ' + N(rc.bottom));
+    }
+    if (rf.left < -1 || rf.right > innerWidth + 1) {
+      falhar('a faixa sem ligacao cabe no ecra', N(rf.left) + '..' + N(rf.right) + ' em ' + innerWidth);
+    }
+    ['hdrAjuda', 'hdrBell', 'hdrFilt'].forEach((id) => {
       const outro = document.getElementById(id);
       if (!outro) return;
       const ro = outro.getBoundingClientRect();
       if (!ro.height) return;
-      const bate = !(rs.top >= ro.bottom || rs.bottom <= ro.top || rs.left >= ro.right || rs.right <= ro.left);
-      if (bate) falhar('o selo da sincronizacao nao tapa o cabecalho', 'sobrepoe #' + id);
+      const bate = !(rf.top >= ro.bottom || rf.bottom <= ro.top || rf.left >= ro.right || rf.right <= ro.left);
+      if (bate) falhar('a faixa sem ligacao nao tapa o cabecalho', 'sobrepoe #' + id);
     });
   }
 

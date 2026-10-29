@@ -30,8 +30,9 @@ const SUBPAGE={tema:{label:'Tema',sub:'Claro, escuro ou o do telemóvel'},
 const view=()=>document.getElementById('view');
 /* As secções da barra lateral (e do menu do telemóvel, que é a mesma): os
    cinco grupos do canvas de 2026-10. Ao cimo, sem título, a Visão geral; ao
-   fundo, sem título, as Definições, a que o gavetaHtml junta a Ajuda e o
-   cartão da conta. Sem título não se recolhem.
+   fundo, sem título, as Definições, a que o gavetaHtml junta o cartão da
+   conta (a Ajuda saiu daqui a 2026-10-29: a porta dela é o «?» do
+   cabeçalho, abrirAjuda). Sem título não se recolhem.
    «pessoas» não é um separador: é a porta única dos Inquilinos, dos
    Proprietários e dos Colaboradores (PESSOAS), que continuam a ser três
    serviços e três ecrãs, escolhidos lá dentro por um segmentado (abasDaArea).
@@ -86,7 +87,7 @@ function destinoDe(id,fora){
   return ids.indexOf(tab)>-1?tab:(ids[0]||'');
 }
 /* A porta acesa no menu: a do separador atual; a das Definições não na
-   Ajuda, que tem porta própria. Os Colaboradores acendem a das Pessoas
+   Ajuda, que tem porta própria (o «?» do cabeçalho, pintarBotaoAjuda). Os Colaboradores acendem a das Pessoas
    (PESSOAS) e os Grupos a deles, nas Casas — nenhum acende já a das Definições.
    Recebe: id — a porta.
    Devolve: true/false. */
@@ -193,10 +194,10 @@ function gavetaHtml(fora){
   const grupos=NAV_GROUPS.map(g=>{const ids=g.ids.filter(id=>portaVisivel(id,fora));if(!ids.length)return '';
     const itens=ids.map(id=>{const r=rotuloDaPorta(id),on=portaAtiva(id),dest=destinoDe(id,fora);
       return `<a class="${on?'on':''}" tabindex="0" ${on?'aria-current="page"':''} role="link" data-toca="ecra" data-click="go('${jsq(dest)}')">${ic(r.icon)}<span class="txt">${r.label}</span>${id==='pessoas'?'':crachaHtml(id,'gaveta')}</a>`}).join('');
-    /* o fundo (as Definições, a Ajuda e a conta) vai numa caixa própria, que a
+    /* o fundo (as Definições e a conta) vai numa caixa própria, que a
        CSS encosta ao fundo da barra e deixa sempre à vista (estilos.css:.nav-fundo):
-       num ecrã de 900px de altura os grupos não cabem todos, e eram a Ajuda e
-       a conta que ficavam por baixo, à espera de quem rolasse a barra */
+       num ecrã de 900px de altura os grupos não cabem todos, e era a conta
+       que ficava por baixo, à espera de quem rolasse a barra */
     if(!g.label&&g.ids.indexOf('settings')>-1)return `<div class="nav-fundo"><div class="navh">${g.label}</div>`+itens+gavetaFundo()+'</div>';
     if(!g.label)return `<div class="navh">${g.label}</div>`+itens;
     const fechada=_gavetaFechadas.indexOf(g.label)>-1,id=gavetaIdDe(g.label);
@@ -205,19 +206,18 @@ function gavetaHtml(fora){
       `<div class="navsec-corpo" id="${id}"><div class="navsec-itens">${itens}</div></div></div>`}).join('');
   return criar+grupos;
 }
-/* O fundo da barra lateral, a seguir às Definições: a Ajuda e o cartão da
-   conta (avatar com as iniciais, o nome, «O meu perfil»). Os dois vivem na
-   nuvem — a Ajuda são os pedidos ao suporte, a conta é a sessão —, e sem
-   sessão não aparecem. A Ajuda é uma página das Definições, e o toque leva lá
-   direto (abrirDefinicoes); o cartão abre a janela do perfil
+/* O fundo da barra lateral, a seguir às Definições: o cartão da conta
+   (avatar com as iniciais, o nome, «O meu perfil»). Vive na nuvem — a conta
+   é a sessão —, e sem sessão não aparece. Abre a janela do perfil
    (abrirOMeuPerfil), a mesma do cartão do perfil das Definições — o nome e o
-   email que ele mostra são os que lá se mudam.
+   email que ele mostra são os que lá se mudam. A Ajuda esteve aqui até
+   2026-10-29: tem agora uma porta só, o «?» do cabeçalho (abrirAjuda), em
+   todos os ecrãs.
    Devolve: o HTML (string), ou '' sem sessão. */
 function gavetaFundo(){
   const u=typeof window!=='undefined'&&window.CW&&CW.user;if(!u)return '';
-  const ajudaOn=tab==='settings'&&setPage==='ajuda',nome=u.name||u.email||'A minha conta';
-  return `<a class="${ajudaOn?'on':''}" tabindex="0" ${ajudaOn?'aria-current="page"':''} role="link" data-toca="ecra" data-click="abrirDefinicoes('ajuda')">${ic('ajuda')}<span class="txt">Ajuda</span></a>`+
-    `<button type="button" class="nav-conta" data-toca="camada" data-click="abrirOMeuPerfil()"><span class="avatar">${esc(initials(nome))}</span>`+
+  const nome=u.name||u.email||'A minha conta';
+  return `<button type="button" class="nav-conta" data-toca="camada" data-click="abrirOMeuPerfil()"><span class="avatar">${esc(initials(nome))}</span>`+
     `<span class="u-minw-0"><b>${esc(nome)}</b><small>O meu perfil</small></span></button>`;
 }
 /* O toque no cartão da conta, no fundo da gaveta: a janela «O meu perfil»
@@ -265,7 +265,10 @@ function gavetaAlternar(rotulo){
    só reescreve o #nav quando o HTML mudou. Reescrever o mesmo recriava os
    nós por nada — tirava o foco a quem anda de teclado na gaveta e cortava a
    meio uma secção a recolher.
-   Devolve: nada — reescreve o HTML de #nav (se mudou) e chama buildTabbar. */
+   Pinta também o «?» da Ajuda no cabeçalho (pintarBotaoAjuda): a sessão que
+   chega e a Ajuda que abre ou fecha passam todas por aqui.
+   Devolve: nada — reescreve o HTML de #nav (se mudou), chama buildTabbar e
+   pinta o «?». */
 function buildNav(){
   /* os separadores escondidos: os que o cargo não abre e os serviços
      desligados nesta conta (acessos.js:separadoresEscondidos) */
@@ -274,6 +277,7 @@ function buildNav(){
   const el=document.getElementById('nav'),html=gavetaHtml(fora);
   if(el&&el._gavetaHtml!==html){el.innerHTML=html;el._gavetaHtml=html}
   buildTabbar(fora);
+  pintarBotaoAjuda();
 }
 /* O crachá de um separador, se o serviço dele registou um (os «Planeados»
    contam os pendentes na gaveta; o «Calendário» mostra o mesmo número só na
@@ -832,20 +836,156 @@ document.addEventListener('pointerdown',sepArrastar);
 // Um goSet('groups') ou goSet('colaboradores') que sobre (um atalho, uma ação
 // antiga) leva ao separador — aqui na base e não só no embrulho da nuvem
 // (cloud/nucleo.js).
-// Refaz também a barra lateral: a Ajuda tem porta própria, e entrar nela (ou
-// sair dela para as Perguntas frequentes) muda a porta acesa sem mudar de
-// separador — o render não toca na barra, e ficava aceso o «Definições». O
-// buildNav só reescreve o #nav quando o HTML muda.
+// Refaz também a barra lateral e o «?» do cabeçalho: a Ajuda tem porta
+// própria (o «?», pintarBotaoAjuda), e entrar nela (ou sair dela para as
+// Perguntas frequentes) muda a porta acesa sem mudar de separador — e na
+// barra ficava aceso o «Definições». O buildNav só reescreve o #nav quando o
+// HTML muda.
 // Recebe: p — a subpágina das Definições (uma chave de SUBPAGE; '' volta ao menu).
 // Devolve: nada — redesenha a vista e a barra lateral.
 function goSet(p){if(p==='groups'||p==='colaboradores')return go(p);setPage=p;if(p)pushHist();_entrar=1;buildNav();render();try{window.scrollTo(0,0)}catch(e){}}
-/* Leva a uma página das Definições a partir de qualquer sítio — a Ajuda, no
-   fundo da barra lateral: muda de separador e abre a página. Fecha a gaveta
+/* Leva a uma página das Definições a partir de qualquer sítio — a Ajuda,
+   pelo «?» do cabeçalho (abrirAjuda): muda de separador e abre a página. Fecha a gaveta
    do telemóvel: vindo de outro separador o go já a fechava, mas já nas
    Definições só corre o goSet, e a Ajuda abria por baixo da gaveta aberta.
    Recebe: p — a subpágina ('ajuda', 'cloud', …; '' a raiz).
    Devolve: nada — redesenha a vista. */
 function abrirDefinicoes(p){closeDrawer();if(tab!=='settings')go('settings');if(tab==='settings')goSet(p)}
+/* ---- o «?» da Ajuda, no cabeçalho ----
+   A Ajuda tem uma porta só desde 2026-10-29: o «?» do cabeçalho
+   (index.html:#hdrAjuda), onde estava a nuvem da sincronização, antes do
+   sino — no telemóvel e no computador. Saiu da gaveta e da barra lateral
+   (gavetaFundo). Na primeira abertura da app neste aparelho, fechadas as
+   boas-vindas e a apresentação do separador, o «?» brilha uma vez (a classe
+   `brilha`, estilos.css), para quem chega saber onde está a Ajuda; o brilho
+   sai quando se lhe toca (abrirAjuda). */
+/* a marca do aparelho: o «?» já brilhou (ou já foi tocado), e não brilha mais */
+const LS_AJUDA_BRILHO='gi_ajuda_brilho';
+/* de quanto em quanto a vigia olha para o ecrã à espera de ele ficar livre,
+   e quantas olhadelas dá por cada pintura do «?» antes de esperar pela seguinte */
+const AJUDA_BRILHO_PASSO=700,AJUDA_BRILHO_VOLTAS=400;
+// o temporizador da vigia, as olhadelas seguidas com o ecrã livre, as olhadelas desde a última pintura, e se acabou
+let _ajudaBrilhoTempo=null,_ajudaBrilhoLivre=0,_ajudaBrilhoVoltas=0,_ajudaBrilhoFim=false;
+/* Pinta o «?» do cabeçalho. Só com sessão: a Ajuda é da nuvem (os pedidos
+   ao suporte, os tutoriais, as apresentações), e sem sessão o botão fica
+   vazio — o :empty da folha esconde-o — e sem brilho. Nas Definições não
+   aparece, em página nenhuma delas, a Ajuda incluída (decisão do Martinho:
+   o «?» é dos separadores, não das Definições nem das subpáginas); fica
+   vazio da mesma maneira, e o brilho espera por um separador. O ícone só se
+   escreve quando muda: o buildNav e cada pintura do ecrã chamam isto, e
+   reescrever o mesmo recriava o nó por nada. Com sessão e à vista, se o «?»
+   ainda não brilhou neste aparelho, arma a vigia do brilho
+   (ajudaBrilhoVigiar).
+   Devolve: nada — mexe no #hdrAjuda, se ele existir. */
+function pintarBotaoAjuda(){
+  const b=typeof document!=='undefined'&&document.getElementById('hdrAjuda');if(!b||!b.classList)return;
+  const u=typeof window!=='undefined'&&window.CW&&CW.user;
+  const ve=!!u&&tab!=='settings';
+  const html=ve?ic('ajuda',16):'';
+  if(b._ajudaHtml!==html){b.innerHTML=html;b._ajudaHtml=html}
+  b.classList.remove('on');b.removeAttribute('aria-current');
+  if(!ve){b.classList.remove('brilha');return}
+  ajudaBrilhoVigiar();
+}
+/* O toque no «?» do cabeçalho: apaga o brilho (ajudaBrilhoApagar) e abre a
+   Ajuda pelo abrirDefinicoes, que fecha primeiro a gaveta do telemóvel —
+   vindo de outro separador e também já nas Definições (o ticket e3e5cdab).
+   Devolve: nada — abre a página da Ajuda. */
+function abrirAjuda(){
+  ajudaBrilhoApagar();
+  abrirDefinicoes('ajuda');
+}
+/* Porque é que o «?» não pode brilhar agora — ou '' quando pode. Param de
+   vez: 'feito' (já brilhou neste aparelho) e 'armazenamento' (sem onde
+   guardar a marca brilharia em todas as aberturas). Os outros esperam: sem
+   sessão, sem o «?» pintado, com a app escondida, com uma janela aberta (as
+   boas-vindas, a apresentação do separador, as novidades, qualquer outra),
+   com a gaveta aberta, com o que a apresentação diz que tapa o ecrã
+   (apresentacao.js:aprEcraOcupado — o estado do servidor por ler, os
+   portões, o tutorial, os modos) e com uma apresentação por abrir aqui
+   (apresentacao.js:aprQueAbrir, aprOcupaOEcra). A apresentação é da nuvem:
+   sem ela carregada contam só as janelas e a gaveta.
+   Devolve: '' ou o motivo ('feito', 'armazenamento', 'sessao', 'botao',
+   'escondida', 'janela', 'gaveta', 'apresentacao', ou o do aprEcraOcupado). */
+function ajudaBrilhoPorque(){
+  try{
+    if(typeof localStorage==='undefined'||!localStorage)return 'armazenamento';
+    if(localStorage.getItem(LS_AJUDA_BRILHO))return 'feito';
+  }catch(e){return 'armazenamento'}
+  if(!(typeof window!=='undefined'&&window.CW&&CW.user))return 'sessao';
+  const b=document.getElementById('hdrAjuda');if(!b||!b._ajudaHtml)return 'botao';
+  if(document.hidden)return 'escondida';
+  if(typeof modalStack!=='undefined'&&modalStack.length)return 'janela';
+  const cl=document.body&&document.body.classList;
+  if(cl&&cl.contains('open'))return 'gaveta';
+  try{
+    const p=typeof aprEcraOcupado==='function'?aprEcraOcupado():'';if(p)return p;
+    if((typeof aprQueAbrir==='function'&&aprQueAbrir())||(typeof aprOcupaOEcra==='function'&&aprOcupaOEcra()))return 'apresentacao';
+  }catch(e){return 'apresentacao'}
+  return '';
+}
+/* Acende o brilho do «?», se ele puder brilhar agora (ajudaBrilhoPorque).
+   Grava primeiro a marca do aparelho e só depois põe a classe: uma marca que
+   não grava (o armazenamento cheio ou fechado) não brilha, senão brilharia
+   em todas as aberturas.
+   Devolve: true se acendeu; false se não. */
+function ajudaBrilhoTentar(){
+  if(ajudaBrilhoPorque())return false;
+  _ajudaBrilhoFim=true;
+  try{localStorage.setItem(LS_AJUDA_BRILHO,'1')}catch(e){return false}
+  document.getElementById('hdrAjuda').classList.add('brilha');
+  return true;
+}
+/* Apaga o brilho do «?» (o toque nele, abrirAjuda), larga a vigia e marca o
+   aparelho: quem tocou no «?» antes de ele brilhar já o encontrou, e o
+   brilho depois era ruído.
+   Devolve: nada. */
+function ajudaBrilhoApagar(){
+  if(_ajudaBrilhoTempo){clearTimeout(_ajudaBrilhoTempo);_ajudaBrilhoTempo=null}
+  _ajudaBrilhoFim=true;_ajudaBrilhoLivre=0;
+  try{localStorage.setItem(LS_AJUDA_BRILHO,'1')}catch(e){}
+  const b=typeof document!=='undefined'&&document.getElementById('hdrAjuda');
+  if(b&&b.classList)b.classList.remove('brilha');
+}
+/* Arma a vigia do brilho, a cada pintura do «?» (pintarBotaoAjuda): dá-lhe
+   as olhadelas todas outra vez e, se não estiver já armada, agenda a
+   próxima (ajudaBrilhoArmar). Acabado o brilho — ou já feito neste
+   aparelho, ou sem onde o guardar —, não faz nada.
+   Devolve: nada. */
+function ajudaBrilhoVigiar(){
+  if(_ajudaBrilhoFim)return;
+  const p=ajudaBrilhoPorque();
+  if(p==='feito'||p==='armazenamento'){_ajudaBrilhoFim=true;return}
+  _ajudaBrilhoVoltas=0;
+  if(!_ajudaBrilhoTempo)ajudaBrilhoArmar();
+}
+/* Agenda a próxima olhadela da vigia (ajudaBrilhoPasso), daqui a
+   AJUDA_BRILHO_PASSO. O temporizador não prende o processo do Node (os
+   testes correm a app com os temporizadores verdadeiros).
+   Devolve: nada. */
+function ajudaBrilhoArmar(){
+  _ajudaBrilhoTempo=setTimeout(ajudaBrilhoPasso,AJUDA_BRILHO_PASSO);
+  try{if(_ajudaBrilhoTempo&&typeof _ajudaBrilhoTempo.unref==='function')_ajudaBrilhoTempo.unref()}catch(e){}
+}
+/* Uma olhadela da vigia. O brilho só entra com o ecrã livre em DUAS
+   olhadelas seguidas: entre o fecho de uma janela e a abertura da seguinte
+   (as novidades abrem 80ms depois de a apresentação fechar,
+   apresentacao.js:aprDarAVezAsNovidades; a apresentação do separador
+   250ms depois da pintura, apresentacao.js:aprAgendar) o ecrã parece livre
+   por um instante, e um brilho por baixo de uma janela não se via. Para de
+   vez com 'feito' ou 'armazenamento'; sem sessão, ou acabadas as
+   olhadelas, espera pela próxima pintura (a sessão que chega passa pelo
+   buildNav).
+   Devolve: nada. */
+function ajudaBrilhoPasso(){
+  _ajudaBrilhoTempo=null;
+  const p=ajudaBrilhoPorque();
+  if(p==='feito'||p==='armazenamento'){_ajudaBrilhoFim=true;return}
+  if(p==='sessao'){_ajudaBrilhoLivre=0;return}
+  if(p)_ajudaBrilhoLivre=0;
+  else if(++_ajudaBrilhoLivre>=2&&ajudaBrilhoTentar())return;
+  if(++_ajudaBrilhoVoltas<AJUDA_BRILHO_VOLTAS)ajudaBrilhoArmar();
+}
 /* Os separadores de uma área, no topo do ecrã do telemóvel (o canvas, M-Casas
    e M-Movimentos): Imóveis/Grupos/Contratos/Pessoas/Visitas e
    Movimentos/Planeados/Créditos, num segmentado — com o crachá do separador
@@ -922,8 +1062,12 @@ function abasIndice(nav){
    (abasCopiar). Outra área, ou outras abas à vista, troca a fila inteira —
    aí não há realce a deslizar, porque não há de onde. Fora de uma área com
    separadores a casa esvazia-se (e o :empty esconde-a).
-   Devolve: nada — mexe na casa das abas (#abasArea). */
+   Pinta também o «?» da Ajuda do cabeçalho (pintarBotaoAjuda), que acende
+   com a Ajuda aberta: o voltar do sistema sai dela só com um render, sem
+   passar pelo buildNav — menos na pintura à parte do vizinho do carrossel.
+   Devolve: nada — mexe na casa das abas (#abasArea) e no «?». */
 function abasAssentar(){
+  if(!(typeof _pintarAParte!=='undefined'&&_pintarAParte))pintarBotaoAjuda();
   const v=view(),casa=document.getElementById('abasArea');
   if(!v||!casa||typeof casa.replaceChildren!=='function')return;
   const novo=abasTirarDaVista(v),vivo=casa.firstElementChild||null;

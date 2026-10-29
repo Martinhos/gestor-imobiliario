@@ -270,27 +270,27 @@ describe('o que a gaveta mostra', () => {
     }
   });
 
-  test('a Ajuda do fundo acende-se a ela, e não às Definições, mesmo chegando lá sem mudar de separador', () => {
+  test('a Ajuda saiu do fundo (a porta dela é o «?» do cabeçalho): na Ajuda nenhuma porta da gaveta se acende, nem as Definições', () => {
     app.window.CW = Object.assign(app.window.CW || {}, { user: { id: 'eu', name: 'Ana Silva' } });
     try {
       app.tab = 'settings';
       app.setPage = '';
       app.buildNav();
       assert.match(nav(), /<a class="on"[^>]*go\('settings'\)/, 'controlo: na raiz, as Definições acesas');
+      assert.ok(nav().includes('nav-conta'), 'o cartão da conta continua no fundo');
+      assert.ok(!/abrirDefinicoes\('ajuda'\)|abrirAjuda|<span class="txt">Ajuda<\/span>/.test(nav()), 'e a Ajuda já não está na gaveta');
       // o abrirDefinicoes('ajuda') já nas Definições, e o «Ajuda» das Perguntas frequentes: só o goSet
       app.goSet('ajuda');
-      const html = nav();
-      assert.match(html, /<a class="on"[^>]*aria-current="page"[^>]*data-click="abrirDefinicoes\('ajuda'\)"/, 'a Ajuda acesa');
-      assert.doesNotMatch(html, /<a class="on"[^>]*go\('settings'\)/, 'e as Definições não');
+      assert.doesNotMatch(nav(), /<a class="on"/, 'na Ajuda, nada aceso na gaveta: a porta acesa é o «?»');
       app.goSet('faq');
-      assert.doesNotMatch(nav(), /<a class="on"[^>]*abrirDefinicoes\('ajuda'\)/, 'saindo da Ajuda, apaga-se');
+      assert.match(nav(), /<a class="on"[^>]*go\('settings'\)/, 'saindo da Ajuda para outra página, as Definições voltam a acender');
     } finally {
       delete app.window.CW.user;
       app.setPage = '';
     }
   });
 
-  test('a Ajuda do fundo fecha a gaveta também quando já se está nas Definições (o ticket e3e5cdab)', () => {
+  test('o «?» da Ajuda fecha a gaveta também quando já se está nas Definições (o ticket e3e5cdab)', () => {
     /* o classList do arnês não guarda nada (contains dá sempre false): um de
        verdade, só para este teste, que o openDrawer e o closeDrawer leem */
     const body = app.document.body, antigo = body.classList, cls = new Set();
@@ -300,15 +300,21 @@ describe('o que a gaveta mostra', () => {
       app.tab = 'dashboard';
       app.setPage = '';
       corpo.add('open');
-      app.abrirDefinicoes('ajuda');
+      app.abrirAjuda();
       assert.equal(app.tab, 'settings');
+      assert.equal(app.setPage, 'ajuda');
       assert.equal(corpo.contains('open'), false, 'controlo: de outro separador, a gaveta fecha');
       // o caso do ticket: já nas Definições só corria o goSet, e a gaveta ficava aberta por cima da Ajuda
       app.setPage = '';
       corpo.add('open');
-      app.abrirDefinicoes('ajuda');
+      app.abrirAjuda();
       assert.equal(app.setPage, 'ajuda', 'abre a Ajuda');
       assert.equal(corpo.contains('open'), false, 'e a gaveta fecha');
+      // e o abrirDefinicoes, por onde o «?» passa, continua a fechá-la sozinho
+      app.setPage = '';
+      corpo.add('open');
+      app.abrirDefinicoes('ajuda');
+      assert.equal(corpo.contains('open'), false, 'o abrirDefinicoes também');
     } finally {
       body.classList = antigo;
       app.setPage = '';

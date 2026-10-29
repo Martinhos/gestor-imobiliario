@@ -517,12 +517,14 @@ function reporRolagemDoPainel(y){
 /* O cabeçalho do ecrã onde se está: o título leva o nome da área no
    telemóvel e o do separador no computador (navegacao.js:tituloDoEcraHtml);
    o subtítulo diz o estado do ecrã onde há um (navegacao.js:subtituloDoEcra);
-   e o sino, o botão dos filtros e a ação do ecrã.
+   e o «?» da Ajuda (navegacao.js:pintarBotaoAjuda), o sino, o botão dos
+   filtros e a ação do ecrã.
    Devolve: nada — escreve no cabeçalho. */
 function pintarCabecalhoDoEcra(){
   const meta=(tab==='settings'&&setPage&&SUBPAGE[setPage])?SUBPAGE[setPage]:TABS.find(x=>x.id===tab);
   document.getElementById('pageTitle').innerHTML=tituloDoEcraHtml(meta);
   document.getElementById('pageSub').textContent=subtituloDoEcra(meta);
+  if(typeof pintarBotaoAjuda==='function')pintarBotaoAjuda();
   if(typeof notifSino==='function')notifSino();
   pintarBotaoFiltros();
   pintarAcaoDoCabecalho();

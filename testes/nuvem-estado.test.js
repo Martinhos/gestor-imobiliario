@@ -1,8 +1,8 @@
-// A nuvem do cabeçalho diz em que estado está a ligação ao servidor: laranja
-// com um relógio enquanto tenta ligar (desde a abertura e em cada nova
-// tentativa depois de uma falha), verde quando o servidor responde, vermelha
-// com uma cruz quando não responde, cobalto com o que está por enviar. Prova
-// o selo (cloud/entrada.js:setSyncBadge), os ícones (icones.js), quando cada
+// O núcleo diz em que estado está a ligação ao servidor: «A ligar» enquanto
+// tenta (desde a abertura e em cada nova tentativa depois de uma falha),
+// «Guardado» quando o servidor responde, «Sem ligação» quando não responde,
+// «N por enviar» com o que falta. Desde 2026-10-29 só a falta de ligação se
+// vê (a faixa, testes/faixa-sync.test.js). Prova os ícones dela (icones.js), quando cada
 // estado se põe (cloud/nucleo.js: tentarLigar, ligou, caiuALigacao, pullNow,
 // pushNow, syncCycle, startSync, encerrarSessao), o arranque e as cores.
 //
@@ -108,114 +108,13 @@ async function ligada(app, esp) {
   esp.selos.length = 0;
 }
 
-/* Um #hdrSync de mentira que guarda o que o setSyncBadge lhe escreve:
-   classes, atributos e o HTML. A app passa a achá-lo pelo id.
-   Recebe: app.
-   Devolve: o elemento. */
-function seloNoEcra(app) {
-  const atr = {};
-  const el = {
-    className: '', innerHTML: '', title: '', atr,
-    setAttribute(k, v) { atr[k] = String(v); },
-    getAttribute(k) { return k in atr ? atr[k] : null; },
-    removeAttribute(k) { delete atr[k]; },
-    classList: { add(c) { if (!(' ' + el.className + ' ').includes(' ' + c + ' ')) el.className += ' ' + c; } },
-  };
-  const antes = app.document.getElementById;
-  app.document.getElementById = (id) => (id === 'hdrSync' ? el : antes(id));
-  return el;
-}
-
-// O setSyncBadge verdadeiro, com o #hdrSync de mentira (e sem espião por cima).
-function comSelo() {
-  const app = carregarTudo();
-  const el = seloNoEcra(app);
-  return { app, el };
-}
-
-describe('o selo (cloud/entrada.js:setSyncBadge)', () => {
-  test('«A ligar»: laranja (.liga), a nuvem com o relógio, a frase no aria-label e no title, e anuncia-se', () => {
-    const { app, el } = comSelo();
-    app.setSyncBadge('liga');
-    assert.equal(el.className, 'sync liga');
-    assert.equal(el.title, 'A ligar ao servidor…');
-    assert.equal(el.atr['aria-label'], 'A ligar ao servidor…');
-    assert.equal(el.atr['aria-live'], 'polite');
-    assert.ok(el.innerHTML.includes(app.ic('nuvemLiga', 18)), 'o ícone é a nuvem com o relógio');
-    assert.match(el.innerHTML, /<span>A ligar ao servidor…<\/span>/);
-  });
-
-  test('«Sem ligação»: vermelho (.fora), a nuvem com a cruz; «Guardado» verde e recolhe; «por enviar» cobalto com a conta', () => {
-    const { app, el } = comSelo();
-    app.setSyncBadge('off');
-    assert.equal(el.className, 'sync fora');
-    assert.equal(el.title, 'Sem ligação ao servidor — sincroniza mais tarde');
-    assert.ok(el.innerHTML.includes(app.ic('nuvemFora', 18)), 'o ícone é a nuvem com a cruz');
-    assert.match(el.innerHTML, /<span>Sem ligação ao servidor<\/span>$/, 'à vista, a frase curta: a inteira comia o título no computador estreito');
-    app.setSyncBadge('pend', 3);
-    assert.equal(el.className, 'sync pend');
-    assert.equal(el.title, '3 alterações por enviar');
-    assert.ok(el.innerHTML.includes(app.ic('nuvemSobe', 18)));
-    let recolhe = null;
-    app.setTimeout = (f, ms) => { recolhe = { f, ms }; return 1; };
-    app.setSyncBadge('ok');
-    assert.equal(el.className, 'sync ok');
-    assert.equal(el.title, 'Guardado');
-    assert.ok(recolhe && recolhe.ms === 2000, 'o recibo recolhe ao fim de dois segundos');
-    recolhe.f();
-    assert.equal(el.className, 'sync ok recibo');
-  });
-
-  test('só o «Guardado» recolhe: o «A ligar», o «por enviar» e o «Sem ligação» ficam', () => {
-    const { app } = comSelo();
-    const tempos = [];
-    app.setTimeout = (f, ms) => { tempos.push(ms); return 1; };
-    app.setSyncBadge('liga');
-    app.setSyncBadge('pend', 2);
-    app.setSyncBadge('off');
-    assert.deepEqual(tempos, []);
-  });
-
-  test('uma nova tentativa depois de uma falha fica com a faixa (.tenta) e não se anuncia; a falha repetida também não', () => {
-    const { app, el } = comSelo();
-    app.setSyncBadge('ok');
-    app.setSyncBadge('off');
-    assert.equal(el.atr['aria-live'], 'polite', 'a primeira falha diz-se');
-    app.setSyncBadge('liga');
-    assert.equal(el.className, 'sync liga tenta', 'a tentativa herda a faixa do «Sem ligação»');
-    assert.equal(el.atr['aria-live'], 'off', 'a roda das tentativas não se anuncia');
-    app.setSyncBadge('off');
-    assert.equal(el.className, 'sync fora');
-    assert.equal(el.atr['aria-live'], 'off', 'a mesma falha outra vez também não');
-    app.setSyncBadge('liga');
-    app.setSyncBadge('ok');
-    assert.equal(el.className, 'sync ok');
-    assert.equal(el.atr['aria-live'], 'polite', 'ligar outra vez diz-se');
-  });
-
-  test('o «A ligar» da abertura é só o ícone no telemóvel (sem .tenta); o mesmo selo duas vezes não se refaz', () => {
-    const { app, el } = comSelo();
-    app.setSyncBadge('liga');
-    assert.equal(el.className, 'sync liga');
-    el.innerHTML = 'marca';
-    app.setSyncBadge('liga');
-    assert.equal(el.innerHTML, 'marca', 'a abertura e o startSync dizem ambos «A ligar»: não se repinta nem se anuncia outra vez');
-  });
-
-  test('sem estado, o selo esvazia (e some pelo :empty)', () => {
-    const { app, el } = comSelo();
-    app.setSyncBadge('off');
-    app.setSyncBadge('');
-    assert.equal(el.innerHTML, '');
-    assert.equal(el.className, '');
-    assert.equal(el.getAttribute('aria-label'), null);
-    assert.equal(el.title === '' || el.title === undefined || el.getAttribute('title') === null, true);
-  });
-});
+/* O que cada estado escreve no ecrã (a faixa sem ligação, que substituiu o
+   selo com a nuvem em 2026-10-29) prova-se em testes/faixa-sync.test.js;
+   aqui fica quando o núcleo diz cada estado. */
 
 describe('os ícones (icones.js)', () => {
   test('a nuvem com o relógio e a nuvem com a cruz existem, no mesmo traço, e são diferentes das outras', () => {
-    const { app } = comSelo();
+    const app = carregarTudo();
     const liga = app.ic('nuvemLiga', 18), fora = app.ic('nuvemFora', 18);
     assert.match(liga, /<circle cx="12" cy="16" r="4"\/>/, 'o mostrador do relógio');
     assert.match(liga, /stroke-width="1\.8"/);
@@ -353,14 +252,10 @@ describe('o arranque e as cores', () => {
       'o /api/me a falhar não decide o selo: decide-o a leitura do estado');
   });
 
-  test('o laranja é o --out, o vermelho o --danger; no telemóvel a tentativa fica com a faixa', () => {
+  test('a faixa: vermelha (--danger) sem ligação e laranja (--out) na nova tentativa; a nuvem saiu do cabeçalho', () => {
     const css = le('web/estilos.css').replace(/\/\*[\s\S]*?\*\//g, '');
-    assert.match(css, /\.sync\.liga\{background:var\(--out-soft\);color:var\(--out\)\}/);
-    assert.match(css, /\.sync\.fora\{background:var\(--danger-soft\);color:var\(--danger\)\}/);
-    assert.match(css, /\.sync\.ok\{background:var\(--in-soft\);color:var\(--in\)\}/, 'verde como antes');
-    assert.match(css, /\.sync\.pend\{background:var\(--accent-soft\);color:var\(--accent-text\)\}/, 'cobalto como antes');
-    assert.match(css, /header\.top:has\(>\.sync\.tenta\)\{padding-bottom:40px\}|header\.top:has\(>\.sync\.tenta\)[,{]/);
-    assert.match(css, /header\.top \.sync\.tenta span\{background:var\(--out-soft\);color:var\(--out\)\}/);
-    assert.doesNotMatch(css, /header\.top \.sync\.liga span\{[^}]*display:flex/, 'o «A ligar» da abertura é só o ícone');
+    assert.match(css, /\.faixa-sync\{[^}]*background:var\(--danger\);color:var\(--danger-ink\)/);
+    assert.match(css, /\.faixa-sync\.tenta\{[^}]*background:var\(--out\)/);
+    assert.doesNotMatch(css, /\.sync\.(liga|ok|pend|fora)\{/, 'os selos do cabeçalho saíram');
   });
 });
