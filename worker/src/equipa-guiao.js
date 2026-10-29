@@ -36,6 +36,8 @@
 export const GUIAO = String.raw`var seccao = '', estado = 'abertos', modelos = null;
 // a última lista de pedidos ou de erros que se pintou (o detalhe pinta-se ao lado dela)
 var listaAtual = null;
+// o pedido que está aberto: uma resposta atrasada (o rasto de quem escreveu) não cai noutro
+var pedidoAberto = '';
 // quantos estão por tratar, por tipo de lista, para os crachás da barra
 var contagens = {};
 // a última ficha pintada: as janelas das ações dizem o nome e o email dela
@@ -165,7 +167,8 @@ var chip = function (html, ligado, acao) {
 
 /* fetch com as regras da casa: cookies de sessão, resposta lida como JSON,
    um 401 recarrega a página (a sessão morreu, volta-se ao ecrã de entrada)
-   e qualquer outro falhanço vira Error com a mensagem do servidor
+   e qualquer outro falhanço vira Error com a mensagem do servidor e o
+   estado HTTP em e.status (o rasto diz um 403 em palavras)
    Recebe: rota — o caminho da API (string, ex.: /api/equipa/pedidos);
    opcoes (opcional) — opções do fetch (método, cabeçalhos, corpo).
    Devolve: Promise com o JSON da resposta; rejeita com Error quando o pedido falha. */
@@ -174,7 +177,7 @@ function pedir(rota, opcoes) {
     .then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
         if (r.status === 401) { location.reload(); throw new Error('sessão terminada'); }
-        if (!r.ok) throw new Error(j.error || ('Erro ' + r.status));
+        if (!r.ok) { var e = new Error(j.error || ('Erro ' + r.status)); e.status = r.status; throw e; }
         return j;
       });
     });
@@ -232,11 +235,12 @@ function esperaHtml(frase) {
 // Devolve: nada — redesenha o conteúdo.
 function aCarregar(frase) { el('conteudo').innerHTML = esperaHtml(frase); }
 // mostra a mensagem do erro no lugar do conteúdo (o .catch das vistas), com o Tentar outra vez
-// Recebe: e — o Error apanhado, com a mensagem a mostrar.
+// Recebe: e — o Error apanhado, com a mensagem a mostrar; acao e args
+// (opcionais) — o que o Tentar outra vez corre (sem eles, volta a abrir a secção).
 // Devolve: nada — substitui o conteúdo pela mensagem.
-function falha(e) {
+function falha(e, acao, args) {
   el('conteudo').innerHTML = vazioHtml('Não deu para carregar.', esc(e && e.message ? e.message : 'Erro sem mensagem.'),
-    '<button type="button" class="btn sm"' + comAcao('ir', [seccao || 'pedidos']) + '>Tentar outra vez</button>');
+    '<button type="button" class="btn sm"' + (typeof acao === 'string' ? comAcao(acao, args) : comAcao('ir', [seccao || 'pedidos'])) + '>Tentar outra vez</button>');
 }
 /* O cabeçalho de uma secção: o título da página, a frase que diz o que ali
    está e, à direita, os botões da secção. Acerta também o título da janela.
@@ -259,12 +263,17 @@ function selo(p) {
 
 /* ------------------------------- navegação ------------------------------ */
 
+// quem abre o rasto das pessoas inteiro (a lista, o resumo, o rasto a partir da ficha): o master e o admin
+var veRastoTodos = eu.master || (eu.papeis || []).indexOf('admin') > -1;
+// quem pede o rasto de quem escreveu um pedido: os de cima e o suporte (o servidor confere o resto)
+var veRastoDoPedido = veRastoTodos || (eu.papeis || []).indexOf('suporte') > -1;
+
 var SECCOES = [
   { id: 'pedidos', nome: 'Pedidos', icone: 'pedidos', conta: 'pessoas', se: eu.cats.indexOf('user') > -1 },
   { id: 'erros', nome: 'Erros', icone: 'erros', conta: 'erros', se: eu.cats.some(function (c) { return c !== 'user'; }) },
   { id: 'pessoas', nome: 'Pessoas', icone: 'procurar', se: eu.cats.indexOf('user') > -1 },
   { id: 'operacao', nome: 'Operação', icone: 'operacao', se: eu.cats.indexOf('infra') > -1 },
-  { id: 'rasto', nome: 'Rasto', icone: 'rasto', se: eu.master },
+  { id: 'rasto', nome: 'Rasto', icone: 'rasto', se: veRastoTodos },
 ];
 
 // marca a secção ativa e repinta a barra lateral; guarda a secção atual em seccao
@@ -300,7 +309,7 @@ function pintarNav() {
 }
 /* Muda de secção: marca o separador, volta ao cimo e abre a vista respetiva.
    Recebe: s — o id da secção de destino (string, um dos ids de SECCOES);
-   alvo (opcional) — no rasto, o alvo por que filtrar.
+   alvo (opcional) — no rasto, o alvo da auditoria por que filtrar (abre a vista Equipa).
    Devolve: nada — abre a vista. */
 function ir(s, alvo) {
   nav(s);
@@ -309,7 +318,7 @@ function ir(s, alvo) {
   else if (s === 'erros') verLista('erros', 'abertos');
   else if (s === 'pessoas') verPessoas();
   else if (s === 'operacao') verOperacao();
-  else if (s === 'rasto') verRasto(alvo);
+  else if (s === 'rasto') verRastoEntrada(alvo);
 }
 // conta os que estão por tratar numa lista que não está à vista, para o crachá da barra
 // Recebe: tipo — 'pessoas' ou 'erros' (string).
@@ -422,6 +431,7 @@ function verPedido(id) {
   if (typeof matchMedia === 'function' && matchMedia('(max-width: 1199px)').matches && typeof scrollTo === 'function') scrollTo(0, 0);
   if (listaAtual) pintarPedidos('<section class="card pd-det">' + esperaHtml() + '</section>', id);
   else aCarregar();
+  pedidoAberto = id;
   var m = modelos == null ? pedir('/api/equipa/modelos').then(function (d) { modelos = d.modelos || []; }) : Promise.resolve();
   Promise.all([pedir('/api/equipa/pedidos/' + encodeURIComponent(id)), m]).then(function (rs) {
     var d = rs[0], p = d.pedido;
@@ -440,6 +450,8 @@ function verPedido(id) {
       document.title = (tipo === 'pessoas' ? 'Pedido' : 'Erro') + ' · Rendorium Equipa';
       el('conteudo').innerHTML = '<div class="pd com-det">' + detalhePedido(d, tipo, false) + '</div>';
     }
+    // o «Ver o rasto» de quem escreveu chega à parte: o pedido já está no ecrã
+    if (d.quem && !d.quem.desconhecido) rastoDoPedido(p.id);
   }).catch(falha);
 }
 
@@ -540,7 +552,8 @@ function detalhePedido(d, tipo, comLista) {
       '<p class="sub n">Entrou a ' + dia(q.desde) + ' · ' + esc(q.casas) + ' casas · ' + esc(q.registos) + ' registos</p>' +
       '<p class="sub n">' + esc(q.errosApanhados || 0) + ' erros apanhados · ' + (q.aceitouTermos ? 'termos aceites' : 'termos por aceitar') + '</p>' +
       (marcas ? '<p class="chips">' + marcas + '</p>' : '') +
-      (eu.cats.indexOf('user') > -1 ? '<button type="button" class="btn sm"' + comAcao('verPessoa', [q.id]) + '>Abrir a ficha</button>' : '');
+      (eu.cats.indexOf('user') > -1 ? '<button type="button" class="btn sm"' + comAcao('verPessoa', [q.id]) + '>Abrir a ficha</button>' : '') +
+      (veRastoDoPedido ? '<div id="pedidoRasto" class="rs-no-pedido"></div>' : '');
   } else if (q) {
     lado = '<p class="lbl">Quem escreveu</p><p class="sub">A conta já não existe (' + esc(q.id) + ').</p>';
   }
@@ -870,6 +883,7 @@ function verPessoa(id) {
       '<div class="fi-cab-acoes">' +
       ((d.pedidos || []).length ? '<a class="btn" href="#pessoaPedidos">Pedidos <span class="n sub">' + esc(d.pedidos.length) + '</span></a>' : '') +
       (d.master ? '<button type="button" class="btn"' + comAcao('ir', ['rasto', q.id]) + '>Ver no rasto</button>' : '') +
+      (veRastoTodos ? '<span id="fichaRasto" class="rs-na-ficha"></span>' : '') +
       '</div></header>';
 
     var limites = q.limites || [], propostas = q.propostas || [];
@@ -922,6 +936,7 @@ function verPessoa(id) {
     // os serviços chegam à parte: a ficha já está no ecrã, e um erro aqui fica no cartão
     verServicos(q.id);
     if (d.master) verRastoDaPessoa(q.id);
+    if (veRastoTodos) rastoDaConta(q.id);
   }).catch(falha);
 }
 
@@ -1569,15 +1584,19 @@ function resumoCopia(dia) {
 
 /* -------------------------------- rasto --------------------------------- */
 
-/* A auditoria: as últimas 200 ações da equipa, opcionalmente filtradas por
-   alvo (o id exato: escreve-se no filtro, ou toca-se num alvo da tabela).
-   Só leitura — o rasto escreve-se sempre e não se apaga nunca.
+/* A vista Equipa do Rasto, a auditoria (só o master): as últimas 200 ações
+   da equipa, opcionalmente filtradas por alvo (o id exato: escreve-se no
+   filtro, ou toca-se num alvo da tabela). Só leitura — o rasto escreve-se
+   sempre e não se apaga nunca.
    Recebe: alvo (opcional) — o alvo por que filtrar (string, como aparece na coluna Sobre).
    Devolve: nada — redesenha a vista com a tabela. */
 function verRasto(alvo) {
   alvo = String(alvo || '').trim();
+  rastoVista = 'equipa';
+  var vez = ++rastoVez;
   aCarregar('A ler o rasto.');
   pedir('/api/equipa/auditoria' + (alvo ? '?alvo=' + encodeURIComponent(alvo) : '')).then(function (d) {
+    if (vez !== rastoVez || seccao !== 'rasto') return;
     var regs = d.registos || [];
     var filtro = '<div class="card rs-filtro"><label class="procura">' + ic('procurar') +
       '<input id="qRasto" type="search" placeholder="Ex: K4P9ZT2M" aria-label="Filtrar pelo alvo: o id exato de uma conta, de um pedido ou um endereço" value="' +
@@ -1595,8 +1614,439 @@ function verRasto(alvo) {
         }).join('') + '</tbody></table></div></section>'
       : vazioHtml(alvo ? 'Nada no rasto sobre “' + esc(alvo) + '”.' : 'Ainda não há rasto nenhum.',
           alvo ? 'O alvo tem de ser o id exato.' : 'Cada ação da equipa escreve aqui uma linha.');
-    el('conteudo').innerHTML = cabecalho('Rasto', 'Quem fez o quê: as últimas 200 ações. Escreve-se sempre e não se apaga nunca.') + filtro + tabela;
-  }).catch(falha);
+    el('conteudo').innerHTML = cabecalho('Rasto', 'Quem da equipa fez o quê: as últimas 200 ações. Escreve-se sempre e não se apaga nunca.') +
+      rastoAbasHtml('equipa') + filtro + tabela;
+  }).catch(function (e) { if (vez === rastoVez) falhaRasto(e, 'ir', ['rasto', alvo]); });
+}
+
+/* --------------------------- o rasto das pessoas -------------------------- */
+
+// a vista do Rasto que está aberta ('pessoas' ou 'equipa'), o período em dias,
+// a forma das Pessoas ('lista' ou 'ecras') e a ordem da lista ('recentes' ou 'sinais')
+var rastoVista = 'pessoas', rastoDias = 30, rastoModo = 'lista', rastoOrdem = 'recentes';
+// a última lista de pessoas que chegou, para mudar a ordem sem voltar à rede
+var rastoPessoasVistas = null;
+// a vez do último pedido do rasto: a resposta de um pedido velho não pinta por cima de um novo
+var rastoVez = 0;
+
+/* Os cinco sinais do contrato, pela ordem em que se mostram: o id que vem do
+   servidor, o nome no plural (as contagens), no singular (um evento) e o tom
+   do selo (âmbar quando a pessoa se perde; vermelho quando o guardar deu erro). */
+var SINAIS_RASTO = [
+  { id: 'em-vao', nomes: 'Toques em vão', nome: 'Toque em vão', tom: 'wa', curto: 'Em vão',
+    diz: 'o toque caiu num sítio onde não há nada para carregar.' },
+  { id: 'repetido', nomes: 'Toques repetidos', nome: 'Toque repetido', tom: 'wa', curto: 'Repetidos',
+    diz: 'três ou mais toques seguidos no mesmo sítio, em menos de um segundo cada.' },
+  { id: 'vai-e-volta', nomes: 'Vai-e-volta', nome: 'Vai-e-volta', tom: 'wa', curto: 'Vai-e-volta',
+    diz: 'abriu uma janela ou um ecrã e saiu em menos de 4 s, sem tocar em nada útil lá dentro.' },
+  { id: 'desistencia', nomes: 'Desistências', nome: 'Desistência', tom: 'wa', curto: 'Desistências',
+    diz: 'escreveu num formulário e fechou-o sem guardar.' },
+  { id: 'erro-campo', nomes: 'Erros ao guardar', nome: 'Erro ao guardar', tom: 'dg', curto: 'Erros',
+    diz: 'carregou em guardar e um campo deu erro.' },
+];
+// os tipos de evento por extenso
+var TIPOS_RASTO = {
+  toque: 'Toque', ecra: 'Ecrã', 'janela-abre': 'Abriu a janela', 'janela-fecha': 'Fechou a janela', guardar: 'Guardou',
+  'erro-campo': 'Erro num campo', erro: 'Erro', pagina: 'Página', secao: 'Secção',
+};
+// as origens por extenso
+var ORIGENS_RASTO = { app: 'App', montra: 'Montra' };
+
+/* O sinal de um id, ou null quando o id não é um dos cinco.
+   Recebe: id — o id do sinal (string, como vem do servidor).
+   Devolve: a entrada de SINAIS_RASTO, ou null. */
+function sinalRasto(id) {
+  for (var i = 0; i < SINAIS_RASTO.length; i++) if (SINAIS_RASTO[i].id === id) return SINAIS_RASTO[i];
+  return null;
+}
+/* Quantos sinais há numa contagem por sinal.
+   Recebe: sinais — {id: n} (pode faltar).
+   Devolve: o total (número). */
+function somaSinaisRasto(sinais) {
+  return SINAIS_RASTO.reduce(function (s, x) { return s + (Number((sinais || {})[x.id]) || 0); }, 0);
+}
+/* Os selos dos sinais com a contagem, só os que aconteceram; o contorno e a
+   letra levam a cor, para se lerem também quando o browser escurece o fundo.
+   Recebe: sinais — {id: n}; vazio (opcional) — o HTML quando não há nenhum.
+   Devolve: string HTML com os selos. */
+function rastoSinaisHtml(sinais, vazio) {
+  var selos = SINAIS_RASTO.filter(function (x) { return Number((sinais || {})[x.id]) > 0; }).map(function (x) {
+    return '<span class="badge rs-s ' + x.tom + '">' + x.nomes + ' <b class="n">' + esc(numero(sinais[x.id])) + '</b></span>';
+  });
+  return selos.length ? '<span class="rs-sinais">' + selos.join('') + '</span>' : (vazio == null ? '<span class="sub">Nenhum</span>' : vazio);
+}
+/* As origens como selos: a app em cobalto, a montra em cinzento.
+   Recebe: origens — lista de 'app' e 'montra'.
+   Devolve: string HTML com os selos. */
+function rastoOrigensHtml(origens) {
+  return (origens || []).filter(Boolean).map(function (o) { return badge(o === 'app' ? 'ac' : '', esc(ORIGENS_RASTO[o] || o)); }).join(' ');
+}
+// um número com a palavra no singular ou no plural: 1 sessão, 3 sessões
+// Recebe: n — o número; um — a palavra para 1; varios — a palavra para os outros.
+// Devolve: o texto («1 sessão», «3 sessões»).
+function contadoRasto(n, um, varios) { n = Number(n) || 0; return (n === 1 ? '1 ' + um : numero(n) + ' ' + varios); }
+// a hora de um instante com os segundos: 16:58:07
+// Recebe: t — o instante (ms).
+// Devolve: o texto da hora.
+function horaRasto(t) { var d = new Date(t); return hora(t) + ':' + dois(d.getSeconds()); }
+// quanto durou uma sessão, como se diz: «menos de 1 s», «41 s», «12 min», «1 h 05 min»
+// Recebe: ms — a duração em milissegundos.
+// Devolve: o texto.
+function duracaoRasto(ms) {
+  ms = Math.max(0, Number(ms) || 0);
+  if (ms < 1000) return 'menos de 1 s';
+  if (ms < 3600000) return duracao(ms);
+  var m = Math.round(ms / 60000);
+  return Math.floor(m / 60) + ' h ' + dois(m % 60) + ' min';
+}
+// o período em dias, só os três que o servidor aceita (30 à falta de outro)
+// Recebe: dias — o que veio (número ou texto).
+// Devolve: 7, 30 ou 90.
+function diasRasto(dias) { var n = Number(dias); return n === 7 || n === 90 ? n : 30; }
+
+/* A porta do separador Rasto: com um alvo (o «Ver no rasto» da ficha, um
+   alvo da tabela da auditoria) vai à vista Equipa filtrada, que é só do
+   master; sem alvo, volta à vista que estava aberta — as Pessoas, à primeira.
+   Recebe: alvo (opcional) — o alvo da auditoria.
+   Devolve: nada — abre a vista. */
+function verRastoEntrada(alvo) {
+  if (eu.master && (alvo || rastoVista === 'equipa')) { verRasto(alvo); return; }
+  if (rastoModo === 'ecras') verRastoResumo(rastoDias);
+  else verRastoPessoas(rastoDias);
+}
+/* Troca de vista no Rasto (as abas do master).
+   Recebe: v — 'pessoas' ou 'equipa'.
+   Devolve: nada — abre a vista. */
+function mudarVistaRasto(v) {
+  rastoVista = v === 'equipa' && eu.master ? 'equipa' : 'pessoas';
+  if (typeof scrollTo === 'function') scrollTo(0, 0);
+  verRastoEntrada();
+}
+/* As abas do Rasto: Pessoas e Equipa. Só o master tem as duas; ao admin a
+   vista Equipa não abre, e com uma só não há abas.
+   Recebe: ativa — 'pessoas' ou 'equipa'.
+   Devolve: string HTML com as abas ('' a quem só tem uma vista). */
+function rastoAbasHtml(ativa) {
+  if (!eu.master) return '';
+  return '<div class="chips rs-abas" role="group" aria-label="Que rasto ver">' +
+    chip('Pessoas', ativa === 'pessoas', comAcao('mudarVistaRasto', ['pessoas'])) +
+    chip('Equipa', ativa === 'equipa', comAcao('mudarVistaRasto', ['equipa'])) + '</div>';
+}
+/* O cabeçalho da vista Pessoas, as abas e a barra dos filtros: por pessoa ou
+   por ecrã, e o período (7, 30 ou 90 dias).
+   Recebe: modo — 'lista' ou 'ecras'; dias — 7, 30 ou 90.
+   Devolve: string HTML do topo. */
+function rastoTopoHtml(modo, dias) {
+  var periodo = [7, 30, 90].map(function (n) {
+    return chip(n + ' dias', dias === n, comAcao(modo === 'ecras' ? 'verRastoResumo' : 'verRastoPessoas', [n]));
+  }).join('');
+  return cabecalho('Rasto', 'Cada toque na app e na montra, debaixo de um pseudónimo, para ver onde as pessoas se perdem. ' +
+      'Só de quem aceitou; fica 90 dias.') + rastoAbasHtml('pessoas') +
+    '<div class="card rs-barra">' +
+    '<div class="chips" role="group" aria-label="Como ver">' +
+    chip('Por pessoa', modo === 'lista', comAcao('verRastoPessoas', [dias])) +
+    chip('Por ecrã', modo === 'ecras', comAcao('verRastoResumo', [dias])) + '</div>' +
+    '<div class="chips" role="group" aria-label="Período">' + periodo + '</div></div>';
+}
+/* O que quer dizer cada sinal, numa secção que abre e fecha, por baixo das tabelas.
+   Devolve: string HTML da legenda. */
+function rastoLegendaHtml() {
+  return '<details class="card rs-legenda"><summary><span class="st-seta" aria-hidden="true">' + ic('baixo', 'i-sm') + '</span>' +
+    '<span class="forte">O que quer dizer cada sinal</span></summary><dl>' +
+    SINAIS_RASTO.map(function (x) { return '<dt>' + badge('rs-s ' + x.tom, x.nomes) + '</dt><dd class="sub">' + maiuscula(x.diz) + '</dd>'; }).join('') +
+    '</dl></details>';
+}
+/* O que mostrar quando o rasto falha: um 403 diz-se em palavras (o papel não
+   abre este rasto), um 404 diz que a pessoa já não tem rasto, e o resto vai ao
+   falha da casa com o Tentar outra vez certo.
+   Recebe: e — o Error (com e.status); acao, args — o que o Tentar outra vez corre;
+   volta (opcional) — o HTML do botão de voltar, para o 404.
+   Devolve: nada — escreve no conteúdo. */
+function falhaRasto(e, acao, args, volta) {
+  if (e && e.status === 403) {
+    el('conteudo').innerHTML = cabecalho('Rasto') + vazioHtml('Este rasto não abre ao teu papel.',
+      'O rasto das pessoas é do master e do admin; o suporte vê o de quem escreveu um pedido, a partir desse pedido. ' +
+      'A auditoria da equipa é só do master.', volta || '');
+    return;
+  }
+  if (e && e.status === 404) {
+    el('conteudo').innerHTML = cabecalho('Rasto') + vazioHtml('Esta pessoa já não tem rasto.',
+      'O pseudónimo não existe: a conta foi apagada, ou os eventos passaram dos 90 dias.', volta || '');
+    return;
+  }
+  falha(e, acao, args);
+}
+
+/* A vista Pessoas do Rasto, por pessoa: a lista dos pseudónimos do período,
+   cada um com a última atividade, as sessões, os eventos, as origens e os
+   sinais. Vazia, diz porquê — ninguém aceitou ainda, ou nada neste período —,
+   e para o saber pergunta pelos 90 dias.
+   Recebe: dias (opcional) — 7, 30 ou 90 (30 à falta de outro).
+   Devolve: nada — redesenha o conteúdo. */
+function verRastoPessoas(dias) {
+  dias = diasRasto(dias);
+  rastoDias = dias; rastoModo = 'lista'; rastoVista = 'pessoas';
+  nav('rasto');
+  var vez = ++rastoVez;
+  var topo = rastoTopoHtml('lista', dias);
+  el('conteudo').innerHTML = topo + esperaHtml('A ler o rasto das pessoas.');
+  pedir('/api/equipa/rasto/pessoas?dias=' + dias).then(function (d) {
+    var pessoas = d.pessoas || [];
+    if (pessoas.length || dias === 90) return { pessoas: pessoas, noventa: pessoas.length };
+    // vazio num período curto: os 90 dias dizem se ninguém aceitou ainda ou se foi só este período
+    return pedir('/api/equipa/rasto/pessoas?dias=90').then(function (d90) { return { pessoas: pessoas, noventa: (d90.pessoas || []).length }; },
+      function () { return { pessoas: pessoas, noventa: null }; });
+  }).then(function (r) {
+    if (vez !== rastoVez || seccao !== 'rasto') return;
+    rastoPessoasVistas = r.pessoas;
+    if (!r.pessoas.length) {
+      var noventa = '<button type="button" class="btn sm"' + comAcao('verRastoPessoas', [90]) + '>Ver os 90 dias</button>';
+      el('conteudo').innerHTML = topo + (r.noventa
+        ? vazioHtml('Ninguém nos últimos ' + dias + ' dias.', 'Há rasto mais antigo: ' + contadoRasto(r.noventa, 'pessoa', 'pessoas') + ' nos últimos 90 dias.', noventa)
+        : r.noventa === null
+          ? vazioHtml('Ninguém nos últimos ' + dias + ' dias.', 'Ou ninguém aceitou o rasto ainda, ou não houve atividade neste período.', noventa)
+          : vazioHtml('Ainda não há rasto de ninguém.', 'Ninguém aceitou o rasto ainda, na montra ou na app: quando alguém aceitar e tocar em alguma coisa, aparece aqui.' +
+              ' Os eventos ficam 90 dias, e em produção as contas de teste ficam de fora.'));
+      return;
+    }
+    el('conteudo').innerHTML = topo + rastoPessoasHtml(r.pessoas, rastoOrdem) + rastoLegendaHtml();
+  }).catch(function (e) { if (vez === rastoVez) falhaRasto(e, 'verRastoPessoas', [dias]); });
+}
+/* Muda a ordem da lista das pessoas sem voltar à rede.
+   Recebe: ordem — 'recentes' ou 'sinais'.
+   Devolve: nada — repinta a lista. */
+function ordenarRasto(ordem) {
+  rastoOrdem = ordem === 'sinais' ? 'sinais' : 'recentes';
+  if (!rastoPessoasVistas || !rastoPessoasVistas.length || seccao !== 'rasto' || rastoModo !== 'lista') return;
+  el('conteudo').innerHTML = rastoTopoHtml('lista', rastoDias) + rastoPessoasHtml(rastoPessoasVistas, rastoOrdem) + rastoLegendaHtml();
+}
+/* O cartão da lista das pessoas: quantas são e quantas tiveram sinais, a
+   ordem (as mais recentes, como vêm do servidor, ou as com mais sinais
+   primeiro) e a tabela, uma linha por pseudónimo — o pid abre a linha do tempo.
+   Recebe: pessoas — a lista do servidor; ordem — 'recentes' ou 'sinais'.
+   Devolve: string HTML do cartão. */
+function rastoPessoasHtml(pessoas, ordem) {
+  var lista = pessoas.slice();
+  if (ordem === 'sinais') {
+    lista.sort(function (a, b) { return somaSinaisRasto(b.sinais) - somaSinaisRasto(a.sinais) || (b.ultimo || 0) - (a.ultimo || 0); });
+  }
+  var comSinais = pessoas.filter(function (p) { return somaSinaisRasto(p.sinais) > 0; }).length;
+  var linhas = lista.map(function (p) {
+    return '<tr><td data-rot="Pessoa"><span class="rs-pessoa-id">' +
+      '<button type="button" class="ligacao rs-pid"' + comAcao('verRastoPessoa', [p.pid]) + '>' + esc(p.pid) + '</button>' +
+      (p.teste ? badge('wa', 'Conta de teste') : '') + (p.conta ? '' : badge('', 'Sem conta')) + '</span></td>' +
+      '<td class="n nw" data-rot="Última atividade">' + quando(p.ultimo) + '</td>' +
+      '<td class="r n" data-rot="Sessões">' + esc(numero(p.sessoes || 0)) + '</td>' +
+      '<td class="r n" data-rot="Eventos">' + esc(numero(p.eventos || 0)) + '</td>' +
+      '<td class="nw" data-rot="Origens">' + (rastoOrigensHtml(p.origens) || '—') + '</td>' +
+      '<td data-rot="Sinais">' + rastoSinaisHtml(p.sinais) + '</td></tr>';
+  }).join('');
+  return '<section class="card" id="rastoLista" aria-label="Pessoas com rasto"><div class="card-cab"><div class="card-cab-txt">' +
+    '<h2 class="card-tit">' + contadoRasto(pessoas.length, 'pessoa', 'pessoas') + '</h2>' +
+    '<p class="sub n">' + (comSinais ? contadoRasto(comSinais, 'pessoa com sinais de se ter perdido', 'pessoas com sinais de se terem perdido')
+      : 'Ninguém com sinais de se ter perdido') + (pessoas.length >= 200 ? ' · as 200 mais recentes' : '') + '</p></div>' +
+    '<div class="chips" role="group" aria-label="Ordem">' +
+    chip('Mais recentes', ordem !== 'sinais', comAcao('ordenarRasto', ['recentes'])) +
+    chip('Mais sinais', ordem === 'sinais', comAcao('ordenarRasto', ['sinais'])) + '</div></div>' +
+    '<div class="tb-rola"><table class="tb empilha rs-tb"><thead><tr><th>Pessoa</th><th>Última atividade</th><th class="r">Sessões</th>' +
+    '<th class="r">Eventos</th><th>Origens</th><th>Sinais</th></tr></thead><tbody>' + linhas + '</tbody></table></div></section>';
+}
+
+/* A vista Pessoas do Rasto, por ecrã: o resumo de onde a interface confunde
+   mais gente — cada ecrã e alvo com sinais, um número por sinal, o total e
+   quantas pessoas, do total maior para o menor.
+   Recebe: dias (opcional) — 7, 30 ou 90 (30 à falta de outro).
+   Devolve: nada — redesenha o conteúdo. */
+function verRastoResumo(dias) {
+  dias = diasRasto(dias);
+  rastoDias = dias; rastoModo = 'ecras'; rastoVista = 'pessoas';
+  nav('rasto');
+  var vez = ++rastoVez;
+  var topo = rastoTopoHtml('ecras', dias);
+  el('conteudo').innerHTML = topo + esperaHtml('A juntar os sinais por ecrã.');
+  pedir('/api/equipa/rasto/resumo?dias=' + dias).then(function (d) {
+    if (vez !== rastoVez || seccao !== 'rasto') return;
+    var linhas = (d.linhas || []).slice().sort(function (a, b) { return (b.total || 0) - (a.total || 0); });
+    el('conteudo').innerHTML = topo + (linhas.length ? rastoResumoHtml(linhas) + rastoLegendaHtml()
+      : vazioHtml('Nenhum sinal nos últimos ' + dias + ' dias.', 'Quando alguém se perder — um toque em vão, um vai-e-volta, uma desistência —, o ecrã e o alvo aparecem aqui.' +
+          (dias < 90 ? ' Experimenta um período maior.' : ' Só entra quem aceitou o rasto.'),
+          dias < 90 ? '<button type="button" class="btn sm"' + comAcao('verRastoResumo', [90]) + '>Ver os 90 dias</button>' : ''));
+  }).catch(function (e) { if (vez === rastoVez) falhaRasto(e, 'verRastoResumo', [dias]); });
+}
+/* A tabela do resumo por ecrã: ecrã, alvo, um número por sinal, o total e as pessoas.
+   Recebe: linhas — as do servidor, já ordenadas pelo total.
+   Devolve: string HTML do cartão. */
+function rastoResumoHtml(linhas) {
+  var corpo = linhas.map(function (l) {
+    var s = l.sinais || {};
+    return '<tr><td data-rot="Ecrã">' + (l.ecra ? '<code class="rs-alvo">' + esc(l.ecra) + '</code>' : '—') + '</td>' +
+      '<td data-rot="Alvo">' + (l.alvo ? '<code class="rs-alvo">' + esc(l.alvo) + '</code>' : '—') + '</td>' +
+      SINAIS_RASTO.map(function (x) {
+        var n = Number(s[x.id]) || 0;
+        return '<td class="r n' + (n ? ' rs-n ' + x.tom : ' sub') + '" data-rot="' + x.nomes + '">' + (n ? esc(numero(n)) : '—') + '</td>';
+      }).join('') +
+      '<td class="r n forte" data-rot="Total">' + esc(numero(l.total || 0)) + '</td>' +
+      '<td class="r n" data-rot="Pessoas">' + esc(numero(l.pessoas || 0)) + '</td></tr>';
+  }).join('');
+  return '<section class="card" aria-label="Sinais por ecrã"><div class="card-cab"><div class="card-cab-txt">' +
+    '<h2 class="card-tit">Onde as pessoas se perdem</h2>' +
+    '<p class="sub">Cada ecrã e o sítio onde se tocou, do que juntou mais sinais para o que juntou menos' +
+    (linhas.length >= 100 ? ' (os 100 primeiros)' : '') + '.</p></div></div>' +
+    '<div class="tb-rola"><table class="tb empilha rs-tb"><thead><tr><th>Ecrã</th><th>Alvo</th>' +
+    SINAIS_RASTO.map(function (x) { return '<th class="r"><abbr title="' + x.nomes + '">' + x.curto + '</abbr></th>'; }).join('') +
+    '<th class="r">Total</th><th class="r">Pessoas</th></tr></thead><tbody>' + corpo + '</tbody></table></div></section>';
+}
+
+/* A linha do tempo de uma pessoa: o pseudónimo, as contagens, e uma secção
+   por sessão (a mais recente primeiro, e aberta; as outras fechadas), com
+   cada evento pela ordem em que aconteceu. Quem chega de um pedido (o
+   suporte também) volta ao pedido e não tem a lista nem a ida à ficha; quem
+   chega da ficha volta à ficha.
+   Recebe: pid — o pseudónimo (string); voltaTipo (opcional) — 'pedido' ou
+   'conta'; voltaId (opcional) — o id do pedido ou da conta de onde se veio.
+   Devolve: nada — redesenha o conteúdo. */
+function verRastoPessoa(pid, voltaTipo, voltaId) {
+  voltaTipo = voltaTipo === 'pedido' || voltaTipo === 'conta' ? voltaTipo : '';
+  if (voltaTipo !== 'pedido') nav('rasto');
+  if (typeof scrollTo === 'function') scrollTo(0, 0);
+  var volta = voltaTipo === 'pedido'
+    ? '<button type="button" class="btn sm ghost rs-volta"' + comAcao('verPedido', [voltaId]) + '>' + ic('voltar') + 'Voltar ao pedido</button>'
+    : voltaTipo === 'conta'
+      ? '<button type="button" class="btn sm ghost rs-volta"' + comAcao('verPessoa', [voltaId]) + '>' + ic('voltar') + 'Voltar à ficha</button>'
+      : '<button type="button" class="btn sm ghost rs-volta"' + comAcao('ir', ['rasto']) + '>' + ic('voltar') + 'Voltar às pessoas</button>';
+  var vez = ++rastoVez, secAberta = seccao;
+  el('conteudo').innerHTML = volta + esperaHtml('A ler o rasto de ' + esc(pid) + '.');
+  pedir('/api/equipa/rasto/pessoa/' + encodeURIComponent(pid)).then(function (d) {
+    if (vez !== rastoVez || seccao !== secAberta) return;
+    el('conteudo').innerHTML = volta + rastoPessoaHtml(d, voltaTipo);
+  }).catch(function (e) { if (vez === rastoVez) falhaRasto(e, 'verRastoPessoa', [pid, voltaTipo, voltaId], volta); });
+}
+/* O HTML da linha do tempo de uma pessoa: o cabeçalho (o pid, se tem conta,
+   se é de teste, a ida à ficha a quem abre as Pessoas), as contagens dos
+   sinais e as sessões, com a passagem da montra para a app entre elas dita
+   numa linha.
+   Recebe: d — a resposta do servidor ({pid, userId, teste, sessoes}); voltaTipo —
+   de onde se veio ('pedido' tira a ida à ficha).
+   Devolve: string HTML. */
+function rastoPessoaHtml(d, voltaTipo) {
+  var sessoes = (d.sessoes || []).filter(function (s) { return s && (s.eventos || []).length; })
+    .sort(function (a, b) { return inicioRasto(b) - inicioRasto(a); });
+  var todos = [], contas = {};
+  sessoes.forEach(function (s) { todos = todos.concat(s.eventos); });
+  todos.forEach(function (ev) { if (sinalRasto(ev.sinal)) contas[ev.sinal] = (contas[ev.sinal] || 0) + 1; });
+  var ficha = d.userId && veRastoTodos && voltaTipo !== 'pedido' && eu.cats.indexOf('user') > -1
+    ? '<button type="button" class="btn"' + comAcao('verPessoa', [d.userId]) + '>Abrir a ficha</button>' : '';
+  var marcas = (d.userId ? badge('ok', 'Com conta') : badge('', 'Só montra, sem conta')) + (d.teste ? badge('wa', 'Conta de teste') : '');
+  var cab = cabecalho('<span class="rs-pid">' + esc(d.pid) + '</span>',
+    '<span class="n">' + contadoRasto(sessoes.length, 'sessão', 'sessões') + ' · ' + contadoRasto(todos.length, 'evento', 'eventos') +
+    (sessoes.length ? ' · de ' + data(inicioRasto(sessoes[sessoes.length - 1])) + ' a ' + data(fimRasto(sessoes[0])) : '') + '</span>', ficha);
+  document.title = d.pid + ' · Rendorium Equipa';
+  var resumo = '<div class="card rs-barra"><span class="chips">' + marcas + '</span>' +
+    rastoSinaisHtml(contas, '<span class="sub">Nenhum sinal de se ter perdido.</span>') + '</div>';
+  if (!sessoes.length) {
+    return cab + resumo + vazioHtml('Ainda sem eventos.', 'O pseudónimo existe, mas não há toques guardados: ou não tocou em nada desde que aceitou, ou passaram os 90 dias.');
+  }
+  var html = sessoes.map(function (s, i) {
+    var entre = '';
+    var antes = sessoes[i + 1];
+    if (antes) {
+      var de = ultimaOrigemRasto(antes), para = (s.eventos[0] || {}).origem;
+      if (de && para && de !== para) {
+        entre = '<p class="rs-passa-entre">' + ic('seta', 'i-sm') + '<span>Passou ' + passagemRasto(de, para) + ', ' +
+          duracaoRasto(inicioRasto(s) - fimRasto(antes)) + ' depois.</span></p>';
+      }
+    }
+    return rastoSessaoHtml(s, i === 0) + entre;
+  }).join('');
+  return cab + resumo + '<div class="rs-sessoes">' + html + '</div>' + rastoLegendaHtml();
+}
+// quando a sessão começou: o do servidor, ou o primeiro evento
+// Recebe: s — a sessão. Devolve: o instante (ms).
+function inicioRasto(s) { return s.inicio || Math.min.apply(null, s.eventos.map(function (e) { return e.at || 0; })); }
+// quando a sessão acabou: o do servidor, ou o último evento
+// Recebe: s — a sessão. Devolve: o instante (ms).
+function fimRasto(s) { return s.fim || Math.max.apply(null, s.eventos.map(function (e) { return e.at || 0; })); }
+// a origem do último evento de uma sessão
+// Recebe: s — a sessão. Devolve: 'app', 'montra' ou ''.
+function ultimaOrigemRasto(s) {
+  var evs = eventosRasto(s);
+  return evs.length ? evs[evs.length - 1].origem || '' : '';
+}
+// os eventos de uma sessão pela ordem em que aconteceram
+// Recebe: s — a sessão. Devolve: uma cópia ordenada dos eventos.
+function eventosRasto(s) { return (s.eventos || []).slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }); }
+// a passagem de uma origem para outra, dita: «da montra para a app»
+// Recebe: de, para — 'app' ou 'montra'. Devolve: o texto.
+function passagemRasto(de, para) {
+  var nome = function (o) { return o === 'app' ? 'a app' : o === 'montra' ? 'a montra' : 'o sítio «' + esc(o) + '»'; };
+  return (de === 'app' || de === 'montra' ? 'd' + nome(de) : 'de ' + nome(de)) + ' para ' + nome(para);
+}
+/* Uma sessão da linha do tempo: uma secção que abre e fecha, com o início,
+   a duração, as origens, quantos eventos e quantos sinais; aberta, a tabela
+   dos eventos, com a linha de cada sinal marcada no contorno e na letra, e a
+   passagem de uma origem para a outra dita numa linha.
+   Recebe: s — a sessão ({sessao, inicio, fim, origens, eventos}); aberta — se abre já aberta.
+   Devolve: string HTML. */
+function rastoSessaoHtml(s, aberta) {
+  var evs = eventosRasto(s);
+  var origens = s.origens && s.origens.length ? s.origens : evs.reduce(function (l, e) { if (e.origem && l.indexOf(e.origem) < 0) l.push(e.origem); return l; }, []);
+  var nSinais = evs.filter(function (e) { return sinalRasto(e.sinal); }).length;
+  var linhas = '', anterior = '';
+  evs.forEach(function (e) {
+    if (anterior && e.origem && e.origem !== anterior) {
+      linhas += '<tr class="rs-passa"><td colspan="7">' + ic('seta', 'i-sm') + 'Passou ' + passagemRasto(anterior, e.origem) + '</td></tr>';
+    }
+    if (e.origem) anterior = e.origem;
+    var sn = sinalRasto(e.sinal);
+    var posicao = e.x != null && e.y != null
+      ? '<span class="sub n">a ' + Math.round(e.x / 10) + '% da esquerda e ' + Math.round(e.y / 10) + '% do cimo' +
+        (e.vw && e.vh ? ' · janela ' + esc(e.vw) + '×' + esc(e.vh) : '') + '</span>' : '';
+    linhas += '<tr' + (sn ? ' class="rs-sinal ' + sn.tom + '"' : '') + '>' +
+      '<td class="n nw" data-rot="Hora">' + horaRasto(e.at) + '</td>' +
+      '<td data-rot="Origem">' + rastoOrigensHtml([e.origem]) + '</td>' +
+      '<td class="nw" data-rot="Tipo">' + esc(TIPOS_RASTO[e.tipo] || e.tipo || '—') + '</td>' +
+      '<td data-rot="Ecrã">' + (e.ecra ? '<code class="rs-alvo">' + esc(e.ecra) + '</code>' : '—') + '</td>' +
+      '<td data-rot="Janela">' + (e.janela ? '<code class="rs-alvo">' + esc(e.janela) + '</code>' : '—') + '</td>' +
+      '<td data-rot="Alvo"><span class="rs-alvo-bloco">' + (e.alvo ? '<code class="rs-alvo">' + esc(e.alvo) + '</code>' : '—') + posicao + '</span></td>' +
+      '<td data-rot="Sinal">' + (sn ? '<span class="badge rs-s ' + sn.tom + '">' + sn.nome + '</span>' : '<span class="sub">—</span>') + '</td></tr>';
+  });
+  return '<details class="card rs-sessao"' + (aberta ? ' open' : '') + '>' +
+    '<summary><span class="st-seta" aria-hidden="true">' + ic('baixo', 'i-sm') + '</span>' +
+    '<span class="forte n">' + data(inicioRasto(s)) + '</span>' +
+    '<span class="sub n">' + duracaoRasto(fimRasto(s) - inicioRasto(s)) + ' · ' + contadoRasto(evs.length, 'evento', 'eventos') + '</span>' +
+    '<span class="rs-sessao-selos">' + rastoOrigensHtml(origens) +
+    (nSinais ? '<span class="badge rs-s wa">' + contadoRasto(nSinais, 'sinal', 'sinais') + '</span>' : '') + '</span></summary>' +
+    '<div class="tb-rola"><table class="tb empilha rs-tb rs-ev"><thead><tr><th>Hora</th><th>Origem</th><th>Tipo</th><th>Ecrã</th><th>Janela</th>' +
+    '<th>Alvo</th><th>Sinal</th></tr></thead><tbody>' + linhas + '</tbody></table></div></details>';
+}
+
+/* O «Ver o rasto» no detalhe de um pedido: pergunta ao servidor o pseudónimo
+   de quem o escreveu (só o dá a quem pode ver o pedido) e, se houver, põe o
+   botão que abre a linha do tempo dessa pessoa, a voltar ao pedido. Sem pid
+   (não aceitou o rasto) não aparece nada; um erro fica calado.
+   Recebe: id — o id do pedido (string).
+   Devolve: nada — preenche o pedidoRasto. */
+function rastoDoPedido(id) {
+  if (!veRastoDoPedido) return;
+  pedir('/api/equipa/rasto/ticket/' + encodeURIComponent(id)).then(function (d) {
+    var sitio = el('pedidoRasto');
+    if (!sitio || pedidoAberto !== id || !d || !d.pid) return;
+    sitio.innerHTML = '<button type="button" class="btn sm"' + comAcao('verRastoPessoa', [d.pid, 'pedido', id]) + '>Ver o rasto</button>' +
+      '<span class="sub n rs-pid">' + esc(d.pid) + '</span>';
+  }).catch(function () {});
+}
+/* O rasto da pessoa na ficha (master e admin): o pseudónimo da conta e o
+   botão que abre a linha do tempo dela, ao lado do «Ver no rasto» da
+   auditoria. Sem pid (não aceitou o rasto) não aparece nada; um erro fica calado.
+   Recebe: id — o id da conta (string).
+   Devolve: nada — preenche o fichaRasto. */
+function rastoDaConta(id) {
+  pedir('/api/equipa/rasto/conta/' + encodeURIComponent(id)).then(function (d) {
+    var sitio = el('fichaRasto');
+    if (!sitio || !fichaVista || fichaVista.id !== id || !d || !d.pid) return;
+    sitio.innerHTML = '<button type="button" class="btn"' + comAcao('verRastoPessoa', [d.pid, 'conta', id]) + '>' +
+      'Ver o rasto da pessoa <span class="sub n rs-pid">' + esc(d.pid) + '</span></button>';
+  }).catch(function () {});
 }
 
 /* -------------------------------- as ações ------------------------------- */
@@ -1641,6 +2091,11 @@ var ACOES = {
   sessoesTeste: function (d) { sessoesTeste(d.arg, d.arg2, d.arg3); },
   criarEndereco: function () { criarEndereco(); },
   procurarRasto: function (d, alvo) { ir('rasto', String(alvo.value || '').trim()); },
+  mudarVistaRasto: function (d) { mudarVistaRasto(d.arg); },
+  verRastoPessoas: function (d) { verRastoPessoas(d.arg); },
+  verRastoResumo: function (d) { verRastoResumo(d.arg); },
+  ordenarRasto: function (d) { ordenarRasto(d.arg); },
+  verRastoPessoa: function (d) { verRastoPessoa(d.arg, d.arg2, d.arg3); },
   confirmarFormulario: function () { confirmarFormulario(); },
   fecharDialogo: function () { el('dialogo').close(); },
   fecharAviso: function () { esconderAviso(); },

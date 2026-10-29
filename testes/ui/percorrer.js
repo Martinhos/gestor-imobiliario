@@ -19,7 +19,10 @@
    conta criada agora pelo formulário fecha as boas-vindas pelo ✕
    (fecharBoasVindas), e cada ecrã passa pela de um separador, da primeira
    visita ao «Percebi» (provarApresentacao). As outras ficam vistas, para
-   nenhuma janela abrir por cima do que se mede (apresentacoesVistas).
+   nenhuma janela abrir por cima do que se mede (apresentacoesVistas). E a
+   pergunta do rasto das pessoas (cloud/rasto.js), que uma conta por escolher
+   vê depois das boas-vindas, responde-se «Aceitar» (responderAoRasto): o
+   resto do percurso corre com a recolha ligada.
 
    Precisa da app a correr. Em CI é o workflow que a levanta. Lido por um
    require (os testes), não arranca: expõe as regras e mais nada. */
@@ -507,8 +510,47 @@ async function entrar(pagina, anotar) {
   // fechar os avisos de primeira abertura, que não são o objeto deste percurso
   await pagina.evaluate(() => { try { CW.acceptLegal && CW.acceptLegal(); } catch (e) {} });
   if (criada) await fecharBoasVindas(pagina);
+  await responderAoRasto(pagina);
   await repouso(pagina);
   await preparar(pagina);
+}
+
+/* A pergunta do rasto das pessoas (cloud/rasto.js:rstPerguntar): uma conta
+   que ainda não escolheu vê-a uma vez, depois das boas-vindas e com o ecrã
+   livre, com Recusar e Aceitar do mesmo peso. Responde-se «Aceitar», o
+   caminho que exercita a recolha: os toques do percurso seguem para o
+   /api/rasto. Uma conta que já escolheu (os ecrãs seguintes, que entram com
+   a mesma conta) não a vê. A escolha chega do servidor depois do estado
+   (rasto.js:rstPedirEscolha) e lê-se no window.rstEscolha: undefined
+   enquanto não chega, null por escolher. A pergunta nunca abre por cima de
+   um portão: o aviso inicial e os termos novos de uma conta que já existia
+   (o percurso corrido outra vez, cá fora), que chegam com o estado, saem
+   enquanto se espera por ela, como no limpar. Não chegar, a pergunta não vir,
+   ou o Aceitar não gravar, é uma falha.
+   Recebe: pagina — a página, com sessão.
+   Devolve: nada — ou rebenta a dizer o que faltou. */
+async function responderAoRasto(pagina) {
+  const h = await pagina.waitForFunction(() => (window.rstEscolha === undefined ? false : String(window.rstEscolha)),
+    null, { timeout: 20000 }).catch(() => null);
+  if (!h) throw new Error('a escolha do rasto não chegou do servidor (cloud/rasto.js:rstPedirEscolha, GET /api/rasto/escolha)');
+  if ((await h.jsonValue()) !== 'null') return;
+  let abriu = null;
+  for (let i = 0; i < 20 && !abriu; i++) {
+    await pagina.evaluate(() => { document.getElementById('cwLegal')?.remove(); document.getElementById('cwTerms')?.remove(); });
+    abriu = await pagina.waitForSelector('.modal.open.rst-pergunta', { timeout: 1000 }).catch(() => null);
+  }
+  if (!abriu) throw new Error('a conta por escolher não viu a pergunta do rasto (cloud/rasto.js:rstTentarPergunta)');
+  await repouso(pagina);
+  const botoes = await pagina.$$eval('.modal.open.rst-pergunta .foot .btn', (bs) => bs.map((b) => b.textContent.trim() + '|' + b.className));
+  if (botoes.join() !== 'Recusar|btn,Aceitar|btn') throw new Error('a pergunta do rasto não tem Recusar e Aceitar do mesmo peso: ' + botoes.join(', '));
+  // armada ANTES do clique, para não perder uma resposta rápida
+  const resposta = pagina.waitForResponse((r) => r.request().method() === 'POST' &&
+    new URL(r.url()).pathname === '/api/rasto/escolha', { timeout: 15000 }).catch(() => null);
+  await pagina.click('.modal.open.rst-pergunta .foot .btn:last-child');
+  const r = await resposta;
+  if (!r || !r.ok()) throw new Error('o Aceitar do rasto não gravou a escolha: ' + (r ? r.status() : 'sem resposta'));
+  await pagina.waitForFunction(() => window.rstEscolha === 'sim' && !document.querySelector('.modal.open.rst-pergunta'),
+    null, { timeout: 5000 });
 }
 
 /* A conta acabou de nascer pelo formulário: as boas-vindas abrem sozinhas,

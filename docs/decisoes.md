@@ -74,6 +74,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-28 · A terceira ronda de tickets de QA
 - 2026-10-28 · A APK de dev abre as ligações do /test
 - 2026-10-28 · Os pedidos das pessoas decidem-se antes, e a resposta é da equipa
+- 2026-10-29 · O rasto das pessoas, debaixo de um pseudónimo
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2763,3 +2764,34 @@ a produção responder. Um erro fechado antes disso reabria-se sozinho na
 ocorrência seguinte. Até ao «promove», os de produção ficam em resolução, com
 uma nota interna e o commit. A ferramenta é o scripts/ticket.mjs, e a skill
 ticket fica na pasta acima do repositório, ao lado da qa.
+
+## 2026-10-29 · O rasto das pessoas, debaixo de um pseudónimo
+
+O Martinho pediu para o back office ver, por pessoa real, o que ela faz na app
+e na montra, com um id para a seguir mas sem o nome: nesta fase, para perceber
+se as pessoas percebem a interface e os fluxos. Por isso guarda-se cada toque,
+e não só os ecrãs — mas onde, nunca o quê. Ficou um pseudónimo aleatório por
+pessoa, e só quem já vê as pessoas vai do pseudónimo à ficha. Os toques
+sozinhos não dizem onde a interface confunde; os cinco sinais (em vão,
+repetido, vai-e-volta, desistência, erro ao guardar) e o resumo por ecrã é que
+o dizem.
+
+O consentimento é um só, para a montra e para a app, porque é a mesma pessoa:
+vive em cookies com o domínio raiz em produção, e fora dela só no host, para um
+cookie de teste nunca chegar à produção. A pessoa pode mudar de ideias num
+aparelho e noutro, por isso a escolha leva a hora e ganha a mais recente. Quem
+recusa depois de aceitar não fica com nada guardado: apaga-se logo. Fechar a
+pergunta da app sem escolher não é escolha, e ela volta passados 7 dias. Na
+montra a faixa é HTML puro e vai no fluxo, a seguir ao hero: quem recusa não
+recebe JavaScript nenhum, e a página continua a não tapar nada. O visitante da
+montra liga-se à conta quando entra, para o rasto de antes da conta não se
+perder; um computador partilhado não junta duas pessoas, os eventos ficam com
+quem os fez.
+
+Os eventos vivem 90 dias e saem com a conta; não vão para a cópia de
+segurança, que se guarda muito mais tempo. Uma ligação guarda as chaves da
+query mas não os valores, que podem ser um token. Quem vê ficou numa função
+só, por emenda dele: o admin vê todas as pessoas, o suporte só quem lhe
+escreveu um pedido (enquanto o pedido existir), e a auditoria da equipa
+continua só do master. Mudar a Privacidade subiu a versão dos termos, e toda a
+gente os volta a aceitar uma vez.

@@ -827,7 +827,57 @@ export async function rotasEquipaApi(c) {
     return null;
   }
 
-  /* ---- o rasto (só o master) ---- */
+  /* ---- o rasto das pessoas (lib/rasto.js) ----
+     Debaixo de um pseudónimo: nada aqui devolve nome nem email. Quem vê
+     decide-o o lib/rasto.js:podeVerRasto — a lista, o resumo e a ida da
+     ficha ao pid são do master e do admin; a linha do tempo de uma pessoa
+     também do suporte, mas só de quem lhe escreveu um pedido, e é a partir
+     desse pedido que lá chega (a rota do ticket). */
+  if (path.startsWith('/api/equipa/rasto/') && method === 'GET') {
+    const rasto = await import('./lib/rasto.js');
+    if (path === '/api/equipa/rasto/pessoas' || path === '/api/equipa/rasto/resumo') {
+      if (!rasto.veTodoORasto(eu)) return err(403, 'O rasto das pessoas é do master e do admin.');
+      const dias = rasto.diasDe(url.searchParams.get('dias'));
+      return path.endsWith('/pessoas')
+        ? json({ pessoas: await rasto.pessoasDoRasto(env, dias) })
+        : json({ linhas: await rasto.resumoDoRasto(env, dias) });
+    }
+    const mRastoPessoa = /^\/api\/equipa\/rasto\/pessoa\/([^/]+)$/.exec(path);
+    if (mRastoPessoa) {
+      // sem decodeURIComponent: um pid não tem %, e um % mal formado não é um 500
+      const pid = mRastoPessoa[1];
+      if (!rasto.PID_RE.test(pid)) return err(400, 'Pseudónimo inválido.');
+      // a permissão antes da existência: a quem não pode ver, um pid que não existe é igual aos outros
+      if (!(await rasto.podeVerRasto(env, eu, pid))) return err(403, 'O rasto desta pessoa não é do teu papel.');
+      const p = await rasto.pessoaDoRasto(env, pid);
+      if (!p) return err(404, 'Esse pseudónimo não existe.');
+      // ver o que alguém fez é ler dados pessoais: fica registado quem viu quem
+      await auditar(env, eu, 'rasto.ver', pid, null);
+      return json(p);
+    }
+    const mRastoConta = /^\/api\/equipa\/rasto\/conta\/([^/]+)$/.exec(path);
+    if (mRastoConta) {
+      if (!rasto.veTodoORasto(eu)) return err(403, 'O rasto das pessoas é do master e do admin.');
+      const id = mRastoConta[1];
+      if (badId(id)) return err(400, 'Id inválido.');
+      return json({ pid: await rasto.pidParaEquipa(env, id) });
+    }
+    const mRastoTicket = /^\/api\/equipa\/rasto\/ticket\/([^/]+)$/.exec(path);
+    if (mRastoTicket) {
+      const id = mRastoTicket[1];
+      if (badId(id)) return err(400, 'Id inválido.');
+      const t = await env.DB.prepare('SELECT category, user_id FROM tickets WHERE id = ?').bind(id).first();
+      if (!t) return err(404, 'Pedido não encontrado.');
+      // a mesma regra do detalhe do pedido
+      if (cats.indexOf(t.category) < 0) return err(403, 'Esse pedido é de outro papel.');
+      const pid = t.user_id ? await rasto.pidParaEquipa(env, t.user_id) : null;
+      // a quem vê o pedido mas não o rasto (quem programa), o pid não serve: não se dá
+      return json({ pid: pid && (await rasto.podeVerRasto(env, eu, pid)) ? pid : null });
+    }
+    return err(404, 'Rota desconhecida.');
+  }
+
+  /* ---- o rasto da equipa (só o master) ---- */
   if (path === '/api/equipa/auditoria' && method === 'GET') {
     if (!eMaster(eu)) return err(403, 'O rasto é só do master.');
     const alvo = (url.searchParams.get('alvo') || '').trim().slice(0, 64);

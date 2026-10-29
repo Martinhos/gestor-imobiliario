@@ -77,6 +77,7 @@ jobs:
                    collaborator_houses collaborators collab_invites roles share_links \
                    shared_group_requests shared_group_members shared_group_houses shared_group_links shared_groups \
                    house_events house_exits house_transfers \
+                   rasto_eventos rasto_visitantes rasto_ids \
                    ticket_msgs ticket_users tickets reports user_services password_resets files rate_limits \
                    houses users; do
             echo "DELETE FROM $t"

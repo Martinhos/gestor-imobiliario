@@ -23,11 +23,18 @@
    Fonts. A imagem de partilha (og:image) continua a ser um ficheiro, porque
    quem a mostra é a rede social, não esta página.
 
-   Não tem JavaScript nenhum. As animações — a entrada do hero, as revelações
-   ao scroll, a risca do cabeçalho — são CSS puro: as guiadas pelo scroll
-   vivem atrás de @supports (animation-timeline), e um motor que não as saiba
-   correr mostra a página feita, sem esconder nada. Com os recuos de menos
-   movimento, menos transparência e mais contraste.
+   Não tem JavaScript para se mostrar. As animações — a entrada do hero, as
+   revelações ao scroll, a risca do cabeçalho — são CSS puro: as guiadas pelo
+   scroll vivem atrás de @supports (animation-timeline), e um motor que não as
+   saiba correr mostra a página feita, sem esconder nada. Com os recuos de
+   menos movimento, menos transparência e mais contraste.
+
+   O único script é o do rasto (GUIAO_RASTO_MONTRA, em /paginas/rasto-montra.js),
+   e só vai na página de quem aceitou. A pergunta é uma faixa em HTML puro, um
+   formulário para o /consentimento com «Recusar» e «Aceitar» do mesmo peso,
+   que só aparece a quem ainda não respondeu; depois da resposta, o rodapé
+   deixa mudá-la. O cookie da resposta é do servidor (index.js), que diz aqui
+   qual é: a página varia com ele, e por isso não fica em cache partilhada.
 
    O Rendorium é um projeto pessoal, sem planos nem pagamentos, e a página
    di-lo por palavras — é a pergunta que qualquer pessoa faz a seguir a «o que
@@ -281,21 +288,71 @@ const DESCRICAO = 'App grátis para senhorios: imóveis, contratos e rendas num 
 const AVISO = 'M12 8v5M12 16.5v.5M10.3 3.8L2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z';
 const VISTO = 'M5 12.5l4.5 4.5L19 7';
 
-/* Constrói a página inteira e devolve-a como Response com uma hora de cache —
-   a página muda quando se publica, não por pedido. Os estilos não vão dentro
-   dela: estão no CSS_LANDING, servido em /paginas/landing.css, e a página
-   vai com a CSP_ESTRITA.
+/* A faixa da pergunta do rasto, para quem ainda não respondeu: um formulário
+   sem JavaScript para o /consentimento, com «Recusar» e «Aceitar» iguais (a
+   mesma classe, o mesmo tamanho: recusar tão fácil como aceitar) e a ligação
+   à secção da Privacidade que o explica. Vai no fluxo da página, a seguir ao
+   hero, e não por cima dele: nada fixo tapa a ação principal nem o conteúdo.
+   Recebe: volta — o caminho para onde o /consentimento devolve a pessoa.
+   Devolve: o HTML da faixa. */
+function faixaDaEscolha(volta) {
+  return `<aside class="wrap escolha" aria-label="O rasto de utilização">
+    <form class="escolha-caixa" method="post" action="/consentimento">
+      <input type="hidden" name="volta" value="${volta}">
+      <div class="escolha-texto">
+        <p>Usamos um identificador neste aparelho para ver onde tocas e o que abres, e assim melhorar a
+        página e a app. Nunca o que escreves. O que fica registado apaga-se ao fim de 90 dias.</p>
+        <a href="/privacidade#rasto-de-utilizacao">Política de Privacidade</a>
+      </div>
+      <div class="escolha-botoes">
+        <button class="escolha-botao" type="submit" name="escolha" value="nao">Recusar</button>
+        <button class="escolha-botao" type="submit" name="escolha" value="sim">Aceitar</button>
+      </div>
+    </form>
+  </aside>`;
+}
+
+/* A linha do rodapé de quem já respondeu: diz o que está em vigor neste
+   aparelho e deixa mudar com um botão só, pelo mesmo /consentimento. Sem ela,
+   quem aceitou na montra e não tem conta não tinha onde retirar o sim.
+   Recebe: escolha — 'sim' ou 'nao'; volta — o caminho de regresso.
+   Devolve: o HTML do formulário do rodapé. */
+function rodapeDaEscolha(escolha, volta) {
+  const sim = escolha === 'sim';
+  return `<form class="rodape-escolha" method="post" action="/consentimento">
+    <input type="hidden" name="volta" value="${volta}">
+    <span>${sim ? 'O rasto de utilização está ligado neste aparelho.' : 'O rasto de utilização está desligado neste aparelho.'}</span>
+    <button class="escolha-botao" type="submit" name="escolha" value="${sim ? 'nao' : 'sim'}">${sim ? 'Recusar' : 'Aceitar'}</button>
+  </form>`;
+}
+
+/* Constrói a página inteira e devolve-a como Response. Os estilos não vão
+   dentro dela: estão no CSS_LANDING, servido em /paginas/landing.css, e a
+   página vai com a CSP_ESTRITA.
+
+   A página varia com a resposta ao rasto (a faixa, o script, a linha do
+   rodapé), que vem num cookie: por isso nunca vai para uma cache partilhada
+   (private) e o browser pergunta sempre antes de reusar a sua (no-cache, e o
+   Vary: Cookie) — senão o 303 do /consentimento devolvia a página de antes,
+   com a faixa ainda lá, e uma cópia guardada podia levar o script a quem
+   recusou.
 
    Fora do domínio raiz isto é uma pré-visualização (dev.rendorium.com/montra,
-   ou o servidor local): leva `noindex` e não declara canonical nem og. Duas
-   cópias da mesma página indexadas são uma a competir com a outra, e um og que
-   aponta para produção a partir de um sítio que não é produção mente a quem
-   partilhar a ligação.
-   Recebe: op — {raiz: true} quando isto está mesmo a ser servido em
-   rendorium.com; qualquer outra coisa vale pré-visualização.
-   Devolve: uma Response HTML com a página completa e uma hora de cache. */
+   ou o servidor local): leva `noindex`, não declara canonical nem og e não
+   fica em cache nenhuma. Duas cópias da mesma página indexadas são uma a
+   competir com a outra, e um og que aponta para produção a partir de um sítio
+   que não é produção mente a quem partilhar a ligação.
+   Recebe: op — { raiz, escolha }: raiz verdadeiro quando isto está mesmo a
+   ser servido em rendorium.com (qualquer outra coisa vale pré-visualização);
+   escolha — 'sim', 'nao' ou null, a resposta ao rasto lida do cookie
+   rd_escolha (outro valor vale null).
+   Devolve: uma Response HTML com a página completa: a faixa da pergunta com
+   escolha null, o script do rasto só com 'sim'. */
 export function paginaLanding(op) {
   const raiz = !!(op && op.raiz);
+  const escolha = op && (op.escolha === 'sim' || op.escolha === 'nao') ? op.escolha : null;
+  // o /montra é o caminho da pré-visualização; em produção a montra é a raiz
+  const volta = raiz ? '/' : '/montra';
   const hoje = new Date();
   const cabecaRaiz = raiz ? `<meta property="og:type" content="website">
 <meta property="og:title" content="Rendorium — nenhuma renda te passa despercebida">
@@ -323,7 +380,7 @@ ${cabecaRaiz}
 <link rel="preload" href="/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/paginas/landing.css">
-</head><body>
+${escolha === 'sim' ? '<script src="/paginas/rasto-montra.js" defer></script>\n' : ''}</head><body>
 <div class="faixa-topo">
   <header>
     <span class="marca"><span class="mark" aria-hidden="true"></span><span class="tit">Rendorium</span></span>
@@ -333,7 +390,7 @@ ${cabecaRaiz}
 </div>
 <main>
 
-  <section class="wrap hero">
+  <section class="wrap hero" id="inicio">
     <div class="hero-texto">
       <p class="chapeu">Gestão de arrendamento para senhorios</p>
       <h1>Nenhuma renda te passa despercebida.</h1>
@@ -360,8 +417,8 @@ ${cabecaRaiz}
       </div>
     </div>
   </section>
-
-  <section class="ligado">
+${escolha === null ? '\n  ' + faixaDaEscolha(volta) + '\n' : ''}
+  <section class="ligado" id="ligado">
     <div class="wrap ligado-cab">
       <h2>Do imóvel à renda, tudo ligado</h2>
       <p class="sub">O contrato cria a renda planeada, o imóvel cria o IMI e o condomínio, e cada
@@ -388,7 +445,7 @@ ${e.ecra(hoje)}
     </div>
   </section>`).join('\n\n  ')}
 
-  <section class="faz">
+  <section class="faz" id="resto">
     <div class="wrap">
       <h2>O resto da gestão, também aqui</h2>
       <div class="grelha">
@@ -397,7 +454,7 @@ ${e.ecra(hoje)}
     </div>
   </section>
 
-  <section class="wrap par-pc">
+  <section class="wrap par-pc" id="computador">
     <div class="pc-texto">
       <h2>No computador, a mesma app — sem instalar nada.</h2>
       <p class="sub">Receita, despesas, prestações e cashflow do ano, por mês e por imóvel.</p>
@@ -415,7 +472,7 @@ ${e.ecra(hoje)}
     </div>
   </section>
 
-  <section class="banda-noite">
+  <section class="banda-noite" id="contas">
     <div class="wrap par">
       <div class="par-texto">
         <h2>Contas entre donos, sem folhas de cálculo.</h2>
@@ -433,7 +490,7 @@ ${e.ecra(hoje)}
     </div>
   </section>
 
-  <section class="wrap dados">
+  <section class="wrap dados" id="dados">
     <div class="dados-lista">
       <h2>Os dados são teus</h2>
       <ul class="lista">
@@ -448,7 +505,7 @@ ${e.ecra(hoje)}
     </div>
   </section>
 
-  <section class="wrap fecho-seccao">
+  <section class="wrap fecho-seccao" id="comecar">
     <div class="fecho">
       <div class="tile fecho-mosaico" aria-hidden="true"></div>
       <div class="fecho-texto">
@@ -465,15 +522,17 @@ ${e.ecra(hoje)}
   <a href="/termos">Termos e Condições</a>
   <a href="/privacidade">Política de Privacidade</a>
   <a href="${APP}">Abrir a app</a>
+  ${escolha ? rodapeDaEscolha(escolha, volta) : ''}
 </footer>
 </body></html>`;
   return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      // a página muda quando se publica, não por pedido — mas a
-      // pré-visualização existe precisamente para ver alterações, e uma hora
-      // de cache fazia-a mentir durante uma hora
-      'Cache-Control': raiz ? 'public, max-age=3600' : 'no-store',
+      /* a página varia com o cookie da resposta ao rasto: nunca numa cache
+         partilhada, e o browser pergunta sempre antes de reusar a dele. A
+         pré-visualização nem isso: existe para ver alterações. */
+      'Cache-Control': raiz ? 'private, no-cache' : 'no-store',
+      Vary: 'Cookie',
       'Content-Security-Policy': CSP_ESTRITA,
     },
   });
@@ -820,7 +879,32 @@ ${alturasDasBarras()}
 .rodape-marca{display:flex;align-items:center;gap:8px;margin-right:auto;color:var(--muted)}
 .rodape .mark{width:24px;height:24px;border-radius:6px}
 .rodape a{display:inline-flex;align-items:center;min-height:44px;text-decoration:none}
-.rodape a:hover{color:var(--accent-text);text-decoration:underline}
+/* quem já respondeu ao rasto muda a resposta aqui, numa linha discreta */
+.rodape-escolha{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;
+  font-size:14px;color:var(--muted)}
+
+/* a faixa da pergunta do rasto, para quem ainda não respondeu: no fluxo da
+   página, a seguir ao hero, e não fixa por cima de nada. Um cartão calmo, com
+   os dois botões iguais — nenhum é o primário, recusar pesa o mesmo que
+   aceitar. */
+.escolha{padding-bottom:24px}
+.escolha-caixa{display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px;padding:16px 24px;
+  border-radius:16px;background:var(--card);border:1px solid var(--line)}
+.escolha-texto{flex:1 1 420px;min-width:0;font-size:14px;color:var(--muted)}
+.escolha-texto a{display:inline-flex;align-items:center;min-height:44px;font-weight:600;color:var(--accent-text)}
+.escolha-botoes{flex:1 1 auto;display:flex;justify-content:flex-end;gap:12px}
+/* o botão secundário da app (44 px, raio 12), para os dois */
+.escolha-botao{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:120px;
+  padding:0 16px;border-radius:12px;border:1px solid var(--line2);background:var(--card);color:var(--ink);
+  font:inherit;font-size:15px;font-weight:600;cursor:pointer;
+  transition:transform var(--rapido) var(--curva),background-color var(--rapido) var(--curva),
+    border-color var(--rapido) var(--curva)}
+.escolha-botao:active{transform:scale(.97)}
+.escolha-botao:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media(max-width:480px){
+  .escolha-caixa{padding:16px}
+  .escolha-botao{flex:1 1 0}
+}
 
 /* o hover só existe onde há rato: num ecrã de dedo, o toque deixava o botão
    aceso até alguém tocar noutro sítio. Só cor — nada levanta nem sombreia. */
@@ -829,6 +913,8 @@ ${alturasDasBarras()}
   a.btn.primary:hover{background:var(--accent-press);border-color:var(--accent-press)}
   a.btn.fantasma:hover{background:var(--press);border-color:var(--press)}
   .fecho a.btn:hover{background:var(--fecho-botao-hover);border-color:var(--fecho-botao-hover)}
+  .rodape a:hover{color:var(--accent-text);text-decoration:underline}
+  .escolha-botao:hover{background:var(--tint)}
 }
 
 /* ----------------------------------------------------------- telemóvel */
@@ -911,6 +997,7 @@ ${alturasDasBarras()}
 @media(prefers-reduced-motion:reduce){
   @keyframes sobe{from{opacity:0}}
   a.btn:hover,a.btn:active{transform:none}
+  .escolha-botao:active{transform:none}
 }
 /* quem pediu menos transparência recebe o cabeçalho sólido */
 @media(prefers-reduced-transparency:reduce){
@@ -918,4 +1005,251 @@ ${alturasDasBarras()}
 /* e quem pediu mais contraste recebe contornos e texto secundário que se veem */
 @media(prefers-contrast:more){:root{--line:#8A93A5;--line2:#6B7385;--muted:#384152}}
 @media(prefers-contrast:more) and (prefers-color-scheme:dark){:root{--line:#56627D;--line2:#6E7A96;--muted:#C9D0DD}}
+`;
+
+/* O JavaScript do rasto na montra, servido em /paginas/rasto-montra.js
+   (paginas-recursos.js) e só pedido pela página de quem aceitou. Manda os
+   eventos do contrato do rasto para o POST /rasto, em lotes de até 50, por
+   sendBeacon a cada 15 s, ao esconder a página e no pagehide:
+   - «pagina» ao carregar (e ao voltar da cache de avanço e recuo);
+   - «secao» quando cada secção com id entra à vista, uma vez por secção
+     (IntersectionObserver: nada de ouvir o scroll);
+   - «toque» em cada clique, com o DESCRITOR do alvo (click:<ação>,
+     a:<host de fora><caminho>?<chaves sem valores>, <tag>#<id>,
+     <tag>.<classe> ou <tag>) e a posição em permilagem da
+     janela, e os sinais «em-vao» (nada interativo debaixo do dedo) e
+     «repetido» (o 3.º toque e os seguintes a 24 px ou menos do anterior, em
+     1 s ou menos). Nunca o texto da página nem o que se escreve.
+   ES5, num IIFE, sem nomes globais; o servidor responde 204 sempre e o
+   cliente nunca reage. */
+export const GUIAO_RASTO_MONTRA = String.raw`(function () {
+  'use strict';
+  var nav = window.navigator;
+  if (!nav || !document.addEventListener) return;
+
+  var LOTE = 50;
+  var CADA = 15000;
+  var MAX_FILA = 1000;
+  // o que conta como interativo (o contrato do rasto): fora disto, um toque é em vão
+  var INTERATIVO = 'button,a[href],input,select,textarea,label,summary,[data-click],' +
+    '[role=button],[role=tab],[role=link],[role=menuitem],[role=switch],[tabindex]';
+  var fila = [];
+  var sessao = 's-' + aleatorio(10);
+  var anterior = null;
+  var vistas = {};
+  var vigia = null;
+
+  /* Um texto aleatório para a sessão, do crypto quando há.
+     Recebe: n — quantos caracteres.
+     Devolve: o texto, com n caracteres de [a-z0-9]. */
+  function aleatorio(n) {
+    var abc = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    var c = window.crypto || window.msCrypto;
+    var v = null;
+    var s = '';
+    var i;
+    if (c && c.getRandomValues) { v = new Uint8Array(n); c.getRandomValues(v); }
+    for (i = 0; i < n; i++) s += abc.charAt((v ? v[i] : Math.floor(Math.random() * 256)) % abc.length);
+    return s;
+  }
+
+  /* Um texto cortado ao tamanho que o servidor guarda.
+     Recebe: t — o texto (ou null); n — o tamanho máximo.
+     Devolve: o texto cortado, ou null. */
+  function corta(t, n) {
+    return t == null ? null : String(t).slice(0, n);
+  }
+
+  /* A largura da janela, em px.
+     Devolve: o número (0 quando não se sabe). */
+  function largura() {
+    return window.innerWidth || (document.documentElement && document.documentElement.clientWidth) || 0;
+  }
+
+  /* A altura da janela, em px.
+     Devolve: o número (0 quando não se sabe). */
+  function altura() {
+    return window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || 0;
+  }
+
+  /* O caminho da página, que é o ecrã da montra.
+     Devolve: o caminho, até 40 caracteres. */
+  function caminho() {
+    return corta((window.location && window.location.pathname) || '/', 40);
+  }
+
+  /* Junta um evento à fila, com o tamanho da janela de agora.
+     Recebe: tipo; ecra; alvo; x, y — a posição em permilagem (ou null);
+     sinal — o sinal (ou null).
+     Devolve: nada. */
+  function poe(tipo, ecra, alvo, x, y, sinal) {
+    if (fila.length >= MAX_FILA) return;
+    fila.push({ t: Date.now(), tipo: tipo, ecra: ecra, janela: null, alvo: alvo,
+      x: x, y: y, vw: largura(), vh: altura(), sinal: sinal });
+  }
+
+  /* Se um elemento casa com um seletor, também nos motores antigos.
+     Recebe: el — o elemento; sel — o seletor.
+     Devolve: verdadeiro ou falso. */
+  function casa(el, sel) {
+    var m = el.matches || el.msMatchesSelector || el.webkitMatchesSelector;
+    return !!m && m.call(el, sel);
+  }
+
+  /* O elemento interativo debaixo do toque: o próprio ou um antepassado.
+     Recebe: el — o elemento tocado.
+     Devolve: o elemento interativo, ou null quando o toque foi em vão. */
+  function interativo(el) {
+    while (el && el.nodeType === 1) {
+      if (casa(el, INTERATIVO)) return el;
+      el = el.parentNode;
+    }
+    return null;
+  }
+
+  /* O destino de uma ligação, sem nenhum valor: o host só quando não é o da
+     página, o caminho, e as CHAVES da pesquisa sem os valores
+     (a:app.rendorium.com/?criar, a:/privacidade). Uma ligação sem endereço
+     web (mailto:, tel:) fica só com o esquema, que o resto é um contacto.
+     Recebe: href — o atributo href, como está escrito.
+     Devolve: o descritor «a:…». */
+  function ligacao(href) {
+    var h = String(href);
+    var host = '';
+    var resto = h;
+    var m = /^(?:[a-z][a-z0-9+.-]*:)?\/\/([^\/?#]*)(.*)$/i.exec(h);
+    var aqui = String((window.location && window.location.hostname) || '').toLowerCase();
+    var caminhoDela, pesquisa, chaves, partes, i, k;
+    if (m) {
+      host = m[1].replace(/^[^@]*@/, '').replace(/:[0-9]*$/, '').toLowerCase();
+      resto = m[2];
+      if (host === aqui) host = '';
+    } else if (/^[a-z][a-z0-9+.-]*:/i.test(h)) {
+      return 'a:' + h.split(':')[0].toLowerCase() + ':';
+    }
+    caminhoDela = resto.split(/[?#]/)[0];
+    if (!caminhoDela) caminhoDela = host ? '/' : caminho();
+    pesquisa = resto.indexOf('?') > -1 && (resto.indexOf('#') < 0 || resto.indexOf('?') < resto.indexOf('#'))
+      ? resto.split('#')[0].slice(resto.indexOf('?') + 1) : '';
+    chaves = [];
+    partes = pesquisa ? pesquisa.split('&') : [];
+    for (i = 0; i < partes.length; i++) {
+      k = partes[i].split('=')[0];
+      if (k && chaves.indexOf(k) < 0) chaves.push(k);
+    }
+    return 'a:' + host + caminhoDela + (chaves.length ? '?' + chaves.join('&') : '');
+  }
+
+  /* O descritor de um elemento: o que ele é, nunca o que diz. Uma ligação
+     pelo destino sem valores (ligacao); um id com dígitos corta-se ao
+     prefixo, que um id de registo não sai daqui.
+     Recebe: el — o elemento.
+     Devolve: o descritor, até 80 caracteres. */
+  function descritor(el) {
+    var tag = String(el.tagName || '').toLowerCase();
+    var acao = el.getAttribute ? el.getAttribute('data-click') : null;
+    var href = el.getAttribute ? el.getAttribute('href') : null;
+    var id = el.id ? String(el.id).replace(/[-_]?[0-9].*$/, '') : '';
+    var cls = String((el.getAttribute && el.getAttribute('class')) || '').replace(/^\s+/, '').split(/\s+/)[0];
+    if (acao) return corta('click:' + acao, 80);
+    if (tag === 'a' && href != null) return corta(ligacao(href), 80);
+    if (id) return corta(tag + '#' + id, 80);
+    if (cls) return corta(tag + '.' + cls, 80);
+    return corta(tag, 80);
+  }
+
+  /* Uma posição em permilagem da janela.
+     Recebe: v — a coordenada em px; total — a medida da janela em px.
+     Devolve: o inteiro de 0 a 1000. */
+  function permil(v, total) {
+    return Math.max(0, Math.min(1000, Math.round((v / total) * 1000)));
+  }
+
+  /* Um clique em qualquer sítio: o toque, com o descritor e os sinais. Um
+     clique de teclado (detail 0) não tem posição, e não conta para o repetido.
+     Recebe: ev — o evento de clique.
+     Devolve: nada. */
+  function aoTocar(ev) {
+    var el = ev.target;
+    var util, w, h, comPosicao, agora, serie;
+    if (el && el.nodeType !== 1) el = el.parentNode;
+    if (!el || el.nodeType !== 1) return;
+    util = interativo(el);
+    w = largura();
+    h = altura();
+    comPosicao = ev.detail !== 0 && typeof ev.clientX === 'number' && w > 0 && h > 0;
+    agora = Date.now();
+    serie = 1;
+    if (comPosicao && anterior && agora - anterior.t <= 1000 &&
+        Math.sqrt(Math.pow(ev.clientX - anterior.x, 2) + Math.pow(ev.clientY - anterior.y, 2)) <= 24) {
+      serie = anterior.serie + 1;
+    }
+    anterior = comPosicao ? { x: ev.clientX, y: ev.clientY, t: agora, serie: serie } : null;
+    poe('toque', caminho(), descritor(util || el),
+      comPosicao ? permil(ev.clientX, w) : null, comPosicao ? permil(ev.clientY, h) : null,
+      serie >= 3 ? 'repetido' : (util ? null : 'em-vao'));
+  }
+
+  /* Despeja a fila no POST /rasto, em lotes de até 50. Um envio recusado
+     perde-se: o rasto nunca insiste nem avisa.
+     Devolve: nada. */
+  function envia() {
+    var corpo;
+    while (fila.length) {
+      corpo = JSON.stringify({ sessao: sessao, eventos: fila.splice(0, LOTE) });
+      try {
+        if (nav.sendBeacon) nav.sendBeacon('/rasto', corpo);
+        else if (window.fetch) window.fetch('/rasto', { method: 'POST', body: corpo, keepalive: true, credentials: 'same-origin' });
+      } catch (e) { /* o cliente nunca reage */ }
+    }
+  }
+
+  /* A página escondeu-se (outro separador, o ecrã apagado): é muitas vezes a
+     última ocasião de enviar num telemóvel, onde o pagehide pode não chegar.
+     Devolve: nada. */
+  function aoEsconder() {
+    if (document.visibilityState === 'hidden') envia();
+  }
+
+  /* A página voltou da cache de avanço e recuo: conta como uma página aberta.
+     Recebe: ev — o evento pageshow.
+     Devolve: nada. */
+  function aoVoltar(ev) {
+    if (ev && ev.persisted) poe('pagina', caminho(), null, null, null, null);
+  }
+
+  /* As secções que entraram à vista: cada uma conta uma vez, e deixa de ser
+     vigiada.
+     Recebe: entradas — as IntersectionObserverEntry do observador.
+     Devolve: nada. */
+  function aoVer(entradas) {
+    var i, alvo;
+    for (i = 0; i < entradas.length; i++) {
+      if (!entradas[i].isIntersecting) continue;
+      alvo = entradas[i].target;
+      if (vigia) vigia.unobserve(alvo);
+      if (!alvo.id || vistas[alvo.id]) continue;
+      vistas[alvo.id] = true;
+      poe('secao', corta('#' + alvo.id, 40), null, null, null, null);
+    }
+  }
+
+  /* Vigia as secções com id da página, para cada uma contar ao entrar à vista.
+     Devolve: nada. */
+  function vigiaSecoes() {
+    var secoes, i;
+    if (!window.IntersectionObserver || !document.querySelectorAll) return;
+    vigia = new window.IntersectionObserver(aoVer, { rootMargin: '0px 0px -25% 0px' });
+    secoes = document.querySelectorAll('main section[id]');
+    for (i = 0; i < secoes.length; i++) vigia.observe(secoes[i]);
+  }
+
+  poe('pagina', caminho(), null, null, null, null);
+  vigiaSecoes();
+  document.addEventListener('click', aoTocar, true);
+  document.addEventListener('visibilitychange', aoEsconder);
+  window.addEventListener('pagehide', envia);
+  window.addEventListener('pageshow', aoVoltar);
+  window.setInterval(envia, CADA);
+})();
 `;

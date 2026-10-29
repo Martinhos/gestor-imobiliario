@@ -5641,3 +5641,17 @@ p.qa-quem{margin:0}
 .gprevista{opacity:.38}
 .legend .li.prevista .dot{background:var(--muted);opacity:.38}
 /* === fim: qa-ronda2: visão geral === */
+/* === o rasto das pessoas: a linha «Ajudar a melhorar» das Definições (cloud/rasto.js) === */
+/* A linha inteira é o interruptor (rasto.js:rstLinhaDasDefinicoes: um botão
+   role=switch com a altura da .linha, 60px, e o aria-checked), e o desenho do
+   .interruptor vai dentro só para se ver: liga-se pelo aria-checked da linha.
+   O estado diz-se também em palavras, e ligado na cor da frente
+   (--accent-text): não fica só no fundo do interruptor, que o Samsung
+   Internet escurece à força. A pergunta é uma janela da casa (openModal) com
+   Recusar e Aceitar do mesmo peso, e não precisa de regra sua. */
+.rst-def .interruptor{pointer-events:none}
+.rst-def[aria-checked="true"] .interruptor{background:var(--accent)}
+.rst-def[aria-checked="true"] .interruptor::after{transform:translateX(18px)}
+.rst-def .small.rst-def-ligado{color:var(--accent-text)}
+.rst-def:disabled{cursor:progress}
+/* === fim: o rasto das pessoas === */

@@ -32,9 +32,12 @@ const html = await resposta.text();
 const css = CSS_LANDING;
 
 describe('a página de entrada', () => {
-  test('sai como HTML, em cache, e sem restos de template', () => {
+  /* A página varia com a resposta ao rasto (um cookie): nunca numa cache
+     partilhada, e o browser revalida antes de reusar a sua. */
+  test('sai como HTML, fora das caches partilhadas, e sem restos de template', () => {
     assert.equal(resposta.headers.get('Content-Type'), 'text/html; charset=utf-8');
-    assert.match(resposta.headers.get('Cache-Control'), /max-age=3600/);
+    assert.equal(resposta.headers.get('Cache-Control'), 'private, no-cache');
+    assert.equal(resposta.headers.get('Vary'), 'Cookie');
     assert.ok(!html.includes('${'), 'nenhum ${} por interpolar');
     assert.ok(!html.includes('undefined'), 'nada ficou undefined');
   });
@@ -137,8 +140,10 @@ describe('a página de entrada', () => {
     assert.match(html, /<meta name="theme-color" content="#0B111E" media="\(prefers-color-scheme: dark\)">/);
   });
 
-  test('não tem JavaScript nenhum', () => {
+  /* O único script é o do rasto, e só para quem aceitou (testes/rasto-montra.test.js). */
+  test('sem o sim ao rasto, não tem JavaScript nenhum', async () => {
     assert.ok(!/<script/i.test(html), 'o carrossel era a única razão para ter, e saiu');
+    assert.ok(!/<script/i.test(await paginaLanding({ raiz: true, escolha: 'nao' }).text()), 'nem a quem recusou');
   });
 
   /* O favicon vinha de app.rendorium.com e a CSP do worker recusava-o
@@ -261,7 +266,7 @@ describe('a página de entrada', () => {
 
   test('a pré-visualização não fica presa em cache', async () => {
     const { paginaLanding: p } = await import('../worker/src/landing.js');
-    assert.match(p({ raiz: true }).headers.get('Cache-Control'), /max-age=3600/, 'em produção, cache');
+    assert.equal(p({ raiz: true }).headers.get('Cache-Control'), 'private, no-cache', 'em produção, só a do browser, revalidada');
     assert.equal(p().headers.get('Cache-Control'), 'no-store',
       'fora dela não: uma pré-visualização em cache mente durante uma hora');
   });

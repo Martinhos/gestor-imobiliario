@@ -22,7 +22,7 @@
 window.LEGAL = (function () {
   'use strict';
 
-  var VERSION = '2026-09-09';
+  var VERSION = '2026-10-29';
   var OPERADOR = 'Martinho Fé Santos';
   var MORADA = '';                       // apartado, escritório virtual ou sede
   var NIF = '';                          // obrigatório quando houver cobrança
@@ -180,6 +180,8 @@ window.LEGAL = (function () {
       'senhorio nos contratos que a app gera.',
       '<b>Dados da tua atividade:</b> imóveis, contratos, movimentos, créditos, documentos e notas.',
       '<b>Dados técnicos:</b> endereço IP e registos de acesso, usados para segurança e para travar abusos.',
+      '<b>Rasto de utilização</b>, só se aceitares: onde tocas e o que abres na app e em rendorium.com, ' +
+      'debaixo de um identificador sem nome. Nunca o que escreves. Está explicado no ponto 12.',
     ]) +
 
     h('4. Para quê e com que fundamento') +
@@ -191,8 +193,12 @@ window.LEGAL = (function () {
       '<b>Cumprir obrigações legais</b> — quando alguma norma nos obrigar a conservar ou fornecer informação.',
       '<b>Comunicações sobre o serviço</b> (confirmação de email, avisos de segurança, alterações aos ' +
       'termos) — execução do contrato. Comunicações de marketing, se as houver, só com o teu consentimento.',
+      '<b>Perceber o que é difícil de usar e melhorar a app e a página</b> (o rasto de utilização do ' +
+      'ponto 12) — o teu consentimento, que podes retirar quando quiseres.',
     ]) +
-    p('Não fazemos decisões automatizadas com efeitos jurídicos sobre ti, nem definição de perfis.') +
+    p('Não fazemos decisões automatizadas com efeitos jurídicos sobre ti. O rasto de utilização (ponto 12) ' +
+      'não é usado para decisões automáticas nem para te avaliar: serve só para perceber onde a interface ' +
+      'confunde.') +
 
     h('5. Quem tem acesso') +
     p('Não vendemos dados pessoais nem os cedemos para fins publicitários. Recorremos aos seguintes ' +
@@ -220,6 +226,8 @@ window.LEGAL = (function () {
       'normal de rotação.',
       'Os registos técnicos de segurança são conservados por um período curto, proporcional à sua ' +
       'finalidade.',
+      'O rasto de utilização apaga-se ao fim de <b>90 dias</b>, logo que o recusares e logo que apagares a ' +
+      'conta. As cópias de segurança não o levam.',
     ]) +
 
     h('8. Os teus direitos') +
@@ -269,15 +277,51 @@ window.LEGAL = (function () {
       'preferências como o tema e a página onde estavas. Fica no teu aparelho.',
       '<b>Google</b> — se usares a entrada com Google, esse serviço define cookies próprios, sujeitos à ' +
       'política de privacidade do Google.',
+      '<b>rd_escolha</b> — guarda a tua resposta sobre o rasto de utilização (aceitar ou recusar) e quando a ' +
+      'deste, durante 180 dias, para não voltarmos a perguntar. É necessário para respeitar essa resposta.',
+      '<b>rd_vis</b> — só existe se aceitares: o identificador aleatório deste aparelho para o rasto de ' +
+      'utilização (ponto 12), durante 180 dias. Recusar apaga-o.',
     ]) +
-    p('Não usamos cookies de análise nem de publicidade. Se vierem a ser usados, será pedido consentimento ' +
-      'prévio.') +
+    p('O rd_escolha e o rd_vis valem em rendorium.com e em app.rendorium.com, para a resposta ser uma só. ' +
+      'Não usamos cookies de publicidade, e o rd_vis é o único que mede a utilização, só com o teu ' +
+      'consentimento.') +
 
-    h('12. Menores') +
+    '<h3 class="lg-h" id="rasto-de-utilizacao">12. Rasto de utilização, só com o teu consentimento</h3>' +
+    p('Se aceitares, na faixa de rendorium.com ou na pergunta da app, registamos como usas a app e a ' +
+      'página, para percebermos o que é difícil de usar e o melhorarmos. Sem o teu sim não se regista ' +
+      'nada, e a página nem carrega o código que o faz.') +
+    p('O que fica registado:') +
+    ul([
+      '<b>onde tocas:</b> a posição na janela e o elemento em que tocaste (um botão, uma ligação), nunca o ' +
+      'texto da página;',
+      '<b>o que abres:</b> os ecrãs, as janelas e as páginas que abres e fechas, e as partes de ' +
+      'rendorium.com que chegas a ver;',
+      '<b>quando guardas</b>, e quando um campo dá erro ao guardar (qual o campo, nunca o valor);',
+      '<b>o tamanho da janela</b> do aparelho.',
+    ]) +
+    p('<b>Nunca</b> registamos o que escreves, os valores dos campos nem os dados da tua conta e dos teus ' +
+      'imóveis.') +
+    p('<b>Com que identificador:</b> um código sem nome (por exemplo P-7K2QXM), sorteado ao acaso e não ' +
+      'tirado da tua conta nem do teu email. Não é anónimo: se tiveres conta, o código fica ligado a ela, e ' +
+      'o que se registou antes de entrares, no mesmo aparelho, junta-se-lhe.') +
+    p('<b>Fundamento:</b> o teu consentimento (artigo 6.º, n.º 1, alínea a) do RGPD), que podes retirar a ' +
+      'qualquer momento, sem afetar o que foi feito antes.') +
+    p('<b>Quem vê:</b> só a equipa do Rendorium, no back office. Quem administra o serviço vê o rasto de ' +
+      'todos e pode chegar à conta a que pertence; quem dá suporte só vê o de quem lhe abriu um pedido de ' +
+      'ajuda. Não o partilhamos com mais ninguém nem o usamos para publicidade.') +
+    p('<b>Durante quanto tempo:</b> cada registo apaga-se ao fim de <b>90 dias</b>. Apagar a conta apaga ' +
+      'o rasto dela. As cópias de segurança diárias não levam o rasto.') +
+    p('<b>Como mudar de ideias:</b> em rendorium.com, no fundo da página; na app, nas <b>Definições</b>. ' +
+      'Vale a resposta mais recente: a que deres num sítio passa para o outro quando abrires a app nesse ' +
+      'aparelho, para a conta e para o aparelho. Recusar depois de aceitar deixa de registar e <b>apaga ' +
+      'logo</b> o que já se registou deste aparelho e, se tiveres sessão iniciada, da tua conta, com o ' +
+      'identificador do aparelho.') +
+
+    h('13. Menores') +
     p('O serviço destina-se a maiores de 18 anos. Não recolhemos conscientemente dados de menores; se ' +
       'soubermos que o fizemos, apagamo-los.') +
 
-    h('13. Alterações') +
+    h('14. Alterações') +
     p('Se esta política mudar de forma significativa, avisamos na aplicação e pedimos nova aceitação. A ' +
       'data no início indica a versão em vigor.');
 

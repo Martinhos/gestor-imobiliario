@@ -22,6 +22,8 @@ const JS = 'text/javascript; charset=utf-8';
    recebe; `texto` vai buscar o conteúdo ao módulo da página. */
 const RECURSOS = {
   '/paginas/landing.css': { tipo: CSS, texto: async () => (await import('./landing.js')).CSS_LANDING },
+  // o rasto da montra: só a página de quem aceitou o pede (landing.js:paginaLanding)
+  '/paginas/rasto-montra.js': { tipo: JS, texto: async () => (await import('./landing.js')).GUIAO_RASTO_MONTRA },
   '/paginas/legal.css': { tipo: CSS, texto: async () => (await import('./legal-vista.js')).CSS_LEGAL },
   '/paginas/documento.js': { tipo: JS, texto: async () => (await import('./legal-vista.js')).GUIAO_LEGAL },
   '/paginas/teste.css': { tipo: CSS, texto: async () => (await import('./teste.js')).CSS_TESTE },

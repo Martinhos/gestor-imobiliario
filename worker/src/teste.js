@@ -22,6 +22,7 @@ import { now, TERMS_VERSION, CSP_ESTRITA } from './lib/http.js';
 import { purgeAccount } from './lib/acesso.js';
 import { newUserId, createSession, destroySession, sessionCookie, tokensDoPedido, getSessionUser } from './auth.js';
 import { auditar } from './lib/auditoria.js';
+import { ligarAoEntrar } from './lib/rasto.js';
 import { navegador } from './rotas/relatos.js';
 import { nomeNoDiscord } from './lib/bot.js';
 
@@ -397,6 +398,8 @@ export async function rotaTeste(c) {
 
   const token = await createSession(env, conta.id, conta.sess_epoch || 0, agenteDe(c.request));
   await largarSessoesDoBrowser(env, c.request, token);
+  // o aparelho que disse sim ao rasto liga-se a esta conta, como numa entrada (nunca lança)
+  await ligarAoEntrar(env, c.request, conta.id);
   await auditar(env, { discordId: quem || 'sistema', nome: '/test', papeis: ['bot'] },
     'teste.sessao', conta.id,
     retomada ? 'conta retomada, dados intactos'

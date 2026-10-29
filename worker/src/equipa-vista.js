@@ -532,6 +532,63 @@ dialog.janela::backdrop{background:var(--veu)}
 /* ---- rasto ---- */
 .rs-filtro{padding:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .rs-filtro .procura{flex:1 1 260px;max-width:420px}
+/* o voltar da linha do tempo é filho do miolo (uma coluna): sem isto estica e centra */
+.rs-volta{align-self:flex-start}
+/* o rasto das pessoas (equipa-guiao.js:verRastoPessoas, verRastoResumo,
+   verRastoPessoa): as abas, a barra dos filtros, o pseudónimo em monoespaçado,
+   os selos dos sinais com contorno e letra na cor (lêem-se quando o browser
+   escurece o fundo à força) e a linha de cada sinal marcada no contorno */
+.rs-abas{gap:8px}
+.rs-barra{padding:14px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.rs-pid{font-family:var(--letra-mono);font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.cab h1 .rs-pid{font-size:.8em}
+.rs-pessoa-id{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
+.rs-sinais{display:inline-flex;flex-wrap:wrap;gap:4px;justify-content:flex-end}
+.badge.rs-s{border:1px solid currentColor}
+.badge.rs-s b{font-weight:700}
+.rs-tb td{vertical-align:top}
+.rs-alvo{font-size:12.5px;overflow-wrap:anywhere}
+.rs-alvo-bloco{display:flex;flex-direction:column;gap:2px;min-width:0}
+.rs-tb td.rs-n{font-weight:700}
+.rs-tb td.rs-n.wa{color:var(--warn)}
+.rs-tb td.rs-n.dg{color:var(--danger)}
+.rs-ev tr.rs-sinal td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
+.rs-ev tr.rs-sinal.dg td:first-child{box-shadow:inset 3px 0 0 var(--danger)}
+.rs-ev tr.rs-sinal td{color:var(--warn);font-weight:600}
+.rs-ev tr.rs-sinal.dg td{color:var(--danger)}
+.rs-ev tr.rs-passa td{padding:8px 16px;color:var(--accent-text);font-weight:600;font-size:13px;border-top:1px dashed var(--accent)}
+.rs-ev tr.rs-passa .i{vertical-align:-3px;margin-right:6px}
+.rs-sessoes{display:flex;flex-direction:column;gap:10px}
+.rs-sessao{overflow:hidden}
+.rs-sessao>summary{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;min-height:48px;padding:12px 18px;cursor:pointer;list-style:none}
+.rs-sessao>summary::-webkit-details-marker{display:none}
+.rs-sessao>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.rs-sessao[open]>summary{border-bottom:1px solid var(--line)}
+.rs-sessao[open]>summary .st-seta{transform:none}
+.rs-sessao-selos{display:inline-flex;flex-wrap:wrap;gap:4px;margin-left:auto}
+.rs-passa-entre{display:flex;align-items:center;gap:8px;padding:2px 18px;color:var(--accent-text);font-size:13px;font-weight:600}
+.rs-passa-entre .i{transform:rotate(-90deg)}
+.rs-no-pedido{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.rs-no-pedido:empty,.rs-na-ficha:empty{display:none}
+.rs-na-ficha .btn .rs-pid{font-size:13px}
+.rs-legenda>summary{display:flex;align-items:center;gap:10px;min-height:48px;padding:12px 18px;cursor:pointer;list-style:none}
+.rs-legenda>summary::-webkit-details-marker{display:none}
+.rs-legenda>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.rs-legenda[open]>summary .st-seta{transform:none}
+.rs-legenda dl{margin:0;padding:0 18px 16px;display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:baseline}
+.rs-legenda dd{margin:0}
+abbr[title]{text-decoration:none}
+@media(hover:hover) and (pointer:fine){.rs-sessao>summary:hover,.rs-legenda>summary:hover{background:var(--tint)}}
+@media(max-width:899px){.rs-sessao>summary,.rs-legenda>summary{padding:12px 14px}.rs-legenda dl{padding:0 14px 14px}.rs-passa-entre{padding:2px 14px}}
+@media(max-width:640px){
+  .rs-ev tr.rs-sinal{box-shadow:inset 3px 0 0 var(--warn)}
+  .rs-ev tr.rs-sinal.dg{box-shadow:inset 3px 0 0 var(--danger)}
+  .rs-ev tr.rs-sinal td:first-child{box-shadow:none}
+  .tb.empilha tr.rs-passa td{display:block;text-align:left;padding:4px 0}
+  .tb.empilha tr.rs-passa td::before{content:none}
+  .rs-legenda dl{grid-template-columns:1fr}
+  .rs-sessao-selos{margin-left:0}
+}
 
 /* o dedo precisa de 44px; e quem pediu menos movimento não vê a roda a correr */
 @media(pointer:coarse){.btn.sm,.chip,.nv,.eq-sair,.menu-op,.ligacao{min-height:44px}.eq-toast-x{width:44px;height:44px}.lado-linha{padding:10px 0}}

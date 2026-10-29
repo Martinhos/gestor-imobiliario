@@ -75,6 +75,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Fora da app: a montra, os emails e o back office
 - A app em serviços
 - Os tickets de QA
+- O rasto das pessoas
 - A CSP sem «unsafe-inline»
 - Os eventos declaram-se, e uma ação é uma gramática
 - Os estilos vivem na folha, e nunca no HTML
@@ -5630,8 +5631,9 @@ história (landing.js:RECEITA_MES, landing.js:DESPESA_MES,
 landing.js:PRESTACAO_MES, landing.js:CASAS): as rendas dos Imóveis somam o
 último mês do gráfico, e o que o hero diz estar por confirmar é o que os
 Planeados mostram. As alturas das barras são regras :nth-child geradas dos
-dados (landing.js:alturasDasBarras), porque a página não tem JavaScript nem
-atributos de estilo. A montra só promete o que a produção tem: nada do IRS
+dados (landing.js:alturasDasBarras), porque a página não tem atributos de
+estilo, e o único JavaScript que leva é o do rasto, a quem o aceitou («O rasto
+das pessoas»). A montra só promete o que a produção tem: nada do IRS
 enquanto a Declaração só existir em dev. O título e a descrição
 (landing.js:TITULO, landing.js:DESCRICAO) ficam nos 60 e nos 160 caracteres,
 com os termos que um senhorio procura. Das capturas antigas fica só a imagem de
@@ -6024,6 +6026,120 @@ scripts/ticket.mjs:publicadoProd, o commit dentro da etiqueta publicado, que o
 deploy de produção move depois de a produção responder): um erro fechado antes
 disso reabria-se sozinho na ocorrência seguinte. Uma base sem a 0024 (a
 produção até ao «promove») lista na mesma, e lá nenhum pedido se implementa.
+
+## O rasto das pessoas
+Com o sim de quem usa, a app e a montra guardam onde se toca, e nunca o quê,
+para se ver se as pessoas percebem a interface e os fluxos. Cada pessoa é um
+pseudónimo, o pid: `P-` e seis caracteres aleatórios, sem 0, O, 1, I nem L,
+nunca derivado do id da conta (worker/src/lib/rasto.js:novoPid). O back office
+mostra-o e nunca o nome nem o email.
+
+O consentimento é um só, para a montra e para a app, e a última escolha ganha.
+O aparelho guarda-o em dois cookies HttpOnly, Secure, SameSite=Lax, de 180
+dias, que só o worker/src/lib/rasto.js escreve e lê
+(worker/src/lib/rasto.js:cookieDoRasto): o `rd_escolha`, com a escolha e a
+hora dela, `sim.<ms>` ou `nao.<ms>` (worker/src/lib/rasto.js:valorDaEscolha),
+e o `rd_vis`, o id do aparelho, que só existe com sim. Em produção, e só nos
+três hosts dela, levam `Domain=rendorium.com`, para a montra e a app
+partilharem a escolha; em qualquer outro sítio ficam no host, também no
+percurso e no dev (worker/src/lib/rasto.js:dominioDoCookie) — o wrangler dev
+reescreve o host do pedido para o da primeira rota, e o host sozinho não
+chega. A conta guarda a escolha em `users.rasto_escolha`, com a hora. Quando a
+app abre com sessão, o `GET /api/rasto/escolha` compara as duas horas e a mais
+recente passa para o outro lado (worker/src/lib/rasto.js:sincronizarEscolha).
+Recusar depois de aceitar apaga logo o pid do aparelho, com os eventos, e, com
+sessão, o da conta (worker/src/lib/rasto.js:apagarAoRecusar); aceitar de novo
+começa com um pid novo.
+
+A montra pergunta numa faixa em HTML puro (landing.js:faixaDaEscolha): um
+formulário para o `POST /consentimento`, com «Recusar» e «Aceitar» da mesma
+classe e do mesmo tamanho — recusar é tão fácil como aceitar —, a frase do que
+se regista e a ligação à secção da Privacidade que o explica. Vai no fluxo, a
+seguir ao hero, e não fixa por cima de nada: no telemóvel não tapa o título
+nem o botão principal. Só aparece a quem ainda não respondeu; depois, o rodapé
+diz o que está em vigor neste aparelho e deixa mudar (landing.js:rodapeDaEscolha).
+O worker trata o /consentimento em qualquer host, antes de reencaminhar a raiz
+para a app, e volta com um 303 ao caminho de onde veio, que só pode ser deste
+site (worker/src/lib/rasto.js:rotaConsentimento). A resposta vem num cookie,
+por isso a montra nunca vai para uma cache partilhada (Cache-Control private,
+no-cache e Vary: Cookie, em landing.js:paginaLanding).
+
+A app pergunta numa janela da casa, e não num portão (cloud/rasto.js:rstPerguntar):
+uma vez, com a escolha por fazer, e só com o ecrã livre em duas tentativas
+seguidas (cloud/rasto.js:rstTentarPergunta) — a régua da apresentação
+(apresentacao.js:aprEcraOcupado), mais as boas-vindas, a apresentação do
+separador por abrir (apresentacao.js:aprQueAbrir) e as novidades
+(novidades.js:ecraLivre). O título é «Ajudas-nos a melhorar o Rendorium?», a
+frase é a da montra, e Recusar e Aceitar têm o mesmo peso (dois .btn, sem
+primário). Fechá-la no ✕, no fundo ou no voltar não é escolha: o aparelho
+guarda só a hora em que se fechou (cloud/rasto.js:rstMarcarPerguntado), e a
+pergunta volta numa abertura da app passados 7 dias
+(cloud/rasto.js:rstJaPerguntado). Nas Definições, na secção App a seguir à
+Ajuda, a linha «Ajudar a melhorar» é ela própria o interruptor, um botão
+role=switch (cloud/rasto.js:rstLinhaDasDefinicoes, estilos.css:.rst-def); o
+estado diz-se em palavras e na cor da letra, não só no fundo do interruptor.
+Desligar não pede confirmação e o aviso diz que o registado foi apagado.
+
+Um evento é `{t, tipo, ecra, janela, alvo, x, y, vw, vh, sinal}`. O alvo é um
+descritor, nunca texto, valores, aria-label, nomes nem ids de registos
+(cloud/rasto.js:rstDescritor): `click:<ação do data-click>`, `<tag>#<id>` com o
+id cortado ao prefixo quando tem algarismos, `<tag>.<1.ª classe>`, ou uma
+ligação pelo destino — o host só quando é de fora, o caminho e as chaves da
+pesquisa sem os valores (`a:app.rendorium.com/?criar`); um mailto: ou um tel:
+fica só o esquema. O servidor não confia no cliente e corta outra vez
+(worker/src/lib/rasto.js:limparEvento, worker/src/lib/rasto.js:descritorDeLigacao).
+Os toques apanham-se num ouvinte no documento, na captura e passivo; um
+levantar a mais de 10px do pousar é um arrasto e não conta. Os sinais
+decide-os o cliente: em vão quando nada responde por cima do alvo
+(cloud/rasto.js:rstEInterativo; um tabindex="-1" não responde), repetido do 3.º
+toque seguido a 24px e 1 s em diante (ganha ao em vão), vai-e-volta numa
+janela ou num ecrã aberto e fechado em 4 s sem um toque útil, desistência
+quando se escreveu e se fechou sem guardar, e erro ao guardar (o
+componentes.js:falhaCampo embrulhado). Os eventos saem em lotes de até 50, a
+cada 15 s e quando a página sai ou se esconde, pelo sendBeacon
+(cloud/rasto.js:rstMandar): da app para o `POST /api/rasto`, da montra para o
+`POST /rasto`, que respondem sempre 204 e só guardam com o sim
+(worker/src/lib/rasto.js:rotaRastoDaMontra), com um travão por pid e outro por
+IP para o que cria linhas (worker/src/lib/rasto.js:travao). Na montra o
+script, o /paginas/rasto-montra.js (landing.js:GUIAO_RASTO_MONTRA), só vai na
+página de quem aceitou; manda também a página aberta e cada secção que entra à
+vista, por IntersectionObserver e nunca pelo scroll. O que o rasto embrulha na
+app (o render, o go, o openModal, o closeModal, o falhaCampo, o CW.logout)
+chama primeiro a função de antes, e o que é dele vai num try/catch: uma falha
+do rasto nunca parte a app.
+
+Ao criar conta, ao entrar e na ligação do /test, um aparelho que disse sim
+liga-se à conta: o rasto da montra de antes da conta junta-se ao dela
+(worker/src/lib/rasto.js:ligarVisitante); um aparelho que já era de outra conta
+passa a apontar para esta, e os eventos ficam com quem os fez. Os eventos vivem
+90 dias, podados no cron diário com uma linha no op_log
+(worker/src/lib/rasto.js:podarRasto); apagar a conta apaga o rasto dela no mesmo
+lote (worker/src/lib/acesso.js:purgeAccount); a cópia diária para o R2 não leva
+as tabelas `rasto_*` (worker/src/salvaguarda.js:tabelasDaBase).
+
+No back office, o Rasto tem duas vistas (equipa-guiao.js:mudarVistaRasto):
+Pessoas e Equipa, a auditoria do que a equipa faz. O separador abre ao master e
+ao admin (equipa-guiao.js:veRastoTodos); a Equipa é só do master, e o admin
+entra direto nas Pessoas. As Pessoas mostram cada pid em monoespaçado, com a
+última atividade, as sessões, os eventos, as origens (montra, app) e os sinais
+em selos com nome e contagem — «Toques em vão», «Toques repetidos»,
+«Vai-e-volta», «Desistências», «Erros ao guardar» —, em 7, 30 ou 90 dias, pela
+mais recente ou pela que tem mais sinais (equipa-guiao.js:verRastoPessoas,
+equipa-guiao.js:ordenarRasto). A pessoa abre a linha do tempo
+(equipa-guiao.js:verRastoPessoa): uma secção por sessão, a mais recente
+primeiro e aberta, e cada evento com a hora ao segundo, a origem, o tipo, o
+ecrã, a janela, o alvo em código e a posição do toque; um evento com sinal
+destaca-se no contorno e na cor da letra, e a passagem da montra para a app
+lê-se na linha. O Resumo por ecrã soma os sinais de toda a gente por ecrã e
+alvo, do maior para o menor (equipa-guiao.js:verRastoResumo): é o quadro de onde
+a interface confunde mais gente. O suporte não tem o separador: no detalhe de
+um pedido que vê, «Ver o rasto» aparece quando quem o escreveu aceitou
+(equipa-guiao.js:rastoDoPedido) e abre a linha do tempo dessa pessoa, com
+«Voltar ao pedido» e sem a lista nem a ficha. Na ficha de uma conta, o master
+e o admin têm «Ver o rasto da pessoa» (equipa-guiao.js:rastoDaConta). Quem vê
+o quê decide-o uma função só (worker/src/lib/rasto.js:podeVerRasto), cada
+consulta da linha do tempo de alguém fica no audit_log (`rasto.ver`), e as
+contas de teste ficam de fora em produção (worker/src/lib/rasto.js:semContasDeTeste).
 
 ## A CSP sem «unsafe-inline»
 A política da app não deixa correr nada que esteja escrito dentro do HTML.

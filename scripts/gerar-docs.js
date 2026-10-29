@@ -71,6 +71,8 @@ const MAPA = [
       'scripts/ticket.mjs'] },
   { id: 'qa', titulo: 'Tickets de QA (só fora de produção)',
     ficheiros: ['worker/src/rotas/qa.js', 'web/cloud/qa.js', 'scripts/qa.mjs'] },
+  { id: 'rasto', titulo: 'O rasto das pessoas (só com o sim delas)',
+    ficheiros: ['worker/src/rotas/rasto.js', 'worker/src/lib/rasto.js', 'web/cloud/rasto.js'] },
   { id: 'correio', titulo: 'Correio (Resend e Email Routing)',
     ficheiros: ['worker/src/lib/correio.js', 'worker/src/lib/enderecos.js'] },
   { id: 'discord', titulo: 'Discord (bot e papéis)',

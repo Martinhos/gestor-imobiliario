@@ -166,7 +166,10 @@ h1{font-family:'Bricolage Grotesque','Geist',system-ui,sans-serif;font-weight:65
 .lg li{margin:0 0 7px}
 .lg b{font-weight:600}
 .lg .lg-h{font-family:'Bricolage Grotesque','Geist',system-ui,sans-serif;font-size:19px;font-weight:650;
-  line-height:1.25;letter-spacing:-.015em;margin:32px 0 10px}
+  line-height:1.25;letter-spacing:-.015em;margin:32px 0 10px;
+  /* uma âncora (a faixa da montra leva a #rasto-de-utilizacao) para o título
+     abaixo do cabeçalho pegajoso, de 64 px, e não debaixo dele */
+  scroll-margin-top:80px}
 .lg a{color:var(--accent)}
 .aviso{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px;
   color:var(--muted);font-size:15px}

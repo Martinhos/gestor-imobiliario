@@ -146,6 +146,16 @@ export default {
         await recordReport(env, ctx, 'infra', 'Varredura dos anexos falhou',
           String((e && e.stack) || (e && e.message) || e).slice(0, 800));
       }
+      /* o rasto das pessoas vive 90 dias (lib/rasto.js:podarRasto, que nunca
+         lança): os eventos mais velhos e os pids anónimos que ficaram vazios */
+      try {
+        const { podarRasto } = await import('./lib/rasto.js');
+        const p = await podarRasto(env);
+        await registarOp(env, 'rasto', p.ok,
+          p.ok ? p.eventos + ' eventos e ' + p.pids + ' pseudónimos podados' : p.erro);
+      } catch (e) {
+        await registarOp(env, 'rasto', false, String((e && e.message) || e));
+      }
       // o resultado é o do envio a sério: um resumo que não chegou a lado
       // nenhum registado como verde era o batimento a mentir
       let entregue = null;
@@ -194,6 +204,18 @@ export default {
     const caminho = url.pathname.replace(/^\/|\/$/g, '');
     const naRaiz = url.hostname === 'rendorium.com' || url.hostname === 'www.rendorium.com';
 
+    /* O consentimento do rasto (o formulário da faixa da montra, sem JS) e a
+       recolha da montra (o sendBeacon dela), em qualquer host e ANTES do
+       reencaminhamento da raiz para a app: a montra vive em rendorium.com e é
+       lá que os pede (lib/rasto.js). Depois da porta do dev, que fica
+       primeiro. */
+    if (request.method === 'POST' && (url.pathname === '/consentimento' || url.pathname === '/rasto')) {
+      const { rotaConsentimento, rotaRastoDaMontra } = await import('./lib/rasto.js');
+      return harden(url.pathname === '/consentimento'
+        ? await rotaConsentimento(env, request, url)
+        : await rotaRastoDaMontra(env, request, url));
+    }
+
     /* Os CSS e os JavaScript das páginas que o worker escreve, que vão com a
        CSP_ESTRITA e já não trazem nada em linha (paginas-recursos.js).
        Antes de tudo: a landing e os documentos legais também os pedem no
@@ -218,7 +240,9 @@ export default {
        para o que já está em «/». */
     if (caminho === 'montra' || (naRaiz && url.pathname === '/')) {
       const { paginaLanding } = await import('./landing.js');
-      return harden(paginaLanding({ raiz: naRaiz }));
+      // a escolha do rasto deste aparelho (o cookie rd_escolha): sem ela, a faixa
+      const { lerCookiesDoRasto } = await import('./lib/rasto.js');
+      return harden(paginaLanding({ raiz: naRaiz, escolha: lerCookiesDoRasto(request).escolha }));
     }
 
     /* O domínio raiz é a montra; a app vive em app.rendorium.com. Qualquer

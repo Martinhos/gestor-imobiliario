@@ -28,6 +28,7 @@ import { rotasEstado } from './rotas/estado.js';
 import { rotasSync } from './rotas/sync.js';
 import { rotasTickets } from './rotas/tickets.js';
 import { rotasQa } from './rotas/qa.js';
+import { rotasRasto } from './rotas/rasto.js';
 import { rotasAnexos } from './rotas/anexos.js';
 import { rotasCasas, rotasTransferencias } from './rotas/casas.js';
 import { rotasConexoes } from './rotas/conexoes.js';
@@ -45,6 +46,7 @@ const COM_SESSAO = [
   rotasSync,
   rotasTickets,
   rotasQa,
+  rotasRasto,
   rotasAnexos,
   rotasColaboradores,
   rotasGrupos,

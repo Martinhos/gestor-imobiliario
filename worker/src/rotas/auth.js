@@ -4,6 +4,7 @@ import { newUserId, createSession, destroySession, sessionCookie, tokensDoPedido
 import { verifyIdToken } from '../oauth.js';
 import { json, err, body, now, clientIp, weakPassword, TERMS_VERSION } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
+import { ligarAoEntrar } from '../lib/rasto.js';
 
 // Quanto vale uma ligação de reposição da palavra-passe: 1 hora, uma vez.
 const REPOR_VALIDADE = 3600 * 1000;
@@ -71,6 +72,8 @@ export async function rotasAuth(c) {
       .bind(id, email, String(b.name || '').trim(), hash, salt, v, now(), TERMS_VERSION, now())
       .run();
     const token = await createSession(env, id);
+    // o visitante da montra que disse sim passa a ser esta conta (lib/rasto.js; nunca lança)
+    await ligarAoEntrar(env, request, id);
     return json({ id, email, name: String(b.name || '').trim(), ...tokenNoCorpo(env, request, token) }, 201, {
       'Set-Cookie': sessionCookie(token),
     });
@@ -170,6 +173,7 @@ export async function rotasAuth(c) {
       } catch (e) { /* fica para a próxima entrada: entrar não depende disto */ }
     }
     const token = await createSession(env, user.id, user.sess_epoch || 0);
+    await ligarAoEntrar(env, request, user.id);
     return json({ id: user.id, email: user.email, name: user.name, ...tokenNoCorpo(env, request, token) }, 200, {
       'Set-Cookie': sessionCookie(token),
     });
@@ -232,6 +236,7 @@ export async function rotasAuth(c) {
       return err(403, 'Esta conta está suspensa.');
     }
     const token2 = await createSession(env, user.id, user.sess_epoch || 0);
+    await ligarAoEntrar(env, request, user.id);
     return json({ id: user.id, email: user.email, name: user.name, ...(nova ? { novo: true } : {}), ...tokenNoCorpo(env, request, token2) }, 200, {
       'Set-Cookie': sessionCookie(token2),
     });

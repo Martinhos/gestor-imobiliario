@@ -31,6 +31,7 @@
 
 import { now } from './http.js';
 import { normalizarPerms, permDoKind, podeAddKind, fraseRecusa, fundirPlaneado, planeadoTermina } from './permissoes.js';
+import { apagarRastoDaConta } from './rasto.js';
 
 /* A condição que tira de uma consulta por grupo quem saiu da casa: com gh a
    linha de shared_group_houses e m a de shared_group_members. É a mesma em
@@ -574,10 +575,13 @@ async function purgarConta(env, uid) {
       env.DB.prepare('DELETE FROM collab_invites WHERE owner_id = ?').bind(uid),
       env.DB.prepare('DELETE FROM share_links WHERE owner_id = ?').bind(uid),
       env.DB.prepare('DELETE FROM share_requests WHERE from_user = ?1 OR to_user = ?1').bind(uid),
+      // o rasto das pessoas (lib/rasto.js): os eventos, os aparelhos e o pseudónimo
+      ...apagarRastoDaConta(env, uid),
       // lápide: a identidade some, as referências ficam legíveis
       env.DB.prepare(
         `UPDATE users SET name = '[deleted]', email = 'apagado-' || id || '@invalido.local',
-           pass_hash = '', pass_salt = '', google_sub = NULL, apple_sub = NULL, deleted_at = ?
+           pass_hash = '', pass_salt = '', google_sub = NULL, apple_sub = NULL,
+           rasto_escolha = NULL, rasto_escolha_at = NULL, deleted_at = ?
          WHERE id = ?`
       ).bind(now(), uid)
     );

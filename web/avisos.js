@@ -27,6 +27,22 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 44,
+    data: '2026-10-29',
+    titulo: 'Ajudar a melhorar o Rendorium',
+    seccoes: [
+      {
+        titulo: 'O rasto de utilização',
+        afeta: ['app', 'conta'],
+        itens: [
+          'Podes ajudar-nos a melhorar o Rendorium: se aceitares, a app guarda onde tocas e que ecrãs abres, com um identificador sem o teu nome, para percebermos o que é difícil de usar. Nunca o que escreves nem os teus dados.',
+          'A app pergunta uma vez. Mudas quando quiseres em Definições, «Ajudar a melhorar», e desligar apaga o que já foi registado. O que fica registado apaga-se ao fim de 90 dias.',
+          'A Política de Privacidade explica tudo numa secção nova, e por isso os termos pedem uma nova aceitação.',
+        ],
+      },
+    ],
+  },
+  {
     v: 43,
     data: '2026-10-27',
     titulo: 'A app apresenta-se, e o ícone fica cobalto',
