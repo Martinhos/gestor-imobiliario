@@ -597,7 +597,9 @@ async function fecharBoasVindas(pagina) {
   const voltou = await pagina.waitForSelector('.modal.open.apr-boas-vindas', { timeout: 5000 }).catch(() => null);
   if (!voltou) throw new Error('o «Voltar à apresentação» não reabriu as boas-vindas (cloud/apresentacao.js:aprResponder)');
   if (!(await fecharEPerguntar())) throw new Error('fechadas a meio outra vez, as boas-vindas não perguntaram: o «Voltar» gastou a pergunta');
-  await pagina.click('.modal.open.apr-pergunta .head .iconbtn');
+  // sem responder, pelo Esc: a pergunta é baixa e a pílula do QA (fora de
+  // produção) pode estar por cima do ✕ da cabeça dela, e apanhava o toque
+  await pagina.keyboard.press('Escape');
   await pagina.waitForFunction(() => !document.querySelector('.modal.open'), null, { timeout: 5000 });
   // a chave nasce com 0 («por ver», apresentacao.js:aprGuardarPorVer): vista é o 1
   const vistas = await pagina.evaluate(() => (db.settings || {}).apresentacoes || {});
