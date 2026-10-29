@@ -377,6 +377,12 @@ dialog.janela::backdrop{background:var(--veu)}
 .lado-linha:hover .lado-tit{text-decoration:underline}
 .pd-contexto{display:flex;gap:8px;flex-wrap:wrap;align-items:baseline;overflow-wrap:anywhere}
 .pd-cat{display:flex;flex-direction:column;gap:8px}
+/* a decisão sobre um pedido de uma pessoa (aceitar ou recusar), e a resposta proposta */
+.pd-decisao{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--line);border-radius:12px}
+.pd-decisao p{flex:1 1 260px;display:flex;flex-direction:column;gap:2px}
+.pd-decisao-tit{font-weight:600}
+.pd-decisao-botoes{display:flex;gap:8px}
+.pd-proposta{padding:10px 12px;border-radius:10px;background:var(--accent-soft);color:var(--accent-text)}
 @container (max-width:660px){.pd-lado{border-left:0;border-top:1px solid var(--line)}}
 /* o fio: o que a pessoa escreveu, as respostas e as notas internas */
 .ms{display:flex;flex-direction:column;gap:6px;padding:14px;border-radius:12px;background:var(--chip)}

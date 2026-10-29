@@ -367,6 +367,85 @@ describe('o fio dos pedidos', () => {
   });
 });
 
+/* ---------------- a decisão: aceitar ou recusar, e a proposta ------------- */
+
+describe('aceitar e recusar os pedidos das pessoas', () => {
+  const url = (pid, acao) => '/api/equipa/pedidos/' + pid + '/' + acao;
+
+  test('aceitar regista quem e quando, e só uma vez', async () => {
+    const env = ambiente();
+    const pid = await novoPedido(env, await novaConta(env));
+    const r = await corpoDe(await chamar(env, SUPORTE, 'POST', url(pid, 'aceitar'), {}));
+    assert.equal(r.pedido.accepted_by, 's1');
+    assert.equal(r.pedido.accepted_by_nome, 'Sofia');
+    assert.ok(r.pedido.accepted_at > 0);
+    assert.equal(r.pedido.accepted_changes, null);
+    assert.equal(r.pedido.status, 'criado');
+    assert.deepEqual(r.msgs, []);
+    // a Dina chega segundo: fica a saber quem foi
+    const de2 = await chamar(env, DEV, 'POST', url(pid, 'aceitar'), {});
+    assert.equal(de2.status, 403);
+    const outra = await chamar(env, MASTER, 'POST', url(pid, 'aceitar'), {});
+    assert.equal(outra.status, 409);
+    assert.match((await outra.json()).error, /Sofia/);
+  });
+
+  test('aceitar com alterações guarda-as e deixa uma nota interna', async () => {
+    const env = ambiente();
+    const pid = await novoPedido(env, await novaConta(env));
+    const r = await corpoDe(await chamar(env, SUPORTE, 'POST', url(pid, 'aceitar'), { texto: 'Só no telemóvel, e sem mudar o menu.' }));
+    assert.equal(r.pedido.accepted_changes, 'Só no telemóvel, e sem mudar o menu.');
+    assert.deepEqual(r.msgs.map((m) => [m.tipo, m.texto]), [['nota', 'Aceite com alterações: Só no telemóvel, e sem mudar o menu.']]);
+    assert.deepEqual((await auditoria(env)).map((x) => x.acao), ['pedido.aceitar']);
+  });
+
+  test('os erros não se aceitam nem se recusam', async () => {
+    const env = ambiente();
+    const pid = await novoPedido(env, await novaConta(env), { categoria: 'client', assunto: 'TypeError' });
+    assert.equal((await chamar(env, MASTER, 'POST', url(pid, 'aceitar'), {})).status, 400);
+    assert.equal((await chamar(env, MASTER, 'POST', url(pid, 'recusar'), { texto: 'não' })).status, 400);
+  });
+
+  test('recusar pede a justificação, fecha o pedido e responde à pessoa com ela', async () => {
+    const env = ambiente();
+    const pid = await novoPedido(env, await novaConta(env));
+    await chamar(env, SUPORTE, 'POST', url(pid, 'aceitar'), { texto: 'assim' });
+    assert.equal((await chamar(env, SUPORTE, 'POST', url(pid, 'recusar'), { texto: '   ' })).status, 400);
+    const r = await corpoDe(await chamar(env, SUPORTE, 'POST', url(pid, 'recusar'), { texto: 'Não vamos mudar isto agora.' }));
+    assert.equal(r.pedido.status, 'concluido');
+    assert.equal(r.pedido.reply, 'Não vamos mudar isto agora.');
+    assert.equal(r.pedido.refused_by_nome, 'Sofia');
+    assert.ok(r.pedido.refused_at > 0);
+    // quem recusou desfaz a aceitação que havia
+    assert.equal(r.pedido.accepted_at, null);
+    assert.equal(r.pedido.accepted_changes, null);
+    assert.equal(r.msgs.at(-1).tipo, 'resposta');
+    assert.equal((await chamar(env, SUPORTE, 'POST', url(pid, 'recusar'), { texto: 'outra vez' })).status, 409);
+    // recusado não se aceita; reabrir larga a recusa e deixa decidir de novo
+    assert.equal((await chamar(env, SUPORTE, 'POST', url(pid, 'aceitar'), {})).status, 409);
+    const aberto = await corpoDe(await chamar(env, SUPORTE, 'POST', url(pid, 'reabrir')));
+    assert.equal(aberto.pedido.refused_at, null);
+    assert.equal((await chamar(env, SUPORTE, 'POST', url(pid, 'aceitar'), {})).status, 200);
+    assert.deepEqual((await auditoria(env)).map((x) => x.acao), ['pedido.aceitar', 'pedido.recusar', 'pedido.reabrir', 'pedido.aceitar']);
+  });
+
+  test('a resposta proposta fica até alguém enviar uma resposta', async () => {
+    const env = ambiente();
+    const pid = await novoPedido(env, await novaConta(env));
+    await env.DB.prepare('UPDATE tickets SET draft_reply = ?, draft_at = ? WHERE id = ?').bind('Já está corrigido.', 5, pid).run();
+    const lista = await corpoDe(await chamar(env, SUPORTE, 'GET', '/api/equipa/pedidos', null, '?tipo=pessoas'));
+    assert.equal(lista.pedidos[0].proposta, 1);
+    // uma nota interna não a larga
+    let r = await corpoDe(await chamar(env, SUPORTE, 'POST', url(pid, 'nota'), { texto: 'vi' }));
+    assert.equal(r.pedido.draft_reply, 'Já está corrigido.');
+    // enviar (como estava ou mudada) larga-a
+    r = await corpoDe(await chamar(env, SUPORTE, 'POST', url(pid, 'fechar'), { texto: 'Já está corrigido, obrigado.' }));
+    assert.equal(r.pedido.draft_reply, null);
+    assert.equal(r.pedido.draft_at, null);
+    assert.equal(r.pedido.reply, 'Já está corrigido, obrigado.');
+  });
+});
+
 /* ----------------------------- respostas-tipo ---------------------------- */
 
 describe('o que não pode vazar', () => {

@@ -73,6 +73,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-28 · O dev só abre pela ligação do /test
 - 2026-10-28 · A terceira ronda de tickets de QA
 - 2026-10-28 · A APK de dev abre as ligações do /test
+- 2026-10-28 · Os pedidos das pessoas decidem-se antes, e a resposta é da equipa
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2742,3 +2743,23 @@ pede o /.well-known/assetlinks.json com a impressão do certificado da APK de
 dev, e quem a tira é o deploy, do APK que acabou de compilar — é pública, não
 precisa da chave nem de segredos, e assim muda sozinha se a chave de dev
 mudar. Uma falha a tirá-la não trava a publicação da app web: avisa e segue.
+
+## 2026-10-28 · Os pedidos das pessoas decidem-se antes, e a resposta é da equipa
+
+O Martinho pediu uma skill que resolvesse os tickets de produção e do dev (os
+pedidos da Ajuda e os erros apanhados) junto com os de QA. Com ela, quatro
+regras dele. Um pedido de uma pessoa só se implementa depois de alguém da
+equipa o aceitar no back office; primeiro pensou-se numa caixa de visto, e
+ficaram dois botões, Aceitar e Recusar, porque recusar também é uma decisão e
+tem de ficar escrita: pede uma justificação, que a pessoa recebe, e fecha o
+pedido. Quem aceita pode aceitar com alterações, e são elas que se
+implementam. Fica sempre quem decidiu e quando (a migração 0024). O Claude
+nunca responde a uma pessoa: deixa a resposta proposta no pedido, e uma pessoa
+da equipa lê-a e envia-a como está ou mudada; o email só sai nesse envio.
+E um ticket só fecha quando a correção está publicada no ambiente dele: no
+dev, com o CI verde; na produção, só depois do «promove», quando o commit já
+está dentro da etiqueta publicado, que o deploy de produção só move depois de
+a produção responder. Um erro fechado antes disso reabria-se sozinho na
+ocorrência seguinte. Até ao «promove», os de produção ficam em resolução, com
+uma nota interna e o commit. A ferramenta é o scripts/ticket.mjs, e a skill
+ticket fica na pasta acima do repositório, ao lado da qa.

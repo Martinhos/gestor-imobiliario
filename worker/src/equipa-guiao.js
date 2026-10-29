@@ -375,6 +375,8 @@ function linhaPedido(p, ativo) {
     '<span class="sub n">' + quem +
     (p.n > 1 ? ' · ' + esc(p.n) + ' vezes' : '') +
     (p.versao ? ' · versão ' + esc(p.versao) : '') +
+    (tecnico || p.status === 'concluido' && !p.refused_at ? ''
+      : p.refused_at ? ' · recusado' : p.proposta ? ' · resposta por enviar' : p.accepted_at ? ' · aceite' : ' · por decidir') +
     (p.assignee_nome ? ' · tomado por ' + esc(p.assignee_nome) : ' · #' + esc(curto(p.id))) + '</span></button>';
 }
 
@@ -428,7 +430,10 @@ function verPedido(id) {
     if (listaAtual && listaAtual.tipo === tipo) {
       // a linha da lista acompanha o que o pedido é agora (depois de responder, tomar, concluir)
       listaAtual.pedidos.forEach(function (x) {
-        if (x.id === p.id) { x.status = p.status; x.assignee_nome = p.assignee_nome; x.updated_at = p.updated_at; }
+        if (x.id === p.id) {
+          x.status = p.status; x.assignee_nome = p.assignee_nome; x.updated_at = p.updated_at;
+          x.accepted_at = p.accepted_at; x.refused_at = p.refused_at; x.proposta = p.draft_reply != null;
+        }
       });
       pintarPedidos(detalhePedido(d, tipo, true), p.id);
     } else {
@@ -485,14 +490,38 @@ function detalhePedido(d, tipo, comLista) {
         : chip(esc(CATS[c] || c), false, comAcao('mudarCategoria', [p.id, c]));
     }).join('') + '</div></div>';
 
+  /* a decisão, só nos pedidos das pessoas: um pedido só se implementa
+     depois de aceite (o Claude só pega nos aceites); recusar fecha-o com uma
+     justificação. Decidido, fica quem decidiu e quando. */
+  var decisao = '';
+  if (!tecnico) {
+    if (p.refused_at) decisao = '<p class="sub n pd-decidido">Recusado por ' + esc(p.refused_by_nome || p.refused_by || 'alguém da equipa') + ' · ' + data(p.refused_at) + '</p>';
+    else if (p.accepted_at) {
+      decisao = '<p class="sub n pd-decidido">Aceite para implementar por ' + esc(p.accepted_by_nome || p.accepted_by || 'alguém da equipa') + ' · ' + data(p.accepted_at) +
+        (p.accepted_changes ? ', com alterações (na nota interna acima)' : '') + '</p>';
+    }
+    else if (p.status !== 'concluido') {
+      decisao = '<div class="pd-decisao"><p><span class="pd-decisao-tit">Por decidir</span>' +
+        '<span class="sub">Só os pedidos aceites seguem para implementar. Recusar conclui o pedido, com a justificação para a pessoa.</span></p>' +
+        '<div class="pd-decisao-botoes"><button type="button" class="btn"' + comAcao('recusarPedido', [p.id]) + '>Recusar</button>' +
+        '<button type="button" class="btn primary"' + comAcao('aceitarPedido', [p.id]) + '>Aceitar</button></div></div>';
+    }
+  }
+  /* a resposta proposta pelo Claude depois de implementar: vem já na caixa,
+     para quem lê a enviar como está ou a mudar antes; só a envia uma pessoa */
+  var proposta = !tecnico && p.draft_reply != null && p.status !== 'concluido' ? String(p.draft_reply) : '';
+
   var resposta = '<div class="pd-resp">' +
     '<div class="pd-resp-modos" role="radiogroup" aria-label="O que escrever">' +
     '<label class="chip"><input type="radio" name="modo" id="modoResposta" class="so-leitor" checked>Responder</label>' +
     '<label class="chip"><input type="radio" name="modo" id="modoNota" class="so-leitor">Nota interna</label>' +
     '<div id="modelosSitio" class="menu">' + menuModelos() + '</div></div>' +
-    '<textarea id="resposta" class="campo" aria-label="Texto" maxlength="2000" data-contar="contaResposta" aria-describedby="respostaErro"></textarea>' +
+    (proposta ? '<p class="sub pd-proposta">Resposta proposta pelo Claude a ' + data(p.draft_at) +
+      ', depois de implementar. Lê-a, muda o que for preciso e envia: a pessoa só a recebe quando a enviares.</p>' : '') +
+    '<textarea id="resposta" class="campo" aria-label="Texto" maxlength="2000" data-contar="contaResposta" aria-describedby="respostaErro">' +
+    esc(proposta) + '</textarea>' +
     '<p class="erro-txt" id="respostaErro"></p>' +
-    '<div class="pd-resp-pe"><span class="sub n"><span id="contaResposta">0</span> / 2000 · ' +
+    '<div class="pd-resp-pe"><span class="sub n"><span id="contaResposta">' + proposta.length + '</span> / 2000 · ' +
     '<span class="so-resposta">' + (tecnico ? 'fica no pedido: não vai para ninguém' : 'a pessoa vê na app e recebe por email') + '</span>' +
     '<span class="so-nota">só a equipa vê</span></span>' +
     '<button type="button" class="btn so-resposta"' + comAcao('guardarModelo') + '>Guardar como modelo</button>' +
@@ -523,7 +552,7 @@ function detalhePedido(d, tipo, comLista) {
   }
 
   return '<section class="card pd-det" aria-label="Pedido aberto">' + cab +
-    '<div class="pd-det-corpo"><div class="pd-fio">' + fio + categoria + resposta + '</div>' +
+    '<div class="pd-det-corpo"><div class="pd-fio">' + fio + categoria + decisao + resposta + '</div>' +
     (lado ? '<aside class="pd-lado">' + lado + '</aside>' : '') + '</div></section>';
 }
 
@@ -556,6 +585,34 @@ function agir(id, acao) {
   enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/' + acao, { texto: t })
     .then(function () { if (FEITO[acao]) avisar(FEITO[acao]); verPedido(id); })
     .catch(function (e) { avisar(e.message, 'erro'); });
+}
+/* Aceita um pedido de uma pessoa para implementar: a janela deixa escrever
+   alterações ao pedido (opcional; só a equipa as vê, e são o que se
+   implementa). O servidor regista quem, quando e as alterações.
+   Recebe: id — o id do pedido (string).
+   Devolve: nada — abre a janela; ao confirmar, executa e reabre o detalhe. */
+function aceitarPedido(id) {
+  formulario('Aceitar o pedido', [{
+    nome: 'alteracoes', rotulo: 'Alterações ao pedido', tipo: 'area', obrigatorio: false, max: 2000,
+    ajuda: 'Se queres que se implemente de outra forma, escreve aqui como. Só a equipa vê.',
+  }], function (v) {
+    return enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/aceitar', { texto: v.alteracoes || '' })
+      .then(function () { avisar(v.alteracoes ? 'Pedido aceite, com as tuas alterações.' : 'Pedido aceite para implementar.'); verPedido(id); });
+  }, { texto: 'O pedido segue para implementar.', botao: 'Aceitar' });
+}
+/* Recusa um pedido de uma pessoa: a janela pede a justificação (obrigatória),
+   que a pessoa recebe como resposta, e o pedido fica concluído.
+   Recebe: id — o id do pedido (string).
+   Devolve: nada — abre a janela; ao confirmar, executa e reabre o detalhe. */
+function recusarPedido(id) {
+  formulario('Recusar o pedido', [{
+    nome: 'justificacao', rotulo: 'Porque é recusado', tipo: 'area', max: 2000,
+    ajuda: 'A pessoa recebe esta justificação na app e por email.',
+    exemplo: 'Ex: Por agora não vamos mudar isto, porque…',
+  }], function (v) {
+    return enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/recusar', { texto: v.justificacao })
+      .then(function () { avisar('Pedido recusado e concluído.'); verPedido(id); });
+  }, { texto: 'O pedido fica concluído, e não segue para implementar.', botao: 'Recusar', perigo: true });
 }
 // muda a categoria de um erro para a do chip e reabre o detalhe
 // Recebe: id — o id do pedido (string); categoria — a categoria nova (string, uma das TECNICAS).
@@ -1563,6 +1620,8 @@ var ACOES = {
   verPedido: function (d) { verPedido(d.arg); },
   agir: function (d) { agir(d.arg, d.arg2); },
   mudarCategoria: function (d) { mudarCategoria(d.arg, d.arg2); },
+  aceitarPedido: function (d) { aceitarPedido(d.arg); },
+  recusarPedido: function (d) { recusarPedido(d.arg); },
   usarModelo: function (d) { usarModelo(d.arg); },
   guardarModelo: function () { guardarModelo(); },
   verPessoas: function () { verPessoas(ultimaProcura); },

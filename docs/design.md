@@ -5659,6 +5659,23 @@ abre a janela de confirmação, o resultado diz-se no aviso de baixo, e
 desligar um serviço pergunta numa faixa âmbar do próprio cartão, com os
 dependentes que caem junto (equipa-guiao.js:mostrarAvisoDesligar).
 
+Um pedido de uma pessoa decide-se antes de se implementar. Enquanto está por
+decidir, o detalhe tem o cartão «Por decidir» com Recusar e Aceitar, e a
+linha da lista diz «por decidir» (depois «aceite», «recusado» ou «resposta
+por enviar»). Aceitar abre a janela com «Alterações ao pedido», opcional e só
+para a equipa (equipa-guiao.js:aceitarPedido): o que lá se escreve fica com a
+aceitação e numa nota interna, e é isso que se implementa quando não bate com
+o pedido. Recusar pede a justificação, obrigatória, que a pessoa recebe como
+resposta, e conclui o pedido (equipa-guiao.js:recusarPedido). Fica quem
+decidiu e quando, no pedido e no rasto (migrations/0024_pedidos_aceites.sql,
+worker/src/equipa-api.js:rotasEquipaApi); o servidor recusa aceitar um pedido
+já decidido ou concluído, e reabrir larga a recusa. Os erros não passam por
+aqui. Depois de implementar, quem programa não responde à pessoa: deixa a
+resposta proposta, que o detalhe mete já na caixa de responder, com uma nota a
+dizer de onde veio. Quem a lê envia-a como está ou muda-a primeiro, e só nesse
+envio a pessoa a recebe (worker/src/equipa-api.js:avisarDono) e a proposta
+sai.
+
 Fora de produção, a Operação do back office (master e admin) mostra as
 sessões de teste abertas (equipa-guiao.js:verSessoesTeste): cada browser onde
 uma ligação do /test foi aberta e ainda tem sessão, agrupado pela conta do
@@ -5990,6 +6007,23 @@ wrangler sem shell e escapa o SQL, porque as notas trazem texto livre. Só
 escreve com comecar (os novos passam a em resolução; recusa um resolvido),
 resolver (a nota e uma linha «Commit: <sha>») e reabrir. Remover
 não existe no script: é de quem testa, na app.
+
+Os pedidos da Ajuda e os erros apanhados (a tabela tickets, de produção e do
+dev) leem-se e fecham-se com `node scripts/ticket.mjs listar | comecar | nota
+| publicado | propor | concluir | reabrir`, e a skill ticket (ao lado da qa)
+junta as três fontes num fluxo só. O script só vai às bases de produção e do
+dev, ou à isolada, e recusa qualquer outro alvo antes do wrangler
+(scripts/ticket.mjs:confereAlvo); as escritas pedem sempre o alvo
+(scripts/ticket.mjs:lerArgumentos), e cada uma deixa a sua linha no rasto do
+back office. Só começa um pedido de uma pessoa que a equipa aceitou
+(scripts/ticket.mjs:confereComecar), e num pedido nunca responde nem fecha:
+grava a resposta proposta, que a equipa envia (scripts/ticket.mjs:sqlPropor).
+Fecha só o que está publicado no ambiente do ticket
+(scripts/ticket.mjs:publicadoDev, o CI verde no ramo dev;
+scripts/ticket.mjs:publicadoProd, o commit dentro da etiqueta publicado, que o
+deploy de produção move depois de a produção responder): um erro fechado antes
+disso reabria-se sozinho na ocorrência seguinte. Uma base sem a 0024 (a
+produção até ao «promove») lista na mesma, e lá nenhum pedido se implementa.
 
 ## A CSP sem «unsafe-inline»
 A política da app não deixa correr nada que esteja escrito dentro do HTML.
