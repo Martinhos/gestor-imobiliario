@@ -944,6 +944,11 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .fp-caixa>.fp-pe{position:sticky;bottom:0;z-index:1;display:flex;align-items:center;gap:10px;margin:12px -12px 0;padding:10px 12px 12px;background:var(--card);border-top:1px solid var(--line)}
 /* no dedo, os dois a meias e com os 48px do rodapé das janelas */
 @media(max-width:900px){.fp-caixa>.fp-pe .btn{flex:1;min-height:48px}}
+/* o painel da vista geral sem movimentos (painel-geral.js:dashBarVazia): a
+   frase e o «Adicionar movimento», sem a moldura tracejada do .empty, que
+   dentro da caixa do painel fazia um cartão dentro do outro */
+.fp-vazio{display:flex;flex-direction:column;align-items:flex-start;gap:8px;color:var(--muted);font-size:14px}
+.fp-vazio b{color:var(--ink);font-weight:600;font-size:15px}
 .fabpad{height:84px}
 .totop{position:fixed;left:50%;transform:translateX(-50%) scale(.9);bottom:calc(20px + var(--inset-bottom));z-index:57;width:44px;height:44px;
   border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);display:flex;align-items:center;justify-content:center;

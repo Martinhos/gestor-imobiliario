@@ -840,10 +840,12 @@ document.addEventListener('pointerdown',sepArrastar);
 // Devolve: nada — redesenha a vista e a barra lateral.
 function goSet(p){if(p==='groups'||p==='colaboradores')return go(p);setPage=p;if(p)pushHist();_entrar=1;buildNav();render();try{window.scrollTo(0,0)}catch(e){}}
 /* Leva a uma página das Definições a partir de qualquer sítio — a Ajuda, no
-   fundo da barra lateral: muda de separador e abre a página.
+   fundo da barra lateral: muda de separador e abre a página. Fecha a gaveta
+   do telemóvel: vindo de outro separador o go já a fechava, mas já nas
+   Definições só corre o goSet, e a Ajuda abria por baixo da gaveta aberta.
    Recebe: p — a subpágina ('ajuda', 'cloud', …; '' a raiz).
    Devolve: nada — redesenha a vista. */
-function abrirDefinicoes(p){if(tab!=='settings')go('settings');if(tab==='settings')goSet(p)}
+function abrirDefinicoes(p){closeDrawer();if(tab!=='settings')go('settings');if(tab==='settings')goSet(p)}
 /* Os separadores de uma área, no topo do ecrã do telemóvel (o canvas, M-Casas
    e M-Movimentos): Imóveis/Grupos/Contratos/Pessoas/Visitas e
    Movimentos/Planeados/Créditos, num segmentado — com o crachá do separador

@@ -1132,7 +1132,11 @@ painel comprido, não atira a caixa para o topo. O anaPanel monta-o
 (vistas.js:anaPanel; o seletor dos filtros comuns só onde o ecrã o pede), e
 o da Visão geral — o imóvel em foco — é o vistas.js:anaPanelPadrao. Nas
 listas e nos Movimentos o «Limpar» e o «Fechar» estão no topo, ao lado do
-título (ver abaixo e «Os Movimentos»).
+título (ver abaixo e «Os Movimentos»). Um botão de filtros que se acende
+abre sempre um painel: na Visão geral sem movimentos (a jornada, o «Ainda
+não há dados») o painel não tem o seletor, que não teria o que filtrar, e
+diz porquê, com o «Adicionar movimento» quando a pessoa o pode fazer
+(painel-geral.js:dashBarVazia, estilos.css:.fp-vazio).
 
 Todas as listas filtram como os Movimentos (vistas.js:lfCabeca), e é um
 componente só, que veste as classes deles, em vez de uma cópia por lista. A

@@ -290,6 +290,31 @@ describe('o que a gaveta mostra', () => {
     }
   });
 
+  test('a Ajuda do fundo fecha a gaveta também quando já se está nas Definições (o ticket e3e5cdab)', () => {
+    /* o classList do arnês não guarda nada (contains dá sempre false): um de
+       verdade, só para este teste, que o openDrawer e o closeDrawer leem */
+    const body = app.document.body, antigo = body.classList, cls = new Set();
+    const corpo = body.classList = { add: (c) => cls.add(c), remove: (c) => cls.delete(c), toggle: (c, v) => (v ?? !cls.has(c)) ? cls.add(c) : cls.delete(c), contains: (c) => cls.has(c) };
+    try {
+      // controlo: vindo de outro separador, o go fecha-a
+      app.tab = 'dashboard';
+      app.setPage = '';
+      corpo.add('open');
+      app.abrirDefinicoes('ajuda');
+      assert.equal(app.tab, 'settings');
+      assert.equal(corpo.contains('open'), false, 'controlo: de outro separador, a gaveta fecha');
+      // o caso do ticket: já nas Definições só corria o goSet, e a gaveta ficava aberta por cima da Ajuda
+      app.setPage = '';
+      corpo.add('open');
+      app.abrirDefinicoes('ajuda');
+      assert.equal(app.setPage, 'ajuda', 'abre a Ajuda');
+      assert.equal(corpo.contains('open'), false, 'e a gaveta fecha');
+    } finally {
+      body.classList = antigo;
+      app.setPage = '';
+    }
+  });
+
   test('cada destino da barra, da área e do menu se anuncia como ligação (role="link"), com o aria-current no aceso', () => {
     app.window.CW = Object.assign(app.window.CW || {}, { user: { id: 'eu', name: 'Ana Silva' } });
     try {
