@@ -192,7 +192,8 @@ window.LEGAL = (function () {
       'legítimo em manter o serviço a funcionar e protegido.',
       '<b>Cumprir obrigações legais</b> — quando alguma norma nos obrigar a conservar ou fornecer informação.',
       '<b>Comunicações sobre o serviço</b> (confirmação de email, avisos de segurança, alterações aos ' +
-      'termos) — execução do contrato. Comunicações de marketing, se as houver, só com o teu consentimento.',
+      'termos, e os avisos dos movimentos planeados em atraso dos imóveis que geres, que podes desligar ' +
+      'nas Definições) — execução do contrato. Comunicações de marketing, se as houver, só com o teu consentimento.',
       '<b>Perceber o que é difícil de usar e melhorar a app e a página</b> (o rasto de utilização do ' +
       'ponto 12) — o teu consentimento, que podes retirar quando quiseres.',
     ]) +

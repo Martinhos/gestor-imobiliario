@@ -75,6 +75,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-28 · A APK de dev abre as ligações do /test
 - 2026-10-28 · Os pedidos das pessoas decidem-se antes, e a resposta é da equipa
 - 2026-10-29 · O rasto das pessoas, debaixo de um pseudónimo
+- 2026-10-29 · A quarta ronda de QA e o email dos planeados em atraso
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2795,3 +2796,37 @@ só, por emenda dele: o admin vê todas as pessoas, o suporte só quem lhe
 escreveu um pedido (enquanto o pedido existir), e a auditoria da equipa
 continua só do master. Mudar a Privacidade subiu a versão dos termos, e toda a
 gente os volta a aceitar uma vez.
+
+## 2026-10-29 · A quarta ronda de QA e o email dos planeados em atraso
+
+Três tickets do Martinho, do telemóvel. A Ajuda no fundo da gaveta, tocada já
+dentro das Definições, abria a página por baixo da gaveta aberta: o caminho
+de lá só fechava a gaveta quando mudava de separador. Fecha-a sempre. O botão
+de filtros da Visão geral sem movimentos acendia-se e não abria nada, porque
+a vista vazia não desenha o seletor; um botão que se acende tem de abrir
+alguma coisa, e o painel passou a dizer porque está vazio e a levar ao
+primeiro movimento.
+
+O terceiro pediu um email aos proprietários quando um movimento recorrente
+fica em atraso. As decisões foram dele: um resumo por dia e só nos dias em que
+há atrasos novos, para o email não virar ruído diário enquanto um atraso velho
+continua por confirmar (os velhos vêm lembrados no mesmo email); os
+proprietários e também os colaboradores que veem os contratos, mas cada um só
+com o que o cargo lhe deixa ver na app, porque um email não pode mostrar um
+valor que a app esconde; ligado por omissão, com a linha nas Definições e a
+ligação no próprio email para desligar; e com o montante, porque é o que se
+precisa para decidir sem abrir a app. Um atraso só conta como avisado quando
+o Resend aceitou o email: sem chave ou com erro, tenta-se no dia seguinte. A
+Privacidade passou a nomear estes avisos nas comunicações do serviço, dentro
+da versão dos termos de 2026-10-29, que ainda não tinha chegado à produção:
+ninguém aceita os termos duas vezes.
+
+A primeira versão do passo corria no cron diário e perguntava os
+participantes casa a casa. Passou nos testes e rebentou na prova no 8788, onde
+a base isolada tem 1576 casas com planeados vencidos: cerca de 4700 consultas
+numa invocação. Ficou no cron de hora a hora, a partir das 9h de Lisboa, com 9
+consultas fixas mais uma por email e no máximo 20 emails por execução; o «um
+por dia» guarda-se na mesma tabela. Cada execução lê a tabela dos registos
+inteira (não há índice no kind): enquanto ela for pequena, as 15 execuções do
+dia cabem no teto de linhas lidas; quando crescer, uma marca de «dia feito»
+evita reler depois de não haver nada por enviar.

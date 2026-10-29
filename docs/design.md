@@ -4461,7 +4461,9 @@ do IRS · Anexo F, os Colaboradores nas Pessoas e os Grupos nas Casas; cracha,
 uma função que devolve o número do crachá, que a navegação lateral mostra
 (nenhuma das de hoje o usa: o crachá dos pedidos dos Grupos vive na aba
 deles e na linha da gaveta, servicos.js:crachaDe); se, uma função que diz
-se a linha aparece agora (nenhuma das de hoje o usa); e linha, uma linha desenhada à
+se a linha aparece agora (o «Ajudar a melhorar», rasto.js:rstLinhaDasDefinicoes,
+e os «Avisos por email», avisos-email.js:aveLinhaDasDefinicoes, que só aparecem
+com sessão); e linha, uma linha desenhada à
 parte, dentro da lista — o Tema. Um html continua a ser um cartão inteiro, à
 parte da lista. O Tema está na própria raiz, num segmentado Automático, Claro
 e Escuro que grava ao tocar e devolve o foco ao botão escolhido
@@ -4473,6 +4475,17 @@ regra do color-scheme»). O toque no
 título leva à página do Tema (definicoes.js:vTema), que explica o que fazer
 quando o browser não passa a preferência do sistema e continua a gravar pelo
 tema.js:setTheme.
+
+Na secção Conta, a seguir à Segurança, os «Avisos por email»
+(avisos-email.js:aveLinhaDasDefinicoes, estilos.css:.ave-def): o interruptor
+do email diário dos planeados em atraso, só com sessão e com os Planeados
+ligados. Como o «Ajudar a melhorar», a linha inteira é o botão (role="switch"),
+o estado diz-se em palavras e, ligado, na cor da frente; lê a escolha do
+servidor quando a raiz se pinta e grava ao tocar, com um aviso a dizer o que
+ficou. As duas ligações do email chegam pelo endereço
+(avisos-email.js:aveApanharDoEndereco): /?avisos abre a raiz com a linha em
+foco e /?planeados abre os Planeados; sem sessão o destino espera pela entrada
+(avisos-email.js:aveTentarDestino), e a chave sai do endereço.
 
 A cabeça das subpáginas é o backRow, e não é um texto fixo: é um getter do
 window (definicoes.js:cabecaDaSubpagina), lido na hora por todas as
@@ -5654,7 +5667,26 @@ correio.js:COR_ESCURO) — quem muda um token da app que o email usa muda-o lá
 também —, a marca como tabela (correio.js:marca), um botão cobalto de 48px
 (correio.js:botao), e cada email uma carta pura com a versão em texto das
 mesmas partes (correio.js:cartaPedidoRecebido, correio.js:cartaReporPassword,
-correio.js:cartaRespostaPedido).
+correio.js:cartaRespostaPedido, correio.js:cartaAtrasos).
+
+O único email que a app manda sem ninguém ter pedido nada é o dos planeados
+em atraso (avisos-atraso.js:resumoDosAtrasos), no cron de hora a hora, a
+partir das 9h de Lisboa (avisos-atraso.js:horaDosAvisos), numa invocação que
+não é a da cópia: um número fixo de consultas, seja qual for o número de casas
+(nunca uma por casa — a D1 tem um teto de consultas por invocação), e no
+máximo 20 emails por execução, ficando os outros para a hora seguinte. Em
+atraso é a regra da app (planeados.js:recIsLate),
+com o dia em Lisboa (avisos-atraso.js:hojeEmLisboa). Recebe-o quem é dono da
+casa (o dono, os comproprietários e os membros dos grupos partilhados) e os
+colaboradores que veem os contratos dela, cada um só com o que o cargo deixa
+ver na app: com «Ver planeados» todos, só com «Ver contratos» as rendas dos
+contratos (avisos-atraso.js:atrasosPorPessoa). Um por pessoa e por dia, e só
+nos dias em que há atrasos novos: os novos e, por baixo, os que continuam,
+por casa, com a data e o montante, o botão para os Planeados e, no rodapé, a
+ligação para os desligar. Um atraso conta como avisado (a tabela
+avisos_atraso) só quando o Resend aceitou o email. Desliga-se por conta, nas
+Definições (users.avisos_email), e quem tem os Planeados desligados não o
+recebe.
 
 O back office (worker/src/equipa-vista.js, worker/src/equipa-guiao.js) tem a
 barra lateral GRAFITE e a marca em ardósia, de propósito diferente do

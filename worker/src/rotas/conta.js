@@ -1,12 +1,12 @@
-// A conta de quem está ligado: dados, termos, palavra-passe, sessões e apagar.
+// A conta de quem está ligado: dados, termos, avisos por email, palavra-passe, sessões e apagar.
 import { createSession, destroySession, sessionCookie, palavraNova, conferePalavra, tokenNoCorpo } from '../auth.js';
 import { json, err, body, now, weakPassword, TERMS_VERSION } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
 import { purgeAccount } from '../lib/acesso.js';
 
-/* As rotas da própria conta: /api/me (ver e apagar), os termos, a
-   palavra-passe e as sessões. Tudo aqui chega já autenticado — o `me` vem no
-   contexto. O que mexe em credenciais sobe o sess_epoch, que é o que deita
+/* As rotas da própria conta: /api/me (ver e apagar), os termos, os avisos
+   por email (/api/conta/avisos), a palavra-passe e as sessões. Tudo aqui
+   chega já autenticado — o `me` vem no contexto. O que mexe em credenciais sobe o sess_epoch, que é o que deita
    abaixo as sessões dos outros aparelhos, e põe um cookie novo para este
    continuar dentro (o token só vai no corpo fora de produção, a pedido —
    tokenNoCorpo, auth.js). Sem rota que sirva não devolve nada, e o worker segue.
@@ -44,6 +44,20 @@ export async function rotasConta(c) {
       return json({ ok: true, deleted: true }, 200, { 'Set-Cookie': sessionCookie('', true) });
     }
     return err(400, 'Corpo inválido.');
+  }
+
+  // Os avisos por email dos planeados em atraso (lib/avisos-atraso.js):
+  // ligados por omissão, a linha «Avisos por email» das Definições lê-os e
+  // muda-os aqui. O corpo é { email: true|false }, e mais nada.
+  if (path === '/api/conta/avisos' && method === 'GET') {
+    const u = await env.DB.prepare('SELECT avisos_email FROM users WHERE id = ?').bind(me.id).first();
+    return json({ email: !u || Number(u.avisos_email) !== 0 });
+  }
+  if (path === '/api/conta/avisos' && method === 'POST') {
+    const b = await body(request);
+    if (!b || typeof b !== 'object' || typeof b.email !== 'boolean') return err(400, 'Corpo inválido.');
+    await env.DB.prepare('UPDATE users SET avisos_email = ? WHERE id = ?').bind(b.email ? 1 : 0, me.id).run();
+    return json({ email: b.email });
   }
 
   // Mudar a palavra-passe (ou definir uma, numa conta que entra com Google).

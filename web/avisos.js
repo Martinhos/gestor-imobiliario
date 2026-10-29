@@ -27,6 +27,30 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 45,
+    data: '2026-10-29',
+    titulo: 'Avisos por email dos movimentos em atraso',
+    seccoes: [
+      {
+        titulo: 'Os planeados em atraso',
+        afeta: ['movimentos', 'conta'],
+        itens: [
+          'Quando um movimento planeado fica em atraso, os proprietários do imóvel recebem um email com o imóvel, a data e o montante, e um botão que abre os Planeados. No máximo um email por dia, e só nos dias em que há atrasos novos; os que continuam em atraso vêm lembrados no mesmo email.',
+          'Os colaboradores que veem os contratos do imóvel também recebem, só com o que o cargo deles deixa ver na app.',
+          'Vem ligado. Desligas em Definições, «Avisos por email», ou pela ligação no fundo do próprio email.',
+        ],
+      },
+      {
+        titulo: 'Pequenas correções',
+        afeta: ['app'],
+        itens: [
+          'Tocar em Ajuda na gaveta, já dentro das Definições, fecha a gaveta.',
+          'Na Visão geral sem movimentos, o botão dos filtros abre um painel que diz porquê e leva ao primeiro movimento.',
+        ],
+      },
+    ],
+  },
+  {
     v: 44,
     data: '2026-10-29',
     titulo: 'Ajudar a melhorar o Rendorium',

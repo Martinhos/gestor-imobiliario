@@ -383,3 +383,13 @@ O Node não lança um .cmd sem shell, e com shell os argumentos passam pelo cmd
 (aspas, %, ^, quebras de linha). Para texto livre, como as notas do
 scripts/qa.mjs, lança-se o node_modules/wrangler/bin/wrangler.js com o
 process.execPath e os argumentos em lista, sem shell.
+
+## A D1 tem um teto de consultas por invocação
+Um passo do cron que faz uma consulta por casa (o participantsOf num ciclo)
+passa nos testes, que usam o SQL sem tetos, e rebenta no worker: na base
+isolada, com 1576 casas, deu «D1_ERROR: Failed to get session commit token»
+(medido a 2026-10-29). O plano gratuito limita as consultas D1 e os
+subpedidos por invocação. Um passo que percorre todas as casas ou pessoas faz
+um número fixo de consultas (JOIN, subconsultas, listas num só parâmetro com
+json_each) e um teto do que envia por execução; o testes/avisos-atraso.test.js
+conta-as com 1 e com 60 casas.

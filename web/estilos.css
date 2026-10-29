@@ -5660,3 +5660,18 @@ p.qa-quem{margin:0}
 .rst-def .small.rst-def-ligado{color:var(--accent-text)}
 .rst-def:disabled{cursor:progress}
 /* === fim: o rasto das pessoas === */
+/* === avisos por email: a linha «Avisos por email» das Definições (cloud/avisos-email.js) === */
+/* O mesmo desenho da «Ajudar a melhorar»: a linha inteira é o interruptor
+   (avisos-email.js:aveLinhaDasDefinicoes, role=switch e aria-checked), e o
+   .interruptor de dentro só se vê. Ligado diz-se em palavras e na cor da
+   frente (--accent-text); a escolha que não se leu, em --danger. A meio de
+   um pedido a linha fica aria-busy e aria-disabled (não disabled: o foco
+   fica nela), e o desenho do interruptor esbate-se. */
+.ave-def .interruptor{pointer-events:none}
+.ave-def[aria-checked="true"] .interruptor{background:var(--accent)}
+.ave-def[aria-checked="true"] .interruptor::after{transform:translateX(18px)}
+.ave-def .small.ave-def-ligado{color:var(--accent-text)}
+.ave-def .small.ave-def-falhou{color:var(--danger)}
+.ave-def[aria-busy="true"]{cursor:progress}
+.ave-def[aria-busy="true"] .interruptor{opacity:.45}
+/* === fim: avisos por email === */

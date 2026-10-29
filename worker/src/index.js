@@ -99,8 +99,10 @@ export default {
   // vai primeiro para o resumo do mesmo dia já poder dizer se correu bem —
   // uma cópia que deixa de acontecer só dá nas vistas quando é precisa.
   async scheduled(event, env, ctx) {
-    // Dois horários. À hora certa olha-se só para os limites, que é barato;
-    // a cópia e o resumo são o trabalho pesado e ficam uma vez por dia. O
+    // Dois horários. À hora certa olha-se para os limites, que é barato, e
+    // (a partir das 9h em Lisboa) mandam-se os avisos dos planeados em
+    // atraso, aos poucos; a cópia e o resumo são o trabalho pesado e ficam
+    // uma vez por dia. O
     // diário reconhece-se pelo horário exato que o wrangler.toml agenda
     // (CRON_DIARIO) — um teste confere que os dois batem.
     const diario = event.cron === CRON_DIARIO;
@@ -124,6 +126,22 @@ export default {
           await registarOp(env, 'vigia', false, String((e && e.message) || e));
           await recordReport(env, ctx, 'infra', 'Vigia dos limites falhou',
             String((e && e.stack) || (e && e.message) || e).slice(0, 800));
+        }
+        /* O email dos planeados em atraso (lib/avisos-atraso.js, que nunca
+           lança), depois da vigia e do batimento: a partir das 9h em Lisboa,
+           com um número fixo de consultas e no máximo 20 emails por hora —
+           o que fica vai na hora seguinte. Não vive no diário porque a cópia
+           já gasta lá a sua parte das consultas que o plano gratuito deixa
+           fazer numa invocação. A hora é a do agendamento (scheduledTime). */
+        try {
+          const { resumoDosAtrasos, horaDosAvisos } = await import('./lib/avisos-atraso.js');
+          const agora = event.scheduledTime || Date.now();
+          if (horaDosAvisos(agora)) {
+            const a = await resumoDosAtrasos(env, agora);
+            await registarOp(env, 'atrasos', a.ok, a.detalhe);
+          }
+        } catch (e) {
+          await registarOp(env, 'atrasos', false, String((e && e.message) || e));
         }
         return;
       }

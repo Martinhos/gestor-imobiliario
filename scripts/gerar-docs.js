@@ -73,6 +73,8 @@ const MAPA = [
     ficheiros: ['worker/src/rotas/qa.js', 'web/cloud/qa.js', 'scripts/qa.mjs'] },
   { id: 'rasto', titulo: 'O rasto das pessoas (só com o sim delas)',
     ficheiros: ['worker/src/rotas/rasto.js', 'worker/src/lib/rasto.js', 'web/cloud/rasto.js'] },
+  { id: 'avisos-atraso', titulo: 'Avisos por email dos planeados em atraso',
+    ficheiros: ['worker/src/lib/avisos-atraso.js', 'web/cloud/avisos-email.js'] },
   { id: 'correio', titulo: 'Correio (Resend e Email Routing)',
     ficheiros: ['worker/src/lib/correio.js', 'worker/src/lib/enderecos.js'] },
   { id: 'discord', titulo: 'Discord (bot e papéis)',

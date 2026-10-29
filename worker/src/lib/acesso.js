@@ -577,6 +577,8 @@ async function purgarConta(env, uid) {
       env.DB.prepare('DELETE FROM share_requests WHERE from_user = ?1 OR to_user = ?1').bind(uid),
       // o rasto das pessoas (lib/rasto.js): os eventos, os aparelhos e o pseudónimo
       ...apagarRastoDaConta(env, uid),
+      // os atrasos que já foram num email a esta conta (lib/avisos-atraso.js)
+      env.DB.prepare('DELETE FROM avisos_atraso WHERE user_id = ?').bind(uid),
       // lápide: a identidade some, as referências ficam legíveis
       env.DB.prepare(
         `UPDATE users SET name = '[deleted]', email = 'apagado-' || id || '@invalido.local',
