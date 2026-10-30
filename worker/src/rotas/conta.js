@@ -3,6 +3,7 @@ import { createSession, destroySession, sessionCookie, palavraNova, conferePalav
 import { json, err, body, now, weakPassword, TERMS_VERSION } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
 import { purgeAccount } from '../lib/acesso.js';
+import { estadoDoEmail, pedirConfirmacao } from './auth.js';
 
 /* As rotas da própria conta: /api/me (ver e apagar), os termos, os avisos
    por email (/api/conta/avisos), a palavra-passe e as sessões. Tudo aqui
@@ -18,11 +19,34 @@ export async function rotasConta(c) {
   const { env, request, path, method, me } = c;
 
   if (path === '/api/me' && method === 'GET') {
+    // a confirmação do email: a app pinta a faixa (até confirmarAte) ou o ecrã
+    const em = await estadoDoEmail(env, me);
     return json({
       id: me.id, email: me.email, name: me.name,
       terms: me.terms_version || null,
       termsCurrent: TERMS_VERSION,
+      emailConfirmado: em.confirmado,
+      confirmarAte: em.ate,
     });
+  }
+
+  /* Reenviar o email «Confirma o teu email». Só com sessão — sem ela, era uma
+     porta para saber que emails têm conta e para encher a caixa de alguém.
+     Uma ligação nova larga as anteriores por usar (pedirConfirmacao), e há um
+     teto de 3 por hora por conta. Sem RESEND_API_KEY (um servidor local) não
+     é uma falha, como em todo o correio; com ele, um email que não saiu diz-se. */
+  if (path === '/api/me/confirmar/reenviar' && method === 'POST') {
+    const em = await estadoDoEmail(env, me);
+    if (em.confirmado) return json({ ok: true, emailConfirmado: true, msg: 'O teu email já está confirmado.' });
+    if (!(await rateLimit(env, 'verif:' + me.id, 3, 3600))) {
+      return err(429, 'Já enviámos 3 emails nesta hora. Espera um pouco, e vê também a pasta de spam.');
+    }
+    const r = await pedirConfirmacao(env, me, new URL(request.url).origin);
+    if (!r.enviado) {
+      console.error('confirmar: email não enviado —', r.motivo);
+      if (env.RESEND_API_KEY) return err(502, 'Não deu para enviar o email agora. Tenta daqui a pouco.');
+    }
+    return json({ ok: true, emailConfirmado: false, msg: 'Enviámos uma ligação nova para ' + me.email + '.' });
   }
 
   // Aceitar os termos em vigor. Recusar apaga a conta — está explicado no

@@ -22,6 +22,12 @@
 // (propor, draft_reply), que a equipa lê, altera se for preciso e envia — é
 // esse envio que fecha o pedido. Os erros não precisam de aceitação e fecham
 // com o concluir (um erro que volta depois de concluído reabre-se sozinho).
+// Os tickets de segurança (categoria 'seguranca': um limite da API atingido,
+// worker/src/lib/limites.js) também esperam pela equipa: só se tratam depois
+// de alguém escrever a resolução proposta no back office (Decidir, gravada em
+// accepted_*: accepted_changes é a proposta), e trata-se seguindo-a; fecham
+// com o concluir. Um arquivado (refused_*) está concluído e não se mexe nele;
+// se o limite voltar a ser atingido, reabre-se sem decisão.
 // Fechar (propor e concluir com --commit) só depois de a correção estar
 // publicada no ramo certo: o publicado diz-o — produção pela etiqueta
 // `publicado`, que o deploy de produção só move depois de o worker novo
@@ -325,10 +331,12 @@ function colunasDaLista(com0024) {
 }
 
 /* O SELECT dos tickets do listar, na ordem em que se escrevem: os abertos
-   primeiro — os pedidos aceites (os que se resolvem), os por decidir, e os
-   erros (por pessoas, depois ocorrências, depois o mais recente); em cada
-   parte os recebidos antes dos em resolução —, e com todos os concluídos no
-   fim, do mais recente para o mais antigo. Teto de 200.
+   primeiro — os pedidos aceites (os que se resolvem), os de segurança com a
+   resolução proposta, os pedidos por decidir, os de segurança por decidir, e
+   os erros (por pessoas, depois ocorrências, depois o mais recente; os de
+   segurança também assim, dentro da parte deles); em cada parte os recebidos
+   antes dos em resolução —, e com todos os concluídos no fim, do mais recente
+   para o mais antigo. Teto de 200.
    Recebe: todos — true para juntar os concluídos; com0024 — se a base tem as
    colunas da 0024 (false: o SELECT de recurso, sem elas).
    Devolve: o SQL (texto, uma instrução). */
@@ -339,7 +347,9 @@ export function sqlTicketsLista(todos, com0024 = true) {
     + ' FROM tickets t LEFT JOIN users u ON u.id = t.user_id'
     + (todos ? '' : ' WHERE ' + aberto)
     + ' ORDER BY CASE WHEN ' + aberto + ' THEN 0 ELSE 1 END,'
-    + " CASE WHEN NOT (" + aberto + ") THEN 0 WHEN t.category = 'user' AND " + aceite + " THEN 0 WHEN t.category = 'user' THEN 1 ELSE 2 END,"
+    + " CASE WHEN NOT (" + aberto + ") THEN 0 WHEN t.category = 'user' AND " + aceite + " THEN 0"
+    + " WHEN t.category = 'seguranca' AND " + aceite + " THEN 1 WHEN t.category = 'user' THEN 2"
+    + " WHEN t.category = 'seguranca' THEN 3 ELSE 4 END,"
     + " CASE WHEN NOT (" + aberto + ") THEN 0 WHEN t.status = 'criado' THEN 0 WHEN t.status = 'resolucao' THEN 1 ELSE 2 END,"
     + " CASE WHEN NOT (" + aberto + ") OR t.category = 'user' THEN 0 ELSE pessoas END DESC,"
     + " CASE WHEN NOT (" + aberto + ") OR t.category = 'user' THEN 0 ELSE t.n END DESC,"
@@ -396,14 +406,15 @@ function sqlNotaNoFio(uuid, id, texto, agora, condicao) {
 }
 
 /* O comecar: cada ticket recebido passa a em resolução — um erro sempre, um
-   pedido só se aceite e não recusado (a condição está no próprio UPDATE,
-   para um pedido que alguém recusou entretanto não passar). Numa base sem a
-   0024 só os erros (os pedidos ainda não se decidem lá).
+   pedido ou um de segurança só se aceite (decidido) e não recusado
+   (arquivado): a condição está no próprio UPDATE, para um que alguém recusou
+   entretanto não passar. Numa base sem a 0024 só os erros (os pedidos e os
+   de segurança ainda não se decidem lá).
    Recebe: ids — os ids conferidos; agora — o instante em ms; com0024 — se a
    base tem as colunas da 0024.
    Devolve: as instruções (array de texto), um UPDATE e um rasto por ticket. */
 export function sqlComecar(ids, agora, com0024 = true) {
-  const pode = com0024 ? "(category <> 'user' OR (accepted_at IS NOT NULL AND refused_at IS NULL))" : "category <> 'user'";
+  const pode = com0024 ? "(category NOT IN ('user', 'seguranca') OR (accepted_at IS NOT NULL AND refused_at IS NULL))" : "category NOT IN ('user', 'seguranca')";
   const out = [];
   ids.forEach((id) => {
     out.push("UPDATE tickets SET status = 'resolucao', updated_at = " + cita(agora)
@@ -496,32 +507,48 @@ export function tem0024(l) {
   return !!l && Object.prototype.hasOwnProperty.call(l, 'accepted_at');
 }
 
-/* A decisão sobre um pedido: 'aceite', 'recusado', 'por-decidir', ou
-   'sem-0024' numa base que ainda não a tem; null num erro.
+/* Se o ticket espera por uma decisão da equipa antes de se tratar: os
+   pedidos das pessoas (Aceitar) e os de segurança (Decidir, com a resolução
+   proposta). Os outros erros não.
+   Recebe: l — a linha de tickets (ou nada).
+   Devolve: true ou false. */
+export function precisaDeDecisao(l) {
+  return !!l && (l.category === 'user' || l.category === 'seguranca');
+}
+
+/* A decisão sobre um pedido ou um ticket de segurança: 'aceite' (no de
+   segurança, decidido com a resolução proposta), 'recusado' (arquivado),
+   'por-decidir', ou 'sem-0024' numa base que ainda não a tem; null num erro.
    Recebe: l — a linha de tickets.
    Devolve: o texto da decisão (ou null). */
 export function decisaoDe(l) {
-  if (!l || l.category !== 'user') return null;
+  if (!precisaDeDecisao(l)) return null;
   if (!tem0024(l)) return 'sem-0024';
   if (l.refused_at != null) return 'recusado';
   if (l.accepted_at != null) return 'aceite';
   return 'por-decidir';
 }
 
-/* A frase de quando um pedido não se pode implementar (por decidir,
-   recusado, ou a base ainda sem a 0024).
-   Recebe: l — a linha de tickets (um pedido); a — o alvo.
+/* A frase de quando um pedido não se pode implementar, ou um ticket de
+   segurança tratar (por decidir, recusado ou arquivado, ou a base ainda sem
+   a 0024).
+   Recebe: l — a linha de tickets (um pedido ou um de segurança); a — o alvo.
    Devolve: a frase (texto). */
 function porqueNaoSeImplementa(l, a) {
   const d = decisaoDe(l);
+  if (l.category === 'seguranca') {
+    if (d === 'sem-0024') return 'A base ' + ondeFica(a) + ' ainda não tem a decisão dos tickets (' + quandoChega0024(a) + '): o ticket de segurança ' + l.id + ' não se trata lá ainda.';
+    if (d === 'recusado') return 'O ticket de segurança ' + l.id + ' foi arquivado no back office' + (l.refused_by_nome ? ' por ' + l.refused_by_nome : '') + ': não se mexe nele.';
+    return 'O ticket de segurança ' + l.id + ' ainda não tem a resolução proposta no back office: só se trata depois de alguém da equipa a escrever (Decidir).';
+  }
   if (d === 'sem-0024') return 'A base ' + ondeFica(a) + ' ainda não tem a aceitação dos pedidos (' + quandoChega0024(a) + '): nenhum pedido de pessoa se implementa lá ainda (o ' + l.id + ' é um).';
   if (d === 'recusado') return 'O pedido ' + l.id + ' foi recusado no back office' + (l.refused_by_nome ? ' por ' + l.refused_by_nome : '') + ': não se implementa.';
   return 'O pedido ' + l.id + ' ainda não foi aceite no back office: só se implementam os aceites.';
 }
 
 /* O que o comecar faz a cada ticket, conferido antes de mexer em algum: um
-   pedido por decidir, recusado ou numa base sem a 0024, um concluído ou um
-   id que não existe param tudo.
+   pedido ou um de segurança por decidir, recusado (arquivado) ou numa base
+   sem a 0024, um concluído ou um id que não existe param tudo.
    Recebe: ids — os ids pedidos; linhas — as linhas da base (sqlUns); a — o alvo.
    Devolve: { mexer: [linhas recebidas], jaEstavam: [linhas em resolução] };
    lança ErroTicket com o primeiro que impede. */
@@ -533,11 +560,12 @@ export function confereComecar(ids, linhas, a) {
   ids.forEach((id) => {
     const l = porId.get(id);
     if (l.status === 'concluido') {
+      if (l.category === 'seguranca' && decisaoDe(l) === 'recusado') throw new ErroTicket(porqueNaoSeImplementa(l, a) + ' Não mexi em nenhum.');
       throw new ErroTicket(l.category === 'user'
         ? 'O pedido ' + id + ' está concluído: reabrir um pedido é da equipa, no back office. Não mexi em nenhum.'
-        : 'O erro ' + id + ' está concluído: reabre-o primeiro (node scripts/ticket.mjs reabrir ' + id + ' --' + a.nome + '). Não mexi em nenhum.');
+        : 'O ' + (l.category === 'seguranca' ? 'ticket de segurança ' : 'erro ') + id + ' está concluído: reabre-o primeiro (node scripts/ticket.mjs reabrir ' + id + ' --' + a.nome + '). Não mexi em nenhum.');
     }
-    if (l.category === 'user' && decisaoDe(l) !== 'aceite') throw new ErroTicket(porqueNaoSeImplementa(l, a) + ' Não mexi em nenhum.');
+    if (precisaDeDecisao(l) && decisaoDe(l) !== 'aceite') throw new ErroTicket(porqueNaoSeImplementa(l, a) + ' Não mexi em nenhum.');
     (l.status === 'resolucao' ? jaEstavam : mexer).push(l);
   });
   return { mexer, jaEstavam };
@@ -549,29 +577,37 @@ export function confereComecar(ids, linhas, a) {
    Devolve: nada; lança ErroTicket com a razão. */
 export function conferePropor(l, id, a) {
   if (!l) throw new ErroTicket('Não há nenhum ticket com o id ' + id + ' ' + ondeFica(a) + ' (confirma com o listar; é o alvo certo?).');
+  if (l.category === 'seguranca') throw new ErroTicket('O ' + id + ' é um ticket de segurança, não um pedido de uma pessoa: não leva resposta. Depois de seguir a resolução proposta, fecha-se com o concluir.');
   if (l.category !== 'user') throw new ErroTicket('O ' + id + ' é um erro, não um pedido de uma pessoa: não leva resposta. Fecha-se com o concluir.');
   if (l.status === 'concluido') throw new ErroTicket('O pedido ' + id + ' já está concluído (a resposta foi enviada, ou foi recusado): não se propõe outra.');
   if (decisaoDe(l) !== 'aceite') throw new ErroTicket(porqueNaoSeImplementa(l, a));
 }
 
-/* Se o concluir pode fechar este ticket: só um erro. Um concluído não é
-   erro: devolve-se o aviso, e não se escreve nada.
+/* Se o concluir pode fechar este ticket: um erro, ou um de segurança com a
+   resolução proposta (depois de a seguir). Um concluído não é erro:
+   devolve-se o aviso, e não se escreve nada.
    Recebe: l — a linha (ou undefined); id — o id pedido; a — o alvo.
    Devolve: null para seguir, ou o texto «já está concluído»; lança ErroTicket com a razão. */
 export function confereConcluir(l, id, a) {
   if (!l) throw new ErroTicket('Não há nenhum ticket com o id ' + id + ' ' + ondeFica(a) + ' (confirma com o listar; é o alvo certo?).');
   if (l.category === 'user') throw new ErroTicket('O ' + id + ' é um pedido de uma pessoa: não se fecha daqui. Usa o propor (node scripts/ticket.mjs propor ' + id + ' --resposta "…" --nota "…" --' + a.nome + '): a equipa lê a resposta e envia-a no back office, e é isso que o fecha.');
-  if (l.status === 'concluido') return 'O erro ' + id + ' já está concluído.';
+  if (l.status === 'concluido') return 'O ' + (l.category === 'seguranca' ? 'ticket de segurança ' : 'erro ') + id + ' já está concluído.';
+  if (l.category === 'seguranca' && decisaoDe(l) !== 'aceite') throw new ErroTicket(porqueNaoSeImplementa(l, a));
   return null;
 }
 
-/* Se o reabrir pode devolver este ticket aos recebidos: um erro em resolução
-   ou concluído; um pedido aceite em resolução. Um pedido por decidir,
-   recusado ou concluído é decisão da equipa, no back office.
+/* Se o reabrir pode devolver este ticket aos recebidos: um erro (ou um de
+   segurança não arquivado) em resolução ou concluído; um pedido aceite em
+   resolução. Um pedido por decidir, recusado ou concluído, e um de
+   segurança arquivado, são decisão da equipa, no back office.
    Recebe: l — a linha (ou undefined); id — o id pedido; a — o alvo.
    Devolve: null para seguir, ou o texto «já está nos recebidos»; lança ErroTicket com a razão. */
 export function confereReabrir(l, id, a) {
   if (!l) throw new ErroTicket('Não há nenhum ticket com o id ' + id + ' ' + ondeFica(a) + ' (confirma com o listar; é o alvo certo?).');
+  if (l.category === 'seguranca' && decisaoDe(l) === 'recusado') {
+    throw new ErroTicket('O ticket de segurança ' + id + ' foi arquivado' + (l.refused_by_nome ? ' por ' + l.refused_by_nome : '') + ': reabri-lo é decisão da equipa, no back office.');
+  }
+  if (l.category === 'seguranca') return l.status === 'criado' ? 'O ticket de segurança ' + id + ' já está nos recebidos.' : null;
   if (l.category !== 'user') return l.status === 'criado' ? 'O erro ' + id + ' já está nos recebidos.' : null;
   const d = decisaoDe(l);
   if (d === 'sem-0024') throw new ErroTicket(porqueNaoSeImplementa(l, a));
@@ -616,7 +652,7 @@ function indenta(t, margem) {
    Devolve: o texto. */
 export function tipoLegivel(l) {
   if (l.category === 'user') return 'pedido de uma pessoa: ' + (l.kind === 'sugestao' ? 'sugestão' : l.kind === 'problema' ? 'problema' : String(l.kind || '?'));
-  return { client: 'erro do browser', server: 'erro do servidor', infra: 'erro da infraestrutura', seguranca: 'erro de segurança' }[l.category]
+  return { client: 'erro do browser', server: 'erro do servidor', infra: 'erro da infraestrutura', seguranca: 'ticket de segurança (limite atingido)' }[l.category]
     || 'erro (' + String(l.category) + ')';
 }
 
@@ -627,10 +663,27 @@ export function estadoLegivel(status) {
   return { criado: 'recebido', resolucao: 'em resolução', concluido: 'concluído' }[status] || String(status);
 }
 
-/* A decisão de um pedido por extenso, como o listar a escreve.
-   Recebe: l — a linha de um pedido.
+/* A decisão de um ticket de segurança por extenso: a resolução proposta (o
+   que se segue), o arquivo, ou à espera.
+   Recebe: l — a linha de um ticket de segurança.
+   Devolve: array de linhas (texto). */
+function decisaoDeSeguranca(l) {
+  if (l.accepted_at === undefined) return ['Decisão: a decisão dos tickets ainda não chegou a esta base (falta a 0024): não se trata.'];
+  if (l.refused_at != null) return ['Decisão: arquivado' + (l.refused_by_nome ? ' por ' + l.refused_by_nome : '') + ' a ' + (quando(l.refused_at) || '?') + ' (a justificação está no fio).'];
+  if (l.accepted_at != null) {
+    return ['Decisão: proposta por ' + (l.accepted_by_nome || l.accepted_by || '?') + ' a ' + (quando(l.accepted_at) || '?') + ':',
+      indenta(l.accepted_changes || '(sem texto)', '  '),
+      '  (Segue-se a resolução proposta; o que for irreversível, como bloquear uma conta, pergunta-se primeiro ao Martinho.)'];
+  }
+  return ['Decisão: por decidir (espera pela resolução proposta no back office; não se mexe nele).'];
+}
+
+/* A decisão de um pedido (ou de um ticket de segurança) por extenso, como o
+   listar a escreve.
+   Recebe: l — a linha de um pedido ou de um ticket de segurança.
    Devolve: array de linhas (texto). */
 export function decisaoLegivel(l) {
+  if (l.category === 'seguranca') return decisaoDeSeguranca(l);
   if (l.accepted_at === undefined) return ['Decisão: a aceitação ainda não chegou a esta base (falta a 0024): não se implementa.'];
   if (l.refused_at != null) return ['Decisão: recusado' + (l.refused_by_nome ? ' por ' + l.refused_by_nome : '') + ' a ' + (quando(l.refused_at) || '?') + ' (a justificação é a última resposta à pessoa).'];
   if (l.accepted_at != null) {
@@ -671,7 +724,7 @@ export function textoDoTicket(l) {
   if (erro) linhas.push('Ocorrências: ' + (l.n == null ? '?' : l.n) + ' · ' + conta(Number(l.pessoas) || 0, 'pessoa', 'pessoas'));
   if (l.context != null && String(l.context).trim()) linhas.push('Contexto: ' + String(l.context).replace(/\s*\n\s*/g, ' '));
   if (l.assignee_nome || l.assignee) linhas.push('Tomado por: ' + (l.assignee_nome || l.assignee));
-  if (!erro) decisaoLegivel(l).forEach((x) => linhas.push(x));
+  if (precisaDeDecisao(l)) decisaoLegivel(l).forEach((x) => linhas.push(x));
   linhas.push('Descrição:');
   linhas.push(indenta(l.body == null ? '' : l.body, '  '));
   if (l.reply) {
@@ -711,8 +764,10 @@ export function juntaFio(tickets, msgs, com0024 = true) {
 }
 
 /* O texto de um alvo no listar: o cabeçalho com as contagens (e o aviso da
-   0024, se faltar), e as secções — «Pedidos aceites», «Pedidos por decidir»,
-   «Erros» e, com --todos, «Concluídos» —, cada ticket por extenso.
+   0024, se faltar), e as secções — «Pedidos aceites», «Segurança com
+   resolução proposta», «Pedidos por decidir», «Segurança por decidir»,
+   «Erros» e, com --todos, «Concluídos» —, cada ticket por extenso. As
+   contagens dos de segurança só aparecem no cabeçalho quando os há.
    Recebe: a — o alvo; tickets — os de juntaFio, na ordem da base; opcoes —
    { todos, sem0024 }.
    Devolve: o texto. */
@@ -725,18 +780,26 @@ export function textoDoAlvo(a, tickets, opcoes = {}) {
   const concluidos = tickets.filter((t) => t.status === 'concluido');
   const aceites = abertos.filter((t) => t.category === 'user' && decisaoDe(t) === 'aceite');
   const porDecidir = abertos.filter((t) => t.category === 'user' && decisaoDe(t) !== 'aceite');
-  const erros = abertos.filter((t) => t.category !== 'user');
+  const segDecididos = abertos.filter((t) => t.category === 'seguranca' && decisaoDe(t) === 'aceite');
+  const segPorDecidir = abertos.filter((t) => t.category === 'seguranca' && decisaoDe(t) !== 'aceite');
+  const erros = abertos.filter((t) => !precisaDeDecisao(t));
   if (!tickets.length) return '### ' + titulo + ': não há tickets' + (opcoes.todos ? '' : ' abertos') + '.' + aviso;
   const recebidos = abertos.filter((t) => t.status === 'criado').length;
+  const seguranca = segDecididos.length + segPorDecidir.length
+    ? ', ' + segDecididos.length + ' de segurança com resolução proposta, ' + segPorDecidir.length + ' de segurança por decidir'
+    : '';
   const partes = ['### ' + titulo + ': ' + conta(aceites.length, 'pedido aceite', 'pedidos aceites')
     + ', ' + conta(porDecidir.length, 'pedido por decidir', 'pedidos por decidir')
+    + seguranca
     + ', ' + conta(erros.length, 'erro', 'erros')
     + ' (' + conta(recebidos, 'recebido', 'recebidos') + ', ' + (abertos.length - recebidos) + ' em resolução)'
     + (opcoes.todos ? '; ' + conta(concluidos.length, 'concluído', 'concluídos') : '') + '.'
     + (tickets.length >= TETO_LISTA ? ' (Só os primeiros ' + TETO_LISTA + '.)' : '') + aviso];
   [
     ['Pedidos aceites (' + aceites.length + '): os que se resolvem, com as alterações de quem aceitou a mandar', aceites],
+    ['Segurança com resolução proposta (' + segDecididos.length + '): trata-se seguindo a proposta; o irreversível (bloquear uma conta…) pergunta-se primeiro ao Martinho', segDecididos],
     ['Pedidos por decidir (' + porDecidir.length + '): NÃO se mexe neles, esperam pelo Aceitar no back office', porDecidir],
+    ['Segurança por decidir (' + segPorDecidir.length + '): NÃO se mexe neles, esperam pela resolução proposta no back office', segPorDecidir],
     ['Erros (' + erros.length + '): por pessoas, depois ocorrências, depois o mais recente', erros],
     ['Concluídos (' + concluidos.length + ')', opcoes.todos ? concluidos : []],
   ].forEach(([cabeca, ts]) => {
@@ -1130,8 +1193,9 @@ function cmdComecar(o, d) {
     mexer.forEach((l) => {
       const n = depois.get(l.id);
       if (!n || n.status !== 'resolucao') throw new ErroTicket('O ' + l.id + ' não ficou em resolução (está ' + (n ? estadoLegivel(n.status) : 'desaparecido') + '): alguém lhe mexeu entretanto? Vê o listar.');
-      frase.set(l.id, (l.category === 'user' ? 'Pedido ' : 'Erro ') + l.id + ' em resolução ' + ondeFica(a) + '.'
-        + (l.category === 'user' && l.accepted_changes ? ' Foi aceite com alterações: são elas que mandam.' : ''));
+      frase.set(l.id, (l.category === 'user' ? 'Pedido ' : l.category === 'seguranca' ? 'Ticket de segurança ' : 'Erro ') + l.id + ' em resolução ' + ondeFica(a) + '.'
+        + (l.category === 'user' && l.accepted_changes ? ' Foi aceite com alterações: são elas que mandam.' : '')
+        + (l.category === 'seguranca' ? ' Segue-se a resolução proposta de ' + (l.accepted_by_nome || l.accepted_by || 'quem decidiu') + ' (no listar).' : ''));
     });
   }
   return o.ids.map((id) => frase.get(id)).join('\n');
@@ -1187,8 +1251,11 @@ function cmdConcluir(o, d) {
   exigePublicado(o, a, d);
   executar(d, a, sqlConcluir(o.id, o.nota, o.commit, d.agora(), d.uuid()));
   const n = lerUns(d, a, [o.id])[0];
-  if (!n || n.status !== 'concluido') throw new ErroTicket('O erro ' + o.id + ' não ficou concluído (está ' + (n ? estadoLegivel(n.status) : 'desaparecido') + '). Vê o listar.');
-  return 'Erro ' + o.id + ' concluído ' + ondeFica(a) + '. Se voltar a acontecer, reabre-se sozinho.';
+  const seg = l.category === 'seguranca';
+  if (!n || n.status !== 'concluido') throw new ErroTicket('O ' + (seg ? 'ticket de segurança ' : 'erro ') + o.id + ' não ficou concluído (está ' + (n ? estadoLegivel(n.status) : 'desaparecido') + '). Vê o listar.');
+  return seg
+    ? 'Ticket de segurança ' + o.id + ' concluído ' + ondeFica(a) + '. Se o limite voltar a ser atingido, reabre-se sozinho, por decidir.'
+    : 'Erro ' + o.id + ' concluído ' + ondeFica(a) + '. Se voltar a acontecer, reabre-se sozinho.';
 }
 
 /* reabrir: de volta aos recebidos (confereReabrir diz o que pode).
@@ -1203,7 +1270,7 @@ function cmdReabrir(o, d) {
   executar(d, a, sqlReabrir(o.id, pedido, d.agora(), d.uuid()));
   const n = lerUns(d, a, [o.id])[0];
   if (!n || n.status !== 'criado') throw new ErroTicket('O ' + o.id + ' não voltou aos recebidos (está ' + (n ? estadoLegivel(n.status) : 'desaparecido') + '). Vê o listar.');
-  return (pedido ? 'Pedido ' : 'Erro ') + o.id + ' de volta aos recebidos ' + ondeFica(a) + '.'
+  return (pedido ? 'Pedido ' : l.category === 'seguranca' ? 'Ticket de segurança ' : 'Erro ') + o.id + ' de volta aos recebidos ' + ondeFica(a) + '.'
     + (pedido && l.draft_reply && LARGA_PROPOSTA_AO_REABRIR ? ' A resposta proposta foi largada (o texto fica no fio, numa nota).' : '');
 }
 

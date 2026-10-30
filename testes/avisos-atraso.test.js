@@ -22,7 +22,7 @@ import assert from 'node:assert/strict';
 
 import worker from '../worker/src/index.js';
 import {
-  ambiente, conta, pedir, resp, casa, registo, dadoGlobal, comproprietario, desligar,
+  ambiente, conta as contaPorConfirmar, pedir, resp, casa, registo, dadoGlobal, comproprietario, desligar,
 } from './lib/api.js';
 import { CRON_DIARIO } from '../worker/src/lib/auditoria.js';
 import { purgeAccount } from '../worker/src/lib/acesso.js';
@@ -32,6 +32,17 @@ import {
 import { cartaAtrasos, dataDoAviso, montanteDoAviso } from '../worker/src/lib/correio.js';
 
 /* ------------------------------ armações ------------------------------- */
+
+/* Uma conta com sessão e o email já confirmado: os avisos só vão para
+   emails confirmados (migração 0027), e as contas da armação nascem por
+   confirmar, como uma conta nova (testes/verificar-email.test.js).
+   Recebe: env; nome; opcoes (opcional) — as do conta de testes/lib/api.js.
+   Devolve: a promessa de {id, email, token, name}. */
+async function contaConfirmada(env, nome, opcoes) {
+  const c = await contaPorConfirmar(env, nome, opcoes);
+  await env.DB.prepare('UPDATE users SET email_verified_at = created_at WHERE id = ?').bind(c.id).run();
+  return c;
+}
 
 const DIA = 86400000;
 // 29/10/2026 às 09:00 UTC (09:00 em Lisboa, já depois da mudança da hora)
@@ -147,7 +158,7 @@ describe('a regra do atraso', () => {
   test('o resumo usa o hoje de Lisboa: um planeado de 14/07 está em atraso às 23:30 UTC desse dia', async () => {
     const env = ambiente({ RESEND_API_KEY: 'k' });
     const enviados = resendFalso();
-    const D = await conta(env, 'Dona');
+    const D = await contaConfirmada(env, 'Dona');
     await casa(env, D, 'h1', { name: 'Casa Soure' });
     await registo(env, 'h1', 'rec', 'r1', plan({ next: '2026-07-14' }), D);
     const r = await correr(env, Date.UTC(2026, 6, 14, 22, 0));   // 23:00 em Lisboa, ainda 14
@@ -159,7 +170,7 @@ describe('a regra do atraso', () => {
 
   test('silenciados, de janela aberta, apagados e de casas apagadas não contam', async () => {
     const env = ambiente();
-    const D = await conta(env, 'Dona');
+    const D = await contaConfirmada(env, 'Dona');
     await casa(env, D, 'h1');
     await casa(env, D, 'hx', {}, 1);   // uma casa apagada
     await registo(env, 'h1', 'rec', 'atraso', plan({ next: dia(-3) }), D);
@@ -181,12 +192,12 @@ describe('a regra do atraso', () => {
 describe('quem recebe', () => {
   test('o dono, o comproprietário por partilha e por grupo; quem saiu, um grupo apagado e um estranho não', async () => {
     const env = ambiente();
-    const D = await conta(env, 'Dona');
-    const P = await conta(env, 'Pela partilha');
-    const G = await conta(env, 'Pelo grupo');
-    const S = await conta(env, 'Saiu da casa');
-    const X = await conta(env, 'Grupo apagado');
-    const E = await conta(env, 'Estranho');
+    const D = await contaConfirmada(env, 'Dona');
+    const P = await contaConfirmada(env, 'Pela partilha');
+    const G = await contaConfirmada(env, 'Pelo grupo');
+    const S = await contaConfirmada(env, 'Saiu da casa');
+    const X = await contaConfirmada(env, 'Grupo apagado');
+    const E = await contaConfirmada(env, 'Estranho');
     await casa(env, D, 'h1', { name: 'Casa Soure' });
     await registo(env, 'h1', 'rec', 'r1', plan(), D);
     await comproprietario(env, D, P, ['h1']);
@@ -206,8 +217,8 @@ describe('quem recebe', () => {
   test('quem vê a mesma casa por dois caminhos recebe cada atraso uma vez, num email só', async () => {
     const env = ambiente({ RESEND_API_KEY: 'k' });
     const enviados = resendFalso();
-    const D = await conta(env, 'Dona');
-    const P = await conta(env, 'Partilha e grupo');
+    const D = await contaConfirmada(env, 'Dona');
+    const P = await contaConfirmada(env, 'Partilha e grupo');
     await casa(env, D, 'h1', { name: 'Casa Soure' });
     await registo(env, 'h1', 'rec', 'r1', plan({ tx: { kind: 'expense', amount: 40, label: 'Condomínio de outubro' } }), D);
     await comproprietario(env, D, P, ['h1']);
@@ -222,12 +233,12 @@ describe('quem recebe', () => {
 
   test('colaboradores: «Ver planeados» vê tudo, só «Ver contratos» as rendas dos contratos, sem nenhuma nada', async () => {
     const env = ambiente();
-    const D = await conta(env, 'Dona');
-    const Rv = await conta(env, 'Vê planeados');
-    const Cv = await conta(env, 'Vê contratos');
-    const N = await conta(env, 'Vê visitas');
-    const Ap = await conta(env, 'Cargo apagado');
-    const Ou = await conta(env, 'De outra casa');
+    const D = await contaConfirmada(env, 'Dona');
+    const Rv = await contaConfirmada(env, 'Vê planeados');
+    const Cv = await contaConfirmada(env, 'Vê contratos');
+    const N = await contaConfirmada(env, 'Vê visitas');
+    const Ap = await contaConfirmada(env, 'Cargo apagado');
+    const Ou = await contaConfirmada(env, 'De outra casa');
     await casa(env, D, 'h1');
     await casa(env, D, 'h2');
     await registo(env, 'h1', 'rec', 'renda', plan({ tx: { kind: 'income', amount: 750, label: 'Renda', contractId: 'c1' } }), D);
@@ -247,8 +258,8 @@ describe('quem recebe', () => {
 
   test('contract.add arrasta rec.view (normalizarPerms): vê tudo', async () => {
     const env = ambiente();
-    const D = await conta(env, 'Dona');
-    const C = await conta(env, 'Gere contratos');
+    const D = await contaConfirmada(env, 'Dona');
+    const C = await contaConfirmada(env, 'Gere contratos');
     await casa(env, D, 'h1');
     await registo(env, 'h1', 'rec', 'imi', plan(), D);
     await colaborador(env, D, C, ['contract.add'], ['h1']);
@@ -257,8 +268,8 @@ describe('quem recebe', () => {
 
   test('um comproprietário com um cargo só de contratos é comproprietário: vê tudo (a precedência do acessoACasa)', async () => {
     const env = ambiente();
-    const D = await conta(env, 'Dona');
-    const P = await conta(env, 'Comproprietária');
+    const D = await contaConfirmada(env, 'Dona');
+    const P = await contaConfirmada(env, 'Comproprietária');
     await casa(env, D, 'h1');
     await registo(env, 'h1', 'rec', 'imi', plan(), D);
     await comproprietario(env, D, P, ['h1']);
@@ -268,8 +279,8 @@ describe('quem recebe', () => {
 
   test('um planeado «Sem imóvel» só vai para a conta dona dele', async () => {
     const env = ambiente();
-    const D = await conta(env, 'Dona');
-    const P = await conta(env, 'Comproprietária');
+    const D = await contaConfirmada(env, 'Dona');
+    const P = await contaConfirmada(env, 'Comproprietária');
     await casa(env, D, 'h1');
     await comproprietario(env, D, P, ['h1']);
     await dadoGlobal(env, D, 'rec', 'solto', plan({ tx: { kind: 'expense', amount: 9.9, label: 'Seguro' } }));
@@ -282,12 +293,12 @@ describe('quem recebe', () => {
 
   test('ficam de fora: os avisos desligados, os Planeados desligados (ou os Movimentos), a conta apagada e, em produção, a conta de teste', async () => {
     const montar = async (env) => {
-      const D = await conta(env, 'Dona');
-      const Desl = await conta(env, 'Desligou os avisos');
-      const SemPl = await conta(env, 'Sem Planeados');
-      const SemMov = await conta(env, 'Sem Movimentos');
-      const Apag = await conta(env, 'Apagada');
-      const T = await conta(env, 'De teste');
+      const D = await contaConfirmada(env, 'Dona');
+      const Desl = await contaConfirmada(env, 'Desligou os avisos');
+      const SemPl = await contaConfirmada(env, 'Sem Planeados');
+      const SemMov = await contaConfirmada(env, 'Sem Movimentos');
+      const Apag = await contaConfirmada(env, 'Apagada');
+      const T = await contaConfirmada(env, 'De teste');
       await casa(env, D, 'h1');
       await registo(env, 'h1', 'rec', 'r1', plan(), D);
       await comproprietario(env, D, Desl, ['h1']);
@@ -327,7 +338,7 @@ describe('uma vez por atraso', () => {
   test('o primeiro dia manda, o segundo sem novos não, e um atraso novo manda com o antigo em «Continuam»', async () => {
     const env = ambiente({ RESEND_API_KEY: 'k' });
     const enviados = resendFalso();
-    const D = await conta(env, 'Dona');
+    const D = await contaConfirmada(env, 'Dona');
     await casa(env, D, 'h1', { name: 'Casa Soure' });
     await registo(env, 'h1', 'rec', 'r1', plan({ next: dia(-2), tx: { kind: 'expense', amount: 40, label: 'Condomínio' } }), D);
 
@@ -362,7 +373,7 @@ describe('uma vez por atraso', () => {
   test('sem RESEND_API_KEY nada se envia nem se grava, sem ser uma falha; com a chave, o dia seguinte manda', async () => {
     const env = ambiente();
     const enviados = resendFalso();
-    const D = await conta(env, 'Dona');
+    const D = await contaConfirmada(env, 'Dona');
     await casa(env, D, 'h1');
     await registo(env, 'h1', 'rec', 'r1', plan(), D);
     const r = await correr(env);
@@ -379,7 +390,7 @@ describe('uma vez por atraso', () => {
   test('com o Resend a recusar nada se grava, o resultado diz porquê, e o dia seguinte tenta outra vez', async () => {
     const env = ambiente({ RESEND_API_KEY: 'k' });
     let enviados = resendFalso(500);
-    const D = await conta(env, 'Dona');
+    const D = await contaConfirmada(env, 'Dona');
     await casa(env, D, 'h1');
     await registo(env, 'h1', 'rec', 'r1', plan(), D);
     const r = await correr(env);
@@ -396,8 +407,8 @@ describe('uma vez por atraso', () => {
   test('uma pessoa que falha não trava as outras', async () => {
     const env = ambiente({ RESEND_API_KEY: 'k' });
     const enviados = [];
-    const D = await conta(env, 'Dona');
-    const P = await conta(env, 'Comproprietária');
+    const D = await contaConfirmada(env, 'Dona');
+    const P = await contaConfirmada(env, 'Comproprietária');
     await casa(env, D, 'h1');
     await registo(env, 'h1', 'rec', 'r1', plan(), D);
     await comproprietario(env, D, P, ['h1']);
@@ -507,7 +518,7 @@ describe('a carta', () => {
   test('o email que sai: do no-reply, com html e texto, as casas por nome e o «Sem imóvel» no fim', async () => {
     const env = ambiente({ RESEND_API_KEY: 'k' });
     const enviados = resendFalso();
-    const D = await conta(env, 'Dona');
+    const D = await contaConfirmada(env, 'Dona');
     await casa(env, D, 'hz', { name: 'Vivenda Zambujeira' });
     await casa(env, D, 'ha', { name: 'Apartamento Aveiro' });
     await registo(env, 'hz', 'rec', 'r1', plan({ next: dia(-3), tx: { kind: 'income', amount: 750, label: 'Renda do Rui', contractId: 'c' } }), D);
@@ -545,7 +556,7 @@ describe('o cron de hora a hora', () => {
      Recebe: env.
      Devolve: a promessa da conta. */
   const comAtraso = async (env) => {
-    const D = await conta(env, 'Dona');
+    const D = await contaConfirmada(env, 'Dona');
     await casa(env, D, 'h1');
     await registo(env, 'h1', 'rec', 'r1', plan({ next: '2026-01-02' }), D);
     return D;
@@ -636,10 +647,10 @@ describe('o que uma execução gasta', () => {
      Devolve: a promessa de { env, pessoas }. */
   async function muitas(n) {
     const env = ambiente({ RESEND_API_KEY: 'k' });
-    const D = await conta(env, 'Dona');
-    const P = await conta(env, 'Partilha');
-    const G = await conta(env, 'Grupo');
-    const C = await conta(env, 'Colaboradora');
+    const D = await contaConfirmada(env, 'Dona');
+    const P = await contaConfirmada(env, 'Partilha');
+    const G = await contaConfirmada(env, 'Grupo');
+    const C = await contaConfirmada(env, 'Colaboradora');
     const ids = [];
     for (let i = 0; i < n; i++) {
       ids.push('h' + i);
@@ -675,11 +686,11 @@ describe('o que uma execução gasta', () => {
   test('no máximo 20 emails por execução: o resto vai na hora seguinte, e quem já recebeu não recebe outra vez', async () => {
     const env = ambiente({ RESEND_API_KEY: 'k' });
     let enviados = resendFalso();
-    const D = await conta(env, 'Dona');
+    const D = await contaConfirmada(env, 'Dona');
     await casa(env, D, 'h1');
     await registo(env, 'h1', 'rec', 'r1', plan(), D);
     const outros = [];
-    for (let i = 0; i < 26; i++) outros.push(await conta(env, 'Pessoa ' + i));
+    for (let i = 0; i < 26; i++) outros.push(await contaConfirmada(env, 'Pessoa ' + i));
     for (const o of outros) await comproprietario(env, D, o, ['h1']);
     assert.equal(MAX_EMAILS_POR_EXECUCAO, 20);
     const r = await correr(env);
@@ -697,7 +708,7 @@ describe('o que uma execução gasta', () => {
   test('um por dia: um atraso novo no mesmo dia espera pelo dia seguinte, e vai em «Novo»', async () => {
     const env = ambiente({ RESEND_API_KEY: 'k' });
     const enviados = resendFalso();
-    const D = await conta(env, 'Dona');
+    const D = await contaConfirmada(env, 'Dona');
     await casa(env, D, 'h1');
     await registo(env, 'h1', 'rec', 'r1', plan({ tx: { kind: 'expense', amount: 40, label: 'Condomínio' } }), D);
     await correr(env);
@@ -714,7 +725,7 @@ describe('o que uma execução gasta', () => {
   test('o dia do «um por dia» é o de Lisboa: um email às 23:30 UTC de verão já é do dia seguinte', async () => {
     const env = ambiente({ RESEND_API_KEY: 'k' });
     const enviados = resendFalso();
-    const D = await conta(env, 'Dona');
+    const D = await contaConfirmada(env, 'Dona');
     await casa(env, D, 'h1');
     await registo(env, 'h1', 'rec', 'r1', plan({ next: '2026-07-01' }), D);
     await correr(env, Date.UTC(2026, 6, 14, 22, 0));   // 23:00 de 14 em Lisboa
@@ -728,7 +739,7 @@ describe('o que uma execução gasta', () => {
 
 describe('GET/POST /api/conta/avisos', () => {
   let env, A;
-  beforeEach(async () => { env = ambiente(); A = await conta(env, 'Ana'); });
+  beforeEach(async () => { env = ambiente(); A = await contaConfirmada(env, 'Ana'); });
 
   test('ligados por omissão; desligar e voltar a ligar', async () => {
     assert.deepEqual(await resp(pedir(env, A, '/api/conta/avisos')), { status: 200, email: true });
@@ -755,7 +766,7 @@ describe('GET/POST /api/conta/avisos', () => {
   });
 
   test('a preferência de uma conta não mexe na de outra', async () => {
-    const B = await conta(env, 'Berta');
+    const B = await contaConfirmada(env, 'Berta');
     await pedir(env, A, '/api/conta/avisos', 'POST', { email: false });
     assert.deepEqual(await resp(pedir(env, B, '/api/conta/avisos')), { status: 200, email: true });
   });
@@ -767,8 +778,8 @@ describe('apagar a conta', () => {
   test('apaga as linhas dela em avisos_atraso; as dos outros ficam', async () => {
     const env = ambiente({ RESEND_API_KEY: 'k' });
     resendFalso();
-    const D = await conta(env, 'Dona');
-    const P = await conta(env, 'Comproprietária');
+    const D = await contaConfirmada(env, 'Dona');
+    const P = await contaConfirmada(env, 'Comproprietária');
     await casa(env, D, 'h1');
     await registo(env, 'h1', 'rec', 'r1', plan(), D);
     await comproprietario(env, D, P, ['h1']);

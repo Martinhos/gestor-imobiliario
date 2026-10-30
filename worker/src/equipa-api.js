@@ -328,9 +328,10 @@ export async function rotasEquipaApi(c) {
     const texto = String((b && b.texto) || '').trim().slice(0, 2000);
     const agora = now();
 
-    const msg = (tipo) => env.DB.prepare(
+    // uma mensagem no fio, com o texto da caixa (ou outro, quando se dá)
+    const msg = (tipo, outro) => env.DB.prepare(
       'INSERT INTO ticket_msgs (id, ticket_id, tipo, texto, autor, nome, papel, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(crypto.randomUUID(), id, tipo, texto, eu.discordId || '?', eu.nome || '', eu.papel || '', agora).run();
+    ).bind(crypto.randomUUID(), id, tipo, outro == null ? texto : outro, eu.discordId || '?', eu.nome || '', eu.papel || '', agora).run();
 
     if (acao === 'nota') {
       if (!texto) return err(400, 'Escreve a nota.');
@@ -354,6 +355,45 @@ export async function rotasEquipaApi(c) {
         return err(409, ((agora2 && agora2.assignee_nome) || 'Outra pessoa') + ' chegou primeiro a este pedido.');
       }
       await auditar(env, eu, 'pedido.atribuir', id, tomar ? 'tomou' : 'largou');
+    } else if (acao === 'aceitar' && t.category === 'seguranca') {
+      /* Decidir um ticket de segurança (um limite atingido): a resolução
+         proposta é obrigatória — bloquear, contactar, subir o limite… — e é
+         ela que se segue (o Claude, pelo scripts/ticket.mjs, só pega nos
+         decididos). Grava-se nas colunas da aceitação (accepted_changes é a
+         proposta) e fica numa nota interna. As mesmas guardas do aceitar. */
+      if (!texto) return err(400, 'Escreve a resolução proposta: é ela que se segue.');
+      const r = await env.DB.prepare(
+        `UPDATE tickets SET accepted_at = ?, accepted_by = ?, accepted_by_nome = ?, accepted_changes = ?, updated_at = ?
+          WHERE id = ? AND accepted_at IS NULL AND refused_at IS NULL AND status <> 'concluido'`
+      ).bind(agora, eu.discordId || '?', eu.nome || '', texto, agora, id).run();
+      if (!r.meta || r.meta.changes !== 1) {
+        return err(409, t.accepted_at ? 'Este ticket já foi decidido' + (t.accepted_by_nome ? ' por ' + t.accepted_by_nome : '') + '.'
+          : t.refused_at ? 'Este ticket foi arquivado' + (t.refused_by_nome ? ' por ' + t.refused_by_nome : '') + '.'
+            : 'Um ticket concluído não se decide: reabre-o primeiro.');
+      }
+      await msg('nota', 'Resolução proposta: ' + texto);
+      await auditar(env, eu, 'pedido.decidir', id, cortar(texto, 120));
+    } else if (acao === 'recusar' && t.category === 'seguranca') {
+      /* Arquivar um ticket de segurança (um falso alarme): a justificação é
+         obrigatória e fica numa nota interna. Conclui-o, e larga a resolução
+         proposta, se havia. Não há pessoa a quem responder: nem reply, nem
+         email. Se o limite voltar a ser atingido, reabre-se sem decisão
+         (lib/limites.js). */
+      if (!texto) return err(400, 'Escreve porque se arquiva: fica no ticket.');
+      if (t.status === 'concluido') return err(409, 'Este ticket já está concluído.');
+      const [, up] = await env.DB.batch([
+        env.DB.prepare(
+          'INSERT INTO ticket_msgs (id, ticket_id, tipo, texto, autor, nome, papel, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(crypto.randomUUID(), id, 'nota', 'Arquivado: ' + texto, eu.discordId || '?', eu.nome || '', eu.papel || '', agora),
+        env.DB.prepare(
+          `UPDATE tickets SET status = 'concluido', refused_at = ?, refused_by = ?, refused_by_nome = ?,
+                  accepted_at = NULL, accepted_by = NULL, accepted_by_nome = NULL, accepted_changes = NULL,
+                  updated_at = ?
+            WHERE id = ? AND status <> 'concluido'`
+        ).bind(agora, eu.discordId || '?', eu.nome || '', agora, id),
+      ]);
+      if (!up || !up.meta || up.meta.changes !== 1) return err(409, 'Este ticket já está concluído.');
+      await auditar(env, eu, 'pedido.arquivar', id, cortar(texto, 120));
     } else if (acao === 'aceitar') {
       /* A decisão sobre um pedido de uma pessoa: só os aceites se
          implementam (o Claude, pelo scripts/ticket.mjs, só pega nesses).
@@ -425,6 +465,10 @@ export async function rotasEquipaApi(c) {
          reabrir larga a recusa, para o pedido se poder decidir de novo. */
       const estado = acao === 'fechar' ? 'concluido' : acao === 'reabrir' ? 'criado' : 'resolucao';
       if (acao === 'responder' && !texto) return err(400, 'Escreve a resposta.');
+      // um ticket de segurança sem decisão só sai pelo Arquivar, que pede a justificação
+      if (acao === 'fechar' && t.category === 'seguranca' && t.accepted_at == null && t.status !== 'concluido') {
+        return err(400, 'Um ticket de segurança por decidir não se conclui assim: decide-o, ou arquiva-o com a justificação.');
+      }
       /* Numa só transação: com dois statements soltos, um erro entre eles
          deixava o fio e a coluna reply a contarem histórias diferentes —
          e o retry de quem viu o 500 duplicava a mensagem no fio. */
@@ -519,9 +563,11 @@ export async function rotasEquipaApi(c) {
     const { newUserId, palavraNova } = await import('./auth.js');
     const pw = await palavraNova(env, pass);
     const id = newUserId();
+    // nasce com o email confirmado (migração 0027): quem a cria na equipa já conferiu o endereço
+    const criada = now();
     await env.DB.prepare(
-      'INSERT INTO users (id, email, name, pass_hash, pass_salt, pass_v, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).bind(id, email, nome || email.split('@')[0], pw.hash, pw.salt, pw.v, now()).run();
+      'INSERT INTO users (id, email, name, pass_hash, pass_salt, pass_v, created_at, email_verified_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(id, email, nome || email.split('@')[0], pw.hash, pw.salt, pw.v, criada, criada).run();
     await auditar(env, eu, 'conta.criar.feito', id, email);
     return json({ id, email });
   }

@@ -143,11 +143,14 @@ describe('a miniatura no servidor', () => {
     // a hora de uploads esgotada: uma foto nova já não sobe…
     await env.DB.prepare('UPDATE rate_limits SET n = 60 WHERE k = ?').bind('up:' + D.id).run();
     assert.equal((await carregar(env, D, 'F_NOVA')).status, 429);
+    // (a primeira recusa da janela leva o contador a 61: é a que abre o ticket de segurança)
+    const upAntes = await env.DB.prepare('SELECT n FROM rate_limits WHERE k = ?').bind('up:' + D.id).first();
+    assert.equal(upAntes.n, 61);
     // …mas a miniatura da que já subiu sobe, sem mexer no contador
     assert.equal((await subirMini(env, D, 'F1')).status, 200);
     assert.deepEqual(await linhas(env), antes, 'nenhuma linha nova nem mudada em files');
     const up = await env.DB.prepare('SELECT n FROM rate_limits WHERE k = ?').bind('up:' + D.id).first();
-    assert.equal(up.n, 60);
+    assert.equal(up.n, 61);
     const tn = await env.DB.prepare('SELECT n FROM rate_limits WHERE k = ?').bind('tn:' + D.id).first();
     assert.equal(tn.n, 1, 'tem o travão dela');
     assert.equal(env.FILES.m.get(chaveDaMiniatura('F1')).length, MINI, 'no R2, na chave derivada');

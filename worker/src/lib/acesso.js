@@ -275,7 +275,7 @@ export async function casasDeColaborador(env, userId) {
 // «Adicionar e confirmar planeados», e confirmar é um put do planeado do
 // dono (avança o next; silenciar mexe em muted) — sem isto o contabilista
 // via o cartão «por confirmar» e levava 403 ao tocar-lhe. O put passa, mas
-// quem grava é planeadoAGravar/fundirPlaneado: só next, until e muted entram.
+// quem grava é planeadoAGravar/fundirPlaneado: só next, until, muted e desde entram.
 // E confirmar um planeado que termina («uma só vez», ou o next seguinte
 // passa o fim) é apagá-lo no cliente — esse del passa também
 // (planeadoTermina); noutro caso apagar o de outrem continua 403. Um
@@ -308,7 +308,7 @@ export function regraDoRegisto(me, acesso, kind, row, put) {
 
 // O que se grava quando um colaborador escreve um planeado: se o planeado
 // existe e não é dele, o que vem funde-se sobre o guardado (fundirPlaneado —
-// só next, until e muted mudam); o seu próprio, ou um novo, grava-se como
+// só next, until, muted e desde mudam); o seu próprio, ou um novo, grava-se como
 // veio. Donos e comproprietários gravam sempre o que mandam. Corre depois de
 // regraDoRegisto dizer que sim e antes da regra dos anexos, da escrita e do
 // linkFiles, para os três olharem para o que fica mesmo na base. Como
@@ -638,6 +638,10 @@ async function purgarConta(env, uid) {
       ...apagarRastoDaConta(env, uid),
       // os atrasos que já foram num email a esta conta (lib/avisos-atraso.js)
       env.DB.prepare('DELETE FROM avisos_atraso WHERE user_id = ?').bind(uid),
+      // as ligações por email que ainda houver: a da confirmação guarda o
+      // endereço (migração 0027), e a da palavra-passe já não serve a ninguém
+      env.DB.prepare('DELETE FROM email_verifications WHERE user_id = ?').bind(uid),
+      env.DB.prepare('DELETE FROM password_resets WHERE user_id = ?').bind(uid),
       // lápide: a identidade some, as referências ficam legíveis
       env.DB.prepare(
         `UPDATE users SET name = '[deleted]', email = 'apagado-' || id || '@invalido.local',

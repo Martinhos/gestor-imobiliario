@@ -382,6 +382,9 @@ dialog.janela::backdrop{background:var(--veu)}
 .pd-decisao p{flex:1 1 260px;display:flex;flex-direction:column;gap:2px}
 .pd-decisao-tit{font-weight:600}
 .pd-decisao-botoes{display:flex;gap:8px}
+/* a resolução proposta de um ticket de segurança decidido: quem, quando e, por baixo, o texto */
+.pd-resolucao{flex-direction:column;align-items:stretch;gap:8px}
+.pd-resolucao p{flex:0 0 auto}
 .pd-proposta{padding:10px 12px;border-radius:10px;background:var(--accent-soft);color:var(--accent-text)}
 @container (max-width:660px){.pd-lado{border-left:0;border-top:1px solid var(--line)}}
 /* o fio: o que a pessoa escreveu, as respostas e as notas internas */

@@ -27,6 +27,31 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 48,
+    data: '2026-10-30',
+    titulo: 'Confirmar o email, e começar os planeados hoje',
+    seccoes: [
+      {
+        titulo: 'Conta e entrada',
+        afeta: ['conta'],
+        itens: [
+          'Quem cria conta com email e palavra-passe recebe um email para o confirmar. Até lá a app funciona, com uma faixa a lembrar; passados 7 dias sem confirmar, só se entra depois de clicar na ligação do email.',
+          'No ecrã de confirmação há «Pedir ajuda», para falares com a equipa se o email não chegar.',
+          'As contas que já existiam e as que entram pela Google contam como confirmadas. Entrar pela Google numa conta por confirmar confirma-a e remove a palavra-passe que lá estivesse.',
+        ],
+      },
+      {
+        titulo: 'Planeados',
+        afeta: ['movimentos', 'contratos', 'creditos'],
+        itens: [
+          'Um planeado com datas em falta tem «Começar a partir de hoje»: as datas antigas ficam por registar, sem criar movimentos, e o próximo passa para a primeira data a partir de hoje. Há Anular.',
+          '«Recusar desta vez» numa renda de um contrato já não volta atrás quando abres a app outra vez.',
+          'As opções do ⋯ já não partem em duas linhas.',
+        ],
+      },
+    ],
+  },
+  {
     v: 47,
     data: '2026-10-29',
     titulo: 'Datas a partir da compra do imóvel',

@@ -150,6 +150,8 @@ describe('ações sobre contas', () => {
       { email: 'Nova@X.pt', nome: 'Equipa', password: 'Aa1!aaaa', motivo: 'conta para a equipa' }));
     assert.equal(r.status, 200);
     assert.equal(r.email, 'nova@x.pt', 'o email normaliza');
+    const criada = await env.DB.prepare('SELECT created_at, email_verified_at FROM users WHERE id = ?').bind(r.id).first();
+    assert.ok(criada.email_verified_at > 0 && criada.email_verified_at === criada.created_at, 'nasce com o email confirmado');
 
     const daCasa = await chamar(env, MASTER, 'POST', '/api/equipa/pessoas',
       { email: 'chefe@rendorium.com', password: 'Aa1!aaaa', motivo: 'conta interna' });

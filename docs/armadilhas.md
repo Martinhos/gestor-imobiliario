@@ -150,8 +150,8 @@ rec.add é «Adicionar e confirmar planeados», e confirmar o planeado do dono
 é um put desse planeado (o cliente manda-o inteiro com o next avançado;
 silenciar mexe em muted). A exceção em `regraDoRegisto` deixa o put passar,
 mas o que se grava passa por `planeadoAGravar`/`fundirPlaneado`
-(worker/src/lib/acesso.js e permissoes.js): só `next`, `until` e `muted`
-entram do que veio; nome, cadência, montante, imóvel, contrato e fim ficam
+(worker/src/lib/acesso.js e permissoes.js): só `next`, `until`, `muted` e
+`desde` (o chão do «Começar a partir de hoje») entram do que veio; nome, cadência, montante, imóvel, contrato e fim ficam
 como o dono os deixou. Uma reescrita com amount/propertyId/tx trocados não
 dá erro — não tem efeito nesses campos —, e um put atrasado sobre um
 planeado que o dono já apagou leva 403 em vez de o ressuscitar. Não

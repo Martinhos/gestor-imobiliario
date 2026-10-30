@@ -78,6 +78,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-29 · A quarta ronda de QA e o email dos planeados em atraso
 - 2026-10-29 · O «?» da Ajuda no lugar da nuvem
 - 2026-10-29 · A quinta ronda de QA: nada antes da compra, o sync em lote e o rasto em palavras
+- 2026-10-29 · A sexta ronda de QA: o email confirma-se, os limites contam, e os planeados começam hoje
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2909,3 +2910,38 @@ o conteúdo — contar por categoria («rendas em atraso») era ler um campo dos
 dados, e ele escolheu não ir aí. A Privacidade passou a dizê-lo e a versão
 dos termos subiu para 2026-10-30, como ele escolheu: quem tem conta volta a
 aceitar uma vez.
+
+## 2026-10-29 · A sexta ronda de QA: o email confirma-se, os limites contam, e os planeados começam hoje
+
+**O email por confirmar.** Ticket do Martinho: nenhum email de verificação saía
+no registo — qualquer endereço, de outra pessoa ou inexistente, ficava dono de
+uma conta e destino dos avisos. Decidiu: a conta entra logo e tem 7 dias; depois
+disso, só com o email confirmado. As contas que já existiam e as da Google
+contam como confirmadas (a migração 0027 preenche email_verified_at com o
+created_at). O portão está no servidor e não só no ecrã, senão a API ficava
+aberta; ficam de fora o que deixa sair, apagar a conta, aceitar os termos e
+pedir ajuda (decisão dele: quem está preso no ecrã pode falar com a equipa). A
+folha encontrou a pré-apropriação — registar o email de outra pessoa com uma
+palavra-passe, e o dono entrar mais tarde pela Google numa conta onde o estranho
+ainda tem sessão —; decisão dele: a Google, ao confirmar, remove a palavra-passe
+e as outras sessões.
+
+**Os limites abrem tickets de segurança.** Um 429 não deixava rasto. Decidiu:
+todos os limites, um ticket por limite e por conta ou IP, e nenhum se trata sem
+uma pessoa escrever a resolução proposta (como os pedidos aceites). Para uma
+força bruta não virar uma escrita na D1 por pedido, só a primeira recusa de cada
+janela escreve (o contador passa de limit a limit + 1 num UPDATE condicional).
+O limites.js deixou de importar o relatos.js (o ciclo relatos → notify → limites
+→ relatos que o testes/quatro-olhos.test.js apanha) e escreve o ticket sozinho,
+com a mesma assinatura; o notify.js deixou de usar o rateLimit na deduplicação
+dos avisos, para o limites.js poder avisar o Discord. Reutilizam-se as colunas da
+0024: accepted_changes guarda a resolução proposta e refused_* o arquivo.
+
+**Começar a partir de hoje.** Um contrato com início no passado deixava a renda em
+atraso para sempre: só havia silenciar, recusar uma de cada vez ou preencher
+tudo. A ação nova precisava de um chão (desde) no planeado: sem ele, o arranque
+seguinte (syncContractRec) puxava a renda de volta aos meses largados. O mesmo
+desfazia o «Recusar desta vez» numa renda de contrato desde sempre (bug antigo,
+achado pela folha); decisão dele: corrigir já, com o mesmo chão, só nas rendas
+de contrato — numa hipoteca o chão esconderia ao preenchimento prestações que
+ninguém recusou.

@@ -399,6 +399,47 @@ export async function emailReporPassword(env, para, ligacao) {
   return enviarEmail(env, { para, remetente: 'maquina', assunto: c.assunto, html: c.html, texto: c.texto });
 }
 
+/* O email «Confirma o teu email», no molde do repor: o botão com a ligação,
+   a ligação por extenso por baixo para quem a tiver de copiar, a validade
+   (7 dias, a mesma janela em que a conta funciona sem confirmar) e o rodapé
+   da conta. O «vale 7 dias e serve uma vez» é garantido por quem a criou
+   (rotas/auth.js:pedirConfirmacao) — aqui só se escreve o envelope.
+   Recebe: ligacao — o URL de confirmação, completo (…/?confirmar=<token>).
+   Devolve: { assunto, html, texto } — o email pronto a enviar. */
+export function cartaConfirmarEmail(ligacao) {
+  const titulo = 'Confirma o teu email';
+  const pedido = 'Criaste uma conta no Rendorium com este email. Confirma que é teu para continuares a usar a app ' +
+    'e a receber os avisos por email.';
+  const validade = 'A ligação vale 7 dias e serve uma vez. Passados os 7 dias, a app pede-te para confirmar antes de continuar.';
+  const url = String(ligacao || '');
+  return {
+    assunto: titulo,
+    texto: textoDoEmail([titulo, pedido, 'Confirmar o email:\n' + url, validade, RODAPE_CONTA]),
+    html: molde({
+      assunto: titulo,
+      titulo,
+      blocos: [
+        paragrafo(escaparHtml(pedido)),
+        botao(url, 'Confirmar o email'),
+        paragrafo('Se o botão não abrir, copia esta ligação:<br><span class="rd-tinta" style="color:' + COR.tinta +
+          ';word-break:break-all">' + escaparHtml(url) + '</span>', 'sub'),
+        paragrafo(escaparHtml(validade)),
+      ],
+      rodape: RODAPE_CONTA,
+    }),
+  };
+}
+
+// O email «Confirma o teu email» (a cartaConfirmarEmail), enviado do no-reply.
+// Uma conta de teste recebe-o no email do dev que a criou (enviarEmail).
+// Recebe: env — o ambiente do worker; para — o email da conta; ligacao — o
+// URL de confirmação, completo.
+// Devolve: promessa de { enviado, motivo } — o que o enviarEmail disser.
+export async function emailConfirmarEmail(env, para, ligacao) {
+  const c = cartaConfirmarEmail(ligacao);
+  return enviarEmail(env, { para, remetente: 'maquina', assunto: c.assunto, html: c.html, texto: c.texto });
+}
+
 /* A resposta da equipa a um pedido: o número e o assunto por cima, a
    resposta numa caixa, e o botão para a app. A resposta vai cortada a
    RESPOSTA_MAX caracteres nas DUAS versões (com reticências quando corta: o

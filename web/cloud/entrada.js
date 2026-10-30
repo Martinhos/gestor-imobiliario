@@ -423,6 +423,7 @@ function finishLogin(u) {
   // quem entra com Google numa conta antiga também tem de aceitar
   api('GET', '/api/me').then(function (m) {
     if (m.termsCurrent && m.terms !== m.termsCurrent) showTermsGate();
+    pintarEmailPorConfirmar(m);   // a faixa dos 7 dias, ou o ecrã depois deles
   }).catch(function () {});
   startSync();
   // veio por uma ligação de convite ou de partilha: só DEPOIS de o ecrã de
@@ -621,6 +622,325 @@ function fecharRepor() {
     document.body.appendChild(el);
     try { document.getElementById('rp_1').focus(); } catch (e) {}
   }, 700);
+})();
+
+/* ---------------- a confirmação do email ----------------
+   Uma conta nova com palavra-passe confirma o email pela ligação que o
+   registo lhe manda (worker/src/rotas/auth.js:pedirConfirmacao). Durante 7
+   dias a app funciona, com a faixa «Confirma o teu email até dd/mm» e o
+   «Reenviar» por cima do conteúdo; passados os 7 dias, o ecrã «Confirma o
+   teu email» tapa tudo até a pessoa abrir a ligação — e o servidor recusa o
+   resto com 403 email_por_confirmar (worker/src/api.js:portaoDoEmail), que
+   também o abre (cloud/nucleo.js:api). Quem diz o estado é o GET /api/me
+   (emailConfirmado, confirmarAte), lido no arranque e no finishLogin. */
+
+/* O envelope da faixa e do ecrã do email, no traço dos ícones da casa
+   (app/icones.js:ic, que não tem um): 24 de grelha, contorno de 1,8.
+   Recebe: s — o tamanho em píxeis.
+   Devolve: o SVG (texto). */
+function icCarta(s) {
+  return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+    '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/></svg>';
+}
+
+/* O dia e o mês de um instante, como se escrevem em Portugal: «05/11».
+   Recebe: ms — milissegundos de época.
+   Devolve: o texto dd/mm, ou '' sem data. */
+function diaDoPrazo(ms) {
+  var d = new Date(Number(ms) || 0);
+  if (!ms || isNaN(d.getTime())) return '';
+  return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+/* Aplica o que o /api/me diz da confirmação do email: confirmado (ou um
+   servidor que ainda não o diz), nada; por confirmar dentro dos 7 dias, a
+   faixa; passados os 7 dias, o ecrã. Sair do ecrã para a app desbloqueada
+   puxa o estado logo, em vez de esperar pelo ciclo dos 30 s.
+   Recebe: m — a resposta do GET /api/me ({email, emailConfirmado, confirmarAte}).
+   Devolve: nada — mexe na faixa (#faixaEmail) e no ecrã (#cwEmail). */
+function pintarEmailPorConfirmar(m) {
+  if (!m || !CW.user) return;
+  if (m.emailConfirmado !== false) {
+    var estavaPreso = !!document.getElementById('cwEmail');
+    largarEmailPorConfirmar();
+    if (estavaPreso && typeof syncCycle === 'function') { try { syncCycle(); } catch (e) {} }
+    return;
+  }
+  CW.emailPorConfirmar = { ate: Number(m.confirmarAte) || 0, email: String(m.email || CW.user.email || '') };
+  if (CW.emailPorConfirmar.ate && Date.now() > CW.emailPorConfirmar.ate) {
+    tirarFaixaDoEmail();
+    mostrarPortaoDoEmail();
+  } else {
+    fecharPortaoDoEmail();
+    pintarFaixaDoEmail();
+  }
+}
+
+/* O servidor recusou um pedido com 403 email_por_confirmar (os 7 dias
+   acabaram entretanto, ou o relógio do aparelho não sabe): abre o ecrã.
+   Chamada pelo cloud/nucleo.js:api.
+   Recebe: nada.
+   Devolve: nada — abre o #cwEmail, se ainda não está aberto. */
+function emailPorConfirmar() {
+  if (!CW.user) return;
+  CW.emailPorConfirmar = CW.emailPorConfirmar || { ate: 0, email: String(CW.user.email || '') };
+  tirarFaixaDoEmail();
+  mostrarPortaoDoEmail();
+}
+
+/* Tira a faixa e o ecrã do email: o email foi confirmado, ou a sessão
+   acabou (cloud/nucleo.js:encerrarSessao).
+   Recebe: nada.
+   Devolve: nada. */
+function largarEmailPorConfirmar() {
+  CW.emailPorConfirmar = null;
+  tirarFaixaDoEmail();
+  fecharPortaoDoEmail();
+}
+
+/* A faixa dos 7 dias: discreta, no fluxo da página logo abaixo do cabeçalho
+   (a seguir ao #hdrSync), e rola com o conteúdo — não fica por cima da
+   navegação, das abas, do FAB nem da pílula do QA (estilos.css:.faixa-email).
+   Recebe: nada (lê CW.emailPorConfirmar).
+   Devolve: nada — cria ou atualiza o #faixaEmail. */
+function pintarFaixaDoEmail() {
+  var info = CW.emailPorConfirmar;
+  if (!info) return;
+  var el = document.getElementById('faixaEmail');
+  if (!el) {
+    var ancora = document.getElementById('hdrSync') || document.querySelector('header.top');
+    if (!ancora || !ancora.parentNode) return;
+    el = document.createElement('div');
+    el.id = 'faixaEmail';
+    el.className = 'faixa-email';
+    el.setAttribute('role', 'status');
+    ancora.parentNode.insertBefore(el, ancora.nextSibling);
+  }
+  var dia = diaDoPrazo(info.ate);
+  el.innerHTML = '<span class="faixa-email-ic">' + icCarta(18) + '</span>' +
+    '<p><b>Confirma o teu email' + (dia ? ' até ' + dia : '') + '.</b>' +
+    '<span>Enviámos a ligação para ' + esc(info.email) + '.</span></p>' +
+    '<button type="button" class="btn faixa-email-btn" data-toca="dados" data-click="CW.reenviarConfirmacao()">Reenviar</button>';
+}
+
+/* Tira a faixa dos 7 dias.
+   Recebe: nada.
+   Devolve: nada. */
+function tirarFaixaDoEmail() {
+  var el = document.getElementById('faixaEmail');
+  if (el) el.remove();
+}
+
+/* O ecrã «Confirma o teu email», por cima de toda a app e dos termos
+   (estilos.css:.email-portao, z 198), abaixo da entrada: o endereço, o
+   «Reenviar o email», o «Já confirmei» (volta a ler o /api/me) e o «Sair».
+   Como os outros portões, o que tem a dizer diz-se nele (#cwe_info,
+   #cwe_err): um aviso ficava por trás. O foco entra no título.
+   Recebe: nada (lê CW.emailPorConfirmar).
+   Devolve: nada — cria o #cwEmail, ou só atualiza o endereço. */
+function mostrarPortaoDoEmail() {
+  var email = (CW.emailPorConfirmar && CW.emailPorConfirmar.email) || (CW.user && CW.user.email) || '';
+  var el = document.getElementById('cwEmail');
+  if (el) {
+    var onde = document.getElementById('cweEndereco');
+    if (onde) onde.textContent = email;
+    return;
+  }
+  el = document.createElement('div');
+  el.id = 'cwEmail';
+  el.className = 'email-portao';
+  el.setAttribute('role', 'alertdialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-labelledby', 'cweTit');
+  el.setAttribute('aria-describedby', 'cweTxt');
+  el.innerHTML =
+    '<div class="tg-caixa">' +
+    '<span class="tg-ic" aria-hidden="true">' + icCarta(28) + '</span>' +
+    '<div class="tg-cab"><h1 id="cweTit" tabindex="-1">Confirma o teu email</h1>' +
+    '<p id="cweTxt">Passaram os 7 dias para confirmar o email desta conta. Abre a ligação que enviámos para ' +
+    '<b id="cweEndereco" class="email-endereco">' + esc(email) + '</b> e volta aqui.</p></div>' +
+    '<p class="email-dica">Não a encontras? Vê a pasta de spam, ou pede outra. Os teus dados continuam guardados.</p>' +
+    '<a href="#" class="ent-esqueci email-ajuda" data-toca="camada" data-click="CW.pedirAjudaSemConfirmar(event)">Pedir ajuda</a>' +
+    '<div class="tg-botoes">' +
+    '<button type="button" class="btn primary" id="cweReenviar" data-toca="dados" data-click="CW.reenviarConfirmacao()">Reenviar o email</button>' +
+    '<button type="button" class="btn" id="cweJa" data-toca="dados" data-click="CW.jaConfirmei()">Já confirmei</button>' +
+    '<button type="button" class="btn ghost" data-toca="ecra" data-click="CW.sairSemConfirmar()">Sair</button>' +
+    '</div>' +
+    '<p id="cwe_info" class="small email-info" role="status"></p>' +
+    '<p id="cwe_err" class="small email-erro" role="alert"></p></div>';
+  document.body.appendChild(el);
+  lockScroll(true);
+  try { document.getElementById('cweTit').focus({ preventScroll: true }); } catch (e) {}
+}
+
+/* Fecha o ecrã do email, se estiver aberto, e destrava o scroll.
+   Recebe: nada.
+   Devolve: nada. */
+function fecharPortaoDoEmail() {
+  var el = document.getElementById('cwEmail');
+  if (!el) return;
+  el.remove();
+  lockScroll(false);
+}
+
+/* Diz uma frase sobre o email onde ela se vê: no ecrã do email, se está
+   aberto (um aviso ficava por trás dele), ou num aviso.
+   Recebe: frase — o texto; erro (opcional) — verdadeiro para o dizer como erro.
+   Devolve: nada. */
+function dizDoEmail(frase, erro) {
+  var info = document.getElementById('cwe_info'), falhou = document.getElementById('cwe_err');
+  if (info && falhou) {
+    info.textContent = erro ? '' : frase;
+    falhou.textContent = erro ? frase : '';
+    return;
+  }
+  toast(frase);
+}
+
+/* O «Reenviar» da faixa e do ecrã: pede uma ligação nova (só com sessão,
+   3 por hora; as anteriores deixam de valer). O botão diz que está a enviar
+   e não aceita um segundo toque enquanto o pedido anda.
+   Recebe: nada.
+   Devolve: nada — o resultado diz-se pelo dizDoEmail. */
+CW.reenviarConfirmacao = function () {
+  var botoes = [].slice.call(document.querySelectorAll('#cweReenviar,.faixa-email-btn'));
+  if (botoes.some(function (b) { return b.disabled; })) return;
+  botoes.forEach(function (b) { b._rotulo = b.textContent; b.disabled = true; b.textContent = 'A enviar…'; });
+  var repoe = function () {
+    botoes.forEach(function (b) { b.disabled = false; if (b._rotulo) b.textContent = b._rotulo; });
+  };
+  api('POST', '/api/me/confirmar/reenviar')
+    .then(function (r) {
+      repoe();
+      if (r && r.emailConfirmado) {
+        pintarEmailPorConfirmar({ emailConfirmado: true });
+        toast(r.msg || 'O teu email já está confirmado.');
+        return;
+      }
+      dizDoEmail((r && r.msg) || 'Enviámos uma ligação nova.');
+    })
+    .catch(function (e) {
+      repoe();
+      dizDoEmail(e.semResposta || !e.status ? 'Sem ligação ao servidor. Tenta daqui a pouco.' : (e.message || 'Não deu para enviar agora.'), true);
+    });
+};
+
+/* O «Já confirmei» do ecrã: volta a perguntar ao servidor. Confirmado, o
+   ecrã sai e a app continua; ainda por confirmar, diz-se no próprio ecrã.
+   Recebe: nada.
+   Devolve: nada. */
+CW.jaConfirmei = function () {
+  var b = document.getElementById('cweJa');
+  if (b) { if (b.disabled) return; b.disabled = true; }
+  api('GET', '/api/me')
+    .then(function (m) {
+      if (b) b.disabled = false;
+      if (m && m.emailConfirmado !== false) {
+        pintarEmailPorConfirmar(m);
+        toast('Email confirmado.');
+        return;
+      }
+      dizDoEmail('Ainda não vemos o email confirmado. Abre a ligação do email mais recente, ou pede outra.', true);
+    })
+    .catch(function (e) {
+      if (b) b.disabled = false;
+      dizDoEmail(e.semResposta || !e.status ? 'Sem ligação ao servidor. Tenta daqui a pouco.' : (e.message || 'Não deu para confirmar agora.'), true);
+    });
+};
+
+/* Quantos pedidos de ajuda a conta já tem (o GET /api/tickets passa o
+   portão do email), para o «Pedir ajuda» saber se um pedido saiu.
+   Recebe: nada.
+   Devolve: Promise com o número, ou null quando não se soube. */
+function pedidosDaConta() {
+  return api('GET', '/api/tickets')
+    .then(function (r) { return ((r && r.tickets) || []).length; })
+    .catch(function () { return null; });
+}
+
+/* O «Pedir ajuda» do ecrã do email (decisão do Martinho, 2026-10-29): abre a
+   janela dos pedidos da Ajuda (cloud/ajuda.js:CW.newTicket), que o servidor
+   deixa passar mesmo com o email por confirmar (api.js:PASSA_SEM_EMAIL).
+   Uma janela vive abaixo do ecrã (70 contra 198), por isso o ecrã sai da
+   frente enquanto ela está aberta e volta quando fecha (o aoFechar da
+   camada, componentes.js:closeModal) — também pelo «Sair sem guardar», que
+   abre por cima dela e a fecha. Um pedido que saiu diz-se no próprio ecrã:
+   o aviso do envio ficava por trás dele.
+   Recebe: e (opcional) — o evento do clique, para travar a navegação da ligação.
+   Devolve: nada. */
+CW.pedirAjudaSemConfirmar = function (e) {
+  if (e && e.preventDefault) e.preventDefault();
+  var portao = document.getElementById('cwEmail');
+  if (!portao || typeof CW.newTicket !== 'function') return;
+  var antes = pedidosDaConta();
+  portao.style.display = 'none';   // o [hidden] não ganha ao display:flex da classe
+  lockScroll(false);
+  CW.newTicket('problema');
+  var camada = modalTop();
+  var volta = function () {
+    var p = document.getElementById('cwEmail');
+    if (!p) return;   // o email confirmou-se entretanto, ou a sessão acabou
+    p.style.display = '';
+    lockScroll(true);
+    var ligacao = p.querySelector('.email-ajuda');
+    try { if (ligacao) ligacao.focus({ preventScroll: true }); } catch (x) {}
+    Promise.all([antes, pedidosDaConta()]).then(function (n) {
+      if (n[0] != null && n[1] != null && n[1] > n[0]) dizDoEmail('Pedido enviado. A resposta chega por email.');
+    });
+  };
+  if (!camada) { volta(); return; }
+  var antesDeFechar = camada.aoFechar;
+  camada.aoFechar = function (origem) {
+    if (typeof antesDeFechar === 'function') { try { antesDeFechar(origem); } catch (x) {} }
+    // o sendTicket fecha a janela e só depois conta o pedido: volta-se no passo seguinte
+    setTimeout(volta, 0);
+  };
+};
+
+/* O «Sair» do ecrã do email: termina a sessão sem a janela de confirmação
+   do CW.logout, que abria por baixo do ecrã. Os dados ficam na conta.
+   Recebe: nada.
+   Devolve: nada — volta à entrada (nucleo.js:encerrarSessao, que tira o ecrã). */
+CW.sairSemConfirmar = function () {
+  encerrarSessao({ avisarServidor: true });
+};
+
+/* Diz o desfecho da ligação ?confirmar=: com sessão, relê o /api/me (a
+   faixa ou o ecrã saem) e diz-se no sítio que se vê; sem sessão, escreve-se
+   no ecrã de entrada (#cwa_info, #cwa_err), que pode ainda estar a nascer.
+   Um 410 numa conta que já está confirmada não é um erro para quem o lê.
+   Recebe: frase — o texto; erro — verdadeiro quando a ligação não serviu;
+   tentativas (opcional) — quantas vezes ainda espera pelo ecrã de entrada.
+   Devolve: nada. */
+function chegadaDoEmail(frase, erro, tentativas) {
+  if (CW.user) {
+    api('GET', '/api/me').then(function (m) {
+      if (erro && m && m.emailConfirmado !== false) { frase = 'O teu email já está confirmado.'; erro = false; }
+      pintarEmailPorConfirmar(m);
+      dizDoEmail(frase, erro);
+    }).catch(function () { dizDoEmail(frase, erro); });
+    return;
+  }
+  var alvo = document.getElementById(erro ? 'cwa_err' : 'cwa_info');
+  if (alvo) { alvo.textContent = erro ? frase : frase + ' Entra para continuares.'; return; }
+  var n = tentativas == null ? 10 : tentativas;
+  if (n > 0) setTimeout(function () { chegadaDoEmail(frase, erro, n - 1); }, 300);
+}
+
+/* A chegada pela ligação do email (?confirmar=<64 hex>): a ligação sai já
+   da barra de endereço (não fica no histórico nem em partilhas) e o token
+   vai ao servidor, com ou sem sessão aberta neste aparelho. */
+(function () {
+  var m = /[?&]confirmar=([a-f0-9]{64})/.exec(location.search);
+  if (!m) return;
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+  api('POST', '/api/auth/confirmar', { t: m[1] })
+    .then(function () { chegadaDoEmail('Email confirmado.', false); })
+    .catch(function (e) {
+      chegadaDoEmail(e.semResposta || !e.status ? 'Sem ligação ao servidor. Abre a ligação do email outra vez daqui a pouco.'
+        : (e.message || 'Essa ligação não serviu.'), true);
+    });
 })();
 
 /* ---------------- aterragem: ?convite=<token>, ?ligar=<token> e ?grupo=<token> ----------------
@@ -1078,6 +1398,8 @@ if (CW.user) {
     guardarSessao();
     // conta anterior a estes documentos: pedir a aceitação antes de continuar
     if (u.termsCurrent && u.terms !== u.termsCurrent) showTermsGate();
+    // o email por confirmar: a faixa dos 7 dias, ou o ecrã depois deles
+    pintarEmailPorConfirmar(u);
     try {
       if (sessionStorage.getItem('gi_exemplo') === '1') {
         sessionStorage.removeItem('gi_exemplo');

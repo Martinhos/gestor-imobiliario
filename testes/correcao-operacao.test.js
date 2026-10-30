@@ -235,7 +235,7 @@ describe('o bot do Discord', () => {
     const base = env.DB;
     env.DB = Object.assign({}, base, {
       prepare(sql) {
-        if (/SELECT category FROM tickets/.test(sql)) throw new Error('D1 em baixo');
+        if (/SELECT category\b[^;]*FROM tickets WHERE id = \?$/.test(sql)) throw new Error('D1 em baixo');
         return base.prepare(sql);
       },
     });
@@ -279,6 +279,19 @@ describe('o bot do Discord', () => {
     const r2 = await (await interagir(env, botao('s1', 'tk:res:T1'))).json();
     assert.equal(r2.type, 7);
     assert.equal(await estadoDo(env, 'T1'), 'resolucao');
+  });
+
+  test('um ticket de segurança por decidir não se conclui pelo /fechar nem pelo «Concluir»; decidido, conclui-se', async () => {
+    const env = ambienteDoBot();
+    await comPedido(env, { id: 'S1', categoria: 'seguranca' });
+    const r = await (await interagir(env, comando('d1', 'fechar', { id: 'S1' }))).json();
+    assert.match(r.data.content, /resolução proposta/);
+    const r2 = await (await interagir(env, botao('d1', 'tk:fim:S1'))).json();
+    assert.match(r2.data.content, /resolução proposta/);
+    assert.equal(await estadoDo(env, 'S1'), 'criado', 'continua por decidir');
+    await env.DB.prepare("UPDATE tickets SET accepted_at = 1, accepted_changes = 'Subir o limite' WHERE id = 'S1'").run();
+    await interagir(env, comando('d1', 'fechar', { id: 'S1' }));
+    assert.equal(await estadoDo(env, 'S1'), 'concluido');
   });
 
   // achado A.5-14

@@ -201,10 +201,16 @@ export async function nomeDoDevNoDiscord(env, quem) {
 
 /* A conta de teste em si: email no subdomínio, palavra-passe impossível,
    termos aceites, e o dono (o dev que a pediu) gravado para o seletor.
+   Nasce com o email por confirmar, como uma conta a sério (migração 0027):
+   com a origem, manda logo o email «Confirma o teu email», que o
+   enviarEmail desvia para o email do dev dono — é assim que o fluxo se
+   prova no dev. Um email que não sai fica no console.error.
    Recebe: env — o ambiente do worker (a base D1); quem (opcional) — o id do
-   dev dono, para o seletor (fica null quando falta).
+   dev dono, para o seletor (fica null quando falta); origem (opcional) — o
+   início do endereço da app, onde a ligação de confirmação abre (sem ela
+   não se manda; a faixa da app tem o «Reenviar»).
    Devolve: promessa de { id, email } da conta acabada de criar. */
-async function criarContaDeTeste(env, quem) {
+async function criarContaDeTeste(env, quem, origem) {
   const id = newUserId();
   const email = 'teste-' + id.toLowerCase() + DOMINIO_TESTE;
   // sem palavra-passe de todo (como as contas so-Google): o formulario de
@@ -213,6 +219,11 @@ async function criarContaDeTeste(env, quem) {
     `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, terms_version, terms_at, test_owner)
      VALUES (?, ?, 'Conta de teste', '', '', ?, ?, ?, ?)`
   ).bind(id, email, now(), TERMS_VERSION, now(), quem || null).run();
+  if (origem) {
+    const { pedirConfirmacao } = await import('./rotas/auth.js');
+    const r = await pedirConfirmacao(env, { id, email }, origem);
+    if (!r.enviado) console.error('confirmar (conta de teste): email não enviado —', r.motivo);
+  }
   return { id, email };
 }
 
@@ -394,7 +405,7 @@ export async function rotaTeste(c) {
       }
     }
   }
-  if (!conta) conta = Object.assign({ sess_epoch: 0 }, await criarContaDeTeste(env, quem));
+  if (!conta) conta = Object.assign({ sess_epoch: 0 }, await criarContaDeTeste(env, quem, url.origin));
 
   const token = await createSession(env, conta.id, conta.sess_epoch || 0, agenteDe(c.request));
   await largarSessoesDoBrowser(env, c.request, token);
@@ -478,7 +489,7 @@ export async function rotasContasDeTeste(c) {
   }
 
   if (path === '/api/teste/nova' && method === 'POST') {
-    const conta = await criarContaDeTeste(env, dono);
+    const conta = await criarContaDeTeste(env, dono, new URL(request.url).origin);
     const token = await createSession(env, conta.id, 0, agenteDe(request));
     await largarSessoesDoBrowser(env, request, token);
     await auditar(env, { discordId: dono, nome: 'seletor de teste', papeis: ['dev'] },

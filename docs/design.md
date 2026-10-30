@@ -63,6 +63,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Um modal está acima de toda a navegação
 - O hambúrguer só existe onde há gaveta
 - Um portão por cima de tudo não mostra avisos
+- O email confirma-se em 7 dias
 - O service worker e a versão
 - A app não afirma nem decide antes de saber
 - A sincronização: o que é daqui e o que é do servidor
@@ -3973,6 +3974,24 @@ Confirmar (primário, quickConfirmRec), Rever (o formulário, confirmRec) e o
 mesmas linhas vão nas linhas dos contratos (cloud/painel.js:pendBlock; ver
 «Os Contratos»).
 
+«Começar a partir de hoje» (cloud/painel.js:CW.startFromToday) vive no ⋯ das
+linhas por confirmar quando há pelo menos uma data em atraso
+(planeados.js:recPodeComecarHoje), no toque longo e como primeiro botão da
+janela do preenchimento, numa linha inteira por cima de Cancelar e Registar.
+Larga as datas em falta sem criar movimentos e passa o planeado para a
+primeira data de hoje em diante, com a janela next..until mantida
+(planeados.js:recComecarHoje); quando não há próxima (uma só vez, ou o fim já
+passou), o planeado é removido. Pede confirmação com quantas datas ficam por
+registar e para que dia passa, e dá Anular. Fixa o desde do planeado
+(planeados.js:recDesde): o chão abaixo do qual nem o preenchimento nem o
+cursor da renda de um contrato voltam a pedir datas. «Recusar desta vez» numa
+renda de contrato fixa-o também (planeados.js:recRecusadaFixa), para o
+arranque não puxar a renda de volta ao mês recusado. Num planeado alheio, o
+servidor funde next, until, muted e desde (lib/permissoes.js:CAMPOS_DE_CONFIRMAR).
+
+O menu do ⋯ tem a largura do texto (estilos.css:.menupop), até 320px e nunca
+mais do que o ecrã: as opções não partem em duas linhas.
+
 A faixa de quem vem de trás (planeados.js:recRetroFaixa) mostra um planeado
 de cada vez com dois ou mais períodos passados sem movimento
 (planeados.js:recRetroCandidatos — nunca as prestações, que se perguntam ao
@@ -4273,6 +4292,35 @@ limpar a versão antiga), reiniciar — num role=status
 (novidades.js:caixaDosPassos): por fazer no ecrã trancado, a correr no ecrã
 de progresso (novidades.js:ecraAtualizar, que recebe a chave do passo e não
 a frase). Tranca também as escritas (ver «O service worker e a versão»).
+
+## O email confirma-se em 7 dias
+
+Uma conta com palavra-passe nasce com o email por confirmar
+(users.email_verified_at a NULL; as contas Google, as que a equipa cria no
+back office e as que já existiam antes da migração 0027 nascem confirmadas).
+O registo manda, em fundo, o email «Confirma o teu email» com uma ligação
+?confirmar= que vale 7 dias e uma só vez (rotas/auth.js:pedirConfirmacao,
+lib/correio.js:emailConfirmarEmail); na base fica só o sha256 do token, como
+no repor da palavra-passe. O /api/me diz emailConfirmado e confirmarAte
+(rotas/auth.js:estadoDoEmail).
+
+Nos 7 dias, a app funciona e há uma faixa por baixo do cabeçalho, no fluxo da
+página — não tapa a navegação nem a pílula do QA —, «Confirma o teu email até
+dd/mm» com «Reenviar» (entrada.js:pintarFaixaDoEmail). A cor é a do aviso
+(--warn-soft com o contorno --warn), e o estado lê-se pelo contorno, que
+sobrevive ao escuro forçado do Samsung. Passados os 7 dias, o servidor recusa
+tudo com 403 email_por_confirmar (api.js:portaoDoEmail), menos o /api/me, o
+reenviar, os termos, apagar a conta, sair e os pedidos de ajuda da própria
+conta (criar e ler); o cliente mostra o ecrã «Confirma o teu email» por cima de tudo
+(entrada.js:mostrarPortaoDoEmail), com «Reenviar o email», «Já confirmei»,
+«Pedir ajuda» e «Sair». Abrir a ligação, com ou sem sessão, diz «Email
+confirmado.» e tira a faixa. Os avisos por email (os planeados em atraso) só
+vão para emails confirmados; o email de repor a palavra-passe vai sempre.
+
+Entrar pela Google numa conta de palavra-passe por confirmar confirma-a, e
+remove a palavra-passe e as outras sessões: quem registou um email que não era
+seu não fica com a conta do dono. Quem a tinha criado e quer palavra-passe usa
+o «Esqueci-me da palavra-passe».
 
 ## O service worker e a versão
 A app abre offline porque o service worker guarda a casca — os ficheiros da
@@ -5787,6 +5835,20 @@ resposta proposta, que o detalhe mete já na caixa de responder, com uma nota a
 dizer de onde veio. Quem a lê envia-a como está ou muda-a primeiro, e só nesse
 envio a pessoa a recebe (worker/src/equipa-api.js:avisarDono) e a proposta
 sai.
+
+Um limite da API atingido abre um ticket de segurança: na primeira recusa de
+cada janela de uma chave, o rateLimit escreve ou engorda um ticket seguranca,
+um por limite e por conta ou IP (lib/limites.js:relatoDoLimite, a tabela
+lib/limites.js:LIMITES), e avisa no Discord; as recusas seguintes na mesma
+janela não escrevem nada. A deduplicação dos avisos e os relatos não contam.
+Um ticket de segurança não se trata sem decisão, nem no back office nem no
+bot do Discord: o cartão «Por decidir» tem
+Arquivar e Decidir. Decidir pede a resolução proposta, obrigatória
+(equipa-guiao.js:decidirSeguranca), que fica com quem e quando e é o que se
+segue; Arquivar pede a justificação (equipa-guiao.js:arquivarSeguranca) e
+conclui-o sem mandar nada a ninguém. Um limite que volta depois de concluído
+reabre o ticket, por decidir. A skill ticket só pega num ticket de segurança
+com a resolução proposta.
 
 Fora de produção, a Operação do back office (master e admin) mostra as
 sessões de teste abertas (equipa-guiao.js:verSessoesTeste): cada browser onde

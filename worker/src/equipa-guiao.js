@@ -340,7 +340,7 @@ var LISTAS = {
   },
   erros: {
     titulo: 'Erros',
-    sub: 'O que a app e o servidor apanham, agrupado: o mesmo erro soma as vezes e as pessoas.',
+    sub: 'O que a app e o servidor apanham, e os limites atingidos, agrupado: o mesmo erro soma as vezes e as pessoas.',
     vazio: 'Quando a app ou o servidor apanharem um erro, aparece aqui.',
   },
 };
@@ -384,7 +384,8 @@ function linhaPedido(p, ativo) {
     '<span class="sub n">' + quem +
     (p.n > 1 ? ' · ' + esc(p.n) + ' vezes' : '') +
     (p.versao ? ' · versão ' + esc(p.versao) : '') +
-    (tecnico || p.status === 'concluido' && !p.refused_at ? ''
+    (p.category === 'seguranca' ? (p.refused_at ? ' · arquivado' : p.status === 'concluido' ? '' : p.accepted_at ? ' · decidido' : ' · por decidir')
+      : tecnico || p.status === 'concluido' && !p.refused_at ? ''
       : p.refused_at ? ' · recusado' : p.proposta ? ' · resposta por enviar' : p.accepted_at ? ' · aceite' : ' · por decidir') +
     (p.assignee_nome ? ' · tomado por ' + esc(p.assignee_nome) : ' · #' + esc(curto(p.id))) + '</span></button>';
 }
@@ -518,6 +519,22 @@ function detalhePedido(d, tipo, comLista) {
         '<div class="pd-decisao-botoes"><button type="button" class="btn"' + comAcao('recusarPedido', [p.id]) + '>Recusar</button>' +
         '<button type="button" class="btn primary"' + comAcao('aceitarPedido', [p.id]) + '>Aceitar</button></div></div>';
     }
+  } else if (p.category === 'seguranca') {
+    /* um ticket de segurança (um limite atingido) também espera por uma
+       decisão: nada se faz sem a resolução proposta de alguém da equipa, e é
+       ela que se segue; arquivar conclui-o, com a justificação numa nota */
+    if (p.refused_at) decisao = '<p class="sub n pd-decidido">Arquivado por ' + esc(p.refused_by_nome || p.refused_by || 'alguém da equipa') + ' · ' + data(p.refused_at) + ' (a justificação está na nota interna acima)</p>';
+    else if (p.accepted_at) {
+      decisao = '<div class="pd-decisao pd-resolucao"><p><span class="pd-decisao-tit">Resolução proposta</span>' +
+        '<span class="sub n">Decidida por ' + esc(p.accepted_by_nome || p.accepted_by || 'alguém da equipa') + ' · ' + data(p.accepted_at) + '. É isto que se segue.</span></p>' +
+        '<p class="ms-texto">' + esc(p.accepted_changes || '') + '</p></div>';
+    }
+    else if (p.status !== 'concluido') {
+      decisao = '<div class="pd-decisao"><p><span class="pd-decisao-tit">Por decidir</span>' +
+        '<span class="sub">Nada se faz sem uma resolução proposta: bloquear, contactar, subir o limite… Arquivar conclui-o, com a justificação.</span></p>' +
+        '<div class="pd-decisao-botoes"><button type="button" class="btn"' + comAcao('arquivarSeguranca', [p.id]) + '>Arquivar</button>' +
+        '<button type="button" class="btn primary"' + comAcao('decidirSeguranca', [p.id]) + '>Decidir</button></div></div>';
+    }
   }
   /* a resposta proposta pelo Claude depois de implementar: vem já na caixa,
      para quem lê a enviar como está ou a mudar antes; só a envia uma pessoa */
@@ -538,7 +555,9 @@ function detalhePedido(d, tipo, comLista) {
     '<span class="so-nota">só a equipa vê</span></span>' +
     '<button type="button" class="btn so-resposta"' + comAcao('guardarModelo') + '>Guardar como modelo</button>' +
     '<button type="button" class="btn so-resposta"' + comAcao('agir', [p.id, 'responder']) + '>Responder</button>' +
-    '<button type="button" class="btn primary so-resposta"' + comAcao('agir', [p.id, 'fechar']) + '>Responder e concluir</button>' +
+    // um ticket de segurança por decidir só se conclui pelo Arquivar (com a justificação)
+    (p.category === 'seguranca' && !p.accepted_at ? ''
+      : '<button type="button" class="btn primary so-resposta"' + comAcao('agir', [p.id, 'fechar']) + '>Responder e concluir</button>') +
     '<button type="button" class="btn primary so-nota"' + comAcao('agir', [p.id, 'nota']) + '>Guardar nota interna</button>' +
     '</div></div>' +
     (p.status === 'concluido' ? '<div><button type="button" class="btn sm"' + comAcao('agir', [p.id, 'reabrir']) + '>Reabrir o pedido</button></div>' : '');
@@ -626,6 +645,38 @@ function recusarPedido(id) {
     return enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/recusar', { texto: v.justificacao })
       .then(function () { avisar('Pedido recusado e concluído.'); verPedido(id); });
   }, { texto: 'O pedido fica concluído, e não segue para implementar.', botao: 'Recusar', perigo: true });
+}
+/* Decide um ticket de segurança (um limite atingido): a janela pede a
+   resolução proposta (obrigatória), o que se vai fazer. O servidor regista
+   quem, quando e a proposta, que fica também numa nota interna; é ela que se
+   segue.
+   Recebe: id — o id do ticket (string).
+   Devolve: nada — abre a janela; ao confirmar, executa e reabre o detalhe. */
+function decidirSeguranca(id) {
+  formulario('Decidir o ticket de segurança', [{
+    nome: 'proposta', rotulo: 'Resolução proposta', tipo: 'area', max: 2000,
+    ajuda: 'O que se faz: bloquear, contactar a pessoa, subir o limite… É isto que se segue. Só a equipa vê.',
+    exemplo: 'Ex: Subir o limite das gravações para 120 em 15 min.',
+  }], function (v) {
+    return enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/aceitar', { texto: v.proposta })
+      .then(function () { avisar('Decidido: segue-se a resolução proposta.'); verPedido(id); });
+  }, { texto: 'O ticket segue para tratar, como escreveres aqui.', botao: 'Decidir' });
+}
+/* Arquiva um ticket de segurança (um falso alarme): a janela pede a
+   justificação (obrigatória), que fica numa nota interna, e o ticket fica
+   concluído. Não vai nada para ninguém. Se o limite voltar a ser atingido,
+   reabre-se por decidir.
+   Recebe: id — o id do ticket (string).
+   Devolve: nada — abre a janela; ao confirmar, executa e reabre o detalhe. */
+function arquivarSeguranca(id) {
+  formulario('Arquivar o ticket de segurança', [{
+    nome: 'justificacao', rotulo: 'Porque se arquiva', tipo: 'area', max: 2000,
+    ajuda: 'Fica numa nota interna: não vai para ninguém.',
+    exemplo: 'Ex: Falso alarme: era um teste da equipa.',
+  }], function (v) {
+    return enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/recusar', { texto: v.justificacao })
+      .then(function () { avisar('Ticket arquivado e concluído.'); verPedido(id); });
+  }, { texto: 'O ticket fica concluído, sem nada a fazer. Se voltar a acontecer, reabre-se por decidir.', botao: 'Arquivar', perigo: true });
 }
 // muda a categoria de um erro para a do chip e reabre o detalhe
 // Recebe: id — o id do pedido (string); categoria — a categoria nova (string, uma das TECNICAS).
@@ -1742,6 +1793,9 @@ var ACOES_RASTO = {
   newTpl: 'Novo modelo', editTpl: 'Editar o modelo', tplView: 'Abrir o modelo', delTpl: 'Apagar o modelo',
   newFromTemplate: 'Usar o modelo', pendToggle: 'Mostrar ou esconder os pendentes', recRetroAgoraNao: 'Agora não',
   'CW.fillMissed': 'Registar os em falta', 'CW.doFillMissed': 'Registar estimativa', 'CW.fillNext': 'Cancelar',
+  'CW.startFromToday': 'Começar a partir de hoje',
+  // a confirmação do email (a faixa dos 7 dias e o ecrã depois deles)
+  'CW.reenviarConfirmacao': 'Reenviar', 'CW.jaConfirmei': 'Já confirmei', 'CW.sairSemConfirmar': 'Sair', 'CW.pedirAjudaSemConfirmar': 'Pedir ajuda',
   // visitas e calendário
   visitModal: 'Adicionar ou editar visita', visView: 'Abrir a visita', visLimparChip: 'Limpar o filtro',
   calNav: 'Mudar de mês', calSel: 'Escolher um dia', calMarcarVisita: 'Marcar visita', calNovoPlaneado: 'Recorrente',
@@ -2530,6 +2584,8 @@ var ACOES = {
   mudarCategoria: function (d) { mudarCategoria(d.arg, d.arg2); },
   aceitarPedido: function (d) { aceitarPedido(d.arg); },
   recusarPedido: function (d) { recusarPedido(d.arg); },
+  decidirSeguranca: function (d) { decidirSeguranca(d.arg); },
+  arquivarSeguranca: function (d) { arquivarSeguranca(d.arg); },
   usarModelo: function (d) { usarModelo(d.arg); },
   guardarModelo: function () { guardarModelo(); },
   verPessoas: function () { verPessoas(ultimaProcura); },

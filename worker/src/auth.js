@@ -243,7 +243,8 @@ export function tokensDoPedido(request) {
    Devolve: null se nenhum token levar a uma sessão válida (falta um elo, a
    conta está apagada ou suspensa, ou o sess_epoch já rodou — sessões
    revogadas); caso contrário devolve o utilizador (id, email, name,
-   sess_epoch, terms_version) com o token que serviu anexado. */
+   sess_epoch, terms_version, created_at, email_verified_at) com o token que
+   serviu anexado. */
 export async function getSessionUser(env, request) {
   for (const token of tokensDoPedido(request)) {
     const u = await sessaoDe(env, token);
@@ -266,7 +267,8 @@ async function sessaoDe(env, token) {
   // contas apagadas ou suspensas deixam de ter sessão válida, mesmo com o
   // token na mão (suspender também sobe o sess_epoch, mas isto é a rede)
   const user = await env.DB.prepare(
-    'SELECT id, email, name, sess_epoch, terms_version FROM users WHERE id = ? AND deleted_at IS NULL AND suspended_at IS NULL'
+    // created_at e email_verified_at: o portão do email (api.js:portaoDoEmail) e o /api/me leem-nos daqui, sem outra consulta
+    'SELECT id, email, name, sess_epoch, terms_version, created_at, email_verified_at FROM users WHERE id = ? AND deleted_at IS NULL AND suspended_at IS NULL'
   )
     .bind(userId)
     .first();

@@ -474,7 +474,7 @@ describe('os comandos de ponta a ponta, numa base SQLite', () => {
 describe('o texto de um ticket', () => {
   test('o tipo, o estado, a decisão, e a conta apagada', () => {
     assert.deepEqual([{ category: 'user', kind: 'problema' }, { category: 'user', kind: 'sugestao' }, { category: 'client' }, { category: 'server' }, { category: 'infra' }, { category: 'seguranca' }].map(tipoLegivel),
-      ['pedido de uma pessoa: problema', 'pedido de uma pessoa: sugestão', 'erro do browser', 'erro do servidor', 'erro da infraestrutura', 'erro de segurança']);
+      ['pedido de uma pessoa: problema', 'pedido de uma pessoa: sugestão', 'erro do browser', 'erro do servidor', 'erro da infraestrutura', 'ticket de segurança (limite atingido)']);
     assert.deepEqual(['criado', 'resolucao', 'concluido', 'outro'].map(estadoLegivel), ['recebido', 'em resolução', 'concluído', 'outro']);
     assert.match(decisaoLegivel({ accepted_at: 1, refused_at: null, accepted_by_nome: 'Dina', accepted_changes: null })[0], /aceite por Dina a .*, sem alterações\./);
     const t = textoDoTicket({ id: 'x', category: 'user', kind: 'problema', status: 'criado', subject: 'a\nb', user_id: 'U9', autor_nome: 'Ana', autor_email: 'a@x.pt', autor_apagado: 5,
@@ -494,6 +494,108 @@ describe('o texto de um ticket', () => {
     assert.equal(textoDoAlvo(a, []), '### Dev (gestor-imobiliario-dev): não há tickets abertos.');
     assert.match(textoDoAlvo(a, Array.from({ length: 200 }, (x, i) => e('t' + i))), /\(Só os primeiros 200\.\)/);
     assert.deepEqual(juntaFio([{ id: 'a', accepted_at: null }], [{ ticket_id: 'a', id: 'm' }, { ticket_id: 'b', id: 'n' }], false), [{ id: 'a', msgs: [{ ticket_id: 'a', id: 'm' }] }]);
+  });
+});
+
+/* --------------- os tickets de segurança: só com a resolução proposta ------- */
+
+// Recebe: nada.
+// Devolve: a base de base() com três tickets de segurança (limites atingidos):
+// um por decidir, um decidido com a resolução proposta e um arquivado.
+function comSeguranca() {
+  const db = base();
+  db.exec(`INSERT INTO tickets (id, user_id, kind, subject, body, status, category, fingerprint, n, created_at, updated_at) VALUES
+      ('s-decidir', 'SISTEMA', 'problema', 'Limite atingido: tentativas de entrada · IP 203.0.113.9', 'Chave: login:203.0.113.9', 'criado', 'seguranca', 'fs1', 4, 20, 40),
+      ('s-decidido', 'U1', 'problema', 'Limite atingido: gravações de dados · conta U1', 'Chave: w:U1', 'criado', 'seguranca', 'fs2', 2, 20, 30),
+      ('s-arquivado', 'SISTEMA', 'problema', 'Limite atingido: registos, Google e recuperações de conta · IP 10.0.0.1', 'Chave: auth:10.0.0.1', 'concluido', 'seguranca', 'fs3', 1, 20, 210);
+    UPDATE tickets SET accepted_at = 200, accepted_by = 'm1', accepted_by_nome = 'Mestre', accepted_changes = 'Subir o limite das gravações para 120 em 15 min.' WHERE id = 's-decidido';
+    UPDATE tickets SET refused_at = 210, refused_by = 'a1', refused_by_nome = 'Ana' WHERE id = 's-arquivado';
+    INSERT INTO ticket_msgs (id, ticket_id, tipo, texto, autor, nome, papel, at) VALUES
+      ('m4', 's-decidido', 'nota', 'Resolução proposta: Subir o limite das gravações para 120 em 15 min.', 'm1', 'Mestre', 'master', 200),
+      ('m5', 's-arquivado', 'nota', 'Arquivado: era um teste da equipa.', 'a1', 'Ana', 'admin', 210);`);
+  return db;
+}
+
+describe('os tickets de segurança', () => {
+  const L = alvoDe('local');
+
+  test('a decisão: por decidir, com a resolução proposta (aceite), arquivado (recusado); sem a 0024 também espera', () => {
+    const db = comSeguranca();
+    assert.deepEqual(['s-decidir', 's-decidido', 's-arquivado'].map((id) => decisaoDe(um(db, id))), ['por-decidir', 'aceite', 'recusado']);
+    assert.equal(decisaoDe(um(sem0024(comSeguranca()), 's-decidido')), 'sem-0024');
+  });
+
+  test('listar: os decididos a seguir aos pedidos aceites, os por decidir a seguir aos pedidos por decidir, antes dos erros', () => {
+    const db = comSeguranca();
+    const [ts] = sqlListar(false).map((s) => db.prepare(s).all());
+    assert.deepEqual(ts.map((l) => l.id), ['p-aceite', 'p-aceite-res', 's-decidido', 'p-decidir', 's-decidir', 'e-muitos', 'e-recente', 'e-n', 'e-res']);
+    const [todos] = sqlListar(true).map((s) => db.prepare(s).all());
+    assert.ok(todos.map((l) => l.id).slice(9).includes('s-arquivado'), 'o arquivado só no --todos, com os concluídos');
+  });
+
+  test('comecar: o por decidir e o arquivado não passam, nem no SQL; o decidido passa', () => {
+    const db = comSeguranca();
+    sqlComecar(['s-decidir', 's-decidido', 's-arquivado'], 500).forEach((s) => db.exec(s));
+    assert.deepEqual(['s-decidir', 's-decidido', 's-arquivado'].map((id) => um(db, id).status), ['criado', 'resolucao', 'concluido']);
+    assert.equal(rasto(db, 's-decidir').length, 0);
+    const sem = sem0024(comSeguranca());
+    sqlComecar(['s-decidido', 'e-n'], 600, false).forEach((s) => sem.exec(s));
+    assert.deepEqual([um(sem, 's-decidido').status, um(sem, 'e-n').status], ['criado', 'resolucao'], 'sem a 0024 não há decisão: não se trata');
+    const linhas = (ids) => comSeguranca().prepare(sqlUns(ids)).all();
+    assert.throws(() => confereComecar(['e-n', 's-decidir'], linhas(['e-n', 's-decidir']), L),
+      /O ticket de segurança s-decidir ainda não tem a resolução proposta no back office: só se trata depois de alguém da equipa a escrever \(Decidir\)\. Não mexi em nenhum\./);
+    assert.throws(() => confereComecar(['s-arquivado'], linhas(['s-arquivado']), L), /foi arquivado no back office por Ana: não se mexe nele\. Não mexi em nenhum\./);
+  });
+
+  test('comecar de ponta a ponta: recusa o por decidir sem mexer; o decidido fica em resolução, com a proposta a mandar', () => {
+    const db = comSeguranca();
+    const nao = corre(['comecar', 's-decidido', 's-decidir', '--local'], db);
+    assert.equal(nao.codigo, 1);
+    assert.match(nao.err, /^ticket: O ticket de segurança s-decidir ainda não tem a resolução proposta no back office/);
+    assert.equal(um(db, 's-decidido').status, 'criado', 'não mexeu em nenhum');
+    const sim = corre(['comecar', 's-decidido', '--local'], db);
+    assert.equal(sim.codigo, 0, sim.err);
+    assert.equal(sim.out, 'Ticket de segurança s-decidido em resolução na base isolada (--local). Segue-se a resolução proposta de Mestre (no listar).\n');
+  });
+
+  test('listar: as secções, a proposta por extenso e a espera; o arquivado não está nos por resolver', () => {
+    const db = comSeguranca();
+    const r = corre(['listar', '--local'], db);
+    assert.equal(r.codigo, 0, r.err);
+    const t = r.out;
+    assert.match(t, /^### Base isolada \(--local\): 2 pedidos aceites, 1 pedido por decidir, 1 de segurança com resolução proposta, 1 de segurança por decidir, 4 erros \(7 recebidos, 2 em resolução\)\./);
+    const marcas = ['#### Pedidos aceites (2)', '#### Segurança com resolução proposta (1)', '== s-decidido · ticket de segurança (limite atingido) · recebido',
+      '#### Pedidos por decidir (1)', '#### Segurança por decidir (1): NÃO se mexe neles, esperam pela resolução proposta no back office', '== s-decidir', '#### Erros (4)']
+      .map((x) => t.indexOf(x));
+    assert.ok(marcas.every((v, i) => v > -1 && (i === 0 || v > marcas[i - 1])), 'pela ordem: ' + marcas.join(', '));
+    assert.match(t, /Decisão: proposta por Mestre a [\d/]+, [\d:]+:\n {2}Subir o limite das gravações para 120 em 15 min\.\n {2}\(Segue-se a resolução proposta; o que for irreversível, como bloquear uma conta, pergunta-se primeiro ao Martinho\.\)/);
+    assert.match(t, /Decisão: por decidir \(espera pela resolução proposta no back office; não se mexe nele\)\./);
+    assert.match(t, /== s-decidir · [^\n]*\nAssunto: Limite atingido: tentativas de entrada · IP 203\.0\.113\.9\nQuem: Sem utilizador\n[\s\S]*?Ocorrências: 4 · 0 pessoas/);
+    assert.doesNotMatch(t, /s-arquivado/);
+    const todos = corre(['listar', '--local', '--todos'], db).out;
+    assert.match(todos, /Decisão: arquivado por Ana a [\d/]+, [\d:]+ \(a justificação está no fio\)\./);
+  });
+
+  test('propor não; concluir só o decidido; reabrir um arquivado é da equipa', () => {
+    const db = comSeguranca();
+    const p = corre(['propor', 's-decidido', '--resposta', 'x', '--nota', 'y', '--sem-commit', '--local'], db);
+    assert.match(p.err, /é um ticket de segurança, não um pedido de uma pessoa: não leva resposta/);
+    const c1 = corre(['concluir', 's-decidir', '--nota', 'x', '--sem-commit', '--local'], db);
+    assert.equal(c1.codigo, 1);
+    assert.match(c1.err, /ainda não tem a resolução proposta/);
+    assert.equal(um(db, 's-decidir').status, 'criado');
+    const c2 = corre(['concluir', 's-decidido', '--nota', 'Subi o limite.', '--sem-commit', '--local'], db);
+    assert.equal(c2.codigo, 0, c2.err);
+    assert.match(c2.out, /^Ticket de segurança s-decidido concluído na base isolada \(--local\)\. Se o limite voltar a ser atingido, reabre-se sozinho, por decidir\.$/m);
+    assert.equal(corre(['concluir', 's-arquivado', '--nota', 'x', '--sem-commit', '--local'], db).out, 'O ticket de segurança s-arquivado já está concluído.\n');
+    const r = corre(['reabrir', 's-arquivado', '--local'], db);
+    assert.equal(r.codigo, 1);
+    assert.match(r.err, /foi arquivado por Ana: reabri-lo é decisão da equipa, no back office/);
+    assert.equal(um(db, 's-arquivado').status, 'concluido');
+    const r2 = corre(['reabrir', 's-decidido', '--local'], db);
+    assert.equal(r2.codigo, 0, r2.err);
+    assert.equal(r2.out, 'Ticket de segurança s-decidido de volta aos recebidos na base isolada (--local).\n');
+    assert.equal(um(db, 's-decidido').accepted_changes, 'Subir o limite das gravações para 120 em 15 min.', 'reabrir não larga a decisão');
   });
 });
 

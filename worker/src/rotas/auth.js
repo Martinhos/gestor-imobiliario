@@ -9,6 +9,76 @@ import { ligarAoEntrar } from '../lib/rasto.js';
 // Quanto vale uma ligação de reposição da palavra-passe: 1 hora, uma vez.
 const REPOR_VALIDADE = 3600 * 1000;
 
+/* A confirmação do email (migração 0027; decisão do Martinho de 2026-10-29,
+   «Entra durante 7 dias»): uma conta nova com palavra-passe funciona 7 dias
+   sem confirmar, com a faixa a lembrar; depois, só o ecrã «Confirma o teu
+   email» (api.js:portaoDoEmail). A ligação do email vale a mesma janela. */
+export const GRACA_EMAIL_MS = 7 * 86400 * 1000;
+const CONFIRMAR_VALIDADE = GRACA_EMAIL_MS;
+
+/* O estado da confirmação do email de uma conta com sessão. A sessão
+   (auth.js:sessaoDe) já traz o created_at e o email_verified_at, e o
+   portão não gasta outra consulta; um `me` montado de outra forma, sem
+   eles, lê-os aqui uma vez e guarda-os nele.
+   Recebe: env — o ambiente do worker (DB); me — o utilizador da sessão
+   (c.me), que ganha created_at e email_verified_at se ainda não os tiver;
+   agora (opcional) — ms de época (now() por omissão).
+   Devolve: promessa de { confirmado, ate, travada } — ate é o fim dos 7
+   dias (ms, null quando confirmado), e travada diz se já passaram sem
+   confirmar. */
+export async function estadoDoEmail(env, me, agora) {
+  if (!('email_verified_at' in me) || !('created_at' in me)) {
+    const u = await env.DB.prepare('SELECT created_at, email_verified_at FROM users WHERE id = ?').bind(me.id).first();
+    me.created_at = u ? u.created_at : 0;
+    me.email_verified_at = u ? u.email_verified_at : null;
+  }
+  const confirmado = me.email_verified_at != null;
+  const ate = confirmado ? null : Number(me.created_at || 0) + GRACA_EMAIL_MS;
+  return { confirmado, ate, travada: !confirmado && (agora == null ? now() : agora) > ate };
+}
+
+/* Cria uma ligação de confirmação do email e manda-a, como o repor da
+   palavra-passe: um token aleatório, só o SHA-256 na D1
+   (email_verifications), válido 7 dias e de uso único. As ligações anteriores
+   desta conta que ainda estavam por usar caem (só a última vale), e as
+   expiradas de toda a gente vão de caminho. Nunca lança: uma falha da base
+   ou do Resend vem no motivo, e quem chama decide se isso conta.
+   Recebe: env — o ambiente do worker (DB, RESEND_API_KEY…); conta — { id,
+   email } da conta; origem — o início do endereço da app (ex.:
+   'https://app.rendorium.com'), onde a ligação abre.
+   Devolve: promessa de { enviado, motivo } — o que o enviarEmail disser. */
+export async function pedirConfirmacao(env, conta, origem) {
+  try {
+    const t = randomToken();
+    const agora = now();
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM email_verifications WHERE expires_at < ? OR (user_id = ? AND used_at IS NULL)')
+        .bind(agora, conta.id),
+      env.DB.prepare('INSERT INTO email_verifications (token_hash, user_id, email, created_at, expires_at) VALUES (?, ?, ?, ?, ?)')
+        .bind(await sha256hex(t), conta.id, String(conta.email), agora, agora + CONFIRMAR_VALIDADE),
+    ]);
+    const { emailConfirmarEmail } = await import('../lib/correio.js');
+    return await emailConfirmarEmail(env, conta.email, String(origem || '') + '/?confirmar=' + t);
+  } catch (e) {
+    return { enviado: false, motivo: String((e && e.message) || e) };
+  }
+}
+
+/* Manda a confirmação sem fazer esperar quem pediu: num ctx.waitUntil quando
+   o há (o registo não espera pelo Resend nem falha por ele), e à espera
+   quando não. Um email que não sai fica no console.error, como no repor.
+   Recebe: c — o contexto do pedido (env, request e, se houver, ctx); conta —
+   { id, email }.
+   Devolve: promessa que acaba quando o envio foi entregue ao waitUntil (ou
+   feito, sem ele). */
+export async function confirmacaoEmFundo(c, conta) {
+  const envio = pedirConfirmacao(c.env, conta, new URL(c.request.url).origin).then((r) => {
+    if (!r.enviado) console.error('confirmar: email não enviado —', r.motivo);
+  });
+  if (c.ctx && typeof c.ctx.waitUntil === 'function') c.ctx.waitUntil(envio);
+  else await envio;
+}
+
 /* Trata as rotas /api/auth/*: registo, entrada (email e Google), reposição de
    palavra-passe, configuração pública e saída. Recebe o contexto partilhado do
    worker; devolve uma Response quando a rota é dele e undefined para o pedido
@@ -72,6 +142,8 @@ export async function rotasAuth(c) {
       .bind(id, email, String(b.name || '').trim(), hash, salt, v, now(), TERMS_VERSION, now())
       .run();
     const token = await createSession(env, id);
+    // o email «Confirma o teu email» sai em fundo: o registo não espera nem falha por ele
+    await confirmacaoEmFundo(c, { id, email });
     // o visitante da montra que disse sim passa a ser esta conta (lib/rasto.js; nunca lança)
     await ligarAoEntrar(env, request, id);
     return json({ id, email, name: String(b.name || '').trim(), ...tokenNoCorpo(env, request, token) }, 201, {
@@ -137,6 +209,38 @@ export async function rotasAuth(c) {
         'UPDATE users SET pass_hash = ?, pass_salt = ?, pass_v = ?, sess_epoch = COALESCE(sess_epoch, 0) + 1 WHERE id = ?'
       ).bind(hash, salt, v, linha.user_id),
       env.DB.prepare('UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL').bind(agora, linha.user_id),
+    ]);
+    return json({ ok: true });
+  }
+
+  /* Confirmar o email pela ligação do email (?confirmar=<token>). Sem sessão:
+     a ligação abre-se muitas vezes noutro aparelho. Uso único e atómico,
+     como o repor: um UPDATE condicional que tem de mudar uma linha. Um token
+     que não existe, um já usado e um expirado respondem igual (410), e
+     também um que foi enviado para um email que já não é o da conta — não
+     se diz a ninguém o que há do outro lado de um token. */
+  if (path === '/api/auth/confirmar' && method === 'POST') {
+    const b = await body(request);
+    const t = String((b && b.t) || '');
+    if (!/^[a-f0-9]{64}$/.test(t)) return err(400, 'Essa ligação não é válida.');
+    const h = await sha256hex(t);
+    const agora = now();
+    const gasto = await env.DB.prepare(
+      'UPDATE email_verifications SET used_at = ? WHERE token_hash = ? AND used_at IS NULL AND expires_at >= ?'
+    ).bind(agora, h, agora).run();
+    const linha = gasto.meta && gasto.meta.changes === 1
+      ? await env.DB.prepare(
+        `SELECT v.user_id FROM email_verifications v JOIN users u ON u.id = v.user_id
+          WHERE v.token_hash = ? AND u.deleted_at IS NULL AND u.email = v.email`
+      ).bind(h).first()
+      : null;
+    if (!linha) {
+      return err(410, 'Essa ligação já foi usada ou expirou. Se o teu email ainda não está confirmado, entra na app e toca em «Reenviar».');
+    }
+    // confirmado fica com a primeira data; as outras ligações por usar caem
+    await env.DB.batch([
+      env.DB.prepare('UPDATE users SET email_verified_at = COALESCE(email_verified_at, ?) WHERE id = ?').bind(agora, linha.user_id),
+      env.DB.prepare('UPDATE email_verifications SET used_at = ? WHERE user_id = ? AND used_at IS NULL').bind(agora, linha.user_id),
     ]);
     return json({ ok: true });
   }
@@ -224,13 +328,34 @@ export async function rotasAuth(c) {
       const name = String((b && b.name) || payload.name || '').trim();
       let id = newUserId();
       while (await env.DB.prepare('SELECT 1 FROM users WHERE id = ?').bind(id).first()) id = newUserId();
+      // nasce confirmada: a Google só dá contas com o email confirmado (oauth.js)
       await env.DB.prepare(
-        `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, ${col}) VALUES (?, ?, ?, '', '', ?, ?)`
+        `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, ${col}, email_verified_at) VALUES (?, ?, ?, '', '', ?, ?, ?)`
       )
-        .bind(id, email, name, now(), payload.sub)
+        .bind(id, email, name, now(), payload.sub, now())
         .run();
-      user = { id, email, name };
+      user = { id, email, name, email_verified_at: now() };
       nova = true;
+    }
+    /* Uma conta de palavra-passe por confirmar com o mesmo email fica
+       confirmada: o fornecedor acabou de provar que o email é de quem entra.
+       E fecha-se a pré-apropriação (decisão do Martinho, 2026-10-29): quem
+       criou a conta com este email nunca provou que era dele, por isso a
+       palavra-passe sai (fica como uma conta só da Google, pass_hash '') e
+       as outras sessões caem (sess_epoch + 1; a sessão desta entrada já
+       nasce com o epoch novo). Quem a criou e quer palavra-passe usa o
+       «Esqueci-me da palavra-passe», que chega a este email. */
+    if (user.email_verified_at == null && email && String(user.email || '').toLowerCase() === email) {
+      await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE users SET email_verified_at = COALESCE(email_verified_at, ?), pass_hash = '', pass_salt = '',
+             sess_epoch = COALESCE(sess_epoch, 0) + 1 WHERE id = ?`
+        ).bind(now(), user.id),
+        // as ligações de repor que alguém tenha pedido com a palavra-passe antiga também deixam de valer
+        env.DB.prepare('UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL').bind(now(), user.id),
+      ]);
+      user.sess_epoch = (user.sess_epoch || 0) + 1;
+      user.pass_hash = '';
     }
     if (user.suspended_at) {
       return err(403, 'Esta conta está suspensa.');

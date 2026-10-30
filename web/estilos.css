@@ -944,10 +944,14 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .sdiv{height:1px;background:var(--line);margin:5px 6px}
 .selopt svg{color:var(--accent);flex:0 0 auto}
 
-/* menu de ações (⋯) */
+/* menu de ações (⋯). Com a largura do texto: preso à direita de um botão de
+   44px, o shrink-to-fit ficava nos 200px do mínimo e partia «Preencher 3 em
+   falta» e «Começar a partir de hoje» em duas linhas. O teto é de 320px, e
+   nunca mais do que o ecrã menos 16px de cada lado. */
 .menuwrap{position:relative}
 .menupop{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:30;background:var(--card);
-  border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;min-width:200px}
+  border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;min-width:200px;
+  width:max-content;max-width:min(320px,calc(100vw - 32px))}
 .menupop.on{display:block}
 .menupop button{width:100%;display:flex;align-items:center;gap:10px;min-height:42px;padding:8px 12px;border:0;background:transparent;
   border-radius:10px;cursor:pointer;text-align:left;font-size:15px;color:var(--ink)}
@@ -1072,6 +1076,10 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .sheet.kb .body{padding-bottom:300px}
 .sheet .foot{padding:14px 20px calc(14px + var(--inset-bottom));border-top:1px solid var(--line);display:flex;gap:10px}
 .sheet .foot .btn{flex:1;justify-content:center;min-height:48px}
+/* o rodapé do preenchimento com a terceira resposta (cloud/painel.js:CW.fillMissed):
+   «Começar a partir de hoje» numa linha inteira por cima de Cancelar e Registar */
+.sheet .foot:has(>.preencher-hoje){flex-wrap:wrap}
+.sheet .foot .btn.preencher-hoje{flex:1 1 100%}
 .iconbtn{border:0;background:transparent;padding:7px;border-radius:10px;cursor:pointer;color:var(--muted);display:inline-flex;align-items:center;justify-content:center}
 @media(hover:hover) and (pointer:fine){.iconbtn:hover{background:var(--chip);color:var(--ink)}}
 /* A porta das opções de um registo, e é a mesma em toda a app: o kebab das
@@ -5721,3 +5729,42 @@ p.qa-quem{margin:0}
 .ave-def[aria-busy="true"]{cursor:progress}
 .ave-def[aria-busy="true"] .interruptor{opacity:.45}
 /* === fim: avisos por email === */
+/* === verificação do email: a faixa dos 7 dias e o ecrã depois deles (cloud/entrada.js) === */
+/* A faixa (entrada.js:pintarFaixaDoEmail) vive no fluxo da página, logo
+   abaixo do cabeçalho (a seguir ao #hdrSync), e rola com o conteúdo: ao
+   contrário da faixa sem ligação, fica 7 dias, e por cima do conteúdo
+   tapava-o esse tempo todo. Não tapa a navegação, as abas, o FAB nem a
+   pílula do QA. Alinha com o .wrap (o mesmo recuo e a mesma largura útil).
+   As cores: o par suave do âmbar (--warn-soft, texto --ink) com a borda em
+   --warn, que é cor da frente — com o escurecimento forçado do Samsung
+   Internet o fundo muda de luz e a borda continua a dizer que é um aviso
+   (docs/design.md, «Tema escuro e a regra do color-scheme»). O «Reenviar» é
+   um .btn (44px), à direita; num ecrã estreito desce para baixo do texto. */
+.faixa-email{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;
+  margin:16px calc(clamp(16px,3vw,36px) + var(--inset-right)) 0 calc(clamp(16px,3vw,36px) + var(--inset-left));
+  max-width:calc(1240px - 2 * clamp(16px,3vw,36px));padding:10px 10px 10px 14px;border-radius:12px;
+  border:1px solid var(--warn);background:var(--warn-soft);color:var(--ink);font-size:14px;line-height:1.35}
+.faixa-email-ic{flex:0 0 auto;display:grid;place-items:center;color:var(--warn)}
+.faixa-email p{flex:1 1 200px;min-width:0;margin:0;display:flex;flex-wrap:wrap;column-gap:6px}
+.faixa-email b{font-weight:650}
+.faixa-email p span{color:var(--muted);overflow-wrap:anywhere}
+.faixa-email-btn{flex:0 0 auto;margin-left:auto;background:var(--card);border-color:var(--warn);color:var(--ink)}
+@media(hover:hover) and (pointer:fine){.faixa-email-btn:hover{background:var(--tint)}}
+.faixa-email-btn:disabled{cursor:progress;opacity:.7}
+@media(max-width:900px){.faixa-email{margin:8px calc(16px + var(--inset-right)) 0 calc(16px + var(--inset-left))}}
+/* O ecrã (entrada.js:mostrarPortaoDoEmail) é um portão como o dos termos
+   (o .tg-caixa e os seus, ajuda.js:showTermsGate): por cima da app e dos
+   termos (196), abaixo da entrada (200), que é para onde o «Sair» leva. O
+   que diz, diz-se nele: #cwe_info em --accent-text, #cwe_err em --danger,
+   ambas cor da frente; vazias, não ocupam lugar. */
+.email-portao{position:fixed;inset:0;z-index:198;background:var(--bg);overflow:auto;display:flex;justify-content:center;
+  padding:calc(28px + var(--inset-top,0px)) calc(20px + var(--inset-right)) calc(24px + var(--inset-bottom,0px)) calc(20px + var(--inset-left))}
+#cweTit:focus-visible{outline:none} /* como o #tgTit: o foco só põe o leitor de ecrã a começar ali */
+.email-endereco{font-weight:650;color:var(--ink);overflow-wrap:anywhere}
+.email-dica{margin:0;font-size:14.5px;color:var(--muted)}
+.email-info{margin:0;color:var(--accent-text)}
+.email-erro{margin:0;color:var(--danger)}
+.email-info:empty,.email-erro:empty{display:none}
+/* o «Pedir ajuda» do ecrã: um link do tamanho do texto, à esquerda, e não a coluna inteira */
+.email-ajuda{align-self:flex-start}
+/* === fim: verificação do email === */

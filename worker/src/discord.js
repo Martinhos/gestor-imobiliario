@@ -366,7 +366,11 @@ async function cmdResponder(env, opts, pap, quem, ctx) {
     [ticketEmbedFull(t)]);
 }
 
-// /fechar: dá o pedido por concluído, com resposta final se vier texto.
+// A recusa de concluir um ticket de segurança por decidir, no /fechar e no botão «Concluir».
+const SEGURANCA_SEM_DECISAO = 'Este ticket de segurança ainda não tem a resolução proposta: decide-o ou arquiva-o no back office (/equipa › Erros).';
+
+// /fechar: dá o pedido por concluído, com resposta final se vier texto. Um
+// ticket de segurança por decidir não se conclui (SEGURANCA_SEM_DECISAO).
 // Recebe: env — acesso à base e ao correio; opts — as opções (id — o id ou
 // prefixo do pedido; texto (opcional) — a resposta final); pap — um papel ou
 // lista de papéis; quem — quem fecha, como { id, nome, papel }; ctx — o
@@ -375,6 +379,10 @@ async function cmdResponder(env, opts, pap, quem, ctx) {
 async function cmdFechar(env, opts, pap, quem, ctx) {
   const g = await guardaDoPedido(env, opts.id, pap);
   if (g.erro) return g.erro;
+  // um ticket de segurança não se conclui sem decisão, como no back office
+  if (g.t.category === 'seguranca' && g.t.accepted_at == null) {
+    return reply(SEGURANCA_SEM_DECISAO);
+  }
   const t = await mudarEstado(env, g.t.id, 'concluido', opts.texto, quem, ctx);
   return reply('✅ Concluído.', [ticketEmbedFull(t)]);
 }
@@ -885,9 +893,12 @@ async function encaminhar(i, env, ctx, request) {
     if (!podeCorrer(pap, comando, meusAcessos)) {
       return json(reply('Este botão faz o mesmo que o **/' + comando + '**, que não é para ti.'));
     }
-    const antes = await env.DB.prepare('SELECT category FROM tickets WHERE id = ?').bind(id).first();
+    const antes = await env.DB.prepare('SELECT category, accepted_at FROM tickets WHERE id = ?').bind(id).first();
     if (antes && !podeVer(pap, antes.category)) {
       return json(reply('Esse pedido é de *' + (CATS[antes.category] || antes.category) + '*, fora do papel **' + nomeDoPapel(pap) + '**.'));
+    }
+    if (acao === 'fim' && antes && antes.category === 'seguranca' && antes.accepted_at == null) {
+      return json(reply(SEGURANCA_SEM_DECISAO));
     }
     const t = await mudarEstado(env, id, acao === 'fim' ? 'concluido' : 'resolucao', null, quemFala(i, pap), ctx);
     if (!t) return json(reply('Esse pedido já não existe.'));

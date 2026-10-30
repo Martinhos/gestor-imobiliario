@@ -301,7 +301,17 @@ function api(method, path, data, opcoes) {
     return lerCorpo(r, opcoes.comSelo).then(function (lido) {
       var j = lido.json;
       if (r.status === 401 && CW.user && sessaoCaiu(method, path, j)) sessionLost();
-      if (!r.ok) { var e = new Error(j.error || ('Erro ' + r.status)); e.status = r.status; throw e; }
+      if (!r.ok) {
+        var e = new Error(j.error || ('Erro ' + r.status)); e.status = r.status;
+        if (j.erro) e.erro = j.erro;
+        /* passaram os 7 dias sem confirmar o email: o servidor só deixa o
+           essencial (worker/src/api.js:portaoDoEmail), e a app abre o ecrã
+           que o diz (cloud/entrada.js:emailPorConfirmar) */
+        if (r.status === 403 && j.erro === 'email_por_confirmar' && CW.user && typeof emailPorConfirmar === 'function') {
+          try { emailPorConfirmar(); } catch (x) {}
+        }
+        throw e;
+      }
       if (!opcoes.comSelo) return j;
       var selo = '';
       try { selo = (r.headers && typeof r.headers.get === 'function' && r.headers.get('ETag')) || ''; } catch (x) {}
@@ -401,7 +411,8 @@ function chaveDaLigacao(id) {
    — já faltava em dois (a ligação de partilha, os planeados perguntados).
    Sai sempre: a sessão, a página guardada, os planeados já perguntados, a
    ligação desta conta, o rasto, o estado em memória, os serviços desligados
-   (eram desta conta) e o selo da nuvem (sem sessão não há ligação de que
+   (eram desta conta), a faixa ou o ecrã do email por confirmar
+   (cloud/entrada.js:largarEmailPorConfirmar) e o selo da nuvem (sem sessão não há ligação de que
    falar; cloud/entrada.js:setSyncBadge). A base local e o retrato ficam, de propósito
    (docs/design.md, «A app não afirma nem decide antes de saber»): quem volta a entrar encontra o que
    deixou, e o finishLogin larga-os quando entra outra conta. Com apagarDados
@@ -431,6 +442,8 @@ function encerrarSessao(o) {
   // sem sessão a nuvem não diz nada; a próxima entrada volta a começar «A ligar»
   semLigacao = false; porLigar = true;
   try { setSyncBadge(''); } catch (e) {}
+  // e a faixa ou o ecrã do email por confirmar eram desta conta
+  try { if (typeof largarEmailPorConfirmar === 'function') largarEmailPorConfirmar(); } catch (e) {}
   try { definirServicosDesligados([]); } catch (e) {}
   try { closeAllModals(); } catch (e) {}
   // a próxima entrada começa na visão geral, não onde se saiu
@@ -1065,7 +1078,9 @@ function pushNow() {
            rede: o selo fica em «N por enviar» e a frase dele chega à pessoa */
         ligou();
         setSyncBadge('pend', porEnviar(ops));
-        avisoDoServidor(e.message);
+        /* o email por confirmar diz-se no ecrã dele (cloud/entrada.js); em
+           aviso aparecia por cima da janela do «Pedir ajuda» */
+        if (e.erro !== 'email_por_confirmar') avisoDoServidor(e.message);
       } else {
         caiuALigacao();   // sem rede, ou sem resposta a tempo
       }

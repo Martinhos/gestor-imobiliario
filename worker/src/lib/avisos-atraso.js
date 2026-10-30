@@ -236,8 +236,9 @@ export async function atrasosPorPessoa(env, hoje) {
   return porPessoa;
 }
 
-/* Das pessoas com atrasos, as que recebem email: conta viva com email, os
-   avisos ligados, o serviço dos Planeados ligado (o fecho conta: sem os
+/* Das pessoas com atrasos, as que recebem email: conta viva com o email
+   confirmado (migração 0027: um email por confirmar pode ser de outra pessoa,
+   ou nem existir), os avisos ligados, o serviço dos Planeados ligado (o fecho conta: sem os
    Movimentos não há Planeados) e, em produção (sem ENV_NAME), sem as contas
    de teste — fora de produção entram, e o enviarEmail desvia o correio delas
    para o dev que as criou. Duas consultas, com os ids num só parâmetro.
@@ -249,7 +250,8 @@ async function destinatarios(env, ids) {
   const lista = JSON.stringify(ids);
   const contas = await linhas(env,
     `SELECT id, email, test_owner FROM users
-      WHERE deleted_at IS NULL AND avisos_email = 1 AND id IN (SELECT value FROM json_each(?))`, lista);
+      WHERE deleted_at IS NULL AND avisos_email = 1 AND email_verified_at IS NOT NULL
+        AND id IN (SELECT value FROM json_each(?))`, lista);
   const desligados = new Map();
   for (const s of await linhas(env,
     'SELECT user_id, service FROM user_services WHERE enabled = 0 AND user_id IN (SELECT value FROM json_each(?))', lista)) {
