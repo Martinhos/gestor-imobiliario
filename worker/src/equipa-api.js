@@ -227,6 +227,23 @@ const ACOES_DE_CONTA = {
   },
 };
 
+/* A pessoa fica a saber por email que houve resposta ao pedido dela — só nos
+   pedidos de pessoas: os tickets técnicos têm dono emprestado e um stack
+   trace não é correio para ninguém. Uma conta apagada não recebe nada.
+   Recebe: env — o ambiente do worker; ctx — o contexto de execução (o envio
+   vai no waitUntil, quando há); t — o pedido (a linha de tickets); texto — a
+   resposta enviada.
+   Devolve: promessa de nada — o envio fica a correr ou feito. */
+async function avisarDono(env, ctx, t, texto) {
+  if (t.category !== 'user') return;
+  const dono = await env.DB.prepare('SELECT email FROM users WHERE id = ? AND deleted_at IS NULL')
+    .bind(t.user_id).first();
+  if (!dono || !dono.email) return;
+  const { emailRespostaPedido } = await import('./lib/correio.js');
+  const envio = emailRespostaPedido(env, dono.email, t.subject, texto, t.id);
+  if (ctx && ctx.waitUntil) ctx.waitUntil(envio); else await envio;
+}
+
 /* As rotas /api/equipa/* que fazem o trabalho: pedidos, pessoas, contas,
    endereços, operação e rasto. Chega cá com `eu` — a sessão de equipa — já
    verificado; tudo o que devolve passa primeiro pelo filtro das categorias
@@ -269,6 +286,8 @@ export async function rotasEquipaApi(c) {
     const rows = (await env.DB.prepare(
       `SELECT t.id, t.kind, t.subject, t.status, t.category, t.user_id, t.n, t.versao,
               t.created_at, t.updated_at, t.reply, t.assignee, t.assignee_nome,
+              t.accepted_at, t.accepted_by_nome, t.refused_at, t.refused_by_nome,
+              (t.draft_reply IS NOT NULL) AS proposta,
               u.name AS nome, u.email AS email,
               (SELECT COUNT(*) FROM ticket_users x WHERE x.fingerprint = t.fingerprint) AS pessoas
          FROM tickets t LEFT JOIN users u ON u.id = t.user_id
@@ -297,7 +316,7 @@ export async function rotasEquipaApi(c) {
   }
 
   /* ---- agir sobre um pedido ---- */
-  const mAcao = /^\/api\/equipa\/pedidos\/([^/]+)\/(responder|fechar|reabrir|nota|atribuir|categoria)$/.exec(path);
+  const mAcao = /^\/api\/equipa\/pedidos\/([^/]+)\/(responder|fechar|reabrir|nota|atribuir|aceitar|recusar|categoria)$/.exec(path);
   if (mAcao && method === 'POST') {
     const id = decodeURIComponent(mAcao[1]), acao = mAcao[2];
     if (badId(id)) return err(400, 'Id inválido.');
@@ -309,9 +328,10 @@ export async function rotasEquipaApi(c) {
     const texto = String((b && b.texto) || '').trim().slice(0, 2000);
     const agora = now();
 
-    const msg = (tipo) => env.DB.prepare(
+    // uma mensagem no fio, com o texto da caixa (ou outro, quando se dá)
+    const msg = (tipo, outro) => env.DB.prepare(
       'INSERT INTO ticket_msgs (id, ticket_id, tipo, texto, autor, nome, papel, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(crypto.randomUUID(), id, tipo, texto, eu.discordId || '?', eu.nome || '', eu.papel || '', agora).run();
+    ).bind(crypto.randomUUID(), id, tipo, outro == null ? texto : outro, eu.discordId || '?', eu.nome || '', eu.papel || '', agora).run();
 
     if (acao === 'nota') {
       if (!texto) return err(400, 'Escreve a nota.');
@@ -335,6 +355,91 @@ export async function rotasEquipaApi(c) {
         return err(409, ((agora2 && agora2.assignee_nome) || 'Outra pessoa') + ' chegou primeiro a este pedido.');
       }
       await auditar(env, eu, 'pedido.atribuir', id, tomar ? 'tomou' : 'largou');
+    } else if (acao === 'aceitar' && t.category === 'seguranca') {
+      /* Decidir um ticket de segurança (um limite atingido): a resolução
+         proposta é obrigatória — bloquear, contactar, subir o limite… — e é
+         ela que se segue (o Claude, pelo scripts/ticket.mjs, só pega nos
+         decididos). Grava-se nas colunas da aceitação (accepted_changes é a
+         proposta) e fica numa nota interna. As mesmas guardas do aceitar. */
+      if (!texto) return err(400, 'Escreve a resolução proposta: é ela que se segue.');
+      const r = await env.DB.prepare(
+        `UPDATE tickets SET accepted_at = ?, accepted_by = ?, accepted_by_nome = ?, accepted_changes = ?, updated_at = ?
+          WHERE id = ? AND accepted_at IS NULL AND refused_at IS NULL AND status <> 'concluido'`
+      ).bind(agora, eu.discordId || '?', eu.nome || '', texto, agora, id).run();
+      if (!r.meta || r.meta.changes !== 1) {
+        return err(409, t.accepted_at ? 'Este ticket já foi decidido' + (t.accepted_by_nome ? ' por ' + t.accepted_by_nome : '') + '.'
+          : t.refused_at ? 'Este ticket foi arquivado' + (t.refused_by_nome ? ' por ' + t.refused_by_nome : '') + '.'
+            : 'Um ticket concluído não se decide: reabre-o primeiro.');
+      }
+      await msg('nota', 'Resolução proposta: ' + texto);
+      await auditar(env, eu, 'pedido.decidir', id, cortar(texto, 120));
+    } else if (acao === 'recusar' && t.category === 'seguranca') {
+      /* Arquivar um ticket de segurança (um falso alarme): a justificação é
+         obrigatória e fica numa nota interna. Conclui-o, e larga a resolução
+         proposta, se havia. Não há pessoa a quem responder: nem reply, nem
+         email. Se o limite voltar a ser atingido, reabre-se sem decisão
+         (lib/limites.js). */
+      if (!texto) return err(400, 'Escreve porque se arquiva: fica no ticket.');
+      if (t.status === 'concluido') return err(409, 'Este ticket já está concluído.');
+      const [, up] = await env.DB.batch([
+        env.DB.prepare(
+          'INSERT INTO ticket_msgs (id, ticket_id, tipo, texto, autor, nome, papel, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(crypto.randomUUID(), id, 'nota', 'Arquivado: ' + texto, eu.discordId || '?', eu.nome || '', eu.papel || '', agora),
+        env.DB.prepare(
+          `UPDATE tickets SET status = 'concluido', refused_at = ?, refused_by = ?, refused_by_nome = ?,
+                  accepted_at = NULL, accepted_by = NULL, accepted_by_nome = NULL, accepted_changes = NULL,
+                  updated_at = ?
+            WHERE id = ? AND status <> 'concluido'`
+        ).bind(agora, eu.discordId || '?', eu.nome || '', agora, id),
+      ]);
+      if (!up || !up.meta || up.meta.changes !== 1) return err(409, 'Este ticket já está concluído.');
+      await auditar(env, eu, 'pedido.arquivar', id, cortar(texto, 120));
+    } else if (acao === 'aceitar') {
+      /* A decisão sobre um pedido de uma pessoa: só os aceites se
+         implementam (o Claude, pelo scripts/ticket.mjs, só pega nesses).
+         Fica quem aceitou e quando, e as alterações que pediu (opcionais:
+         aceitar com alterações, que mandam mais do que o pedido), também como
+         nota interna no fio. Como no atribuir, o UPDATE exige o estado
+         que se leu: dois a carregar ao mesmo tempo não ficam ambos
+         registados, e um pedido recusado ou concluído não se aceita. */
+      if (t.category !== 'user') return err(400, 'Só os pedidos das pessoas se aceitam: os erros não passam por aqui.');
+      const r = await env.DB.prepare(
+        `UPDATE tickets SET accepted_at = ?, accepted_by = ?, accepted_by_nome = ?, accepted_changes = ?, updated_at = ?
+          WHERE id = ? AND accepted_at IS NULL AND refused_at IS NULL AND status <> 'concluido'`
+      ).bind(agora, eu.discordId || '?', eu.nome || '', texto || null, agora, id).run();
+      if (!r.meta || r.meta.changes !== 1) {
+        return err(409, t.accepted_at ? 'Este pedido já foi aceite' + (t.accepted_by_nome ? ' por ' + t.accepted_by_nome : '') + '.'
+          : t.refused_at ? 'Este pedido foi recusado' + (t.refused_by_nome ? ' por ' + t.refused_by_nome : '') + '.'
+            : 'Um pedido concluído não se aceita: reabre-o primeiro.');
+      }
+      if (texto) {
+        await env.DB.prepare(
+          'INSERT INTO ticket_msgs (id, ticket_id, tipo, texto, autor, nome, papel, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(crypto.randomUUID(), id, 'nota', 'Aceite com alterações: ' + texto, eu.discordId || '?', eu.nome || '', eu.papel || '', agora).run();
+      }
+      await auditar(env, eu, 'pedido.aceitar', id, texto ? cortar(texto, 120) : null);
+    } else if (acao === 'recusar') {
+      /* Recusar fecha o pedido, sempre com uma justificação: a pessoa
+         recebe-a como resposta (na app e por email), e fica quem recusou e
+         quando. Larga a aceitação, se houver (quem aceitou mudou de ideia), e
+         a resposta proposta, que deixou de ser verdade. */
+      if (t.category !== 'user') return err(400, 'Só os pedidos das pessoas se recusam: os erros fecham-se.');
+      if (!texto) return err(400, 'Escreve porque é recusado: a pessoa recebe a justificação.');
+      if (t.status === 'concluido') return err(409, 'Este pedido já está concluído.');
+      const [, up] = await env.DB.batch([
+        env.DB.prepare(
+          'INSERT INTO ticket_msgs (id, ticket_id, tipo, texto, autor, nome, papel, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(crypto.randomUUID(), id, 'resposta', texto, eu.discordId || '?', eu.nome || '', eu.papel || '', agora),
+        env.DB.prepare(
+          `UPDATE tickets SET status = 'concluido', reply = ?, refused_at = ?, refused_by = ?, refused_by_nome = ?,
+                  accepted_at = NULL, accepted_by = NULL, accepted_by_nome = NULL, accepted_changes = NULL,
+                  draft_reply = NULL, draft_at = NULL, updated_at = ?
+            WHERE id = ? AND status <> 'concluido'`
+        ).bind(texto, agora, eu.discordId || '?', eu.nome || '', agora, id),
+      ]);
+      if (!up || !up.meta || up.meta.changes !== 1) return err(409, 'Este pedido já está concluído.');
+      await auditar(env, eu, 'pedido.recusar', id, cortar(texto, 120));
+      await avisarDono(env, ctx, t, texto);
     } else if (acao === 'categoria') {
       const nova = String((b && b.categoria) || '').trim();
       if (CATEGORIAS.indexOf(nova) < 0) return err(400, 'Categoria desconhecida.');
@@ -355,9 +460,15 @@ export async function rotasEquipaApi(c) {
     } else {
       /* responder, fechar, reabrir. A resposta entra no fio E na coluna
          reply — a app do utilizador lê a reply, e passa a ser sempre a
-         última resposta em vez de a única. */
+         última resposta em vez de a única. Enviar uma resposta larga a
+         proposta do Claude (já foi lida e enviada, como estava ou mudada);
+         reabrir larga a recusa, para o pedido se poder decidir de novo. */
       const estado = acao === 'fechar' ? 'concluido' : acao === 'reabrir' ? 'criado' : 'resolucao';
       if (acao === 'responder' && !texto) return err(400, 'Escreve a resposta.');
+      // um ticket de segurança sem decisão só sai pelo Arquivar, que pede a justificação
+      if (acao === 'fechar' && t.category === 'seguranca' && t.accepted_at == null && t.status !== 'concluido') {
+        return err(400, 'Um ticket de segurança por decidir não se conclui assim: decide-o, ou arquiva-o com a justificação.');
+      }
       /* Numa só transação: com dois statements soltos, um erro entre eles
          deixava o fio e a coluna reply a contarem histórias diferentes —
          e o retry de quem viu o 500 duplicava a mensagem no fio. */
@@ -368,22 +479,16 @@ export async function rotasEquipaApi(c) {
         ).bind(crypto.randomUUID(), id, 'resposta', texto, eu.discordId || '?', eu.nome || '', eu.papel || '', agora));
       }
       ops.push(env.DB.prepare(
-        'UPDATE tickets SET status = ?, reply = COALESCE(?, reply), updated_at = ? WHERE id = ?'
-      ).bind(estado, texto || null, agora, id));
+        `UPDATE tickets SET status = ?, reply = COALESCE(?, reply), updated_at = ?,
+                draft_reply = CASE WHEN ? IS NULL THEN draft_reply END,
+                draft_at = CASE WHEN ? IS NULL THEN draft_at END
+                ${acao === 'reabrir' ? ', refused_at = NULL, refused_by = NULL, refused_by_nome = NULL' : ''}
+          WHERE id = ?`
+      ).bind(estado, texto || null, agora, texto || null, texto || null, id));
       await env.DB.batch(ops);
       await auditar(env, eu, 'pedido.' + acao, id, texto ? cortar(texto, 120) : null);
-      /* a pessoa fica a saber por email que houve resposta — só nos pedidos
-         de pessoas: os tickets técnicos têm dono emprestado e um stack trace
-         não é correio para ninguém */
-      if (texto && t.category === 'user') {
-        const dono = await env.DB.prepare('SELECT email FROM users WHERE id = ? AND deleted_at IS NULL')
-          .bind(t.user_id).first();
-        if (dono && dono.email) {
-          const { emailRespostaPedido } = await import('./lib/correio.js');
-          const envio = emailRespostaPedido(env, dono.email, t.subject, texto, t.id);
-          if (ctx && ctx.waitUntil) ctx.waitUntil(envio); else await envio;
-        }
-      }
+      // a pessoa fica a saber por email que houve resposta (só nos pedidos de pessoas)
+      if (texto) await avisarDono(env, ctx, t, texto);
     }
 
     const novo = await env.DB.prepare('SELECT * FROM tickets WHERE id = ?').bind(id).first();
@@ -458,9 +563,11 @@ export async function rotasEquipaApi(c) {
     const { newUserId, palavraNova } = await import('./auth.js');
     const pw = await palavraNova(env, pass);
     const id = newUserId();
+    // nasce com o email confirmado (migração 0027): quem a cria na equipa já conferiu o endereço
+    const criada = now();
     await env.DB.prepare(
-      'INSERT INTO users (id, email, name, pass_hash, pass_salt, pass_v, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).bind(id, email, nome || email.split('@')[0], pw.hash, pw.salt, pw.v, now()).run();
+      'INSERT INTO users (id, email, name, pass_hash, pass_salt, pass_v, created_at, email_verified_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(id, email, nome || email.split('@')[0], pw.hash, pw.salt, pw.v, criada, criada).run();
     await auditar(env, eu, 'conta.criar.feito', id, email);
     return json({ id, email });
   }
@@ -766,7 +873,57 @@ export async function rotasEquipaApi(c) {
     return null;
   }
 
-  /* ---- o rasto (só o master) ---- */
+  /* ---- o rasto das pessoas (lib/rasto.js) ----
+     Debaixo de um pseudónimo: nada aqui devolve nome nem email. Quem vê
+     decide-o o lib/rasto.js:podeVerRasto — a lista, o resumo e a ida da
+     ficha ao pid são do master e do admin; a linha do tempo de uma pessoa
+     também do suporte, mas só de quem lhe escreveu um pedido, e é a partir
+     desse pedido que lá chega (a rota do ticket). */
+  if (path.startsWith('/api/equipa/rasto/') && method === 'GET') {
+    const rasto = await import('./lib/rasto.js');
+    if (path === '/api/equipa/rasto/pessoas' || path === '/api/equipa/rasto/resumo') {
+      if (!rasto.veTodoORasto(eu)) return err(403, 'O rasto das pessoas é do master e do admin.');
+      const dias = rasto.diasDe(url.searchParams.get('dias'));
+      return path.endsWith('/pessoas')
+        ? json({ pessoas: await rasto.pessoasDoRasto(env, dias) })
+        : json({ linhas: await rasto.resumoDoRasto(env, dias) });
+    }
+    const mRastoPessoa = /^\/api\/equipa\/rasto\/pessoa\/([^/]+)$/.exec(path);
+    if (mRastoPessoa) {
+      // sem decodeURIComponent: um pid não tem %, e um % mal formado não é um 500
+      const pid = mRastoPessoa[1];
+      if (!rasto.PID_RE.test(pid)) return err(400, 'Pseudónimo inválido.');
+      // a permissão antes da existência: a quem não pode ver, um pid que não existe é igual aos outros
+      if (!(await rasto.podeVerRasto(env, eu, pid))) return err(403, 'O rasto desta pessoa não é do teu papel.');
+      const p = await rasto.pessoaDoRasto(env, pid);
+      if (!p) return err(404, 'Esse pseudónimo não existe.');
+      // ver o que alguém fez é ler dados pessoais: fica registado quem viu quem
+      await auditar(env, eu, 'rasto.ver', pid, null);
+      return json(p);
+    }
+    const mRastoConta = /^\/api\/equipa\/rasto\/conta\/([^/]+)$/.exec(path);
+    if (mRastoConta) {
+      if (!rasto.veTodoORasto(eu)) return err(403, 'O rasto das pessoas é do master e do admin.');
+      const id = mRastoConta[1];
+      if (badId(id)) return err(400, 'Id inválido.');
+      return json({ pid: await rasto.pidParaEquipa(env, id) });
+    }
+    const mRastoTicket = /^\/api\/equipa\/rasto\/ticket\/([^/]+)$/.exec(path);
+    if (mRastoTicket) {
+      const id = mRastoTicket[1];
+      if (badId(id)) return err(400, 'Id inválido.');
+      const t = await env.DB.prepare('SELECT category, user_id FROM tickets WHERE id = ?').bind(id).first();
+      if (!t) return err(404, 'Pedido não encontrado.');
+      // a mesma regra do detalhe do pedido
+      if (cats.indexOf(t.category) < 0) return err(403, 'Esse pedido é de outro papel.');
+      const pid = t.user_id ? await rasto.pidParaEquipa(env, t.user_id) : null;
+      // a quem vê o pedido mas não o rasto (quem programa), o pid não serve: não se dá
+      return json({ pid: pid && (await rasto.podeVerRasto(env, eu, pid)) ? pid : null });
+    }
+    return err(404, 'Rota desconhecida.');
+  }
+
+  /* ---- o rasto da equipa (só o master) ---- */
   if (path === '/api/equipa/auditoria' && method === 'GET') {
     if (!eMaster(eu)) return err(403, 'O rasto é só do master.');
     const alvo = (url.searchParams.get('alvo') || '').trim().slice(0, 64);

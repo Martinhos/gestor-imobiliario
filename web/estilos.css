@@ -39,6 +39,10 @@
   /* fora da escala porque não são reações: --desenho é um gráfico a
      desenhar-se e --pulso é um crachá a saltar */
   --desenho:.5s; --pulso:.18s;
+  /* e --chama é um pulso do anel que chama a atenção para uma porta nova (o
+     brilho do «?» da Ajuda, três vezes e pára): devagar, para se ver, sem
+     parecer um alarme */
+  --chama:1s;
   /* e --volta é a roda da espera a girar: uma volta que se vê, contínua */
   --volta:.9s;
   /* o tempo que o toque longo espera antes de disparar (componentes.js): a
@@ -638,27 +642,14 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
   aside .nav-criar{display:none}
   #hdrAcao,#hdrSec{display:none}
   header.top #hdrBell,header.top #hdrFilt{border-color:transparent;background:transparent;width:44px;min-width:44px;padding:0}
+  /* o «?» da Ajuda (index.html:#hdrAjuda) é o mesmo quadrado do sino */
+  header.top #hdrAjuda{border-color:transparent;background:transparent;width:44px;min-width:44px;padding:0}
   /* aceso (o painel dos filtros aberto, ou o «Concluir» da edição dos
      cartões): o .btn.primary sem o fundo deixava o ícone na --accent-ink —
      branco no cabeçalho claro, escuro no escuro —, e o botão sumia justamente
      quando era a maneira de fechar o painel. Aceso é o par suave da escolha
      feita, o mesmo do .selopt.on, em claro e em escuro (vistas.js:pintarBotaoFiltros) */
   header.top #hdrFilt.primary{background:var(--accent-soft);color:var(--accent-text)}
-  header.top .sync{background:transparent!important;width:44px;height:44px;padding:0;justify-content:center}
-  header.top .sync span{display:none}
-  /* sem ligação, a frase desce para uma faixa fina por baixo do cabeçalho, a
-     toda a largura; o ícone fica. O cabeçalho cresce o que ela ocupa, e ela
-     pinta-se no fundo dele (o header é pegajoso: é ele a caixa dela). A nova
-     tentativa depois de uma falha (.liga.tenta) fica com a faixa que lá
-     está, agora laranja, e o cabeçalho não mexe de 30 em 30 segundos. Os
-     outros estados são só o ícone, com a frase no aria-label e no title: o
-     «N alterações por enviar» (cobalto) e o «Guardado» passam por ali a cada
-     gravação, e o «A ligar» da abertura a cada abertura — com faixa, o
-     cabeçalho crescia e encolhia de cada vez. */
-  header.top:has(>.sync.fora),header.top:has(>.sync.tenta){padding-bottom:40px}
-  header.top .sync.fora span,header.top .sync.tenta span{display:flex;align-items:center;position:absolute;left:0;right:0;bottom:0;min-height:34px;padding:0 calc(16px + var(--inset-right)) 0 calc(16px + var(--inset-left));font-size:13px;font-weight:600;white-space:normal;line-height:1.25}
-  header.top .sync.fora span{background:var(--danger-soft);color:var(--danger)}
-  header.top .sync.tenta span{background:var(--out-soft);color:var(--out)}
   /* no telemóvel o título é o da área (Casas, Dinheiro): os separadores logo
      por baixo já dizem onde se está (navegacao.js:tituloDoEcraHtml) */
   header.top #pageTitle .tit-sep{display:none}
@@ -695,19 +686,73 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
 /* o fecho do menu só existe onde ele é uma gaveta */
 aside .fecha-gaveta{display:none;color:var(--side-ink)}
 @media(hover:hover) and (pointer:fine){aside .fecha-gaveta:hover{background:var(--side-hover);color:var(--side-ink)}}
-/* o estado da sincronização, no cabeçalho (cloud/entrada.js:setSyncBadge):
-   um selo de 30px com a nuvem e a frase; o «Guardado» recolhe ao ícone.
-   «A ligar» é laranja (o --out: o --warn é âmbar acastanhado, e era a cor do
-   «Sem ligação» de antes — as duas a meias confundiam-se), «Sem ligação» é
-   vermelho (o --danger); os pares dão 4,5:1 ou mais em claro e em escuro */
+/* A faixa sem ligação (cloud/entrada.js:setSyncBadge), no lugar da nuvem que
+   vivia no cabeçalho. Só aparece sem ligação: vermelha «Sem ligação ao
+   servidor.», com «N alterações por enviar.» por baixo, e laranja na nova
+   tentativa (.tenta). Por cima do conteúdo e sem o empurrar — é fixa —, logo
+   abaixo do cabeçalho, igual no telemóvel e no computador.
+   O sítio: o #hdrSync é uma caixa de altura 0 logo a seguir ao header.top
+   (index.html), e a faixa, fixa e sem top, fica na posição estática — a
+   linha de baixo do cabeçalho, seja qual for a altura dele (o subtítulo do
+   computador, a área segura do telemóvel) — e não rola. Tem de ser a filha:
+   o #hdrSync é filho do main, que é flex, e um fixo filho de um flex tem a
+   posição estática no topo do contentor, por trás do cabeçalho.
+   As cores: o par cheio do perigo (--danger com a --danger-ink, 4,5:1 ou
+   mais nos dois temas) e o do laranja (--out com a --accent-ink, o do
+   crachá); e a borda na mesma cor, que é cor da frente — com o escurecimento
+   forçado do Samsung Internet o fundo pode mudar de luz, e a borda continua
+   a dizer o estado (docs/design.md, «Tema escuro e a regra do color-scheme»).
+   O z 50 passa por cima das barras pegajosas das listas (.fwrap, 46) e fica
+   por baixo do FAB (58), do véu do menu (61) e das janelas. */
+#hdrSync{display:block;height:0}
 #hdrSync:empty{display:none}
-.sync{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;min-height:30px;padding:0 10px;border-radius:6px;font-size:13px;font-weight:600;white-space:nowrap}
-.sync.liga{background:var(--out-soft);color:var(--out)}
-.sync.ok{background:var(--in-soft);color:var(--in)}
-.sync.pend{background:var(--accent-soft);color:var(--accent-text)}
-.sync.fora{background:var(--danger-soft);color:var(--danger)}
-.sync.recibo{padding:0 7px}
-.sync.recibo span{display:none}
+.faixa-sync{position:fixed;z-index:50;left:calc(var(--rail) + clamp(16px,3vw,36px) + var(--inset-left));right:calc(clamp(16px,3vw,36px) + var(--inset-right));
+  margin-top:8px;display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 14px;border-radius:12px;
+  border:1px solid var(--danger);background:var(--danger);color:var(--danger-ink);box-shadow:var(--shadow);
+  font-size:14px;line-height:1.3}
+.faixa-sync.tenta{border-color:var(--out);background:var(--out);color:var(--accent-ink)}
+.faixa-sync svg{flex:0 0 auto}
+.faixa-sync p{margin:0;min-width:0;display:flex;flex-wrap:wrap;column-gap:6px}
+.faixa-sync b{font-weight:650}
+.faixa-sync span{font-weight:500}
+/* no telemóvel a barra lateral é uma gaveta: 16px de cada lado */
+@media(max-width:900px){.faixa-sync{left:calc(16px + var(--inset-left));right:calc(16px + var(--inset-right))}}
+/* Movimento: a faixa entra a descer 8px e a ganhar opacidade (--medio na
+   --curva, a de quem entra em cena), só na primeira entrada (.entra) — a
+   roda das tentativas troca o texto e a cor no sítio —, e sai pelo mesmo
+   caminho, mais depressa (--rapido), antes de o setSyncBadge a esvaziar
+   (.sai, 200 ms depois). Transform e opacidade, nada que mexa no desenho da
+   página. Sem movimento (prefers-reduced-motion), a regra geral apaga as
+   duas: a faixa aparece e sai seca. */
+@keyframes faixaEntra{from{opacity:0;transform:translateY(-8px)}}
+@keyframes faixaSai{to{opacity:0;transform:translateY(-8px)}}
+.faixa-sync.entra{animation:faixaEntra var(--medio) var(--curva)}
+.faixa-sync.sai{animation:faixaSai var(--rapido) var(--curva) both}
+
+/* O «?» da Ajuda (index.html:#hdrAjuda, navegacao.js:abrirAjuda), onde vivia a
+   nuvem: o mesmo botão do sino — no computador o .btn de 44px de altura com o
+   ícone de 16 e o contorno, no telemóvel o quadrado de 44 sem contorno (a
+   @media do cabeçalho). Aceso (a Ajuda aberta: a classe on ou o
+   aria-current), o par suave da escolha feita e o contorno no --accent: o
+   ícone e a borda são cor da frente, e dizem o estado também com o
+   escurecimento forçado do Samsung. */
+#hdrAjuda{width:50px;padding:0}
+#hdrAjuda svg{pointer-events:none}
+header.top #hdrAjuda.on,header.top #hdrAjuda[aria-current="page"]{background:var(--accent-soft);color:var(--accent-text);border-color:var(--accent)}
+/* O brilho da primeira abertura (a classe brilha, posta e tirada por
+   navegacao.js): uma vez por aparelho, para se dar pela porta da Ajuda.
+   Um anel parado no --accent (::after, a borda é cor da frente) e, por
+   cima, um anel que se solta dele e se desfaz (::before: cresce 30% e perde
+   a opacidade) — três vezes, na --chama cada, e pára; o anel parado fica
+   até ao toque, que tira a classe. Só transform e opacidade. Sem movimento
+   (prefers-reduced-motion) a regra geral apaga o pulso e fica o anel
+   parado, que é o que diz «olha aqui». */
+#hdrAjuda.brilha::before,#hdrAjuda.brilha::after{content:"";position:absolute;inset:-4px;border:2px solid var(--accent);border-radius:16px;pointer-events:none}
+#hdrAjuda.brilha::before{opacity:0;animation:ajudaChama var(--chama) var(--curva) 3}
+@keyframes ajudaChama{from{opacity:.7;transform:scale(1)}to{opacity:0;transform:scale(1.3)}}
+/* dito aqui também, e não só na regra geral do prefers-reduced-motion: sem o
+   pulso, o anel de cima nem se pinta */
+@media(prefers-reduced-motion:reduce){#hdrAjuda.brilha::before{animation:none;display:none}}
 /* a ação principal do ecrã, no cabeçalho do computador, e a secundária à
    esquerda dela (navegacao.js:pintarAcaoDoCabecalho) */
 #hdrAcao:empty{display:none}
@@ -899,10 +944,14 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .sdiv{height:1px;background:var(--line);margin:5px 6px}
 .selopt svg{color:var(--accent);flex:0 0 auto}
 
-/* menu de ações (⋯) */
+/* menu de ações (⋯). Com a largura do texto: preso à direita de um botão de
+   44px, o shrink-to-fit ficava nos 200px do mínimo e partia «Preencher 3 em
+   falta» e «Começar a partir de hoje» em duas linhas. O teto é de 320px, e
+   nunca mais do que o ecrã menos 16px de cada lado. */
 .menuwrap{position:relative}
 .menupop{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:30;background:var(--card);
-  border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;min-width:200px}
+  border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;min-width:200px;
+  width:max-content;max-width:min(320px,calc(100vw - 32px))}
 .menupop.on{display:block}
 .menupop button{width:100%;display:flex;align-items:center;gap:10px;min-height:42px;padding:8px 12px;border:0;background:transparent;
   border-radius:10px;cursor:pointer;text-align:left;font-size:15px;color:var(--ink)}
@@ -944,6 +993,11 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .fp-caixa>.fp-pe{position:sticky;bottom:0;z-index:1;display:flex;align-items:center;gap:10px;margin:12px -12px 0;padding:10px 12px 12px;background:var(--card);border-top:1px solid var(--line)}
 /* no dedo, os dois a meias e com os 48px do rodapé das janelas */
 @media(max-width:900px){.fp-caixa>.fp-pe .btn{flex:1;min-height:48px}}
+/* o painel da vista geral sem movimentos (painel-geral.js:dashBarVazia): a
+   frase e o «Adicionar movimento», sem a moldura tracejada do .empty, que
+   dentro da caixa do painel fazia um cartão dentro do outro */
+.fp-vazio{display:flex;flex-direction:column;align-items:flex-start;gap:8px;color:var(--muted);font-size:14px}
+.fp-vazio b{color:var(--ink);font-weight:600;font-size:15px}
 .fabpad{height:84px}
 .totop{position:fixed;left:50%;transform:translateX(-50%) scale(.9);bottom:calc(20px + var(--inset-bottom));z-index:57;width:44px;height:44px;
   border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);display:flex;align-items:center;justify-content:center;
@@ -1022,6 +1076,10 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .sheet.kb .body{padding-bottom:300px}
 .sheet .foot{padding:14px 20px calc(14px + var(--inset-bottom));border-top:1px solid var(--line);display:flex;gap:10px}
 .sheet .foot .btn{flex:1;justify-content:center;min-height:48px}
+/* o rodapé do preenchimento com a terceira resposta (cloud/painel.js:CW.fillMissed):
+   «Começar a partir de hoje» numa linha inteira por cima de Cancelar e Registar */
+.sheet .foot:has(>.preencher-hoje){flex-wrap:wrap}
+.sheet .foot .btn.preencher-hoje{flex:1 1 100%}
 .iconbtn{border:0;background:transparent;padding:7px;border-radius:10px;cursor:pointer;color:var(--muted);display:inline-flex;align-items:center;justify-content:center}
 @media(hover:hover) and (pointer:fine){.iconbtn:hover{background:var(--chip);color:var(--ink)}}
 /* A porta das opções de um registo, e é a mesma em toda a app: o kebab das
@@ -1388,7 +1446,7 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
    dois botões carregam, para que um u-d-… que alguém lhes venha a pôr não os
    desesconda. Continua abaixo de qualquer el.style, que é o que esconde e
    mostra estes dois. */
-#raiz#raiz #hdrBell:empty,#raiz#raiz #hdrFilt:empty{display:none}
+#raiz#raiz #hdrBell:empty,#raiz#raiz #hdrFilt:empty,#raiz#raiz #hdrAjuda:empty{display:none}
 /* ---- web/app/componentes.js ---- */
 /* O emblema de uma opção do pickModal (componentes.js): o fundo e a cor
    andam sempre aos pares — o vermelho no que apaga, a cor de destaque no
@@ -4733,8 +4791,9 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
    imagem tem altura fixa: a janela não salta de tamanho entre elas. */
 @media(min-width:521px){.apr-janela .sheet{width:min(620px,calc(100vw - 28px))}}
 /* a pergunta a quem fecha uma antes do fim (cloud/apresentacao.js:aprPerguntar):
-   três respostas de frase inteira, que lado a lado não cabem — em coluna,
-   com o primário em baixo, à mão do polegar */
+   duas respostas de frase inteira, que lado a lado não cabem num telemóvel —
+   em coluna, com o primário («Voltar à apresentação») em baixo, à mão do
+   polegar */
 .apr-pergunta .sheet .foot{flex-direction:column}
 .apr-pergunta .sheet .foot .btn{flex:0 0 auto}
 .apr{display:flex;flex-direction:column;gap:14px}
@@ -5641,3 +5700,71 @@ p.qa-quem{margin:0}
 .gprevista{opacity:.38}
 .legend .li.prevista .dot{background:var(--muted);opacity:.38}
 /* === fim: qa-ronda2: visão geral === */
+/* === o rasto das pessoas: a linha «Ajudar a melhorar» das Definições (cloud/rasto.js) === */
+/* A linha inteira é o interruptor (rasto.js:rstLinhaDasDefinicoes: um botão
+   role=switch com a altura da .linha, 60px, e o aria-checked), e o desenho do
+   .interruptor vai dentro só para se ver: liga-se pelo aria-checked da linha.
+   O estado diz-se também em palavras, e ligado na cor da frente
+   (--accent-text): não fica só no fundo do interruptor, que o Samsung
+   Internet escurece à força. A pergunta é uma janela da casa (openModal) com
+   Recusar e Aceitar do mesmo peso, e não precisa de regra sua. */
+.rst-def .interruptor{pointer-events:none}
+.rst-def[aria-checked="true"] .interruptor{background:var(--accent)}
+.rst-def[aria-checked="true"] .interruptor::after{transform:translateX(18px)}
+.rst-def .small.rst-def-ligado{color:var(--accent-text)}
+.rst-def:disabled{cursor:progress}
+/* === fim: o rasto das pessoas === */
+/* === avisos por email: a linha «Avisos por email» das Definições (cloud/avisos-email.js) === */
+/* O mesmo desenho da «Ajudar a melhorar»: a linha inteira é o interruptor
+   (avisos-email.js:aveLinhaDasDefinicoes, role=switch e aria-checked), e o
+   .interruptor de dentro só se vê. Ligado diz-se em palavras e na cor da
+   frente (--accent-text); a escolha que não se leu, em --danger. A meio de
+   um pedido a linha fica aria-busy e aria-disabled (não disabled: o foco
+   fica nela), e o desenho do interruptor esbate-se. */
+.ave-def .interruptor{pointer-events:none}
+.ave-def[aria-checked="true"] .interruptor{background:var(--accent)}
+.ave-def[aria-checked="true"] .interruptor::after{transform:translateX(18px)}
+.ave-def .small.ave-def-ligado{color:var(--accent-text)}
+.ave-def .small.ave-def-falhou{color:var(--danger)}
+.ave-def[aria-busy="true"]{cursor:progress}
+.ave-def[aria-busy="true"] .interruptor{opacity:.45}
+/* === fim: avisos por email === */
+/* === verificação do email: a faixa dos 7 dias e o ecrã depois deles (cloud/entrada.js) === */
+/* A faixa (entrada.js:pintarFaixaDoEmail) vive no fluxo da página, logo
+   abaixo do cabeçalho (a seguir ao #hdrSync), e rola com o conteúdo: ao
+   contrário da faixa sem ligação, fica 7 dias, e por cima do conteúdo
+   tapava-o esse tempo todo. Não tapa a navegação, as abas, o FAB nem a
+   pílula do QA. Alinha com o .wrap (o mesmo recuo e a mesma largura útil).
+   As cores: o par suave do âmbar (--warn-soft, texto --ink) com a borda em
+   --warn, que é cor da frente — com o escurecimento forçado do Samsung
+   Internet o fundo muda de luz e a borda continua a dizer que é um aviso
+   (docs/design.md, «Tema escuro e a regra do color-scheme»). O «Reenviar» é
+   um .btn (44px), à direita; num ecrã estreito desce para baixo do texto. */
+.faixa-email{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;
+  margin:16px calc(clamp(16px,3vw,36px) + var(--inset-right)) 0 calc(clamp(16px,3vw,36px) + var(--inset-left));
+  max-width:calc(1240px - 2 * clamp(16px,3vw,36px));padding:10px 10px 10px 14px;border-radius:12px;
+  border:1px solid var(--warn);background:var(--warn-soft);color:var(--ink);font-size:14px;line-height:1.35}
+.faixa-email-ic{flex:0 0 auto;display:grid;place-items:center;color:var(--warn)}
+.faixa-email p{flex:1 1 200px;min-width:0;margin:0;display:flex;flex-wrap:wrap;column-gap:6px}
+.faixa-email b{font-weight:650}
+.faixa-email p span{color:var(--muted);overflow-wrap:anywhere}
+.faixa-email-btn{flex:0 0 auto;margin-left:auto;background:var(--card);border-color:var(--warn);color:var(--ink)}
+@media(hover:hover) and (pointer:fine){.faixa-email-btn:hover{background:var(--tint)}}
+.faixa-email-btn:disabled{cursor:progress;opacity:.7}
+@media(max-width:900px){.faixa-email{margin:8px calc(16px + var(--inset-right)) 0 calc(16px + var(--inset-left))}}
+/* O ecrã (entrada.js:mostrarPortaoDoEmail) é um portão como o dos termos
+   (o .tg-caixa e os seus, ajuda.js:showTermsGate): por cima da app e dos
+   termos (196), abaixo da entrada (200), que é para onde o «Sair» leva. O
+   que diz, diz-se nele: #cwe_info em --accent-text, #cwe_err em --danger,
+   ambas cor da frente; vazias, não ocupam lugar. */
+.email-portao{position:fixed;inset:0;z-index:198;background:var(--bg);overflow:auto;display:flex;justify-content:center;
+  padding:calc(28px + var(--inset-top,0px)) calc(20px + var(--inset-right)) calc(24px + var(--inset-bottom,0px)) calc(20px + var(--inset-left))}
+#cweTit:focus-visible{outline:none} /* como o #tgTit: o foco só põe o leitor de ecrã a começar ali */
+.email-endereco{font-weight:650;color:var(--ink);overflow-wrap:anywhere}
+.email-dica{margin:0;font-size:14.5px;color:var(--muted)}
+.email-info{margin:0;color:var(--accent-text)}
+.email-erro{margin:0;color:var(--danger)}
+.email-info:empty,.email-erro:empty{display:none}
+/* o «Pedir ajuda» do ecrã: um link do tamanho do texto, à esquerda, e não a coluna inteira */
+.email-ajuda{align-self:flex-start}
+/* === fim: verificação do email === */

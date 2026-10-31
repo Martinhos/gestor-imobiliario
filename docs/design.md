@@ -54,6 +54,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Entrar na seleção é como nas Casas
 - A fita da barra de baixo
 - A renda planeada e as rendas já lançadas
+- A data de compra é o chão das datas da casa
 - Os Contratos
 - As Pessoas e as Visitas
 - Os Movimentos
@@ -62,6 +63,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Um modal está acima de toda a navegação
 - O hambúrguer só existe onde há gaveta
 - Um portão por cima de tudo não mostra avisos
+- O email confirma-se em 7 dias
 - O service worker e a versão
 - A app não afirma nem decide antes de saber
 - A sincronização: o que é daqui e o que é do servidor
@@ -75,6 +77,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Fora da app: a montra, os emails e o back office
 - A app em serviços
 - Os tickets de QA
+- O rasto das pessoas
 - A CSP sem «unsafe-inline»
 - Os eventos declaram-se, e uma ação é uma gramática
 - Os estilos vivem na folha, e nunca no HTML
@@ -1131,7 +1134,11 @@ painel comprido, não atira a caixa para o topo. O anaPanel monta-o
 (vistas.js:anaPanel; o seletor dos filtros comuns só onde o ecrã o pede), e
 o da Visão geral — o imóvel em foco — é o vistas.js:anaPanelPadrao. Nas
 listas e nos Movimentos o «Limpar» e o «Fechar» estão no topo, ao lado do
-título (ver abaixo e «Os Movimentos»).
+título (ver abaixo e «Os Movimentos»). Um botão de filtros que se acende
+abre sempre um painel: na Visão geral sem movimentos (a jornada, o «Ainda
+não há dados») o painel não tem o seletor, que não teria o que filtrar, e
+diz porquê, com o «Adicionar movimento» quando a pessoa o pode fazer
+(painel-geral.js:dashBarVazia, estilos.css:.fp-vazio).
 
 Todas as listas filtram como os Movimentos (vistas.js:lfCabeca), e é um
 componente só, que veste as classes deles, em vez de uma cópia por lista. A
@@ -1776,30 +1783,35 @@ A janela é um openModal (apresentacao.js:aprAbrir): o ✕ da cabeça, o Esc, o
 voltar e o arrasto da folha fecham-na como a qualquer outra, e é o aoFechar da
 camada que a marca como vista, por qualquer caminho
 (apresentacao.js:aprAoFechar). Quem a fecha por um desses caminhos antes da
-última imagem pode estar a dizer que não quer nenhuma: a app pergunta-lhe,
-uma vez por conta, «Não queres ver as apresentações?»
+última imagem pode estar a dizer que não quer nenhuma: a app pergunta-lhe, uma
+vez por conta, «Não queres ver as apresentações?»
 (apresentacao.js:aprPerguntar), nas boas-vindas e nos separadores, e a marca
-espera pela resposta. Três botões em coluna, o primário em baixo
-(estilos.css:.apr-pergunta): «Voltar à apresentação» reabre-a na imagem onde
-estava e não gasta a pergunta; «Não mostrar mais» marca-a vista e nenhuma
-volta a abrir sozinha (a chave nenhuma); «Continuar a mostrar» marca-a vista
-e as outras abrem na primeira visita (apresentacao.js:aprResponder). As duas
-últimas guardam a resposta (a chave perguntou), e fechar a pergunta sem
-escolher é o fecho de sempre, que pergunta outra vez da próxima. O «Percebi»,
-a última imagem e a Ajuda nunca perguntam. Não há interruptor para as voltar
-a ligar: a Ajuda reabre cada uma. No corpo, o palco com as imagens lado a lado
-numa fita — cada uma é a maquete e, por baixo, o título e o texto, e viajam
-juntas —, os pontos e a frase do leitor de ecrã (apresentacao.js:aprCorpo); a
-imagem tem altura fixa (estilos.css:.apr-imagem) e a fita estica as folhas à
-altura da maior, por isso a janela não salta de tamanho entre elas. No rodapé,
-Anterior (sem ele na primeira) e Seguinte, primário; na última, o botão do
-fim — «Percebi» nos separadores, «Ir para os imóveis» nas boas-vindas
-(apresentacao.js:aprPintar, apresentacao.js:aprFimDe). O palco é uma região
-com nome, cada imagem um grupo «N de M», as de fora inertes, e a cada
-passagem o leitor de ecrã ouve «Imagem 2 de 7» e o título. Os pontos são só
-desenho, e o de agora é mais comprido: a forma diz qual é, também com o
-escurecimento forçado (estilos.css:.apr-pontos). No computador a janela tem
-620px e as peças crescem com ela (estilos.css:.apr-cena).
+espera pela resposta. O texto diz que a de cada ecrã continua no «?» do
+cabeçalho (navegacao.js:abrirAjuda). Dois botões em coluna, o primário em
+baixo, à mão do polegar (estilos.css:.apr-pergunta): «Não mostrar mais»
+marca-a vista, nenhuma volta a abrir sozinha (as chaves perguntou e nenhuma)
+e, com a pergunta já fechada, um aviso em baixo diz que a de cada ecrã fica no
+«?»; «Voltar à apresentação», o primário — o caminho que não muda nada —,
+reabre-a na imagem onde estava e não gasta a pergunta
+(apresentacao.js:aprResponder). O aviso não tapa as novidades que esperavam
+pela pergunta: a janela que abre levanta-o acima do rodapé dela
+(componentes.js:avisoAcimaDoRodape). Fechar a pergunta sem escolher é o fecho
+de sempre, que a dá por vista e pergunta outra vez da próxima. O «Percebi», a
+última imagem, o «?» e a Ajuda nunca perguntam. Não há interruptor para as
+voltar a ligar: o «?» reabre a de cada ecrã, e a Ajuda todas. No corpo, o
+palco com as imagens lado a lado numa fita — cada uma é a maquete e, por
+baixo, o título e o texto, e viajam juntas —, os pontos e a frase do leitor de
+ecrã (apresentacao.js:aprCorpo); a imagem tem altura fixa
+(estilos.css:.apr-imagem) e a fita estica as folhas à altura da maior, por
+isso a janela não salta de tamanho entre elas. No rodapé, Anterior (sem ele na
+primeira) e Seguinte, primário; na última, o botão do fim — «Percebi» nos
+separadores, «Ir para os imóveis» nas boas-vindas (apresentacao.js:aprPintar,
+apresentacao.js:aprFimDe). O palco é uma região com nome, cada imagem um grupo
+«N de M», as de fora inertes, e a cada passagem o leitor de ecrã ouve «Imagem
+2 de 7» e o título. Os pontos são só desenho, e o de agora é mais comprido: a
+forma diz qual é, também com o escurecimento forçado
+(estilos.css:.apr-pontos). No computador a janela tem 620px e as peças crescem
+com ela (estilos.css:.apr-cena).
 
 O gesto é o das fotos (web/app/anexos.js:fotoArrastar, o padrão copiado e não
 chamado): o eixo decide-se aos 10px (apresentacao.js:aprEixo), largar depois
@@ -2082,68 +2094,50 @@ requestAnimationFrame não corre — e aí a contagem nem começa, o que é o la
 bom da falha: o texto de partida já é o final.
 
 ## O que a app diz sobre o que guardou
-A app escreve no aparelho e sincroniza depois. Quem acaba de escrever alguma
-coisa tem de poder saber se ela já subiu, e o silêncio não serve para isso:
-o silêncio quer dizer «está tudo enviado» e quer dizer «ainda não tentei», e
-são coisas diferentes.
+A app escreve no aparelho e sincroniza depois. Com ligação, o que se escreve
+sobe em segundos, e não há nada para ver: o cabeçalho não tem selo nem
+nuvem, e no sítio onde ela estava, antes do sino, está o «?» da Ajuda
+(decisão do Martinho, 2026-10-29). O que a app diz é quando NÃO consegue
+guardar no servidor: uma faixa (cloud/entrada.js:setSyncBadge, o
+index.html:#hdrSync, que vive a seguir ao cabeçalho e não dentro dele) que
+aparece por cima do conteúdo, rente ao cabeçalho, sem o empurrar nem mexer
+com o scroll — o #hdrSync tem altura 0 e é a filha, a .faixa-sync, que é
+position:fixed —, com 16px de cada lado no telemóvel. Igual no telemóvel e
+no computador.
 
-O selo (cloud/entrada.js:setSyncBadge) tem quatro estados, e o que os separa
-é quanto tempo ficam. «A ligar ao servidor…» é laranja, com um relógio na
-base da nuvem: aparece desde a abertura com sessão, antes do primeiro
-/api/state, e outra vez em cada nova tentativa depois de uma falha, e fica o
-que a tentativa durar — no máximo o tempo-limite do pedido
-(cloud/nucleo.js:TEMPO_API). «Guardado» é verde e é um recibo: aparece e sai
-ao fim de dois segundos, porque um letreiro permanente deixa de se ler. «N
-alterações por enviar» é cobalto e fica enquanto houver — é o estado que
-faltava, e o número é o das operações que o próximo envio vai levar
-(cloud/nucleo.js:pushNow), não uma estimativa. «Sem ligação ao servidor» é
-vermelho, com uma cruz dentro da nuvem — sem rede, ou sem resposta a tempo —
-e fica até à tentativa seguinte. Uma recusa do servidor (um 429, um 5xx) não
-é falta de ligação: o servidor respondeu, fica «N alterações por enviar», e a
-frase do servidor diz-se num toast (cloud/nucleo.js:avisoDoServidor). Sem
-sessão o selo não existe: sair esvazia-o (cloud/nucleo.js:encerrarSessao).
-O laranja é o --out, e não o --warn, que é âmbar acastanhado e se
-confundia com o vermelho ao lado; os pares (--out sobre --out-soft,
---danger sobre --danger-soft) dão 4,5:1 ou mais nos dois temas. O relógio
-não roda: o estado diz-se pela cor e pelo desenho.
+O setSyncBadge continua a receber os mesmos estados do núcleo, e é só a
+maneira de os mostrar que mudou. «Sem ligação ao servidor.» é vermelha (o
+par cheio do perigo, --danger com a --danger-ink, que dá 4,5:1 nos dois
+temas), com o «N alterações por enviar.» na segunda linha quando as há —
+o número que o núcleo deu, ou, sem ele, o que difere do retrato do servidor
+(cloud/entrada.js:alteracoesPorEnviar). A nova tentativa depois de uma
+falha mantém a faixa, em laranja (--out), com «A tentar ligar ao
+servidor…» (a classe .tenta). O «A ligar» da abertura, o «Guardado» e o «N
+por enviar» com ligação esvaziam-na (cloud/entrada.js:esvaziarFaixa). A
+faixa entra a descer 8px com a opacidade, em --medio, só na primeira vez, e
+sai pelo mesmo caminho em --rapido. Uma recusa do servidor (um 429, um 5xx)
+não é falta de ligação: a frase do servidor diz-se num toast
+(cloud/nucleo.js:avisoDoServidor). Sem sessão a faixa não existe: sair
+esvazia-a (cloud/nucleo.js:encerrarSessao). Enquanto está à vista, tapa as
+abas da área no telemóvel e fica com os toques: é por pouco tempo, e o que
+ela diz é mais importante.
 
 Quem decide é o núcleo, em três sítios: cloud/nucleo.js:tentarLigar antes de
-cada conversa (só põe o «A ligar» se a última falhou, ou se ainda nenhuma
-acabou nesta sessão — com a ligação de pé, a leitura de três em três minutos
-não pisca nada), cloud/nucleo.js:ligou quando o servidor responde (com dados,
+cada conversa, cloud/nucleo.js:ligou quando o servidor responde (com dados,
 com um 304 ou com uma recusa) e cloud/nucleo.js:caiuALigacao quando não
-responde. Sem ligação, o ciclo de 30 segundos tenta outra vez a cada volta,
-sem esperar pelo intervalo de leitura (cloud/nucleo.js:syncCycle) — que
-depois de uma hora parada é de meia hora, e o selo ficava vermelho esse tempo
-todo com a rede já de volta —, e uma tentativa por ciclo: se o envio já
-tentou, a leitura não vai atrás dele. O voltar online e o voltar à frente
-também são tentativas. No arranque o selo nasce «A ligar» e quem o tira é a
-leitura do estado; o /api/me a falhar não o põe em «Sem ligação», porque
-isso o fazia piscar, e mentia se só o /api/me tivesse falhado.
+responde. Sem ligação, o ciclo de 30 segundos tenta outra vez a cada volta
+(cloud/nucleo.js:syncCycle), uma tentativa por ciclo. O voltar online e o
+voltar à frente também são tentativas. O /api/me a falhar no arranque não põe
+a faixa, porque isso a fazia piscar, e mentia se só o /api/me tivesse
+falhado.
 
 O leitor de ecrã ouve as mudanças (o #hdrSync é um role=status), mas não a
-roda das tentativas: sem rede, de 30 em 30 segundos, o selo passa a «A ligar»
-e volta a «Sem ligação», e a tentativa e a falha repetida mudam-no com o
-aria-live desligado. O mesmo selo duas vezes seguidas não se refaz nem se
-anuncia. À vista diz «Sem ligação ao servidor»; o «— sincroniza mais tarde»
-fica no aria-label e no title, porque com ele a frase comia o título do ecrã
-no computador estreito.
-
-E vive no cabeçalho ao lado do título, nunca em cima de outra peça dele:
-esteve no canto superior direito, que é onde o sino mora, e ninguém tinha
-dado por isso porque nenhuma cena do percurso o mostrava — só aparecia
-quando a ligação caía. Há uma cena por estado e uma regra que guarda o sítio
-(testes/ui/invariantes.js). No telemóvel o selo é o ícone, com a frase no
-aria-label e no title, e só o «Sem ligação» desce para uma faixa fina por
-baixo do cabeçalho, a toda a largura, com o cabeçalho a crescer o que ela
-ocupa (ver «Navegação»). O «N alterações por enviar» fica o ícone cobalto: a
-cada gravação o selo passa por ele e logo a seguir pelo «Guardado», e a faixa
-a entrar e a sair fazia o cabeçalho saltar a cada gravação. O «A ligar» da
-abertura também é só o ícone, pela mesma razão, a cada abertura. Mas uma nova
-tentativa depois de uma falha herda a faixa que lá está, agora laranja (a
-classe .tenta, estilos.css:header.top) — sem isso o cabeçalho encolhia e
-crescia de 30 em 30 segundos enquanto a rede não voltasse. A .tenta só nasce
-do «Sem ligação» ou de outra tentativa, nunca do «por enviar».
+roda das tentativas: sem rede, de 30 em 30 segundos, a faixa passa a «A
+tentar ligar» e volta a «Sem ligação», e a tentativa e a falha repetida
+mudam-na com o aria-live desligado; uma contagem nova anuncia-se. Há uma
+cena do percurso por estado da faixa (sem ligação e a tentar) e uma regra
+que guarda o sítio dela: abaixo do cabeçalho, dentro do ecrã, sem tapar o
+«?», o sino nem os filtros (testes/ui/invariantes.js).
 
 ## Uma porta, e nenhum beco
 As opções de um registo — editar, duplicar, apagar, selecionar vários —
@@ -3335,7 +3329,10 @@ mas nunca passa por cima de um mês que já tem renda deste contrato**
 corrigir um início de 2028 para 2025 traz o cursor de volta — mas ele pára no
 primeiro mês por confirmar, e não em janeiro. É a mesma regra que faz o
 confirmar não duplicar: o cursor nunca aterra num mês já lançado, e quando
-lá chega por outro caminho (uma renda lançada à mão), salta e di-lo.
+lá chega por outro caminho (uma renda lançada à mão), salta e di-lo. Nem recua
+para antes da compra da casa: o chão do cursor é o primeiro dia de pagamento
+desde a data de compra (planeados.js:primeiraDesdeACompra), mesmo num contrato
+com o início mais antigo; ver «A data de compra é o chão das datas da casa».
 
 Renda é o que é renda (irs.js:ehRenda): a caução e os empréstimos são passivo
 e não contam. E conta pelo mês a que respeita, não pelo dia em que entrou
@@ -3356,6 +3353,48 @@ Por isso os movimentos não se movem com o contrato — a app **aponta**. Ao
 guardar um contrato, os que caem fora das datas dele, de um lado e do outro,
 são contados e mostram-se um a um, para se abrir cada um e decidir
 (contrato.js:movimentosForaDoContrato, contrato.js:verMovimentosFora).
+
+## A data de compra é o chão das datas da casa
+Uma casa não tem história antes de ser comprada. O início de um contrato, a
+data de uma receita de uma casa só e o início de uma hipoteca recusam-se antes
+da data de compra da ficha (imovel.js:antesDaCompra, a regra num só sítio, com
+imovel.js:dataDeCompra), com o erro junto do campo e a data como se escreve em
+Portugal: «O imóvel foi comprado a 12/03/2020: o contrato não pode começar
+antes.» (contrato.js:ctInicioAntesDaCompra), «… uma receita não pode ser de
+antes.» (movimento.js:txDataAntesDaCompra), «… a hipoteca não pode começar
+antes.» (imovel.js:creditoAntesDaCompra, na janela da hipoteca e na ficha do
+imóvel, com a data de compra que está no formulário). Num contrato de um
+quarto, a casa é a do quarto. O calendário do browser também não oferece os
+dias de antes (o min do campo, imovel.js:minDaCompra). Sem data de compra na
+ficha não há limite. Só se confere a data nova ou mudada (ou a casa trocada):
+um registo antigo que já estava antes — gravado antes da regra, ou cuja casa
+mudou de data de compra depois — grava-se quando se mexe noutro campo, e o
+campo não nasce inválido. Mudar a data de compra para depois de registos que
+já existem não se recusa.
+
+Nos movimentos só se conferem as receitas (as rendas, as cauções): antes de a
+casa ser minha ninguém me pagou renda dela. As despesas, as prestações e os
+outros tipos entram com qualquer data — o sinal do contrato-promessa, o IMT,
+as obras antes da escritura. O min do campo da data só existe nas receitas e
+acompanha o tipo quando ele muda (o formulário repinta-se;
+movimento.js:txMinDaData), e o guardar confere na mesma — uma despesa que
+passa a receita com a data antes recusa-se. E só o que é de uma casa e tem
+data de facto: um planeado (a data é a próxima ocorrência) e um modelo que não
+regista o movimento ficam de fora; um movimento sem imóvel não tem compra; o
+de um grupo ou de «Todos os imóveis» também não — «Todos» já só parte pelos
+imóveis comprados nessa data (saldos.js:imoveisDeTodos), e num grupo a compra
+de uma casa não diz nada da data do movimento inteiro.
+
+O preenchimento das rendas em falta segue a mesma regra: a origem de um plano
+nunca é antes da compra da casa (planeados.js:origemDoPlano), o cursor da
+renda não recua para antes do primeiro dia de pagamento desde ela
+(planeados.js:cursorDaRenda, planeados.js:primeiraDesdeACompra), e a janela do
+preenchimento diz porque as datas começam ali e não no início do contrato
+(cloud/painel.js:CW.fillMissed, planeados.js:planoAntesDaCompra). O teto de
+600 períodos (planeados.js:datasEmFalta) fica com os mais recentes, até hoje.
+Andava da origem para a frente e parava aos 600: um contrato «desde 1870» numa
+casa comprada em 2020 propunha as rendas de 1870 a 1919, e registá-las era
+gravar 600 movimentos de uma vez (ticket de QA a3a6d2d4).
 
 ## Os Contratos
 A lista tem dois desenhos e um HTML só, como a dos Movimentos
@@ -3935,6 +3974,24 @@ Confirmar (primário, quickConfirmRec), Rever (o formulário, confirmRec) e o
 mesmas linhas vão nas linhas dos contratos (cloud/painel.js:pendBlock; ver
 «Os Contratos»).
 
+«Começar a partir de hoje» (cloud/painel.js:CW.startFromToday) vive no ⋯ das
+linhas por confirmar quando há pelo menos uma data em atraso
+(planeados.js:recPodeComecarHoje), no toque longo e como primeiro botão da
+janela do preenchimento, numa linha inteira por cima de Cancelar e Registar.
+Larga as datas em falta sem criar movimentos e passa o planeado para a
+primeira data de hoje em diante, com a janela next..until mantida
+(planeados.js:recComecarHoje); quando não há próxima (uma só vez, ou o fim já
+passou), o planeado é removido. Pede confirmação com quantas datas ficam por
+registar e para que dia passa, e dá Anular. Fixa o desde do planeado
+(planeados.js:recDesde): o chão abaixo do qual nem o preenchimento nem o
+cursor da renda de um contrato voltam a pedir datas. «Recusar desta vez» numa
+renda de contrato fixa-o também (planeados.js:recRecusadaFixa), para o
+arranque não puxar a renda de volta ao mês recusado. Num planeado alheio, o
+servidor funde next, until, muted e desde (lib/permissoes.js:CAMPOS_DE_CONFIRMAR).
+
+O menu do ⋯ tem a largura do texto (estilos.css:.menupop), até 320px e nunca
+mais do que o ecrã: as opções não partem em duas linhas.
+
 A faixa de quem vem de trás (planeados.js:recRetroFaixa) mostra um planeado
 de cada vez com dois ou mais períodos passados sem movimento
 (planeados.js:recRetroCandidatos — nunca as prestações, que se perguntam ao
@@ -4236,6 +4293,35 @@ limpar a versão antiga), reiniciar — num role=status
 de progresso (novidades.js:ecraAtualizar, que recebe a chave do passo e não
 a frase). Tranca também as escritas (ver «O service worker e a versão»).
 
+## O email confirma-se em 7 dias
+
+Uma conta com palavra-passe nasce com o email por confirmar
+(users.email_verified_at a NULL; as contas Google, as que a equipa cria no
+back office e as que já existiam antes da migração 0027 nascem confirmadas).
+O registo manda, em fundo, o email «Confirma o teu email» com uma ligação
+?confirmar= que vale 7 dias e uma só vez (rotas/auth.js:pedirConfirmacao,
+lib/correio.js:emailConfirmarEmail); na base fica só o sha256 do token, como
+no repor da palavra-passe. O /api/me diz emailConfirmado e confirmarAte
+(rotas/auth.js:estadoDoEmail).
+
+Nos 7 dias, a app funciona e há uma faixa por baixo do cabeçalho, no fluxo da
+página — não tapa a navegação nem a pílula do QA —, «Confirma o teu email até
+dd/mm» com «Reenviar» (entrada.js:pintarFaixaDoEmail). A cor é a do aviso
+(--warn-soft com o contorno --warn), e o estado lê-se pelo contorno, que
+sobrevive ao escuro forçado do Samsung. Passados os 7 dias, o servidor recusa
+tudo com 403 email_por_confirmar (api.js:portaoDoEmail), menos o /api/me, o
+reenviar, os termos, apagar a conta, sair e os pedidos de ajuda da própria
+conta (criar e ler); o cliente mostra o ecrã «Confirma o teu email» por cima de tudo
+(entrada.js:mostrarPortaoDoEmail), com «Reenviar o email», «Já confirmei»,
+«Pedir ajuda» e «Sair». Abrir a ligação, com ou sem sessão, diz «Email
+confirmado.» e tira a faixa. Os avisos por email (os planeados em atraso) só
+vão para emails confirmados; o email de repor a palavra-passe vai sempre.
+
+Entrar pela Google numa conta de palavra-passe por confirmar confirma-a, e
+remove a palavra-passe e as outras sessões: quem registou um email que não era
+seu não fica com a conta do dono. Quem a tinha criado e quer palavra-passe usa
+o «Esqueci-me da palavra-passe».
+
 ## O service worker e a versão
 A app abre offline porque o service worker guarda a casca — os ficheiros da
 app e mais nada — numa cache com o nome da versão (sw.js:CACHE; a versão é a
@@ -4369,6 +4455,42 @@ maneira ao ler, com o mesmo código: o bloco da fusão vive igual, letra a
 letra, em worker/src/lib/permissoes.js e em web/cloud/nucleo.js, e o
 testes/fusao-da-casa.test.js compara-os.
 
+Em lote. Um POST /api/sync com N operações gasta as mesmas consultas à D1 que
+um com uma (worker/src/lib/escritas.js:aplicarOps): lê de uma vez as casas que
+o pedido toca e o acesso a elas (escritas.js:lerCasas,
+acesso.js:acessosACasas), as linhas dos registos (escritas.js:lerLinhas, com
+as chaves numa lista JSON e json_each) e os anexos que a regra dos anexos tem
+de ver (escritas.js:lerPresos); decide tudo em memória com as regras de sempre
+(regraDoRegisto, planeadoAGravar, a fusão a três, recusaDosAnexos,
+recusaPelaCompra) e grava com env.DB.batch — um lote para as fichas, um para
+os registos, um para prender os anexos (as instruções do files.js:linkFiles,
+apanhadas sem correr). As fases seguem a ordem em que o cliente manda: fichas,
+registos e dados globais, casas apagadas, anexos. Um lote que falha corre
+instrução a instrução, e só a má é o 500 da sua operação; uma escrita
+condicional que não pegou relê e funde na volta seguinte (até três, depois o
+409); a mesma linha duas vezes no pedido vai uma por volta, pela ordem. Medido
+(testes/sync-lote.test.js): 7 consultas com 1 movimento novo e com 200; 9 para
+uma comproprietária com anexos; 11 para um colaborador sem «Juntar anexos».
+
+O que cada operação fez. O resultado de aplicarOps diz `acao` ('criado',
+'editado', 'removido'), `scope` e `kind` ('house' numa ficha), e `igual: true`
+quando a fusão o deixou como estava. A resposta ao cliente continua com a
+forma de sempre (rotas/sync.js:paraOCliente tira estes campos); a contagem por
+kind e ação é rotas/sync.js:contarOps, tirada na rota antes de despir os
+resultados.
+
+O pedaço do cliente é web/cloud/nucleo.js:LOTE_SYNC = 200, o máximo do
+servidor (rotas/sync.js:MAX_OPS): com as consultas fixas, pedaços menores só
+gastavam mais pedidos do travão de ritmo (60 em 15 minutos).
+
+Recusa de validação (422). O servidor recusa por operação um contrato, uma
+receita de uma casa e um crédito com data antes da compra do imóvel
+(escritas.js:recusaPelaCompra). O cliente não reenvia
+(nucleo.js:recusaPorValidacao): um registo sai do aparelho e do retrato (o
+estado seguinte traz a versão do servidor, se havia); numa ficha só o crédito
+recusado sai (se é novo) ou volta à data da base; diz-se a frase do servidor
+uma vez por envio, com «Não foi guardado.».
+
 No aparelho guardam-se as bases das casas e as dos registos por enviar
 (nucleo.js:saveBases, nucleo.js:basesPorEnviar — gravadas no começo de cada
 envio, antes do pedido); a de um registo que o retrato diz igual ao do
@@ -4456,7 +4578,9 @@ do IRS · Anexo F, os Colaboradores nas Pessoas e os Grupos nas Casas; cracha,
 uma função que devolve o número do crachá, que a navegação lateral mostra
 (nenhuma das de hoje o usa: o crachá dos pedidos dos Grupos vive na aba
 deles e na linha da gaveta, servicos.js:crachaDe); se, uma função que diz
-se a linha aparece agora (nenhuma das de hoje o usa); e linha, uma linha desenhada à
+se a linha aparece agora (o «Ajudar a melhorar», rasto.js:rstLinhaDasDefinicoes,
+e os «Avisos por email», avisos-email.js:aveLinhaDasDefinicoes, que só aparecem
+com sessão); e linha, uma linha desenhada à
 parte, dentro da lista — o Tema. Um html continua a ser um cartão inteiro, à
 parte da lista. O Tema está na própria raiz, num segmentado Automático, Claro
 e Escuro que grava ao tocar e devolve o foco ao botão escolhido
@@ -4469,6 +4593,17 @@ título leva à página do Tema (definicoes.js:vTema), que explica o que fazer
 quando o browser não passa a preferência do sistema e continua a gravar pelo
 tema.js:setTheme.
 
+Na secção Conta, a seguir à Segurança, os «Avisos por email»
+(avisos-email.js:aveLinhaDasDefinicoes, estilos.css:.ave-def): o interruptor
+do email diário dos planeados em atraso, só com sessão e com os Planeados
+ligados. Como o «Ajudar a melhorar», a linha inteira é o botão (role="switch"),
+o estado diz-se em palavras e, ligado, na cor da frente; lê a escolha do
+servidor quando a raiz se pinta e grava ao tocar, com um aviso a dizer o que
+ficou. As duas ligações do email chegam pelo endereço
+(avisos-email.js:aveApanharDoEndereco): /?avisos abre a raiz com a linha em
+foco e /?planeados abre os Planeados; sem sessão o destino espera pela entrada
+(avisos-email.js:aveTentarDestino), e a chave sai do endereço.
+
 A cabeça das subpáginas é o backRow, e não é um texto fixo: é um getter do
 window (definicoes.js:cabecaDaSubpagina), lido na hora por todas as
 subpáginas — as da base e as da nuvem, que continuam a escrever
@@ -4479,8 +4614,8 @@ Definições (definicoes.js:navDasDefinicoes, o canvas D-DefCategorias): as
 mesmas secções e linhas da raiz, com a página aberta acesa — o IRS e as
 etiquetas acendem as categorias, os termos e a política o aviso legal
 (definicoes.js:paginaDasDefinicoes) —, posta ao lado do conteúdo pela folha
-(estilos.css:.wrap:has(>.def-nav)). A Ajuda tem porta própria na barra
-lateral e fica sem ela. O navRow (definicoes.js:navRow) é uma função, com o
+(estilos.css:.wrap:has(>.def-nav)). A página da Ajuda fica sem ela, e o «?»
+do cabeçalho não aparece nas Definições. O navRow (definicoes.js:navRow) é uma função, com o
 desenho das linhas da raiz num cartão só dela (o aviso legal usa-a), e os
 títulos das subpáginas da base são os do canvas.
 
@@ -5428,10 +5563,9 @@ app em serviços»). A barra lateral arruma-os nos cinco grupos do canvas de
 2026-10 (navegacao.js:NAV_GROUPS), iguais no menu do telemóvel: ao cimo, sem
 título, a Visão geral; Casas (Imóveis, Grupos, Contratos, Pessoas, Visitas); Dinheiro
 (Movimentos, Planeados, Créditos); Análise (Avaliação, Projeções, IRS · Anexo
-F); Agenda (o Calendário); e ao fundo, sem título, as Definições, a Ajuda e o
-cartão da conta (navegacao.js:gavetaFundo — a Ajuda e a conta só com
-sessão). A Ajuda leva à página dela nas Definições
-(navegacao.js:abrirDefinicoes); o cartão da conta, com o avatar, o nome e «O
+F); Agenda (o Calendário); e ao fundo, sem título, as Definições e o cartão
+da conta (navegacao.js:gavetaFundo — a conta só com sessão). A Ajuda não está
+na gaveta nem na barra lateral: vive nas Definições («Ajuda e sugestões»). O cartão da conta, com o avatar, o nome e «O
 meu perfil», abre a janela do perfil (navegacao.js:abrirOMeuPerfil →
 cloud/utilizadores.js:CW.editProfile, data-toca="camada"), a mesma do cartão
 do perfil das Definições: fecha primeiro a gaveta (como o «Criar»), e sem a
@@ -5542,16 +5676,22 @@ separador no computador, o da área no telemóvel (estilos.css:#pageTitle, o
 (navegacao.js:subtituloDoEcra: na Visão geral, o período dos indicadores,
 «Ano de 2026 · até hoje, 17/10/2026»; nos Colaboradores, quantas pessoas
 colaboram e quantos convites esperam,
-cloud/colaboradores.js:resumoDosColaboradores). A sincronização
-(index.html:#hdrSync, cloud/entrada.js:setSyncBadge) é laranja «A ligar ao
-servidor…», com um relógio, enquanto tenta ligar; verde «Guardado», que
-recolhe ao ícone ao fim de dois segundos — um recibo, não um letreiro —;
-cobalto «N alterações por enviar»; e vermelho «Sem ligação ao servidor», com
-uma cruz; no telemóvel o «Guardado», o «N alterações por enviar» e o «A
-ligar» da abertura são só o ícone, e «sem ligação» e a nova tentativa depois
-de uma falha descem para uma faixa fina por baixo do cabeçalho, a toda a
-largura, com o ícone a ficar e o cabeçalho a crescer o que ela ocupa
-(estilos.css:header.top, o .sync dentro de estilos.css:@media(max-width:900px)). A ação secundária é a de um ecrã que a
+cloud/colaboradores.js:resumoDosColaboradores). Antes do sino, o «?»
+(index.html:#hdrAjuda, navegacao.js:pintarBotaoAjuda,
+navegacao.js:abrirAjuda) abre a apresentação do separador onde se está, a
+mesma que a Ajuda revê em «Apresentações» (cloud/apresentacao.js:aprRever:
+sem marcar nada, a não ser que se chegue ao fim), sem mudar de ecrã e
+fechando primeiro a gaveta. Só com sessão e só num separador com
+apresentação para esta conta (navegacao.js:temApresentacao) — nas
+Definições, em página nenhuma delas (decisões do Martinho), o botão fica
+vazio e o :empty esconde-o —, do tamanho do sino, e o nome dele é
+«Apresentação deste ecrã». Na primeira abertura da app num
+aparelho, quando o ecrã fica livre (sem janelas, boas-vindas nem
+apresentação por mostrar, duas olhadelas seguidas), o anel dele pulsa três
+vezes na --chama e pára (navegacao.js:ajudaBrilhoTentar, a marca
+gi_ajuda_brilho); com movimento reduzido fica só o anel; tocar-lhe apaga-o
+(navegacao.js:ajudaBrilhoApagar). O estado da sincronização já não está no
+cabeçalho: é a faixa de «O que a app diz sobre o que guardou». A ação secundária é a de um ecrã que a
 tem — o «Exportar CSV» dos Movimentos (index.html:#hdrSec,
 navegacao.js:ACAO_SECUNDARIA) —, e a principal, só no computador
 (index.html:#hdrAcao, navegacao.js:pintarAcaoDoCabecalho), é «Novo
@@ -5630,8 +5770,9 @@ história (landing.js:RECEITA_MES, landing.js:DESPESA_MES,
 landing.js:PRESTACAO_MES, landing.js:CASAS): as rendas dos Imóveis somam o
 último mês do gráfico, e o que o hero diz estar por confirmar é o que os
 Planeados mostram. As alturas das barras são regras :nth-child geradas dos
-dados (landing.js:alturasDasBarras), porque a página não tem JavaScript nem
-atributos de estilo. A montra só promete o que a produção tem: nada do IRS
+dados (landing.js:alturasDasBarras), porque a página não tem atributos de
+estilo, e o único JavaScript que leva é o do rasto, a quem o aceitou («O rasto
+das pessoas»). A montra só promete o que a produção tem: nada do IRS
 enquanto a Declaração só existir em dev. O título e a descrição
 (landing.js:TITULO, landing.js:DESCRICAO) ficam nos 60 e nos 160 caracteres,
 com os termos que um senhorio procura. Das capturas antigas fica só a imagem de
@@ -5648,7 +5789,26 @@ correio.js:COR_ESCURO) — quem muda um token da app que o email usa muda-o lá
 também —, a marca como tabela (correio.js:marca), um botão cobalto de 48px
 (correio.js:botao), e cada email uma carta pura com a versão em texto das
 mesmas partes (correio.js:cartaPedidoRecebido, correio.js:cartaReporPassword,
-correio.js:cartaRespostaPedido).
+correio.js:cartaRespostaPedido, correio.js:cartaAtrasos).
+
+O único email que a app manda sem ninguém ter pedido nada é o dos planeados
+em atraso (avisos-atraso.js:resumoDosAtrasos), no cron de hora a hora, a
+partir das 9h de Lisboa (avisos-atraso.js:horaDosAvisos), numa invocação que
+não é a da cópia: um número fixo de consultas, seja qual for o número de casas
+(nunca uma por casa — a D1 tem um teto de consultas por invocação), e no
+máximo 20 emails por execução, ficando os outros para a hora seguinte. Em
+atraso é a regra da app (planeados.js:recIsLate),
+com o dia em Lisboa (avisos-atraso.js:hojeEmLisboa). Recebe-o quem é dono da
+casa (o dono, os comproprietários e os membros dos grupos partilhados) e os
+colaboradores que veem os contratos dela, cada um só com o que o cargo deixa
+ver na app: com «Ver planeados» todos, só com «Ver contratos» as rendas dos
+contratos (avisos-atraso.js:atrasosPorPessoa). Um por pessoa e por dia, e só
+nos dias em que há atrasos novos: os novos e, por baixo, os que continuam,
+por casa, com a data e o montante, o botão para os Planeados e, no rodapé, a
+ligação para os desligar. Um atraso conta como avisado (a tabela
+avisos_atraso) só quando o Resend aceitou o email. Desliga-se por conta, nas
+Definições (users.avisos_email), e quem tem os Planeados desligados não o
+recebe.
 
 O back office (worker/src/equipa-vista.js, worker/src/equipa-guiao.js) tem a
 barra lateral GRAFITE e a marca em ardósia, de propósito diferente do
@@ -5658,6 +5818,37 @@ alert(), prompt(), confirm() nem <select>: o que pede valores ou um motivo
 abre a janela de confirmação, o resultado diz-se no aviso de baixo, e
 desligar um serviço pergunta numa faixa âmbar do próprio cartão, com os
 dependentes que caem junto (equipa-guiao.js:mostrarAvisoDesligar).
+
+Um pedido de uma pessoa decide-se antes de se implementar. Enquanto está por
+decidir, o detalhe tem o cartão «Por decidir» com Recusar e Aceitar, e a
+linha da lista diz «por decidir» (depois «aceite», «recusado» ou «resposta
+por enviar»). Aceitar abre a janela com «Alterações ao pedido», opcional e só
+para a equipa (equipa-guiao.js:aceitarPedido): o que lá se escreve fica com a
+aceitação e numa nota interna, e é isso que se implementa quando não bate com
+o pedido. Recusar pede a justificação, obrigatória, que a pessoa recebe como
+resposta, e conclui o pedido (equipa-guiao.js:recusarPedido). Fica quem
+decidiu e quando, no pedido e no rasto (migrations/0024_pedidos_aceites.sql,
+worker/src/equipa-api.js:rotasEquipaApi); o servidor recusa aceitar um pedido
+já decidido ou concluído, e reabrir larga a recusa. Os erros não passam por
+aqui. Depois de implementar, quem programa não responde à pessoa: deixa a
+resposta proposta, que o detalhe mete já na caixa de responder, com uma nota a
+dizer de onde veio. Quem a lê envia-a como está ou muda-a primeiro, e só nesse
+envio a pessoa a recebe (worker/src/equipa-api.js:avisarDono) e a proposta
+sai.
+
+Um limite da API atingido abre um ticket de segurança: na primeira recusa de
+cada janela de uma chave, o rateLimit escreve ou engorda um ticket seguranca,
+um por limite e por conta ou IP (lib/limites.js:relatoDoLimite, a tabela
+lib/limites.js:LIMITES), e avisa no Discord; as recusas seguintes na mesma
+janela não escrevem nada. A deduplicação dos avisos e os relatos não contam.
+Um ticket de segurança não se trata sem decisão, nem no back office nem no
+bot do Discord: o cartão «Por decidir» tem
+Arquivar e Decidir. Decidir pede a resolução proposta, obrigatória
+(equipa-guiao.js:decidirSeguranca), que fica com quem e quando e é o que se
+segue; Arquivar pede a justificação (equipa-guiao.js:arquivarSeguranca) e
+conclui-o sem mandar nada a ninguém. Um limite que volta depois de concluído
+reabre o ticket, por decidir. A skill ticket só pega num ticket de segurança
+com a resolução proposta.
 
 Fora de produção, a Operação do back office (master e admin) mostra as
 sessões de teste abertas (equipa-guiao.js:verSessoesTeste): cada browser onde
@@ -5691,13 +5882,39 @@ testes, sem cache, com os cabeçalhos de segurança de sempre. A entrada e o
 criar conta não existem lá; uma conta normal do dev também leva o 404. Passam
 sem sessão a própria ligação (/t/entrar) e o que a página dela pede quando a
 ligação está mal (o CSS, as duas letras e o ícone — teste.js:SEM_SESSAO), as
-interações do Discord, o /versao.json que o deploy confirma, e o back office,
-com a entrada da equipa pelo Discord, como sempre. Fecha-se com o ENV_NAME
+interações do Discord, o /versao.json que o deploy confirma, o
+/.well-known/assetlinks.json que o Android lê (abaixo), e o back office, com a
+entrada da equipa pelo Discord, como sempre. Fecha-se com o ENV_NAME
 «dev» e a PORTA_DEV «fechada» juntos (o [env.dev.vars] do wrangler.toml): a
 produção e o percurso ficam abertos. Para os ficheiros da app também ficarem
 atrás da porta, no dev todos passam pelo worker (o run_worker_first do
 [env.dev.assets]), ao preço de uma invocação por ficheiro; a conferência da
 sessão fica lembrada 30 segundos por isolado (teste.js:temSessaoDeTeste).
+
+A APK de dev abre as ligações do /test direto na app, e não no browser: sem
+elas o WebView dela nunca teria a sessão e via só o 404. O intent-filter (VIEW
+e BROWSABLE, https, dev.rendorium.com, o caminho exato /t/entrar, com
+autoVerify) vive só no flavor dev (android/app/src/dev/AndroidManifest.xml, que
+o manifest merger junta à MainActivity de main); a app de produção não declara
+nada. A MainActivity carrega a ligação em vez do início (onCreate) ou por cima
+do que estiver aberto (onNewIntent, por ser singleTask), mas só um ACTION_VIEW
+https do HOST do flavor, sem porta nem utilizador e com o caminho exatamente
+/t/entrar, e refaz o URL a partir do HOST com a query tal como veio. Abre-se
+uma vez só: recriar a activity não a repete, voltar pelos recentes também não,
+e o histórico do WebView limpa-se na página a que a ligação leva, para o
+«voltar» sair da app em vez de regressar à sessão de antes. O Android 12+ só
+entrega a ligação à app depois de ler, sem cookies, o
+/.well-known/assetlinks.json do domínio e encontrar lá o pacote
+(pt.gestorimobiliario.app.dev) e a impressão SHA-256 do certificado que assina o
+APK; sem isso abre-a no browser, e o 10 e o 11 perguntam com que app. Quem tira a
+impressão é o deploy do dev, do APK acabado de compilar (o keytool, que só vê a
+assinatura v1, e o apksigner do SDK do runner, que vê as v2/v3 — com minSdk 29
+o AGP já não põe a v1), e escreve-a em web/assetlinks-dev.json, fora do git. O
+worker serve esse ficheiro no caminho que o Android pede, só no dev
+(worker/src/teste.js:assetLinksDoDev), como application/json e com cinco
+minutos de cache; sem ele, o 404 seco da porta, sem cache, para o Android não
+guardar a falta. Uma falha a tirar a impressão não impede a app de sair: o
+deploy avisa no resumo e o caminho fica em 404 até ao deploy seguinte.
 
 ## A app em serviços
 Cada separador da barra lateral é um serviço com manifesto próprio, e as
@@ -5964,6 +6181,181 @@ wrangler sem shell e escapa o SQL, porque as notas trazem texto livre. Só
 escreve com comecar (os novos passam a em resolução; recusa um resolvido),
 resolver (a nota e uma linha «Commit: <sha>») e reabrir. Remover
 não existe no script: é de quem testa, na app.
+
+Os pedidos da Ajuda e os erros apanhados (a tabela tickets, de produção e do
+dev) leem-se e fecham-se com `node scripts/ticket.mjs listar | comecar | nota
+| publicado | propor | concluir | reabrir`, e a skill ticket (ao lado da qa)
+junta as três fontes num fluxo só. O script só vai às bases de produção e do
+dev, ou à isolada, e recusa qualquer outro alvo antes do wrangler
+(scripts/ticket.mjs:confereAlvo); as escritas pedem sempre o alvo
+(scripts/ticket.mjs:lerArgumentos), e cada uma deixa a sua linha no rasto do
+back office. Só começa um pedido de uma pessoa que a equipa aceitou
+(scripts/ticket.mjs:confereComecar), e num pedido nunca responde nem fecha:
+grava a resposta proposta, que a equipa envia (scripts/ticket.mjs:sqlPropor).
+Fecha só o que está publicado no ambiente do ticket
+(scripts/ticket.mjs:publicadoDev, o CI verde no ramo dev;
+scripts/ticket.mjs:publicadoProd, o commit dentro da etiqueta publicado, que o
+deploy de produção move depois de a produção responder): um erro fechado antes
+disso reabria-se sozinho na ocorrência seguinte. Uma base sem a 0024 (a
+produção até ao «promove») lista na mesma, e lá nenhum pedido se implementa.
+
+## O rasto das pessoas
+Com o sim de quem usa, a app e a montra guardam onde se toca, e nunca o quê,
+para se ver se as pessoas percebem a interface e os fluxos. Cada pessoa é um
+pseudónimo, o pid: `P-` e seis caracteres aleatórios, sem 0, O, 1, I nem L,
+nunca derivado do id da conta (worker/src/lib/rasto.js:novoPid). O back office
+mostra-o e nunca o nome nem o email.
+
+O consentimento é um só, para a montra e para a app, e a última escolha ganha.
+O aparelho guarda-o em dois cookies HttpOnly, Secure, SameSite=Lax, de 180
+dias, que só o worker/src/lib/rasto.js escreve e lê
+(worker/src/lib/rasto.js:cookieDoRasto): o `rd_escolha`, com a escolha e a
+hora dela, `sim.<ms>` ou `nao.<ms>` (worker/src/lib/rasto.js:valorDaEscolha),
+e o `rd_vis`, o id do aparelho, que só existe com sim. Em produção, e só nos
+três hosts dela, levam `Domain=rendorium.com`, para a montra e a app
+partilharem a escolha; em qualquer outro sítio ficam no host, também no
+percurso e no dev (worker/src/lib/rasto.js:dominioDoCookie) — o wrangler dev
+reescreve o host do pedido para o da primeira rota, e o host sozinho não
+chega. A conta guarda a escolha em `users.rasto_escolha`, com a hora. Quando a
+app abre com sessão, o `GET /api/rasto/escolha` compara as duas horas e a mais
+recente passa para o outro lado (worker/src/lib/rasto.js:sincronizarEscolha).
+Recusar depois de aceitar apaga logo o pid do aparelho, com os eventos, e, com
+sessão, o da conta (worker/src/lib/rasto.js:apagarAoRecusar); aceitar de novo
+começa com um pid novo.
+
+A montra pergunta numa faixa em HTML puro (landing.js:faixaDaEscolha): um
+formulário para o `POST /consentimento`, com «Recusar» e «Aceitar» da mesma
+classe e do mesmo tamanho — recusar é tão fácil como aceitar —, a frase do que
+se regista e a ligação à secção da Privacidade que o explica. Vai no fluxo, a
+seguir ao hero, e não fixa por cima de nada: no telemóvel não tapa o título
+nem o botão principal. Só aparece a quem ainda não respondeu; depois, o rodapé
+diz o que está em vigor neste aparelho e deixa mudar (landing.js:rodapeDaEscolha).
+O worker trata o /consentimento em qualquer host, antes de reencaminhar a raiz
+para a app, e volta com um 303 ao caminho de onde veio, que só pode ser deste
+site (worker/src/lib/rasto.js:rotaConsentimento). A resposta vem num cookie,
+por isso a montra nunca vai para uma cache partilhada (Cache-Control private,
+no-cache e Vary: Cookie, em landing.js:paginaLanding).
+
+A app pergunta numa janela da casa, e não num portão (cloud/rasto.js:rstPerguntar):
+uma vez, com a escolha por fazer, e só com o ecrã livre em duas tentativas
+seguidas (cloud/rasto.js:rstTentarPergunta) — a régua da apresentação
+(apresentacao.js:aprEcraOcupado), mais as boas-vindas, a apresentação do
+separador por abrir (apresentacao.js:aprQueAbrir) e as novidades
+(novidades.js:ecraLivre). O título é «Ajudas-nos a melhorar o Rendorium?», a
+frase é a da montra, e Recusar e Aceitar têm o mesmo peso (dois .btn, sem
+primário). Fechá-la no ✕, no fundo ou no voltar não é escolha: o aparelho
+guarda só a hora em que se fechou (cloud/rasto.js:rstMarcarPerguntado), e a
+pergunta volta numa abertura da app passados 7 dias
+(cloud/rasto.js:rstJaPerguntado). Nas Definições, na secção App a seguir à
+Ajuda, a linha «Ajudar a melhorar» é ela própria o interruptor, um botão
+role=switch (cloud/rasto.js:rstLinhaDasDefinicoes, estilos.css:.rst-def); o
+estado diz-se em palavras e na cor da letra, não só no fundo do interruptor.
+Desligar não pede confirmação e o aviso diz que o registado foi apagado.
+
+Um evento é `{t, tipo, ecra, janela, alvo, x, y, vw, vh, sinal}`. O alvo é um
+descritor, nunca texto, valores, aria-label, nomes nem ids de registos
+(cloud/rasto.js:rstDescritor): `click:<ação do data-click>` só com o nome —
+sem os argumentos, e um `event.stopPropagation();` à frente não conta
+(cloud/rasto.js:rstNomeDaAcao; a montra faz o mesmo, landing.js:nomeDaAcao) —,
+`<tag>#<id>` com o id cortado ao prefixo quando tem algarismos,
+`<tag>.<1.ª classe>`, ou uma ligação pelo destino — o host só quando é de
+fora, o caminho e as chaves da pesquisa sem os valores
+(`a:app.rendorium.com/?criar`); um mailto: ou um tel: fica só o esquema. O servidor não confia no cliente e corta outra vez
+(worker/src/lib/rasto.js:limparEvento, worker/src/lib/rasto.js:descritorDeLigacao).
+Os toques apanham-se num ouvinte no documento, na captura e passivo; um
+levantar a mais de 10px do pousar é um arrasto e não conta. Os sinais
+decide-os o cliente: em vão quando nada responde por cima do alvo
+(cloud/rasto.js:rstEInterativo; um tabindex="-1" não responde), repetido do 3.º
+toque seguido a 24px e 1 s em diante (ganha ao em vão), vai-e-volta numa
+janela ou num ecrã aberto e fechado em 4 s sem um toque útil, desistência
+quando se escreveu e se fechou sem guardar, e erro ao guardar (o
+componentes.js:falhaCampo embrulhado). Os eventos saem em lotes de até 50, a
+cada 15 s e quando a página sai ou se esconde, pelo sendBeacon
+(cloud/rasto.js:rstMandar): da app para o `POST /api/rasto`, da montra para o
+`POST /rasto`, que respondem sempre 204 e só guardam com o sim
+(worker/src/lib/rasto.js:rotaRastoDaMontra), com um travão por pid e outro por
+IP para o que cria linhas (worker/src/lib/rasto.js:travao). Na montra o
+script, o /paginas/rasto-montra.js (landing.js:GUIAO_RASTO_MONTRA), só vai na
+página de quem aceitou; manda também a página aberta e cada secção que entra à
+vista, por IntersectionObserver e nunca pelo scroll. O que o rasto embrulha na
+app (o render, o go, o openModal, o closeModal, o falhaCampo, o CW.logout)
+chama primeiro a função de antes, e o que é dele vai num try/catch: uma falha
+do rasto nunca parte a app.
+
+Os dados que se guardam contam-se no servidor, nunca vêm do cliente: por cada
+pedido de sync de uma conta em sim, um evento `dados` (origem app) com quantos
+registos se adicionaram, editaram ou removeram, e de que tipo — nunca o
+conteúdo (rotas/sync.js:contarOps, worker/src/lib/rasto.js:registarDados,
+depois de responder, no waitUntil). As contagens vão no alvo,
+`dados:house+1,contract~2,tx+36,tx-3` (+ adicionou, ~ editou, - removeu), pela
+ordem dos tipos de worker/src/lib/rasto.js:KINDS_DOS_DADOS, só inteiros de 1 a
+99999 (worker/src/lib/rasto.js:alvoDosDados); um registo que a fusão deixou
+igual não conta. A sessão é a que o cliente manda no cabeçalho X-Rasto-Sessao
+quando o rasto está ligado (worker/src/lib/rasto.js:sessaoDoPedido), ou a da
+app desta pessoa nos últimos 30 minutos, ou uma nova. Um cliente que mande um
+evento `dados` vê-o deitado fora (worker/src/lib/rasto.js:TIPOS_DO_CLIENTE), e
+uma falha aqui nunca parte o sync.
+
+Ao criar conta, ao entrar e na ligação do /test, um aparelho que disse sim
+liga-se à conta: o rasto da montra de antes da conta junta-se ao dela
+(worker/src/lib/rasto.js:ligarVisitante); um aparelho que já era de outra conta
+passa a apontar para esta, e os eventos ficam com quem os fez. Os eventos vivem
+90 dias, podados no cron diário com uma linha no op_log
+(worker/src/lib/rasto.js:podarRasto); apagar a conta apaga o rasto dela no mesmo
+lote (worker/src/lib/acesso.js:purgeAccount); a cópia diária para o R2 não leva
+as tabelas `rasto_*` (worker/src/salvaguarda.js:tabelasDaBase).
+
+No back office, o Rasto tem duas vistas (equipa-guiao.js:mudarVistaRasto):
+Pessoas e Equipa, a auditoria do que a equipa faz. O separador abre ao master e
+ao admin (equipa-guiao.js:veRastoTodos); a Equipa é só do master, e o admin
+entra direto nas Pessoas. As Pessoas mostram cada pid em monoespaçado, com a
+última atividade, as sessões, os eventos, as origens (montra, app) e os sinais
+em selos com nome e contagem — «Toques em vão», «Toques repetidos»,
+«Vai-e-volta», «Desistências», «Erros ao guardar» —, em 7, 30 ou 90 dias, pela
+mais recente ou pela que tem mais sinais (equipa-guiao.js:verRastoPessoas,
+equipa-guiao.js:ordenarRasto). A pessoa abre a linha do tempo
+(equipa-guiao.js:verRastoPessoa): uma secção por sessão, a mais recente
+primeiro e aberta, lida em palavras, com os textos da app. Cada sessão abre
+com as páginas visitadas, pela ordem e sem repetir a mesma seguida — «Visão
+geral › Imóveis › Contratos» — e, quando houve, os registos que mudaram numa
+frase — «Adicionou 1 imóvel e 36 movimentos; editou 2 contratos»
+(equipa-guiao.js:rastoSessaoResumoHtml). Dentro da sessão, a tabela lê-se como
+as sessões: do evento mais recente, em cima, para o mais antigo, em baixo, e a
+passagem de uma origem para a outra fica entre os dois eventos onde mudou
+(equipa-guiao.js:rastoSessaoHtml); as páginas visitadas, por serem um caminho,
+ficam pela ordem do tempo. Cada evento tem a hora ao segundo, a
+origem, o que fez, onde e o sinal (equipa-guiao.js:rastoFezHtml,
+equipa-guiao.js:rastoOndeHtml). Um toque num botão, numa ligação ou noutra
+coisa que responde diz o nome dele como a app o escreve — «Tocou em
+«Guardar»» — e não diz a posição; um toque fora deles (um em vão, ou um
+repetido em nada que responda) diz o sítio em palavras e onde caiu — «Tocou
+num cartão», a 51% da esquerda e 30% do cimo, janela 384×785
+(equipa-guiao.js:rastoToqueHtml, equipa-guiao.js:toqueEmBotaoRasto). Os ecrãs
+dizem-se pelo nome do separador e, nas Definições, «Definições › Tema»; as
+janelas pelo nome próprio ou pelo botão que as abriu; a montra pelas páginas e
+pelas secções. Um evento com sinal destaca-se no contorno e na cor da letra, e
+a passagem da montra para a app lê-se na linha. O Resumo por ecrã soma os
+sinais de toda a gente por ecrã e alvo, com as mesmas palavras, do maior para
+o menor (equipa-guiao.js:verRastoResumo): é o quadro de onde a interface
+confunde mais gente.
+
+Os dicionários vivem no guião (ECRAS_RASTO, SUBPAGINAS_RASTO, PAGINAS_RASTO,
+SECCOES_RASTO, JANELAS_RASTO, ACOES_RASTO, BOTOES_RASTO, CAMPOS_RASTO,
+SITIOS_RASTO, FAMILIAS_RASTO, ETIQUETAS_RASTO, DADOS_RASTO). Um descritor que
+nenhum conhece aparece cru, em monoespaçado e discreto (.rs-cru), nunca
+inventado; um sítio que só se conhece pela família da classe (imv-, ct-,
+apr-…) ou pela etiqueta leva o descritor cru ao lado. O
+testes/rasto-dicionario.test.js lê todos os data-click escritos em web/app e
+web/cloud e falha quando uma ação não tem rótulo (diz qual e em que ficheiro);
+as que chegam por variáveis têm a lista das principais. Uma ação nova
+acrescenta-se a ACOES_RASTO com o texto que o botão mostra. O suporte não tem o separador: no detalhe de
+um pedido que vê, «Ver o rasto» aparece quando quem o escreveu aceitou
+(equipa-guiao.js:rastoDoPedido) e abre a linha do tempo dessa pessoa, com
+«Voltar ao pedido» e sem a lista nem a ficha. Na ficha de uma conta, o master
+e o admin têm «Ver o rasto da pessoa» (equipa-guiao.js:rastoDaConta). Quem vê
+o quê decide-o uma função só (worker/src/lib/rasto.js:podeVerRasto), cada
+consulta da linha do tempo de alguém fica no audit_log (`rasto.ver`), e as
+contas de teste ficam de fora em produção (worker/src/lib/rasto.js:semContasDeTeste).
 
 ## A CSP sem «unsafe-inline»
 A política da app não deixa correr nada que esteja escrito dentro do HTML.

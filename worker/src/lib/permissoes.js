@@ -358,13 +358,17 @@ export function fundirCasaComBase(existenteStr, chega, base) {
   return out === atual ? Object.assign({}, atual) : out;
 }
 
-// Os campos de um planeado que confirmar e silenciar tocam — os únicos que um
-// colaborador com rec.add pode mudar num planeado que não criou.
-const CAMPOS_DE_CONFIRMAR = ['next', 'until', 'muted'];
+// Os campos de um planeado que confirmar, silenciar, recusar e começar a
+// partir de hoje tocam — os únicos que um colaborador com rec.add pode mudar
+// num planeado que não criou. O desde é o chão que o «Começar a partir de
+// hoje» e o «Recusar desta vez» deixam (web/app/planeados.js:recDesde): sem
+// ele, o cursor da renda do contrato voltava aos meses largados no arranque
+// seguinte, no aparelho do dono e no de quem colabora.
+const CAMPOS_DE_CONFIRMAR = ['next', 'until', 'muted', 'desde'];
 
 // O planeado de outrem que um colaborador com rec.add grava, fundido sobre o
-// que está na base: só next, until e muted entram (o que confirmar e silenciar
-// tocam); nome, cadência, montante, imóvel, contrato e o resto ficam como o
+// que está na base: só next, until, muted e desde entram (o que confirmar,
+// silenciar, recusar e começar a partir de hoje tocam); nome, cadência, montante, imóvel, contrato e o resto ficam como o
 // dono os deixou. Uma reescrita com amount/propertyId/tx diferentes não dá
 // erro — simplesmente não tem efeito nesses campos, e o put do cliente que
 // manda o planeado inteiro com o next avançado continua a passar.

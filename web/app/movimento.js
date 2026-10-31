@@ -96,6 +96,8 @@ function txGuardar(id){
   if(semMontante)tForm.amount=0;
   else if(!(tForm.amount>0))return falhaCampo('t_amount','Indica um montante.');
   if(!tForm.label.trim())return falhaCampo('t_label','Escreve uma descrição.');
+  const compra=txDataAntesDaCompra(id);
+  if(compra)return falhaCampo('t_date','O imóvel foi comprado a '+compra+': uma receita não pode ser de antes.');
   /* com hipotecas vivas, um pagamento de crédito sem hipoteca ia parar à conta errada ou a nenhuma */
   if(tForm.kind==='loan'&&!tForm.loanId&&liveLoans(prop(tForm.propertyId)).length)return falhaCampo('t_loan','Indica a hipoteca.');
   if(tForm.kind==='settle'){
@@ -125,6 +127,40 @@ function txGuardar(id){
   if(planeado)return txGuardarPlaneado();
   if(m.modo==='tpl')return txGuardarModelo();
   return txGuardarMovimento(id);
+}
+/* A data de uma RECEITA do formulário é antes da compra da casa
+   (imovel.js:antesDaCompra)? Só as receitas (kind 'income': as rendas, as
+   cauções): antes de a casa ser minha ninguém me pagou renda dela. As
+   despesas, as prestações e os outros tipos entram com qualquer data — o
+   sinal do contrato-promessa, o IMT, as obras antes da escritura (decisão do
+   Martinho, 2026-10-29: «Despesas podem»). Só se confere o que tem data e é
+   de UMA casa: um planeado (a data é a próxima ocorrência, não um facto) e um
+   modelo que não regista o movimento ficam de fora; um movimento sem imóvel
+   não tem compra; o de um grupo ou de «Todos os imóveis» também não —
+   «Todos» já só parte pelos imóveis comprados nessa data
+   (saldos.js:imoveisDeTodos), e num grupo a compra de uma casa não diz nada
+   da data do movimento inteiro. E só a data nova ou mudada (ou a casa ou o
+   tipo trocados): uma receita antiga que já estava antes da compra grava-se
+   quando se mexe noutro campo. Sem os Imóveis ligados não há a regra.
+   Recebe: id — o id do movimento em edição (null num novo).
+   Devolve: a data de compra em DD/MM/AAAA quando a data é antes dela, ou ''. */
+function txDataAntesDaCompra(id){
+  const m=txModo,t=tForm;
+  if(!servicoLigado('properties')||m.modo==='rec'||(m.modo==='tpl'&&!m.alsoTx))return '';
+  if(t.kind!=='income'||!t.propertyId||t.groupId||t.todos)return '';
+  const old=id?(db.transactions||[]).find(x=>x.id===id):null;
+  if(old&&old.date===t.date&&old.propertyId===t.propertyId&&old.kind===t.kind)return '';
+  return antesDaCompra(t.propertyId,t.date);
+}
+/* O min do campo da data: a compra da casa, nos mesmos movimentos que o
+   txDataAntesDaCompra confere (receitas de uma casa só). Mudar o tipo
+   repinta o formulário (setKind), e o min vai e vem com ele; o guardar
+   confere na mesma.
+   Recebe: t — o movimento do formulário (tForm).
+   Devolve: ' min="AAAA-MM-DD"' (texto) ou ''. */
+function txMinDaData(t){
+  if(!servicoLigado('properties')||t.kind!=='income'||!t.propertyId||t.groupId||t.todos)return '';
+  return minDaCompra(t.propertyId,t.date);
 }
 /* Se o montante do formulário aberto pode ficar vazio: só num modelo que se
    guarda sozinho (o modo 'tpl' sem alsoTx). Com alsoTx regista-se também o
@@ -483,11 +519,11 @@ function txBody(){
     ${credit?`<div class="seg c2">${[['owed','users','Recebida','alguém me emprestou'],['repay','down','Paga','devolvo a essa pessoa']].map(([k,i,l,sb])=>`<button type="button" class="opt ${t.kind===k?'on':''}" aria-pressed="${t.kind===k}" data-toca="rascunho" data-click="setKind('${k}')"><span class="ic">${ic(i,18)}</span><b>${l}</b><small>${sb}</small></button>`).join('')}</div>`:''}
     <div class="sect mov-grp">
       <label>Montante (€)${montanteOpc?'':' <span class="req">*</span>'}<div class="mov-montante">
-        <span class="mov-montante-campo ${tom.valor}"><input id="t_amount" type="text" inputmode="decimal" class="disp" value="${txMontanteNoCampo(t.amount)}" ${montanteOpc?'placeholder="Opcional"':`placeholder="Ex: ${t.kind==='income'?'900':t.kind==='loan'?'650':t.kind==='settle'?'250':t.kind==='owed'||t.kind==='repay'?'5000':'80'}"`} data-input="txMontanteEscrito(this.value)"><span class="disp mov-euro" aria-hidden="true">€</span></span>
+        <span class="mov-montante-campo ${tom.valor}"><input id="t_amount" type="text" inputmode="decimal" class="disp" value="${txMontanteNoCampo(t.amount)}" ${montanteOpc?'placeholder="Opcional"':`placeholder="Ex: ${t.kind==='income'?'900':t.kind==='loan'?'650':t.kind==='settle'?'250':t.kind==='owed'||t.kind==='repay'?'5000':'80'}"`} data-input="txMontanteEscrito(this.value)" autocomplete="off"><span class="disp mov-euro" aria-hidden="true">€</span></span>
         <button type="button" class="btn sm primary${repor?'':' u-d-none'} mov-repor" id="amt_reset" title="Repor a prestação calculada" data-toca="rascunho" data-click="onAmtReset()">Repor</button></div></label>
       ${montanteOpc?'<div class="hint u-mt-n6px">Em branco, escreves o montante quando usares o modelo.</div>':''}
       <label>Descrição <span class="req">*</span><input id="t_label" value="${esc(t.label)}" placeholder="Ex: ${t.kind==='income'?'Renda de agosto':t.kind==='loan'?'Prestação de agosto':t.kind==='owed'?'Empréstimo para obras':t.kind==='repay'?'Devolução de parte do empréstimo':t.kind==='settle'?'Acerto entre proprietários':'Condomínio'}" autocomplete="off"></label>
-      ${planeado?imovel:`<div class="mov-par"><label>Data<input id="t_date" type="date" value="${esc(t.date)}" data-change="txDataMudou()"></label>${imovel}</div>`}
+      ${planeado?imovel:`<div class="mov-par"><label>Data<input id="t_date" type="date" value="${esc(t.date)}" data-change="txDataMudou()"${txMinDaData(t)}></label>${imovel}</div>`}
       ${(!settle&&!t.propertyId&&!t.groupId&&!t.todos&&podeSemImovel())?'<div class="hint u-mt-n6px">Conta nos totais, mas não na avaliação de nenhum imóvel.</div>':''}
       ${t.todos&&!t.propertyId?`<div class="hint u-mt-n6px">${esc(dicaDeTodos(t))}</div>`:''}
       ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)+(ctEstado(c)==='futuro'&&c.start?' · começa a '+dPT(c.start):'')}))),'onCtChange','rascunho')}</label>`:''}
@@ -594,7 +630,7 @@ function txFiscoSect(){
   const fixo=txModo.modo!=='rec'&&txModo.modo!=='tpl';
   return `<div class="${fixo?'row':''}">
       ${fixo?`<label>Mês a que respeita (opcional)<input id="t_periodo" type="month" value="${esc(t.periodo||'')}" placeholder="Ex: 2026-08"></label>`:''}
-      <label>Retido na fonte (€)<input id="t_retencao" type="text" inputmode="decimal" value="${t.retencao?dec(t.retencao):''}" placeholder="Opcional"></label></div>
+      <label>Retido na fonte (€)<input id="t_retencao" type="text" inputmode="decimal" value="${t.retencao?dec(t.retencao):''}" placeholder="Opcional" autocomplete="off"></label></div>
     <div class="hint u-mt-n6px">${fixo?'Mês em branco: o da data. ':''}Se o inquilino é uma empresa que retém IRS, escreve o que ficou retido: a renda bruta é o montante mais isto.</div>
     ${fixo&&ctDeclarado(c)?`<label class="check"><input type="checkbox" id="t_recibo" ${t.recibo?'checked':''}> Recibo de renda eletrónico emitido</label>
     <div class="hint u-mt-n4px">Emite-se no Portal das Finanças quando a renda entra; marcar aqui cala o aviso.</div>`:''}`;
@@ -622,7 +658,7 @@ function splitSect(ows){
     <label class="mov-rot-fraco">Como se divide${sel('t_split',mode,SPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onSplitSel','rascunho')}</label>
     ${(mode==='quota'||mode==='equal')?'':`<div class="form u-g-7px">${ows.map(o=>`<div class="ownrow"><span class="avatar u-w-30px u-h-30px u-fs-11px u-fx-0-0-30px">${esc(initials(o.name))}</span>
       <span class="nm">${esc(rotuloDoDono(o,ows.length))}</span>
-      <input id="t_sp_${o.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[o.id]!=null&&parts[o.id]!==''?dec(parts[o.id]):''}" placeholder="Ex: ${exemploDaParte(mode)}" aria-label="Parte de ${esc(o.name)}" data-input="refreshSplit()">
+      <input id="t_sp_${o.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[o.id]!=null&&parts[o.id]!==''?dec(parts[o.id]):''}" placeholder="Ex: ${exemploDaParte(mode)}" aria-label="Parte de ${esc(o.name)}" data-input="refreshSplit()" autocomplete="off">
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
     <div id="splitHint" class="mov-divisao-dica" aria-live="polite">${splitHint(ows)}</div></div>`;
 }
@@ -731,7 +767,7 @@ function psplitSect(){
     <label class="mov-rot-fraco">Como se divide${sel('t_psplit',mode,PSPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onPsplitSel','rascunho')}</label>
     ${['equal','value','purchase'].indexOf(mode)>-1?'':`<div class="form u-g-7px">${ps.map(p=>`<div class="ownrow"><span class="avatar u-w-30px u-h-30px u-fs-11px u-fx-0-0-30px">${ic('building',15)}</span>
       <span class="nm">${esc(p.name)}</span>
-      <input id="t_pp_${p.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[p.id]!=null&&parts[p.id]!==''?dec(parts[p.id]):''}" placeholder="Ex: ${exemploDaParte(mode)}" aria-label="Parte de ${esc(p.name)}" data-input="refreshPsplit()">
+      <input id="t_pp_${p.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[p.id]!=null&&parts[p.id]!==''?dec(parts[p.id]):''}" placeholder="Ex: ${exemploDaParte(mode)}" aria-label="Parte de ${esc(p.name)}" data-input="refreshPsplit()" autocomplete="off">
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
     <div id="psplitHint" class="mov-divisao-dica" aria-live="polite">${psplitHint()}</div></div>`;
 }
@@ -872,10 +908,10 @@ function loanHint(){
     <div class="row-between u-ai-center u-mb-2px"><span class="small"><b>Distribuição do montante</b></span>
       <button class="btn sm${t._splitTouched?'':' u-d-none'} u-fx-0-0-auto u-p-6px-9px" id="lh_reset" data-toca="rascunho" data-click="onLoanReset()" title="Repor a prestação calculada na hipoteca">${ic('clock',14)} Repor</button></div>
     <div class="stat u-ai-center"><span>Juros (€)</span>
-      <input class="statin" id="t_int" type="text" inputmode="decimal" value="${dec(int.toFixed(2))}" data-input="onLoanSplit('int')"></div>
+      <input class="statin" id="t_int" type="text" inputmode="decimal" value="${dec(int.toFixed(2))}" data-input="onLoanSplit('int')" autocomplete="off"></div>
     <div class="stat u-ai-center"><span>Imposto do selo (${dec(db.settings.stampPct??4)}%)</span><b id="lh_stamp">${euro2(st)}</b></div>
     <div class="stat u-b-0 u-ai-center"><span>Abate ao capital (€)</span>
-      <input class="statin pos" id="t_cap" type="text" inputmode="decimal" value="${dec(Math.max(0,cap).toFixed(2))}" data-input="onLoanSplit('cap')"></div>
+      <input class="statin pos" id="t_cap" type="text" inputmode="decimal" value="${dec(Math.max(0,cap).toFixed(2))}" data-input="onLoanSplit('cap')" autocomplete="off"></div>
     <div class="hint" id="loanLeft">${loanLeftTxt(l,int,st,cap,0,amt,avail)}</div></div>`;
 }
 // Linha por baixo da distribuição: quanto fica em dívida depois deste pagamento,

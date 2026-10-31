@@ -287,8 +287,8 @@ describe('o formulário do contrato no desenho do canvas (M-NovoContrato)', () =
     assert.match(html, /<input type="checkbox" role="switch" class="ct-sw" id="c_autorec" checked>/);
     assert.match(html, /<input type="checkbox" role="switch" class="ct-sw" id="c_active" checked>/);
     // o dia do pagamento: dois campos lado a lado, «Opcional»
-    assert.match(html, /<label>entre o dia<input id="c_day"[^>]*placeholder="Opcional"><\/label>/);
-    assert.match(html, /<label>e o dia<input id="c_dayTo"[^>]*placeholder="Opcional"><\/label>/);
+    assert.match(html, /<label>entre o dia<input id="c_day"[^>]*placeholder="Opcional" autocomplete="off"><\/label>/);
+    assert.match(html, /<label>e o dia<input id="c_dayTo"[^>]*placeholder="Opcional" autocomplete="off"><\/label>/);
     assert.match(html, /Num mês que não tenha esse dia \(o 31 em abril\), conta o último dia do mês\./, 'o dia que «flutua» diz-se');
   });
 

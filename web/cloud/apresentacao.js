@@ -176,7 +176,10 @@ function aprVista(id) { return !!aprVistas()[id]; }
 /* A resposta à pergunta de quem fecha antes do fim (aprPerguntar), na mesma
    chave das vistas e com a mesma forma: perguntou — a conta já respondeu, e
    não se pergunta outra vez; nenhuma — «Não mostrar mais»: nenhuma abre
-   sozinha (a Ajuda continua a reabri-las). Nenhum separador tem estes ids. */
+   sozinha (o «?» do cabeçalho e a Ajuda continuam a reabri-las). Hoje as
+   duas vão juntas; só perguntou têm as contas que, antes da v46, responderam
+   «Continuar a mostrar» — e essas também não voltam a ouvir a pergunta.
+   Nenhum separador tem estes ids. */
 var APR_PERGUNTOU = 'perguntou', APR_NENHUMA = 'nenhuma';
 
 /* Esta conta disse «Não mostrar mais»?
@@ -402,7 +405,7 @@ function aprOcupaOEcra() {
    arrasto da folha fecham-na como a qualquer outra, e é o aoFechar da camada
    que marca a apresentação como vista — por qualquer caminho. Quem a fecha
    por um desses caminhos antes da última imagem ouve, uma vez por conta, se
-   quer continuar a vê-las (aprPerguntar), e a marca espera pela resposta. No corpo, o
+   ainda as quer ver (aprPerguntar), e a marca espera pela resposta. No corpo, o
    palco com as imagens lado a lado numa fita (cada imagem é a maquete e,
    por baixo, o título e o texto: as duas viajam juntas), a fita dos pontos e
    o texto para o leitor de ecrã; no rodapé, Anterior (sem ele na primeira) e
@@ -548,25 +551,25 @@ function aprPerguntaAoFechar(c, origem) {
     !aprVista(APR_PERGUNTOU) && !aprNenhuma());
 }
 
-/* A pergunta a quem fechou uma apresentação antes do fim: se quer continuar
-   a vê-las. Abre logo, no lugar da que fechou (a pilha já a largou). Três
-   respostas (aprResponder): «Voltar à apresentação» reabre-a onde estava,
-   para um ✕ por engano, e não gasta a pergunta; «Não mostrar mais» marca-a
-   vista e nenhuma abre sozinha; «Continuar a mostrar», o primário — o
-   caminho seguro —, marca-a vista e as outras abrem na primeira visita. As
-   duas últimas guardam a resposta, e a pergunta não volta. Fechar a pergunta
-   sem responder é o fecho de sempre: a apresentação fica vista, e pergunta-se
-   da próxima vez. Os botões vão em coluna (estilos.css:.apr-pergunta).
+/* A pergunta a quem fechou uma apresentação antes do fim: se ainda as quer
+   ver. Abre logo, no lugar da que fechou (a pilha já a largou). Duas
+   respostas (aprResponder), em coluna com o primário em baixo, à mão do
+   polegar (estilos.css:.apr-pergunta): «Não mostrar mais» marca-a vista,
+   nenhuma abre sozinha e a pergunta não volta; «Voltar à apresentação», o
+   primário — o caminho que não muda nada, e o de um ✕ por engano —,
+   reabre-a onde estava e não gasta a pergunta. O texto diz que a de cada
+   ecrã fica no «?» do cabeçalho (navegacao.js:abrirAjuda), que a reabre a
+   qualquer hora. Fechar a pergunta sem responder é o fecho de sempre: a
+   apresentação fica vista, e pergunta-se da próxima vez.
    Recebe: c — o estado do carrossel da que fechou.
    Devolve: nada. */
 function aprPerguntar(c) {
   var p = { c: c, feito: false };
   var L = openModal('Não queres ver as apresentações?',
     '<div class="hint u-fs-14px">Cada separador explica-se numa janela como esta na primeira vez que lá chegas. ' +
-      'Se preferires, a app deixa de as mostrar, e revês cada uma quando quiseres em <b>Ajuda → Apresentações</b>.</div>',
-    '<button type="button" class="btn" data-toca="vista" data-click="aprResponder(\'voltar\')">Voltar à apresentação</button>' +
+      'Se preferires, a app deixa de as mostrar; a de cada ecrã continua no <b>?</b>, lá em cima.</div>',
     '<button type="button" class="btn" data-toca="camada" data-click="aprResponder(\'nenhuma\')">Não mostrar mais</button>' +
-    '<button type="button" class="btn primary" data-toca="camada" data-click="aprResponder(\'mostrar\')">Continuar a mostrar</button>');
+    '<button type="button" class="btn primary" data-toca="vista" data-click="aprResponder(\'voltar\')">Voltar à apresentação</button>');
   if (!L) { aprMarcarFecho(c); aprDarAVezAsNovidades(); return; }
   L.aprPergunta = p;
   if (L.el && L.el.classList) L.el.classList.add('apr-pergunta');
@@ -579,10 +582,22 @@ function aprPerguntar(c) {
   };
 }
 
-/* A resposta à pergunta de cima (aprPerguntar).
-   Recebe: r — 'voltar', 'nenhuma' ou 'mostrar'.
+/* O aviso de quem respondeu «Não mostrar mais» (aprResponder): o «?» fica. */
+var APR_AVISO_NENHUMA = 'As apresentações não voltam a abrir sozinhas. A de cada ecrã fica no «?», lá em cima.';
+
+/* A resposta à pergunta de cima (aprPerguntar). 'voltar' reabre a
+   apresentação na imagem onde estava, ainda a marcar, sem marcar nada nem
+   gastar a pergunta. 'nenhuma' marca-a vista com as chaves perguntou e
+   nenhuma, fecha a pergunta e só então diz, num aviso em baixo
+   (componentes.js:toast), que a de cada ecrã fica no «?». O aviso não tapa
+   as novidades que esperavam pela pergunta (aprDarAVezAsNovidades), nem
+   outra janela: a que abre levanta-o acima do rodapé dela
+   (componentes.js:avisoAcimaDoRodape). Outra resposta não faz nada, e a
+   pergunta fica aberta.
+   Recebe: r — 'voltar' ou 'nenhuma'.
    Devolve: nada. */
 function aprResponder(r) {
+  if (r !== 'voltar' && r !== 'nenhuma') return;
   var t = typeof modalTop === 'function' ? modalTop() : null, p = t && t.aprPergunta;
   if (!p || p.feito) return;
   p.feito = true;
@@ -592,8 +607,9 @@ function aprResponder(r) {
     if (mesma) aprAbrir(c.id, { marcar: true, i: c.i });
     return;
   }
-  if (mesma) aprMarcarFecho(c, r === 'nenhuma' ? [APR_PERGUNTOU, APR_NENHUMA] : [APR_PERGUNTOU]);
+  if (mesma) aprMarcarFecho(c, [APR_PERGUNTOU, APR_NENHUMA]);
   closeModal();
+  if (mesma && typeof toast === 'function') toast(APR_AVISO_NENHUMA, { ms: 4500 });
 }
 
 /* O corpo da janela: o palco com as imagens numa fita (só a primeira à

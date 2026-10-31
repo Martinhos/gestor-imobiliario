@@ -27,6 +27,119 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 48,
+    data: '2026-10-30',
+    titulo: 'Confirmar o email, e começar os planeados hoje',
+    seccoes: [
+      {
+        titulo: 'Conta e entrada',
+        afeta: ['conta'],
+        itens: [
+          'Quem cria conta com email e palavra-passe recebe um email para o confirmar. Até lá a app funciona, com uma faixa a lembrar; passados 7 dias sem confirmar, só se entra depois de clicar na ligação do email.',
+          'No ecrã de confirmação há «Pedir ajuda», para falares com a equipa se o email não chegar.',
+          'As contas que já existiam e as que entram pela Google contam como confirmadas. Entrar pela Google numa conta por confirmar confirma-a e remove a palavra-passe que lá estivesse.',
+        ],
+      },
+      {
+        titulo: 'Planeados',
+        afeta: ['movimentos', 'contratos', 'creditos'],
+        itens: [
+          'Um planeado com datas em falta tem «Começar a partir de hoje»: as datas antigas ficam por registar, sem criar movimentos, e o próximo passa para a primeira data a partir de hoje. Há Anular.',
+          '«Recusar desta vez» numa renda de um contrato já não volta atrás quando abres a app outra vez.',
+          'As opções do ⋯ já não partem em duas linhas.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 47,
+    data: '2026-10-29',
+    titulo: 'Datas a partir da compra do imóvel',
+    seccoes: [
+      {
+        titulo: 'Contratos, receitas e créditos',
+        afeta: ['contratos', 'movimentos', 'creditos'],
+        itens: [
+          'Um contrato, uma receita ou uma hipoteca de um imóvel já não podem ter data antes da compra dele, quando a ficha tem a data de aquisição. As despesas continuam a poder ser de antes, como o sinal do contrato-promessa.',
+          'O preenchimento das rendas em falta começa na compra, e não no início do contrato.',
+          'Registar muitos movimentos de uma vez já não os envia aos poucos: vão todos no mesmo envio.',
+        ],
+      },
+      {
+        titulo: 'Apresentações',
+        afeta: ['app'],
+        itens: [
+          'Quem fecha uma apresentação a meio escolhe entre voltar a ela ou não ver mais nenhuma. Se escolheres não ver mais, a de cada ecrã continua no «?».',
+          'Os campos de valores e percentagens deixaram de mostrar sugestões de valores escritos antes.',
+        ],
+      },
+      {
+        titulo: 'O rasto de utilização',
+        afeta: ['app', 'conta'],
+        itens: [
+          'Se aceitaste ajudar a melhorar o Rendorium, o rasto passa a contar também quantos registos adicionas, editas ou removes, e de que tipo (um imóvel, três movimentos). Nunca o conteúdo deles.',
+          'A Política de Privacidade diz isto, e por isso os termos pedem uma nova aceitação.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 46,
+    data: '2026-10-29',
+    titulo: 'A apresentação de cada ecrã no «?»',
+    seccoes: [
+      {
+        titulo: 'Apresentações e ligação',
+        afeta: ['app'],
+        itens: [
+          'O «?» no cabeçalho abre a apresentação do ecrã onde estás, para a reveres quando quiseres. Não aparece nas Definições.',
+          'A Ajuda saiu do fundo do menu, onde fica o cartão da tua conta: está nas Definições, em «Ajuda e sugestões».',
+          'A nuvem da sincronização saiu do cabeçalho. Quando não há ligação ao servidor aparece uma faixa vermelha por cima do ecrã, com quantas alterações esperam para ser enviadas, e sai sozinha quando a ligação volta.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 45,
+    data: '2026-10-29',
+    titulo: 'Avisos por email dos movimentos em atraso',
+    seccoes: [
+      {
+        titulo: 'Os planeados em atraso',
+        afeta: ['movimentos', 'conta'],
+        itens: [
+          'Quando um movimento planeado fica em atraso, os proprietários do imóvel recebem um email com o imóvel, a data e o montante, e um botão que abre os Planeados. No máximo um email por dia, e só nos dias em que há atrasos novos; os que continuam em atraso vêm lembrados no mesmo email.',
+          'Os colaboradores que veem os contratos do imóvel também recebem, só com o que o cargo deles deixa ver na app.',
+          'Vem ligado. Desligas em Definições, «Avisos por email», ou pela ligação no fundo do próprio email.',
+        ],
+      },
+      {
+        titulo: 'Pequenas correções',
+        afeta: ['app'],
+        itens: [
+          'Tocar em Ajuda na gaveta, já dentro das Definições, fecha a gaveta.',
+          'Na Visão geral sem movimentos, o botão dos filtros abre um painel que diz porquê e leva ao primeiro movimento.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 44,
+    data: '2026-10-29',
+    titulo: 'Ajudar a melhorar o Rendorium',
+    seccoes: [
+      {
+        titulo: 'O rasto de utilização',
+        afeta: ['app', 'conta'],
+        itens: [
+          'Podes ajudar-nos a melhorar o Rendorium: se aceitares, a app guarda onde tocas e que ecrãs abres, com um identificador sem o teu nome, para percebermos o que é difícil de usar. Nunca o que escreves nem os teus dados.',
+          'A app pergunta uma vez. Mudas quando quiseres em Definições, «Ajudar a melhorar», e desligar apaga o que já foi registado. O que fica registado apaga-se ao fim de 90 dias.',
+          'A Política de Privacidade explica tudo numa secção nova, e por isso os termos pedem uma nova aceitação.',
+        ],
+      },
+    ],
+  },
+  {
     v: 43,
     data: '2026-10-27',
     titulo: 'A app apresenta-se, e o ícone fica cobalto',

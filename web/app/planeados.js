@@ -40,6 +40,23 @@ function rendaJaLancada(c,iso){
    Recebe: t — o movimento.
    Devolve: 'AAAA-MM' (texto; '' sem data nem periodo). */
 function mesDaRenda(t){return /^\d{4}-\d{2}$/.test(String(t.periodo||''))?t.periodo:String(t.date||'').slice(0,7)}
+/* A data de compra de uma casa, para os planeados. A regra vive com a casa
+   (imovel.js:dataDeCompra); os Planeados não requerem os Imóveis, e sem eles
+   ligados não há chão nenhum.
+   Recebe: id — o id do imóvel (vazio: sem imóvel).
+   Devolve: 'AAAA-MM-DD' (texto), ou ''. */
+function compraDaCasa(id){return id&&servicoLigado('properties')?dataDeCompra(id):''}
+/* O primeiro dia de pagamento (o dia `dia` de cada mês) no dia da compra da
+   casa ou depois: o chão do cursor da renda.
+   Recebe: id — o id do imóvel; dia — o dia do mês em que se paga (1–31,
+   preso ao último dia nos meses mais curtos).
+   Devolve: 'AAAA-MM-DD' (texto), ou '' sem data de compra. */
+function primeiraDesdeACompra(id,dia){
+  const compra=compraDaCasa(id);if(!compra)return '';
+  let y=Number(compra.slice(0,4)),m=Number(compra.slice(5,7))-1,d=dayInMonth(y,m,dia||1);
+  if(d<compra){m++;if(m>11){m=0;y++}d=dayInMonth(y,m,dia||1)}
+  return d;
+}
 /* Onde é que o cursor da renda deve estar.
 
    O cursor anda para onde tiver de andar — para a frente quando o contrato
@@ -48,14 +65,23 @@ function mesDaRenda(t){return /^\d{4}-\d{2}$/.test(String(t.periodo||''))?t.peri
    regra que faz as duas coisas ao mesmo tempo: acompanha o contrato nos dois
    sentidos, e não há duplicado nenhum a inventar, porque ele nunca aterra num
    mês já lançado.
+   Nem recua para antes da compra da casa (imovel.js:dataDeCompra): o chão é
+   o primeiro dia de pagamento desde ela, mesmo num contrato antigo com o
+   início antes — um contrato «desde 1870» numa casa comprada em 2020 pedia
+   600 rendas em atraso (ticket de QA a3a6d2d4).
    Recebe: c — o contrato; next — o cursor atual; minNext — a primeira
    ocorrência que o contrato permite; from — o dia de pagamento.
    Devolve: a data do cursor, ou '' se já passou do fim do contrato. */
 function cursorDaRenda(c,next,minNext,from){
   const passo=(iso,n)=>{const d=new Date(iso+'T00:00:00');let y=d.getFullYear(),m=d.getMonth()+n;
     y+=Math.floor(m/12);m=((m%12)+12)%12;return dayInMonth(y,m,from)};
+  const chao=primeiraDesdeACompra((c||{}).propertyId,from);
+  if(chao&&(!minNext||minNext<chao))minNext=chao;
   let x=next||minNext;
   if(!x)return '';
+  /* cedo de mais salta logo para o chão: um cursor velho décadas atrás não
+     chegava lá nas 600 voltas de um mês */
+  if(minNext&&x<minNext)x=minNext;
   /* para a frente: enquanto for cedo de mais, ou enquanto o mês já estiver
      lançado — é aqui que o confirmar deixa de poder duplicar */
   let guarda=0;
@@ -117,8 +143,12 @@ function syncContractRec(c){
        ressuscitar confirmações — mas uma confirmação não é um estado do
        planeado, é um movimento com registo próprio: o cursor não lhe toca. O
        único mal era voltar a pedir um mês já lançado, e é precisamente isso
-       que o cursorDaRenda não deixa acontecer. */
-    const x=cursorDaRenda(c,r.next,minNext,from);
+       que o cursorDaRenda não deixa acontecer. E não recua para antes do
+       chão do «Começar a partir de hoje» (recDesde), no dia de pagamento
+       desse mês: sem isto, o arranque seguinte voltava a pedir os meses
+       largados de propósito. */
+    const desde=recDesde(r),chaoRec=desde?dayInMonth(Number(desde.slice(0,4)),Number(desde.slice(5,7))-1,from):'';
+    const x=cursorDaRenda(c,r.next,chaoRec&&(!minNext||minNext<chaoRec)?chaoRec:minNext,from);
     if(!x){db.recurring=db.recurring.filter(y=>y.id!==r.id);return}
     if(x!==r.next){const d=new Date(x+'T00:00:00');r.next=x;r.until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
     return}
@@ -324,13 +354,50 @@ function repararRecsSemCredito(){
 /* De onde vem a história de um plano: o início do contrato ou da hipoteca.
    A recorrência criada por eles arranca no mês corrente, por isso os meses
    anteriores não aparecem em lado nenhum sem isto.
-   Recebe: r — o plano recorrente ({tx, next, …}) cuja origem se procura.
-   Devolve: uma data AAAA-MM-DD — o início do contrato ou da hipoteca; sem eles, r.next. */
-function origemDoPlano(r){
+   Nunca antes da compra da casa (a do contrato, ou a do plano): antes dela
+   não há história nenhuma a registar, mesmo com um início mais antigo.
+   Recebe: r — o plano recorrente ({tx, next, …}) cuja origem se procura;
+   cru (opcional) — true para a origem sem o chão da compra.
+   Devolve: uma data AAAA-MM-DD — o início do contrato ou da hipoteca; sem
+   eles, r.next; a data de compra quando eles são antes dela; e o chão do
+   «Começar a partir de hoje» (recDesde) quando é depois de tudo isso. */
+function origemDoPlano(r,cru){
   const c=r.tx.contractId?contract(r.tx.contractId):null;
-  if(c&&c.start)return c.start;
-  if(r.tx.loanId){const x=anyLoan(r.tx.loanId);if(x&&x.l.start)return x.l.start}
-  return r.next;
+  let o=r.next;
+  if(c&&c.start)o=c.start;
+  else if(r.tx.loanId){const x=anyLoan(r.tx.loanId);if(x&&x.l.start)o=x.l.start}
+  if(cru)return o;
+  const compra=compraDaCasa(c?c.propertyId:r.tx.propertyId);
+  if(compra&&o&&String(o)<compra)o=compra;
+  /* «Começar a partir de hoje» (CW.startFromToday) larga o que vem de trás:
+     o que fica antes do r.desde já não está em falta */
+  const chao=recDesde(r);
+  return chao&&o&&String(o)<chao?chao:o;
+}
+/* O chão que o «Começar a partir de hoje» deixou num planeado (r.desde): as
+   datas antes dele ficam por registar de propósito, e nem o preenchimento
+   nem o cursor da renda voltam a elas. Nunca passa do r.next: quem depois
+   recua a próxima data à mão volta a ter o que pôs.
+   Recebe: r — o planeado ({next, desde}).
+   Devolve: 'AAAA-MM-DD' (texto), ou '' sem chão. */
+function recDesde(r){
+  const d=String((r||{}).desde||'');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return '';
+  const n=String((r||{}).next||'');
+  return /^\d{4}-\d{2}-\d{2}$/.test(n)&&n<d?n:d;
+}
+/* O plano começa antes da compra da casa? É o que a janela do preenchimento
+   explica, para as datas não parecerem erradas ao lado do início do contrato.
+   Recebe: r — o plano recorrente.
+   Devolve: a data de compra em DD/MM/AAAA quando a origem do plano é antes
+   dela (e o preenchimento começa nela), ou ''. */
+function planoAntesDaCompra(r){
+  const o=origemDoPlano(r,true),c=origemDoPlano(r);
+  /* só quando é a compra que manda: com o chão do «Começar a partir de hoje»
+     (recDesde) depois dela, as datas começam no chão, e a frase da compra
+     dizia uma data que não é a da compra */
+  const ct=r.tx.contractId?contract(r.tx.contractId):null,compra=compraDaCasa(ct?ct.propertyId:r.tx.propertyId);
+  return o&&c!==o&&c===compra?dPT(c):'';
 }
 /* Já existe o movimento deste plano nesse mês? Num contrato, a renda desse
    mês — pela mesma regra do rendaJaLancada (só renda, e pelo mês a que
@@ -359,13 +426,19 @@ function jaRegistado(r,d){
 function planoPrestacoesEmFalta(r){
   const x=r&&r.tx&&r.tx.loanId?anyLoan(r.tx.loanId):null;
   if(!x||r.tx.kind!=='loan'||r.tx.payType==='amortizacao')return [];
-  return loanPrestacoesEmFalta(x.l,db.transactions,today(),r.next||'');
+  const lista=loanPrestacoesEmFalta(x.l,db.transactions,today(),r.next||''),chao=recDesde(r);
+  /* as de antes do «Começar a partir de hoje» ficam por registar */
+  return chao?lista.filter(p=>p.date>=chao):lista;
 }
 /* As datas do plano que já passaram sem movimento registado, da origem
    (início do contrato ou da hipoteca) até hoje, respeitando o fim do plano.
    Numa hipoteca são as datas da lista simulada (planoPrestacoesEmFalta);
-   nas outras, período a período a partir da origem, saltando os meses em que
-   já há movimento. O guarda de 600 períodos evita ciclos com datas estragadas.
+   nas outras, período a período a partir da origem (que nunca é antes da
+   compra da casa: origemDoPlano), saltando os meses em que já há movimento.
+   O teto de 600 períodos fica com os MAIS RECENTES, até hoje: andava da
+   origem para a frente e parava aos 600, e um contrato «desde 1870» propunha
+   as rendas de 1870 a 1919 (ticket de QA a3a6d2d4). O guarda das voltas
+   evita ciclos com datas estragadas.
    Recebe: r — o plano recorrente a analisar.
    Devolve: array de datas AAAA-MM-DD por ordem cronológica; vazio sem plano ou sem próxima data. */
 function datasEmFalta(r){
@@ -377,14 +450,19 @@ function datasEmFalta(r){
     d=dayInMonth(Number(origin.slice(0,4)),Number(origin.slice(5,7))-1,day);
     if(d<origin)d=nextDate(d,r.every);
   }else d=origin;
-  const out=[];let guard=0;
-  while(d&&d<=t&&guard++<600){
-    if(!jaRegistado(r,d))out.push(d);
+  /* primeiro as datas (só contas de calendário), guardando as 600 últimas;
+     só depois se pergunta a cada uma se já tem movimento */
+  const datas=[];let guard=0;
+  while(d&&d<=t&&guard++<100000){
+    datas.push(d);
+    if(datas.length>600)datas.shift();
     if(r.every==='once')break;
-    d=nextDate(d,r.every);
+    const seg=nextDate(d,r.every);
+    if(!(seg>d))break;
+    d=seg;
     if(r.end&&d>r.end)break;
   }
-  return out;
+  return datas.filter(x=>!jaRegistado(r,x));
 }
 /* recorrências vencidas (a data prevista já passou ou é hoje)
    Devolve: a lista dessas recorrências (array de objetos de db.recurring). */
@@ -422,6 +500,95 @@ function recTermina(r){
   if(!r)return false;
   if(r.every==='once')return true;
   return !!(r.end&&r.next&&nextDate(r.next,r.every)>r.end);
+}
+/* Depois de «Recusar desta vez» (cloud/painel.js:CW.rejectRec, já com o
+   recAdvance feito): numa renda automática de contrato o chão (r.desde) passa
+   para a nova próxima data. Sem ele, o cursor da renda (syncContractRec, que
+   recua enquanto o mês anterior não tem renda) voltava ao mês recusado no
+   arranque seguinte, e a recusa desfazia-se sozinha. Só aí: os outros
+   planeados não têm cursor que recue, e numa hipoteca o chão escondia ao
+   «Preencher» as prestações de antes do plano, que ninguém recusou. O
+   preço, numa renda: os meses sem renda de antes de um mês já pago deixam de
+   ser propostos ao preencher — o cursor já não os pedia.
+   Recebe: r — o planeado recusado (pode já ter saído de db.recurring).
+   Devolve: nada — muda r.desde quando é o caso; quem chama grava. */
+function recRecusadaFixa(r){
+  if(!r||!r.auto||!(r.tx||{}).contractId||!r.next)return;
+  if(!(db.recurring||[]).some(x=>x.id===r.id))return;
+  if(String(r.desde||'')<r.next)r.desde=r.next;
+}
+/* A k-ésima ocorrência de um planeado a contar do r.next (k = 0 é o próprio
+   next), presa ao dia do next: de 31/01 em diante dá 28/02 e 31/03 — o
+   nextDate encadeado ficava no 28 para sempre. A semana são 7 dias; o mês, o
+   trimestre e o ano contam meses, como o nextDate.
+   Recebe: r — o planeado ({next, every}); k — quantas ocorrências à frente (≥ 0).
+   Devolve: a data em AAAA-MM-DD (texto). */
+function recDataN(r,k){
+  if(!k)return r.next;
+  if(r.every==='week')return addDays(r.next,7*k);
+  const passo=r.every==='year'?12:r.every==='quarter'?3:1;
+  const m=Number(r.next.slice(5,7))-1+passo*k;
+  return dayInMonth(Number(r.next.slice(0,4))+Math.floor(m/12),m%12,Number(r.next.slice(8,10)));
+}
+/* «Começar a partir de hoje»: a primeira ocorrência que ainda não passou —
+   a de hoje em diante, ou a que tem a janela (next..until) aberta hoje, que
+   ainda não está em atraso (recIsLate) e é a que se quer registar —, com a
+   largura da janela mantida, como no recAdvance. Sem nenhuma — um «uma só
+   vez» que já passou, ou o fim (end) antes dela —, o planeado termina. Não
+   mexe no r: quem chama aplica, e o Anular repõe o que lá estava.
+   Recebe: r — o planeado ({next, until, every, end}); hoje (opcional) —
+   'AAAA-MM-DD' (por omissão, o dia da app).
+   Devolve: {next, until} da ocorrência (until '' sem janela), ou {fim: true}. */
+function recComecarHoje(r,hoje){
+  if(!r||!/^\d{4}-\d{2}-\d{2}$/.test(String(r.next||'')))return {fim:true};
+  hoje=hoje||today();
+  const gap=r.until&&r.until>r.next?Math.round((new Date(r.until+'T00:00:00')-new Date(r.next+'T00:00:00'))/864e5):0;
+  for(let k=0;k<100000;k++){
+    const next=recDataN(r,k);
+    if(r.end&&next>r.end)return {fim:true};
+    const until=gap?addDays(next,gap):'';
+    if((until||next)>=hoje)return {next,until};
+    if(r.every==='once')return {fim:true};
+  }
+  return {fim:true};
+}
+/* O que o «Começar a partir de hoje» larga: as datas em falta (datasEmFalta)
+   antes da ocorrência que fica (recComecarHoje) — todas, quando o planeado
+   termina. Numa hipoteca a lista simulada pára no r.next, e as do próprio
+   plano daí para a frente (as que já venceram sem pagamento) contam também.
+   Recebe: r — o planeado.
+   Devolve: {next, until, fim, datas} — a ocorrência que fica (ou fim) e as
+   datas largadas, por ordem (array de 'AAAA-MM-DD'). */
+function recComecarHojeResumo(r){
+  const novo=recComecarHoje(r,today()),antes=d=>novo.fim||d<novo.next;
+  const datas=datasEmFalta(r).filter(antes);
+  if(r&&r.next&&(r.tx||{}).loanId){
+    const meses=new Set(datas.map(d=>d.slice(0,7)));
+    for(let k=0;k<100000;k++){
+      const d=recDataN(r,k);
+      if(!antes(d)||d>today()||(r.end&&d>r.end))break;
+      if(!meses.has(d.slice(0,7))&&!jaRegistado(r,d)){datas.push(d);meses.add(d.slice(0,7))}
+      if(r.every==='once')break;
+    }
+  }
+  return {next:novo.next||'',until:novo.until||'',fim:!!novo.fim,datas:datas.sort()};
+}
+/* Posso «Começar a partir de hoje» neste planeado? Há pelo menos uma data a
+   largar; com o planeado a terminar, posso apagá-lo (num alheio, só quando o
+   servidor o aceita: podeEditar com recTermina). E a renda automática de um
+   contrato que acaba antes da próxima não termina aqui: o syncContractRec
+   voltava a criá-la no arranque seguinte, com os meses largados em atraso —
+   essa termina-se no contrato. As permissões de silenciar e recusar
+   (podeEditar com 'confirmar') são de quem chama, como no pendMenuItens.
+   Recebe: r — o planeado.
+   Devolve: true/false. */
+function recPodeComecarHoje(r){
+  if(!r||!r.next)return false;
+  const s=recComecarHojeResumo(r);
+  if(!s.datas.length)return false;
+  if(!s.fim)return true;
+  if(r.auto&&(r.tx||{}).contractId)return false;
+  return podeEditar((r.tx||{}).propertyId,'rec.add',r,true);
 }
 /* O crédito de uma prestação planeada (ou de um modelo): o que ela traz e,
    só quando não traz nenhum, a única hipoteca viva do imóvel. É a mesma regra
@@ -925,11 +1092,14 @@ function recOrigem(r){
 /* cartão dos movimentos em atraso / por confirmar */
 let pendAll=false;
 /* As opções do ⋯ de uma linha por confirmar: silenciar (ou reativar), recusar
-   desta vez e preencher os períodos em falta — as duas últimas são da nuvem
-   (cloud/painel.js:CW.rejectRec, CW.fillMissed) e só entram quando ela as tem.
-   Recusar não destrói nada (avança o planeado sem criar movimento), por isso
-   vive aqui e não num botão vermelho. Preencher cria movimentos: pede o mesmo
-   que confirmar.
+   desta vez, preencher os períodos em falta e começar a partir de hoje — as
+   três últimas são da nuvem (cloud/painel.js:CW.rejectRec, CW.fillMissed,
+   CW.startFromToday) e só entram quando ela as tem. Recusar não destrói nada
+   (avança o planeado sem criar movimento), por isso vive aqui e não num botão
+   vermelho. Preencher cria movimentos: pede o mesmo que confirmar. Começar a
+   partir de hoje larga as em falta de uma vez, sem criar movimentos: pede o
+   mesmo que recusar, e só aparece com alguma data a largar
+   (recPodeComecarHoje) — também com uma só, que o Preencher não mostra.
    Recebe: r — o planeado; ok — se posso silenciá-lo e recusá-lo; podeConf —
    se posso registar o movimento dele.
    Devolve: a lista de opções do componentes.js:menu (array, vazio sem nenhuma). */
@@ -939,6 +1109,8 @@ function pendMenuItens(r,ok,podeConf){
   if(ok&&nuvem&&typeof nuvem.rejectRec==='function')it.push({label:'Recusar desta vez',icon:'x',toca:'camada',act:`CW.rejectRec('${id}')`});
   const n=podeConf&&nuvem&&typeof nuvem.fillMissed==='function'?datasEmFalta(r).length:0;
   if(n>=2)it.push({label:'Preencher '+n+' em falta',icon:'lista',toca:'camada',act:`CW.fillMissed('${id}')`});
+  if(ok&&nuvem&&typeof nuvem.startFromToday==='function'&&recPodeComecarHoje(r))
+    it.push({label:'Começar a partir de hoje',icon:'cal',toca:'camada',act:`CW.startFromToday('${id}')`});
   return it;
 }
 /* Uma linha do cartão dos por confirmar: o nome, de onde é e quando (tocar

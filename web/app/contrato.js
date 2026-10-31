@@ -454,7 +454,8 @@ function verMovimentosFora(id){
 /* Devolve o handler que o modal usa ao guardar: valida imóvel, quarto (a
    casa inteira e um quarto arrendado só com o início no dia do fim dos
    contratos deles, ou depois — ctEscolhaInvalida), renda,
-   inquilinos e datas e grava (ctGravar). O erro diz-se junto do campo
+   inquilinos e datas (o início nunca antes da compra da casa:
+   ctInicioAntesDaCompra) e grava (ctGravar). O erro diz-se junto do campo
    (componentes.js:falhaCampo), que também o anuncia. Num contrato que já tinha
    fim e o vê ir para a frente, pergunta primeiro se é uma renovação ou uma
    correção da data (ctFimPergunta) — a renovação fica no histórico.
@@ -479,14 +480,32 @@ function ctSaver(){
     if(!cForm.tenantIds.length)return falhaCampo('c_tenants','Escolhe pelo menos um inquilino.');
     /* um fim antes do início guardava sem aviso e o contrato sumia das
        rendas e projeções, sem sinal nenhum do porquê */
-    if(cForm.start&&cForm.end&&cForm.end<cForm.start)return falhaCampo('c_end','O fim do contrato é antes do início — verifica as datas.');
     const antes=contract(cForm.id),fimAntes=antes&&antes.end;
+    /* nem antes da compra da casa (a do quarto, num contrato de um quarto):
+       só quando o início é novo ou mudou, ou a casa mudou — um contrato
+       antigo que já estava antes continua a gravar-se. Pela ordem do
+       formulário: o início vem antes do fim */
+    const compra=ctInicioAntesDaCompra(cForm,antes);
+    if(compra)return falhaCampo('c_start','O imóvel foi comprado a '+compra+': o contrato não pode começar antes.');
+    if(cForm.start&&cForm.end&&cForm.end<cForm.start)return falhaCampo('c_end','O fim do contrato é antes do início — verifica as datas.');
     /* só quando o fim vai para a frente (uma renovação nunca o encurta) e a
        renovação ainda não foi escrita à mão nas renovações */
     if(fimAntes&&cForm.end&&cForm.end>fimAntes&&!(fiscoDe(cForm).renovacoes||[]).some(r=>r.inicio===pzAddDias(fimAntes,1)))
       return ctFimPergunta(fimAntes);
     ctGravar();
   };
+}
+/* O início do contrato do formulário é antes da compra da casa? Só conta um
+   início novo ou mudado (ou uma casa trocada): o contrato antigo que já
+   estava antes da compra grava-se quando se mexe noutro campo.
+   Recebe: c — o contrato do formulário (cForm); antes — o mesmo contrato
+   como está na base (undefined num contrato novo).
+   Devolve: a data de compra em DD/MM/AAAA quando o início é antes dela (a
+   frase do erro leva-a), ou ''. */
+function ctInicioAntesDaCompra(c,antes){
+  if(!c||!c.start)return '';
+  if(antes&&antes.start===c.start&&antes.propertyId===c.propertyId)return '';
+  return antesDaCompra(c.propertyId,c.start);
 }
 /* o fim que estava gravado, enquanto a pergunta «renovação ou correção?»
    está aberta (ctFimPergunta → ctFimResposta) */
@@ -574,26 +593,26 @@ function ctBody(){
       <div class="hint ct-colado">É por este nome que o contrato aparece nos movimentos e nas listas. ${nomeVazio?`Em branco: «${esc(nomeVazio)}», o dos inquilinos.`:'Em branco, usa-se o nome dos inquilinos.'}</div>
     </div>
     <div class="sect ct-gf" id="ct_renda"><h3 class="ct-gf-tit">Renda</h3>
-      <label>Renda mensal (€) <span class="req">*</span><input id="c_rent" type="text" inputmode="decimal" class="num" value="${c.rent||''}" placeholder="Ex: 450" data-input="liveNet()"></label>
-      <label>Imposto sobre a renda (%, opcional)<input id="c_tax" type="text" inputmode="decimal" class="num" value="${c.taxRate?dec(c.taxRate):''}" placeholder="Ex: ${dec(irsRate(c))}" data-input="liveNet()"></label>
+      <label>Renda mensal (€) <span class="req">*</span><input id="c_rent" type="text" inputmode="decimal" class="num" value="${c.rent||''}" placeholder="Ex: 450" data-input="liveNet()" autocomplete="off"></label>
+      <label>Imposto sobre a renda (%, opcional)<input id="c_tax" type="text" inputmode="decimal" class="num" value="${c.taxRate?dec(c.taxRate):''}" placeholder="Ex: ${dec(irsRate(c))}" data-input="liveNet()" autocomplete="off"></label>
       <div class="hint ct-colado">Em branco: <b id="c_taxVazio">${dec(irsRate(c))} %</b>, a estimativa para ${YEAR}. ${esc(irsTaxasTexto(YEAR))} É uma estimativa sobre a renda bruta: as despesas dedutíveis (IMI, condomínio, obras) baixam o imposto.</div>
       <div class="ct-net" id="netBox">${netBox()}</div>
       <div class="ct-campo"><span class="flabel" id="c_diasRot">A renda paga-se</span>
         <div class="ct-par ct-dias" role="group" aria-labelledby="c_diasRot">
-          <label>entre o dia<input id="c_day" type="text" inputmode="numeric" class="num" value="${c.payDay||''}" placeholder="Opcional"></label>
-          <label>e o dia<input id="c_dayTo" type="text" inputmode="numeric" class="num" value="${c.payDayTo||''}" placeholder="Opcional"></label></div>
+          <label>entre o dia<input id="c_day" type="text" inputmode="numeric" class="num" value="${c.payDay||''}" placeholder="Opcional" autocomplete="off"></label>
+          <label>e o dia<input id="c_dayTo" type="text" inputmode="numeric" class="num" value="${c.payDayTo||''}" placeholder="Opcional" autocomplete="off"></label></div>
         <div class="hint">Num mês que não tenha esse dia (o 31 em abril), conta o último dia do mês.</div></div>
-      <label>Aumento anual (%, opcional)<input id="c_inc" type="text" inputmode="decimal" class="num" value="${c.increase==null?'':dec(c.increase)}" placeholder="Ex: ${dec(db.settings.growth)}"></label>
+      <label>Aumento anual (%, opcional)<input id="c_inc" type="text" inputmode="decimal" class="num" value="${c.increase==null?'':dec(c.increase)}" placeholder="Ex: ${dec(db.settings.growth)}" autocomplete="off"></label>
       <div class="hint ct-colado">Aumento em branco: ${dec(db.settings.growth)} % ao ano nas projeções (o das Definições), sem o aviso do aumento nos prazos.</div>
     </div>
     <div class="sect ct-gf" id="ct_prazo"><h3 class="ct-gf-tit">Prazo</h3>
       <div class="ct-par">
-        <label>Início<input id="c_start" type="date" value="${c.start||''}" data-change="ctInicioMudou()"></label>
+        <label>Início<input id="c_start" type="date" value="${c.start||''}" data-change="ctInicioMudou()"${minDaCompra(c.propertyId,c.start)}></label>
         <label>Fim<input id="c_end" type="date" value="${c.end||''}" data-change="liveNet()"></label></div>
       <p class="hint ct-colado" id="c_prazoFrase">${esc(ctFraseDoPrazo(c))}</p>
       <div class="ct-par">
-        <label>Caução (€)<input id="c_dep" type="text" inputmode="decimal" class="num" value="${c.deposit||''}" placeholder="Opcional"></label>
-        <label>Rendas antecipadas (meses)<input id="c_adv" type="text" inputmode="numeric" class="num" value="${c.advance||''}" placeholder="Opcional"></label></div>
+        <label>Caução (€)<input id="c_dep" type="text" inputmode="decimal" class="num" value="${c.deposit||''}" placeholder="Opcional" autocomplete="off"></label>
+        <label>Rendas antecipadas (meses)<input id="c_adv" type="text" inputmode="numeric" class="num" value="${c.advance||''}" placeholder="Opcional" autocomplete="off"></label></div>
       ${rec?`<div class="hint ct-colado">Com rendas antecipadas, a renda recorrente arranca depois dos meses pagos à cabeça.</div>`:''}
       <label>IBAN para pagamento das rendas (opcional)<input id="c_iban" value="${esc(c.iban)}" placeholder="Ex: PT50 0002 0123 1234 5678 9015 4" autocomplete="off"></label>
     </div>
@@ -611,7 +630,7 @@ function ctBody(){
         ${inv.map(it=>`<div class="invrow">
           <input type="checkbox" class="i-c" id="invc_${it.id}" aria-label="Selecionar ${esc(it.name||'artigo')}">
           <input class="i-n" id="invn_${it.id}" value="${esc(it.name)}" placeholder="Ex: Sofá" aria-label="Artigo">
-          <input class="i-q" id="invq_${it.id}" type="text" inputmode="numeric" value="${it.qty}" placeholder="Ex: 1" aria-label="Quantidade">
+          <input class="i-q" id="invq_${it.id}" type="text" inputmode="numeric" value="${it.qty}" placeholder="Ex: 1" aria-label="Quantidade" autocomplete="off">
           <span class="i-s">${sel('invs_'+it.id,it.state,[{v:'novo',label:'Novo'},{v:'usado',label:'Usado'}],'','rascunho')}</span>
           <button type="button" class="btn sm danger so-icone" aria-label="Remover ${esc(it.name||'artigo')}" data-toca="rascunho" data-click="delInv('${it.id}')">${ic('trash',14)}</button></div>`).join('')}
         <div class="toolbar u-m-4px-0-0"><button type="button" class="btn sm danger" data-toca="rascunho" data-click="delInvSelected()">Remover selecionados</button></div>
@@ -638,7 +657,7 @@ function ctBody(){
         ${c.keys.map(k=>`<div class="invrow u-gtc-auto-1fr-62px-auto">
           <input type="checkbox" id="keyc_${k.id}" aria-label="Selecionar ${esc(k.name||'chave')}">
           <input class="i-n" id="keyn_${k.id}" value="${esc(k.name)}" placeholder="Ex: Chave de casa" aria-label="Tipo de chave">
-          <input class="i-q" id="keyq_${k.id}" type="text" inputmode="numeric" value="${k.qty}" placeholder="Ex: 1" aria-label="Quantidade">
+          <input class="i-q" id="keyq_${k.id}" type="text" inputmode="numeric" value="${k.qty}" placeholder="Ex: 1" aria-label="Quantidade" autocomplete="off">
           <button type="button" class="btn sm danger so-icone" aria-label="Remover ${esc(k.name||'chave')}" data-toca="rascunho" data-click="delKey('${k.id}')">${ic('trash',14)}</button></div>`).join('')}
         <div class="toolbar u-m-4px-0-0"><button type="button" class="btn sm danger" data-toca="rascunho" data-click="delKeySelected()">Remover selecionadas</button></div>
       </div>`:`<div class="hint">Ainda sem chaves: o auto de entrega do contrato em PDF diz «sem elementos registados».</div>`}
@@ -1106,7 +1125,7 @@ function fiscoSect(){
     ${L&&B?`<div id="c_fn23"${ctN23Visivel(c)?'':' hidden'}><div class="form">
       <label>Renda acima de ${dec(L.percentagem)} % do limite do concelho?${sel('c_facima',f.rendaAcimaDoLimite===true?'1':f.rendaAcimaDoLimite===false?'0':'',[{v:'',label:'Não sei'},{v:'0',label:'Não'},{v:'1',label:'Sim'}],'liveNet','rascunho')}</label>
       <div class="hint ct-colado">Num contrato de habitação celebrado desde ${dPT(L.desde)}, uma renda mensal acima de ${dec(L.percentagem)} % dos limites gerais da tipologia no concelho (os do arrendamento acessível) faz perder a redução pela duração, e o contrato vai ao quadro 4.1 (CIRS art. 72.º n.º 23). A app não tem essas tabelas: indica-o aqui. Em «Não sei» conta-se a redução.</div>
-      <label>Renda do contrato anterior neste imóvel (€)<input id="c_fant" type="text" inputmode="decimal" value="${f.rendaAnterior?dec(f.rendaAnterior):''}" placeholder="Opcional" data-input="liveNet()"></label>
+      <label>Renda do contrato anterior neste imóvel (€)<input id="c_fant" type="text" inputmode="decimal" value="${f.rendaAnterior?dec(f.rendaAnterior):''}" placeholder="Opcional" data-input="liveNet()" autocomplete="off"></label>
       <div class="hint ct-colado">Se a renda deste contrato for pelo menos ${dec(B.rendaMenorPct)} % mais baixa do que a do anterior, a taxa desce mais ${dec(B.pontos)} pontos (CIRS art. 72.º n.º 24, quadro 4.2B do Anexo F). Em branco: não se aplica.</div>
     </div></div>`:''}
     <div><div class="flabel">Renovações</div>

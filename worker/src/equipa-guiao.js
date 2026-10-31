@@ -36,6 +36,8 @@
 export const GUIAO = String.raw`var seccao = '', estado = 'abertos', modelos = null;
 // a última lista de pedidos ou de erros que se pintou (o detalhe pinta-se ao lado dela)
 var listaAtual = null;
+// o pedido que está aberto: uma resposta atrasada (o rasto de quem escreveu) não cai noutro
+var pedidoAberto = '';
 // quantos estão por tratar, por tipo de lista, para os crachás da barra
 var contagens = {};
 // a última ficha pintada: as janelas das ações dizem o nome e o email dela
@@ -165,7 +167,8 @@ var chip = function (html, ligado, acao) {
 
 /* fetch com as regras da casa: cookies de sessão, resposta lida como JSON,
    um 401 recarrega a página (a sessão morreu, volta-se ao ecrã de entrada)
-   e qualquer outro falhanço vira Error com a mensagem do servidor
+   e qualquer outro falhanço vira Error com a mensagem do servidor e o
+   estado HTTP em e.status (o rasto diz um 403 em palavras)
    Recebe: rota — o caminho da API (string, ex.: /api/equipa/pedidos);
    opcoes (opcional) — opções do fetch (método, cabeçalhos, corpo).
    Devolve: Promise com o JSON da resposta; rejeita com Error quando o pedido falha. */
@@ -174,7 +177,7 @@ function pedir(rota, opcoes) {
     .then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
         if (r.status === 401) { location.reload(); throw new Error('sessão terminada'); }
-        if (!r.ok) throw new Error(j.error || ('Erro ' + r.status));
+        if (!r.ok) { var e = new Error(j.error || ('Erro ' + r.status)); e.status = r.status; throw e; }
         return j;
       });
     });
@@ -232,11 +235,12 @@ function esperaHtml(frase) {
 // Devolve: nada — redesenha o conteúdo.
 function aCarregar(frase) { el('conteudo').innerHTML = esperaHtml(frase); }
 // mostra a mensagem do erro no lugar do conteúdo (o .catch das vistas), com o Tentar outra vez
-// Recebe: e — o Error apanhado, com a mensagem a mostrar.
+// Recebe: e — o Error apanhado, com a mensagem a mostrar; acao e args
+// (opcionais) — o que o Tentar outra vez corre (sem eles, volta a abrir a secção).
 // Devolve: nada — substitui o conteúdo pela mensagem.
-function falha(e) {
+function falha(e, acao, args) {
   el('conteudo').innerHTML = vazioHtml('Não deu para carregar.', esc(e && e.message ? e.message : 'Erro sem mensagem.'),
-    '<button type="button" class="btn sm"' + comAcao('ir', [seccao || 'pedidos']) + '>Tentar outra vez</button>');
+    '<button type="button" class="btn sm"' + (typeof acao === 'string' ? comAcao(acao, args) : comAcao('ir', [seccao || 'pedidos'])) + '>Tentar outra vez</button>');
 }
 /* O cabeçalho de uma secção: o título da página, a frase que diz o que ali
    está e, à direita, os botões da secção. Acerta também o título da janela.
@@ -259,12 +263,17 @@ function selo(p) {
 
 /* ------------------------------- navegação ------------------------------ */
 
+// quem abre o rasto das pessoas inteiro (a lista, o resumo, o rasto a partir da ficha): o master e o admin
+var veRastoTodos = eu.master || (eu.papeis || []).indexOf('admin') > -1;
+// quem pede o rasto de quem escreveu um pedido: os de cima e o suporte (o servidor confere o resto)
+var veRastoDoPedido = veRastoTodos || (eu.papeis || []).indexOf('suporte') > -1;
+
 var SECCOES = [
   { id: 'pedidos', nome: 'Pedidos', icone: 'pedidos', conta: 'pessoas', se: eu.cats.indexOf('user') > -1 },
   { id: 'erros', nome: 'Erros', icone: 'erros', conta: 'erros', se: eu.cats.some(function (c) { return c !== 'user'; }) },
   { id: 'pessoas', nome: 'Pessoas', icone: 'procurar', se: eu.cats.indexOf('user') > -1 },
   { id: 'operacao', nome: 'Operação', icone: 'operacao', se: eu.cats.indexOf('infra') > -1 },
-  { id: 'rasto', nome: 'Rasto', icone: 'rasto', se: eu.master },
+  { id: 'rasto', nome: 'Rasto', icone: 'rasto', se: veRastoTodos },
 ];
 
 // marca a secção ativa e repinta a barra lateral; guarda a secção atual em seccao
@@ -300,7 +309,7 @@ function pintarNav() {
 }
 /* Muda de secção: marca o separador, volta ao cimo e abre a vista respetiva.
    Recebe: s — o id da secção de destino (string, um dos ids de SECCOES);
-   alvo (opcional) — no rasto, o alvo por que filtrar.
+   alvo (opcional) — no rasto, o alvo da auditoria por que filtrar (abre a vista Equipa).
    Devolve: nada — abre a vista. */
 function ir(s, alvo) {
   nav(s);
@@ -309,7 +318,7 @@ function ir(s, alvo) {
   else if (s === 'erros') verLista('erros', 'abertos');
   else if (s === 'pessoas') verPessoas();
   else if (s === 'operacao') verOperacao();
-  else if (s === 'rasto') verRasto(alvo);
+  else if (s === 'rasto') verRastoEntrada(alvo);
 }
 // conta os que estão por tratar numa lista que não está à vista, para o crachá da barra
 // Recebe: tipo — 'pessoas' ou 'erros' (string).
@@ -331,7 +340,7 @@ var LISTAS = {
   },
   erros: {
     titulo: 'Erros',
-    sub: 'O que a app e o servidor apanham, agrupado: o mesmo erro soma as vezes e as pessoas.',
+    sub: 'O que a app e o servidor apanham, e os limites atingidos, agrupado: o mesmo erro soma as vezes e as pessoas.',
     vazio: 'Quando a app ou o servidor apanharem um erro, aparece aqui.',
   },
 };
@@ -375,6 +384,9 @@ function linhaPedido(p, ativo) {
     '<span class="sub n">' + quem +
     (p.n > 1 ? ' · ' + esc(p.n) + ' vezes' : '') +
     (p.versao ? ' · versão ' + esc(p.versao) : '') +
+    (p.category === 'seguranca' ? (p.refused_at ? ' · arquivado' : p.status === 'concluido' ? '' : p.accepted_at ? ' · decidido' : ' · por decidir')
+      : tecnico || p.status === 'concluido' && !p.refused_at ? ''
+      : p.refused_at ? ' · recusado' : p.proposta ? ' · resposta por enviar' : p.accepted_at ? ' · aceite' : ' · por decidir') +
     (p.assignee_nome ? ' · tomado por ' + esc(p.assignee_nome) : ' · #' + esc(curto(p.id))) + '</span></button>';
 }
 
@@ -420,6 +432,7 @@ function verPedido(id) {
   if (typeof matchMedia === 'function' && matchMedia('(max-width: 1199px)').matches && typeof scrollTo === 'function') scrollTo(0, 0);
   if (listaAtual) pintarPedidos('<section class="card pd-det">' + esperaHtml() + '</section>', id);
   else aCarregar();
+  pedidoAberto = id;
   var m = modelos == null ? pedir('/api/equipa/modelos').then(function (d) { modelos = d.modelos || []; }) : Promise.resolve();
   Promise.all([pedir('/api/equipa/pedidos/' + encodeURIComponent(id)), m]).then(function (rs) {
     var d = rs[0], p = d.pedido;
@@ -428,13 +441,18 @@ function verPedido(id) {
     if (listaAtual && listaAtual.tipo === tipo) {
       // a linha da lista acompanha o que o pedido é agora (depois de responder, tomar, concluir)
       listaAtual.pedidos.forEach(function (x) {
-        if (x.id === p.id) { x.status = p.status; x.assignee_nome = p.assignee_nome; x.updated_at = p.updated_at; }
+        if (x.id === p.id) {
+          x.status = p.status; x.assignee_nome = p.assignee_nome; x.updated_at = p.updated_at;
+          x.accepted_at = p.accepted_at; x.refused_at = p.refused_at; x.proposta = p.draft_reply != null;
+        }
       });
       pintarPedidos(detalhePedido(d, tipo, true), p.id);
     } else {
       document.title = (tipo === 'pessoas' ? 'Pedido' : 'Erro') + ' · Rendorium Equipa';
       el('conteudo').innerHTML = '<div class="pd com-det">' + detalhePedido(d, tipo, false) + '</div>';
     }
+    // o «Ver o rasto» de quem escreveu chega à parte: o pedido já está no ecrã
+    if (d.quem && !d.quem.desconhecido) rastoDoPedido(p.id);
   }).catch(falha);
 }
 
@@ -485,19 +503,61 @@ function detalhePedido(d, tipo, comLista) {
         : chip(esc(CATS[c] || c), false, comAcao('mudarCategoria', [p.id, c]));
     }).join('') + '</div></div>';
 
+  /* a decisão, só nos pedidos das pessoas: um pedido só se implementa
+     depois de aceite (o Claude só pega nos aceites); recusar fecha-o com uma
+     justificação. Decidido, fica quem decidiu e quando. */
+  var decisao = '';
+  if (!tecnico) {
+    if (p.refused_at) decisao = '<p class="sub n pd-decidido">Recusado por ' + esc(p.refused_by_nome || p.refused_by || 'alguém da equipa') + ' · ' + data(p.refused_at) + '</p>';
+    else if (p.accepted_at) {
+      decisao = '<p class="sub n pd-decidido">Aceite para implementar por ' + esc(p.accepted_by_nome || p.accepted_by || 'alguém da equipa') + ' · ' + data(p.accepted_at) +
+        (p.accepted_changes ? ', com alterações (na nota interna acima)' : '') + '</p>';
+    }
+    else if (p.status !== 'concluido') {
+      decisao = '<div class="pd-decisao"><p><span class="pd-decisao-tit">Por decidir</span>' +
+        '<span class="sub">Só os pedidos aceites seguem para implementar. Recusar conclui o pedido, com a justificação para a pessoa.</span></p>' +
+        '<div class="pd-decisao-botoes"><button type="button" class="btn"' + comAcao('recusarPedido', [p.id]) + '>Recusar</button>' +
+        '<button type="button" class="btn primary"' + comAcao('aceitarPedido', [p.id]) + '>Aceitar</button></div></div>';
+    }
+  } else if (p.category === 'seguranca') {
+    /* um ticket de segurança (um limite atingido) também espera por uma
+       decisão: nada se faz sem a resolução proposta de alguém da equipa, e é
+       ela que se segue; arquivar conclui-o, com a justificação numa nota */
+    if (p.refused_at) decisao = '<p class="sub n pd-decidido">Arquivado por ' + esc(p.refused_by_nome || p.refused_by || 'alguém da equipa') + ' · ' + data(p.refused_at) + ' (a justificação está na nota interna acima)</p>';
+    else if (p.accepted_at) {
+      decisao = '<div class="pd-decisao pd-resolucao"><p><span class="pd-decisao-tit">Resolução proposta</span>' +
+        '<span class="sub n">Decidida por ' + esc(p.accepted_by_nome || p.accepted_by || 'alguém da equipa') + ' · ' + data(p.accepted_at) + '. É isto que se segue.</span></p>' +
+        '<p class="ms-texto">' + esc(p.accepted_changes || '') + '</p></div>';
+    }
+    else if (p.status !== 'concluido') {
+      decisao = '<div class="pd-decisao"><p><span class="pd-decisao-tit">Por decidir</span>' +
+        '<span class="sub">Nada se faz sem uma resolução proposta: bloquear, contactar, subir o limite… Arquivar conclui-o, com a justificação.</span></p>' +
+        '<div class="pd-decisao-botoes"><button type="button" class="btn"' + comAcao('arquivarSeguranca', [p.id]) + '>Arquivar</button>' +
+        '<button type="button" class="btn primary"' + comAcao('decidirSeguranca', [p.id]) + '>Decidir</button></div></div>';
+    }
+  }
+  /* a resposta proposta pelo Claude depois de implementar: vem já na caixa,
+     para quem lê a enviar como está ou a mudar antes; só a envia uma pessoa */
+  var proposta = !tecnico && p.draft_reply != null && p.status !== 'concluido' ? String(p.draft_reply) : '';
+
   var resposta = '<div class="pd-resp">' +
     '<div class="pd-resp-modos" role="radiogroup" aria-label="O que escrever">' +
     '<label class="chip"><input type="radio" name="modo" id="modoResposta" class="so-leitor" checked>Responder</label>' +
     '<label class="chip"><input type="radio" name="modo" id="modoNota" class="so-leitor">Nota interna</label>' +
     '<div id="modelosSitio" class="menu">' + menuModelos() + '</div></div>' +
-    '<textarea id="resposta" class="campo" aria-label="Texto" maxlength="2000" data-contar="contaResposta" aria-describedby="respostaErro"></textarea>' +
+    (proposta ? '<p class="sub pd-proposta">Resposta proposta pelo Claude a ' + data(p.draft_at) +
+      ', depois de implementar. Lê-a, muda o que for preciso e envia: a pessoa só a recebe quando a enviares.</p>' : '') +
+    '<textarea id="resposta" class="campo" aria-label="Texto" maxlength="2000" data-contar="contaResposta" aria-describedby="respostaErro">' +
+    esc(proposta) + '</textarea>' +
     '<p class="erro-txt" id="respostaErro"></p>' +
-    '<div class="pd-resp-pe"><span class="sub n"><span id="contaResposta">0</span> / 2000 · ' +
+    '<div class="pd-resp-pe"><span class="sub n"><span id="contaResposta">' + proposta.length + '</span> / 2000 · ' +
     '<span class="so-resposta">' + (tecnico ? 'fica no pedido: não vai para ninguém' : 'a pessoa vê na app e recebe por email') + '</span>' +
     '<span class="so-nota">só a equipa vê</span></span>' +
     '<button type="button" class="btn so-resposta"' + comAcao('guardarModelo') + '>Guardar como modelo</button>' +
     '<button type="button" class="btn so-resposta"' + comAcao('agir', [p.id, 'responder']) + '>Responder</button>' +
-    '<button type="button" class="btn primary so-resposta"' + comAcao('agir', [p.id, 'fechar']) + '>Responder e concluir</button>' +
+    // um ticket de segurança por decidir só se conclui pelo Arquivar (com a justificação)
+    (p.category === 'seguranca' && !p.accepted_at ? ''
+      : '<button type="button" class="btn primary so-resposta"' + comAcao('agir', [p.id, 'fechar']) + '>Responder e concluir</button>') +
     '<button type="button" class="btn primary so-nota"' + comAcao('agir', [p.id, 'nota']) + '>Guardar nota interna</button>' +
     '</div></div>' +
     (p.status === 'concluido' ? '<div><button type="button" class="btn sm"' + comAcao('agir', [p.id, 'reabrir']) + '>Reabrir o pedido</button></div>' : '');
@@ -511,7 +571,8 @@ function detalhePedido(d, tipo, comLista) {
       '<p class="sub n">Entrou a ' + dia(q.desde) + ' · ' + esc(q.casas) + ' casas · ' + esc(q.registos) + ' registos</p>' +
       '<p class="sub n">' + esc(q.errosApanhados || 0) + ' erros apanhados · ' + (q.aceitouTermos ? 'termos aceites' : 'termos por aceitar') + '</p>' +
       (marcas ? '<p class="chips">' + marcas + '</p>' : '') +
-      (eu.cats.indexOf('user') > -1 ? '<button type="button" class="btn sm"' + comAcao('verPessoa', [q.id]) + '>Abrir a ficha</button>' : '');
+      (eu.cats.indexOf('user') > -1 ? '<button type="button" class="btn sm"' + comAcao('verPessoa', [q.id]) + '>Abrir a ficha</button>' : '') +
+      (veRastoDoPedido ? '<div id="pedidoRasto" class="rs-no-pedido"></div>' : '');
   } else if (q) {
     lado = '<p class="lbl">Quem escreveu</p><p class="sub">A conta já não existe (' + esc(q.id) + ').</p>';
   }
@@ -523,7 +584,7 @@ function detalhePedido(d, tipo, comLista) {
   }
 
   return '<section class="card pd-det" aria-label="Pedido aberto">' + cab +
-    '<div class="pd-det-corpo"><div class="pd-fio">' + fio + categoria + resposta + '</div>' +
+    '<div class="pd-det-corpo"><div class="pd-fio">' + fio + categoria + decisao + resposta + '</div>' +
     (lado ? '<aside class="pd-lado">' + lado + '</aside>' : '') + '</div></section>';
 }
 
@@ -556,6 +617,66 @@ function agir(id, acao) {
   enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/' + acao, { texto: t })
     .then(function () { if (FEITO[acao]) avisar(FEITO[acao]); verPedido(id); })
     .catch(function (e) { avisar(e.message, 'erro'); });
+}
+/* Aceita um pedido de uma pessoa para implementar: a janela deixa escrever
+   alterações ao pedido (opcional; só a equipa as vê, e são o que se
+   implementa). O servidor regista quem, quando e as alterações.
+   Recebe: id — o id do pedido (string).
+   Devolve: nada — abre a janela; ao confirmar, executa e reabre o detalhe. */
+function aceitarPedido(id) {
+  formulario('Aceitar o pedido', [{
+    nome: 'alteracoes', rotulo: 'Alterações ao pedido', tipo: 'area', obrigatorio: false, max: 2000,
+    ajuda: 'Se queres que se implemente de outra forma, escreve aqui como. Só a equipa vê.',
+  }], function (v) {
+    return enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/aceitar', { texto: v.alteracoes || '' })
+      .then(function () { avisar(v.alteracoes ? 'Pedido aceite, com as tuas alterações.' : 'Pedido aceite para implementar.'); verPedido(id); });
+  }, { texto: 'O pedido segue para implementar.', botao: 'Aceitar' });
+}
+/* Recusa um pedido de uma pessoa: a janela pede a justificação (obrigatória),
+   que a pessoa recebe como resposta, e o pedido fica concluído.
+   Recebe: id — o id do pedido (string).
+   Devolve: nada — abre a janela; ao confirmar, executa e reabre o detalhe. */
+function recusarPedido(id) {
+  formulario('Recusar o pedido', [{
+    nome: 'justificacao', rotulo: 'Porque é recusado', tipo: 'area', max: 2000,
+    ajuda: 'A pessoa recebe esta justificação na app e por email.',
+    exemplo: 'Ex: Por agora não vamos mudar isto, porque…',
+  }], function (v) {
+    return enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/recusar', { texto: v.justificacao })
+      .then(function () { avisar('Pedido recusado e concluído.'); verPedido(id); });
+  }, { texto: 'O pedido fica concluído, e não segue para implementar.', botao: 'Recusar', perigo: true });
+}
+/* Decide um ticket de segurança (um limite atingido): a janela pede a
+   resolução proposta (obrigatória), o que se vai fazer. O servidor regista
+   quem, quando e a proposta, que fica também numa nota interna; é ela que se
+   segue.
+   Recebe: id — o id do ticket (string).
+   Devolve: nada — abre a janela; ao confirmar, executa e reabre o detalhe. */
+function decidirSeguranca(id) {
+  formulario('Decidir o ticket de segurança', [{
+    nome: 'proposta', rotulo: 'Resolução proposta', tipo: 'area', max: 2000,
+    ajuda: 'O que se faz: bloquear, contactar a pessoa, subir o limite… É isto que se segue. Só a equipa vê.',
+    exemplo: 'Ex: Subir o limite das gravações para 120 em 15 min.',
+  }], function (v) {
+    return enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/aceitar', { texto: v.proposta })
+      .then(function () { avisar('Decidido: segue-se a resolução proposta.'); verPedido(id); });
+  }, { texto: 'O ticket segue para tratar, como escreveres aqui.', botao: 'Decidir' });
+}
+/* Arquiva um ticket de segurança (um falso alarme): a janela pede a
+   justificação (obrigatória), que fica numa nota interna, e o ticket fica
+   concluído. Não vai nada para ninguém. Se o limite voltar a ser atingido,
+   reabre-se por decidir.
+   Recebe: id — o id do ticket (string).
+   Devolve: nada — abre a janela; ao confirmar, executa e reabre o detalhe. */
+function arquivarSeguranca(id) {
+  formulario('Arquivar o ticket de segurança', [{
+    nome: 'justificacao', rotulo: 'Porque se arquiva', tipo: 'area', max: 2000,
+    ajuda: 'Fica numa nota interna: não vai para ninguém.',
+    exemplo: 'Ex: Falso alarme: era um teste da equipa.',
+  }], function (v) {
+    return enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/recusar', { texto: v.justificacao })
+      .then(function () { avisar('Ticket arquivado e concluído.'); verPedido(id); });
+  }, { texto: 'O ticket fica concluído, sem nada a fazer. Se voltar a acontecer, reabre-se por decidir.', botao: 'Arquivar', perigo: true });
 }
 // muda a categoria de um erro para a do chip e reabre o detalhe
 // Recebe: id — o id do pedido (string); categoria — a categoria nova (string, uma das TECNICAS).
@@ -813,6 +934,7 @@ function verPessoa(id) {
       '<div class="fi-cab-acoes">' +
       ((d.pedidos || []).length ? '<a class="btn" href="#pessoaPedidos">Pedidos <span class="n sub">' + esc(d.pedidos.length) + '</span></a>' : '') +
       (d.master ? '<button type="button" class="btn"' + comAcao('ir', ['rasto', q.id]) + '>Ver no rasto</button>' : '') +
+      (veRastoTodos ? '<span id="fichaRasto" class="rs-na-ficha"></span>' : '') +
       '</div></header>';
 
     var limites = q.limites || [], propostas = q.propostas || [];
@@ -865,6 +987,7 @@ function verPessoa(id) {
     // os serviços chegam à parte: a ficha já está no ecrã, e um erro aqui fica no cartão
     verServicos(q.id);
     if (d.master) verRastoDaPessoa(q.id);
+    if (veRastoTodos) rastoDaConta(q.id);
   }).catch(falha);
 }
 
@@ -1512,15 +1635,19 @@ function resumoCopia(dia) {
 
 /* -------------------------------- rasto --------------------------------- */
 
-/* A auditoria: as últimas 200 ações da equipa, opcionalmente filtradas por
-   alvo (o id exato: escreve-se no filtro, ou toca-se num alvo da tabela).
-   Só leitura — o rasto escreve-se sempre e não se apaga nunca.
+/* A vista Equipa do Rasto, a auditoria (só o master): as últimas 200 ações
+   da equipa, opcionalmente filtradas por alvo (o id exato: escreve-se no
+   filtro, ou toca-se num alvo da tabela). Só leitura — o rasto escreve-se
+   sempre e não se apaga nunca.
    Recebe: alvo (opcional) — o alvo por que filtrar (string, como aparece na coluna Sobre).
    Devolve: nada — redesenha a vista com a tabela. */
 function verRasto(alvo) {
   alvo = String(alvo || '').trim();
+  rastoVista = 'equipa';
+  var vez = ++rastoVez;
   aCarregar('A ler o rasto.');
   pedir('/api/equipa/auditoria' + (alvo ? '?alvo=' + encodeURIComponent(alvo) : '')).then(function (d) {
+    if (vez !== rastoVez || seccao !== 'rasto') return;
     var regs = d.registos || [];
     var filtro = '<div class="card rs-filtro"><label class="procura">' + ic('procurar') +
       '<input id="qRasto" type="search" placeholder="Ex: K4P9ZT2M" aria-label="Filtrar pelo alvo: o id exato de uma conta, de um pedido ou um endereço" value="' +
@@ -1538,8 +1665,903 @@ function verRasto(alvo) {
         }).join('') + '</tbody></table></div></section>'
       : vazioHtml(alvo ? 'Nada no rasto sobre “' + esc(alvo) + '”.' : 'Ainda não há rasto nenhum.',
           alvo ? 'O alvo tem de ser o id exato.' : 'Cada ação da equipa escreve aqui uma linha.');
-    el('conteudo').innerHTML = cabecalho('Rasto', 'Quem fez o quê: as últimas 200 ações. Escreve-se sempre e não se apaga nunca.') + filtro + tabela;
-  }).catch(falha);
+    el('conteudo').innerHTML = cabecalho('Rasto', 'Quem da equipa fez o quê: as últimas 200 ações. Escreve-se sempre e não se apaga nunca.') +
+      rastoAbasHtml('equipa') + filtro + tabela;
+  }).catch(function (e) { if (vez === rastoVez) falhaRasto(e, 'ir', ['rasto', alvo]); });
+}
+
+/* --------------------------- o rasto das pessoas -------------------------- */
+
+// a vista do Rasto que está aberta ('pessoas' ou 'equipa'), o período em dias,
+// a forma das Pessoas ('lista' ou 'ecras') e a ordem da lista ('recentes' ou 'sinais')
+var rastoVista = 'pessoas', rastoDias = 30, rastoModo = 'lista', rastoOrdem = 'recentes';
+// a última lista de pessoas que chegou, para mudar a ordem sem voltar à rede
+var rastoPessoasVistas = null;
+// a vez do último pedido do rasto: a resposta de um pedido velho não pinta por cima de um novo
+var rastoVez = 0;
+
+/* Os cinco sinais do contrato, pela ordem em que se mostram: o id que vem do
+   servidor, o nome no plural (as contagens), no singular (um evento) e o tom
+   do selo (âmbar quando a pessoa se perde; vermelho quando o guardar deu erro). */
+var SINAIS_RASTO = [
+  { id: 'em-vao', nomes: 'Toques em vão', nome: 'Toque em vão', tom: 'wa', curto: 'Em vão',
+    diz: 'o toque caiu num sítio onde não há nada para carregar.' },
+  { id: 'repetido', nomes: 'Toques repetidos', nome: 'Toque repetido', tom: 'wa', curto: 'Repetidos',
+    diz: 'três ou mais toques seguidos no mesmo sítio, em menos de um segundo cada.' },
+  { id: 'vai-e-volta', nomes: 'Vai-e-volta', nome: 'Vai-e-volta', tom: 'wa', curto: 'Vai-e-volta',
+    diz: 'abriu uma janela ou um ecrã e saiu em menos de 4 s, sem tocar em nada útil lá dentro.' },
+  { id: 'desistencia', nomes: 'Desistências', nome: 'Desistência', tom: 'wa', curto: 'Desistências',
+    diz: 'escreveu num formulário e fechou-o sem guardar.' },
+  { id: 'erro-campo', nomes: 'Erros ao guardar', nome: 'Erro ao guardar', tom: 'dg', curto: 'Erros',
+    diz: 'carregou em guardar e um campo deu erro.' },
+];
+// os tipos de evento por extenso
+var TIPOS_RASTO = {
+  toque: 'Toque', ecra: 'Ecrã', 'janela-abre': 'Abriu a janela', 'janela-fecha': 'Fechou a janela', guardar: 'Guardou',
+  'erro-campo': 'Erro num campo', erro: 'Erro', pagina: 'Página', secao: 'Secção', dados: 'Dados',
+};
+// as origens por extenso
+var ORIGENS_RASTO = { app: 'App', montra: 'Montra' };
+
+/* ------------------------------ o rasto em palavras ------------------------------
+   O cliente manda descritores (click:<ação>, a:<destino>, <etiqueta>#<id>,
+   <etiqueta>.<classe>) e ids de ecrãs e de janelas, nunca o texto da página
+   (web/cloud/rasto.js:rstDescritor, landing.js:GUIAO_RASTO_MONTRA). Aqui
+   traduzem-se para os textos da app com os dicionários de baixo: um botão
+   pelo nome que a app lhe escreve, sem posição; um toque fora de botões pelo
+   nome do sítio, com a posição. O que nenhum dicionário conhece aparece cru
+   e discreto (rs-cru), e o testes/rasto-dicionario.test.js falha quando uma
+   ação dos data-click da app fica sem rótulo. */
+
+// os separadores da app (web/app/navegacao.js:TABS)
+var ECRAS_RASTO = {
+  dashboard: 'Visão geral', properties: 'Imóveis', groups: 'Grupos', contracts: 'Contratos', visits: 'Visitas',
+  tenants: 'Inquilinos', owners: 'Proprietários', colaboradores: 'Colaboradores', transactions: 'Movimentos',
+  recurring: 'Planeados', calendar: 'Calendário', credits: 'Créditos', projections: 'Projeções', reports: 'Avaliação',
+  fisco: 'IRS · Anexo F', settings: 'Definições',
+};
+// as subpáginas das Definições (navegacao.js:SUBPAGE e as linhas de definicoes.js e da nuvem)
+var SUBPAGINAS_RASTO = {
+  tema: 'Tema', defaults: 'Valores por omissão', cats: 'Categorias, etiquetas e IRS', tags: 'Etiquetas', irs: 'IRS e dedução',
+  groups: 'Grupos', filtros: 'Filtros comuns', dados: 'Importar e cópias', novidades: 'Novidades', cloud: 'Segurança',
+  legal: 'Aviso legal', ajuda: 'Ajuda e sugestões', faq: 'Perguntas frequentes', termos: 'Termos e Condições',
+  privacidade: 'Política de Privacidade',
+};
+// as páginas da montra e dos documentos, pelo caminho
+var PAGINAS_RASTO = { '/': 'Início da montra', '/privacidade': 'Política de Privacidade', '/termos': 'Termos e Condições' };
+// as secções da montra, pelo id (worker/src/landing.js)
+var SECCOES_RASTO = {
+  inicio: 'Início', ligado: 'Do imóvel à renda, tudo ligado', imoveis: 'Imóveis', contratos: 'Contratos',
+  planeados: 'Planeados', computador: 'No computador', resto: 'O resto da gestão', contas: 'Contas entre donos',
+  dados: 'Os dados são teus', comecar: 'Começa pelo primeiro imóvel', 'rasto-de-utilizacao': 'Rasto de utilização',
+};
+// as janelas e os portões com nome próprio (web/cloud/rasto.js:rstIdDaCamada e rstPortao), já com as aspas
+var JANELAS_RASTO = {
+  'sair-sem-guardar': '«Sair sem guardar?»', 'rst-pergunta': '«Ajudas-nos a melhorar o Rendorium?»',
+  'apr-pergunta': 'da pergunta da apresentação', janela: 'sem nome', cwAuth: 'da entrada', cwLegal: 'do aviso inicial',
+  cwTerms: 'dos termos novos', cwUpd: 'da versão nova', cwUpd2: 'da versão nova', cwRepor: 'da palavra-passe nova',
+  cwDoc: 'de um documento legal', cwGuia: 'do tutorial',
+};
+// os botões da app pelo nome da ação do data-click, com o texto que a app lhes escreve
+var ACOES_RASTO = {
+  closeModal: 'Fechar', closeAllModals: 'Fechar as janelas', closePops: 'Fechar o menu', menuOpen: 'Abrir o menu',
+  onSave: 'Guardar', _ok: 'Confirmar', _pick: 'Escolher uma opção', _pm: 'Guardar', _sairSemGuardar: 'Sair sem guardar',
+  cwSairParaColaboradores: 'Sair sem guardar', go: 'Ir para um separador', goBarra: 'Ir para um separador',
+  goSet: 'Abrir uma página das Definições', gavetaAlternar: 'Abrir ou fechar a gaveta', abrirOMeuPerfil: 'Abrir o meu perfil',
+  abrirAdicionar: 'Adicionar', criarEscolha: 'Escolher o que adicionar', fabAlternarMenu: 'Adicionar',
+  fabFecharMenu: 'Escolher o que adicionar', novoGrupoEscolher: 'Grupo', recarregarApp: 'Recarregar',
+  selOpen: 'Abrir uma lista de escolha', selPick: 'Escolher uma opção', toggleFold: 'Abrir ou fechar uma secção',
+  abrirSeletorFicheiros: 'Escolher ficheiros', selecionarCampo: 'Selecionar a ligação',
+  // imóveis
+  propModal: 'Adicionar ou editar imóvel', propView: 'Abrir o imóvel', delProp: 'Apagar o imóvel', seed: 'Carregar exemplo',
+  imvGaleria: 'Ver as fotografias', marcarVisitaNoImovel: 'Marcar visita', contratoNoQuarto: 'Novo contrato',
+  delPropOwner: 'Remover proprietário', addPropOwner: 'Adicionar proprietário', delRoom: 'Remover quarto', addRoom: 'Adicionar quarto',
+  addLoan: 'Adicionar crédito', delLoan: 'Remover crédito', setLType: 'Escolher o tipo de crédito',
+  imvTrfLigar: 'Ir para os proprietários', imvTrfPedir: 'Enviar pedido', imvTransferir: 'Transferir o controlo',
+  verMovimentosDoImovel: 'Ver os movimentos do imóvel', pagamentoNoImovel: 'Pagamento', despesaNoImovel: 'Despesa',
+  openMeta: 'Abrir um anexo', fotoPassar: 'Passar de fotografia', fotoDescarregar: 'Descarregar', downloadMeta: 'Descarregar',
+  delFileConfirm: 'Remover o anexo', pesEscolherDocs: 'Adicionar documentos',
+  // contratos
+  ctModal: 'Adicionar ou editar contrato', ctView: 'Abrir o contrato', ctAbrirDaLista: 'Abrir o contrato',
+  ctFiltroRapido: 'Ver terminados', delContract: 'Apagar o contrato', reactivateContract: 'Reativar o contrato',
+  ctPdfJanela: 'Gerar contrato em PDF', ctPdfDescarregar: 'Descarregar o PDF', ctRenovar: 'Renovar', ctRenovarOk: 'Renovar',
+  endContract: 'Terminar', ctRegistarRenda: 'Registar renda', ctVerMovimentos: 'Ver movimentos', ctVerAnexos: 'Ver os anexos',
+  ctFimResposta: 'É uma correção ou uma renovação', ctMarcarComunicada: 'Marcar como comunicada',
+  ctEscolheQuarto: 'Escolher o quarto', ctComecaNoFim: 'Escolher o quarto', setFiscoEstado: 'Escolher o estado na AT',
+  delInv: 'Remover artigo', delInvSelected: 'Remover selecionados', addInv: 'Adicionar artigo', addInvBulk: 'Adicionar vários',
+  doInvBulk: 'Adicionar', togCtPhoto: 'Selecionar uma fotografia', allCtPhotos: 'Selecionar todas',
+  delKey: 'Remover tipo de chave', delKeySelected: 'Remover selecionadas', addKey: 'Adicionar tipo de chave',
+  addKeyBulk: 'Adicionar várias', doKeyBulk: 'Adicionar', delRenov: 'Remover renovação', addRenov: 'Adicionar renovação',
+  newTenantFromCt: 'Criar inquilino novo', pzSilencia: 'Silenciar o prazo',
+  // pessoas
+  personModal: 'Adicionar ou editar pessoa', personView: 'Abrir a pessoa', delPerson: 'Apagar a pessoa',
+  abrirFicha: 'Abrir a ficha', settleModal: 'Acertar contas', doSettle: 'Registar pagamentos',
+  balancesDetail: 'Como se chega aos saldos', visConverte: 'Converter em inquilino',
+  // movimentos
+  txModal: 'Adicionar ou editar movimento', txView: 'Abrir o movimento', 'CW.openTx': 'Abrir o movimento',
+  newTxPick: 'Adicionar movimento', anaApply: 'Adicionar movimento', editarMovimento: 'Editar o movimento', delTx: 'Apagar o movimento',
+  clearTxFilters: 'Limpar', txLimparFiltro: 'Limpar o filtro', txPorEtiqueta: 'Filtrar por etiqueta', txFilterFechar: 'Fechar',
+  txPorTipo: 'Filtrar por tipo', txVerTipo: 'Ver o tipo', onTxNoPayer: 'Só os sem pagador', txqLimpar: 'Limpar a pesquisa',
+  txFiltrosAlternar: 'Filtros', txEtiqAbrir: 'Etiquetas', aplicarFiltroComum: 'Aplicar um filtro comum',
+  newTplForTx: 'Criar modelo novo', newTagFromTx: 'Criar etiqueta nova', setKind: 'Escolher o tipo de movimento',
+  txMudaTipo: 'Mudar o tipo', txPagoPor: 'Escolher quem pagou', setPayType: 'Escolher a forma de pagamento',
+  onAmtReset: 'Repor', onLoanReset: 'Repor', pagarCredor: 'Pagar', 'CW.kpiToTx': 'Ver nos movimentos',
+  dashVerSemImovel: 'Ver movimentos sem imóvel',
+  // planeados
+  newRec: 'Novo planeado', editRec: 'Editar o planeado', recView: 'Abrir o planeado', delRec: 'Apagar o planeado',
+  confirmRec: 'Rever', quickConfirmRec: 'Confirmar', skipRec: 'Silenciar', 'CW.rejectRec': 'Rejeitar o planeado',
+  newTpl: 'Novo modelo', editTpl: 'Editar o modelo', tplView: 'Abrir o modelo', delTpl: 'Apagar o modelo',
+  newFromTemplate: 'Usar o modelo', pendToggle: 'Mostrar ou esconder os pendentes', recRetroAgoraNao: 'Agora não',
+  'CW.fillMissed': 'Registar os em falta', 'CW.doFillMissed': 'Registar estimativa', 'CW.fillNext': 'Cancelar',
+  'CW.startFromToday': 'Começar a partir de hoje',
+  // a confirmação do email (a faixa dos 7 dias e o ecrã depois deles)
+  'CW.reenviarConfirmacao': 'Reenviar', 'CW.jaConfirmei': 'Já confirmei', 'CW.sairSemConfirmar': 'Sair', 'CW.pedirAjudaSemConfirmar': 'Pedir ajuda',
+  // visitas e calendário
+  visitModal: 'Adicionar ou editar visita', visView: 'Abrir a visita', visLimparChip: 'Limpar o filtro',
+  calNav: 'Mudar de mês', calSel: 'Escolher um dia', calMarcarVisita: 'Marcar visita', calNovoPlaneado: 'Recorrente',
+  calPendAlternar: 'Mostrar ou esconder os pendentes',
+  // créditos
+  amortModal: 'Plano de amortização', mortView: 'Abrir a hipoteca', mortModal: 'Editar', newMort: 'Nova hipoteca',
+  delMort: 'Apagar a hipoteca', delMortFrom: 'Apagar a hipoteca', associarOrfaos: 'Associar',
+  credPagasAlternar: 'Liquidadas', pagarCreditoDaHipoteca: 'Pagamento',
+  // visão geral, avaliação, projeções e IRS
+  kpiModal: 'Ver a evolução', kpiPorque: 'Como se calcula', repFoco: 'Abrir a avaliação do imóvel', donutDrill: 'Abrir ou voltar no gráfico',
+  anaChipFocar: 'Escolher o imóvel', repAnaLimpar: 'Voltar a todos os imóveis', projAnaLimpar: 'Voltar a todos os imóveis',
+  dashPersonalizarPainel: 'Personalizar painel', 'CW.backToDash': 'Visão geral', 'CW.resetDashOrder': 'Repor ordem',
+  'CW.exitEdit': 'Concluir', fiscoEscolherAno: 'Escolher o ano', limparAmbito: 'Limpar o titular',
+  hdrFiltToggle: 'Todos · por inteiro', fiscoPartilhar: 'Partilhar resumo', fiscoCsv: 'Exportar CSV',
+  fiscoVerGuia: 'Guia de preenchimento', fiscoSetIrs: 'Escolher a coluna do IRS', fiscoSetTitular: 'Escolher o titular',
+  // listas, filtros e seleção
+  lpMenu: 'Opções', lfClear: 'Limpar', lfToggle: 'Filtros', lfApply: 'Fechar', lfLimparCampo: 'Limpar o campo',
+  lqLimpar: 'Limpar a pesquisa', limparFiltroAtual: 'Limpar filtros',
+  'CW.selTodos': 'Selecionar todos os movimentos', 'CW.selEntrar': 'Selecionar', 'CW.selEntrarTodos': 'Selecionar todos',
+  'CW.selSair': 'Cancelar', 'CW.selTagToggle': 'Marcar uma etiqueta', 'CW.selGravar': 'Aplicar',
+  'CW.selEditar': 'Editar os selecionados', 'CW.selApagar': 'Apagar os selecionados', 'CW.selLTodos': 'Selecionar todos',
+  'CW.selLVisEstado': 'Realizada ou falta', 'CW.selLSair': 'Cancelar', 'CW.selLApagar': 'Apagar',
+  'CW.selLMudo': 'Mudar os selecionados', 'CW.selLTransferir': 'Transferir o controlo',
+  // tarefas
+  tfAbrir: 'Abrir as tarefas', tfFechar: 'Fechar', tfGuardar: 'Guardar', tfNovaTarefa: 'Adicionar tarefa',
+  tfLimparPesquisa: 'Limpar a pesquisa', tfDobrar: 'Abrir ou fechar uma secção', tfPegaClique: 'Arrastar a tarefa',
+  tfEditarTarefa: 'Editar a tarefa', tfRemoverTarefa: 'Remover a tarefa', tfNovaSeccao: 'Nova secção',
+  tfRemoverSeccao: 'Remover a secção', tfMudarNomeSeccao: 'Mudar o nome da secção',
+  // notificações
+  notifModal: 'Abrir as notificações', notifLido: 'Marcar tudo como lido', notifTransfVer: 'Ver',
+  notifTransfAceitar: 'Aceitar', notifTransfRecusar: 'Recusar', notifTransfCancelar: 'Cancelar',
+  // definições
+  addCat: 'Nova categoria', delCat: 'Apagar a categoria', addSub: 'Nova subcategoria', delSub: 'Apagar a subcategoria',
+  renameSub: 'Mudar o nome', mudarNomeCategoria: 'Mudar o nome da categoria', defCatAbrir: 'Abrir uma categoria',
+  defArvoreEscolher: 'Escolher na árvore de categorias', resetCats: 'Repor as de origem',
+  resetIrsMapa: 'Repor as colunas do Anexo F', addTag: 'Nova etiqueta', delTag: 'Apagar a etiqueta',
+  groupModal: 'Novo grupo', delGroup: 'Apagar o grupo', grupoTipoEscolher: 'Escolher o tipo de grupo',
+  fcModal: 'Novo filtro comum', fcGuardar: 'Guardar', delFiltroComum: 'Apagar o filtro comum',
+  temaEscolher: 'Escolher o tema', setTheme: 'Escolher o tema', exportarSoMeu: 'Guardar cópia', driveOpen: 'Repor uma cópia',
+  bkPasteBox: 'Colar cópia', bkReporColado: 'Repor', undoImport: 'Desfazer a importação', swEscolherFicheiro: 'Escolher ficheiro',
+  swPasteBox: 'Colar o texto do CSV', swParseColado: 'Continuar', swDo: 'Importar', wipe: 'Apagar todos os dados',
+  aveMudarNasDefinicoes: 'Mudar os avisos por email', rstMudarNasDefinicoes: 'Mudar nas Definições',
+  // ajuda, apresentações, tutorial, novidades e QA
+  aprResponder: 'Não mostrar mais ou voltar à apresentação', aprPassar: 'Anterior', aprSeguinte: 'Seguinte',
+  aprRever: 'Rever uma apresentação', aprMarcarTodasVistas: 'Marcar todas como vistas',
+  'CW.guiaAbrir': 'Abrir o tutorial', 'CW.guiaFechar': 'Fechar o tutorial', 'CW.guiaAnterior': 'Anterior',
+  'CW.guiaSeguinte': 'Seguinte', 'CW.passosFora': 'Dispensar os primeiros passos', 'CW.novToggle': 'Abrir ou fechar uma novidade',
+  'CW.novFechar': 'Continuar', 'CW.atualizarAgora': 'Atualizar agora', fecharFaixaAtualizar: 'Depois',
+  'CW.newTicket': 'Novo pedido', 'CW.ticketTipo': 'Escolher o tipo de pedido', 'CW.sendTicket': 'Enviar',
+  'CW.ticketsDeNovo': 'Tentar de novo', 'CW.perguntaAbrir': 'Abrir uma pergunta frequente',
+  rstResponder: 'Aceitar ou Recusar o rasto', qaEnviar: 'Enviar ticket', qaGravidade: 'Escolher a gravidade',
+  qaRemoverImagem: 'Remover a imagem', qaNovoTicket: 'Novo ticket', qaCarregarDeNovo: 'Tentar de novo',
+  qaDobrar: 'Abrir ou fechar um ticket', qaAbrirTicket: 'Abrir o ticket', qaRemover: 'Remover', qaReabrir: 'Reabrir',
+  qaImagemDeNovo: 'Tentar de novo',
+  // conta, entrada, termos e documentos
+  'CW.showAuth': 'Iniciar sessão', 'CW.submitAuth': 'Entrar ou criar conta', 'CW.modoDaEntrada': 'Entrar ou criar conta',
+  'CW.verPalavraPasse': 'Mostrar a palavra-passe', 'CW.esqueci': 'Esqueci-me da palavra-passe', fecharRepor: 'Cancelar',
+  'CW.reporConfirmar': 'Guardar a palavra-passe nova', 'CW.naoSouEu': 'Não sou eu', 'CW.chegadaDepois': 'Agora não',
+  'CW.logout': 'Terminar sessão', 'CW.deleteAccount': 'Apagar a conta', 'CW.doDeleteAccount': 'Apagar definitivamente',
+  'CW.savePassword': 'Guardar a palavra-passe', 'CW.editProfile': 'Editar o perfil', 'CW.copyId': 'Copiar o id',
+  'CW.readDoc': 'Ler os Termos ou a Privacidade', 'CW.closeDoc': 'Voltar', 'CW.acceptLegal': 'Começar',
+  'CW.acceptTerms': 'Aceitar e continuar', 'CW.refuseTerms': 'Recusar e apagar a conta', 'CW.doRefuseTerms': 'Apagar definitivamente',
+  // partilha, proprietários, colaboradores e grupos
+  'CW.addConn': 'Ligar', 'CW.acceptConn': 'Aceitar a ligação', 'CW.delConn': 'Recusar ou cancelar a ligação',
+  'CW.sharesModal': 'Casas partilhadas', 'CW.shareResponder': 'Responder à proposta de divisão',
+  'CW.answerProposal': 'Responder à proposta de divisão', 'CW.proposeShares': 'Propor nova divisão',
+  'CW.shareProporAbrir': 'Propor nova divisão', 'CW.shareProporFechar': 'Não propor',
+  'CW.ligacaoCopiar': 'Copiar', 'CW.ligacaoRodar': 'Rodar', 'CW.ligacaoDesativar': 'Desativar', 'CW.ligacaoCriar': 'Criar ligação',
+  'CW.pedidoAceitar': 'Aceitar', 'CW.pedidoRecusar': 'Recusar', 'CW.pedidoCancelar': 'Cancelar pedido',
+  'CW.cargoModal': 'Editar o cargo', 'CW.cargoExemplo': 'Escolher um cargo de exemplo', 'CW.cargoPermissoes': 'Permissões',
+  'CW.apagarCargo': 'Apagar o cargo', 'CW.conviteModal': 'Convidar', 'CW.conviteCargo': 'Escolher o cargo do convite',
+  'CW.conviteGrupo': 'Escolher o grupo do convite', 'CW.criarConvite': 'Criar ligação de convite',
+  'CW.partilharLigacao': 'Partilhar…', 'CW.copiar': 'Copiar ligação', 'CW.mudarColaborador': 'Mudar cargo ou imóveis',
+  cwGerirColaboradores: 'Gerir', 'CW.removerColaborador': 'Remover', 'CW.revogarConvite': 'Revogar', 'CW.sairDeImovel': 'Deixar de colaborar',
+  'CW.aceitarConvite': 'Aceitar convite', 'CW.enviarPedido': 'Enviar pedido', 'CW.entrarNoGrupo': 'Pedir para entrar',
+  'CW.grupoModal': 'Abrir o grupo', 'CW.grupoPartilhar': 'Partilhar este grupo', 'CW.grupoImoveis': 'Adicionar imóveis ao grupo',
+  'CW.grupoRemoverImovel': 'Remover o imóvel do grupo', 'CW.grupoRemoverMembro': 'Remover do grupo', 'CW.grupoSair': 'Sair do grupo',
+  'CW.grupoRenomear': 'Mudar o nome do grupo', 'CW.grupoApagar': 'Apagar o grupo', 'CW.casasDoGrupoCom': 'Casas partilhadas',
+  'CW.grupoAceitarPedido': 'Aceitar', 'CW.grupoRecusarPedido': 'Recusar', 'CW.grupoCancelarPedido': 'Cancelar pedido',
+  'CW.grupoLigacaoCopiar': 'Copiar', 'CW.grupoLigacaoRodar': 'Rodar', 'CW.grupoLigacaoDesativar': 'Desativar',
+  'CW.grupoLigacaoCriar': 'Criar ligação',
+};
+// os elementos que respondem ao toque sem data-click, pela classe ou pelo id
+var BOTOES_RASTO = { 'escolha-botao': 'Aceitar ou Recusar o rasto', bg: 'Fora da janela' };
+// os campos e os outros elementos que respondem ao toque, pela etiqueta (com o artigo, para a frase)
+var CAMPOS_RASTO = {
+  input: 'num campo', textarea: 'numa caixa de texto', select: 'numa lista de escolha', label: 'no rótulo de um campo',
+  summary: 'numa secção que abre e fecha', button: 'num botão', a: 'numa ligação',
+};
+// os sítios sem nada para carregar, pelo id ou pela classe (com a preposição: «Tocou num cartão»)
+var SITIOS_RASTO = {
+  view: 'no fundo do ecrã', raiz: 'no fundo do ecrã', nav: 'na gaveta', tabbar: 'na barra de baixo', abasArea: 'nas abas',
+  pageTitle: 'no título do ecrã', pageSub: 'no subtítulo do ecrã', top: 'no cabeçalho', toast: 'num aviso',
+  modalBody: 'no corpo de uma janela', modalTitle: 'no título de uma janela', modalFoot: 'no rodapé de uma janela',
+  sheet: 'numa janela', body: 'no corpo de uma janela', head: 'no cabeçalho de uma janela', foot: 'no rodapé de uma janela',
+  card: 'num cartão', cartao: 'num cartão', small: 'num texto pequeno', hint: 'num texto de ajuda', badge: 'num selo', form: 'num formulário',
+  req: 'na marca de obrigatório', stat: 'numa linha de valores', flabel: 'no rótulo de um campo', lbl: 'num rótulo',
+  toolbar: 'numa barra de botões', empty: 'numa mensagem de lista vazia', num: 'num número', n: 'num número',
+  title: 'num título', 'section-title': 'num título de secção', 'card-tit': 'no título de um cartão', list: 'numa lista',
+  row: 'numa linha', 'row-between': 'numa linha', row3: 'numa linha', linha: 'numa linha', sect: 'numa secção',
+  ic: 'num ícone', 'chips-fila': 'numa fila de filtros', chip: 'num filtro', avatar: 'nas iniciais de uma pessoa',
+  disp: 'num valor', check: 'numa caixa de escolha', segm: 'num seletor', seg: 'num seletor', table: 'numa tabela',
+  tablewrap: 'numa tabela', cols: 'numa grelha', grid: 'numa grelha', txt: 'num texto', chartbox: 'num gráfico',
+  legend: 'na legenda de um gráfico', kpi: 'num indicador', neg: 'num valor negativo', amber: 'num aviso',
+  'imv-linha': 'no cartão de um imóvel', 'mov-linha': 'num movimento', txrow: 'num movimento', calday: 'num dia do calendário',
+  espera: 'numa espera', 'atencao-linha': 'num aviso', 'atencao-txt': 'num aviso',
+  // a montra
+  hero: 'no topo da montra', wrap: 'no fundo da página', tile: 'num cartão', 'm-cartao': 'num cartão da maquete',
+  telemovel: 'na maquete do telemóvel', ecra: 'na maquete do telemóvel', 'm-sub': 'num texto da maquete',
+  sub: 'num texto', tit: 'num título', chapeu: 'num título', valor: 'num valor', mark: 'num destaque',
+  'banda-noite': 'na secção das contas entre donos', faz: 'na secção do resto da gestão', ligado: 'na secção «tudo ligado»',
+  'faixa-topo': 'no cabeçalho', 'rodape-marca': 'no rodapé', computador: 'na maquete do computador',
+};
+// as famílias de classes da app, pelo prefixo (quando a classe exata não está em SITIOS_RASTO)
+var FAMILIAS_RASTO = [
+  ['apr-', 'na apresentação'], ['imv-', 'na ficha de um imóvel'], ['ct-', 'num contrato'], ['mov-', 'num movimento'],
+  ['tx', 'num movimento'], ['cred-', 'num crédito'], ['pes-', 'na ficha de uma pessoa'], ['vg-', 'na visão geral'],
+  ['def-', 'nas Definições'], ['fis-', 'no IRS'], ['cal', 'no calendário'], ['tf-', 'nas tarefas'], ['qa-', 'nos tickets de QA'],
+  ['grp-', 'num grupo'], ['colab-', 'nos colaboradores'], ['ava-', 'na avaliação'], ['ana-', 'numa análise'],
+  ['vis-', 'numa visita'], ['pt-', 'na apresentação'], ['upd-', 'na versão nova'], ['nov-', 'nas novidades'],
+  ['pc-', 'na maquete do computador'], ['m-', 'na maquete do telemóvel'], ['escolha-', 'na faixa do rasto'],
+];
+// as etiquetas, quando nem o id nem a classe dizem nada
+var ETIQUETAS_RASTO = {
+  html: 'no fundo do ecrã', body: 'no fundo do ecrã', main: 'no fundo do ecrã', header: 'no cabeçalho', footer: 'no rodapé',
+  nav: 'na navegação', aside: 'na barra lateral', section: 'numa secção', svg: 'num gráfico', img: 'numa imagem',
+  h1: 'num título', h2: 'num título', h3: 'num título', h4: 'num título', p: 'num texto', span: 'num texto', b: 'num texto',
+  strong: 'num texto', small: 'num texto pequeno', li: 'numa linha de uma lista', ul: 'numa lista', ol: 'numa lista',
+  table: 'numa tabela', td: 'numa tabela', th: 'numa tabela', tr: 'numa tabela', dl: 'numa lista', dt: 'numa lista', dd: 'numa lista',
+};
+// os tipos de registo do evento «dados» (worker/src/lib/rasto.js:KINDS_DOS_DADOS), pela ordem em que se dizem
+var DADOS_RASTO = [
+  ['house', 'imóvel', 'imóveis'], ['contract', 'contrato', 'contratos'], ['tx', 'movimento', 'movimentos'],
+  ['rec', 'planeado', 'planeados'], ['tpl', 'modelo', 'modelos'], ['visit', 'visita', 'visitas'],
+  ['tenant', 'inquilino', 'inquilinos'], ['group', 'grupo', 'grupos'], ['profile', 'o perfil'], ['settings', 'as definições'],
+];
+// as três operações do evento «dados», pelo sinal no alvo e pela ordem em que se dizem
+var OPERACOES_RASTO = [['+', 'Adicionou'], ['~', 'Editou'], ['-', 'Removeu']];
+
+/* Um nome do rasto em HTML: em palavras quando um dicionário o conhece; o
+   descritor cru e discreto quando não.
+   Recebe: p — { txt, cru } (txt vazio quando não se sabe).
+   Devolve: string HTML ('—' quando não há nada). */
+function palavraRastoHtml(p) {
+  if (p && p.txt) return esc(p.txt);
+  return p && p.cru ? '<code class="rs-cru">' + esc(p.cru) + '</code>' : '—';
+}
+/* O ecrã de um evento em palavras: um separador da app, uma subpágina das
+   Definições («Definições › Tema»), uma página da montra ou uma secção dela.
+   Recebe: ecra — o ecrã guardado (string ou null).
+   Devolve: { txt, cru, seccao } (seccao true numa secção da montra). */
+function ecraRasto(ecra) {
+  var e = String(ecra || '');
+  if (!e) return { txt: '', cru: '' };
+  if (e.charAt(0) === '#') return { txt: SECCOES_RASTO[e.slice(1)] ? '«' + SECCOES_RASTO[e.slice(1)] + '»' : '', cru: e, seccao: true };
+  if (e.charAt(0) === '/') return { txt: PAGINAS_RASTO[e] || '', cru: e };
+  var partes = e.split('/');
+  if (partes[0] === 'settings' && partes.length > 1) {
+    return { txt: SUBPAGINAS_RASTO[partes[1]] ? 'Definições › ' + SUBPAGINAS_RASTO[partes[1]] : '', cru: e };
+  }
+  return { txt: ECRAS_RASTO[e] || '', cru: e };
+}
+/* Uma janela em palavras, para ir depois de «janela»: as de nome próprio,
+   a apresentação de um separador, ou a da ação que a abriu («de «Adicionar
+   ou editar imóvel»»).
+   Recebe: janela — o id guardado (string ou null).
+   Devolve: { txt, cru }. */
+function janelaRasto(janela) {
+  var j = String(janela || '');
+  if (!j) return { txt: '', cru: '' };
+  if (JANELAS_RASTO[j]) return { txt: JANELAS_RASTO[j], cru: j };
+  if (j.indexOf('apresentacao/') === 0) {
+    var de = ECRAS_RASTO[j.slice(13)];
+    return { txt: de ? 'da apresentação de ' + de : 'de uma apresentação', cru: j };
+  }
+  return { txt: ACOES_RASTO[j] ? 'de «' + ACOES_RASTO[j] + '»' : '', cru: j };
+}
+/* O destino de uma ligação em palavras: a app (entrar ou criar conta), os
+   documentos, uma secção da montra, um email ou um telefone.
+   Recebe: d — o que vem depois de «a:» (o host de fora, o caminho e as chaves).
+   Devolve: o nome (texto), ou '' quando não se conhece. */
+function ligacaoRasto(d) {
+  d = String(d || '');
+  if (d === 'mailto' || d === 'mailto:') return 'Enviar um email';
+  if (d === 'tel' || d === 'tel:') return 'Telefonar';
+  if (d.charAt(0) === '#') return SECCOES_RASTO[d.slice(1)] ? 'Ir à secção «' + SECCOES_RASTO[d.slice(1)] + '»' : '';
+  var m = /^([a-z0-9.-]*)(\/[^?]*)?(?:\?(.*))?$/.exec(d);
+  if (!m) return '';
+  var host = m[1], caminho = m[2] || '/', chaves = (m[3] || '').split('&');
+  if (/^(?:app|dev)\.rendorium\.com$/.test(host) && caminho === '/') return chaves.indexOf('criar') > -1 ? 'Criar conta' : 'Entrar na app';
+  if (host && !/(?:^|\.)rendorium\.com$/.test(host)) return '';
+  if (caminho.indexOf('/privacidade') === 0) return 'Política de Privacidade';
+  if (caminho.indexOf('/termos') === 0) return 'Termos e Condições';
+  if (caminho === '/' && !host) return chaves.indexOf('criar') > -1 ? 'Criar conta' : 'Início';
+  return '';
+}
+/* Um descritor em palavras: se responde ao toque (um botão, uma ligação, um
+   campo) e o nome dele como a app o escreve; ou o sítio onde se tocou, com a
+   preposição («num cartão»). Nunca há texto da página para mostrar: o
+   descritor não o leva.
+   Recebe: alvo — o descritor guardado (string ou null).
+   Devolve: { interativo: true|false|null, rotulo, sitio, exato, cru } —
+   rotulo é o nome de um botão («Guardar»), sitio o de um sítio ou de um
+   elemento genérico («num campo»), exato se o sítio se conhece pelo nome (e
+   não pela família ou pela etiqueta), cru o descritor tal e qual. */
+function alvoRasto(alvo) {
+  var a = String(alvo || '');
+  var r = { interativo: null, rotulo: '', sitio: '', exato: false, cru: a };
+  if (!a) return r;
+  if (a.indexOf('click:') === 0) { r.interativo = true; r.rotulo = ACOES_RASTO[a.slice(6)] || ''; r.cru = a.slice(6); return r; }
+  if (a.indexOf('a:') === 0) { r.interativo = true; r.rotulo = ligacaoRasto(a.slice(2)); r.sitio = r.rotulo ? '' : 'numa ligação'; return r; }
+  var m = /^([a-z][a-z0-9-]*)(?:([#.])(.+))?$/.exec(a);
+  if (!m) return r;
+  var tag = m[1], nome = m[3] || '';
+  if (CAMPOS_RASTO[tag]) {
+    r.interativo = true;
+    if (BOTOES_RASTO[nome]) r.rotulo = BOTOES_RASTO[nome];
+    else r.sitio = CAMPOS_RASTO[tag];
+    return r;
+  }
+  r.interativo = false;
+  if (BOTOES_RASTO[nome]) { r.interativo = true; r.rotulo = BOTOES_RASTO[nome]; return r; }
+  if (nome && SITIOS_RASTO[nome]) { r.sitio = SITIOS_RASTO[nome]; r.exato = true; return r; }
+  for (var i = 0; !r.sitio && nome && i < FAMILIAS_RASTO.length; i++) {
+    if (nome.indexOf(FAMILIAS_RASTO[i][0]) === 0) r.sitio = FAMILIAS_RASTO[i][1];
+  }
+  if (!r.sitio) r.sitio = ETIQUETAS_RASTO[tag] || '';
+  // a etiqueta sozinha diz tudo; uma família ou uma classe que não se conhece leva o descritor ao lado
+  r.exato = !nome && !!r.sitio;
+  return r;
+}
+/* Se um toque caiu num botão (ou noutra coisa que responde). O cliente
+   decide: marca em-vao o que não respondia, e um toque sem sinal respondeu;
+   só num toque repetido, que tapa o em-vao, decide o descritor.
+   Recebe: e — o evento (tipo toque); a — o alvoRasto(e.alvo).
+   Devolve: true/false. */
+function toqueEmBotaoRasto(e, a) {
+  if (e.sinal === 'em-vao') return false;
+  if (e.sinal === 'repetido') return a.interativo === true;
+  return true;
+}
+/* Onde, na janela, caiu um toque: só para os toques fora de botões.
+   Recebe: e — o evento (x, y em permilagem; vw, vh em px).
+   Devolve: string HTML ('' sem posição). */
+function posicaoRastoHtml(e) {
+  if (e.x == null || e.y == null) return '';
+  return '<span class="sub n">a ' + Math.round(e.x / 10) + '% da esquerda e ' + Math.round(e.y / 10) + '% do cimo' +
+    (e.vw && e.vh ? ' · janela ' + esc(e.vw) + '×' + esc(e.vh) : '') + '</span>';
+}
+/* Um toque em palavras. Num botão, o nome dele como a app o escreve, sem
+   posição: «Tocou em «Guardar»». Fora de botões, o nome do sítio e a
+   posição: «Tocou num cartão», a 51% da esquerda. O que o dicionário não
+   conhece vai cru, discreto, ao lado.
+   Recebe: e — o evento (tipo toque).
+   Devolve: string HTML. */
+function rastoToqueHtml(e) {
+  var a = alvoRasto(e.alvo);
+  var cru = '<code class="rs-cru">' + esc(a.cru) + '</code>';
+  if (toqueEmBotaoRasto(e, a)) {
+    if (a.rotulo) return '<span>Tocou em <span class="rs-rotulo">«' + esc(a.rotulo) + '»</span></span>';
+    if (a.sitio) return '<span>Tocou ' + esc(a.sitio) + '</span>' + cru;
+    return '<span>Tocou ' + (a.cru ? 'num botão' : 'sem alvo') + '</span>' + (a.cru ? cru : '');
+  }
+  if (a.sitio) return '<span>Tocou ' + esc(a.sitio) + '</span>' + (a.exato ? '' : cru) + posicaoRastoHtml(e);
+  return '<span>Tocou ' + (a.cru ? 'em ' + cru : 'num sítio sem nome') + '</span>' + posicaoRastoHtml(e);
+}
+/* As contagens de um evento «dados», lidas do alvo («dados:house+1,tx-3»):
+   só os tipos e as operações conhecidos.
+   Recebe: alvo — o alvo guardado; soma (opcional) — um objeto a que somar.
+   Devolve: { 'house+': 1, 'tx-': 3, … } (o objeto da soma, quando veio). */
+function contagensRasto(alvo, soma) {
+  var c = soma || {};
+  var s = String(alvo || '');
+  if (s.indexOf('dados:') !== 0) return c;
+  s.slice(6).split(',').forEach(function (p) {
+    var m = /^([a-z]+)([+~-])(\d{1,6})$/.exec(p);
+    if (m) c[m[1] + m[2]] = (c[m[1] + m[2]] || 0) + Number(m[3]);
+  });
+  return c;
+}
+/* Uma lista em português: «a», «a e b», «a, b e c».
+   Recebe: l — a lista de textos.
+   Devolve: o texto. */
+function juntarRasto(l) {
+  return l.length < 2 ? (l[0] || '') : l.slice(0, -1).join(', ') + ' e ' + l[l.length - 1];
+}
+/* As contagens como uma frase: «Adicionou 1 imóvel e 36 movimentos; editou
+   2 contratos; removeu 3 movimentos», com os plurais certos.
+   Recebe: c — as contagens (contagensRasto).
+   Devolve: o texto ('' sem nada contado). */
+function fraseDadosRasto(c) {
+  var frases = [];
+  OPERACOES_RASTO.forEach(function (op) {
+    var partes = [];
+    DADOS_RASTO.forEach(function (k) {
+      var n = c[k[0] + op[0]];
+      if (!n) return;
+      partes.push(k.length === 2 ? k[1] : contadoRasto(n, k[1], k[2]));
+    });
+    if (partes.length) frases.push((frases.length ? op[1].toLowerCase() : op[1]) + ' ' + juntarRasto(partes));
+  });
+  return frases.join('; ');
+}
+/* O que se fez num evento, em palavras: o toque (rastoToqueHtml), o ecrã, a
+   página e a secção que se abriram, as janelas, o guardar, os erros, e os
+   registos que mudaram.
+   Recebe: e — o evento.
+   Devolve: string HTML. */
+function rastoFezHtml(e) {
+  var t = e.tipo;
+  if (t === 'toque') return rastoToqueHtml(e);
+  if (t === 'dados') {
+    var f = fraseDadosRasto(contagensRasto(e.alvo));
+    return f ? '<span class="rs-rotulo">' + esc(f) + '</span>' : '<code class="rs-cru">' + esc(e.alvo || '') + '</code>';
+  }
+  if (t === 'ecra') return '<span>Abriu o ecrã ' + palavraRastoHtml(ecraRasto(e.ecra)) + '</span>';
+  if (t === 'pagina') return '<span>Abriu a página ' + palavraRastoHtml(ecraRasto(e.ecra)) + '</span>';
+  if (t === 'secao') return '<span>Viu a secção ' + palavraRastoHtml(ecraRasto(e.ecra)) + '</span>';
+  if (t === 'janela-abre' || t === 'janela-fecha') {
+    return '<span>' + (t === 'janela-abre' ? 'Abriu' : 'Fechou') + ' a janela ' + palavraRastoHtml(janelaRasto(e.janela)) + '</span>';
+  }
+  if (t === 'guardar') return '<span>Guardou</span>';
+  if (t === 'erro-campo') return '<span>Um campo deu erro ao guardar</span>' + (e.alvo ? '<code class="rs-cru">' + esc(e.alvo) + '</code>' : '');
+  if (t === 'erro') return '<span>A app deu um erro</span>';
+  return esc(TIPOS_RASTO[t] || t || '—');
+}
+/* Onde aconteceu um evento: o ecrã e, por cima dele, a janela.
+   Recebe: e — o evento.
+   Devolve: string HTML ('—' sem ecrã nem janela). */
+function rastoOndeHtml(e) {
+  var ec = e.tipo === 'secao' ? { txt: '', cru: '' } : ecraRasto(e.ecra);
+  var j = janelaRasto(e.janela);
+  var partes = [];
+  if (ec.txt || ec.cru) partes.push(palavraRastoHtml(ec));
+  if (j.txt || j.cru) partes.push('janela ' + palavraRastoHtml(j));
+  return partes.length ? partes.join(' › ') : '—';
+}
+/* O alvo de uma linha do resumo por ecrã em palavras: o nome do botão, ou o
+   sítio; o desconhecido cru.
+   Recebe: alvo — o descritor.
+   Devolve: string HTML. */
+function rastoAlvoHtml(alvo) {
+  var a = alvoRasto(alvo);
+  if (a.rotulo) return '«' + esc(a.rotulo) + '»';
+  if (a.sitio) return maiuscula(esc(a.sitio)) + (a.exato ? '' : ' <code class="rs-cru">' + esc(a.cru) + '</code>');
+  return a.cru ? '<code class="rs-cru">' + esc(a.cru) + '</code>' : '—';
+}
+/* O topo de uma sessão: as páginas visitadas, pela ordem e sem repetir a
+   mesma seguida («Visão geral › Imóveis › Contratos»), e os registos que
+   mudaram nela, numa frase.
+   Recebe: evs — os eventos da sessão, pela ordem em que aconteceram.
+   Devolve: string HTML ('' quando não há nem uma coisa nem outra). */
+function rastoSessaoResumoHtml(evs) {
+  var paginas = [], ultima = null, soma = {};
+  evs.forEach(function (e) {
+    if (e.tipo === 'dados') { contagensRasto(e.alvo, soma); return; }
+    if (e.tipo === 'secao' || !e.ecra) return;
+    var p = ecraRasto(e.ecra);
+    var chave = p.txt || p.cru;
+    if (chave === ultima) return;
+    ultima = chave;
+    paginas.push(palavraRastoHtml(p));
+  });
+  var dados = fraseDadosRasto(soma);
+  if (!paginas.length && !dados) return '';
+  return '<div class="rs-sessao-resumo">' +
+    (paginas.length ? '<p><span class="forte">Páginas visitadas:</span> ' + paginas.join(' › ') + '</p>' : '') +
+    (dados ? '<p><span class="forte">Dados:</span> ' + esc(dados) + '</p>' : '') + '</div>';
+}
+
+/* O sinal de um id, ou null quando o id não é um dos cinco.
+   Recebe: id — o id do sinal (string, como vem do servidor).
+   Devolve: a entrada de SINAIS_RASTO, ou null. */
+function sinalRasto(id) {
+  for (var i = 0; i < SINAIS_RASTO.length; i++) if (SINAIS_RASTO[i].id === id) return SINAIS_RASTO[i];
+  return null;
+}
+/* Quantos sinais há numa contagem por sinal.
+   Recebe: sinais — {id: n} (pode faltar).
+   Devolve: o total (número). */
+function somaSinaisRasto(sinais) {
+  return SINAIS_RASTO.reduce(function (s, x) { return s + (Number((sinais || {})[x.id]) || 0); }, 0);
+}
+/* Os selos dos sinais com a contagem, só os que aconteceram; o contorno e a
+   letra levam a cor, para se lerem também quando o browser escurece o fundo.
+   Recebe: sinais — {id: n}; vazio (opcional) — o HTML quando não há nenhum.
+   Devolve: string HTML com os selos. */
+function rastoSinaisHtml(sinais, vazio) {
+  var selos = SINAIS_RASTO.filter(function (x) { return Number((sinais || {})[x.id]) > 0; }).map(function (x) {
+    return '<span class="badge rs-s ' + x.tom + '">' + x.nomes + ' <b class="n">' + esc(numero(sinais[x.id])) + '</b></span>';
+  });
+  return selos.length ? '<span class="rs-sinais">' + selos.join('') + '</span>' : (vazio == null ? '<span class="sub">Nenhum</span>' : vazio);
+}
+/* As origens como selos: a app em cobalto, a montra em cinzento.
+   Recebe: origens — lista de 'app' e 'montra'.
+   Devolve: string HTML com os selos. */
+function rastoOrigensHtml(origens) {
+  return (origens || []).filter(Boolean).map(function (o) { return badge(o === 'app' ? 'ac' : '', esc(ORIGENS_RASTO[o] || o)); }).join(' ');
+}
+// um número com a palavra no singular ou no plural: 1 sessão, 3 sessões
+// Recebe: n — o número; um — a palavra para 1; varios — a palavra para os outros.
+// Devolve: o texto («1 sessão», «3 sessões»).
+function contadoRasto(n, um, varios) { n = Number(n) || 0; return (n === 1 ? '1 ' + um : numero(n) + ' ' + varios); }
+// a hora de um instante com os segundos: 16:58:07
+// Recebe: t — o instante (ms).
+// Devolve: o texto da hora.
+function horaRasto(t) { var d = new Date(t); return hora(t) + ':' + dois(d.getSeconds()); }
+// quanto durou uma sessão, como se diz: «menos de 1 s», «41 s», «12 min», «1 h 05 min»
+// Recebe: ms — a duração em milissegundos.
+// Devolve: o texto.
+function duracaoRasto(ms) {
+  ms = Math.max(0, Number(ms) || 0);
+  if (ms < 1000) return 'menos de 1 s';
+  if (ms < 3600000) return duracao(ms);
+  var m = Math.round(ms / 60000);
+  return Math.floor(m / 60) + ' h ' + dois(m % 60) + ' min';
+}
+// o período em dias, só os três que o servidor aceita (30 à falta de outro)
+// Recebe: dias — o que veio (número ou texto).
+// Devolve: 7, 30 ou 90.
+function diasRasto(dias) { var n = Number(dias); return n === 7 || n === 90 ? n : 30; }
+
+/* A porta do separador Rasto: com um alvo (o «Ver no rasto» da ficha, um
+   alvo da tabela da auditoria) vai à vista Equipa filtrada, que é só do
+   master; sem alvo, volta à vista que estava aberta — as Pessoas, à primeira.
+   Recebe: alvo (opcional) — o alvo da auditoria.
+   Devolve: nada — abre a vista. */
+function verRastoEntrada(alvo) {
+  if (eu.master && (alvo || rastoVista === 'equipa')) { verRasto(alvo); return; }
+  if (rastoModo === 'ecras') verRastoResumo(rastoDias);
+  else verRastoPessoas(rastoDias);
+}
+/* Troca de vista no Rasto (as abas do master).
+   Recebe: v — 'pessoas' ou 'equipa'.
+   Devolve: nada — abre a vista. */
+function mudarVistaRasto(v) {
+  rastoVista = v === 'equipa' && eu.master ? 'equipa' : 'pessoas';
+  if (typeof scrollTo === 'function') scrollTo(0, 0);
+  verRastoEntrada();
+}
+/* As abas do Rasto: Pessoas e Equipa. Só o master tem as duas; ao admin a
+   vista Equipa não abre, e com uma só não há abas.
+   Recebe: ativa — 'pessoas' ou 'equipa'.
+   Devolve: string HTML com as abas ('' a quem só tem uma vista). */
+function rastoAbasHtml(ativa) {
+  if (!eu.master) return '';
+  return '<div class="chips rs-abas" role="group" aria-label="Que rasto ver">' +
+    chip('Pessoas', ativa === 'pessoas', comAcao('mudarVistaRasto', ['pessoas'])) +
+    chip('Equipa', ativa === 'equipa', comAcao('mudarVistaRasto', ['equipa'])) + '</div>';
+}
+/* O cabeçalho da vista Pessoas, as abas e a barra dos filtros: por pessoa ou
+   por ecrã, e o período (7, 30 ou 90 dias).
+   Recebe: modo — 'lista' ou 'ecras'; dias — 7, 30 ou 90.
+   Devolve: string HTML do topo. */
+function rastoTopoHtml(modo, dias) {
+  var periodo = [7, 30, 90].map(function (n) {
+    return chip(n + ' dias', dias === n, comAcao(modo === 'ecras' ? 'verRastoResumo' : 'verRastoPessoas', [n]));
+  }).join('');
+  return cabecalho('Rasto', 'Cada toque na app e na montra, debaixo de um pseudónimo, para ver onde as pessoas se perdem. ' +
+      'Só de quem aceitou; fica 90 dias.') + rastoAbasHtml('pessoas') +
+    '<div class="card rs-barra">' +
+    '<div class="chips" role="group" aria-label="Como ver">' +
+    chip('Por pessoa', modo === 'lista', comAcao('verRastoPessoas', [dias])) +
+    chip('Por ecrã', modo === 'ecras', comAcao('verRastoResumo', [dias])) + '</div>' +
+    '<div class="chips" role="group" aria-label="Período">' + periodo + '</div></div>';
+}
+/* O que quer dizer cada sinal, numa secção que abre e fecha, por baixo das tabelas.
+   Devolve: string HTML da legenda. */
+function rastoLegendaHtml() {
+  return '<details class="card rs-legenda"><summary><span class="st-seta" aria-hidden="true">' + ic('baixo', 'i-sm') + '</span>' +
+    '<span class="forte">O que quer dizer cada sinal</span></summary><dl>' +
+    SINAIS_RASTO.map(function (x) { return '<dt>' + badge('rs-s ' + x.tom, x.nomes) + '</dt><dd class="sub">' + maiuscula(x.diz) + '</dd>'; }).join('') +
+    '</dl></details>';
+}
+/* O que mostrar quando o rasto falha: um 403 diz-se em palavras (o papel não
+   abre este rasto), um 404 diz que a pessoa já não tem rasto, e o resto vai ao
+   falha da casa com o Tentar outra vez certo.
+   Recebe: e — o Error (com e.status); acao, args — o que o Tentar outra vez corre;
+   volta (opcional) — o HTML do botão de voltar, para o 404.
+   Devolve: nada — escreve no conteúdo. */
+function falhaRasto(e, acao, args, volta) {
+  if (e && e.status === 403) {
+    el('conteudo').innerHTML = cabecalho('Rasto') + vazioHtml('Este rasto não abre ao teu papel.',
+      'O rasto das pessoas é do master e do admin; o suporte vê o de quem escreveu um pedido, a partir desse pedido. ' +
+      'A auditoria da equipa é só do master.', volta || '');
+    return;
+  }
+  if (e && e.status === 404) {
+    el('conteudo').innerHTML = cabecalho('Rasto') + vazioHtml('Esta pessoa já não tem rasto.',
+      'O pseudónimo não existe: a conta foi apagada, ou os eventos passaram dos 90 dias.', volta || '');
+    return;
+  }
+  falha(e, acao, args);
+}
+
+/* A vista Pessoas do Rasto, por pessoa: a lista dos pseudónimos do período,
+   cada um com a última atividade, as sessões, os eventos, as origens e os
+   sinais. Vazia, diz porquê — ninguém aceitou ainda, ou nada neste período —,
+   e para o saber pergunta pelos 90 dias.
+   Recebe: dias (opcional) — 7, 30 ou 90 (30 à falta de outro).
+   Devolve: nada — redesenha o conteúdo. */
+function verRastoPessoas(dias) {
+  dias = diasRasto(dias);
+  rastoDias = dias; rastoModo = 'lista'; rastoVista = 'pessoas';
+  nav('rasto');
+  var vez = ++rastoVez;
+  var topo = rastoTopoHtml('lista', dias);
+  el('conteudo').innerHTML = topo + esperaHtml('A ler o rasto das pessoas.');
+  pedir('/api/equipa/rasto/pessoas?dias=' + dias).then(function (d) {
+    var pessoas = d.pessoas || [];
+    if (pessoas.length || dias === 90) return { pessoas: pessoas, noventa: pessoas.length };
+    // vazio num período curto: os 90 dias dizem se ninguém aceitou ainda ou se foi só este período
+    return pedir('/api/equipa/rasto/pessoas?dias=90').then(function (d90) { return { pessoas: pessoas, noventa: (d90.pessoas || []).length }; },
+      function () { return { pessoas: pessoas, noventa: null }; });
+  }).then(function (r) {
+    if (vez !== rastoVez || seccao !== 'rasto') return;
+    rastoPessoasVistas = r.pessoas;
+    if (!r.pessoas.length) {
+      var noventa = '<button type="button" class="btn sm"' + comAcao('verRastoPessoas', [90]) + '>Ver os 90 dias</button>';
+      el('conteudo').innerHTML = topo + (r.noventa
+        ? vazioHtml('Ninguém nos últimos ' + dias + ' dias.', 'Há rasto mais antigo: ' + contadoRasto(r.noventa, 'pessoa', 'pessoas') + ' nos últimos 90 dias.', noventa)
+        : r.noventa === null
+          ? vazioHtml('Ninguém nos últimos ' + dias + ' dias.', 'Ou ninguém aceitou o rasto ainda, ou não houve atividade neste período.', noventa)
+          : vazioHtml('Ainda não há rasto de ninguém.', 'Ninguém aceitou o rasto ainda, na montra ou na app: quando alguém aceitar e tocar em alguma coisa, aparece aqui.' +
+              ' Os eventos ficam 90 dias, e em produção as contas de teste ficam de fora.'));
+      return;
+    }
+    el('conteudo').innerHTML = topo + rastoPessoasHtml(r.pessoas, rastoOrdem) + rastoLegendaHtml();
+  }).catch(function (e) { if (vez === rastoVez) falhaRasto(e, 'verRastoPessoas', [dias]); });
+}
+/* Muda a ordem da lista das pessoas sem voltar à rede.
+   Recebe: ordem — 'recentes' ou 'sinais'.
+   Devolve: nada — repinta a lista. */
+function ordenarRasto(ordem) {
+  rastoOrdem = ordem === 'sinais' ? 'sinais' : 'recentes';
+  if (!rastoPessoasVistas || !rastoPessoasVistas.length || seccao !== 'rasto' || rastoModo !== 'lista') return;
+  el('conteudo').innerHTML = rastoTopoHtml('lista', rastoDias) + rastoPessoasHtml(rastoPessoasVistas, rastoOrdem) + rastoLegendaHtml();
+}
+/* O cartão da lista das pessoas: quantas são e quantas tiveram sinais, a
+   ordem (as mais recentes, como vêm do servidor, ou as com mais sinais
+   primeiro) e a tabela, uma linha por pseudónimo — o pid abre a linha do tempo.
+   Recebe: pessoas — a lista do servidor; ordem — 'recentes' ou 'sinais'.
+   Devolve: string HTML do cartão. */
+function rastoPessoasHtml(pessoas, ordem) {
+  var lista = pessoas.slice();
+  if (ordem === 'sinais') {
+    lista.sort(function (a, b) { return somaSinaisRasto(b.sinais) - somaSinaisRasto(a.sinais) || (b.ultimo || 0) - (a.ultimo || 0); });
+  }
+  var comSinais = pessoas.filter(function (p) { return somaSinaisRasto(p.sinais) > 0; }).length;
+  var linhas = lista.map(function (p) {
+    return '<tr><td data-rot="Pessoa"><span class="rs-pessoa-id">' +
+      '<button type="button" class="ligacao rs-pid"' + comAcao('verRastoPessoa', [p.pid]) + '>' + esc(p.pid) + '</button>' +
+      (p.teste ? badge('wa', 'Conta de teste') : '') + (p.conta ? '' : badge('', 'Sem conta')) + '</span></td>' +
+      '<td class="n nw" data-rot="Última atividade">' + quando(p.ultimo) + '</td>' +
+      '<td class="r n" data-rot="Sessões">' + esc(numero(p.sessoes || 0)) + '</td>' +
+      '<td class="r n" data-rot="Eventos">' + esc(numero(p.eventos || 0)) + '</td>' +
+      '<td class="nw" data-rot="Origens">' + (rastoOrigensHtml(p.origens) || '—') + '</td>' +
+      '<td data-rot="Sinais">' + rastoSinaisHtml(p.sinais) + '</td></tr>';
+  }).join('');
+  return '<section class="card" id="rastoLista" aria-label="Pessoas com rasto"><div class="card-cab"><div class="card-cab-txt">' +
+    '<h2 class="card-tit">' + contadoRasto(pessoas.length, 'pessoa', 'pessoas') + '</h2>' +
+    '<p class="sub n">' + (comSinais ? contadoRasto(comSinais, 'pessoa com sinais de se ter perdido', 'pessoas com sinais de se terem perdido')
+      : 'Ninguém com sinais de se ter perdido') + (pessoas.length >= 200 ? ' · as 200 mais recentes' : '') + '</p></div>' +
+    '<div class="chips" role="group" aria-label="Ordem">' +
+    chip('Mais recentes', ordem !== 'sinais', comAcao('ordenarRasto', ['recentes'])) +
+    chip('Mais sinais', ordem === 'sinais', comAcao('ordenarRasto', ['sinais'])) + '</div></div>' +
+    '<div class="tb-rola"><table class="tb empilha rs-tb"><thead><tr><th>Pessoa</th><th>Última atividade</th><th class="r">Sessões</th>' +
+    '<th class="r">Eventos</th><th>Origens</th><th>Sinais</th></tr></thead><tbody>' + linhas + '</tbody></table></div></section>';
+}
+
+/* A vista Pessoas do Rasto, por ecrã: o resumo de onde a interface confunde
+   mais gente — cada ecrã e alvo com sinais, um número por sinal, o total e
+   quantas pessoas, do total maior para o menor.
+   Recebe: dias (opcional) — 7, 30 ou 90 (30 à falta de outro).
+   Devolve: nada — redesenha o conteúdo. */
+function verRastoResumo(dias) {
+  dias = diasRasto(dias);
+  rastoDias = dias; rastoModo = 'ecras'; rastoVista = 'pessoas';
+  nav('rasto');
+  var vez = ++rastoVez;
+  var topo = rastoTopoHtml('ecras', dias);
+  el('conteudo').innerHTML = topo + esperaHtml('A juntar os sinais por ecrã.');
+  pedir('/api/equipa/rasto/resumo?dias=' + dias).then(function (d) {
+    if (vez !== rastoVez || seccao !== 'rasto') return;
+    var linhas = (d.linhas || []).slice().sort(function (a, b) { return (b.total || 0) - (a.total || 0); });
+    el('conteudo').innerHTML = topo + (linhas.length ? rastoResumoHtml(linhas) + rastoLegendaHtml()
+      : vazioHtml('Nenhum sinal nos últimos ' + dias + ' dias.', 'Quando alguém se perder — um toque em vão, um vai-e-volta, uma desistência —, o ecrã e o alvo aparecem aqui.' +
+          (dias < 90 ? ' Experimenta um período maior.' : ' Só entra quem aceitou o rasto.'),
+          dias < 90 ? '<button type="button" class="btn sm"' + comAcao('verRastoResumo', [90]) + '>Ver os 90 dias</button>' : ''));
+  }).catch(function (e) { if (vez === rastoVez) falhaRasto(e, 'verRastoResumo', [dias]); });
+}
+/* A tabela do resumo por ecrã: ecrã, alvo, um número por sinal, o total e as pessoas.
+   Recebe: linhas — as do servidor, já ordenadas pelo total.
+   Devolve: string HTML do cartão. */
+function rastoResumoHtml(linhas) {
+  var corpo = linhas.map(function (l) {
+    var s = l.sinais || {};
+    return '<tr><td data-rot="Ecrã">' + palavraRastoHtml(ecraRasto(l.ecra)) + '</td>' +
+      '<td data-rot="Alvo">' + rastoAlvoHtml(l.alvo) + '</td>' +
+      SINAIS_RASTO.map(function (x) {
+        var n = Number(s[x.id]) || 0;
+        return '<td class="r n' + (n ? ' rs-n ' + x.tom : ' sub') + '" data-rot="' + x.nomes + '">' + (n ? esc(numero(n)) : '—') + '</td>';
+      }).join('') +
+      '<td class="r n forte" data-rot="Total">' + esc(numero(l.total || 0)) + '</td>' +
+      '<td class="r n" data-rot="Pessoas">' + esc(numero(l.pessoas || 0)) + '</td></tr>';
+  }).join('');
+  return '<section class="card" aria-label="Sinais por ecrã"><div class="card-cab"><div class="card-cab-txt">' +
+    '<h2 class="card-tit">Onde as pessoas se perdem</h2>' +
+    '<p class="sub">Cada ecrã e o sítio onde se tocou, do que juntou mais sinais para o que juntou menos' +
+    (linhas.length >= 100 ? ' (os 100 primeiros)' : '') + '.</p></div></div>' +
+    '<div class="tb-rola"><table class="tb empilha rs-tb"><thead><tr><th>Ecrã</th><th>Alvo</th>' +
+    SINAIS_RASTO.map(function (x) { return '<th class="r"><abbr title="' + x.nomes + '">' + x.curto + '</abbr></th>'; }).join('') +
+    '<th class="r">Total</th><th class="r">Pessoas</th></tr></thead><tbody>' + corpo + '</tbody></table></div></section>';
+}
+
+/* A linha do tempo de uma pessoa: o pseudónimo, as contagens, e uma secção
+   por sessão (a mais recente primeiro, e aberta; as outras fechadas), com
+   os eventos também do mais recente para o mais antigo. Quem chega de um pedido (o
+   suporte também) volta ao pedido e não tem a lista nem a ida à ficha; quem
+   chega da ficha volta à ficha.
+   Recebe: pid — o pseudónimo (string); voltaTipo (opcional) — 'pedido' ou
+   'conta'; voltaId (opcional) — o id do pedido ou da conta de onde se veio.
+   Devolve: nada — redesenha o conteúdo. */
+function verRastoPessoa(pid, voltaTipo, voltaId) {
+  voltaTipo = voltaTipo === 'pedido' || voltaTipo === 'conta' ? voltaTipo : '';
+  if (voltaTipo !== 'pedido') nav('rasto');
+  if (typeof scrollTo === 'function') scrollTo(0, 0);
+  var volta = voltaTipo === 'pedido'
+    ? '<button type="button" class="btn sm ghost rs-volta"' + comAcao('verPedido', [voltaId]) + '>' + ic('voltar') + 'Voltar ao pedido</button>'
+    : voltaTipo === 'conta'
+      ? '<button type="button" class="btn sm ghost rs-volta"' + comAcao('verPessoa', [voltaId]) + '>' + ic('voltar') + 'Voltar à ficha</button>'
+      : '<button type="button" class="btn sm ghost rs-volta"' + comAcao('ir', ['rasto']) + '>' + ic('voltar') + 'Voltar às pessoas</button>';
+  var vez = ++rastoVez, secAberta = seccao;
+  el('conteudo').innerHTML = volta + esperaHtml('A ler o rasto de ' + esc(pid) + '.');
+  pedir('/api/equipa/rasto/pessoa/' + encodeURIComponent(pid)).then(function (d) {
+    if (vez !== rastoVez || seccao !== secAberta) return;
+    el('conteudo').innerHTML = volta + rastoPessoaHtml(d, voltaTipo);
+  }).catch(function (e) { if (vez === rastoVez) falhaRasto(e, 'verRastoPessoa', [pid, voltaTipo, voltaId], volta); });
+}
+/* O HTML da linha do tempo de uma pessoa: o cabeçalho (o pid, se tem conta,
+   se é de teste, a ida à ficha a quem abre as Pessoas), as contagens dos
+   sinais e as sessões, com a passagem da montra para a app entre elas dita
+   numa linha.
+   Recebe: d — a resposta do servidor ({pid, userId, teste, sessoes}); voltaTipo —
+   de onde se veio ('pedido' tira a ida à ficha).
+   Devolve: string HTML. */
+function rastoPessoaHtml(d, voltaTipo) {
+  var sessoes = (d.sessoes || []).filter(function (s) { return s && (s.eventos || []).length; })
+    .sort(function (a, b) { return inicioRasto(b) - inicioRasto(a); });
+  var todos = [], contas = {};
+  sessoes.forEach(function (s) { todos = todos.concat(s.eventos); });
+  todos.forEach(function (ev) { if (sinalRasto(ev.sinal)) contas[ev.sinal] = (contas[ev.sinal] || 0) + 1; });
+  var ficha = d.userId && veRastoTodos && voltaTipo !== 'pedido' && eu.cats.indexOf('user') > -1
+    ? '<button type="button" class="btn"' + comAcao('verPessoa', [d.userId]) + '>Abrir a ficha</button>' : '';
+  var marcas = (d.userId ? badge('ok', 'Com conta') : badge('', 'Só montra, sem conta')) + (d.teste ? badge('wa', 'Conta de teste') : '');
+  var cab = cabecalho('<span class="rs-pid">' + esc(d.pid) + '</span>',
+    '<span class="n">' + contadoRasto(sessoes.length, 'sessão', 'sessões') + ' · ' + contadoRasto(todos.length, 'evento', 'eventos') +
+    (sessoes.length ? ' · de ' + data(inicioRasto(sessoes[sessoes.length - 1])) + ' a ' + data(fimRasto(sessoes[0])) : '') + '</span>', ficha);
+  document.title = d.pid + ' · Rendorium Equipa';
+  var resumo = '<div class="card rs-barra"><span class="chips">' + marcas + '</span>' +
+    rastoSinaisHtml(contas, '<span class="sub">Nenhum sinal de se ter perdido.</span>') + '</div>';
+  if (!sessoes.length) {
+    return cab + resumo + vazioHtml('Ainda sem eventos.', 'O pseudónimo existe, mas não há toques guardados: ou não tocou em nada desde que aceitou, ou passaram os 90 dias.');
+  }
+  var html = sessoes.map(function (s, i) {
+    var entre = '';
+    var antes = sessoes[i + 1];
+    if (antes) {
+      var de = ultimaOrigemRasto(antes), para = (s.eventos[0] || {}).origem;
+      if (de && para && de !== para) {
+        entre = '<p class="rs-passa-entre">' + ic('seta', 'i-sm') + '<span>Passou ' + passagemRasto(de, para) + ', ' +
+          duracaoRasto(inicioRasto(s) - fimRasto(antes)) + ' depois.</span></p>';
+      }
+    }
+    return rastoSessaoHtml(s, i === 0) + entre;
+  }).join('');
+  return cab + resumo + '<div class="rs-sessoes">' + html + '</div>' + rastoLegendaHtml();
+}
+// quando a sessão começou: o do servidor, ou o primeiro evento
+// Recebe: s — a sessão. Devolve: o instante (ms).
+function inicioRasto(s) { return s.inicio || Math.min.apply(null, s.eventos.map(function (e) { return e.at || 0; })); }
+// quando a sessão acabou: o do servidor, ou o último evento
+// Recebe: s — a sessão. Devolve: o instante (ms).
+function fimRasto(s) { return s.fim || Math.max.apply(null, s.eventos.map(function (e) { return e.at || 0; })); }
+// a origem do último evento de uma sessão
+// Recebe: s — a sessão. Devolve: 'app', 'montra' ou ''.
+function ultimaOrigemRasto(s) {
+  var evs = eventosRasto(s);
+  return evs.length ? evs[evs.length - 1].origem || '' : '';
+}
+// os eventos de uma sessão pela ordem em que aconteceram
+// Recebe: s — a sessão. Devolve: uma cópia ordenada dos eventos.
+function eventosRasto(s) { return (s.eventos || []).slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }); }
+// a passagem de uma origem para outra, dita: «da montra para a app»
+// Recebe: de, para — 'app' ou 'montra'. Devolve: o texto.
+function passagemRasto(de, para) {
+  var nome = function (o) { return o === 'app' ? 'a app' : o === 'montra' ? 'a montra' : 'o sítio «' + esc(o) + '»'; };
+  return (de === 'app' || de === 'montra' ? 'd' + nome(de) : 'de ' + nome(de)) + ' para ' + nome(para);
+}
+/* Uma sessão da linha do tempo: uma secção que abre e fecha, com o início,
+   a duração, as origens, quantos eventos e quantos sinais; aberta, as
+   páginas visitadas e os registos que mudou (rastoSessaoResumoHtml) e a
+   tabela dos eventos em palavras (o que fez e onde), do mais recente para o
+   mais antigo, como as sessões, com a linha de cada
+   sinal marcada no contorno e na letra, e a passagem de uma origem para a
+   outra dita numa linha.
+   Recebe: s — a sessão ({sessao, inicio, fim, origens, eventos}); aberta — se abre já aberta.
+   Devolve: string HTML. */
+function rastoSessaoHtml(s, aberta) {
+  var evs = eventosRasto(s);
+  var origens = s.origens && s.origens.length ? s.origens : evs.reduce(function (l, e) { if (e.origem && l.indexOf(e.origem) < 0) l.push(e.origem); return l; }, []);
+  var nSinais = evs.filter(function (e) { return sinalRasto(e.sinal); }).length;
+  // monta-se pela ordem do tempo (a passagem fica entre os dois eventos onde a
+  // origem mudou) e lê-se ao contrário: o mais recente em cima, como as sessões
+  var linhas = [], anterior = '';
+  evs.forEach(function (e) {
+    if (anterior && e.origem && e.origem !== anterior) {
+      linhas.push('<tr class="rs-passa"><td colspan="5">' + ic('seta', 'i-sm') + 'Passou ' + passagemRasto(anterior, e.origem) + '</td></tr>');
+    }
+    if (e.origem) anterior = e.origem;
+    var sn = sinalRasto(e.sinal);
+    linhas.push('<tr' + (sn ? ' class="rs-sinal ' + sn.tom + '"' : '') + '>' +
+      '<td class="n nw" data-rot="Hora">' + horaRasto(e.at) + '</td>' +
+      '<td data-rot="Origem">' + rastoOrigensHtml([e.origem]) + '</td>' +
+      '<td data-rot="O que fez"><span class="rs-alvo-bloco">' + rastoFezHtml(e) + '</span></td>' +
+      '<td data-rot="Onde">' + rastoOndeHtml(e) + '</td>' +
+      '<td data-rot="Sinal">' + (sn ? '<span class="badge rs-s ' + sn.tom + '">' + sn.nome + '</span>' : '<span class="sub">—</span>') + '</td></tr>');
+  });
+  return '<details class="card rs-sessao"' + (aberta ? ' open' : '') + '>' +
+    '<summary><span class="st-seta" aria-hidden="true">' + ic('baixo', 'i-sm') + '</span>' +
+    '<span class="forte n">' + data(inicioRasto(s)) + '</span>' +
+    '<span class="sub n">' + duracaoRasto(fimRasto(s) - inicioRasto(s)) + ' · ' + contadoRasto(evs.length, 'evento', 'eventos') + '</span>' +
+    '<span class="rs-sessao-selos">' + rastoOrigensHtml(origens) +
+    (nSinais ? '<span class="badge rs-s wa">' + contadoRasto(nSinais, 'sinal', 'sinais') + '</span>' : '') + '</span></summary>' +
+    rastoSessaoResumoHtml(evs) +
+    '<div class="tb-rola"><table class="tb empilha rs-tb rs-ev"><thead><tr><th>Hora</th><th>Origem</th><th>O que fez</th><th>Onde</th>' +
+    '<th>Sinal</th></tr></thead><tbody>' + linhas.reverse().join('') + '</tbody></table></div></details>';
+}
+
+/* O «Ver o rasto» no detalhe de um pedido: pergunta ao servidor o pseudónimo
+   de quem o escreveu (só o dá a quem pode ver o pedido) e, se houver, põe o
+   botão que abre a linha do tempo dessa pessoa, a voltar ao pedido. Sem pid
+   (não aceitou o rasto) não aparece nada; um erro fica calado.
+   Recebe: id — o id do pedido (string).
+   Devolve: nada — preenche o pedidoRasto. */
+function rastoDoPedido(id) {
+  if (!veRastoDoPedido) return;
+  pedir('/api/equipa/rasto/ticket/' + encodeURIComponent(id)).then(function (d) {
+    var sitio = el('pedidoRasto');
+    if (!sitio || pedidoAberto !== id || !d || !d.pid) return;
+    sitio.innerHTML = '<button type="button" class="btn sm"' + comAcao('verRastoPessoa', [d.pid, 'pedido', id]) + '>Ver o rasto</button>' +
+      '<span class="sub n rs-pid">' + esc(d.pid) + '</span>';
+  }).catch(function () {});
+}
+/* O rasto da pessoa na ficha (master e admin): o pseudónimo da conta e o
+   botão que abre a linha do tempo dela, ao lado do «Ver no rasto» da
+   auditoria. Sem pid (não aceitou o rasto) não aparece nada; um erro fica calado.
+   Recebe: id — o id da conta (string).
+   Devolve: nada — preenche o fichaRasto. */
+function rastoDaConta(id) {
+  pedir('/api/equipa/rasto/conta/' + encodeURIComponent(id)).then(function (d) {
+    var sitio = el('fichaRasto');
+    if (!sitio || !fichaVista || fichaVista.id !== id || !d || !d.pid) return;
+    sitio.innerHTML = '<button type="button" class="btn"' + comAcao('verRastoPessoa', [d.pid, 'conta', id]) + '>' +
+      'Ver o rasto da pessoa <span class="sub n rs-pid">' + esc(d.pid) + '</span></button>';
+  }).catch(function () {});
 }
 
 /* -------------------------------- as ações ------------------------------- */
@@ -1563,6 +2585,10 @@ var ACOES = {
   verPedido: function (d) { verPedido(d.arg); },
   agir: function (d) { agir(d.arg, d.arg2); },
   mudarCategoria: function (d) { mudarCategoria(d.arg, d.arg2); },
+  aceitarPedido: function (d) { aceitarPedido(d.arg); },
+  recusarPedido: function (d) { recusarPedido(d.arg); },
+  decidirSeguranca: function (d) { decidirSeguranca(d.arg); },
+  arquivarSeguranca: function (d) { arquivarSeguranca(d.arg); },
   usarModelo: function (d) { usarModelo(d.arg); },
   guardarModelo: function () { guardarModelo(); },
   verPessoas: function () { verPessoas(ultimaProcura); },
@@ -1582,6 +2608,11 @@ var ACOES = {
   sessoesTeste: function (d) { sessoesTeste(d.arg, d.arg2, d.arg3); },
   criarEndereco: function () { criarEndereco(); },
   procurarRasto: function (d, alvo) { ir('rasto', String(alvo.value || '').trim()); },
+  mudarVistaRasto: function (d) { mudarVistaRasto(d.arg); },
+  verRastoPessoas: function (d) { verRastoPessoas(d.arg); },
+  verRastoResumo: function (d) { verRastoResumo(d.arg); },
+  ordenarRasto: function (d) { ordenarRasto(d.arg); },
+  verRastoPessoa: function (d) { verRastoPessoa(d.arg, d.arg2, d.arg3); },
   confirmarFormulario: function () { confirmarFormulario(); },
   fecharDialogo: function () { el('dialogo').close(); },
   fecharAviso: function () { esconderAviso(); },

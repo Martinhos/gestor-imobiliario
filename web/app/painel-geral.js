@@ -9,6 +9,17 @@
    geral (dashOpcoesImovel), que são as únicas com proprietários.
    Devolve: string HTML do painel de análise (vistas.js:anaPanel). */
 function dashBar(){return anaPanel(`<div class="u-w-100pc">${sel('dashPropSel',dashProp,dashOpcoesImovel(),'onDashProp','vista')}</div>`,true)}
+/* O painel do filtro enquanto não há movimentos (o ticket de QA f6b36a57):
+   o botão do cabeçalho acendia-se e não abria nada, porque a vista vazia (a
+   jornada, o «Ainda não há dados», o «Ainda não há nada registado») não
+   desenhava o seletor. Abre-se na mesma, sem o seletor, que não teria o que
+   filtrar, com a frase que diz porquê e o caminho para o primeiro movimento:
+   o «Adicionar movimento» com a condição do + (acessos.js:ACOES_DE_ADICIONAR),
+   e só com os Movimentos ligados nesta conta.
+   Devolve: string HTML do painel (vistas.js:anaPanel). */
+function dashBarVazia(){
+  const pode=servicoLigado('transactions')&&(podeSemImovel()||casasComo('tx.add').length>0);
+  return anaPanel(`<div class="fp-vazio"><b>Ainda não há movimentos</b>O filtro escolhe o imóvel, o grupo ou o proprietário que a vista geral mostra, e os números saem dos movimentos. Adiciona o primeiro para começares.${pode?'<div><button type="button" class="btn primary" data-toca="camada" data-click="anaApply();newTxPick()">Adicionar movimento</button></div>':''}</div>`)}
 /* As opções do seletor da Visão geral: as das análises (vistas.js:anaOpcoesImovel
    — todos, cada imóvel do âmbito e, depois de uma linha, os grupos) e, depois de
    outra linha, os proprietários: «Os meus» (os imóveis de que sou dono ou
@@ -99,12 +110,12 @@ function vDashboard(){
      A espera do servidor ganha: antes do primeiro estado não se afirma nada. */
   if(!db.transactions.length&&!souSoColaborador()&&typeof jornadaInicial==='function'){
     const jornada=jornadaInicial();
-    if(jornada)return esperaDoServidor()||'<!--jornada-->'+jornada+portefolioInicial(m);
+    if(jornada)return esperaDoServidor()||'<!--jornada-->'+dashBarVazia()+jornada+portefolioInicial(m);
   }
   /* o primeiro passo é um imóvel, e o botão é do serviço dos Imóveis: com ele
      desligado nesta conta o botão não se escreve, e a frase diz quem o liga */
   if(!db.properties.length&&!db.transactions.length)
-    return esperaDoServidor()||`<div class="empty"><b>Ainda não há nada registado</b>${servicoLigado('properties')?'Começa por adicionar um imóvel'+(podeExemplo()?', ou carrega dados de exemplo':'')+'.':fraseServicoDesligado('properties')}
+    return esperaDoServidor()||dashBarVazia()+`<div class="empty"><b>Ainda não há nada registado</b>${servicoLigado('properties')?'Começa por adicionar um imóvel'+(podeExemplo()?', ou carrega dados de exemplo':'')+'.':fraseServicoDesligado('properties')}
       <div class="toolbar u-jc-center u-mt-16px">
       ${servicoLigado('properties')?`<button class="btn primary" data-toca="camada" data-click="propModal()">Adicionar imóvel</button>`:''}
       ${podeExemplo()?`<button class="btn" data-toca="dados" data-click="seed()">Carregar exemplo</button>`:''}</div></div>`;
@@ -121,7 +132,7 @@ function vDashboard(){
      cima: é o caminho mais curto para o primeiro movimento. A marca
      <!--sem-movimentos--> diz ao dashDepois que não há blocos para personalizar. */
   if(!db.transactions.length&&!souSoColaborador())
-    return esperaDoServidor()||'<!--sem-movimentos-->'+colabHint+pedeAtencao()+`<div class="empty u-mb-14px"><b>Ainda não há dados para mostrar</b>Os indicadores e os gráficos da vista geral saem dos movimentos. Regista a primeira renda recebida ou despesa paga.
+    return esperaDoServidor()||'<!--sem-movimentos-->'+dashBarVazia()+colabHint+pedeAtencao()+`<div class="empty u-mb-14px"><b>Ainda não há dados para mostrar</b>Os indicadores e os gráficos da vista geral saem dos movimentos. Regista a primeira renda recebida ou despesa paga.
       ${servicoLigado('transactions')?saida('Ir para os movimentos',"go('transactions')",'ecra'):vazioServicoDesligado('transactions')}</div>`+portefolioInicial(m);
   const inc=monthly(YEAR,pid,'income',true),exp=monthly(YEAR,pid,'expense',true),ln=monthly(YEAR,pid,'loan',true),am=monthly(YEAR,pid,'amort',true);
   let acc=0;const cum=inc.map((v,i)=>acc+=v-exp[i]-ln[i]-am[i]);

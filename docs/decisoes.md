@@ -72,6 +72,14 @@ confere que cada uma aponta para código que existe.
 - 2026-10-28 · A hipoteca que começa no futuro
 - 2026-10-28 · O dev só abre pela ligação do /test
 - 2026-10-28 · A terceira ronda de tickets de QA
+- 2026-10-28 · A APK de dev abre as ligações do /test
+- 2026-10-28 · Os pedidos das pessoas decidem-se antes, e a resposta é da equipa
+- 2026-10-29 · O rasto das pessoas, debaixo de um pseudónimo
+- 2026-10-29 · A quarta ronda de QA e o email dos planeados em atraso
+- 2026-10-29 · O «?» da Ajuda no lugar da nuvem
+- 2026-10-29 · A quinta ronda de QA: nada antes da compra, o sync em lote e o rasto em palavras
+- 2026-10-29 · A sexta ronda de QA: o email confirma-se, os limites contam, e os planeados começam hoje
+- 2026-10-31 · O rasto de uma pessoa lê-se do mais recente para o mais antigo
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2729,3 +2737,223 @@ uma data inventada, que os reenviava todos ao servidor. E um toque durante o
 arranque (o relato «LFK is not defined», ao abrir a gaveta antes de o
 vistas.js carregar) deixou de correr a ação com meia app: engole-se, em vez
 de se guardar para depois.
+
+## 2026-10-28 · A APK de dev abre as ligações do /test
+
+Com o dev fechado a quem não vem do /test, a APK de dev via só o 404: o
+WebView dela nunca tinha a sessão. O Martinho pediu que ela abrisse as
+ligações do /test. O intent-filter vive só no flavor dev, com o caminho exato
+que a MainActivity aceita, e com autoVerify: sem a verificação, o Android 12+
+abre a ligação no browser, onde a sessão fica, e não na app. A verificação
+pede o /.well-known/assetlinks.json com a impressão do certificado da APK de
+dev, e quem a tira é o deploy, do APK que acabou de compilar — é pública, não
+precisa da chave nem de segredos, e assim muda sozinha se a chave de dev
+mudar. Uma falha a tirá-la não trava a publicação da app web: avisa e segue.
+
+## 2026-10-28 · Os pedidos das pessoas decidem-se antes, e a resposta é da equipa
+
+O Martinho pediu uma skill que resolvesse os tickets de produção e do dev (os
+pedidos da Ajuda e os erros apanhados) junto com os de QA. Com ela, quatro
+regras dele. Um pedido de uma pessoa só se implementa depois de alguém da
+equipa o aceitar no back office; primeiro pensou-se numa caixa de visto, e
+ficaram dois botões, Aceitar e Recusar, porque recusar também é uma decisão e
+tem de ficar escrita: pede uma justificação, que a pessoa recebe, e fecha o
+pedido. Quem aceita pode aceitar com alterações, e são elas que se
+implementam. Fica sempre quem decidiu e quando (a migração 0024). O Claude
+nunca responde a uma pessoa: deixa a resposta proposta no pedido, e uma pessoa
+da equipa lê-a e envia-a como está ou mudada; o email só sai nesse envio.
+E um ticket só fecha quando a correção está publicada no ambiente dele: no
+dev, com o CI verde; na produção, só depois do «promove», quando o commit já
+está dentro da etiqueta publicado, que o deploy de produção só move depois de
+a produção responder. Um erro fechado antes disso reabria-se sozinho na
+ocorrência seguinte. Até ao «promove», os de produção ficam em resolução, com
+uma nota interna e o commit. A ferramenta é o scripts/ticket.mjs, e a skill
+ticket fica na pasta acima do repositório, ao lado da qa.
+
+## 2026-10-29 · O rasto das pessoas, debaixo de um pseudónimo
+
+O Martinho pediu para o back office ver, por pessoa real, o que ela faz na app
+e na montra, com um id para a seguir mas sem o nome: nesta fase, para perceber
+se as pessoas percebem a interface e os fluxos. Por isso guarda-se cada toque,
+e não só os ecrãs — mas onde, nunca o quê. Ficou um pseudónimo aleatório por
+pessoa, e só quem já vê as pessoas vai do pseudónimo à ficha. Os toques
+sozinhos não dizem onde a interface confunde; os cinco sinais (em vão,
+repetido, vai-e-volta, desistência, erro ao guardar) e o resumo por ecrã é que
+o dizem.
+
+O consentimento é um só, para a montra e para a app, porque é a mesma pessoa:
+vive em cookies com o domínio raiz em produção, e fora dela só no host, para um
+cookie de teste nunca chegar à produção. A pessoa pode mudar de ideias num
+aparelho e noutro, por isso a escolha leva a hora e ganha a mais recente. Quem
+recusa depois de aceitar não fica com nada guardado: apaga-se logo. Fechar a
+pergunta da app sem escolher não é escolha, e ela volta passados 7 dias. Na
+montra a faixa é HTML puro e vai no fluxo, a seguir ao hero: quem recusa não
+recebe JavaScript nenhum, e a página continua a não tapar nada. O visitante da
+montra liga-se à conta quando entra, para o rasto de antes da conta não se
+perder; um computador partilhado não junta duas pessoas, os eventos ficam com
+quem os fez.
+
+Os eventos vivem 90 dias e saem com a conta; não vão para a cópia de
+segurança, que se guarda muito mais tempo. Uma ligação guarda as chaves da
+query mas não os valores, que podem ser um token. Quem vê ficou numa função
+só, por emenda dele: o admin vê todas as pessoas, o suporte só quem lhe
+escreveu um pedido (enquanto o pedido existir), e a auditoria da equipa
+continua só do master. Mudar a Privacidade subiu a versão dos termos, e toda a
+gente os volta a aceitar uma vez.
+
+## 2026-10-29 · A quarta ronda de QA e o email dos planeados em atraso
+
+Três tickets do Martinho, do telemóvel. A Ajuda no fundo da gaveta, tocada já
+dentro das Definições, abria a página por baixo da gaveta aberta: o caminho
+de lá só fechava a gaveta quando mudava de separador. Fecha-a sempre. O botão
+de filtros da Visão geral sem movimentos acendia-se e não abria nada, porque
+a vista vazia não desenha o seletor; um botão que se acende tem de abrir
+alguma coisa, e o painel passou a dizer porque está vazio e a levar ao
+primeiro movimento.
+
+O terceiro pediu um email aos proprietários quando um movimento recorrente
+fica em atraso. As decisões foram dele: um resumo por dia e só nos dias em que
+há atrasos novos, para o email não virar ruído diário enquanto um atraso velho
+continua por confirmar (os velhos vêm lembrados no mesmo email); os
+proprietários e também os colaboradores que veem os contratos, mas cada um só
+com o que o cargo lhe deixa ver na app, porque um email não pode mostrar um
+valor que a app esconde; ligado por omissão, com a linha nas Definições e a
+ligação no próprio email para desligar; e com o montante, porque é o que se
+precisa para decidir sem abrir a app. Um atraso só conta como avisado quando
+o Resend aceitou o email: sem chave ou com erro, tenta-se no dia seguinte. A
+Privacidade passou a nomear estes avisos nas comunicações do serviço, dentro
+da versão dos termos de 2026-10-29, que ainda não tinha chegado à produção:
+ninguém aceita os termos duas vezes.
+
+A primeira versão do passo corria no cron diário e perguntava os
+participantes casa a casa. Passou nos testes e rebentou na prova no 8788, onde
+a base isolada tem 1576 casas com planeados vencidos: cerca de 4700 consultas
+numa invocação. Ficou no cron de hora a hora, a partir das 9h de Lisboa, com 9
+consultas fixas mais uma por email e no máximo 20 emails por execução; o «um
+por dia» guarda-se na mesma tabela. Cada execução lê a tabela dos registos
+inteira (não há índice no kind): enquanto ela for pequena, as 15 execuções do
+dia cabem no teto de linhas lidas; quando crescer, uma marca de «dia feito»
+evita reler depois de não haver nada por enviar.
+
+## 2026-10-29 · O «?» da Ajuda no lugar da nuvem
+
+O Martinho quis a Ajuda num «?» e, vendo as opções, foi mais longe: a nuvem da
+sincronização sai do cabeçalho e o «?» fica no lugar dela. Com ligação, o que
+se escreve sobe em segundos, e o «Guardado», o «A ligar» e o «N por enviar»
+eram ruído a passar no canto a cada gravação; o que importa dizer é quando
+não se consegue guardar, e isso passou a ser uma faixa vermelha por cima do
+ecrã, com as alterações que esperam, que não empurra nada (a de antes fazia
+o cabeçalho crescer). Igual no telemóvel e no computador. A Ajuda tem uma
+porta só, o «?»: saiu da gaveta e da barra lateral. E o «?» não aparece nas
+Definições, em página nenhuma delas: é a porta dos separadores, e quem já
+está nas Definições tem a Ajuda à mão. Brilha uma vez por aparelho, na
+primeira abertura, quando o ecrã fica livre das boas-vindas e da apresentação
+— não na primeira abertura da gaveta, como ele pensou primeiro, porque o «?»
+deixou de estar dentro dela.
+
+Nota do mesmo dia: o Martinho viu o «?» a levar à Ajuda e pediu outra coisa:
+«Quero que o ? abra o tutorial da página, não que leve à ajuda nas
+definições». O «?» abre agora a apresentação do separador onde se está, a
+mesma que a Ajuda revê, sem mudar de ecrã; num separador sem apresentação
+para esta conta não aparece. A Ajuda continua fora da gaveta, nas Definições
+(«Ajuda e sugestões»).
+
+## 2026-10-29 · A quinta ronda de QA: nada antes da compra, o sync em lote e o rasto em palavras
+
+**Um contrato desde 1870.** O Martinho criou, numa conta de teste, um contrato
+com início em 1870 numa casa comprada em 2020. A app propôs «Preencher 600
+períodos» — as rendas de 1870 a 1919, porque o teto do
+planeados.js:datasEmFalta guardava as 600 mais antigas —, e as 600 entraram «1
+a 1»: o servidor gastava três consultas sequenciais por operação, e um pedido
+de 200 batia no teto de 50 consultas por invocação do plano gratuito da D1
+perto da 15.ª; o resto era 500, o cliente reenviava de 30 em 30 segundos, e
+cada volta gastava o travão de ritmo e o plafond diário. Decisões dele: o chão
+é só a data de compra (sem ela não há limite); vale para o início de um
+contrato, de um crédito e para a data de um movimento, e o servidor também
+recusa; nos movimentos só as receitas («Despesas podem»: o sinal do
+contrato-promessa, a avaliação do banco e o IMT pagam-se antes da escritura).
+Só se confere o que é novo ou cuja data mudou, para os dados que já estão
+assim continuarem a sincronizar. O sync passou a ler tudo de uma vez e a
+gravar em db.batch, que a D1 conta como uma consulta: 7 consultas com 1
+operação e com 200, onde eram 8 e 605 (testes/sync-lote.test.js).
+
+**Os registos da Cloudflare.** Os Workers Logs passam a ser pagos, e o
+Martinho não os quer. Saíram os blocos dos dois ambientes do wrangler.toml; o
+wrangler deploy manda enabled:false quando a configuração não diz nada (lido
+no código do wrangler 4.148), e o testes/ferramentas.test.js garante que o
+bloco não volta. O relato estruturado de cada erro fica para o wrangler tail;
+o que conta continua na D1 e no Discord. A nota de 2026-09 sobre a linha de
+invocação dos logs deixa de valer.
+
+**A pergunta da apresentação.** Tinha três respostas, e «Continuar a mostrar»
+fazia o mesmo que fechar e seguir. Ficam duas, «Voltar à apresentação» (o
+primário) e «Não mostrar mais», e escolher a segunda diz que a de cada ecrã
+continua no «?». Quem já tinha respondido «Continuar a mostrar» não volta a
+ouvir a pergunta.
+
+**Sem sugestões nos números.** O Samsung Internet mostrava, ao lado do
+montante de uma despesa, os valores escritos antes. Os 38 campos de números
+levam autocomplete="off", como os de texto já levavam, e o
+testes/campos-numericos.test.js apanha um campo novo que o esqueça.
+
+**O rasto em palavras.** Dois tickets dele, a ler o rasto no telemóvel: a
+posição de cada toque não dizia nada quando o toque era num botão, e o rasto
+não dizia que páginas a pessoa visitou nem o que fez com os dados. Decidiu:
+só textos da app — num botão, o nome dele e sem posição; fora de botões, a
+posição e o nome do sítio. Nunca nomes, moradas, valores nem texto da página:
+o «nunca o quê» fica. O cliente continua a mandar só descritores e é o back
+office que os traduz com um dicionário, para nada mudar no que sai do
+aparelho e uma tradução melhor valer também para o rasto já guardado. O
+dicionário cobre todas as ações dos data-click (uma regra de reserva dava
+frases em meio inglês), e um teste falha quando aparece uma ação sem rótulo.
+Os dados contam-se no servidor, por tipo e por operação, só com o sim e nunca
+o conteúdo — contar por categoria («rendas em atraso») era ler um campo dos
+dados, e ele escolheu não ir aí. A Privacidade passou a dizê-lo e a versão
+dos termos subiu para 2026-10-30, como ele escolheu: quem tem conta volta a
+aceitar uma vez.
+
+## 2026-10-29 · A sexta ronda de QA: o email confirma-se, os limites contam, e os planeados começam hoje
+
+**O email por confirmar.** Ticket do Martinho: nenhum email de verificação saía
+no registo — qualquer endereço, de outra pessoa ou inexistente, ficava dono de
+uma conta e destino dos avisos. Decidiu: a conta entra logo e tem 7 dias; depois
+disso, só com o email confirmado. As contas que já existiam e as da Google
+contam como confirmadas (a migração 0027 preenche email_verified_at com o
+created_at). O portão está no servidor e não só no ecrã, senão a API ficava
+aberta; ficam de fora o que deixa sair, apagar a conta, aceitar os termos e
+pedir ajuda (decisão dele: quem está preso no ecrã pode falar com a equipa). A
+folha encontrou a pré-apropriação — registar o email de outra pessoa com uma
+palavra-passe, e o dono entrar mais tarde pela Google numa conta onde o estranho
+ainda tem sessão —; decisão dele: a Google, ao confirmar, remove a palavra-passe
+e as outras sessões.
+
+**Os limites abrem tickets de segurança.** Um 429 não deixava rasto. Decidiu:
+todos os limites, um ticket por limite e por conta ou IP, e nenhum se trata sem
+uma pessoa escrever a resolução proposta (como os pedidos aceites). Para uma
+força bruta não virar uma escrita na D1 por pedido, só a primeira recusa de cada
+janela escreve (o contador passa de limit a limit + 1 num UPDATE condicional).
+O limites.js deixou de importar o relatos.js (o ciclo relatos → notify → limites
+→ relatos que o testes/quatro-olhos.test.js apanha) e escreve o ticket sozinho,
+com a mesma assinatura; o notify.js deixou de usar o rateLimit na deduplicação
+dos avisos, para o limites.js poder avisar o Discord. Reutilizam-se as colunas da
+0024: accepted_changes guarda a resolução proposta e refused_* o arquivo.
+
+**Começar a partir de hoje.** Um contrato com início no passado deixava a renda em
+atraso para sempre: só havia silenciar, recusar uma de cada vez ou preencher
+tudo. A ação nova precisava de um chão (desde) no planeado: sem ele, o arranque
+seguinte (syncContractRec) puxava a renda de volta aos meses largados. O mesmo
+desfazia o «Recusar desta vez» numa renda de contrato desde sempre (bug antigo,
+achado pela folha); decisão dele: corrigir já, com o mesmo chão, só nas rendas
+de contrato — numa hipoteca o chão esconderia ao preenchimento prestações que
+ninguém recusou.
+
+## 2026-10-31 · O rasto de uma pessoa lê-se do mais recente para o mais antigo
+
+Ticket de QA do Martinho (89e70111, 31/10, num Samsung): na linha do tempo de
+uma pessoa, as sessões vinham da mais recente para a mais antiga, mas os eventos
+de cada uma do mais antigo para o mais recente — duas ordens opostas no mesmo
+ecrã. Os eventos passaram a vir também do mais recente, em cima. A passagem da
+montra para a app continua a dizer o sentido do tempo («da montra para a app»)
+e fica entre os dois eventos onde a origem mudou. As páginas visitadas ficam
+pela ordem do tempo: são um caminho com «›», e ao contrário as setas
+apontariam para trás.

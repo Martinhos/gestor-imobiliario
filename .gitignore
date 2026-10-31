@@ -18,6 +18,9 @@ terraform/*.tfplan
 android/keystore.properties
 android/app/*.keystore
 web/gestor-imobiliario.apk
+# o assetlinks do dev: o deploy do dev escreve-o com a impressão do APK que
+# acabou de compilar (deploy.yml, «Escrever o assetlinks do APK de dev»)
+web/assetlinks-dev.json
 # capturas do percurso de interface: pesam e refazem-se a cada corrida
 testes/ui/relatorio/
 .claude/worktrees/

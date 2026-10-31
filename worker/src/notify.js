@@ -159,6 +159,54 @@ export function errorEmbed(r) {
   };
 }
 
+/* O embed de um ticket de segurança: um limite da API atingido
+   (lib/limites.js), aberto pela primeira vez ou reaberto depois de concluído.
+   O título do errorEmbed («Erro na app») enganava: aqui não falhou nada, alguém
+   bateu num travão. Diz que espera pela resolução proposta no back office.
+   Recebe: r — { id, message (a mensagem do ticket: o limite e a conta ou o
+   IP), detail (a chave, o limite, a janela e a hora), user_id (a conta, ou
+   nada), n (as janelas em que já foi atingido), reaberto (true quando voltou
+   depois de concluído), created_at (ms) }.
+   Devolve: objeto embed do Discord, pronto para notifyDev. */
+export function limiteEmbed(r) {
+  return {
+    title: 'Limite atingido' + (r.reaberto ? ' de novo (reaberto)' : '') + (r.n > 1 ? ' (×' + r.n + ')' : ''),
+    description: '```\n' + cut(r.message, 900) + '\n```',
+    color: r.reaberto ? 0xb94a48 : 0xd6a34a,
+    fields: [
+      { name: 'Quem', value: r.user_id || 'sem conta (pelo IP)', inline: true },
+      { name: 'O que falta', value: 'Decidir no back office (/equipa › Erros), com a resolução proposta', inline: true },
+      { name: 'Detalhe', value: '```' + cut(r.detail || '—', 1000) + '```', inline: false },
+    ],
+    footer: { text: 'report ' + r.id },
+    timestamp: new Date(r.created_at).toISOString(),
+  };
+}
+
+/* O «ainda não avisei hoje» da vigia dos tetos: uma linha por chave na
+   rate_limits ('aviso:' + o nome do teto), com prazo de 24 horas. Era o
+   rateLimit(…, 1, 86400), mas o rateLimit abre tickets de segurança e avisa
+   por este ficheiro: usá-lo daqui fazia um ciclo de importações
+   (testes/quatro-olhos.test.js). Uma só escrita, condicionada: insere a chave,
+   ou renova-a se o prazo já passou; com o prazo a correr não muda nada.
+   Recebe: env — o ambiente do worker (D1 em env.DB); chave — a chave
+   completa (ex.: 'aviso:D1 · linhas lidas'); agora (opcional) — o instante em ms.
+   Devolve: promessa de true na primeira vez em 24 horas (avisa-se) e false
+   com o prazo a correr; true se a base falhar (como o rateLimit: um contador
+   em baixo não cala o aviso). */
+export async function avisoDeHoje(env, chave, agora) {
+  const t = agora || Date.now();
+  try {
+    const r = await env.DB.prepare(
+      `INSERT INTO rate_limits (k, n, expires_at) VALUES (?, 1, ?)
+       ON CONFLICT (k) DO UPDATE SET n = 1, expires_at = excluded.expires_at WHERE rate_limits.expires_at < ?`
+    ).bind(chave, t + 86400000, t).run();
+    return !!(r && r.meta && r.meta.changes);
+  } catch (e) {
+    return true;
+  }
+}
+
 // Consumo do dia, contra os limites do plano gratuito. Os números da
 // Cloudflare vêm da API de análise; se ela não responder, vai o que
 // conseguimos contar por dentro, que chega para perceber a tendência.
@@ -241,8 +289,9 @@ export async function usageFields(env) {
 
    Uma vez por dia por limite. Sem isso, um limite que fica em 85% durante a
    tarde toda mandava vinte e quatro avisos e ninguém voltava a ler nenhum.
-   O travão é o mesmo rate_limits que já existe — um contador com prazo é
-   exatamente o que aqui é preciso, e poupa uma tabela. */
+   O travão é a mesma tabela rate_limits que já existe — um contador com
+   prazo é exatamente o que aqui é preciso, e poupa uma tabela —, mas pela
+   avisoDeHoje, não pelo rateLimit (que abre tickets de segurança). */
 export const LIMIAR_AVISO = 0.8;
 
 // A vigia em si (a razão de ser está no comentário acima): compara o consumo com os
@@ -259,15 +308,14 @@ export async function watchLimits(env, ctx) {
   const uso = await cloudflareUsage(env);
   if (!uso) return { avisados: 0, motivo: 'sem dados de consumo' };
 
-  const { rateLimit } = await import('./lib/limites.js');
   const apertados = [];
   for (const k of Object.keys(LIMITS)) {
     const v = uso[k];
     if (v == null) continue;
     const fracao = v / LIMITS[k];
     if (fracao < LIMIAR_AVISO) continue;
-    // rateLimit devolve true na primeira vez da janela: é o "ainda não avisei hoje"
-    if (!(await rateLimit(env, 'aviso:' + k, 1, 86400))) continue;
+    // true na primeira vez em 24 horas: é o "ainda não avisei hoje"
+    if (!(await avisoDeHoje(env, 'aviso:' + k))) continue;
     apertados.push({ nome: k, valor: v, tecto: LIMITS[k], pct: Math.round(fracao * 100) });
   }
   if (!apertados.length) return { avisados: 0 };

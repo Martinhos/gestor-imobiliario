@@ -150,8 +150,8 @@ rec.add é «Adicionar e confirmar planeados», e confirmar o planeado do dono
 é um put desse planeado (o cliente manda-o inteiro com o next avançado;
 silenciar mexe em muted). A exceção em `regraDoRegisto` deixa o put passar,
 mas o que se grava passa por `planeadoAGravar`/`fundirPlaneado`
-(worker/src/lib/acesso.js e permissoes.js): só `next`, `until` e `muted`
-entram do que veio; nome, cadência, montante, imóvel, contrato e fim ficam
+(worker/src/lib/acesso.js e permissoes.js): só `next`, `until`, `muted` e
+`desde` (o chão do «Começar a partir de hoje») entram do que veio; nome, cadência, montante, imóvel, contrato e fim ficam
 como o dono os deixou. Uma reescrita com amount/propertyId/tx trocados não
 dá erro — não tem efeito nesses campos —, e um put atrasado sobre um
 planeado que o dono já apagou leva 403 em vez de o ressuscitar. Não
@@ -383,3 +383,29 @@ O Node não lança um .cmd sem shell, e com shell os argumentos passam pelo cmd
 (aspas, %, ^, quebras de linha). Para texto livre, como as notas do
 scripts/qa.mjs, lança-se o node_modules/wrangler/bin/wrangler.js com o
 process.execPath e os argumentos em lista, sem shell.
+
+## A D1 tem um teto de consultas por invocação
+Um passo do cron que faz uma consulta por casa (o participantsOf num ciclo)
+passa nos testes, que usam o SQL sem tetos, e rebenta no worker: na base
+isolada, com 1576 casas, deu «D1_ERROR: Failed to get session commit token»
+(medido a 2026-10-29). O plano gratuito limita as consultas D1 e os
+subpedidos por invocação. Um passo que percorre todas as casas ou pessoas faz
+um número fixo de consultas (JOIN, subconsultas, listas num só parâmetro com
+json_each) e um teto do que envia por execução; o testes/avisos-atraso.test.js
+conta-as com 1 e com 60 casas.
+
+O /api/sync caiu no mesmo teto (ticket QA a3a6d2d4, 2026-10-29): cada operação
+gastava três consultas sequenciais, e um pedido de 200 (o «Preencher 600
+períodos» de um contrato de 1870) passava à ~15.ª; o resto era 500, o cliente
+reenviava de 30 em 30 segundos e as rendas entravam «1 a 1», a gastar o travão
+de ritmo e o plafond diário. Um `db.batch()` conta como UMA consulta nesse
+teto, seja qual for o número de instruções: «a db.batch() call counts as a
+single query against it, not one query per statement»
+(https://developers.cloudflare.com/d1/platform/limits/, «Queries per Worker
+invocation»: 50 no plano gratuito, 1000 no pago). Os limites de cada instrução
+valem lá dentro: 100 parâmetros e 100 KB de SQL por instrução — por isso as
+listas vão num só parâmetro JSON (json_each), não em `IN (?, ?, …)`. E um lote
+é tudo ou nada: uma instrução que falhe desfaz as outras — quem o usa para
+operações independentes tem de correr uma a uma quando ele falha
+(escritas.js:correrLote). O testes/sync-lote.test.js conta as consultas como a
+D1 as conta (um batch = 1) com 1 e com 200 operações.

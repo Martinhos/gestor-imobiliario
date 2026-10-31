@@ -12,7 +12,7 @@ import { dailyReport, watchLimits } from './notify.js';
 import { copiar } from './salvaguarda.js';
 import { recursoDePagina } from './paginas-recursos.js';
 import { CAMINHOS_DE_IDENTIDADE, identidadeDeDev } from './lib/identidade.js';
-import { portaDoDev } from './teste.js';
+import { assetLinksDoDev, portaDoDev } from './teste.js';
 
 /* Os dois scripts em linha do web/index.html — a armadilha de erros e a cura
    do arranque — têm de correr antes de qualquer ficheiro, e por isso não podem
@@ -99,8 +99,10 @@ export default {
   // vai primeiro para o resumo do mesmo dia já poder dizer se correu bem —
   // uma cópia que deixa de acontecer só dá nas vistas quando é precisa.
   async scheduled(event, env, ctx) {
-    // Dois horários. À hora certa olha-se só para os limites, que é barato;
-    // a cópia e o resumo são o trabalho pesado e ficam uma vez por dia. O
+    // Dois horários. À hora certa olha-se para os limites, que é barato, e
+    // (a partir das 9h em Lisboa) mandam-se os avisos dos planeados em
+    // atraso, aos poucos; a cópia e o resumo são o trabalho pesado e ficam
+    // uma vez por dia. O
     // diário reconhece-se pelo horário exato que o wrangler.toml agenda
     // (CRON_DIARIO) — um teste confere que os dois batem.
     const diario = event.cron === CRON_DIARIO;
@@ -125,6 +127,22 @@ export default {
           await recordReport(env, ctx, 'infra', 'Vigia dos limites falhou',
             String((e && e.stack) || (e && e.message) || e).slice(0, 800));
         }
+        /* O email dos planeados em atraso (lib/avisos-atraso.js, que nunca
+           lança), depois da vigia e do batimento: a partir das 9h em Lisboa,
+           com um número fixo de consultas e no máximo 20 emails por hora —
+           o que fica vai na hora seguinte. Não vive no diário porque a cópia
+           já gasta lá a sua parte das consultas que o plano gratuito deixa
+           fazer numa invocação. A hora é a do agendamento (scheduledTime). */
+        try {
+          const { resumoDosAtrasos, horaDosAvisos } = await import('./lib/avisos-atraso.js');
+          const agora = event.scheduledTime || Date.now();
+          if (horaDosAvisos(agora)) {
+            const a = await resumoDosAtrasos(env, agora);
+            await registarOp(env, 'atrasos', a.ok, a.detalhe);
+          }
+        } catch (e) {
+          await registarOp(env, 'atrasos', false, String((e && e.message) || e));
+        }
         return;
       }
       let copiaOk = false;
@@ -145,6 +163,16 @@ export default {
       } catch (e) {
         await recordReport(env, ctx, 'infra', 'Varredura dos anexos falhou',
           String((e && e.stack) || (e && e.message) || e).slice(0, 800));
+      }
+      /* o rasto das pessoas vive 90 dias (lib/rasto.js:podarRasto, que nunca
+         lança): os eventos mais velhos e os pids anónimos que ficaram vazios */
+      try {
+        const { podarRasto } = await import('./lib/rasto.js');
+        const p = await podarRasto(env);
+        await registarOp(env, 'rasto', p.ok,
+          p.ok ? p.eventos + ' eventos e ' + p.pids + ' pseudónimos podados' : p.erro);
+      } catch (e) {
+        await registarOp(env, 'rasto', false, String((e && e.message) || e));
       }
       // o resultado é o do envio a sério: um resumo que não chegou a lado
       // nenhum registado como verde era o batimento a mentir
@@ -183,8 +211,28 @@ export default {
     const fechada = await portaDoDev(env, request, url);
     if (fechada) return harden(fechada);
 
+    /* O /.well-known/assetlinks.json do dev (teste.js:assetLinksDoDev), que
+       o Android lê sem cookies para a APK de dev abrir as ligações do /test.
+       Logo DEPOIS da porta, e não antes: a porta continua a ser a primeira
+       coisa de todas, e o que ela deixa passar sem sessão fica dito num sítio
+       só (teste.js:SEM_SESSAO), onde o caminho está. Fora do dev, null. */
+    const ligacoes = await assetLinksDoDev(env, request, url);
+    if (ligacoes) return harden(ligacoes);
+
     const caminho = url.pathname.replace(/^\/|\/$/g, '');
     const naRaiz = url.hostname === 'rendorium.com' || url.hostname === 'www.rendorium.com';
+
+    /* O consentimento do rasto (o formulário da faixa da montra, sem JS) e a
+       recolha da montra (o sendBeacon dela), em qualquer host e ANTES do
+       reencaminhamento da raiz para a app: a montra vive em rendorium.com e é
+       lá que os pede (lib/rasto.js). Depois da porta do dev, que fica
+       primeiro. */
+    if (request.method === 'POST' && (url.pathname === '/consentimento' || url.pathname === '/rasto')) {
+      const { rotaConsentimento, rotaRastoDaMontra } = await import('./lib/rasto.js');
+      return harden(url.pathname === '/consentimento'
+        ? await rotaConsentimento(env, request, url)
+        : await rotaRastoDaMontra(env, request, url));
+    }
 
     /* Os CSS e os JavaScript das páginas que o worker escreve, que vão com a
        CSP_ESTRITA e já não trazem nada em linha (paginas-recursos.js).
@@ -210,7 +258,9 @@ export default {
        para o que já está em «/». */
     if (caminho === 'montra' || (naRaiz && url.pathname === '/')) {
       const { paginaLanding } = await import('./landing.js');
-      return harden(paginaLanding({ raiz: naRaiz }));
+      // a escolha do rasto deste aparelho (o cookie rd_escolha): sem ela, a faixa
+      const { lerCookiesDoRasto } = await import('./lib/rasto.js');
+      return harden(paginaLanding({ raiz: naRaiz, escolha: lerCookiesDoRasto(request).escolha }));
     }
 
     /* O domínio raiz é a montra; a app vive em app.rendorium.com. Qualquer

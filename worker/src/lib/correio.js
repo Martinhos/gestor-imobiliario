@@ -87,6 +87,7 @@ const ESTILO = '<style>' +
   '.rd-tinta{color:' + COR_ESCURO.tinta + '!important}' +
   '.rd-sec{color:' + COR_ESCURO.secundario + '!important}' +
   '.rd-rodape{color:' + COR_ESCURO.terciario + '!important;border-color:' + COR_ESCURO.contorno + '!important}' +
+  '.rd-rodape a{color:' + COR_ESCURO.cobalto + '!important}' +
   '.rd-caixa{border-color:' + COR_ESCURO.contorno + '!important}' +
   '.rd-cit{background:' + COR_ESCURO.suave + '!important;color:' + COR_ESCURO.suaveTinta + '!important}' +
   '.rd-botao{background:' + COR_ESCURO.cobalto + '!important}' +
@@ -195,9 +196,11 @@ function marca() {
    Recebe: opcoes — { assunto: o assunto do email (vai para o <title>);
    titulo: o título dentro do cartão; blocos: array de HTML (parágrafos,
    citação, caixa, botão; os falsos saltam-se); rodape (opcional): o texto
-   pequeno do fim, por omissão o aviso de quem tem conta }.
+   pequeno do fim, por omissão o aviso de quem tem conta; rodapeHtml
+   (opcional): o mesmo rodapé já em HTML (escapado por quem chama), para
+   quando leva uma ligação — ganha ao rodape }.
    Devolve: o HTML completo do email, como texto. */
-export function molde({ assunto, titulo, blocos, rodape }) {
+export function molde({ assunto, titulo, blocos, rodape, rodapeHtml }) {
   const linhas = (blocos || []).filter(Boolean)
     .map((b) => '<tr><td style="padding:16px 0 0">' + b + '</td></tr>').join('');
   return '<!doctype html><html lang="pt-PT"><head><meta charset="utf-8">' +
@@ -223,7 +226,7 @@ export function molde({ assunto, titulo, blocos, rodape }) {
     ';font-size:22px;line-height:1.25;font-weight:700;letter-spacing:-0.015em;color:' + COR.tinta + '">' + escaparHtml(titulo) + '</h1></td></tr>' +
     linhas + '</table></td></tr>' +
     '<tr><td class="rd-rodape" style="padding:16px 28px 22px;border-top:1px solid ' + COR.contorno + ';font-family:' + LETRA +
-    ';font-size:12.5px;line-height:1.5;color:' + COR.terciario + '">' + escaparHtml(rodape || RODAPE_CONTA) + '</td></tr>' +
+    ';font-size:12.5px;line-height:1.5;color:' + COR.terciario + '">' + (rodapeHtml || escaparHtml(rodape || RODAPE_CONTA)) + '</td></tr>' +
     '</table>' +
     '<!--[if mso]></td></tr></table><![endif]-->' +
     '</td></tr></table></body></html>';
@@ -396,6 +399,47 @@ export async function emailReporPassword(env, para, ligacao) {
   return enviarEmail(env, { para, remetente: 'maquina', assunto: c.assunto, html: c.html, texto: c.texto });
 }
 
+/* O email «Confirma o teu email», no molde do repor: o botão com a ligação,
+   a ligação por extenso por baixo para quem a tiver de copiar, a validade
+   (7 dias, a mesma janela em que a conta funciona sem confirmar) e o rodapé
+   da conta. O «vale 7 dias e serve uma vez» é garantido por quem a criou
+   (rotas/auth.js:pedirConfirmacao) — aqui só se escreve o envelope.
+   Recebe: ligacao — o URL de confirmação, completo (…/?confirmar=<token>).
+   Devolve: { assunto, html, texto } — o email pronto a enviar. */
+export function cartaConfirmarEmail(ligacao) {
+  const titulo = 'Confirma o teu email';
+  const pedido = 'Criaste uma conta no Rendorium com este email. Confirma que é teu para continuares a usar a app ' +
+    'e a receber os avisos por email.';
+  const validade = 'A ligação vale 7 dias e serve uma vez. Passados os 7 dias, a app pede-te para confirmar antes de continuar.';
+  const url = String(ligacao || '');
+  return {
+    assunto: titulo,
+    texto: textoDoEmail([titulo, pedido, 'Confirmar o email:\n' + url, validade, RODAPE_CONTA]),
+    html: molde({
+      assunto: titulo,
+      titulo,
+      blocos: [
+        paragrafo(escaparHtml(pedido)),
+        botao(url, 'Confirmar o email'),
+        paragrafo('Se o botão não abrir, copia esta ligação:<br><span class="rd-tinta" style="color:' + COR.tinta +
+          ';word-break:break-all">' + escaparHtml(url) + '</span>', 'sub'),
+        paragrafo(escaparHtml(validade)),
+      ],
+      rodape: RODAPE_CONTA,
+    }),
+  };
+}
+
+// O email «Confirma o teu email» (a cartaConfirmarEmail), enviado do no-reply.
+// Uma conta de teste recebe-o no email do dev que a criou (enviarEmail).
+// Recebe: env — o ambiente do worker; para — o email da conta; ligacao — o
+// URL de confirmação, completo.
+// Devolve: promessa de { enviado, motivo } — o que o enviarEmail disser.
+export async function emailConfirmarEmail(env, para, ligacao) {
+  const c = cartaConfirmarEmail(ligacao);
+  return enviarEmail(env, { para, remetente: 'maquina', assunto: c.assunto, html: c.html, texto: c.texto });
+}
+
 /* A resposta da equipa a um pedido: o número e o assunto por cima, a
    resposta numa caixa, e o botão para a app. A resposta vai cortada a
    RESPOSTA_MAX caracteres nas DUAS versões (com reticências quando corta: o
@@ -441,4 +485,151 @@ export function cartaRespostaPedido(env, assunto, resposta, id) {
 export async function emailRespostaPedido(env, para, assunto, resposta, id) {
   const c = cartaRespostaPedido(env, assunto, resposta, id);
   return enviarEmail(env, { para, remetente: 'suporte', assunto: c.assunto, html: c.html, texto: c.texto });
+}
+
+/* --------------------- os avisos dos planeados em atraso ------------------ */
+
+// O espaço fino dos milhares e do «€», o mesmo da app (web/app/formato.js:SP).
+const ESPACO_FINO = ' ';
+// O que cada sentido do dinheiro diz ao lado do montante.
+const SENTIDO = { in: 'a receber', out: 'a pagar' };
+
+/* Uma data AAAA-MM-DD como a app a escreve (web/app/formato.js:dPT).
+   Recebe: iso — a data (só os 10 primeiros caracteres contam).
+   Devolve: 'dd/mm/aaaa', ou '' quando não é uma data. */
+export function dataDoAviso(iso) {
+  const t = String(iso || '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t.slice(8, 10) + '/' + t.slice(5, 7) + '/' + t.slice(0, 4) : '';
+}
+
+/* Um montante em euros como a app o escreve com duas casas
+   (web/app/formato.js:money): milhares com espaço fino, vírgula decimal, o
+   «€» no fim, e o menos tipográfico nos negativos.
+   Recebe: v — o valor (número ou texto; o que não for número conta 0).
+   Devolve: o texto, ex.: «1 250,50 €». */
+export function montanteDoAviso(v) {
+  const n = Number(v) || 0;
+  const [inteira, decimal] = Math.abs(n).toFixed(2).split('.');
+  return (n < 0 ? '−' : '') + inteira.replace(/\B(?=(\d{3})+(?!\d))/g, ESPACO_FINO) + ',' + decimal + ESPACO_FINO + '€';
+}
+
+/* O sentido de um atraso dito ao lado do montante.
+   Recebe: fluxo — 'in', 'out' ou outro (uma transferência não tem sentido).
+   Devolve: 'a receber', 'a pagar' ou ''. */
+function sentidoDoAviso(fluxo) {
+  return Object.prototype.hasOwnProperty.call(SENTIDO, fluxo) ? SENTIDO[fluxo] : '';
+}
+
+/* Os atrasos de uma secção agrupados por casa, pela ordem em que chegam
+   (quem chama já os ordenou). Agrupa pelo id da casa quando o há — duas
+   casas com o mesmo nome não se juntam —, senão pelo nome.
+   Recebe: lista — [{ casa, casaId (opcional), descricao, data, montante,
+   fluxo }], com casa já o nome a mostrar.
+   Devolve: [{ casa, itens: [...] }]. */
+function porCasa(lista) {
+  const grupos = [];
+  const onde = new Map();
+  for (const a of lista || []) {
+    const nome = String(a.casa || '');
+    const chave = a.casaId != null ? 'id:' + a.casaId : 'nome:' + nome;
+    if (!onde.has(chave)) { onde.set(chave, { casa: nome, itens: [] }); grupos.push(onde.get(chave)); }
+    onde.get(chave).itens.push(a);
+  }
+  return grupos;
+}
+
+/* Uma linha de atraso em texto: a descrição, a data e o montante com o sentido.
+   Recebe: a — o atraso ({ descricao, data, montante, fluxo }).
+   Devolve: a linha, ex.: «- Renda · previsto para 01/10/2026 · 750,00 € a receber». */
+function linhaDoAviso(a) {
+  const sentido = sentidoDoAviso(a.fluxo);
+  return '- ' + String(a.descricao || '') + ' · previsto para ' + dataDoAviso(a.data) + ' · ' +
+    montanteDoAviso(a.montante) + (sentido ? ' ' + sentido : '');
+}
+
+/* Uma casa da lista dos atrasos, em HTML: o nome por cima e uma linha por
+   atraso — a descrição e a data à esquerda, o montante e o sentido à direita
+   —, numa caixa com contorno como a da resposta da equipa.
+   Recebe: grupo — { casa, itens } (o de porCasa).
+   Devolve: a tabela da casa. */
+function casaDoAviso(grupo) {
+  const sec = 'font-family:' + LETRA + ';font-size:13px;line-height:1.5;color:' + COR.secundario;
+  const linhas = grupo.itens.map((a, i) => {
+    const filete = i ? 'border-top:1px solid ' + COR.contorno + ';' : '';
+    const sentido = sentidoDoAviso(a.fluxo);
+    return '<tr><td class="rd-caixa rd-tinta" valign="top" style="' + filete + 'padding:10px 16px;font-family:' + LETRA +
+      ';font-size:15px;line-height:1.4;color:' + COR.tinta + ';overflow-wrap:anywhere;word-break:break-word">' +
+      escaparHtml(a.descricao) + '<br><span class="rd-sec" style="' + sec + '">Previsto para ' + escaparHtml(dataDoAviso(a.data)) + '</span></td>' +
+      '<td class="rd-caixa rd-tinta" valign="top" align="right" style="' + filete + 'padding:10px 16px 10px 0;font-family:' + LETRA +
+      ';font-size:15px;line-height:1.4;font-weight:600;color:' + COR.tinta + ';white-space:nowrap;font-variant-numeric:tabular-nums">' +
+      escaparHtml(montanteDoAviso(a.montante)) +
+      (sentido ? '<br><span class="rd-sec" style="' + sec + ';font-weight:400">' + escaparHtml(sentido) + '</span>' : '') + '</td></tr>';
+  }).join('');
+  return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="rd-caixa" style="border-collapse:separate;border-spacing:0;border:1px solid ' +
+    COR.contorno + ';border-radius:12px">' +
+    '<tr><td colspan="2" class="rd-sec" style="padding:12px 16px 2px;' + sec + ';font-weight:600;overflow-wrap:anywhere;word-break:break-word">' +
+    escaparHtml(grupo.casa) + '</td></tr>' + linhas + '</table>';
+}
+
+/* O resumo diário dos movimentos planeados em atraso: os novos (os que nunca
+   foram num email a esta pessoa) e, quando os há, os que continuam em atraso,
+   cada secção agrupada por casa, com a descrição, a data em que devia ter
+   acontecido e o montante; o botão «Abrir os Planeados» e, no rodapé, a
+   ligação para desligar os avisos nas Definições. Os títulos das secções
+   concordam com o número («Novo em atraso» / «Novos em atraso»).
+   Recebe: env — o ambiente do worker (dá o endereço da app); novos e
+   continuam — arrays de { casa (o nome a mostrar), casaId (opcional: agrupa
+   por ele), descricao, data
+   (AAAA-MM-DD), montante (número), fluxo ('in', 'out' ou outro) }, já
+   ordenados.
+   Devolve: { assunto, html, texto } — o email pronto a enviar. */
+export function cartaAtrasos(env, novos, continuam) {
+  const lnovos = novos || [];
+  const lcont = continuam || [];
+  const n = lnovos.length + lcont.length;
+  const assunto = n === 1 ? 'Tens um movimento em atraso' : 'Tens ' + n + ' movimentos em atraso';
+  const app = enderecoDaApp(env);
+  const planeados = app + '/?planeados';
+  const avisos = app + '/?avisos';
+  const intro = n === 1
+    ? 'Este movimento planeado passou a data e ainda não está confirmado na app.'
+    : 'Estes movimentos planeados passaram a data e ainda não estão confirmados na app.';
+  const seccoes = [
+    { titulo: lnovos.length === 1 ? 'Novo em atraso' : 'Novos em atraso', grupos: porCasa(lnovos) },
+    { titulo: lcont.length === 1 ? 'Continua em atraso' : 'Continuam em atraso', grupos: porCasa(lcont) },
+  ].filter((s) => s.grupos.length);
+  const pergunta = 'Não queres estes avisos?';
+  const desliga = 'Desliga-os nas Definições';
+  const tituloDe = (s) => '<strong class="rd-tinta" style="font-family:' + LETRA_TITULO + ';font-size:16px;color:' + COR.tinta + '">' +
+    escaparHtml(s.titulo) + '</strong>';
+  return {
+    assunto,
+    texto: textoDoEmail([
+      assunto,
+      intro,
+      ...seccoes.map((s) => [s.titulo, ...s.grupos.map((g) => g.casa + '\n' + g.itens.map(linhaDoAviso).join('\n'))].join('\n\n')),
+      'Abrir os Planeados: ' + planeados,
+      pergunta + ' ' + desliga + ': ' + avisos,
+    ]),
+    html: molde({
+      assunto,
+      titulo: assunto,
+      blocos: [
+        paragrafo(escaparHtml(intro)),
+        ...seccoes.flatMap((s) => [paragrafo(tituloDe(s)), ...s.grupos.map(casaDoAviso)]),
+        botao(planeados, 'Abrir os Planeados'),
+      ],
+      rodapeHtml: escaparHtml(pergunta) + ' <a href="' + escaparHtml(avisos) + '" target="_blank" style="color:' + COR.cobalto +
+        ';text-decoration:underline">' + escaparHtml(desliga) + '</a>.',
+    }),
+  };
+}
+
+// O resumo dos planeados em atraso (a cartaAtrasos), enviado do no-reply.
+// Recebe: env — o ambiente do worker; para — o email da pessoa; novos e
+// continuam — os atrasos, como a cartaAtrasos os recebe.
+// Devolve: promessa de { enviado, motivo } — o que o enviarEmail disser.
+export async function emailAtrasos(env, para, novos, continuam) {
+  const c = cartaAtrasos(env, novos, continuam);
+  return enviarEmail(env, { para, remetente: 'maquina', assunto: c.assunto, html: c.html, texto: c.texto });
 }

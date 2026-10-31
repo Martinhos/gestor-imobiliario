@@ -476,7 +476,8 @@ function mortModal(pid,lid){
 /* Abre o modal da hipoteca `lid` do imóvel já carregado em pForm (newMort e
    mortModal tratam disso primeiro). Liga o repaint ao mortBody, põe o menu de
    apagar quando é edição, e define o onSave: sem capital em dívida (nova ou
-   editada) recusa e aponta o campo; senão grava o imóvel inteiro na db, sincroniza os
+   editada) recusa e aponta o campo, e o mesmo com um início novo antes da
+   compra da casa (imovel.js:creditoAntesDaCompra); senão grava o imóvel inteiro na db, sincroniza os
    movimentos planeados das prestações e fecha. A nova diz «Hipoteca
    adicionada.» com o «Ver» para a ficha dela (componentes.js:avisoComVer).
    Recebe: lid — o id da hipoteca dentro de pForm; isNew — verdadeiro quando
@@ -497,6 +498,9 @@ function mortOpen(lid,isNew){
        isso recusa-se em branco também ao editar — só na nova, o campo dizia
        «obrigatório» e gravava-se vazio */
     if(l&&!(capitalDoInicio(l,db.transactions)>0))return falhaCampo('l_out_'+l.id,'Indica o capital em dívida.');
+    /* nem antes da compra da casa, quando o início é novo ou mudou (imovel.js:creditoAntesDaCompra) */
+    const cedo=creditoAntesDaCompra(pForm,prop(pForm.id));
+    if(cedo)return falhaCampo('l_start_'+cedo.id,cedo.msg);
     if(l)l.name=l.name||l.bank||'Hipoteca';   /* a recorrência identifica-se pelo nome */
     /* a pergunta pelas prestações desde o início cria movimentos: com os
        Movimentos ligados; o planeado da prestação só com os Planeados */

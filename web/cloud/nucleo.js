@@ -301,7 +301,17 @@ function api(method, path, data, opcoes) {
     return lerCorpo(r, opcoes.comSelo).then(function (lido) {
       var j = lido.json;
       if (r.status === 401 && CW.user && sessaoCaiu(method, path, j)) sessionLost();
-      if (!r.ok) { var e = new Error(j.error || ('Erro ' + r.status)); e.status = r.status; throw e; }
+      if (!r.ok) {
+        var e = new Error(j.error || ('Erro ' + r.status)); e.status = r.status;
+        if (j.erro) e.erro = j.erro;
+        /* passaram os 7 dias sem confirmar o email: o servidor só deixa o
+           essencial (worker/src/api.js:portaoDoEmail), e a app abre o ecrã
+           que o diz (cloud/entrada.js:emailPorConfirmar) */
+        if (r.status === 403 && j.erro === 'email_por_confirmar' && CW.user && typeof emailPorConfirmar === 'function') {
+          try { emailPorConfirmar(); } catch (x) {}
+        }
+        throw e;
+      }
       if (!opcoes.comSelo) return j;
       var selo = '';
       try { selo = (r.headers && typeof r.headers.get === 'function' && r.headers.get('ETag')) || ''; } catch (x) {}
@@ -401,7 +411,8 @@ function chaveDaLigacao(id) {
    — já faltava em dois (a ligação de partilha, os planeados perguntados).
    Sai sempre: a sessão, a página guardada, os planeados já perguntados, a
    ligação desta conta, o rasto, o estado em memória, os serviços desligados
-   (eram desta conta) e o selo da nuvem (sem sessão não há ligação de que
+   (eram desta conta), a faixa ou o ecrã do email por confirmar
+   (cloud/entrada.js:largarEmailPorConfirmar) e o selo da nuvem (sem sessão não há ligação de que
    falar; cloud/entrada.js:setSyncBadge). A base local e o retrato ficam, de propósito
    (docs/design.md, «A app não afirma nem decide antes de saber»): quem volta a entrar encontra o que
    deixou, e o finishLogin larga-os quando entra outra conta. Com apagarDados
@@ -431,6 +442,8 @@ function encerrarSessao(o) {
   // sem sessão a nuvem não diz nada; a próxima entrada volta a começar «A ligar»
   semLigacao = false; porLigar = true;
   try { setSyncBadge(''); } catch (e) {}
+  // e a faixa ou o ecrã do email por confirmar eram desta conta
+  try { if (typeof largarEmailPorConfirmar === 'function') largarEmailPorConfirmar(); } catch (e) {}
   try { definirServicosDesligados([]); } catch (e) {}
   try { closeAllModals(); } catch (e) {}
   // a próxima entrada começa na visão geral, não onde se saiu
@@ -744,13 +757,23 @@ function descricaoDe(kind, data) {
    frase do servidor (pode vir vazia; o toast diz a razão pela sua voz).
    Devolve: nada — mexe em db e junta a descrição à lista para o toast. */
 function recusaRegisto(o, erro) {
+  var reg = largarRegisto(o);
+  pushNow._recusadosAgora = (pushNow._recusadosAgora || []).concat([descricaoDe(o.kind, reg || o.data)]);
+}
+
+/* Tira da base local, do retrato e das bases um registo que o servidor
+   recusou (recusaRegisto, recusaPorValidacao): o que falta cá não é uma
+   remoção por enviar, e o próximo estado traz a versão do servidor, se existir.
+   Recebe: o — a operação do push ({kind, id, _key}).
+   Devolve: o registo tirado, ou null se já lá não estava. */
+function largarRegisto(o) {
   var lista = listaDe(o) || [];
   var i = -1;
   for (var k = 0; k < lista.length; k++) if (lista[k].id === o.id) { i = k; break; }
   var reg = i > -1 ? lista.splice(i, 1)[0] : null;
   delete snap[o._key];
   delete bases[chaveDaBase(o._key)]; delete basesPorEnviar[o._key];
-  pushNow._recusadosAgora = (pushNow._recusadosAgora || []).concat([descricaoDe(o.kind, reg || o.data)]);
+  return reg;
 }
 
 /* O 403 de um serviço desligado nesta conta, distinguido do 403 de permissão
@@ -808,6 +831,41 @@ function recusaPorServico(o, sid) {
   pushNow._servicoAgora = (pushNow._servicoAgora || []).concat([{ servico: sid, nome: nome, op: o.op }]);
 }
 
+/* O servidor recusou gravar uma operação pela validação dos dados (422 —
+   hoje, uma data antes da compra do imóvel: worker/src/lib/escritas.js:
+   recusaPelaCompra). Reenviá-la não muda nada: ficava a subir de 30 em 30
+   segundos para sempre, com o selo em «por enviar». Como no 403 de
+   permissão (recusaRegisto), um registo sai da base local e do retrato — o
+   servidor nunca o teve assim; se já lá estava, o próximo estado traz a
+   versão de lá. Um imóvel não sai: só o crédito recusado — um crédito novo
+   antes da compra sai, e um cuja data recuou volta à data que o servidor tem
+   (a base); o envio seguinte leva a ficha sem ele. Se não houver nada a
+   corrigir cá (o aparelho e o servidor discordam), a ficha dá-se por
+   enviada, e o estado seguinte acerta-a. Diz-se a frase do servidor, uma vez
+   por envio, no fim (pushNow).
+   Recebe: o — a operação do push ({op, scope, kind, id, houseId, data, _key,
+   _res}); erro — a frase do servidor.
+   Devolve: nada — mexe em db e junta o aviso à lista do fim do envio. */
+function recusaPorValidacao(o, erro) {
+  pushNow._invalidosAgora = (pushNow._invalidosAgora || []).concat([String(erro || 'Os dados não foram aceites pelo servidor.')]);
+  if (o.scope !== 'house') { largarRegisto(o); return; }
+  var p = (db.properties || []).find(function (x) { return x.id === o.houseId; });
+  var b = bases[chaveDaBase(o._key)] || {};
+  var compra = p && p.purchaseDate;
+  var antes = {};
+  (Array.isArray(b.loans) ? b.loans : []).forEach(function (l) { if (l && l.id) antes[l.id] = l.start || ''; });
+  var mudou = false;
+  if (p && compra) {
+    p.loans = (p.loans || []).filter(function (l) {
+      if (!l.start || l.start >= compra) return true;
+      if (!(l.id in antes)) { mudou = true; return false; }
+      if (antes[l.id] !== l.start) { l.start = antes[l.id]; mudou = true; }
+      return true;
+    });
+  }
+  if (!mudou) snap[o._key] = o._res;
+}
+
 /* Quantas operações de um envio ainda não chegaram ao servidor: os «put»
    cujo resumo o retrato ainda não tem, e os «del» que ainda lá estão.
    Recebe: ops — as operações do envio.
@@ -828,9 +886,20 @@ function avisoDoServidor(msg) {
   try { toast(m || 'O servidor não aceitou o envio agora. Fica neste aparelho e segue depois.', { ms: 6000 }); } catch (e) {}
 }
 
+/* Quantas operações vão num POST /api/sync: o máximo que o servidor aceita
+   (worker/src/rotas/sync.js:MAX_OPS). Um pedido gasta as mesmas consultas à
+   D1 com 1 operação ou com 200 (worker/src/lib/escritas.js:aplicarOps): as
+   escritas vão num db.batch, que a D1 conta como UMA consulta no teto de 50
+   por invocação do plano gratuito — «a db.batch() call counts as a single
+   query against it, not one query per statement»
+   (https://developers.cloudflare.com/d1/platform/limits/). Pedaços mais
+   pequenos só gastavam mais pedidos do travão de ritmo (60 em 15 minutos,
+   lib/limites.js) e mais escritas no contador dele. */
+var LOTE_SYNC = 200;
+
 /* Envia ao servidor a diferença entre o estado local e o retrato: 'put' do que
    mudou (casas primeiro, que os registos dependem delas) e 'del' do que
-   desapareceu, em lotes de 200. O put de uma casa ou de um registo leva a
+   desapareceu, em lotes de LOTE_SYNC. O put de uma casa ou de um registo leva a
    base (os campos que mudaram desde a versão do servidor que este aparelho
    leu, baseParcial), e o servidor funde em vez de gravar por cima
    (worker/src/lib/escritas.js:escreverCasa, worker/src/lib/escritas.js:gravarRegisto);
@@ -913,7 +982,7 @@ function pushNow() {
   seloAplicado = ''; resumoAplicado = '';
 
   var chain = Promise.resolve();
-  for (var i = 0; i < ops.length; i += 200) {
+  for (var i = 0; i < ops.length; i += LOTE_SYNC) {
     (function (chunk) {
       chain = chain.then(function () {
         return api('POST', '/api/sync', {
@@ -922,7 +991,10 @@ function pushNow() {
             if (o.base) x.base = o.base;
             return x;
           }),
-        }).then(function (res) {
+          // a sessão do rasto, para o servidor juntar o que este envio mudou
+          // aos toques da mesma visita (lib/rasto.js:sessaoDoPedido); só com
+          // o rasto ligado nesta conta
+        }, typeof rstLigado === 'function' && rstLigado() && rstSessao ? { headers: { 'X-Rasto-Sessao': rstSessao } } : undefined).then(function (res) {
           (res.results || []).forEach(function (r, idx) {
             var o = chunk[idx];
             if (!o) return;
@@ -942,11 +1014,13 @@ function pushNow() {
             }
             // sem permissão num imóvel de colaboração: o registo não fica a fingir que subiu
             else if (o.op === 'put' && o.scope === 'record' && r.status === 403) recusaRegisto(o, r.error);
+            // os dados não passam na validação (uma data antes da compra): não se insiste
+            else if (o.op === 'put' && r.status === 422) recusaPorValidacao(o, r.error);
             else pushNow._recusadas = (pushNow._recusadas || 0) + 1;
           });
         });
       });
-    })(ops.slice(i, i + 200));
+    })(ops.slice(i, i + LOTE_SYNC));
   }
   return chain
     .then(function () {
@@ -963,6 +1037,16 @@ function pushNow() {
         try {
           toast(fora[0] + ' não foi guardado: sem permissão neste imóvel.' +
             (fora.length > 1 ? ' E mais ' + (fora.length - 1) + '.' : ''), { ms: 6000 });
+        } catch (e) {}
+      }
+      /* o que a validação do servidor recusou (recusaPorValidacao): já saiu
+         (ou foi corrigido) cá, e diz-se a frase dele — uma vez por envio */
+      var invalidos = pushNow._invalidosAgora || []; pushNow._invalidosAgora = [];
+      if (invalidos.length) {
+        try { rawSet(KEY, JSON.stringify(db)); render(); } catch (e) {}
+        try {
+          toast(invalidos[0] + ' Não foi guardado.' +
+            (invalidos.length > 1 ? ' E mais ' + (invalidos.length - 1) + '.' : ''), { ms: 7000 });
         } catch (e) {}
       }
       /* o que um serviço desligado recusou: o serviço fica desligado já no
@@ -994,7 +1078,9 @@ function pushNow() {
            rede: o selo fica em «N por enviar» e a frase dele chega à pessoa */
         ligou();
         setSyncBadge('pend', porEnviar(ops));
-        avisoDoServidor(e.message);
+        /* o email por confirmar diz-se no ecrã dele (cloud/entrada.js); em
+           aviso aparecia por cima da janela do «Pedir ajuda» */
+        if (e.erro !== 'email_por_confirmar') avisoDoServidor(e.message);
       } else {
         caiuALigacao();   // sem rede, ou sem resposta a tempo
       }

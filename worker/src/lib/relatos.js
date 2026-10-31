@@ -86,11 +86,9 @@ export async function recordReport(env, ctx, categoria, message, detail, userId,
   const t = now();
   const versao = extra && extra.versao != null ? String(extra.versao).slice(0, 20) : null;
   const contexto = extra && extra.contexto ? mascararTokens(extra.contexto).slice(0, 200) : '';
-  /* Um registo estruturado por relato, para os Workers Logs. É o que fica a
-     ver-se por pedido depois de se desligar a linha automática de invocação
-     (wrangler.toml), que gravava o URL em bruto com os tokens lá dentro. Aqui
-     vai tudo já mascarado, e como objeto e não como texto: fica pesquisável
-     por campo no painel, e o Discord continua a receber o embed. */
+  /* Um registo estruturado por relato, para quem estiver a ver o wrangler
+     tail. Vai tudo já mascarado, e como objeto e não como texto; o que fica é
+     o pedido na D1 e o embed no Discord. */
   console.error({ relato: categoria, msg: msg.slice(0, 300), contexto, versao, quem: userId || null });
   medirRelato(env, categoria, fp);
   try {

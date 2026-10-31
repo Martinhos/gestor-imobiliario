@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- So no flavor dev: o manifest merger junta este intent-filter ao da
+         MainActivity de main (o exported e o singleTask vem de la), e a app
+         de producao nao declara nada disto. As ligacoes do /test do Discord
+         (https://dev.rendorium.com/t/entrar?...) sao a unica porta do dev
+         sem sessao: abertas aqui, a sessao da conta de teste fica no WebView.
+         O autoVerify faz o Android confirmar a ligacao no
+         /.well-known/assetlinks.json do dev; sem essa confirmacao, o Android
+         12+ abre-as no browser e o 10 e o 11 perguntam com que app. -->
+    <application>
+        <activity android:name=".MainActivity">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="dev.rendorium.com"
+                    android:path="/t/entrar" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

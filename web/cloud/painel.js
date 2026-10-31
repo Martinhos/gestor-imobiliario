@@ -148,7 +148,9 @@ vTransactions = function () {
 /* ---------------- recusar um movimento planeado ---------------- */
 
 // Recusar a ocorrência de um planeado: pede confirmação e depois avança o plano
-// sem criar movimento nenhum (um "once" desaparece de vez). Grava e re-renderiza.
+// sem criar movimento nenhum (um "once" desaparece de vez). Numa renda de
+// contrato fixa o chão na nova data (planeados.js:recRecusadaFixa), para o
+// arranque seguinte não a puxar de volta ao mês recusado. Grava e re-renderiza.
 // Recebe: id — o id (string) do plano recorrente cuja ocorrência se recusa.
 // Devolve: nada — abre o modal de confirmação; só ao confirmar é que grava e redesenha.
 CW.rejectRec = function (id) {
@@ -160,10 +162,97 @@ CW.rejectRec = function (id) {
     (once ? ' e, como só acontecia uma vez, deixa de ser pedido.' : ' e passa à data seguinte. O plano continua ativo.'),
     function () {
       recAdvance(r);
+      recRecusadaFixa(r);
       save(); buildNav(); render();
       toast(once ? 'Movimento recusado.' : 'Recusado — segue para a próxima data.');
     });
 };
+
+/* ---------------- começar um planeado a partir de hoje ----------------
+   Um planeado que «começou» numa data passada (o contrato, a hipoteca, um
+   movimento à mão) e que só se quer registar daqui para a frente: larga todas
+   as datas em falta de uma vez, sem criar movimentos, e passa para a primeira
+   ocorrência de hoje em diante (planeados.js:recComecarHoje). O chão fica no
+   planeado (r.desde): o preenchimento e o cursor da renda já não voltam aos
+   meses largados (planeados.js:recDesde). Numa hipoteca não abate capital
+   nenhum. Ticket de QA e0450533. */
+
+// O texto da confirmação: quantas datas ficam por registar, de quando a
+// quando, e para onde passa o planeado — ou que termina e é removido.
+// Recebe: r — o planeado; s — o resumo do planeados.js:recComecarHojeResumo.
+// Devolve: HTML (string) para o corpo da confirmação.
+function comecarHojeFrase(r, s) {
+  var n = s.datas.length, a = dPT(s.datas[0]), b = dPT(s.datas[n - 1]);
+  var de = ' de <b>' + esc(r.name) + '</b>';
+  var quais = n === 1 ? 'A data em falta' + de + ', ' + a + ', fica' : 'As ' + n + ' datas em falta' + de + ', de ' + a + ' a ' + b + ', ficam';
+  return quais + ' por registar: nenhum movimento é criado. ' +
+    (s.fim ? 'Como não há mais nenhuma data a partir de hoje, o planeado termina e é removido.'
+      : 'O próximo fica a <b>' + dPT(s.next) + '</b>.') +
+    ((r.tx || {}).loanId ? ' O capital em dívida da hipoteca não muda.' : '') +
+    (r.muted && !s.fim ? ' Os avisos voltam a ficar ligados.' : '');
+}
+
+// Começar a partir de hoje: confirma, larga as datas em falta, passa o
+// planeado para a primeira ocorrência de hoje em diante (ou remove-o, quando
+// já não há nenhuma), tira o silêncio e dá o Anular, que repõe o next, o
+// until, o muted e o chão de antes — ou o planeado inteiro, se saiu. Pede o
+// mesmo que recusar (podeEditar com 'confirmar'); remover um alheio, o que o
+// servidor aceita (podeEditar com true). Vindo da janela do preenchimento,
+// fecha-a primeiro, e cancelar ou confirmar seguem para o plano seguinte da
+// fila (CW.fillNext), como o Cancelar dela.
+// Recebe: id — o id (string) do planeado; doPreencher (opcional) — verdadeiro
+// quando vem do segundo botão da janela do CW.fillMissed.
+// Devolve: nada — abre a confirmação (ou avisa num toast que não há nada a largar).
+CW.startFromToday = function (id, doPreencher) {
+  if (doPreencher && modalStack.length) closeModal();
+  var r = (db.recurring || []).find(function (x) { return x.id === id; });
+  if (!r) return doPreencher ? CW.fillNext() : undefined;
+  var s = recComecarHojeResumo(r), hid = (r.tx || {}).propertyId;
+  var recusa = motivoRecusa(hid, 'rec.add', r, s.fim ? true : 'confirmar');
+  if (recusa || !recPodeComecarHoje(r)) {
+    toast(recusa || 'Não há datas em falta para largar.');
+    return doPreencher ? CW.fillNext() : undefined;
+  }
+  openModal('Começar a partir de hoje', '<div class="hint u-fs-14px">' + comecarHojeFrase(r, s) + '</div>',
+    '<button class="btn" data-click="' + (doPreencher ? 'CW.fillNext()' : 'closeModal()') + '">Cancelar</button>' +
+    '<button class="btn primary" data-toca="dados" data-click="_ok()">Confirmar</button>');
+  _ok = function () {
+    closeModal();
+    var vivo = (db.recurring || []).find(function (x) { return x.id === id; });
+    if (vivo) comecarHojeAplicar(vivo);
+    if (doPreencher) CW.fillNext();
+  };
+};
+
+// Aplica o «Começar a partir de hoje» a um planeado já confirmado pela
+// pessoa: recalcula (a base pode ter mudado com a confirmação aberta), muda
+// ou remove, grava, redesenha e arma o Anular.
+// Recebe: r — o planeado vivo (de db.recurring).
+// Devolve: nada — grava e mostra o aviso com o Anular.
+function comecarHojeAplicar(r) {
+  if (!recPodeComecarHoje(r)) return toast('Não há datas em falta para largar.');
+  var s = recComecarHojeResumo(r), id = r.id, n = s.datas.length;
+  var copia = JSON.parse(JSON.stringify(r)), pos = db.recurring.indexOf(r);
+  var antes = { next: r.next, until: r.until, muted: r.muted, temDesde: Object.prototype.hasOwnProperty.call(r, 'desde'), desde: r.desde };
+  if (s.fim) db.recurring = db.recurring.filter(function (x) { return x.id !== id; });
+  else { r.next = s.next; r.until = s.until; r.muted = false; r.desde = s.next; }
+  save(); buildNav(); render();
+  var quantas = n === 1 ? '1 data fica' : n + ' datas ficam';
+  comDesfazer(s.fim ? 'Planeado removido: ' + quantas + ' por registar.' : 'Começa a ' + dPT(s.next) + ': ' + quantas + ' por registar.',
+    function () {
+      /* o planeado vivo pela base de agora: um sync pelo meio troca os objetos */
+      var vivo = (db.recurring || []).find(function (x) { return x.id === id; });
+      if (s.fim) {
+        if (!vivo) db.recurring.splice(Math.max(0, Math.min(pos, db.recurring.length)), 0, normRec(copia));
+        return;
+      }
+      if (!vivo) return;
+      vivo.next = antes.next; vivo.until = antes.until; vivo.muted = antes.muted;
+      /* '' e não delete: num planeado alheio o servidor só funde os campos que
+         chegam (permissoes.js:fundirPlaneado), e um campo que não vem ficava */
+      vivo.desde = antes.temDesde ? antes.desde : '';
+    });
+}
 
 /* ---------- preencher por estimativa os períodos já passados ----------
    Quem regista um contrato ou uma hipoteca que já vem de trás não vai
@@ -202,7 +291,9 @@ function planoQuem(r) {
 // com o total e o aviso de que é tudo estimativa. Numa hipoteca são as
 // prestações do plano (juros, selo e capital) e o modal diz para quanto
 // desce o capital em dívida. Não escreve nada na base — isso é o
-// doFillMissed, ao confirmar.
+// doFillMissed, ao confirmar. A quem pode recusar, um segundo botão,
+// «Começar a partir de hoje» (CW.startFromToday), larga-os em vez de os
+// registar.
 // Recebe: id — o id (string) do plano recorrente com períodos em falta.
 // Devolve: nada — abre o modal (ou avisa num toast que não há nada por preencher).
 CW.fillMissed = function (id) {
@@ -232,11 +323,14 @@ CW.fillMissed = function (id) {
     if (!n) return toast('Não há períodos por preencher.');
     var val0 = Number(r.tx.amount) || 0;
     var per = EVERY_WORD[r.every] || 'período';
+    // o plano começa antes da compra da casa: as datas começam nela, e diz-se porquê
+    var compra = planoAntesDaCompra(r);
     body = '<div class="form">' +
       '<div class="hint">Vais registar <b>' + n + '</b> movimento' + (n === 1 ? '' : 's') +
       ' de <b>' + esc(r.name) + '</b>, de <b>' + dPT(dates[0]) + '</b> a <b>' + dPT(dates[n - 1]) + '</b>, ' +
       'todos com o valor atual de <b>' + euro2(val0) + '</b> por ' + per + '.</div>' +
       planoQuem(r) +
+      (compra ? '<div class="hint">O imóvel foi comprado a <b>' + compra + '</b>: antes disso não há nada a registar.</div>' : '') +
       '<div class="hint u-bl-3px-solid-v-warn u-pl-10px">' +
       '<b>Isto é uma estimativa.</b> O valor de cada período pode não corresponder ao que foi realmente pago: ' +
       'não entra em conta com aumentos de renda, meses em falta, atrasos nem valores diferentes. ' +
@@ -244,7 +338,13 @@ CW.fillMissed = function (id) {
       '<div class="hint">Ficam marcados com a etiqueta <b>Estimativa</b> — procura por “estimativa” nos Movimentos para os veres todos.</div>' +
       '<div class="stat u-mt-6px"><span>Total a registar</span><b>' + euro2(val0 * n) + '</b></div></div>';
   }
+  /* a outra resposta: não registar o que ficou para trás e começar hoje
+     (CW.startFromToday), a quem pode recusar. Vai primeiro e numa linha só
+     (estilos.css:.preencher-hoje): três botões lado a lado a 384px partiam o
+     rótulo em três linhas */
+  var hoje = podeEditar((r.tx || {}).propertyId, 'rec.add', r, 'confirmar') && recPodeComecarHoje(r);
   openModal('Preencher ' + n + ' ' + (n === 1 ? 'período' : 'períodos'), body,
+    (hoje ? '<button class="btn preencher-hoje" data-toca="camada" data-click="CW.startFromToday(\'' + id + '\',1)">Começar a partir de hoje</button>' : '') +
     '<button class="btn" data-toca="camada" data-click="CW.fillNext()">Cancelar</button>' +
     '<button class="btn primary" data-toca="dados" data-click="CW.doFillMissed(\'' + id + '\')">Registar estimativa</button>');
 };
@@ -300,9 +400,11 @@ CW.doFillMissed = function (id) {
     (reg && reg.partes ? reg.partes : [t]).forEach(function (x) { db.transactions.push(x); });
     n++;
   }
-  // as ocorrências já vencidas ficam saldadas: empurra o plano para a frente
+  // as ocorrências já vencidas ficam saldadas: empurra o plano para a frente.
+  // O guarda é largo: o cursor de uma renda pode estar 600 meses atrás (sem
+  // data de compra na casa), e parar aos 600 deixava-o um ou dois meses aquém
   var live = r, guard = 0;
-  while (live && live.next && live.next <= today() && guard++ < 600) {
+  while (live && live.next && live.next <= today() && guard++ < 100000) {
     recAdvance(live);
     live = (db.recurring || []).find(function (x) { return x.id === id; });
   }
@@ -402,10 +504,11 @@ function offerFill() {
   CW.fillMissed(alvo.id);
 }
 
-/* O «Recusar desta vez» e o «Preencher N em falta» das linhas dos por
-   confirmar vivem no ⋯ de cada linha (planeados.js:pendMenuItens, que os
-   mostra quando a nuvem tem CW.rejectRec e CW.fillMissed); já não se
-   acrescentam ao cartão por cima. */
+/* O «Recusar desta vez», o «Preencher N em falta» e o «Começar a partir de
+   hoje» das linhas dos por confirmar vivem no ⋯ de cada linha
+   (planeados.js:pendMenuItens, que os mostra quando a nuvem tem
+   CW.rejectRec, CW.fillMissed e CW.startFromToday); já não se acrescentam ao
+   cartão por cima. */
 
 // acrescenta uma opção ao menu de toque longo que acabou de abrir
 // Recebe: opts — objeto com icon (nome do ícone), label (texto principal) e act
@@ -455,6 +558,11 @@ lpMenu = function (v) {
       menuOption({ icon: 'clock', label: 'Preencher ' + n + ' períodos em falta', first: true,
         sub: (r.tx || {}).loanId ? 'prestações antigas do plano; o capital em dívida desce com elas' : 'de uma vez, por estimativa',
         act: function () { CW.fillMissed(a[1]); } });
+    }
+    /* a quem pode recusar, como no ⋯ da linha (planeados.js:pendMenuItens) */
+    if (r && podeEditar((r.tx || {}).propertyId, 'rec.add', r, 'confirmar') && recPodeComecarHoje(r)) {
+      menuOption({ icon: 'cal', label: 'Começar a partir de hoje',
+        sub: 'as datas em falta ficam por registar, sem criar movimentos', act: function () { CW.startFromToday(a[1]); } });
     }
     menuOption({ icon: 'x', danger: true, label: 'Recusar desta vez',
       sub: 'não cria o movimento e passa à data seguinte', act: function () { CW.rejectRec(a[1]); } });

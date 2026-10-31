@@ -21,13 +21,14 @@ import { getSessionUser } from './auth.js';
 import { json, err, body, CATEGORIAS } from './lib/http.js';
 import { recordReport } from './lib/relatos.js';
 
-import { rotasAuth } from './rotas/auth.js';
+import { rotasAuth, estadoDoEmail } from './rotas/auth.js';
 import { rotasRelatos } from './rotas/relatos.js';
 import { rotasConta } from './rotas/conta.js';
 import { rotasEstado } from './rotas/estado.js';
 import { rotasSync } from './rotas/sync.js';
 import { rotasTickets } from './rotas/tickets.js';
 import { rotasQa } from './rotas/qa.js';
+import { rotasRasto } from './rotas/rasto.js';
 import { rotasAnexos } from './rotas/anexos.js';
 import { rotasCasas, rotasTransferencias } from './rotas/casas.js';
 import { rotasConexoes } from './rotas/conexoes.js';
@@ -45,6 +46,7 @@ const COM_SESSAO = [
   rotasSync,
   rotasTickets,
   rotasQa,
+  rotasRasto,
   rotasAnexos,
   rotasColaboradores,
   rotasGrupos,
@@ -52,6 +54,42 @@ const COM_SESSAO = [
   rotasTransferencias,
   rotasConexoes,
 ];
+
+/* O que uma conta com o email por confirmar há mais de 7 dias ainda pode
+   fazer (rotas/auth.js:GRACA_EMAIL_MS): ler quem é (GET /api/me, que diz à
+   app para mostrar o ecrã «Confirma o teu email»), reenviar o email, os
+   termos (aceitar, ou recusar e apagar), apagar a conta, pedir ajuda (criar
+   um pedido e ler os seus, rotas/tickets.js: o «Pedir ajuda» do ecrã —
+   decisão do Martinho, 2026-10-29), e, no ambiente de dev, trocar de conta
+   de teste. Sair é do rotasAuth, antes da sessão. A
+   exportação dos dados é do aparelho (Definições › Importar e cópias), sem
+   rota no servidor. Chaves 'MÉTODO caminho'; /api/teste/ vai por prefixo. */
+const PASSA_SEM_EMAIL = new Set([
+  'GET /api/me',
+  'POST /api/me/confirmar/reenviar',
+  'DELETE /api/me',
+  'POST /api/me/terms',
+  'POST /api/tickets',
+  'GET /api/tickets',
+]);
+
+/* O portão do email no servidor: o ecrã da app não chega, porque sem isto a
+   API ficava aberta a quem a chamasse sem a app. Uma conta por confirmar há
+   mais de 7 dias recebe 403 com { erro: 'email_por_confirmar' } em tudo o
+   que não está em PASSA_SEM_EMAIL, e a app abre o ecrã ao lê-lo
+   (cloud/nucleo.js:api). As outras passam sem consulta nenhuma: a sessão
+   já traz o created_at e o email_verified_at (auth.js:sessaoDe).
+   Recebe: c — o contexto do pedido, já com c.me.
+   Devolve: promessa da Response 403, ou de null quando o pedido segue. */
+async function portaoDoEmail(c) {
+  if (PASSA_SEM_EMAIL.has(c.method + ' ' + c.path) || c.path.startsWith('/api/teste/')) return null;
+  const em = await estadoDoEmail(c.env, c.me);
+  if (!em.travada) return null;
+  return json({
+    error: 'Confirma o teu email para continuar. Abre a ligação que te enviámos, ou pede outra em «Reenviar».',
+    erro: 'email_por_confirmar',
+  }, 403);
+}
 
 /* Ponto de entrada de todos os /api/*: normaliza o caminho, monta o contexto
    partilhado e corre as rotas por ordem — primeiro as que dispensam sessão
@@ -93,6 +131,10 @@ export async function handleApi(request, env, ctx) {
 
   c.me = await getSessionUser(env, request);
   if (!c.me) return err(401, 'Sessão inválida — inicia sessão de novo.');
+
+  // passados os 7 dias sem confirmar o email, só o essencial passa
+  const travada = await portaoDoEmail(c);
+  if (travada) return travada;
 
   for (const rota of COM_SESSAO) {
     const r = await rota(c);

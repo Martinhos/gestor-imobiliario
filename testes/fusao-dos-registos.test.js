@@ -279,23 +279,25 @@ describe('a fusão no servidor', () => {
 
   test('uma escrita a meio: a fusão repete-se com o registo fresco e nada se perde', async () => {
     const { env, B } = await partilhada({ tarefas: { seccoes: [], itens: [] } });
-    // entre a leitura e a escrita do Bruno, a Ana grava uma tarefa (uma vez)
+    // entre a leitura e a escrita do Bruno, a Ana grava uma tarefa (uma vez);
+    // a leitura é a do pedido inteiro (escritas.js:lerLinhas)
     const prep = env.DB.prepare.bind(env.DB);
     let meteu = false;
     env.DB.prepare = (sql) => {
       const st = prep(sql);
-      if (meteu || !/^SELECT data, deleted FROM records/.test(sql)) return st;
+      if (meteu || !/JOIN records r ON/.test(sql)) return st;
       const bind = st.bind.bind(st);
       st.bind = (...a) => {
-        const b = bind(...a), first = b.first.bind(b);
-        b.first = async () => {
-          const row = await first();
+        const b = bind(...a), all = b.all.bind(b);
+        b.all = async () => {
+          const lidas = await all();
           if (!meteu) {
             meteu = true;
+            const row = lidas.results[0];
             const d = JSON.parse(row.data); d.tarefas.itens.push(tarefa('TA', 'Da Ana'));
             await prep('UPDATE records SET data = ? WHERE kind = ? AND id = ?').bind(JSON.stringify(d), 'contract', 'C1').run();
           }
-          return row;
+          return lidas;
         };
         return b;
       };

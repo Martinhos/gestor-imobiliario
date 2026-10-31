@@ -1057,14 +1057,15 @@ function aprANomeDaConta() {
   return String((u && (u.name || u.email)) || 'A minha conta');
 }
 
-/* A imagem do perfil: o fundo do menu, com o cartão da conta em destaque
-   (navegacao.js:gavetaFundo), atrás, e a janela «O meu perfil» à frente,
+/* A imagem do perfil: o fundo do menu — as Definições e, em destaque, o
+   cartão da conta (navegacao.js:gavetaFundo; a Ajuda saiu dali a
+   2026-10-29, para o «?» do cabeçalho) —, atrás, e a janela «O meu perfil» à frente,
    com o nome e os campos que os contratos levam.
    Devolve: o HTML da imagem. */
 function aprADefinicoesPerfil() {
   var nome = aprANomeDaConta();
   return aprCena(aprPar(
-    '<span class="apr-a-gaveta"><span class="apr-a-gav-i">' + ic('gear', 12) + 'Definições</span><span class="apr-a-gav-i">' + ic('ajuda', 12) + 'Ajuda</span>' +
+    '<span class="apr-a-gaveta"><span class="apr-a-gav-i">' + ic('gear', 12) + 'Definições</span>' +
       '<span class="apr-a-conta apr-alvo"><span class="apr-m-avatar">' + esc(initials(nome)) + '</span><span><b>' + esc(nome) + '</b><span>O meu perfil</span></span></span></span>',
     aprFolha('O meu perfil', aprCampo('Nome completo', nome === 'A minha conta' ? '' : nome, { obrigatorio: true, vazio: 'Ex: Ana Rodrigues' }) +
       '<span class="apr-m-grelha apr-a-grelha-2">' + aprCampo('NIF', '', { vazio: 'Opcional' }) + aprCampo('Telemóvel', '', { vazio: 'Ex: 912 345 678' }) + '</span>' +

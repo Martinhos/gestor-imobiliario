@@ -22,6 +22,7 @@ import { now, TERMS_VERSION, CSP_ESTRITA } from './lib/http.js';
 import { purgeAccount } from './lib/acesso.js';
 import { newUserId, createSession, destroySession, sessionCookie, tokensDoPedido, getSessionUser } from './auth.js';
 import { auditar } from './lib/auditoria.js';
+import { ligarAoEntrar } from './lib/rasto.js';
 import { navegador } from './rotas/relatos.js';
 import { nomeNoDiscord } from './lib/bot.js';
 
@@ -200,10 +201,16 @@ export async function nomeDoDevNoDiscord(env, quem) {
 
 /* A conta de teste em si: email no subdomínio, palavra-passe impossível,
    termos aceites, e o dono (o dev que a pediu) gravado para o seletor.
+   Nasce com o email por confirmar, como uma conta a sério (migração 0027):
+   com a origem, manda logo o email «Confirma o teu email», que o
+   enviarEmail desvia para o email do dev dono — é assim que o fluxo se
+   prova no dev. Um email que não sai fica no console.error.
    Recebe: env — o ambiente do worker (a base D1); quem (opcional) — o id do
-   dev dono, para o seletor (fica null quando falta).
+   dev dono, para o seletor (fica null quando falta); origem (opcional) — o
+   início do endereço da app, onde a ligação de confirmação abre (sem ela
+   não se manda; a faixa da app tem o «Reenviar»).
    Devolve: promessa de { id, email } da conta acabada de criar. */
-async function criarContaDeTeste(env, quem) {
+async function criarContaDeTeste(env, quem, origem) {
   const id = newUserId();
   const email = 'teste-' + id.toLowerCase() + DOMINIO_TESTE;
   // sem palavra-passe de todo (como as contas so-Google): o formulario de
@@ -212,6 +219,11 @@ async function criarContaDeTeste(env, quem) {
     `INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at, terms_version, terms_at, test_owner)
      VALUES (?, ?, 'Conta de teste', '', '', ?, ?, ?, ?)`
   ).bind(id, email, now(), TERMS_VERSION, now(), quem || null).run();
+  if (origem) {
+    const { pedirConfirmacao } = await import('./rotas/auth.js');
+    const r = await pedirConfirmacao(env, { id, email }, origem);
+    if (!r.enviado) console.error('confirmar (conta de teste): email não enviado —', r.motivo);
+  }
   return { id, email };
 }
 
@@ -393,10 +405,12 @@ export async function rotaTeste(c) {
       }
     }
   }
-  if (!conta) conta = Object.assign({ sess_epoch: 0 }, await criarContaDeTeste(env, quem));
+  if (!conta) conta = Object.assign({ sess_epoch: 0 }, await criarContaDeTeste(env, quem, url.origin));
 
   const token = await createSession(env, conta.id, conta.sess_epoch || 0, agenteDe(c.request));
   await largarSessoesDoBrowser(env, c.request, token);
+  // o aparelho que disse sim ao rasto liga-se a esta conta, como numa entrada (nunca lança)
+  await ligarAoEntrar(env, c.request, conta.id);
   await auditar(env, { discordId: quem || 'sistema', nome: '/test', papeis: ['bot'] },
     'teste.sessao', conta.id,
     retomada ? 'conta retomada, dados intactos'
@@ -475,7 +489,7 @@ export async function rotasContasDeTeste(c) {
   }
 
   if (path === '/api/teste/nova' && method === 'POST') {
-    const conta = await criarContaDeTeste(env, dono);
+    const conta = await criarContaDeTeste(env, dono, new URL(request.url).origin);
     const token = await createSession(env, conta.id, 0, agenteDe(request));
     await largarSessoesDoBrowser(env, request, token);
     await auditar(env, { discordId: dono, nome: 'seletor de teste', papeis: ['dev'] },
@@ -505,7 +519,10 @@ export async function rotasContasDeTeste(c) {
    · o que as páginas de erro do /t/entrar pedem (o CSS, as duas letras e o
      ícone) — o back office pede o CSS dele debaixo de /equipa/;
    · o /versao.json, que o deploy lê para confirmar a publicação
-     (scripts/entrega.js). Diz a versão e a data, e nada de quem é.
+     (scripts/entrega.js). Diz a versão e a data, e nada de quem é;
+   · o /.well-known/assetlinks.json (assetLinksDoDev, abaixo), que o Android
+     lê sem cookies para deixar a APK de dev abrir as ligações do /test. Diz o
+     pacote e a impressão do certificado, que já são públicos no APK.
 
    Fecha-se só com ENV_NAME 'dev' E a PORTA_DEV a 'fechada' (as duas no
    [env.dev.vars] do wrangler.toml): a produção não tem ENV_NAME, o percurso
@@ -533,6 +550,7 @@ const SEM_SESSAO = {
   '/fonts/geist.woff2': ['GET', 'HEAD'],
   '/fonts/bricolage-grotesque.woff2': ['GET', 'HEAD'],
   '/icon-192.png': ['GET', 'HEAD'],
+  '/.well-known/assetlinks.json': ['GET', 'HEAD'],
 };
 
 /* Quanto tempo uma conferência de sessão fica lembrada, e quantas no máximo.
@@ -611,4 +629,49 @@ export async function portaDoDev(env, request, url) {
   if (passaNaPorta(o)) return null;
   o.sessaoDeTeste = await temSessaoDeTeste(env, request);
   return passaNaPorta(o) ? null : naoEncontrado();
+}
+
+/* -------- o assetlinks.json do dev --------------------------------------
+   A APK de dev (pt.gestorimobiliario.app.dev) declara as ligações
+   https://dev.rendorium.com/t/entrar com android:autoVerify: o Android 12+
+   só as abre direto na app depois de ler, sem cookies, o
+   /.well-known/assetlinks.json deste domínio e encontrar lá o pacote e a
+   impressão SHA-256 do certificado que assina o APK. Quem a escreve é o
+   deploy do dev (passo «Escrever o assetlinks do APK de dev», no
+   deploy.yml), que a tira do APK acabado de compilar e a põe em
+   web/assetlinks-dev.json — fora do git, e fora de uma pasta com ponto, que
+   os assets podem não servir. Daqui sai esse ficheiro, no caminho que o
+   Android pede.
+
+   Só no dev (ENV_NAME 'dev'), e com a porta fechada ou aberta. Na produção
+   o caminho segue para os assets como sempre; o /assetlinks-dev.json em si
+   continua atrás da porta. Sem o ficheiro (antes do primeiro deploy, ou com
+   o keytool a falhar) é o 404 seco, sem cache: o Android guarda o
+   resultado da verificação, e um 404 guardado pelo caminho tapava o ficheiro
+   quando ele chegasse. Com ele, cinco minutos: uma impressão nova (a chave
+   de dev a substituir a de produção) chega depressa. */
+const ASSETLINKS = '/.well-known/assetlinks.json';
+const ASSETLINKS_DEV = '/assetlinks-dev.json';
+
+/* A rota do /.well-known/assetlinks.json no dev, depois da porta (que o
+   deixa passar sem sessão, SEM_SESSAO).
+   Recebe: env — o ambiente do worker; request — o pedido; url — o URL dele.
+   Devolve: promessa de null (não é este pedido: outro caminho, outro
+   método ou fora do dev) ou da Response — 200 application/json com o corpo
+   do ASSETS /assetlinks-dev.json, ou o 404 seco. */
+export async function assetLinksDoDev(env, request, url) {
+  if (env.ENV_NAME !== 'dev' || url.pathname !== ASSETLINKS) return null;
+  if (request.method !== 'GET' && request.method !== 'HEAD') return null;
+  let r = null;
+  try {
+    // um pedido novo, sem os cabeçalhos condicionais: um 304 dos assets não serve ao Android
+    r = await env.ASSETS.fetch(new Request(new URL(ASSETLINKS_DEV, url), { method: request.method }));
+  } catch (e) {
+    console.error('assetlinks do dev', e && e.message);
+  }
+  if (!r || r.status !== 200) return naoEncontrado();
+  return new Response(request.method === 'HEAD' ? null : r.body, {
+    status: 200,
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' },
+  });
 }

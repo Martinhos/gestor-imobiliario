@@ -319,7 +319,7 @@ describe('as escritas de casas e registos vivem num sítio só', () => {
     const esc = ler('worker/src/lib/escritas.js');
     for (const f of ['worker/src/rotas/sync.js', 'worker/src/rotas/casas.js']) {
       const s = ler(f);
-      assert.match(s, /aplicarOp\(/, f + ' escreve pela aplicarOp');
+      assert.match(s, /aplicarOps?\(/, f + ' escreve pela aplicarOp(s)');
       // (as quotas, que só casas.js tem, continuam a gravar a ficha: não são uma cópia do sync)
       assert.doesNotMatch(s, /INSERT INTO records|INSERT INTO houses|UPDATE houses SET data = \?, updated_at = \?, deleted|INSERT INTO user_records|UPDATE records SET deleted|UPDATE user_records SET deleted/,
         f + ' já não tem o SQL da escrita');
