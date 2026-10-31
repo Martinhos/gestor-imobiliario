@@ -382,10 +382,26 @@ describe('a vista Pessoas', () => {
     g.ctx.verRastoPessoa('P-UNA222'); await assentar();
     const html = g.conteudo();
     assert.match(html, /<tr class="rs-passa"><td colspan="5">[\s\S]*?Passou da montra para a app<\/td><\/tr>/);
-    assert.ok(html.indexOf('09:00:00') < html.indexOf('09:01:00'), 'os eventos pela ordem em que aconteceram');
+    assert.ok(html.indexOf('09:01:00') < html.indexOf('09:00:00'), 'o evento mais recente em cima, como as sessões');
     assert.match(html, /Só montra, sem conta/);
     assert.match(html, /Conta de teste/);
     assert.equal(acao(html, 'verPessoa'), undefined, 'sem conta não há ficha');
+  });
+
+  test('dentro da sessão, do mais recente para o mais antigo, com cada passagem entre os seus dois eventos e as páginas pela ordem do tempo', async () => {
+    const uma = { pid: 'P-VEM222', userId: 'U9', teste: false, sessoes: [{ sessao: 's-v', inicio: t(27, 9, 0, 0), fim: t(27, 9, 2, 0), origens: ['montra', 'app'], eventos: [
+      { at: t(27, 9, 1, 0), origem: 'app', tipo: 'ecra', ecra: 'properties', sinal: null },
+      { at: t(27, 9, 2, 0), origem: 'montra', tipo: 'pagina', ecra: '/precos', sinal: null },
+      { at: t(27, 9, 0, 0), origem: 'montra', tipo: 'pagina', ecra: '/', sinal: null },
+    ] }] };
+    const g = await correr(MASTER, (rota) => (rota.startsWith('/api/equipa/rasto/pessoa/') ? uma : {}));
+    g.ctx.verRastoPessoa('P-VEM222'); await assentar();
+    const corpo = /<tbody>([\s\S]*?)<\/tbody>/.exec(g.conteudo().split('rs-ev')[1])[1];
+    const leitura = [...corpo.matchAll(/(\d\d:\d\d:\d\d)|Passou (da \w+ para a \w+)/g)].map((m) => m[1] || m[2]);
+    assert.deepEqual(leitura, ['09:02:00', 'da app para a montra', '09:01:00', 'da montra para a app', '09:00:00'],
+      'cada passagem fica entre os dois eventos onde a origem mudou e diz o sentido do tempo');
+    assert.match(g.conteudo(), /Páginas visitadas:<\/span> Início da montra › Imóveis › <code class="rs-cru">\/precos<\/code><\/p>/,
+      'as páginas visitadas são um caminho: pela ordem em que aconteceram, ao contrário da tabela');
   });
 
   test('o admin não tem a ida à ficha (não abre as Pessoas da equipa)', async () => {

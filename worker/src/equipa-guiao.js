@@ -2413,7 +2413,7 @@ function rastoResumoHtml(linhas) {
 
 /* A linha do tempo de uma pessoa: o pseudónimo, as contagens, e uma secção
    por sessão (a mais recente primeiro, e aberta; as outras fechadas), com
-   cada evento pela ordem em que aconteceu. Quem chega de um pedido (o
+   os eventos também do mais recente para o mais antigo. Quem chega de um pedido (o
    suporte também) volta ao pedido e não tem a lista nem a ida à ficha; quem
    chega da ficha volta à ficha.
    Recebe: pid — o pseudónimo (string); voltaTipo (opcional) — 'pedido' ou
@@ -2498,7 +2498,8 @@ function passagemRasto(de, para) {
 /* Uma sessão da linha do tempo: uma secção que abre e fecha, com o início,
    a duração, as origens, quantos eventos e quantos sinais; aberta, as
    páginas visitadas e os registos que mudou (rastoSessaoResumoHtml) e a
-   tabela dos eventos em palavras (o que fez e onde), com a linha de cada
+   tabela dos eventos em palavras (o que fez e onde), do mais recente para o
+   mais antigo, como as sessões, com a linha de cada
    sinal marcada no contorno e na letra, e a passagem de uma origem para a
    outra dita numa linha.
    Recebe: s — a sessão ({sessao, inicio, fim, origens, eventos}); aberta — se abre já aberta.
@@ -2507,19 +2508,21 @@ function rastoSessaoHtml(s, aberta) {
   var evs = eventosRasto(s);
   var origens = s.origens && s.origens.length ? s.origens : evs.reduce(function (l, e) { if (e.origem && l.indexOf(e.origem) < 0) l.push(e.origem); return l; }, []);
   var nSinais = evs.filter(function (e) { return sinalRasto(e.sinal); }).length;
-  var linhas = '', anterior = '';
+  // monta-se pela ordem do tempo (a passagem fica entre os dois eventos onde a
+  // origem mudou) e lê-se ao contrário: o mais recente em cima, como as sessões
+  var linhas = [], anterior = '';
   evs.forEach(function (e) {
     if (anterior && e.origem && e.origem !== anterior) {
-      linhas += '<tr class="rs-passa"><td colspan="5">' + ic('seta', 'i-sm') + 'Passou ' + passagemRasto(anterior, e.origem) + '</td></tr>';
+      linhas.push('<tr class="rs-passa"><td colspan="5">' + ic('seta', 'i-sm') + 'Passou ' + passagemRasto(anterior, e.origem) + '</td></tr>');
     }
     if (e.origem) anterior = e.origem;
     var sn = sinalRasto(e.sinal);
-    linhas += '<tr' + (sn ? ' class="rs-sinal ' + sn.tom + '"' : '') + '>' +
+    linhas.push('<tr' + (sn ? ' class="rs-sinal ' + sn.tom + '"' : '') + '>' +
       '<td class="n nw" data-rot="Hora">' + horaRasto(e.at) + '</td>' +
       '<td data-rot="Origem">' + rastoOrigensHtml([e.origem]) + '</td>' +
       '<td data-rot="O que fez"><span class="rs-alvo-bloco">' + rastoFezHtml(e) + '</span></td>' +
       '<td data-rot="Onde">' + rastoOndeHtml(e) + '</td>' +
-      '<td data-rot="Sinal">' + (sn ? '<span class="badge rs-s ' + sn.tom + '">' + sn.nome + '</span>' : '<span class="sub">—</span>') + '</td></tr>';
+      '<td data-rot="Sinal">' + (sn ? '<span class="badge rs-s ' + sn.tom + '">' + sn.nome + '</span>' : '<span class="sub">—</span>') + '</td></tr>');
   });
   return '<details class="card rs-sessao"' + (aberta ? ' open' : '') + '>' +
     '<summary><span class="st-seta" aria-hidden="true">' + ic('baixo', 'i-sm') + '</span>' +
@@ -2529,7 +2532,7 @@ function rastoSessaoHtml(s, aberta) {
     (nSinais ? '<span class="badge rs-s wa">' + contadoRasto(nSinais, 'sinal', 'sinais') + '</span>' : '') + '</span></summary>' +
     rastoSessaoResumoHtml(evs) +
     '<div class="tb-rola"><table class="tb empilha rs-tb rs-ev"><thead><tr><th>Hora</th><th>Origem</th><th>O que fez</th><th>Onde</th>' +
-    '<th>Sinal</th></tr></thead><tbody>' + linhas + '</tbody></table></div></details>';
+    '<th>Sinal</th></tr></thead><tbody>' + linhas.reverse().join('') + '</tbody></table></div></details>';
 }
 
 /* O «Ver o rasto» no detalhe de um pedido: pergunta ao servidor o pseudónimo

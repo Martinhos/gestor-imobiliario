@@ -79,6 +79,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-29 · O «?» da Ajuda no lugar da nuvem
 - 2026-10-29 · A quinta ronda de QA: nada antes da compra, o sync em lote e o rasto em palavras
 - 2026-10-29 · A sexta ronda de QA: o email confirma-se, os limites contam, e os planeados começam hoje
+- 2026-10-31 · O rasto de uma pessoa lê-se do mais recente para o mais antigo
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2945,3 +2946,14 @@ desfazia o «Recusar desta vez» numa renda de contrato desde sempre (bug antigo
 achado pela folha); decisão dele: corrigir já, com o mesmo chão, só nas rendas
 de contrato — numa hipoteca o chão esconderia ao preenchimento prestações que
 ninguém recusou.
+
+## 2026-10-31 · O rasto de uma pessoa lê-se do mais recente para o mais antigo
+
+Ticket de QA do Martinho (89e70111, 31/10, num Samsung): na linha do tempo de
+uma pessoa, as sessões vinham da mais recente para a mais antiga, mas os eventos
+de cada uma do mais antigo para o mais recente — duas ordens opostas no mesmo
+ecrã. Os eventos passaram a vir também do mais recente, em cima. A passagem da
+montra para a app continua a dizer o sentido do tempo («da montra para a app»)
+e fica entre os dois eventos onde a origem mudou. As páginas visitadas ficam
+pela ordem do tempo: são um caminho com «›», e ao contrário as setas
+apontariam para trás.

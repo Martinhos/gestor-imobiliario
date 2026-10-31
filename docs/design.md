@@ -6319,7 +6319,11 @@ primeiro e aberta, lida em palavras, com os textos da app. Cada sessão abre
 com as páginas visitadas, pela ordem e sem repetir a mesma seguida — «Visão
 geral › Imóveis › Contratos» — e, quando houve, os registos que mudaram numa
 frase — «Adicionou 1 imóvel e 36 movimentos; editou 2 contratos»
-(equipa-guiao.js:rastoSessaoResumoHtml). Cada evento tem a hora ao segundo, a
+(equipa-guiao.js:rastoSessaoResumoHtml). Dentro da sessão, a tabela lê-se como
+as sessões: do evento mais recente, em cima, para o mais antigo, em baixo, e a
+passagem de uma origem para a outra fica entre os dois eventos onde mudou
+(equipa-guiao.js:rastoSessaoHtml); as páginas visitadas, por serem um caminho,
+ficam pela ordem do tempo. Cada evento tem a hora ao segundo, a
 origem, o que fez, onde e o sinal (equipa-guiao.js:rastoFezHtml,
 equipa-guiao.js:rastoOndeHtml). Um toque num botão, numa ligação ou noutra
 coisa que responde diz o nome dele como a app o escreve — «Tocou em
