@@ -106,7 +106,7 @@ jobs:
       # dentro; o de dev leva dev.rendorium.com, chama-se «Rendorium DEV» e
       # instala-se ao lado do de produção. Fica aqui, antes de «Esperar pelos
       # testes», de propósito: é só do runner, e compila enquanto eles correm.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
