@@ -3048,3 +3048,18 @@ campos e enchia o resto da resposta de tabulações até ao teto, sem fechar o
 JSON. A resposta cortada depois de um valor completo passou a ler-se
 (lib/fine.js:respostaDoModelo), e a validação e o aviso do cliente fazem o
 resto.
+
+Nota do mesmo dia (v52): a pergunta dos produtos facultativos. O Martinho
+perguntou se fazia sentido um botão para os produtos; a proposta aceite foi uma
+pergunta, «Tens os produtos facultativos deste crédito?», só quando o
+documento traz as duas condições, com o Não por omissão (a leitura continua
+sem os produtos) e o Sim a trocar a TAN, o spread e a prestação da conferência
+pelos bonificados (fine.js:fineProdutos). Não é um botão para escrever os
+produtos: o custo deles (seguros, cartão) é uma despesa, não uma condição da
+hipoteca, e a nota do Sim di-lo. Medido na FINE de prova com produtos: com as
+três chaves bonificadas no fim do esquema, o granite não via o spread
+bonificado e trocava a prestação base pela bonificada em 2 leituras de 3 — o
+que dava o aviso da prestação sem razão. Com cada chave bonificada logo a
+seguir à base (lib/fine.js:ESQUEMA) e a regra das duas prestações no prompt,
+3 em 3 certas no spread e na prestação base; a prestação bonificada fica por
+ler, e com o Sim a prestação não se confere em vez de dar um aviso falso.

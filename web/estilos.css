@@ -5802,4 +5802,12 @@ label.fine-lido{color:var(--accent-text)}
 label.fine-lido>input,label.fine-lido .selbtn{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .fine-lido>.flabel{color:var(--accent-text)}
 .fine-lido .opt.on{box-shadow:0 0 0 1px var(--accent)}
+/* A pergunta dos produtos facultativos (fine.js:fineProdutosHtml), quando o
+   documento traz as condições com e sem eles: o segmentado da casa, curto
+   (duas palavras), com a escolha na cor da frente (o .segm>.on passa do
+   --muted ao --ink e engrossa a letra). */
+.fine-lido-caixa>.fine-produtos{display:grid;gap:6px;margin:8px 0 2px;justify-items:start}
+.fine-produtos>p{justify-self:stretch}
+.fine-lido-caixa .fine-produtos-perg{color:var(--ink);font-weight:600;font-size:14px}
+.fine-produtos-seg{width:180px;max-width:100%}
 /* === fim: a FINE na hipoteca === */

@@ -66,7 +66,7 @@ describe('o botão', () => {
     const h = app.fineSect(l);
     assert.match(h, /Ler a partir da FINE ou do contrato/);
     assert.match(h, /A app preenche os campos por ti, e tu confirmas antes de guardar\. Se preferires, preenche à mão aqui em baixo\./);
-    assert.match(h, /<div class="hint" id="fine_prod_a">Se tiveres produtos facultativos associados ao crédito \(seguros, cartões, ordenado domiciliado\), não são tidos em conta: a app lê as condições sem eles\.<\/div>/);
+    assert.match(h, /<div class="hint" id="fine_prod_a">Se tiveres produtos facultativos associados ao crédito \(seguros, cartões, ordenado domiciliado\), a app lê as condições sem eles\. Quando o documento traz as duas, podes escolher a seguir\.<\/div>/);
     assert.match(h, /aria-describedby="fine_dica_a fine_prod_a"/);
     assert.match(h, /accept="application\/pdf"/);
     assert.match(h, /data-change="fineFicheiro\(this,'a'\)"/);
@@ -288,6 +288,93 @@ describe('a verificação cruzada da prestação', () => {
     const l = app.normLoan({ outstanding: 0, years: 30, rate: 3 });
     igual(app.fineConferir(l, 500), null);
     igual(app.fineConferir(app.normLoan({ outstanding: 100000, years: 30, rate: 3 }), 0), null);
+  });
+});
+
+describe('os produtos facultativos', () => {
+  /* Uma variável de 150 000 € a 30 anos, Euribor 2,2 %: o spread base 1,25 %
+     e o bonificado 0,85 %, com as prestações certas de cada um. */
+  const base = { outstanding: 150000, capitalInicio: 150000, years: 30, type: 'variavel', index: '6m', euribor: 2.2, stampTax: true };
+  const prest = (spread) => Math.round(app.loanCalc(app.normLoan(Object.assign({ spread }, base))).total * 100) / 100;
+  const resposta = (bonificado) => ({ campos: { outstanding: 150000, prazoMeses: 360, type: 'variavel', index: '6m', euribor: 2.2, spread: 1.25, prestacao: prest(1.25) }, ignorados: [], bonificado });
+  const miolo = () => app.fineMiolo(L());
+
+  test('sem as condições com os produtos no documento, não há pergunta', async () => {
+    casa();
+    responde(200, resposta(undefined));
+    await ler();
+    assert.ok(!/Tens os produtos facultativos/.test(miolo()));
+  });
+
+  test('com elas, a pergunta aparece com o Não escolhido, e os campos levam as condições sem os produtos', async () => {
+    casa();
+    responde(200, resposta({ spread: 0.85, prestacao: prest(0.85) }));
+    await ler();
+    const h = miolo();
+    assert.match(h, /<p class="fine-produtos-perg" id="fine_pp_a">Tens os produtos facultativos deste crédito\?<\/p>/);
+    assert.match(h, /role="group" aria-labelledby="fine_pp_a"/);
+    assert.match(h, /id="fine_pr_nao_a" class="on" aria-pressed="true"[^>]*data-click="fineProdutos\('a',false\)">Não</);
+    assert.match(h, /id="fine_pr_sim_a" class="" aria-pressed="false"[^>]*data-click="fineProdutos\('a',true\)">Sim</);
+    assert.ok(h.includes(`Com os produtos, o documento dá o spread de 0,85 % e a prestação de ${app.euro2(prest(0.85))}.`), h);
+    assert.ok(!/O custo dos produtos/.test(h), 'o custo só com o Sim');
+    igual(L().spread, 1.25);
+    assert.ok(!/não bate/.test(h), 'a prestação base bate');
+  });
+
+  test('o Sim troca o spread e a prestação da verificação; o Não repõe', async () => {
+    casa();
+    responde(200, resposta({ spread: 0.85, prestacao: prest(0.85) }));
+    await ler();
+    const antes = repintou;
+    app.fineProdutos('a', true);
+    igual(L().spread, 0.85);
+    igual(repintou, antes + 1, 'repinta o formulário');
+    assert.ok(app.fineMarca(L(), 'spread'), 'o spread trocado fica marcado');
+    let h = miolo();
+    assert.match(h, /id="fine_pr_sim_a" class="on" aria-pressed="true"/);
+    assert.ok(h.includes(`Sem os produtos, o documento dá o spread de 1,25 % e a prestação de ${app.euro2(prest(1.25))}.`), h);
+    assert.match(h, /O custo dos produtos \(seguros, cartão\) não entra na hipoteca: regista-o à parte, como despesa\./);
+    assert.ok(!/não bate/.test(h), 'a prestação com os produtos bate com o spread bonificado');
+    app.fineProdutos('a', false);
+    igual(L().spread, 1.25);
+    h = miolo();
+    assert.match(h, /id="fine_pr_nao_a" class="on" aria-pressed="true"/);
+    assert.ok(!/não bate/.test(h));
+    igual(gravou, 0, 'nada se grava sem o Guardar');
+  });
+
+  test('o Sim sem prestação bonificada não confere a prestação base com o spread bonificado', async () => {
+    casa();
+    responde(200, resposta({ spread: 0.85 }));
+    await ler();
+    app.fineProdutos('a', true);
+    assert.ok(!/não bate/.test(miolo()));
+  });
+
+  test('na fixa, a TAN; o que o tipo de taxa não tem, ou fica acima da base, ou é lixo, não entra', async () => {
+    casa();
+    responde(200, { campos: { outstanding: 150000, prazoMeses: 360, type: 'fixa', rate: 3.4 }, ignorados: [], bonificado: { rate: 3, spread: 0.85 } });
+    await ler();
+    assert.ok(miolo().includes('Com os produtos, o documento dá a TAN de 3 %.'), miolo());
+    app.fineProdutos('a', true);
+    igual(L().rate, 3);
+    igual(L().spread, 0, 'a fixa não leva spread');
+    for (const bon of [{ spread: 1.5 }, { spread: '<b>0.5</b>' }, { spread: 40 }, 'lixo', [1], null]) {
+      limpar(app); casa();
+      responde(200, resposta(bon));
+      await ler();
+      assert.ok(!/Tens os produtos facultativos/.test(miolo()), JSON.stringify(bon));
+    }
+  });
+
+  test('uma leitura nova volta ao Não', async () => {
+    casa();
+    responde(200, resposta({ spread: 0.85, prestacao: prest(0.85) }));
+    await ler();
+    app.fineProdutos('a', true);
+    await ler();
+    igual(L().spread, 1.25);
+    assert.match(miolo(), /id="fine_pr_nao_a" class="on"/);
   });
 });
 

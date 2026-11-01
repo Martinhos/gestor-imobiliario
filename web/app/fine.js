@@ -14,9 +14,12 @@
    antes de guardar.» diz o que aconteceu, e «Ficou por ler: …» o que
    faltou — frases impessoais, sem a app a falar como «eu». Os produtos
    facultativos (seguros, cartões, ordenado domiciliado) não contam: o
-   servidor lê as condições sem eles, e a dica di-lo. Nada se grava sem o
-   Guardar da pessoa. Uma prestação lida que não
-   bate com a que a app calcula dá um aviso junto ao bloco.
+   servidor lê as condições sem eles, e a dica di-lo. Quando o documento
+   traz também as condições com eles (a bonificação), a pergunta «Tens os
+   produtos facultativos deste crédito?» troca o spread, a TAN e a
+   prestação da verificação cruzada (fineProdutos); o Não é a resposta por
+   omissão. Nada se grava sem o Guardar da pessoa. Uma prestação lida que
+   não bate com a que a app calcula dá um aviso junto ao bloco.
 
    Só aparece com sessão, fora de produção e a quem pode editar a casa
    (finePodeLer). Tudo o que vem do servidor entra por esc() ou por value,
@@ -50,7 +53,9 @@ var FINE_FRASES={
   botao:'Ler a partir da FINE ou do contrato',
   aLer:'A ler o documento…',
   dica:'A app preenche os campos por ti, e tu confirmas antes de guardar. Se preferires, preenche à mão aqui em baixo.',
-  produtos:'Se tiveres produtos facultativos associados ao crédito (seguros, cartões, ordenado domiciliado), não são tidos em conta: a app lê as condições sem eles.',
+  produtos:'Se tiveres produtos facultativos associados ao crédito (seguros, cartões, ordenado domiciliado), a app lê as condições sem eles. Quando o documento traz as duas, podes escolher a seguir.',
+  perguntaProdutos:'Tens os produtos facultativos deste crédito?',
+  custoProdutos:'O custo dos produtos (seguros, cartão) não entra na hipoteca: regista-o à parte, como despesa.',
   lido:'Lido do documento — confirma antes de guardar.',
   semRede:'Sem ligação ao servidor. Tenta daqui a pouco, ou preenche à mão.',
   demorou:'A leitura demorou de mais. Tenta daqui a pouco, ou preenche à mão.',
@@ -90,12 +95,15 @@ var FINE_DO_TIPO={
    o do anterior.
    Recebe: lid — o id da hipoteca.
    Devolve: {ocupado, erro, marcas:{campo: valor aplicado}, lidos, faltou,
-   estranhos (os nomes do que o servidor recusou), prazoMeses, prestacao, aviso (o HTML do último aviso pintado)} — o mesmo
-   objeto enquanto o formulário for o mesmo. */
+   estranhos (os nomes do que o servidor recusou), prazoMeses, prestacao,
+   aviso (o HTML do último aviso pintado), base e bonificado (as condições
+   sem e com os produtos facultativos, {rate?, spread?, prestacao?}),
+   comProdutos (a resposta à pergunta)} — o mesmo objeto enquanto o
+   formulário for o mesmo. */
 function fineDe(lid){
   if(fineEstado.form!==pForm)fineEstado={form:pForm,porHipoteca:{}};
   const t=fineEstado.porHipoteca;
-  if(!t[lid])t[lid]={ocupado:false,erro:'',marcas:{},lidos:0,faltou:null,estranhos:[],prazoMeses:0,prestacao:0,aviso:''};
+  if(!t[lid])t[lid]={ocupado:false,erro:'',marcas:{},lidos:0,faltou:null,estranhos:[],prazoMeses:0,prestacao:0,aviso:'',base:{},bonificado:{},comProdutos:false};
   return t[lid];
 }
 /* O botão aparece? Só com sessão (a rota pede-a), fora de produção (a rota
@@ -134,6 +142,7 @@ function fineMiolo(l){
   if(e.lidos){
     h+=`<div class="fine-lido-caixa"><p class="fine-lido-linha">${esc(FINE_FRASES.lido)}</p>`;
     if(e.estranhos&&e.estranhos.length)h+=`<p class="fine-aviso fine-estranho" role="alert">${esc(fineFraseEstranhos(e.estranhos))}</p>`;
+    h+=fineProdutosHtml(l,e);
     if(e.prazoMeses&&e.prazoMeses%12)h+=`<p class="fine-nota">${esc(fineFrasePrazo(e.prazoMeses))}</p>`;
     if(e.faltou&&e.faltou.length)h+=`<p class="fine-nota fine-faltou">Ficou por ler: ${esc(fineJuntar(e.faltou))}.</p>`;
     h+=`</div>`;
@@ -158,6 +167,51 @@ function fineAvisoHtml(l,e){
 function fineRedesenhar(lid){
   const b=document.getElementById('fine_'+lid),l=findLoan(pForm,lid);
   if(b&&l)b.innerHTML=fineMiolo(l);
+}
+/* A pergunta dos produtos facultativos, quando o documento traz as duas
+   condições: um segmentado Não/Sim (aria-pressed na escolha), a nota com
+   os valores da outra escolha e, com o Sim, que o custo dos produtos fica
+   fora da hipoteca.
+   Recebe: l — a hipoteca; e — o estado dela (fineDe).
+   Devolve: o HTML; '' sem condições com os produtos. */
+function fineProdutosHtml(l,e){
+  if(!e.bonificado||!Object.keys(e.bonificado).length)return '';
+  const id=esc(l.id),sim=!!e.comProdutos;
+  const bot=(v,txt)=>`<button type="button" id="fine_pr_${v?'sim':'nao'}_${id}" class="${sim===v?'on':''}" aria-pressed="${sim===v}" data-toca="rascunho" data-click="fineProdutos('${jsq(l.id)}',${v})">${txt}</button>`;
+  return `<div class="fine-produtos" role="group" aria-labelledby="fine_pp_${id}">
+    <p class="fine-produtos-perg" id="fine_pp_${id}">${esc(FINE_FRASES.perguntaProdutos)}</p>
+    <div class="segm fine-produtos-seg">${bot(false,'Não')}${bot(true,'Sim')}</div>
+    <p class="fine-nota">${esc(fineFraseOutra(e))}</p>
+    ${sim?`<p class="fine-nota">${esc(FINE_FRASES.custoProdutos)}</p>`:''}</div>`;
+}
+/* Os valores da escolha que não está feita, para a pessoa ver o que a
+   troca muda: «Com os produtos, o documento dá o spread de 0,85 % e a
+   prestação de 758,89 €.» (ou «Sem os produtos, …» com o Sim).
+   Recebe: e — o estado (fineDe), com base e bonificado.
+   Devolve: a frase. */
+function fineFraseOutra(e){
+  const fonte=e.comProdutos?e.base:e.bonificado,partes=[];
+  if('rate' in e.bonificado)partes.push(`a TAN de ${dec(fonte.rate)} %`);
+  if('spread' in e.bonificado)partes.push(`o spread de ${dec(fonte.spread)} %`);
+  if('prestacao' in e.bonificado)partes.push(`a prestação de ${euro2(fonte.prestacao)}`);
+  return `${e.comProdutos?'Sem':'Com'} os produtos, o documento dá ${fineJuntar(partes)}.`;
+}
+/* A resposta à pergunta dos produtos facultativos: o Sim passa a TAN e o
+   spread do formulário às condições com os produtos, e a verificação
+   cruzada à prestação com eles; o Não repõe as condições sem eles. Os
+   campos trocados ficam marcados outra vez (vieram do documento). Mexe só
+   no formulário: grava o Guardar.
+   Recebe: lid — o id da hipoteca; sim — true quando os tem.
+   Devolve: nada — muda pForm e repinta o formulário. */
+function fineProdutos(lid,sim){
+  collectProp();
+  const e=fineDe(lid),l=findLoan(pForm,lid);
+  if(!l||!e.bonificado||!Object.keys(e.bonificado).length)return;
+  const fonte=sim?e.bonificado:e.base;
+  ['rate','spread'].forEach(k=>{if(k in e.bonificado&&k in fonte){l[k]=fonte[k];e.marcas[k]=fonte[k]}});
+  e.prestacao=fonte.prestacao||0;
+  e.comProdutos=!!sim;
+  repaintProp();
 }
 /* O prazo da FINE em meses que não dá anos inteiros: diz o arredondamento.
    Recebe: m — o prazo em meses.
@@ -204,6 +258,20 @@ function fineLimpar(campos){
   n('euribor',-1,10);n('spread',0,10);n('amortFeeFix',0,2);n('amortFeeVar',0,0.5);n('prestacao',1,50000);
   return o;
 }
+/* As condições com os produtos facultativos passadas pelas gamas outra vez,
+   e só as que baixam uma condição base lida: uma bonificação acima da base
+   (ou sem base) não é bonificação nenhuma.
+   Recebe: b — o bonificado da resposta (aguenta lixo); c — os campos já
+   limpos (fineLimpar).
+   Devolve: {rate?, spread?, prestacao?} — vazio quando nada serve. */
+function fineLimparBonificado(b,c){
+  const x=b&&typeof b==='object'&&!Array.isArray(b)?b:{},o={};
+  [['rate',0,20],['spread',0,10],['prestacao',1,50000]].forEach(([k,min,max])=>{
+    const v=fineNumero(x[k],min,max);
+    if(v!==null&&typeof c[k]==='number'&&v<c[k])o[k]=v;
+  });
+  return o;
+}
 /* O valor de um campo como o formulário o tem agora, para saber se a pessoa
    o mudou depois de lido (a marca sai).
    Recebe: l — a hipoteca; k — o nome do campo na resposta.
@@ -232,10 +300,14 @@ function fineIgual(a,b){
    milhões ou um prazo de séculos não é uma FINE de confiança. Pode trazer
    instruções escondidas que puseram o modelo a mentir também nos valores
    que passam nas gamas, e por isso a pessoa é avisada para conferir tudo.
+   As condições com os produtos facultativos (bonificado) ficam no estado, ao
+   lado das base, para a pergunta: só as dos campos que o tipo de taxa tem,
+   e a resposta começa no Não — os campos levam as condições sem eles.
    Recebe: l — a hipoteca de pForm; campos — o campos da resposta; e — o
-   estado dela (fineDe); ignorados (opcional) — os nomes que o servidor recusou.
+   estado dela (fineDe); ignorados (opcional) — os nomes que o servidor
+   recusou; bonificado (opcional) — o bonificado da resposta.
    Devolve: quantos campos preencheu. */
-function fineAplicar(l,campos,e,ignorados){
+function fineAplicar(l,campos,e,ignorados,bonificado){
   const c=fineLimpar(campos),tipo=c.type||l.type||'fixa',marcas={};
   const quer=FINE_COMUNS.concat(FINE_DO_TIPO[tipo]||[]);
   if(c.type){l.type=c.type;marcas.type=c.type}
@@ -251,6 +323,9 @@ function fineAplicar(l,campos,e,ignorados){
   e.prestacao=c.prestacao||0;
   e.faltou=quer.concat(['prestacao']).filter(k=>c[k]===undefined).map(k=>FINE_CAMPOS[k].nome);
   e.estranhos=Array.isArray(ignorados)?Object.keys(FINE_CAMPOS).filter(k=>ignorados.indexOf(k)>-1).map(k=>FINE_CAMPOS[k].nome):[];
+  const bon=fineLimparBonificado(bonificado,c);
+  e.bonificado={};e.base={};e.comProdutos=false;
+  Object.keys(bon).forEach(k=>{if(k==='prestacao'||quer.indexOf(k)>-1){e.bonificado[k]=bon[k];e.base[k]=c[k]}});
   e.erro='';
   return e.lidos;
 }
@@ -315,7 +390,8 @@ function fineRecusaLocal(f){
    (nucleo.js:api: o Authorization e o X-Rendorium-Token, e o cookie
    same-origin), e com tempo limite.
    Recebe: f — o File (ou Blob) do PDF.
-   Devolve: Promise que resolve sempre: {campos, ignorados} com 200, ou
+   Devolve: Promise que resolve sempre: {campos, ignorados, bonificado} com 200
+   (o bonificado tal como veio: o fineAplicar é que o limpa), ou
    {erro} com a frase a mostrar (a do servidor, quando a há). */
 function fineLer(f){
   const h={'Content-Type':'application/pdf'};
@@ -332,7 +408,7 @@ function fineLer(f){
     return corpo.then(j=>{
       j=j&&typeof j==='object'?j:{};
       if(r.ok){
-        if(j.campos&&typeof j.campos==='object'&&!Array.isArray(j.campos))return fim({campos:j.campos,ignorados:Array.isArray(j.ignorados)?j.ignorados:[]});
+        if(j.campos&&typeof j.campos==='object'&&!Array.isArray(j.campos))return fim({campos:j.campos,ignorados:Array.isArray(j.ignorados)?j.ignorados:[],bonificado:j.bonificado});
         return fim({erro:FINE_FRASES.falhou});
       }
       const frase=typeof j.error==='string'&&j.error.trim()?j.error.trim().slice(0,240):FINE_FRASES.falhou;
@@ -378,7 +454,7 @@ function fineFicheiro(input,lid){
     if(res.erro){e.erro=res.erro;fineRedesenhar(lid);return}
     collectProp();
     const l=findLoan(pForm,lid);if(!l)return;
-    const n=fineAplicar(l,res.campos,e,res.ignorados);
+    const n=fineAplicar(l,res.campos,e,res.ignorados,res.bonificado);
     if(!n){e.lidos=0;e.erro=FINE_FRASES.nada;fineRedesenhar(lid);return}
     repaintProp();
   });

@@ -27,6 +27,22 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 52,
+    data: '2026-11-01',
+    titulo: 'Os produtos facultativos escolhem-se ao ler a FINE',
+    seccoes: [
+      {
+        titulo: 'Créditos à habitação',
+        afeta: ['creditos'],
+        soDev: true,
+        itens: [
+          'Quando a FINE ou o contrato traz as condições sem e com os produtos facultativos, aparece «Tens os produtos facultativos deste crédito?». O Não vem escolhido; o Sim troca a TAN e o spread pelos bonificados.',
+          'O custo dos produtos (seguros, cartão) não entra na hipoteca: regista-o à parte, como despesa.',
+        ],
+      },
+    ],
+  },
+  {
     v: 51,
     data: '2026-11-01',
     titulo: 'A FINE lê-se sem os produtos facultativos',

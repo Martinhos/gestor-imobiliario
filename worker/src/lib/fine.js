@@ -30,8 +30,8 @@ export const TETO_TEXTO = 20000;
 // o PDF não tem camada de texto: é uma digitalização, e não há OCR.
 export const MIN_TEXTO = 200;
 
-// O máximo de tokens da resposta do modelo: o JSON das doze chaves cabe à
-// larga em 300; o teto impede uma resposta descontrolada de gastar neurons.
+// O máximo de tokens da resposta do modelo: o JSON das quinze chaves cabe à
+// larga em 350; o teto impede uma resposta descontrolada de gastar neurons.
 export const MAX_TOKENS_RESPOSTA = 400;
 
 /* Os bancos a operar em Portugal no crédito à habitação, com os nomes por que
@@ -100,7 +100,11 @@ export function bancoCanonico(texto) {
    fechado (additionalProperties: false), só números, inteiros, enums e o nome
    do banco, cada chave obrigatória e a null quando o documento não a diz.
    As chaves falam a língua da FINE; o validar() passa-as aos campos da
-   hipoteca. */
+   hipoteca. Cada condição com os produtos facultativos (_bonificada/o) vem
+   logo a seguir à base: o modelo escreve as chaves por esta ordem, e com o
+   par lado a lado o granite deixa de pôr a bonificada no lugar da base
+   (medido na FINE de prova com produtos: com as três no fim, trocava a
+   prestação em 2 leituras de 3 e não via o spread bonificado). */
 export const ESQUEMA = {
   type: 'object',
   additionalProperties: false,
@@ -110,16 +114,20 @@ export const ESQUEMA = {
     prazo_meses: { type: ['integer', 'null'] },
     tipo_taxa: { type: ['string', 'null'], enum: ['fixa', 'mista', 'variavel', null] },
     tan: { type: ['number', 'null'] },
+    tan_bonificada: { type: ['number', 'null'] },
     anos_taxa_fixa: { type: ['integer', 'null'] },
     indexante: { type: ['string', 'null'], enum: ['3m', '6m', '12m', null] },
     euribor: { type: ['number', 'null'] },
     spread: { type: ['number', 'null'] },
+    spread_bonificado: { type: ['number', 'null'] },
     comissao_reembolso_fixa: { type: ['number', 'null'] },
     comissao_reembolso_variavel: { type: ['number', 'null'] },
     prestacao: { type: ['number', 'null'] },
+    prestacao_bonificada: { type: ['number', 'null'] },
   },
-  required: ['banco', 'montante', 'prazo_meses', 'tipo_taxa', 'tan', 'anos_taxa_fixa', 'indexante',
-    'euribor', 'spread', 'comissao_reembolso_fixa', 'comissao_reembolso_variavel', 'prestacao'],
+  required: ['banco', 'montante', 'prazo_meses', 'tipo_taxa', 'tan', 'tan_bonificada', 'anos_taxa_fixa', 'indexante',
+    'euribor', 'spread', 'spread_bonificado', 'comissao_reembolso_fixa', 'comissao_reembolso_variavel', 'prestacao',
+    'prestacao_bonificada'],
 };
 
 // As marcas que cercam o documento na mensagem ao modelo; dentro do texto
@@ -141,8 +149,9 @@ export const SISTEMA = [
   'tan: a TAN na taxa fixa; na mista, a TAN do período de taxa fixa; na variável, null. anos_taxa_fixa: só na mista, os anos do período de taxa fixa.',
   'indexante: "3m", "6m" ou "12m" para a Euribor a 3, 6 ou 12 meses (na mista, a do período variável). euribor: o valor do indexante à data da ficha. spread: o spread (na mista, o do período variável).',
   'comissao_reembolso_fixa: a comissão de reembolso antecipado em % do capital na taxa fixa (ou no período de taxa fixa). comissao_reembolso_variavel: a mesma na taxa variável (ou no período de taxa variável).',
-  'prestacao: a prestação mensal em euros (na mista, a do período de taxa fixa).',
-  'Produtos facultativos: muitas fichas mostram as condições com e sem produtos ou vendas associadas facultativas (seguros, cartões, domiciliação do ordenado), às vezes como «spread bonificado», «TAN com bonificação» ou «com redução». Usa SEMPRE as condições SEM esses produtos e sem bonificação: o spread, a TAN e a prestação base.',
+  'prestacao: a prestação mensal em euros (na mista, a do período de taxa fixa). Quando a ficha dá duas prestações, uma sem e outra com produtos facultativos, a SEM produtos vai para prestacao e a COM produtos para prestacao_bonificada.',
+  'Produtos facultativos: muitas fichas mostram as condições com e sem produtos ou vendas associadas facultativas (seguros, cartões, domiciliação do ordenado), às vezes como «spread bonificado», «TAN com bonificação» ou «com redução». Em tan, spread e prestacao vão SEMPRE as condições SEM esses produtos e sem bonificação: a TAN, o spread e a prestação base.',
+  'tan_bonificada, spread_bonificado e prestacao_bonificada: só quando a ficha mostra também as condições COM os produtos facultativos, a TAN, o spread e a prestação com essa bonificação (por exemplo, a linha «Spread bonificado» vai para spread_bonificado e a linha «Spread base» para spread); quando não as mostra, ficam null.',
 ].join('\n');
 
 /* O texto útil de uma conversão do toMarkdown: sem os títulos que ele junta
@@ -234,6 +243,13 @@ const REGRAS = [
   { de: 'comissao_reembolso_variavel', campo: 'amortFeeVar', min: 0, max: 0.5, casas: 3 },
   { de: 'prestacao', campo: 'prestacao', min: 1, max: 50000, casas: 2 },
 ];
+/* As condições com os produtos facultativos (a bonificação): o mesmo campo
+   da hipoteca e a mesma gama da condição base de onde partem. */
+const REGRAS_BONIFICADO = [
+  { de: 'tan_bonificada', campo: 'rate', min: 0, max: 20, casas: 3 },
+  { de: 'spread_bonificado', campo: 'spread', min: 0, max: 10, casas: 3 },
+  { de: 'prestacao_bonificada', campo: 'prestacao', min: 1, max: 50000, casas: 2 },
+];
 const TIPOS = ['fixa', 'mista', 'variavel'];
 const INDEXANTES = ['3m', '6m', '12m'];
 
@@ -264,9 +280,16 @@ function arredondar(x, n) {
    inventou descartam-se sem rasto; null (ou ausente) é «não lido». Por fim,
    com o tipo de taxa lido, saem os campos que esse tipo não tem (a TAN na
    variável, o spread na fixa…).
+   As condições com os produtos facultativos vão à parte, em bonificado, pelo
+   mesmo campo e com a mesma gama da base: fora dela, o campo vai para os
+   ignorados (um spread bonificado de 40 % é tão estranho como um de base);
+   sem a base lida, igual ou acima dela, ou de um campo que o tipo de taxa
+   não tem, sai sem rasto — uma bonificação só existe a baixar uma condição
+   que se leu.
    Recebe: bruto — o objeto que o modelo devolveu (qualquer valor).
-   Devolve: { campos, ignorados } — campos só com o que passou; ignorados os
-   nomes dos campos recusados, sem repetidos. */
+   Devolve: { campos, ignorados, bonificado } — campos só com o que passou;
+   ignorados os nomes dos campos recusados, sem repetidos; bonificado
+   {rate?, spread?, prestacao?}, vazio quando o documento não as tem. */
 export function validar(bruto) {
   const campos = {};
   const ignorados = [];
@@ -298,5 +321,14 @@ export function validar(bruto) {
       if (campo in campos && !tipos.includes(campos.type)) delete campos[campo];
     }
   }
-  return { campos, ignorados };
+  const bonificado = {};
+  for (const r of REGRAS_BONIFICADO) {
+    if (!tem(r.de)) continue;
+    const v = o[r.de];
+    if (typeof v !== 'number' || !Number.isFinite(v)) { recusar(r.campo); continue; }
+    const x = arredondar(v, r.casas);
+    if (x < r.min || x > r.max) { recusar(r.campo); continue; }
+    if (r.campo in campos && x < campos[r.campo]) bonificado[r.campo] = x === 0 ? 0 : x;
+  }
+  return { campos, ignorados, bonificado };
 }

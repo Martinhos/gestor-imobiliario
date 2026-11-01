@@ -65,7 +65,7 @@ export function rotaFineEmProducao(c) {
    passadas todas, os campos lidos.
    Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
    method, path e o utilizador em c.me).
-   Devolve: a Response — 200 {campos, ignorados}; 404 em produção; 413, 415,
+   Devolve: a Response — 200 {campos, ignorados, bonificado?}; 404 em produção; 413, 415,
    429, 503 ou 422 com a frase do contrato — ou nada (undefined) quando o
    pedido não é desta rota. */
 export async function rotasFine(c) {
@@ -113,9 +113,10 @@ export async function rotasFine(c) {
   }
   if (!bruto) return indisponivel();   // o modelo não devolveu JSON nenhum
 
-  const { campos, ignorados } = validar(bruto);
+  const { campos, ignorados, bonificado } = validar(bruto);
   if (!Object.keys(campos).length) return err(422, 'Este documento não tem os valores de um crédito.');
-  return json({ campos, ignorados });
+  // as condições com os produtos facultativos só vão quando o documento as tem
+  return json(Object.keys(bonificado).length ? { campos, ignorados, bonificado } : { campos, ignorados });
 }
 
 /* Os bytes começam pela assinatura de um PDF («%PDF-»)? O Content-Type não

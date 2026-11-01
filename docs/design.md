@@ -4148,10 +4148,10 @@ No topo do formulário da hipoteca, antes de qualquer campo, está o «Ler a
 partir da FINE ou do contrato» (fine.js:fineSect). É o mesmo loanSect no
 modal «Nova/Editar hipoteca» e na ficha do imóvel. A dica diz que a app
 preenche e a pessoa confirma, e que por baixo se preenche à mão. Uma segunda
-linha diz que os produtos facultativos associados ao crédito (seguros,
-cartões, ordenado domiciliado) não são tidos em conta: lêem-se as condições
-sem eles, o spread, a TAN e a prestação base, e nunca as bonificadas
-(lib/fine.js:SISTEMA). Só aparece
+linha diz que, com produtos facultativos associados ao crédito (seguros,
+cartões, ordenado domiciliado), se lêem as condições sem eles — o spread, a
+TAN e a prestação base (lib/fine.js:SISTEMA) — e que, quando o documento traz
+as duas, se escolhe a seguir. Só aparece
 com sessão, fora de produção e a quem pode editar a casa
 (fine.js:finePodeLer). O PDF fica anexado à hipoteca pelo caminho de sempre
 (web/app/anexos.js:takeFiles), também quando a leitura falha, e o mesmo ficheiro não
@@ -4183,6 +4183,21 @@ do Samsung não apaga. A marca sai quando a pessoa muda o campo e não volta
 guardar.» e «Ficou por ler: …» ficam até se guardar ou fechar. São
 impessoais: a app não fala como «eu», nem conta os campos que preencheu, nem
 o diz num aviso flutuante.
+
+Quando o documento traz também as condições com os produtos facultativos, o
+servidor devolve-as à parte (bonificado: a TAN, o spread e a prestação, só os
+que o tipo de taxa tem e só abaixo da base — lib/fine.js:validar) e, por baixo
+da linha «Lido do documento», aparece «Tens os produtos facultativos deste
+crédito?» com um segmentado Não/Sim (fine.js:fineProdutosHtml). O Não vem
+escolhido e os campos levam as condições sem os produtos. O Sim troca a TAN e
+o spread do formulário pelos bonificados, marca-os outra vez, e a verificação
+cruzada passa a usar a prestação com os produtos (sem ela lida, não confere);
+o Não repõe (fine.js:fineProdutos). Uma nota diz os valores da outra escolha
+(«Com os produtos, o documento dá o spread de 0,85 %.»), e com o Sim outra diz
+que o custo dos produtos não entra na hipoteca: regista-se à parte, como
+despesa. Cada chave bonificada vem no esquema logo a seguir à base
+(lib/fine.js:ESQUEMA): o modelo escreve-as por essa ordem, e lado a lado não as
+troca.
 
 Uma FINE com instruções escondidas pode pôr o modelo a mentir, e a defesa não
 é o modelo. São duas contas que a app faz sozinha:
