@@ -371,29 +371,33 @@ describe('a Visão geral', () => {
     assert.equal(app.falaDoMesmo(cartao('17 000,00 €'), s, ano), false, 'um número de outro período cala a faixa');
   });
 
-  /* O acumulado acaba no mês corrente (o canvas: «jan · mai · out»): a linha
-     não segue por meses que ainda não chegaram ao nível de hoje, e a janela de
-     um indicador não os desenha a 0 €. Com um movimento de data futura, vão
-     até ele. As barras das entradas e saídas vão até dezembro, com os meses
-     seguintes previstos pelos planeados. */
-  test('o acumulado e a janela de um indicador acabam no mês corrente; as entradas e saídas vão até dezembro', () => {
+  /* As entradas e saídas, o acumulado e a janela de um indicador mostram os
+     mesmos últimos 12 meses, a acabar no mês corrente (metricas.js:janelaMeses):
+     nenhum segue por meses que ainda não chegaram, e as barras já não levam
+     os previstos dos planeados. Com um movimento de data futura no ano, vão
+     até ele. A leitura diz o mês com o ano; o eixo, só o mês. */
+  test('as entradas e saídas, o acumulado e a janela de um indicador mostram os últimos 12 meses', () => {
     const lidoDe = (html) => JSON.parse(/data-lido="([^"]*)"/.exec(html)[1].replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&'));
     const rotulos = (html, titulo) => {
       const i = html.indexOf('>' + titulo + '</h3>');
       assert.ok(i > -1, 'o cartão ' + titulo);
       return lidoDe(html.slice(i)).rot;
     };
+    const janela = (fimAno, fimMes) => [...app.mesesAte(fimAno, fimMes, 12)].map((x) => app.MES[x.m - 1] + ' ' + x.y);
     let html = vista();
-    const ateHoje = [...app.MES.slice(0, MES)];
-    igual(rotulos(html, 'Cashflow acumulado'), ateHoje, 'o acumulado acaba no mês corrente');
-    igual(rotulos(html, 'Entradas e saídas'), [...app.MES].map((m, i) => (i < MES ? m : m + ' · previsto')), 'as entradas e saídas vão até dezembro, com os meses seguintes previstos');
+    const ultimos12 = janela(ANO, MES);
+    assert.equal(ultimos12[0], app.MES[MES % 12] + ' ' + (ANO - 1), 'começa no mesmo mês do ano passado, a seguir ao corrente');
+    igual(rotulos(html, 'Cashflow acumulado'), ultimos12, 'o acumulado acaba no mês corrente');
+    igual(rotulos(html, 'Entradas e saídas'), ultimos12, 'as entradas e saídas também, sem previstos');
+    assert.doesNotMatch(html, /· previsto/);
     const abertas = janelasFalsas(app, 'render', 'toast');
     app.kpiModal(/id="(k\d+)"/.exec(html)[1]);
-    igual(lidoDe(abertas[0].b).rot, ateHoje, 'o «Mês a mês» da janela também');
+    igual(lidoDe(abertas[0].b).rot, ultimos12, 'o «Mês a mês» da janela também');
     // um movimento com data futura leva os gráficos até ele
     mov({ kind: 'income', category: 'Rendas', amount: 50, propertyId: 'casa', date: ANO + '-12-10' });
     html = app.vDashboard();
-    igual(rotulos(html, 'Cashflow acumulado'), [...app.MES], 'até dezembro, onde está o movimento');
+    igual(rotulos(html, 'Cashflow acumulado'), janela(ANO, 12), 'até dezembro, onde está o movimento');
+    igual(rotulos(html, 'Entradas e saídas'), janela(ANO, 12));
   });
 
   /* A janela de um indicador pinta as duas linhas na cor da série do cartão
@@ -436,8 +440,8 @@ describe('a Visão geral', () => {
     const filas = html.slice(iCols).split('<div class="cols">').slice(1).map((f) => [...f.matchAll(/<h3 class="title vg-tit">([^<]+)<\/h3>/g)].map((m) => m[1]));
     igual(filas, [['Entradas e saídas', 'Cashflow acumulado'], ['Despesas por categoria', 'Cashflow por imóvel', 'Renda por contrato'], ['Portefólio', 'Contas entre proprietários']]);
     assert.match(html, /id="donutCard"/, 'o donut guarda o id por onde se redesenha');
-    assert.match(html, /class="gdestaque"/, 'o mês da leitura está em destaque');
-    assert.equal((html.match(/<div class="chartler fixa"/g) || []).length, 2, 'as duas leituras acesas');
+    assert.doesNotMatch(html, /class="gdestaque"/, 'nenhum mês aceso nas entradas e saídas');
+    assert.equal((html.match(/<div class="chartler fixa"/g) || []).length, 2, 'as duas leituras começam num mês (o corrente)');
   });
 
   test('o Portefólio é a grelha de números, com o que o telemóvel junta e o que deixa de fora marcado', () => {

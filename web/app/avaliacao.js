@@ -7,7 +7,7 @@ let avaN=0;
    dentada do cabeçalho, avaOpcoes), e depois o portefólio — o herói do
    valor de mercado contra o valor por rendimento, os cinco rácios, a conta de
    exploração ao lado das contas entre proprietários, a tabela «Por imóvel» e
-   os gráficos do ano. Tocar numa linha da tabela põe esse imóvel em foco
+   os gráficos (avaGraficos). Tocar numa linha da tabela põe esse imóvel em foco
    (repFoco) e a página passa a ser a ficha dele (repCard). Com um imóvel só no
    âmbito, o portefólio É esse imóvel: vai logo a ficha, sem tabela de uma linha.
    Devolve: o HTML da vista (string). */
@@ -272,19 +272,23 @@ function avaTabela(list,pid){
     <th>Imóvel</th><th class="u-ta-left">Ocupação</th><th>Valor</th><th>Renda anual</th><th>NOI anualizado</th><th>Yield</th><th>Cap rate</th><th>LTV</th><th>Cashflow</th></tr></thead>
     <tbody>${list.map(linha).join('')}</tbody></table></div>`,'ava-por-imovel');
 }
-/* os dois gráficos do ano, lado a lado: rendas, despesas e prestações mês a mês
-   (as cores das séries: tema.js:COR_SERIE) e a estrutura das despesas
+/* os dois gráficos, lado a lado: rendas, despesas e prestações mês a mês nos
+   últimos 12 meses de registos (metricas.js:janelaMeses, a decisão do Martinho
+   de 2026-11-01: o eixo só com o mês, a leitura com o mês e o ano, e a divisão
+   tracejada na passagem de dezembro para janeiro; as cores das séries:
+   tema.js:COR_SERIE) e a estrutura das despesas, que é do ano
    Recebe: pid — id do imóvel, 'g:ID' ou null; vazio — o HTML a mostrar sem gastos no ano.
    Devolve: o HTML da fila dos dois cartões (string). */
 function avaGraficos(pid,vazio){
-  const inc=monthly(YEAR,pid,'income',true),exp=monthly(YEAR,pid,'expense',true),ln=monthly(YEAR,pid,'loan',true),cs=byCategory(YEAR,pid,true);
+  const jan=janelaMeses(null,t=>txWeight(t,pid,true)>0),r=rotulosDaJanela(jan),m_=k=>mensalNaJanela(jan,pid,k,true);
+  const inc=m_('income'),exp=m_('expense'),ln=m_('loan'),cs=byCategory(YEAR,pid,true);
   return `<div class="cols">
-    ${avaCartao('Rendas e despesas','Mês a mês em '+YEAR,cBars(inc.map((v,i)=>[{label:'Rendas',value:v,color:COR_SERIE.receita},{label:'Despesas',value:-exp[i],color:COR_SERIE.despesa},{label:'Prestação',value:-ln[i],color:COR_SERIE.prestacao}]),MES,{h:190}))}
+    ${avaCartao('Rendas e despesas','Últimos 12 meses',cBars(inc.map((v,i)=>[{label:'Rendas',value:v,color:COR_SERIE.receita},{label:'Despesas',value:-exp[i],color:COR_SERIE.despesa},{label:'Prestação',value:-ln[i],color:COR_SERIE.prestacao}]),r.eixo,{h:190,rotulos:r.ler,divisoes:r.divisoes}))}
     ${avaCartao('Estrutura de despesas','Gastos do ano',cs.length?cDonut(cs,{sub:'gastos do ano'}):vazio)}</div>`;
 }
 /* O portefólio (no âmbito do filtro de proprietário, na quota-parte dele, ou
    de um grupo de imóveis): o herói, os rácios, a conta de exploração com as
-   contas entre proprietários, a tabela «Por imóvel» e os gráficos do ano.
+   contas entre proprietários, a tabela «Por imóvel» e os gráficos (avaGraficos).
    Recebe: pid — 'g:ID' de um grupo de imóveis, ou null/vazio para o portefólio completo.
    Devolve: o HTML (string); '' sem imóveis no âmbito. */
 function portCard(pid){
@@ -300,7 +304,7 @@ function portCard(pid){
 /* A avaliação de um imóvel (a ficha que a linha da tabela abre): o nome, a
    morada e a ocupação; o herói do valor de mercado contra o valor por
    rendimento; os rácios; a conta de exploração com as contas entre
-   proprietários e os indicadores; os contratos ativos; os gráficos do ano; e
+   proprietários e os indicadores; os contratos ativos; os gráficos (avaGraficos); e
    — havendo hipotecas — a projeção da dívida até ao fim. Com um proprietário
    filtrado, os valores entram na quota-parte dele (como no portefólio); a
    tabela de contratos e o cartão das hipotecas ficam por inteiro, que são

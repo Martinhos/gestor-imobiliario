@@ -80,6 +80,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-29 · A quinta ronda de QA: nada antes da compra, o sync em lote e o rasto em palavras
 - 2026-10-29 · A sexta ronda de QA: o email confirma-se, os limites contam, e os planeados começam hoje
 - 2026-10-31 · O rasto de uma pessoa lê-se do mais recente para o mais antigo
+- 2026-11-01 · Os gráficos mês a mês mostram os últimos 12 meses
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2957,3 +2958,39 @@ montra para a app continua a dizer o sentido do tempo («da montra para a app»)
 e fica entre os dois eventos onde a origem mudou. As páginas visitadas ficam
 pela ordem do tempo: são um caminho com «›», e ao contrário as setas
 apontariam para trás.
+
+## 2026-11-01 · Os gráficos mês a mês mostram os últimos 12 meses
+
+Três tickets de QA do Martinho (a814718f, 6d8d079c, 64aeede6, 01/11, no
+Samsung). Os gráficos mês a mês iam de janeiro a dezembro do ano corrente:
+em novembro, metade de cada gráfico era o que ainda não tinha acontecido, e
+em janeiro um mês só. Ele quis os últimos 12 meses de registos, com uma
+barra entre dezembro e janeiro, e, filtrado por um ano, só os meses desse
+ano (no corrente, de janeiro até ao mês atual). A janela é uma só
+(metricas.js:janelaMeses) e serve a Visão geral, os indicadores, a Avaliação
+e os Movimentos; as Projeções são anos para a frente e ficaram como estavam,
+escolha dele.
+
+Isto desfaz a decisão de 2026-10-28, em que as entradas e saídas iam até
+dezembro com o que os planeados preveem, esbatido. Com a janela a acabar no
+mês corrente, os previstos já não cabiam: em janeiro dariam 23 colunas. Ele
+escolheu tirá-los, e a função que os calculava saiu.
+
+Só há filtro de ano onde já havia, o chip Período dos Movimentos. A Visão
+geral e a Avaliação mostram sempre os últimos 12 meses, e os números grandes
+dos indicadores continuam a ser do ano corrente: um filtro de ano novo nesses
+ecrãs mudava os indicadores, a comparação com o ano anterior e a avaliação,
+e não era isso que os tickets pediam. Num intervalo de datas que não é um
+ano, os cartões dos Movimentos mostram os meses dele, no máximo 12, com o
+título «De mar 2026 a jun 2026».
+
+A silhueta dos indicadores desenhava os doze meses do ano, com os futuros a
+zero, e a janela que abre ao tocar-lhe cortava no mês corrente: duas formas
+diferentes para o mesmo número. Agora os dois saem da mesma série.
+
+No dia 1 a faixa acendia o mês anterior, de propósito (o mês novo ainda está
+vazio). Ele preferiu nenhum mês aceso: a leitura do canto fica no mês
+corrente, mesmo a zero. O cashflow acumulado recomeça em janeiro, também
+escolha dele: o último ponto continua a ser o Cashflow do ano, e a barra da
+passagem de ano marca o recomeço. Um movimento de data futura só estende a
+janela se contar nos totais: uma caução em dezembro dava meses vazios no fim.

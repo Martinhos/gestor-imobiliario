@@ -27,6 +27,23 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 49,
+    data: '2026-11-01',
+    titulo: 'Os gráficos mostram os últimos 12 meses',
+    seccoes: [
+      {
+        titulo: 'Imóveis e portefólio',
+        afeta: ['imoveis', 'movimentos'],
+        itens: [
+          'Os gráficos mês a mês da vista geral e da avaliação mostram os últimos 12 meses, com uma linha a separar dezembro de janeiro. Já não aparecem os meses que ainda não chegaram.',
+          'A pequena linha de cada indicador da vista geral mostra os mesmos meses que o gráfico que se abre ao tocar-lhe.',
+          'Nas entradas e saídas nenhum mês fica realçado, e o cashflow acumulado recomeça em janeiro.',
+          'Nos movimentos, os gráficos dos totais seguem o período escolhido: um ano mostra os meses desse ano.',
+        ],
+      },
+    ],
+  },
+  {
     v: 48,
     data: '2026-10-30',
     titulo: 'Confirmar o email, e começar os planeados hoje',

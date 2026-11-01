@@ -51,44 +51,38 @@ function dashNomeDoFoco(pid){
   if(String(pid).startsWith('g:'))return 'Grupo · '+((grp(String(pid).slice(2))||{}).name||'');
   return propName(pid);
 }
-/* O que os planeados preveem para os meses do ano DEPOIS do corrente, por tipo:
-   as ocorrências de cada planeado nesses meses (calendario.js:calPlaneados, as
-   da Agenda — sem os silenciados, até ao fim de cada um), cada uma com o
-   movimento que a confirmação registaria (planeados.js:recTx: o valor do
-   molde, a renda por inteiro como a app a lança) e pesada como as métricas
-   (metricas.js:txWeight, o imóvel, o grupo ou o proprietário em foco). Uma
-   ocorrência que já tem o seu movimento registado (planeados.js:jaRegistado: a
-   renda desse mês lançada antes do tempo) não conta duas vezes — esse
-   movimento já está nos valores do mês. Os que não contam nos totais
-   (tipos.js:countsInTotals) e as amortizações antecipadas, que as barras não
-   mostram, ficam de fora. O mês corrente e os passados ficam a zero: esses
-   são o que está registado. Sem os Planeados nesta conta, tudo a zero; e sem
-   o Calendário também, porque as ocorrências são as dele (servicoLigado, o
-   idioma de guarda entre serviços — o arnês nem carrega um desligado).
-   Recebe: pid — o imóvel, 'g:ID' ou 'g:o:UID' em foco; vazio/null para o âmbito todo.
-   Devolve: {income, expense, loan} — cada um 12 valores (jan–dez), em euros. */
-function previstoPorMes(pid){
-  const z=()=>[...Array(12)].map(()=>0),out={income:z(),expense:z(),loan:z()};
-  const agora=new Date().getMonth();
-  if(agora>=11||!servicoLigado('recurring')||!servicoLigado('calendar'))return out;
-  const de=YEAR+'-'+String(agora+2).padStart(2,'0')+'-01';
-  calPlaneados(de,YEAR+'-12-31').forEach(({date,rec})=>{
-    if(jaRegistado(rec,date))return;
-    const t=recTx(rec,date);
-    if(!countsInTotals(t)||isAmort(t)||!out[t.kind])return;
-    const w=txWeight(t,pid,true);if(!(w>0))return;
-    out[t.kind][Number(String(date).slice(5,7))-1]+=(Number(t.amount)||0)*w;
-  });
-  return out;
+/* As séries dos dois gráficos mês a mês da Visão geral numa janela de meses
+   (metricas.js:janelaMeses): o registado de cada tipo em cada mês
+   (mensalNaJanela, na quota do proprietário filtrado) e o cashflow acumulado,
+   que recomeça em janeiro (a decisão do Martinho de 2026-11-01). Os meses da
+   janela de um ano anterior são o acumulado DESSE ano, a contar de janeiro —
+   dezembro de 2025 é o cashflow de 2025 inteiro, com os meses de antes da
+   janela —, e de janeiro em diante o do ano corrente, cujo último mês bate
+   com o cartão Cashflow (metrics(YEAR).cf). Por isso as séries contam-se
+   desde janeiro do primeiro ano da janela e cortam-se no fim.
+   Recebe: janela — array de {y, m}, do mais antigo para o mais recente
+   (janelaMeses); pid — o imóvel, 'g:ID' ou 'g:o:UID' em foco; vazio/null para
+   o âmbito todo.
+   Devolve: {inc, exp, ln, am, cum} — cada um um número por mês da janela, em
+   euros: as receitas, as despesas, as prestações e as amortizações
+   antecipadas (positivas) e o cashflow acumulado do ano de cada mês. */
+function vgSeriesDaJanela(janela,pid){
+  if(!janela.length)return {inc:[],exp:[],ln:[],am:[],cum:[]};
+  const ult=janela[janela.length-1],todos=mesesAte(ult.y,ult.m,janela.length+janela[0].m-1);
+  const v=k=>mensalNaJanela(todos,pid,k,true),inc=v('income'),exp=v('expense'),ln=v('loan'),am=v('amort');
+  let acc=0;const cum=todos.map((x,i)=>acc=(x.m===1?0:acc)+inc[i]-exp[i]-ln[i]-am[i]);
+  const corta=a=>a.slice(-janela.length);
+  return {inc:corta(inc),exp:corta(exp),ln:corta(ln),am:corta(am),cum:corta(cum)};
 }
 // muda o imóvel (ou grupo) em foco na visão geral
 // Devolve: nada — redesenha a vista.
 function onDashProp(){dashProp=val('dashPropSel')||'';render()}
 /* Visão geral, pela ordem do canvas de 2026-10 (Main, M-Inicio): o «Pede
    atenção» (pedeAtencao), os quatro indicadores do ano (com evolução ao
-   toque), o aviso das despesas sem imóvel, as entradas e saídas mês a mês e o
-   cashflow acumulado, as despesas por categoria, o cashflow por imóvel e a
-   renda por contrato, e o Portefólio ao lado das contas entre proprietários.
+   toque), o aviso das despesas sem imóvel, as entradas e saídas e o cashflow
+   acumulado dos últimos 12 meses (vgSeriesDaJanela), as despesas por
+   categoria, o cashflow por imóvel e a renda por contrato, e o Portefólio
+   ao lado das contas entre proprietários.
    Cada fila é um .cols: a nuvem parte-as em blocos arrumáveis e dá a cada
    cartão a largura da fila — metade com dois, um terço com três
    (cloud/painel.js). Os rácios de rentabilidade vivem na Avaliação. Respeita o
@@ -134,32 +128,30 @@ function vDashboard(){
   if(!db.transactions.length&&!souSoColaborador())
     return esperaDoServidor()||'<!--sem-movimentos-->'+dashBarVazia()+colabHint+pedeAtencao()+`<div class="empty u-mb-14px"><b>Ainda não há dados para mostrar</b>Os indicadores e os gráficos da vista geral saem dos movimentos. Regista a primeira renda recebida ou despesa paga.
       ${servicoLigado('transactions')?saida('Ir para os movimentos',"go('transactions')",'ecra'):vazioServicoDesligado('transactions')}</div>`+portefolioInicial(m);
-  const inc=monthly(YEAR,pid,'income',true),exp=monthly(YEAR,pid,'expense',true),ln=monthly(YEAR,pid,'loan',true),am=monthly(YEAR,pid,'amort',true);
-  let acc=0;const cum=inc.map((v,i)=>acc+=v-exp[i]-ln[i]-am[i]);
-  /* As entradas e saídas vão de janeiro a dezembro (decisão do Martinho,
-     2026-10-28): o mês corrente e os passados são o registado; os seguintes
-     somam ao que já lá estiver registado (as datas futuras, que a app aceita e
-     que contam como sempre) o que os planeados preveem (previstoPorMes), e
-     desenham-se esbatidos, com «previsto» na legenda e na leitura
-     (graficos.js:cBars, previstoDe). Os quatro indicadores, os totais e o
-     acumulado não levam previsões.
+  /* As entradas e saídas e o cashflow acumulado mostram os últimos 12 meses
+     de registos (metricas.js:janelaMeses, a decisão do Martinho de
+     2026-11-01): a acabar no mês corrente, ou no último mês do ano com um
+     movimento de data futura (a app aceita-os, e contam como sempre — o fim
+     do acumulado tem de bater com o cartão Cashflow). É a janela do
+     vistas.js:evoMoney, com o mesmo filtro de quem estende o fim: a silhueta
+     dos indicadores mostra os mesmos meses. O eixo leva só o mês e a leitura
+     o mês com o ano (rotulosDaJanela), e a passagem de dezembro para janeiro
+     é a divisão (graficos.js:divisoesSvg) — no acumulado, o recomeço do ano
+     (vgSeriesDaJanela). Só o registado: os previstos dos planeados saíram
+     (desfaz a decisão de 2026-10-28), e nenhum mês fica aceso (sem destaque).
+     Os quatro indicadores continuam a ser do ano corrente.
      Prestações junto ao eixo e despesas por baixo (o canvas): é a ordem dos
      segmentos que faz a legenda e a leitura, e por isso a descida inverte-se
      no cBars (desceAoContrario), não aqui. */
-  const agora=new Date().getMonth(),prev=previstoPorMes(pid),fut=(arr,i)=>i>agora?arr[i]:0;
-  const groups=inc.map((v,i)=>[{label:'Receita',value:v+fut(prev.income,i),color:COR_SERIE.receita},{label:'Despesas',value:-(exp[i]+fut(prev.expense,i)),color:COR_SERIE.despesa},{label:'Prestações',value:-(ln[i]+fut(prev.loan,i)),color:COR_SERIE.prestacao}]);
-  /* O cashflow acumulado acaba no mês corrente (o canvas: «jan · mai · out»),
-     ou no último com movimento quando há datas futuras, que a app aceita — o
-     fim da linha tem de bater com o Cashflow. Até dezembro, a linha seguia por
-     nov e dez ao nível de hoje e a leitura dizia «dez −6 358 €», como se fosse
-     um valor registado. */
-  const ate=mesesAMostrar([inc,exp,ln,am]),mesesVistos=MES.slice(0,ate);
-  /* o mês que a leitura dos gráficos mostra antes de alguém tocar (o canvas:
-     «out 2026 · Receita … · Despesas … · Prestações …»): o corrente, ou o
-     último antes dele com algum movimento — no dia 1 o mês ainda está vazio */
-  let mesLer=agora;while(mesLer>0&&!inc[mesLer]&&!exp[mesLer]&&!ln[mesLer])mesLer--;
-  if(!inc[mesLer]&&!exp[mesLer]&&!ln[mesLer])mesLer=agora;
-  const amortizacoes=am.map((v,i)=>v>0.005?'Em '+MES[i]+': amortização de '+euro2(v):'').filter(Boolean);
+  const janela=janelaMeses(null,t=>txWeight(t,pid,true)>0),rj=rotulosDaJanela(janela);
+  const {inc,exp,ln,am,cum}=vgSeriesDaJanela(janela,pid);
+  const groups=inc.map((v,i)=>[{label:'Receita',value:v,color:COR_SERIE.receita},{label:'Despesas',value:-exp[i],color:COR_SERIE.despesa},{label:'Prestações',value:-ln[i],color:COR_SERIE.prestacao}]);
+  /* o mês que a leitura dos dois gráficos mostra antes de alguém tocar (o
+     canvas: «nov 2026 · Receita … · Despesas … · Prestações …»): o corrente,
+     mesmo vazio no dia 1 — saltar para o último com movimento acendia
+     outubro no dia 1 de novembro (o ticket de QA 64aeede6) */
+  const hoje=today(),mesLer=janela.findIndex(x=>x.y===Number(hoje.slice(0,4))&&x.m===Number(hoje.slice(5,7)));
+  const amortizacoes=am.map((v,i)=>v>0.005?'Em '+rj.ler[i]+': amortização de '+euro2(v):'').filter(Boolean);
   /* por imóvel: o cashflow (verde o que dá, laranja o que custa) e o que o
      explica quando ele é baixo — uma amortização deste ano, o uso próprio */
   const porImovel=m.props.map(p=>{const mp=metrics(YEAR,p.id,{share:true});
@@ -211,8 +203,8 @@ function vDashboard(){
     ${kpi('Cashflow',euro2(m.cf),'','Receita − despesas − prestações − amortizações.',WHY.cashflow,E('cf'),null,kp('cf',COR_SERIE_ESCURO.cashflow,'',COR_SERIE.cashflow))}</div>
   ${pid?'':orphanCard()}
   <div class="cols">
-    ${vgCard('Entradas e saídas','mês a mês em '+YEAR,cBars(groups,MES,{h:GRAF_ALTURA,destaque:mesLer,ler:mesLer,fmt:euro2,desceAoContrario:true,previstoDe:agora+1})+DICA_DEDO)}
-    ${vgCard('Cashflow acumulado',esc(amortizacoes.join(' · ')),cLine([{name:'Acumulado',values:cum.slice(0,ate),color:COR_SERIE.cashflow}],mesesVistos,{h:GRAF_ALTURA,ler:agora,titulo:'Cashflow acumulado',lerFmt:euro2}))}</div>
+    ${vgCard('Entradas e saídas','últimos 12 meses',cBars(groups,rj.eixo,{h:GRAF_ALTURA,rotulos:rj.ler,divisoes:rj.divisoes,ler:mesLer,fmt:euro2,desceAoContrario:true})+DICA_DEDO)}
+    ${vgCard('Cashflow acumulado',esc(amortizacoes.join(' · ')),cLine([{name:'Acumulado',values:cum,color:COR_SERIE.cashflow}],rj.eixo,{h:GRAF_ALTURA,rotulos:rj.ler,divisoes:rj.divisoes,ler:mesLer,titulo:'Cashflow acumulado',lerFmt:euro2}))}</div>
   <div class="cols">
     ${donutCard()}
     ${(!pid||String(pid).startsWith('g:'))&&porImovel.length>1?vgCard('Cashflow por imóvel','',cHBars(porImovel,{fmt:euro2})+(notasImovel.length?`<p class="small vg-nota">${esc(notasImovel.join(' '))}</p>`:'')):''}

@@ -129,6 +129,59 @@ const monthly=(y,pid,kind,share)=>[...Array(12)].map((_,i)=>{
   const doTipo=kind==='amort'?isAmort:kind==='loan'?(t=>t.kind==='loan'&&!isAmort(t)):(t=>t.kind===kind);
   return sum(db.transactions.filter(t=>String(t.date).startsWith(mo)&&doTipo(t)&&countsInTotals(t)).map(t=>t.amount*txWeight(t,pid,share)));
 });
+/* Os n meses seguidos que acabam no mês m do ano y, do mais antigo para o
+   mais recente — a peça de que as janelas dos gráficos mês a mês se fazem.
+   Recebe: y — o ano do último mês; m — o último mês (1–12); n — quantos meses.
+   Devolve: array de {y, m} (m de 1 a 12). */
+function mesesAte(y,m,n){
+  const out=[];let a=Number(y),b=Number(m);
+  for(let k=0;k<n;k++){out.unshift({y:a,m:b});if(--b<1){b=12;a--}}
+  return out;
+}
+/* A janela dos gráficos mês a mês (decisão do Martinho, 2026-11-01): sem ano,
+   os últimos 12 meses de registos, a acabar no mês corrente; com o ano
+   corrente, de janeiro até esse mesmo fim; com outro ano, de janeiro a
+   dezembro desse ano. O fim é o mês corrente ou, quando há movimentos de data
+   futura no ano corrente (a app aceita-os, e contam nos totais), o último mês
+   com um deles: o acumulado tem de acabar no valor do cartão do ano.
+   Recebe: ano (opcional) — o ano escolhido (número ou texto); sem ele, os
+   últimos 12 meses; conta (opcional) — quais movimentos de data futura
+   estendem o fim, além de contarem nos totais (função t → booleano: o que
+   está na vista; sem ela, todos). Um que não conta nos totais (uma caução)
+   nunca estende: daria meses vazios no fim.
+   Devolve: array de {y, m}, do mais antigo para o mais recente. */
+function janelaMeses(ano,conta){
+  const hoje=today(),y0=Number(hoje.slice(0,4));
+  if(ano&&Number(ano)!==y0)return mesesAte(Number(ano),12,12);
+  let fim=Number(hoje.slice(5,7));
+  (db.transactions||[]).forEach(t=>{const d=String(t.date||'');
+    if(d.slice(0,4)!==String(y0))return;
+    const m=Number(d.slice(5,7));if(m>fim&&countsInTotals(t)&&(!conta||conta(t)))fim=m});
+  return mesesAte(y0,fim,ano?fim:12);
+}
+/* Os totais de um tipo de movimento em cada mês de uma janela, com o mesmo
+   peso do monthly (txWeight; 'loan' sem as amortizações, 'amort' só elas).
+   Recebe: janela — array de {y, m} (janelaMeses); pid — o id de um imóvel,
+   'g:ID' de um grupo, ou vazio para o âmbito atual; kind — 'income',
+   'expense', 'loan' ou 'amort'; share (opcional) — pesar pela quota do
+   proprietário filtrado.
+   Devolve: array de números, um por mês da janela. */
+function mensalNaJanela(janela,pid,kind,share){
+  const doTipo=kind==='amort'?isAmort:kind==='loan'?(t=>t.kind==='loan'&&!isAmort(t)):(t=>t.kind===kind);
+  const L=db.transactions.filter(t=>doTipo(t)&&countsInTotals(t));
+  return janela.map(({y,m})=>{const mo=`${y}-${String(m).padStart(2,'0')}`;
+    return sum(L.filter(t=>String(t.date).startsWith(mo)).map(t=>t.amount*txWeight(t,pid,share)))});
+}
+/* Os rótulos de uma janela de meses: o eixo leva só o mês («dez»), a leitura
+   o mês e o ano («dez 2025»), e cada passagem de ano dá uma divisão — a barra
+   vertical entre dezembro e janeiro, com o ano novo ao lado.
+   Recebe: janela — array de {y, m} (janelaMeses).
+   Devolve: {eixo, ler, divisoes} — eixo e ler arrays de texto, divisoes
+   array de {i, label} (i o índice do primeiro mês do ano novo). */
+function rotulosDaJanela(janela){
+  return {eixo:janela.map(x=>MES[x.m-1]),ler:janela.map(x=>MES[x.m-1]+' '+x.y),
+    divisoes:janela.map((x,i)=>i&&x.y!==janela[i-1].y?{i,label:String(x.y)}:null).filter(Boolean)};
+}
 /* cat: se indicado, devolve as subcategorias dessa categoria
    Recebe: y — o ano; pid — o id de um imóvel, 'g:ID' de um grupo, ou vazio para o âmbito atual;
    share — pesar pela quota do proprietário filtrado; cat (opcional) — uma categoria de despesa,
