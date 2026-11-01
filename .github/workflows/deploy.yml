@@ -45,7 +45,7 @@ jobs:
     steps:
       # histórico todo, e as etiquetas: o guarda da chegada compara esta
       # árvore com a da publicação anterior (a etiqueta «publicado»)
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
