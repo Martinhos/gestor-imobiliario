@@ -114,7 +114,7 @@ export async function rotasFine(c) {
   if (!bruto) return indisponivel();   // o modelo não devolveu JSON nenhum
 
   const { campos, ignorados } = validar(bruto);
-  if (!Object.keys(campos).length) return err(422, 'Não encontrei os valores de um crédito neste documento.');
+  if (!Object.keys(campos).length) return err(422, 'Este documento não tem os valores de um crédito.');
   return json({ campos, ignorados });
 }
 

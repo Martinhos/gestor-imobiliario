@@ -11,8 +11,11 @@
    pForm, nunca na base), cada campo preenchido fica marcado na cor da frente
    (o contorno e o rótulo no --accent — o Samsung Internet do Martinho
    escurece à força e só a frente sobrevive), a linha «Lido do documento — confirma
-   antes de guardar.» diz o que aconteceu, e «Não consegui ler: …» o que
-   faltou. Nada se grava sem o Guardar da pessoa. Uma prestação lida que não
+   antes de guardar.» diz o que aconteceu, e «Ficou por ler: …» o que
+   faltou — frases impessoais, sem a app a falar como «eu». Os produtos
+   facultativos (seguros, cartões, ordenado domiciliado) não contam: o
+   servidor lê as condições sem eles, e a dica di-lo. Nada se grava sem o
+   Guardar da pessoa. Uma prestação lida que não
    bate com a que a app calcula dá um aviso junto ao bloco.
 
    Só aparece com sessão, fora de produção e a quem pode editar a casa
@@ -47,16 +50,17 @@ var FINE_FRASES={
   botao:'Ler a partir da FINE ou do contrato',
   aLer:'A ler o documento…',
   dica:'A app preenche os campos por ti, e tu confirmas antes de guardar. Se preferires, preenche à mão aqui em baixo.',
+  produtos:'Se tiveres produtos facultativos associados ao crédito (seguros, cartões, ordenado domiciliado), não são tidos em conta: a app lê as condições sem eles.',
   lido:'Lido do documento — confirma antes de guardar.',
   semRede:'Sem ligação ao servidor. Tenta daqui a pouco, ou preenche à mão.',
   demorou:'A leitura demorou de mais. Tenta daqui a pouco, ou preenche à mão.',
   falhou:'Não deu para ler o documento agora. Tenta daqui a pouco, ou preenche à mão.',
   grande:'O PDF é grande demais para ler (máx. 5 MB).',
   naoPdf:'Escolhe um PDF.',
-  nada:'Não encontrei os valores de um crédito neste documento.',
+  nada:'Este documento não tem os valores de um crédito.',
 };
-/* Os campos que a rota pode devolver, com o nome em português (para «Não
-   consegui ler: …») e o sufixo do campo do loanSect (l_<sufixo>_<id>) onde a
+/* Os campos que a rota pode devolver, com o nome em português (para «Ficou
+   por ler: …») e o sufixo do campo do loanSect (l_<sufixo>_<id>) onde a
    marca se acende. A prestação não tem campo: serve a verificação cruzada. */
 var FINE_CAMPOS={
   bank:{nome:'o banco',campo:'bank'},
@@ -123,15 +127,15 @@ function fineSect(l){
 function fineMiolo(l){
   const e=fineDe(l.id),id=esc(l.id),ocup=e.ocupado;
   let h=`<input type="file" id="fine_in_${id}" accept="application/pdf" class="u-d-none" data-change="fineFicheiro(this,'${jsq(l.id)}')">
-    <button type="button" class="btn fine-btn" id="fine_btn_${id}" data-toca="rascunho" aria-describedby="fine_dica_${id}"${ocup?' disabled aria-busy="true"':''} data-click="abrirSeletorFicheiros('fine_in_${jsq(l.id)}')">${ic('file',16)} ${esc(ocup?FINE_FRASES.aLer:FINE_FRASES.botao)}</button>
-    <div class="hint" id="fine_dica_${id}">${esc(FINE_FRASES.dica)}</div>`;
+    <button type="button" class="btn fine-btn" id="fine_btn_${id}" data-toca="rascunho" aria-describedby="fine_dica_${id} fine_prod_${id}"${ocup?' disabled aria-busy="true"':''} data-click="abrirSeletorFicheiros('fine_in_${jsq(l.id)}')">${ic('file',16)} ${esc(ocup?FINE_FRASES.aLer:FINE_FRASES.botao)}</button>
+    <div class="hint" id="fine_dica_${id}">${esc(FINE_FRASES.dica)}</div>
+    <div class="hint" id="fine_prod_${id}">${esc(FINE_FRASES.produtos)}</div>`;
   if(e.erro)h+=`<p class="erro-campo fine-erro" id="fine_erro_${id}" role="alert">${esc(e.erro)}</p>`;
   if(e.lidos){
     h+=`<div class="fine-lido-caixa"><p class="fine-lido-linha">${esc(FINE_FRASES.lido)}</p>`;
     if(e.estranhos&&e.estranhos.length)h+=`<p class="fine-aviso fine-estranho" role="alert">${esc(fineFraseEstranhos(e.estranhos))}</p>`;
-    h+=`<p class="fine-nota">${esc(fineFrasePreenchidos(e.lidos))}</p>`;
     if(e.prazoMeses&&e.prazoMeses%12)h+=`<p class="fine-nota">${esc(fineFrasePrazo(e.prazoMeses))}</p>`;
-    if(e.faltou&&e.faltou.length)h+=`<p class="fine-nota fine-faltou">Não consegui ler: ${esc(fineJuntar(e.faltou))}.</p>`;
+    if(e.faltou&&e.faltou.length)h+=`<p class="fine-nota fine-faltou">Ficou por ler: ${esc(fineJuntar(e.faltou))}.</p>`;
     h+=`</div>`;
   }
   e.aviso=fineAvisoHtml(l,e);
@@ -155,18 +159,12 @@ function fineRedesenhar(lid){
   const b=document.getElementById('fine_'+lid),l=findLoan(pForm,lid);
   if(b&&l)b.innerHTML=fineMiolo(l);
 }
-/* «Preenchi 6 campos — estão com o contorno azul.», no singular quando é um.
-   Recebe: n — quantos campos se preencheram.
-   Devolve: a frase. */
-function fineFrasePreenchidos(n){
-  return n===1?'Preenchi 1 campo — está com o contorno azul.':`Preenchi ${n} campos — estão com o contorno azul.`;
-}
 /* O prazo da FINE em meses que não dá anos inteiros: diz o arredondamento.
    Recebe: m — o prazo em meses.
    Devolve: a frase. */
 function fineFrasePrazo(m){
   const a=Math.max(1,Math.round(m/12));
-  return `A FINE diz ${m} meses: ficou ${a} ${a===1?'ano':'anos'}, arredondado ao ano.`;
+  return `O documento diz ${m} meses: ${a===1?'ficou 1 ano':'ficaram '+a+' anos'}, arredondado ao ano.`;
 }
 /* O aviso de um documento que trouxe valores sem sentido num crédito.
    Recebe: nomes — os nomes em português do que o servidor recusou.
@@ -383,6 +381,5 @@ function fineFicheiro(input,lid){
     const n=fineAplicar(l,res.campos,e,res.ignorados);
     if(!n){e.lidos=0;e.erro=FINE_FRASES.nada;fineRedesenhar(lid);return}
     repaintProp();
-    toast(fineFrasePreenchidos(n).split(' — ')[0]+'.');
   });
 }

@@ -4147,7 +4147,11 @@ espaço (continuidade.js:aFitaAbreEspaco).
 No topo do formulário da hipoteca, antes de qualquer campo, está o «Ler a
 partir da FINE ou do contrato» (fine.js:fineSect). É o mesmo loanSect no
 modal «Nova/Editar hipoteca» e na ficha do imóvel. A dica diz que a app
-preenche e a pessoa confirma, e que por baixo se preenche à mão. Só aparece
+preenche e a pessoa confirma, e que por baixo se preenche à mão. Uma segunda
+linha diz que os produtos facultativos associados ao crédito (seguros,
+cartões, ordenado domiciliado) não são tidos em conta: lêem-se as condições
+sem eles, o spread, a TAN e a prestação base, e nunca as bonificadas
+(lib/fine.js:SISTEMA). Só aparece
 com sessão, fora de produção e a quem pode editar a casa
 (fine.js:finePodeLer). O PDF fica anexado à hipoteca pelo caminho de sempre
 (web/app/anexos.js:takeFiles), também quando a leitura falha, e o mesmo ficheiro não
@@ -4159,7 +4163,10 @@ fechado (lib/fine.js:ESQUEMA). O prompt diz que o texto entre as marcas é um
 documento de onde se tiram dados, nunca instruções. O que o modelo devolve
 passa pelo lib/fine.js:validar: cada campo tem o seu tipo e a sua gama, o
 banco é sempre um nome da lista fechada (lib/fine.js:BANCOS) e nunca o texto
-do modelo, e o que falha vai para os ignorados. Nada do documento fica: nem
+do modelo, e o que falha vai para os ignorados. Uma resposta que chega sem a
+chaveta do fim (o modelo a encher o resto de espaços até ao teto dos tokens)
+lê-se na mesma, desde que cortada depois de um valor completo
+(lib/fine.js:respostaDoModelo). Nada do documento fica: nem
 os bytes, nem o texto, nem a resposta vão para a base, para a consola ou para
 um relato de erro. A rota recusa em produção (404 antes da sessão), acima de
 5 MB, o que não começa por %PDF-, mais de 5 leituras por conta e por dia, e
@@ -4173,8 +4180,9 @@ preenchido fica marcado no rótulo (estilos.css:label.fine-lido): o contorno
 no --accent e o rótulo no --accent-text, a cor da frente que o escurecimento
 do Samsung não apaga. A marca sai quando a pessoa muda o campo e não volta
 (fine.js:fineMarca). As linhas «Lido do documento — confirma antes de
-guardar.», a contagem do que se preencheu e «Não consegui ler: …» ficam até
-se guardar ou fechar.
+guardar.» e «Ficou por ler: …» ficam até se guardar ou fechar. São
+impessoais: a app não fala como «eu», nem conta os campos que preencheu, nem
+o diz num aviso flutuante.
 
 Uma FINE com instruções escondidas pode pôr o modelo a mentir, e a defesa não
 é o modelo. São duas contas que a app faz sozinha:

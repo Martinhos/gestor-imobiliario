@@ -142,6 +142,7 @@ export const SISTEMA = [
   'indexante: "3m", "6m" ou "12m" para a Euribor a 3, 6 ou 12 meses (na mista, a do período variável). euribor: o valor do indexante à data da ficha. spread: o spread (na mista, o do período variável).',
   'comissao_reembolso_fixa: a comissão de reembolso antecipado em % do capital na taxa fixa (ou no período de taxa fixa). comissao_reembolso_variavel: a mesma na taxa variável (ou no período de taxa variável).',
   'prestacao: a prestação mensal em euros (na mista, a do período de taxa fixa).',
+  'Produtos facultativos: muitas fichas mostram as condições com e sem produtos ou vendas associadas facultativas (seguros, cartões, domiciliação do ordenado), às vezes como «spread bonificado», «TAN com bonificação» ou «com redução». Usa SEMPRE as condições SEM esses produtos e sem bonificação: o spread, a TAN e a prestação base.',
 ].join('\n');
 
 /* O texto útil de uma conversão do toMarkdown: sem os títulos que ele junta
@@ -199,9 +200,24 @@ export function respostaDoModelo(saida) {
   if (typeof r === 'string') {
     // um modelo conversador embrulha às vezes o JSON num bloco ```json
     const t = r.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-    try { r = JSON.parse(t); } catch (e) { return null; }
+    try { r = JSON.parse(t); } catch (e) { r = jsonSemFecho(t); }
   }
   return r && typeof r === 'object' && !Array.isArray(r) ? r : null;
+}
+
+/* Um JSON que chegou sem a chaveta do fim. Medido com a FINE envenenada de
+   prova: o granite escrevia os campos todos e enchia o resto da resposta de
+   tabulações até ao teto dos tokens, sem fechar o objeto, e a rota dava um
+   503 que mandava «tentar daqui a pouco» — quando o certo é ler o que veio e
+   deixar a validação recusar os absurdos (e o cliente avisar). Só se aceita
+   um objeto plano cortado depois de um valor completo: tira-se o lixo do fim
+   (espaços, uma vírgula solta) e fecha-se; o que não der JSON assim fica de
+   fora.
+   Recebe: t — o texto da resposta (já sem o bloco ```).
+   Devolve: o objeto, ou null. */
+function jsonSemFecho(t) {
+  if (!/^\{/.test(t) || /\}\s*$/.test(t)) return null;
+  try { return JSON.parse(t.replace(/[\s,]+$/, '') + '}'); } catch (e) { return null; }
 }
 
 /* Cada chave do modelo: o campo da hipoteca, o tipo e a gama do contrato

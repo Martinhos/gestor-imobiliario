@@ -66,6 +66,8 @@ describe('o botão', () => {
     const h = app.fineSect(l);
     assert.match(h, /Ler a partir da FINE ou do contrato/);
     assert.match(h, /A app preenche os campos por ti, e tu confirmas antes de guardar\. Se preferires, preenche à mão aqui em baixo\./);
+    assert.match(h, /<div class="hint" id="fine_prod_a">Se tiveres produtos facultativos associados ao crédito \(seguros, cartões, ordenado domiciliado\), não são tidos em conta: a app lê as condições sem eles\.<\/div>/);
+    assert.match(h, /aria-describedby="fine_dica_a fine_prod_a"/);
     assert.match(h, /accept="application\/pdf"/);
     assert.match(h, /data-change="fineFicheiro\(this,'a'\)"/);
     assert.ok(!/ style=| on[a-z]+=/i.test(h), 'sem style= nem on…= (a CSP)');
@@ -143,9 +145,10 @@ describe('ler o PDF', () => {
     assert.match(h, /<label class="fine-lido">Capital em dívida/);
     assert.match(h, /<div class="fine-lido"><div class="flabel">Tipo de taxa/);
     assert.match(h, /Lido do documento — confirma antes de guardar\./);
-    assert.match(h, /Preenchi 6 campos — estão com o contorno azul\./);
-    assert.match(h, /Não consegui ler: a prestação\./);
-    assert.ok(avisos.includes('Preenchi 6 campos.'), avisos.join(' | '));
+    assert.match(h, /Ficou por ler: a prestação\./);
+    // as frases são impessoais: a app não fala como «eu», nem num aviso flutuante
+    assert.ok(!/Preenchi|consegui/.test(h), 'sem frases na primeira pessoa');
+    assert.ok(!avisos.some((a) => /Preenchi/.test(a)), avisos.join(' | '));
   });
   test('o tipo muda como no setLType e só entram os campos desse tipo', async () => {
     casa();
@@ -174,15 +177,14 @@ describe('ler o PDF', () => {
     responde(200, { campos: { outstanding: 150000, prazoMeses: 342 }, ignorados: [] });
     await ler();
     igual(L().years, 29);
-    assert.match(app.fineMiolo(L()), /A FINE diz 342 meses: ficou 29 anos, arredondado ao ano\./);
+    assert.match(app.fineMiolo(L()), /O documento diz 342 meses: ficaram 29 anos, arredondado ao ano\./);
   });
-  test('o que faltou diz-se com os nomes em português, e a contagem no singular', async () => {
+  test('o que faltou diz-se com os nomes em português', async () => {
     casa();
     responde(200, { campos: { outstanding: 150000, spread: 99 }, ignorados: ['spread', '<b>x</b>'] });
     await ler();
     const h = app.fineMiolo(L());
-    assert.match(h, /Preenchi 1 campo — está com o contorno azul\./);
-    assert.match(h, /Não consegui ler: o banco, o prazo, o tipo de taxa, a taxa, a comissão de amortização da taxa fixa e a prestação\./);
+    assert.match(h, /Ficou por ler: o banco, o prazo, o tipo de taxa, a taxa, a comissão de amortização da taxa fixa e a prestação\./);
     assert.ok(!/&lt;b&gt;|<b>x/.test(h), 'um nome desconhecido do ignorados não se mostra');
     assert.match(h, /O documento traz valores que não fazem sentido num crédito \(o spread\)\. Pode não ser de confiança: confirma cada campo com o original antes de guardar\./);
   });

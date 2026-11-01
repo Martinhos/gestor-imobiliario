@@ -3036,3 +3036,15 @@ servidor com --local, e aí a rota dá o 503 dela.
 
 As novidades ganharam a secção soDev (novidades.js:afetaMe): a v50 fala da
 FINE no dev, e em produção o aviso some porque fica sem secções.
+
+Nota do mesmo dia (v51): o Martinho não quer a app a falar como «eu» — saiu o
+«Preenchi N campos» (a linha e o aviso flutuante) e o «Não consegui ler»
+passou a «Ficou por ler». E pediu que se dissesse que os produtos facultativos
+não são tidos em conta; escolheu que a leitura use as condições SEM eles (o
+spread, a TAN e a prestação base), coerente com essa frase
+(lib/fine.js:SISTEMA), provado com uma FINE de prova com as duas condições.
+Com o prompt novo, a FINE envenenada passou a dar 503: o granite escrevia os
+campos e enchia o resto da resposta de tabulações até ao teto, sem fechar o
+JSON. A resposta cortada depois de um valor completo passou a ler-se
+(lib/fine.js:respostaDoModelo), e a validação e o aviso do cliente fazem o
+resto.
