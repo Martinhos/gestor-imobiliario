@@ -43,10 +43,14 @@ function funcsDoUtilizador() {
 }
 
 // Diz se uma secção de novidades toca nalguma funcionalidade desta pessoa.
-// Recebe: sec — secção de um aviso ({titulo, itens, afeta?}); afeta é a lista de
+// Uma secção com soDev fala do que só existe fora de produção (como o soDev
+// do catálogo dos serviços): em produção não diz respeito a ninguém, e um
+// aviso que fique sem secções não aparece (avisoParaMim).
+// Recebe: sec — secção de um aviso ({titulo, itens, afeta?, soDev?}); afeta é a lista de
 // chaves de funcionalidades que toca (sem ela, conta como ['app']).
 // Devolve: true/false — se a secção diz respeito a quem está a ver.
 function afetaMe(sec) {
+  if (sec.soDev && (!window.CW || CW.ambiente === 'producao')) return false;
   var minhas = funcsDoUtilizador();
   var toca = sec.afeta || ['app'];
   return toca.some(function (f) { return minhas.indexOf(f) > -1; });

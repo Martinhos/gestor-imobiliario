@@ -27,6 +27,24 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 50,
+    data: '2026-11-01',
+    titulo: 'A hipoteca lê-se da FINE ou do contrato',
+    seccoes: [
+      {
+        titulo: 'Créditos à habitação',
+        afeta: ['creditos'],
+        soDev: true,
+        itens: [
+          'No topo do formulário da hipoteca há «Ler a partir da FINE ou do contrato»: escolhes o PDF do banco e a app preenche o banco, o capital, o prazo, o tipo de taxa, as taxas e as comissões. Confirmas antes de guardar, ou preenches à mão por baixo.',
+          'Os campos preenchidos ficam com o contorno azul até os mudares, e a app diz o que não conseguiu ler.',
+          'Se a prestação que a app calcula não bater com a do documento, ou se o documento trouxer valores sem sentido num crédito, aparece um aviso para conferires.',
+          'O PDF fica anexado à hipoteca. Só PDF com texto: uma digitalização preenche-se à mão. Até 5 leituras por dia.',
+        ],
+      },
+    ],
+  },
+  {
     v: 49,
     data: '2026-11-01',
     titulo: 'Os gráficos mostram os últimos 12 meses',

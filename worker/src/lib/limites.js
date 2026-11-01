@@ -47,6 +47,10 @@ export const LIMITES = {
   'tk:': { o: 'pedidos de ajuda', quem: 'conta' },
   'qa:': { o: 'tickets de QA', quem: 'conta' },
   'rasto:': { o: 'lotes do rasto', quem: 'visitante' },
+  'fine:': { o: 'leituras de documentos do crédito', quem: 'conta' },
+  // o teto global das leituras (rotas/fine.js:TETO_GLOBAL) é a quota do
+  // Workers AI da conta Cloudflare, não abuso de ninguém: não relata
+  'fineg:': { o: 'leituras de documentos do crédito, todas as contas', quem: 'nenhum', fora: true },
   'aviso:': { o: 'avisos dos tetos da Cloudflare', quem: 'nenhum', fora: true },
   'rp:': { o: 'relatos de erro da app', quem: 'conta', fora: true },
   'rpa:': { o: 'relatos de erro sem sessão', quem: 'ip', fora: true },

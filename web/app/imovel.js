@@ -639,8 +639,11 @@ function propBody(){
       {icon:'lista',open:!!(p.listing||p.notes),summary:p.listing||p.notes?'com texto':'os comentários ficam entre os donos'})}
     <div class="hint">A renda, as datas e os inquilinos ficam no contrato, não aqui.</div></div>`;
 }
-// Secção de uma hipoteca no formulário: campos consoante o tipo de taxa,
-// caixa de simulação e documentos. O i serve só para o título por omissão.
+// Secção de uma hipoteca no formulário: no topo, o «Ler a partir da FINE ou
+// do contrato» (fine.js:fineSect, só fora de produção); depois os campos
+// consoante o tipo de taxa — com a marca dos que vieram do documento
+// (fine.js:fineMarca, no rótulo) —, caixa de simulação e documentos. O i
+// serve só para o título por omissão.
 // Recebe: l — a hipoteca (objeto de normLoan); i — a posição dela na lista (a
 // contar do zero), para o título "Hipoteca N" quando não tem nome.
 // Devolve: string de HTML da secção, pronta a inserir com innerHTML.
@@ -648,31 +651,32 @@ function loanSect(l,i){
   return `<div class="sect">
     <div class="sect-head"><span class="ic">${ic('bank',18)}</span><b>${esc(l.name||'Hipoteca '+(i+1))}</b><span class="spacer"></span>
       <button type="button" class="btn sm danger so-icone" aria-label="Apagar a hipoteca" data-toca="dados" data-risco="destroi" data-click="delLoan('${l.id}')">${ic('trash',16)}</button></div>
+    ${fineSect(l)}
     <div class="row">
       <label>Finalidade<input id="l_name_${l.id}" value="${esc(l.name)}" placeholder="Opcional" autocomplete="off" data-input="liveLoan('${l.id}')"></label>
-      <label>Banco<input id="l_bank_${l.id}" value="${esc(l.bank)}" placeholder="Opcional" autocomplete="off"></label></div>
+      <label${fineMarca(l,'bank')}>Banco<input id="l_bank_${l.id}" value="${esc(l.bank)}" placeholder="Opcional" autocomplete="off" data-input="liveLoan('${l.id}')"></label></div>
     <div class="row3">
-      <label>Capital em dívida (€) <span class="req">*</span><input id="l_out_${l.id}" type="text" inputmode="decimal" value="${imvEurosNoCampo(capitalDoInicio(l,db.transactions))}" placeholder="Ex: 150000" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
-      <label>Prazo (anos)<input id="l_years_${l.id}" type="text" inputmode="numeric" value="${esc(l.years||'')}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
+      <label${fineMarca(l,'outstanding')}>Capital em dívida (€) <span class="req">*</span><input id="l_out_${l.id}" type="text" inputmode="decimal" value="${imvEurosNoCampo(capitalDoInicio(l,db.transactions))}" placeholder="Ex: 150000" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
+      <label${fineMarca(l,'prazoMeses')}>Prazo (anos)<input id="l_years_${l.id}" type="text" inputmode="numeric" value="${esc(l.years||'')}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
       <label>Início<input id="l_start_${l.id}" type="date" value="${esc(l.start||'')}"${minDaCompra(pForm,l.start)}></label></div>
     <div class="hint u-mt-n4px">À data de início: as prestações registadas abatem-no, e a caixa abaixo diz o que falta hoje. Se o crédito já vem de trás, ao guardar a app propõe registar as prestações desde então — e o capital desce com elas. Prazo em branco: 30 anos.</div>
-    <div><div class="flabel">Tipo de taxa</div>
+    <div${fineMarca(l,'type')}><div class="flabel">Tipo de taxa</div>
       <div class="seg c3">${[['fixa','lock','Fixa','não muda'],['mista','split','Mista','fixa e depois variável'],['variavel','wave','Variável','Euribor + spread']]
         .map(([k,ico,lb,sb])=>`<button type="button" class="opt ${l.type===k?'on':''}" data-toca="rascunho" data-click="setLType('${l.id}','${k}')"><span class="ic">${ic(ico,18)}</span><b>${lb}</b><small>${sb}</small></button>`).join('')}</div></div>
     ${l.type==='fixa'?`<div class="row">
-      <label>Taxa anual TAN (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
-      <label>Comissão de amortização (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional" autocomplete="off"></label></div>`:''}
+      <label${fineMarca(l,'rate')}>Taxa anual TAN (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
+      <label${fineMarca(l,'amortFeeFix')}>Comissão de amortização (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional" autocomplete="off" data-input="liveLoan('${l.id}')"></label></div>`:''}
     ${l.type==='mista'?`<div class="row">
-        <label>Anos com taxa fixa<input id="l_fy_${l.id}" type="text" inputmode="numeric" value="${l.fixedYears||''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
-        <label>Taxa fixa (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label></div>
+        <label${fineMarca(l,'fixedYears')}>Anos com taxa fixa<input id="l_fy_${l.id}" type="text" inputmode="numeric" value="${l.fixedYears||''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
+        <label${fineMarca(l,'rate')}>Taxa fixa (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label></div>
       <div class="hint u-mt-n4px">Anos com taxa fixa em branco: 5.</div>`:''}
     ${l.type!=='fixa'?`<div class="row3">
-      <label>Indexante${sel('l_index_'+l.id,l.index,['3m','6m','12m'].map(x=>({v:x,label:'Euribor '+x})),'liveLoanAll','rascunho')}</label>
-      <label>Indexante (%)<input id="l_eur_${l.id}" type="text" inputmode="decimal" value="${l.euribor?dec(l.euribor):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
-      <label>Spread (%)<input id="l_spr_${l.id}" type="text" inputmode="decimal" value="${l.spread?dec(l.spread):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label></div>
+      <label${fineMarca(l,'index')}>Indexante${sel('l_index_'+l.id,l.index,['3m','6m','12m'].map(x=>({v:x,label:'Euribor '+x})),'liveLoanAll','rascunho')}</label>
+      <label${fineMarca(l,'euribor')}>Indexante (%)<input id="l_eur_${l.id}" type="text" inputmode="decimal" value="${l.euribor?dec(l.euribor):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
+      <label${fineMarca(l,'spread')}>Spread (%)<input id="l_spr_${l.id}" type="text" inputmode="decimal" value="${l.spread?dec(l.spread):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label></div>
     <div class="row">
-      ${l.type==='mista'?`<label>Comissão amort. — fase fixa (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional" autocomplete="off"></label>`:''}
-      <label>Comissão amort. — taxa variável (%)<input id="l_fvar_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeVar!=null?dec(l.amortFeeVar):''}" placeholder="Opcional" autocomplete="off"></label></div>`:''}
+      ${l.type==='mista'?`<label${fineMarca(l,'amortFeeFix')}>Comissão amort. — fase fixa (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional" autocomplete="off" data-input="liveLoan('${l.id}')"></label>`:''}
+      <label${fineMarca(l,'amortFeeVar')}>Comissão amort. — taxa variável (%)<input id="l_fvar_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeVar!=null?dec(l.amortFeeVar):''}" placeholder="Opcional" autocomplete="off" data-input="liveLoan('${l.id}')"></label></div>`:''}
     <label class="check"><input type="checkbox" id="l_stamp_${l.id}" ${l.stampTax?'checked':''} data-change="toggleStamp('${l.id}')">
       Pagar imposto do selo sobre os juros (${dec(db.settings.stampPct??4)}%)</label>
     <div class="hint u-mt-n4px">Créditos mais antigos podem não o ter. Desliga se a tua prestação não o inclui.</div>
@@ -896,19 +900,20 @@ function toggleStamp(lid){collectProp();const l=findLoan(pForm,lid);if(l)l.stamp
 // Devolve: nada — redesenha a vista.
 function setLType(lid,t){collectProp();const l=findLoan(pForm,lid);if(l)l.type=t;repaintProp()}
 // Refaz a caixa de simulação da hipoteca lid sem repintar o resto do
-// formulário; sem lid, refaz todas.
+// formulário; sem lid, refaz todas. As marcas da FINE dos campos que a
+// pessoa mudou saem, e o aviso da prestação refaz-se (fine.js:fineRefrescar).
 // Recebe: lid (opcional) — o id da hipoteca cuja caixa se refaz; sem lid, todas.
 // Devolve: nada — reescreve a(s) caixa(s) de simulação no DOM.
 function liveLoan(lid){
   collectProp();
-  if(lid){const b=document.getElementById('loanBox_'+lid);if(b)b.innerHTML=loanBox(findLoan(pForm,lid))}
+  if(lid){const l=findLoan(pForm,lid),b=document.getElementById('loanBox_'+lid);if(b)b.innerHTML=loanBox(l);fineRefrescar(l)}
   else liveLoanAll();
 }
 // Refaz as caixas de simulação de todas as hipotecas (o select do indexante
 // repinta-se a si próprio, por isso não dá para saber qual mudou).
 // Devolve: nada — reescreve as caixas de simulação no DOM.
 function liveLoanAll(){collectProp();(pForm.loans||[]).forEach(l=>{
-  const b=document.getElementById('loanBox_'+l.id);if(b)b.innerHTML=loanBox(l)})}
+  const b=document.getElementById('loanBox_'+l.id);if(b)b.innerHTML=loanBox(l);fineRefrescar(l)})}
 /* HTML da caixa de simulação de uma hipoteca: prestação mensal decomposta em
    capital, juros e selo, o capital em dívida de hoje quando as prestações
    registadas já abateram o do início, prestação após a fase fixa (mista, se

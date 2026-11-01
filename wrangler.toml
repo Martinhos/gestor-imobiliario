@@ -42,6 +42,17 @@ id = "PLACEHOLDER_KV_ID"
 binding = "FILES"
 bucket_name = "gestor-imobiliario"
 
+# O Workers AI: lê a FINE em PDF da hipoteca (worker/src/rotas/fine.js) com o
+# toMarkdown e um modelo de texto, dentro dos 10 000 neurons gratuitos por dia
+# da conta inteira. A rota só existe fora de produção; a ligação fica aqui
+# também porque o percurso e o servidor local correm este ambiente de topo.
+# No wrangler dev os modelos correm sempre na Cloudflare (não há simulação
+# local) e o servidor abre a ligação remota ao arrancar: sem sessão do
+# wrangler (o CI) recusa-se a arrancar. Aí corre-se com --local, que desliga
+# as ligações remotas — o servidor arranca e a leitura dá o 503 da rota.
+[ai]
+binding = "AI"
+
 # O que o worker mede sobre si próprio (lib/medidas.js): um ponto por pedido
 # e um por relato, sem dados de pessoas. Três meses de retenção, consulta por
 # SQL, e no plano gratuito: 100.000 pontos por dia — o projeto não chega a um
@@ -133,6 +144,10 @@ id = "PLACEHOLDER_KV_DEV_ID"
 [[env.dev.r2_buckets]]
 binding = "FILES"
 bucket_name = "gestor-imobiliario-dev"
+
+# o Workers AI da leitura da FINE (o [ai] do topo não se herda)
+[env.dev.ai]
+binding = "AI"
 
 # as medidas do dev vão para um conjunto à parte, para não se somarem às de produção
 # [[env.dev.analytics_engine_datasets]]

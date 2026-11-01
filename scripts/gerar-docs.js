@@ -53,7 +53,7 @@ const MAPA = [
     ficheiros: ['web/app/tipos.js', 'web/app/lista-movimentos.js', 'web/app/movimento.js', 'web/app/planeados.js', 'web/cloud/selecao.js',
       'web/cloud/selecao-listas.js'] },
   { id: 'creditos', titulo: 'Créditos à habitação',
-    ficheiros: ['web/app/credito.js', 'web/app/creditos.js'] },
+    ficheiros: ['web/app/credito.js', 'web/app/creditos.js', 'web/app/fine.js', 'worker/src/rotas/fine.js', 'worker/src/lib/fine.js'] },
   { id: 'notif', titulo: 'Notificações e sino',
     ficheiros: ['web/app/notificacoes.js'] },
   { id: 'vistas', titulo: 'Métricas, gráficos e filtros',

@@ -409,3 +409,16 @@ listas vão num só parâmetro JSON (json_each), não em `IN (?, ?, …)`. E um 
 operações independentes tem de correr uma a uma quando ele falha
 (escritas.js:correrLote). O testes/sync-lote.test.js conta as consultas como a
 D1 as conta (um batch = 1) com 1 e com 200 operações.
+
+## O wrangler dev com o [ai] precisa de sessão
+
+O binding do Workers AI no wrangler.toml é remoto mesmo no wrangler dev: ao
+arrancar abre uma sessão na Cloudflare e, sem sessão do wrangler nem
+CLOUDFLARE_API_TOKEN, sai com «Failed to start the remote proxy session». No
+CI (o Interface) e em qualquer máquina sem login, arranca-se com --local: o
+env.AI fica de fora e a leitura da FINE dá 503 (rotas/fine.js:rotasFine). Com
+sessão, o wrangler dev local gasta da mesma quota diária que a produção.
+
+E o TaskStop de uma tarefa em fundo mata a shell mas deixa vivos o node e o
+workerd do wrangler dev: um servidor esquecido continua a responder na porta,
+com a base de antes.

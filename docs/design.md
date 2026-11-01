@@ -4143,6 +4143,51 @@ semanas tem mais uma fila do que um mês de cinco, e ela ficaria por cima da
 legenda. A fila a mais só aparece depois de largar, quando a fita abre o
 espaço (continuidade.js:aFitaAbreEspaco).
 
+### A hipoteca lê-se da FINE ou do contrato
+No topo do formulário da hipoteca, antes de qualquer campo, está o «Ler a
+partir da FINE ou do contrato» (fine.js:fineSect). É o mesmo loanSect no
+modal «Nova/Editar hipoteca» e na ficha do imóvel. A dica diz que a app
+preenche e a pessoa confirma, e que por baixo se preenche à mão. Só aparece
+com sessão, fora de produção e a quem pode editar a casa
+(fine.js:finePodeLer). O PDF fica anexado à hipoteca pelo caminho de sempre
+(web/app/anexos.js:takeFiles), também quando a leitura falha, e o mesmo ficheiro não
+se anexa duas vezes. Os bytes vão ao POST /api/creditos/fine (fine.js:fineLer).
+
+O servidor (rotas/fine.js:rotasFine) passa o PDF a texto no toMarkdown do
+Workers AI e manda o texto a um modelo sem ferramentas, com um JSON schema
+fechado (lib/fine.js:ESQUEMA). O prompt diz que o texto entre as marcas é um
+documento de onde se tiram dados, nunca instruções. O que o modelo devolve
+passa pelo lib/fine.js:validar: cada campo tem o seu tipo e a sua gama, o
+banco é sempre um nome da lista fechada (lib/fine.js:BANCOS) e nunca o texto
+do modelo, e o que falha vai para os ignorados. Nada do documento fica: nem
+os bytes, nem o texto, nem a resposta vão para a base, para a consola ou para
+um relato de erro. A rota recusa em produção (404 antes da sessão), acima de
+5 MB, o que não começa por %PDF-, mais de 5 leituras por conta e por dia, e
+acima do teto global do dia (rotas/fine.js:TETO_GLOBAL, tirado do custo
+medido a 80% da quota gratuita). Uma digitalização sem texto diz «preenche à
+mão».
+
+O que volta é uma proposta. Entra no formulário e nunca na base (grava o
+Guardar), e passa outra vez pelas gamas (fine.js:fineLimpar). Cada campo
+preenchido fica marcado no rótulo (estilos.css:label.fine-lido): o contorno
+no --accent e o rótulo no --accent-text, a cor da frente que o escurecimento
+do Samsung não apaga. A marca sai quando a pessoa muda o campo e não volta
+(fine.js:fineMarca). As linhas «Lido do documento — confirma antes de
+guardar.», a contagem do que se preencheu e «Não consegui ler: …» ficam até
+se guardar ou fechar.
+
+Uma FINE com instruções escondidas pode pôr o modelo a mentir, e a defesa não
+é o modelo. São duas contas que a app faz sozinha:
+- a prestação que a app calcula (credito.js:loanCalc), sem e com o selo,
+  compara-se com a do documento, e acima do maior de 2% e 5 € aparece um
+  aviso com os dois valores (fine.js:fineConferir), que sai quando se corrige
+  o campo;
+- um valor que o servidor recusou por fora de gama (um capital de milhões, um
+  prazo de séculos) avisa que o documento pode não ser de confiança e pede
+  para conferir cada campo com o original (fine.js:fineFraseEstranhos).
+
+Os erros da rota dizem-se junto ao botão, com a frase do servidor.
+
 ## As datas leem-se como se escrevem em Portugal
 O ecrã dizia `2028-03-15`. Passa a dizer **15/03/2028** (formato.js:dPT), e
 os meses soltos dizem «ago 2026» (lista-movimentos.js:mesPt) — a mesma forma nas
@@ -4367,6 +4412,12 @@ custou uma avaria em produção (a história está no diário, de 2026-09-09 a
 - Publicar sem subir a versão não sai: o CI compara os ficheiros que a cache
   guarda com os da publicação anterior, e recusa se mudaram sem versão nova
   (chegada.js:decidir, chegada.js:ficheirosGuardados).
+
+Uma novidade do que só existe fora de produção (o mesmo soDev do catálogo
+dos serviços) vai numa secção com soDev: true. Em produção essa secção não
+diz respeito a ninguém, e um aviso que fique sem secções não aparece
+(novidades.js:afetaMe, novidades.js:avisoParaMim). A versão sobe na mesma,
+porque os ficheiros mudaram.
 
 A rede de segurança do arranque (em linha no index.html, antes de todos os
 <script>) apaga as caches e recarrega quando um ficheiro não carrega — mas

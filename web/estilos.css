@@ -5768,3 +5768,38 @@ p.qa-quem{margin:0}
 /* o «Pedir ajuda» do ecrã: um link do tamanho do texto, à esquerda, e não a coluna inteira */
 .email-ajuda{align-self:flex-start}
 /* === fim: verificação do email === */
+/* === a FINE na hipoteca (fine.js) === */
+/* O bloco «Ler a partir da FINE ou do contrato», no topo do formulário da
+   hipoteca (imovel.js:loanSect). O botão é um .btn inteiro (44px, o mínimo
+   de toque) com o contorno no --accent: é a porta para não escrever nada. A
+   meio da leitura fica desligado e diz «A ler o documento…».
+   As marcas dos campos lidos (fine.js:fineMarca, a classe no rótulo): o
+   contorno do campo no --accent com o segundo pixel em sombra (o desenho do
+   .err, para o campo não saltar) e o rótulo no --accent-text. É a cor da
+   FRENTE que diz o estado — o escurecimento forçado do Samsung Internet
+   apaga a diferença de luz dos fundos e deixa as bordas e o texto
+   (docs/design.md, «Tema escuro e a regra do color-scheme»). No tipo de
+   taxa a escolha acesa já tem a borda no --accent; a marca engrossa-a.
+   «Lido da FINE — confirma antes de guardar.» no --accent-text; o aviso da
+   prestação com o traço de 3px no --warn à esquerda, como o «Prazo
+   esgotado» da caixa da simulação; o erro é o .erro-campo da casa. */
+.fine-bloco{display:grid;gap:8px;justify-items:start}
+.fine-bloco>.hint,.fine-bloco>p,.fine-lido-caixa,.fine-aviso-caixa{justify-self:stretch}
+/* a caixa do aviso fica sempre no DOM (é a região viva que anuncia o aviso a
+   chegar e a sair); vazia, devolve o espaço do gap em vez de sumir com
+   display:none, que há leitores de ecrã que deixam de ouvir */
+.fine-bloco>.fine-aviso-caixa:empty{margin-top:-8px}
+.fine-btn{border-color:var(--accent);color:var(--accent-text);max-width:100%;white-space:normal;text-align:left}
+.fine-btn svg{flex:0 0 auto}
+@media(hover:hover) and (pointer:fine){.fine-btn:hover{background:var(--tint)}}
+.fine-btn:disabled{cursor:progress;opacity:.7}
+.fine-lido-caixa{display:grid;gap:2px}
+.fine-lido-caixa p{margin:0}
+.fine-lido-linha{color:var(--accent-text);font-weight:650;font-size:14px}
+.fine-nota{color:var(--muted);font-size:13px;line-height:1.4}
+.fine-aviso{margin:0;padding:2px 0 2px 10px;border-left:3px solid var(--warn);color:var(--ink);font-size:13.5px;line-height:1.4;overflow-wrap:anywhere}
+label.fine-lido{color:var(--accent-text)}
+label.fine-lido>input,label.fine-lido .selbtn{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.fine-lido>.flabel{color:var(--accent-text)}
+.fine-lido .opt.on{box-shadow:0 0 0 1px var(--accent)}
+/* === fim: a FINE na hipoteca === */

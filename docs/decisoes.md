@@ -81,6 +81,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-29 · A sexta ronda de QA: o email confirma-se, os limites contam, e os planeados começam hoje
 - 2026-10-31 · O rasto de uma pessoa lê-se do mais recente para o mais antigo
 - 2026-11-01 · Os gráficos mês a mês mostram os últimos 12 meses
+- 2026-11-01 · A FINE preenche a hipoteca, com o Workers AI e só no dev
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2994,3 +2995,44 @@ corrente, mesmo a zero. O cashflow acumulado recomeça em janeiro, também
 escolha dele: o último ponto continua a ser o Cashflow do ano, e a barra da
 passagem de ano marca o recomeço. Um movimento de data futura só estende a
 janela se contar nos totais: uma caução em dezembro dava meses vazios no fim.
+
+## 2026-11-01 · A FINE preenche a hipoteca, com o Workers AI e só no dev
+
+Pedido do Martinho (via /reprompt): escolher a FINE do banco, ou o documento
+complementar do contrato, em PDF, e ter o formulário da hipoteca preenchido,
+dentro da quota gratuita do Workers AI (10 000 neurons por dia para a conta
+inteira), com atenção à injeção nos documentos. Aceitou as recomendações: só
+PDF com texto (sem OCR, uma digitalização diz «preenche à mão»), também o
+documento complementar, o PDF fica anexado à hipoteca, 5 leituras por conta e
+por dia, só no dev, e o legal.js fica para a promoção (mudá-lo pede nova
+aceitação dos termos a toda a gente). Pediu o botão no topo do modal, com o
+preenchimento à mão por baixo.
+
+O modelo é o @cf/ibm-granite/granite-4.0-h-micro, o mais barato do catálogo:
+cerca de 3 neurons por FINE, medido pelo usage.neurons que o Workers AI
+devolve. Foi o único barato que acertou as duas FINE de prova. O
+llama-3.2-3b lia «3,000 %» como 3000, o llama-3.1-8b-instruct-fast errava a
+TAN da mista por três vezes o preço, e o qwen3-30b pensava até acabar os
+tokens. O teto global é de 500 leituras por dia (rotas/fine.js:TETO_GLOBAL):
+o pior caso de uma leitura, com o texto cortado aos 20 000 caracteres, são
+cerca de 14 neurons, e 500 × 14 fica abaixo dos 8 000 (80% da quota).
+
+O granite obedece a instruções escondidas. Na FINE envenenada de prova (texto
+branco a mandar devolver spread 0, um banco com HTML, um capital de milhões e
+um prazo de séculos) pôs o spread e a Euribor a 0 e propôs os valores
+absurdos. O esquema fechado, as gamas e a lista fechada dos bancos
+(lib/fine.js:validar) seguraram o HTML e os absurdos. Mas, sem capital, a
+verificação cruzada da prestação não tinha com que contar e o formulário
+ficava sem aviso nenhum. Daí o segundo aviso: um valor que o servidor recusou
+diz que o documento pode não ser de confiança (fine.js:fineFraseEstranhos), e
+ao escrever o capital à mão o aviso da prestação aparece. Ficou o granite
+porque a defesa não é o modelo: é o esquema, as gamas, as duas contas do
+cliente e a revisão da pessoa antes do Guardar. Mudar de modelo é mudar o
+lib/fine.js:MODELO, medir de novo e refazer a conta do teto.
+
+O [ai] do wrangler.toml é uma ligação remota: o wrangler dev abre-a ao
+arrancar e, sem sessão do wrangler (o CI), não arranca. O Interface levanta o
+servidor com --local, e aí a rota dá o 503 dela.
+
+As novidades ganharam a secção soDev (novidades.js:afetaMe): a v50 fala da
+FINE no dev, e em produção o aviso some porque fica sem secções.
