@@ -66,7 +66,7 @@ describe('o botão', () => {
     const h = app.fineSect(l);
     assert.match(h, /Ler a partir da FINE ou do contrato/);
     assert.match(h, /A app preenche os campos por ti, e tu confirmas antes de guardar\. Se preferires, preenche à mão aqui em baixo\./);
-    assert.match(h, /<div class="hint" id="fine_prod_a">Se tiveres produtos facultativos associados ao crédito \(seguros, cartões, ordenado domiciliado\), a app lê as condições sem eles\. Quando o documento traz as duas, podes escolher a seguir\.<\/div>/);
+    assert.match(h, /<div class="hint" id="fine_prod_a">Se o documento indicar produtos facultativos \(seguros, cartões, ordenado domiciliado\), aparecem mais abaixo nos produtos da hipoteca, desligados: liga os que tens\.<\/div>/);
     assert.match(h, /aria-describedby="fine_dica_a fine_prod_a"/);
     assert.match(h, /accept="application\/pdf"/);
     assert.match(h, /data-change="fineFicheiro\(this,'a'\)"/);
@@ -292,89 +292,152 @@ describe('a verificação cruzada da prestação', () => {
 });
 
 describe('os produtos facultativos', () => {
-  /* Uma variável de 150 000 € a 30 anos, Euribor 2,2 %: o spread base 1,25 %
-     e o bonificado 0,85 %, com as prestações certas de cada um. */
+  /* Uma variável de 150 000 € a 30 anos, Euribor 2,2 %: o spread base 1,25 %,
+     o seguro de vida baixa 0,25 e o ordenado 0,15 (com os dois, 0,85 %), com
+     as prestações certas de cada caso. */
   const base = { outstanding: 150000, capitalInicio: 150000, years: 30, type: 'variavel', index: '6m', euribor: 2.2, stampTax: true };
   const prest = (spread) => Math.round(app.loanCalc(app.normLoan(Object.assign({ spread }, base))).total * 100) / 100;
-  const resposta = (bonificado) => ({ campos: { outstanding: 150000, prazoMeses: 360, type: 'variavel', index: '6m', euribor: 2.2, spread: 1.25, prestacao: prest(1.25) }, ignorados: [], bonificado });
+  const lista = [{ tipo: 'seguro_vida', spread: 0.25 }, { tipo: 'ordenado', spread: 0.15 }];
+  const resposta = (produtos, prestacaoComProdutos) => ({ campos: { outstanding: 150000, prazoMeses: 360, type: 'variavel', index: '6m', euribor: 2.2, spread: 1.25, prestacao: prest(1.25) }, ignorados: [], produtos, prestacaoComProdutos });
   const miolo = () => app.fineMiolo(L());
+  const tipos = () => L().produtos.map((p) => p.tipo);
 
-  test('sem as condições com os produtos no documento, não há pergunta', async () => {
+  test('a lista lida entra nos produtos da hipoteca, desligada e com ids novos, e o spread fica o base', async () => {
     casa();
-    responde(200, resposta(undefined));
+    responde(200, resposta(lista, prest(0.85)));
     await ler();
-    assert.ok(!/Tens os produtos facultativos/.test(miolo()));
-  });
-
-  test('com elas, a pergunta aparece com o Não escolhido, e os campos levam as condições sem os produtos', async () => {
-    casa();
-    responde(200, resposta({ spread: 0.85, prestacao: prest(0.85) }));
-    await ler();
+    igual(tipos(), ['seguro_vida', 'ordenado']);
+    igual(L().produtos.map((p) => [p.spread, p.tan, p.ativo]), [[0.25, null, false], [0.15, null, false]]);
+    for (const p of L().produtos) assert.match(p.id, /^[A-Za-z0-9_-]{1,64}$/);
+    igual(L().spread, 1.25);
+    igual(app.spreadEmVigor(L()), 1.25, 'desligados não baixam nada');
     const h = miolo();
-    assert.match(h, /<p class="fine-produtos-perg" id="fine_pp_a">Tens os produtos facultativos deste crédito\?<\/p>/);
-    assert.match(h, /role="group" aria-labelledby="fine_pp_a"/);
-    assert.match(h, /id="fine_pr_nao_a" class="on" aria-pressed="true"[^>]*data-click="fineProdutos\('a',false\)">Não</);
-    assert.match(h, /id="fine_pr_sim_a" class="" aria-pressed="false"[^>]*data-click="fineProdutos\('a',true\)">Sim</);
-    assert.ok(h.includes(`Com os produtos, o documento dá o spread de 0,85 % e a prestação de ${app.euro2(prest(0.85))}.`), h);
-    assert.ok(!/O custo dos produtos/.test(h), 'o custo só com o Sim');
-    igual(L().spread, 1.25);
-    assert.ok(!/não bate/.test(h), 'a prestação base bate');
-  });
-
-  test('o Sim troca o spread e a prestação da verificação; o Não repõe', async () => {
-    casa();
-    responde(200, resposta({ spread: 0.85, prestacao: prest(0.85) }));
-    await ler();
-    const antes = repintou;
-    app.fineProdutos('a', true);
-    igual(L().spread, 0.85);
-    igual(repintou, antes + 1, 'repinta o formulário');
-    assert.ok(app.fineMarca(L(), 'spread'), 'o spread trocado fica marcado');
-    let h = miolo();
-    assert.match(h, /id="fine_pr_sim_a" class="on" aria-pressed="true"/);
-    assert.ok(h.includes(`Sem os produtos, o documento dá o spread de 1,25 % e a prestação de ${app.euro2(prest(1.25))}.`), h);
-    assert.match(h, /O custo dos produtos \(seguros, cartão\) não entra na hipoteca: regista-o à parte, como despesa\./);
-    assert.ok(!/não bate/.test(h), 'a prestação com os produtos bate com o spread bonificado');
-    app.fineProdutos('a', false);
-    igual(L().spread, 1.25);
-    h = miolo();
-    assert.match(h, /id="fine_pr_nao_a" class="on" aria-pressed="true"/);
-    assert.ok(!/não bate/.test(h));
+    assert.match(h, /O documento indica 2 produtos facultativos: estão nos produtos da hipoteca, desligados\. Liga os que tens\./);
+    assert.ok(!/não bate/.test(h), 'sem produtos ligados, a prestação base bate');
+    assert.ok(app.fineMarca(L(), 'produtos'), 'o bloco dos produtos fica marcado como lido');
+    assert.match(app.loanSect(L(), 0), /class="hip-prod fine-lido"/);
     igual(gravou, 0, 'nada se grava sem o Guardar');
   });
 
-  test('o Sim sem prestação bonificada não confere a prestação base com o spread bonificado', async () => {
-    casa();
-    responde(200, resposta({ spread: 0.85 }));
+  test('substitui a lista que lá estava; sem produtos lidos, a de antes fica', async () => {
+    casa({ produtos: [{ id: 'velho', tipo: 'cartao_credito', spread: 0.1, ativo: true }] });
+    responde(200, resposta(undefined));
     await ler();
-    app.fineProdutos('a', true);
-    assert.ok(!/não bate/.test(miolo()));
+    igual(L().produtos.map((p) => p.id), ['velho'], 'o documento não indica produtos: os escritos à mão ficam');
+    responde(200, resposta([{ tipo: 'seguro_multirriscos', spread: 0.05 }]));
+    await ler();
+    igual(tipos(), ['seguro_multirriscos']);
+    igual(L().produtos[0].ativo, false);
+    assert.notEqual(L().produtos[0].id, 'velho');
+    assert.match(miolo(), /O documento indica 1 produto facultativo: está nos produtos da hipoteca, desligado\. Liga-o se o tens\./);
   });
 
-  test('na fixa, a TAN; o que o tipo de taxa não tem, ou fica acima da base, ou é lixo, não entra', async () => {
+  test('lixo, tipos fora da lista, repetidos e reduções fora de gama não entram', async () => {
     casa();
-    responde(200, { campos: { outstanding: 150000, prazoMeses: 360, type: 'fixa', rate: 3.4 }, ignorados: [], bonificado: { rate: 3, spread: 0.85 } });
+    responde(200, resposta([
+      { tipo: 'seguro_vida', spread: 0.25 },
+      { tipo: 'seguro_vida', spread: 0.5 },          // repetido: fica o primeiro
+      { tipo: 'iate', spread: 0.1 },                 // fora da lista
+      { tipo: 'cartao_credito', spread: 4 },         // acima de 3
+      { tipo: 'cartao_debito', spread: 0 },          // zero não é redução
+      { tipo: 'poupanca', spread: '0.1' },           // texto
+      { tipo: 'debitos', tan: 0.2 },                 // a variável não tem TAN
+      { tipo: '<b>x</b>', spread: 0.1 }, null, 'lixo', [1],
+      { tipo: 'ordenado', spread: 0.12345 },         // às milésimas
+    ]));
     await ler();
-    assert.ok(miolo().includes('Com os produtos, o documento dá a TAN de 3 %.'), miolo());
-    app.fineProdutos('a', true);
-    igual(L().rate, 3);
-    igual(L().spread, 0, 'a fixa não leva spread');
-    for (const bon of [{ spread: 1.5 }, { spread: '<b>0.5</b>' }, { spread: 40 }, 'lixo', [1], null]) {
+    igual(L().produtos.map((p) => [p.tipo, p.spread, p.tan]), [['seguro_vida', 0.25, null], ['ordenado', 0.123, null]]);
+    for (const lixo of ['lixo', { tipo: 'seguro_vida' }, [{ tipo: 'iate', spread: 1 }], null, 7]) {
       limpar(app); casa();
-      responde(200, resposta(bon));
+      responde(200, resposta(lixo));
       await ler();
-      assert.ok(!/Tens os produtos facultativos/.test(miolo()), JSON.stringify(bon));
+      igual(L().produtos.length, 0, JSON.stringify(lixo));
     }
   });
 
-  test('uma leitura nova volta ao Não', async () => {
+  test('no máximo 8; na fixa só a TAN, na mista as duas', async () => {
     casa();
-    responde(200, resposta({ spread: 0.85, prestacao: prest(0.85) }));
+    const muitos = ['seguro_vida', 'seguro_multirriscos', 'ordenado', 'debitos', 'cartao_credito', 'cartao_debito', 'poupanca', 'conjunto', 'outro'].map((tipo) => ({ tipo, spread: 0.01 }));
+    responde(200, resposta(muitos));
     await ler();
-    app.fineProdutos('a', true);
+    igual(L().produtos.length, 8);
+    limpar(app); casa();
+    responde(200, { campos: { outstanding: 150000, prazoMeses: 360, type: 'fixa', rate: 3.4 }, ignorados: [], produtos: [{ tipo: 'seguro_vida', spread: 0.2, tan: 0.3 }, { tipo: 'ordenado', spread: 0.1 }] });
     await ler();
-    igual(L().spread, 1.25);
-    assert.match(miolo(), /id="fine_pr_nao_a" class="on"/);
+    igual(L().produtos.map((p) => [p.tipo, p.spread, p.tan]), [['seguro_vida', null, 0.3]], 'na fixa o spread não entra, e um produto só com spread sai');
+    limpar(app); casa();
+    responde(200, { campos: { outstanding: 150000, prazoMeses: 360, type: 'mista', fixedYears: 5, rate: 3, index: '6m', euribor: 2.2, spread: 1 }, ignorados: [], produtos: [{ tipo: 'seguro_vida', spread: 0.2, tan: 0.3 }] });
+    await ler();
+    igual(L().produtos.map((p) => [p.spread, p.tan]), [[0.2, 0.3]]);
+  });
+
+  test('a prestação: nenhum ligado → a lida; todos → a com produtos; alguns → não confere', async () => {
+    casa();
+    /* a prestação lida de propósito errada, para se ver qual se confere */
+    const errada = Math.round(prest(1.25) * 1.2 * 100) / 100;
+    responde(200, Object.assign(resposta(lista, prest(0.85)), {}));
+    await ler();
+    assert.ok(!/não bate/.test(miolo()), 'nenhum ligado: a base bate');
+    L().produtos.forEach((p) => { p.ativo = true; });
+    assert.ok(!/não bate/.test(miolo()), 'todos ligados: spread 0,85 e a prestação com produtos batem');
+    igual(app.spreadEmVigor(L()), 0.85);
+    L().produtos[1].ativo = false;
+    assert.ok(!/não bate/.test(miolo()), 'alguns ligados: o documento não diz essa prestação');
+    igual(app.finePrestacaoAConferir(L(), app.fineDe('a')), 0);
+    /* todos ligados com a prestação com produtos errada: avisa */
+    limpar(app); casa();
+    responde(200, resposta(lista, Math.round(prest(0.85) * 0.9 * 100) / 100));
+    await ler();
+    L().produtos.forEach((p) => { p.ativo = true; });
+    assert.match(miolo(), /não bate com a do documento/);
+    /* nenhum ligado com a base errada: avisa; todos ligados sem a com produtos: não confere */
+    limpar(app); casa();
+    responde(200, Object.assign(resposta(lista), { campos: Object.assign(resposta(lista).campos, { prestacao: errada }) }));
+    await ler();
+    assert.match(miolo(), /não bate/);
+    L().produtos.forEach((p) => { p.ativo = true; });
+    assert.ok(!/não bate/.test(miolo()), 'sem a prestação com produtos, não confere');
+  });
+
+  test('a prestação com produtos só entra entre 1 e 50 000 € e abaixo da base', async () => {
+    for (const [pc, fica] of [[prest(0.85), true], [prest(1.25) + 10, false], [0, false], [60000, false], ['700', false], [null, false]]) {
+      limpar(app); casa();
+      responde(200, resposta(lista, pc));
+      await ler();
+      igual(app.fineDe('a').prestacaoComProdutos, fica ? pc : 0, String(pc));
+    }
+    limpar(app); casa();
+    responde(200, { campos: { outstanding: 150000, prazoMeses: 360, type: 'variavel', index: '6m', euribor: 2.2, spread: 1.25 }, ignorados: [], produtos: lista, prestacaoComProdutos: 700 });
+    await ler();
+    igual(app.fineDe('a').prestacaoComProdutos, 0, 'sem a prestação base lida, não há «abaixo da base»');
+  });
+
+  test('a marca do bloco sai quando a lista muda, e não com o ligar', async () => {
+    casa();
+    responde(200, resposta(lista));
+    await ler();
+    L().produtos[0].ativo = true;
+    assert.ok(app.fineMarca(L(), 'produtos'), 'ligar é o que se espera');
+    L().produtos[0].spread = 0.3;
+    igual(app.fineMarca(L(), 'produtos'), '');
+  });
+
+  test('o servidor recusou as reduções: avisa, como um campo fora de gama', async () => {
+    casa();
+    responde(200, Object.assign(resposta(undefined), { ignorados: ['produtos'] }));
+    await ler();
+    assert.match(miolo(), /valores que não fazem sentido num crédito \(as reduções dos produtos facultativos\)/);
+  });
+
+  test('a pergunta Sim/Não da v52 já não existe', async () => {
+    casa();
+    responde(200, Object.assign(resposta(lista, prest(0.85)), { bonificado: { spread: 0.85, prestacao: prest(0.85) } }));
+    await ler();
+    const h = miolo() + app.loanSect(L(), 0);
+    assert.ok(!/Tens os produtos facultativos/.test(h));
+    assert.ok(!/fine_pr_(sim|nao)_/.test(h));
+    igual(L().spread, 1.25, 'o bonificado não troca nada');
+    for (const nome of ['fineProdutos', 'fineProdutosHtml', 'fineFraseOutra', 'fineLimparBonificado']) igual(typeof app[nome], 'undefined', nome);
   });
 });
 

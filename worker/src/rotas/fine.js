@@ -27,15 +27,19 @@ export const LEITURAS_POR_DIA = 5;
    gratuito do Workers AI são 10 000 neurons por dia para tudo; ficamos a 80%
    (8 000), e o custo de uma leitura é o MEDIDO (o `usage.neurons` que o
    modelo devolve, .unlazy/fine-ia/medir-1.1.mjs) com o granite-4.0-h-micro:
-     · as FINE de prova (≈1 300 caracteres de texto): 3,2 a 3,4 neurons cada
-       (≈1 150–1 280 tokens de entrada, ≈140 de saída);
-     · o pior caso, com o texto cheio (TETO_TEXTO, 20 000 caracteres ≈ 6 500
-       tokens de entrada com o prompt) e a resposta no teto (400 tokens):
-       6 500 × 1 542 / 1 000 000 + 400 × 10 158 / 1 000 000 ≈ 10 + 4 = 14 neurons;
-     · 8 000 / 14 ≈ 570 leituras. Arredonda-se para baixo, 500.
+     · as FINE de prova (≈1 300 caracteres de texto), com a lista dos
+       produtos facultativos no esquema e no prompt (2026-11-02,
+       .unlazy/fine-produtos/medir-a.mjs): 4,4 a 5,9 neurons cada (≈1 700–1 820
+       tokens de entrada, ≈180–430 de saída; o prompt e o esquema são ≈1 500);
+     · o pior caso, com o texto cheio (TETO_TEXTO, 20 000 caracteres ≈ 7 500
+       tokens de entrada com o prompt) e a resposta no teto
+       (MAX_TOKENS_RESPOSTA, 600 tokens):
+       7 500 × 1 542 / 1 000 000 + 600 × 10 158 / 1 000 000 ≈ 11,6 + 6,1 = 17,7 neurons;
+     · 8 000 / 17,7 ≈ 452 leituras. Arredonda-se para baixo, 450 (eram 500
+       com a resposta a 400 tokens, antes da lista dos produtos).
    O toMarkdown não gasta neurons nos PDF (só nas imagens). Muda o modelo
    (lib/fine.js:MODELO), mede-se de novo e refaz-se esta conta. */
-export const TETO_GLOBAL = 500;
+export const TETO_GLOBAL = 450;
 
 // A janela dos dois limites: um dia, a contar da primeira leitura.
 const DIA = 86400;
@@ -65,7 +69,7 @@ export function rotaFineEmProducao(c) {
    passadas todas, os campos lidos.
    Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
    method, path e o utilizador em c.me).
-   Devolve: a Response — 200 {campos, ignorados, bonificado?}; 404 em produção; 413, 415,
+   Devolve: a Response — 200 {campos, ignorados, produtos?, prestacaoComProdutos?}; 404 em produção; 413, 415,
    429, 503 ou 422 com a frase do contrato — ou nada (undefined) quando o
    pedido não é desta rota. */
 export async function rotasFine(c) {
@@ -113,10 +117,21 @@ export async function rotasFine(c) {
   }
   if (!bruto) return indisponivel();   // o modelo não devolveu JSON nenhum
 
-  const { campos, ignorados, bonificado } = validar(bruto);
+  const { campos, ignorados, produtos, prestacaoComProdutos } = validar(bruto);
   if (!Object.keys(campos).length) return err(422, 'Este documento não tem os valores de um crédito.');
-  // as condições com os produtos facultativos só vão quando o documento as tem
-  return json(Object.keys(bonificado).length ? { campos, ignorados, bonificado } : { campos, ignorados });
+  return json(resposta(campos, ignorados, produtos, prestacaoComProdutos));
+}
+
+/* O corpo do 200: os produtos facultativos e a prestação com eles só vão
+   quando o documento os tem.
+   Recebe: campos, ignorados, produtos, prestacaoComProdutos — o que o
+   validar devolveu.
+   Devolve: { campos, ignorados, produtos?, prestacaoComProdutos? }. */
+function resposta(campos, ignorados, produtos, prestacaoComProdutos) {
+  const r = { campos, ignorados };
+  if (produtos.length) r.produtos = produtos;
+  if (prestacaoComProdutos != null) r.prestacaoComProdutos = prestacaoComProdutos;
+  return r;
 }
 
 /* Os bytes começam pela assinatura de um PDF («%PDF-»)? O Content-Type não

@@ -5802,12 +5802,38 @@ label.fine-lido{color:var(--accent-text)}
 label.fine-lido>input,label.fine-lido .selbtn{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .fine-lido>.flabel{color:var(--accent-text)}
 .fine-lido .opt.on{box-shadow:0 0 0 1px var(--accent)}
-/* A pergunta dos produtos facultativos (fine.js:fineProdutosHtml), quando o
-   documento traz as condições com e sem eles: o segmentado da casa, curto
-   (duas palavras), com a escolha na cor da frente (o .segm>.on passa do
-   --muted ao --ink e engrossa a letra). */
-.fine-lido-caixa>.fine-produtos{display:grid;gap:6px;margin:8px 0 2px;justify-items:start}
-.fine-produtos>p{justify-self:stretch}
-.fine-lido-caixa .fine-produtos-perg{color:var(--ink);font-weight:600;font-size:14px}
-.fine-produtos-seg{width:180px;max-width:100%}
 /* === fim: a FINE na hipoteca === */
+/* === os produtos facultativos da hipoteca (imovel.js:loanProdSect) === */
+/* O bloco a seguir às taxas: o título, a dica, uma linha por produto, o
+   «Adicionar produto», a taxa em vigor e a nota do custo. Cada linha é uma
+   caixa de contorno --line com o tipo e o Remover em cima e, em baixo, as
+   reduções e o interruptor; quebra em vez de alargar (nada de scroll de lado
+   a 390px). O interruptor é o botão inteiro (role=switch): o .interruptor
+   de dentro só se vê, como na «Ajudar a melhorar» das Definições. Ligado
+   diz-se na cor da FRENTE — a palavra «Ligado» no --accent-text e o contorno
+   da linha no --accent, com o segundo pixel em sombra por fora —, porque o
+   escurecimento forçado do Samsung Internet apaga a diferença de luz dos
+   fundos (docs/design.md, «Tema escuro e a regra do color-scheme»). Lido da
+   FINE e por mexer, o título leva a cor da marca (.fine-lido>.flabel). */
+.hip-prod{display:grid;gap:8px;justify-items:start}
+.hip-prod>.flabel{margin-bottom:0}
+.hip-prod>.hint,.hip-prod>p,.hip-prod-lista{justify-self:stretch}
+.hip-prod-lista{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.hip-prod-linha{display:grid;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card);min-width:0}
+.hip-prod-linha.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.hip-prod-cab{display:flex;align-items:center;gap:8px;min-width:0}
+.hip-prod-tipo{flex:1 1 auto;min-width:0;display:block}
+.hip-prod-pe{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 12px;min-width:0}
+.hip-prod-red{flex:1 1 180px;min-width:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));align-items:end;gap:8px}
+.hip-prod-red>label{min-width:0}
+.hip-prod-liga{flex:0 0 auto;display:inline-flex;align-items:center;gap:8px;min-height:46px;padding:0 4px;border:0;background:transparent;color:var(--muted);font:inherit;font-size:14px;font-weight:600;cursor:pointer;border-radius:10px}
+.hip-prod-liga .interruptor{pointer-events:none}
+.hip-prod-liga[aria-checked="true"] .interruptor{background:var(--accent)}
+.hip-prod-liga[aria-checked="true"] .interruptor::after{transform:translateX(18px)}
+.hip-prod-liga[aria-checked="true"] .hip-prod-estado{color:var(--accent-text)}
+.hip-prod-liga:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hip-prod-vigor{margin:0;color:var(--ink);font-weight:600;font-size:14px;line-height:1.4}
+@media(pointer:coarse){.hip-prod-add{min-height:44px}}
+/* a linha dos produtos ligados no painel da hipoteca (creditos.js:credDetalhe) */
+.cred-det-prod{margin:0 0 4px;color:var(--muted)}
+/* === fim: os produtos facultativos da hipoteca === */

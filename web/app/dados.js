@@ -165,13 +165,54 @@ function migrateInline(){
   Promise.all(list.map(x=>idbGet(x.id).then(b=>{if(b)return;return fetch(x.data).then(r=>r.blob()).then(bl=>idbPut(x.id,bl))}).catch(()=>{})))
     .then(()=>{save()});
 }
+/* Os produtos facultativos de uma hipoteca (seguros, cartões, ordenado
+   domiciliado…): uma lista FECHADA, a mesma e pela mesma ordem no servidor
+   (worker/src/lib/fine.js, a leitura da FINE). Cada produto guardado na
+   hipoteca é um destes tipos; um tipo desconhecido passa a 'outro'. Vive aqui,
+   ao lado do normLoan, porque a base é o primeiro ficheiro a carregar: o
+   formulário (imovel.js:loanProdSect), a ficha (creditos.js:mortFicha) e a
+   leitura da FINE (fine.js:fineLimparProdutos) leem-na todos. */
+var PRODUTOS_HIPOTECA=[
+  {id:'seguro_vida',nome:'Seguro de vida'},
+  {id:'seguro_multirriscos',nome:'Seguro multirriscos'},
+  {id:'ordenado',nome:'Ordenado domiciliado'},
+  {id:'debitos',nome:'Débitos diretos domiciliados'},
+  {id:'cartao_credito',nome:'Cartão de crédito'},
+  {id:'cartao_debito',nome:'Cartão de débito'},
+  {id:'poupanca',nome:'Poupança ou PPR'},
+  {id:'conjunto',nome:'Todos os produtos facultativos'},
+  {id:'outro',nome:'Outro produto'},
+];
+/* A redução de um produto, em pontos percentuais: um número em (0, 3],
+   arredondado às milésimas. O que não for número, ou ficar fora da gama
+   (depois de arredondado), não é redução nenhuma.
+   Recebe: v — o valor (só um number conta; um texto já passou pelo numTaxa).
+   Devolve: o número, ou null. */
+function produtoReducao(v){
+  if(typeof v!=='number'||!isFinite(v))return null;
+  const r=Math.round(v*1000)/1000;
+  return r>0&&r<=3?r:null;
+}
+/* normaliza um produto facultativo de uma hipoteca: o id seguro (ou um novo),
+   o tipo da lista fechada (PRODUTOS_HIPOTECA, senão 'outro'), as reduções do
+   spread e da TAN (produtoReducao, null quando não há) e se está ligado.
+   Recebe: x — o produto em bruto (objeto parcial, ou nada).
+   Devolve: um objeto novo {id, tipo, spread, tan, ativo}. */
+function normProduto(x){
+  const o=x&&typeof x==='object'&&!Array.isArray(x)?x:{};
+  return {id:idSeguro(o.id||uid()),tipo:PRODUTOS_HIPOTECA.some(p=>p.id===o.tipo)?o.tipo:'outro',
+    spread:produtoReducao(o.spread),tan:produtoReducao(o.tan),ativo:o.ativo===true};
+}
 /* normaliza uma hipoteca: omissões preenchidas, campos extintos (active, taeg, mtic) fora, anexos pelo normFile
+   e os produtos facultativos pelo normProduto (o spread e a rate são a BASE, sem eles: a taxa em vigor
+   é a de credito.js:spreadEmVigor e taxaFixaEmVigor)
    Recebe: l — a hipoteca em bruto (objeto parcial de qualquer versão, ou nada).
    Devolve: um objeto novo com todos os campos da hipoteca preenchidos. */
 function normLoan(l){const o=Object.assign({id:uid(),name:'',bank:'',outstanding:0,years:30,type:'fixa',
-  rate:0,fixedYears:5,euribor:0,spread:0,index:'6m',start:'',stampTax:true,amortFeeFix:2,amortFeeVar:0.5,files:[]},l||{});
+  rate:0,fixedYears:5,euribor:0,spread:0,index:'6m',start:'',stampTax:true,amortFeeFix:2,amortFeeVar:0.5,files:[],produtos:[]},l||{});
   o.id=idSeguro(o.id);delete o.active;delete o.taeg;delete o.mtic;
   if(o.stampTax===undefined)o.stampTax=true;
+  o.produtos=(Array.isArray(o.produtos)?o.produtos:[]).filter(x=>x&&typeof x==='object'&&!Array.isArray(x)).map(normProduto);
   o.files=(o.files||[]).map(normFile);return o}
 /* normaliza uma visita a um imóvel: quem vem (texto livre — ainda não é
    inquilino, não há ficha), onde, quando (data + horas), estado, desfecho

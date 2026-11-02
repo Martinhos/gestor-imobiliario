@@ -27,6 +27,29 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 53,
+    data: '2026-11-02',
+    titulo: 'Os produtos facultativos ligam-se um a um na hipoteca',
+    seccoes: [
+      {
+        titulo: 'Créditos à habitação',
+        afeta: ['creditos'],
+        itens: [
+          'Cada hipoteca tem agora os seus produtos facultativos (seguro de vida, multirriscos, ordenado domiciliado…), cada um com a redução que dá. Liga os que tens e o spread ou a TAN em vigor desce sozinho; desliga um que cancelaste e volta a subir.',
+          'O spread e a TAN que escreves são os sem produtos. O custo dos produtos não entra na hipoteca: regista-o à parte, como despesa.',
+        ],
+      },
+      {
+        titulo: 'A leitura da FINE',
+        afeta: ['creditos'],
+        soDev: true,
+        itens: [
+          'A leitura da FINE ou do contrato preenche a lista dos produtos facultativos com a redução de cada um, todos desligados, e deixa de perguntar «Tens os produtos facultativos deste crédito?».',
+        ],
+      },
+    ],
+  },
+  {
     v: 52,
     data: '2026-11-01',
     titulo: 'Os produtos facultativos escolhem-se ao ler a FINE',

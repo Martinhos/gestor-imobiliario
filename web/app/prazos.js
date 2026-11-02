@@ -270,9 +270,10 @@ function prazosDe(hoje){
       const r0=servicoLigado('recurring')?loanRecOf(l):null;
       const fim=fimDaFaseFixa(l,db.transactions||[],h,r0&&r0.next);
       if(!fim)return;
-      const depois=(Number(l.euribor)||0)+(Number(l.spread)||0);
+      /* as taxas em vigor: com os produtos facultativos ligados (credito.js:spreadEmVigor, taxaFixaEmVigor) */
+      const depois=taxa3((Number(l.euribor)||0)+spreadEmVigor(l));
       poe('taxa',l.id+':'+fim,fim,'Fim da taxa fixa — '+(l.name||l.bank||'crédito')+' ('+(p.name||'imóvel')+')',
-        'A '+dPT(fim)+' a taxa passa de '+dec(l.rate)+'% para Euribor+spread (hoje ~'+dec(depois)+'%). Bom momento para comparar propostas.',
+        'A '+dPT(fim)+' a taxa passa de '+dec(taxaFixaEmVigor(l))+'% para Euribor+spread (hoje ~'+dec(depois)+'%). Bom momento para comparar propostas.',
         servicoLigado('credits')?`mortView('${jsq(p.id)}','${jsq(l.id)}')`:(servicoLigado('properties')?`propView('${jsq(p.id)}')`:''),false);
     });
   });

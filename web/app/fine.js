@@ -5,21 +5,23 @@
    o mesmo na ficha do imóvel e no modal «Nova/Editar hipoteca»), o PDF fica
    anexado à hipoteca pelo caminho de sempre (anexos.js:takeFiles, como o
    imovel.js:loanAddFiles) e os bytes vão à rota POST /api/creditos/fine, que
-   os lê com o Workers AI e devolve {campos, ignorados}.
+   os lê com o Workers AI e devolve {campos, ignorados, produtos?,
+   prestacaoComProdutos?}.
 
    O que vem do servidor é uma PROPOSTA: entra nos campos do formulário (em
    pForm, nunca na base), cada campo preenchido fica marcado na cor da frente
    (o contorno e o rótulo no --accent — o Samsung Internet do Martinho
    escurece à força e só a frente sobrevive), a linha «Lido do documento — confirma
    antes de guardar.» diz o que aconteceu, e «Ficou por ler: …» o que
-   faltou — frases impessoais, sem a app a falar como «eu». Os produtos
-   facultativos (seguros, cartões, ordenado domiciliado) não contam: o
-   servidor lê as condições sem eles, e a dica di-lo. Quando o documento
-   traz também as condições com eles (a bonificação), a pergunta «Tens os
-   produtos facultativos deste crédito?» troca o spread, a TAN e a
-   prestação da verificação cruzada (fineProdutos); o Não é a resposta por
-   omissão. Nada se grava sem o Guardar da pessoa. Uma prestação lida que
-   não bate com a que a app calcula dá um aviso junto ao bloco.
+   faltou — frases impessoais, sem a app a falar como «eu». O spread e a
+   TAN lidos são os base, sem os produtos facultativos (seguros, cartões,
+   ordenado domiciliado); os produtos que o documento indica, cada um com a
+   sua redução, entram na lista de produtos da hipoteca (imovel.js:
+   loanProdSect) desligados — a pessoa liga os que tem —, e substituem os
+   que lá estavam (fineAplicar). A prestação lida confere-se sem produtos
+   ligados; com todos ligados, a prestação com eles (finePrestacaoAConferir).
+   Nada se grava sem o Guardar da pessoa. Uma prestação lida que não bate
+   com a que a app calcula dá um aviso junto ao bloco.
 
    Só aparece com sessão, fora de produção e a quem pode editar a casa
    (finePodeLer). Tudo o que vem do servidor entra por esc() ou por value,
@@ -53,9 +55,7 @@ var FINE_FRASES={
   botao:'Ler a partir da FINE ou do contrato',
   aLer:'A ler o documento…',
   dica:'A app preenche os campos por ti, e tu confirmas antes de guardar. Se preferires, preenche à mão aqui em baixo.',
-  produtos:'Se tiveres produtos facultativos associados ao crédito (seguros, cartões, ordenado domiciliado), a app lê as condições sem eles. Quando o documento traz as duas, podes escolher a seguir.',
-  perguntaProdutos:'Tens os produtos facultativos deste crédito?',
-  custoProdutos:'O custo dos produtos (seguros, cartão) não entra na hipoteca: regista-o à parte, como despesa.',
+  produtos:'Se o documento indicar produtos facultativos (seguros, cartões, ordenado domiciliado), aparecem mais abaixo nos produtos da hipoteca, desligados: liga os que tens.',
   lido:'Lido do documento — confirma antes de guardar.',
   semRede:'Sem ligação ao servidor. Tenta daqui a pouco, ou preenche à mão.',
   demorou:'A leitura demorou de mais. Tenta daqui a pouco, ou preenche à mão.',
@@ -66,7 +66,9 @@ var FINE_FRASES={
 };
 /* Os campos que a rota pode devolver, com o nome em português (para «Ficou
    por ler: …») e o sufixo do campo do loanSect (l_<sufixo>_<id>) onde a
-   marca se acende. A prestação não tem campo: serve a verificação cruzada. */
+   marca se acende. A prestação não tem campo: serve a verificação cruzada.
+   Os produtos facultativos marcam o bloco deles (imovel.js:loanProdSect), e
+   o nome serve o aviso do que o servidor recusou. */
 var FINE_CAMPOS={
   bank:{nome:'o banco',campo:'bank'},
   outstanding:{nome:'o capital',campo:'out'},
@@ -80,7 +82,11 @@ var FINE_CAMPOS={
   amortFeeFix:{nome:'a comissão de amortização da taxa fixa',campo:'ffix'},
   amortFeeVar:{nome:'a comissão de amortização da taxa variável',campo:'fvar'},
   prestacao:{nome:'a prestação',campo:''},
+  produtos:{nome:'as reduções dos produtos facultativos',campo:''},
 };
+/* Quantos produtos facultativos se leem de um documento, no máximo (o mesmo
+   teto da rota). */
+var FINE_MAX_PRODUTOS=8;
 /* O que cada tipo de taxa tem para ler, além do que todos têm: é a lista do
    que «faltou», e o que se aplica ao formulário (um campo de outro tipo não
    entra numa hipoteca que não o mostra). */
@@ -96,14 +102,13 @@ var FINE_DO_TIPO={
    Recebe: lid — o id da hipoteca.
    Devolve: {ocupado, erro, marcas:{campo: valor aplicado}, lidos, faltou,
    estranhos (os nomes do que o servidor recusou), prazoMeses, prestacao,
-   aviso (o HTML do último aviso pintado), base e bonificado (as condições
-   sem e com os produtos facultativos, {rate?, spread?, prestacao?}),
-   comProdutos (a resposta à pergunta)} — o mesmo objeto enquanto o
-   formulário for o mesmo. */
+   prestacaoComProdutos (a prestação com todos os produtos, 0 sem ela),
+   produtosLidos (quantos produtos entraram), aviso (o HTML do último aviso
+   pintado)} — o mesmo objeto enquanto o formulário for o mesmo. */
 function fineDe(lid){
   if(fineEstado.form!==pForm)fineEstado={form:pForm,porHipoteca:{}};
   const t=fineEstado.porHipoteca;
-  if(!t[lid])t[lid]={ocupado:false,erro:'',marcas:{},lidos:0,faltou:null,estranhos:[],prazoMeses:0,prestacao:0,aviso:'',base:{},bonificado:{},comProdutos:false};
+  if(!t[lid])t[lid]={ocupado:false,erro:'',marcas:{},lidos:0,faltou:null,estranhos:[],prazoMeses:0,prestacao:0,prestacaoComProdutos:0,produtosLidos:0,aviso:''};
   return t[lid];
 }
 /* O botão aparece? Só com sessão (a rota pede-a), fora de produção (a rota
@@ -142,7 +147,7 @@ function fineMiolo(l){
   if(e.lidos){
     h+=`<div class="fine-lido-caixa"><p class="fine-lido-linha">${esc(FINE_FRASES.lido)}</p>`;
     if(e.estranhos&&e.estranhos.length)h+=`<p class="fine-aviso fine-estranho" role="alert">${esc(fineFraseEstranhos(e.estranhos))}</p>`;
-    h+=fineProdutosHtml(l,e);
+    if(e.produtosLidos)h+=`<p class="fine-nota">${esc(fineFraseProdutos(e.produtosLidos))}</p>`;
     if(e.prazoMeses&&e.prazoMeses%12)h+=`<p class="fine-nota">${esc(fineFrasePrazo(e.prazoMeses))}</p>`;
     if(e.faltou&&e.faltou.length)h+=`<p class="fine-nota fine-faltou">Ficou por ler: ${esc(fineJuntar(e.faltou))}.</p>`;
     h+=`</div>`;
@@ -157,7 +162,7 @@ function fineMiolo(l){
    Recebe: l — a hipoteca; e — o estado dela (fineDe).
    Devolve: o HTML do aviso, ou '' quando bate (ou não se pode saber). */
 function fineAvisoHtml(l,e){
-  const av=fineConferir(l,e.prestacao);
+  const av=fineConferir(l,finePrestacaoAConferir(l,e));
   return av?`<p class="fine-aviso" id="fine_aviso_${esc(l.id)}">A prestação calculada (${euro2(av.calculada)}) não bate com a do documento (${euro2(av.fine)}) — confirma a taxa, o prazo e o capital.</p>`:'';
 }
 /* Troca só o miolo do bloco da hipoteca lid (o botão ocupado, o erro, o
@@ -168,50 +173,12 @@ function fineRedesenhar(lid){
   const b=document.getElementById('fine_'+lid),l=findLoan(pForm,lid);
   if(b&&l)b.innerHTML=fineMiolo(l);
 }
-/* A pergunta dos produtos facultativos, quando o documento traz as duas
-   condições: um segmentado Não/Sim (aria-pressed na escolha), a nota com
-   os valores da outra escolha e, com o Sim, que o custo dos produtos fica
-   fora da hipoteca.
-   Recebe: l — a hipoteca; e — o estado dela (fineDe).
-   Devolve: o HTML; '' sem condições com os produtos. */
-function fineProdutosHtml(l,e){
-  if(!e.bonificado||!Object.keys(e.bonificado).length)return '';
-  const id=esc(l.id),sim=!!e.comProdutos;
-  const bot=(v,txt)=>`<button type="button" id="fine_pr_${v?'sim':'nao'}_${id}" class="${sim===v?'on':''}" aria-pressed="${sim===v}" data-toca="rascunho" data-click="fineProdutos('${jsq(l.id)}',${v})">${txt}</button>`;
-  return `<div class="fine-produtos" role="group" aria-labelledby="fine_pp_${id}">
-    <p class="fine-produtos-perg" id="fine_pp_${id}">${esc(FINE_FRASES.perguntaProdutos)}</p>
-    <div class="segm fine-produtos-seg">${bot(false,'Não')}${bot(true,'Sim')}</div>
-    <p class="fine-nota">${esc(fineFraseOutra(e))}</p>
-    ${sim?`<p class="fine-nota">${esc(FINE_FRASES.custoProdutos)}</p>`:''}</div>`;
-}
-/* Os valores da escolha que não está feita, para a pessoa ver o que a
-   troca muda: «Com os produtos, o documento dá o spread de 0,85 % e a
-   prestação de 758,89 €.» (ou «Sem os produtos, …» com o Sim).
-   Recebe: e — o estado (fineDe), com base e bonificado.
+/* A nota dos produtos facultativos lidos: onde ficaram e o que fazer.
+   Recebe: n — quantos entraram (≥ 1).
    Devolve: a frase. */
-function fineFraseOutra(e){
-  const fonte=e.comProdutos?e.base:e.bonificado,partes=[];
-  if('rate' in e.bonificado)partes.push(`a TAN de ${dec(fonte.rate)} %`);
-  if('spread' in e.bonificado)partes.push(`o spread de ${dec(fonte.spread)} %`);
-  if('prestacao' in e.bonificado)partes.push(`a prestação de ${euro2(fonte.prestacao)}`);
-  return `${e.comProdutos?'Sem':'Com'} os produtos, o documento dá ${fineJuntar(partes)}.`;
-}
-/* A resposta à pergunta dos produtos facultativos: o Sim passa a TAN e o
-   spread do formulário às condições com os produtos, e a verificação
-   cruzada à prestação com eles; o Não repõe as condições sem eles. Os
-   campos trocados ficam marcados outra vez (vieram do documento). Mexe só
-   no formulário: grava o Guardar.
-   Recebe: lid — o id da hipoteca; sim — true quando os tem.
-   Devolve: nada — muda pForm e repinta o formulário. */
-function fineProdutos(lid,sim){
-  collectProp();
-  const e=fineDe(lid),l=findLoan(pForm,lid);
-  if(!l||!e.bonificado||!Object.keys(e.bonificado).length)return;
-  const fonte=sim?e.bonificado:e.base;
-  ['rate','spread'].forEach(k=>{if(k in e.bonificado&&k in fonte){l[k]=fonte[k];e.marcas[k]=fonte[k]}});
-  e.prestacao=fonte.prestacao||0;
-  e.comProdutos=!!sim;
-  repaintProp();
+function fineFraseProdutos(n){
+  return n===1?'O documento indica 1 produto facultativo: está nos produtos da hipoteca, desligado. Liga-o se o tens.'
+    :`O documento indica ${n} produtos facultativos: estão nos produtos da hipoteca, desligados. Liga os que tens.`;
 }
 /* O prazo da FINE em meses que não dá anos inteiros: diz o arredondamento.
    Recebe: m — o prazo em meses.
@@ -258,19 +225,37 @@ function fineLimpar(campos){
   n('euribor',-1,10);n('spread',0,10);n('amortFeeFix',0,2);n('amortFeeVar',0,0.5);n('prestacao',1,50000);
   return o;
 }
-/* As condições com os produtos facultativos passadas pelas gamas outra vez,
-   e só as que baixam uma condição base lida: uma bonificação acima da base
-   (ou sem base) não é bonificação nenhuma.
-   Recebe: b — o bonificado da resposta (aguenta lixo); c — os campos já
-   limpos (fineLimpar).
-   Devolve: {rate?, spread?, prestacao?} — vazio quando nada serve. */
-function fineLimparBonificado(b,c){
-  const x=b&&typeof b==='object'&&!Array.isArray(b)?b:{},o={};
-  [['rate',0,20],['spread',0,10],['prestacao',1,50000]].forEach(([k,min,max])=>{
-    const v=fineNumero(x[k],min,max);
-    if(v!==null&&typeof c[k]==='number'&&v<c[k])o[k]=v;
-  });
-  return o;
+/* Os produtos facultativos da resposta passados outra vez pelas regras do
+   contrato (a rota já o fez; a app não confia no que não escreveu): só os
+   tipos da lista fechada (dados.js:PRODUTOS_HIPOTECA — um desconhecido não
+   entra), sem tipos repetidos (fica o primeiro), só as reduções que o tipo
+   de taxa tem (credito.js:produtosReducoes) e dentro de (0, 3]
+   (dados.js:produtoReducao), um produto sem redução nenhuma não entra, e no
+   máximo FINE_MAX_PRODUTOS.
+   Recebe: lista — o produtos da resposta (aguenta lixo); tipo — o tipo de
+   taxa da hipoteca ('fixa', 'mista', 'variavel').
+   Devolve: [{tipo, spread, tan}] — spread e tan null quando não há. */
+function fineLimparProdutos(lista,tipo){
+  if(!Array.isArray(lista))return [];
+  const red=produtosReducoes(tipo),vistos={},out=[];
+  for(const x of lista){
+    if(out.length>=FINE_MAX_PRODUTOS)break;
+    if(!x||typeof x!=='object'||Array.isArray(x)||typeof x.tipo!=='string')continue;
+    if(!PRODUTOS_HIPOTECA.some(p=>p.id===x.tipo)||vistos[x.tipo])continue;
+    const spread=red.spread?produtoReducao(x.spread):null,tan=red.tan?produtoReducao(x.tan):null;
+    if(spread===null&&tan===null)continue;
+    vistos[x.tipo]=true;
+    out.push({tipo:x.tipo,spread,tan});
+  }
+  return out;
+}
+/* A lista dos produtos como texto, para saber se a pessoa a mudou depois de
+   lida: o tipo e as reduções de cada um, pela ordem — ligar e desligar não
+   conta (é o que se espera que a pessoa faça).
+   Recebe: l — a hipoteca.
+   Devolve: o texto. */
+function fineAssinaturaProdutos(l){
+  return JSON.stringify((l&&l.produtos||[]).map(p=>[p.tipo,p.spread,p.tan]));
 }
 /* O valor de um campo como o formulário o tem agora, para saber se a pessoa
    o mudou depois de lido (a marca sai).
@@ -279,6 +264,7 @@ function fineLimparBonificado(b,c){
 function fineValorAtual(l,k){
   if(k==='outstanding')return capitalDoInicio(l,db.transactions);
   if(k==='prazoMeses')return Number(l.years)||0;
+  if(k==='produtos')return fineAssinaturaProdutos(l);
   return l[k];
 }
 /* Dois valores iguais: os números com folga de vírgula flutuante (o campo
@@ -300,14 +286,17 @@ function fineIgual(a,b){
    milhões ou um prazo de séculos não é uma FINE de confiança. Pode trazer
    instruções escondidas que puseram o modelo a mentir também nos valores
    que passam nas gamas, e por isso a pessoa é avisada para conferir tudo.
-   As condições com os produtos facultativos (bonificado) ficam no estado, ao
-   lado das base, para a pergunta: só as dos campos que o tipo de taxa tem,
-   e a resposta começa no Não — os campos levam as condições sem eles.
+   Os produtos facultativos lidos (limpos outra vez, fineLimparProdutos, com
+   o tipo de taxa já aplicado) SUBSTITUEM os que a hipoteca tinha: todos
+   desligados e com id novo — a pessoa liga os que tem. Sem nenhum que sirva,
+   ficam os que lá estavam. A prestação com os produtos fica no estado para a
+   verificação cruzada, só entre 1 e 50 000 € e abaixo da prestação base lida.
    Recebe: l — a hipoteca de pForm; campos — o campos da resposta; e — o
    estado dela (fineDe); ignorados (opcional) — os nomes que o servidor
-   recusou; bonificado (opcional) — o bonificado da resposta.
-   Devolve: quantos campos preencheu. */
-function fineAplicar(l,campos,e,ignorados,bonificado){
+   recusou; produtos (opcional) — o produtos da resposta;
+   prestacaoComProdutos (opcional) — a prestação com eles.
+   Devolve: quantos campos preencheu (os produtos contam como um). */
+function fineAplicar(l,campos,e,ignorados,produtos,prestacaoComProdutos){
   const c=fineLimpar(campos),tipo=c.type||l.type||'fixa',marcas={};
   const quer=FINE_COMUNS.concat(FINE_DO_TIPO[tipo]||[]);
   if(c.type){l.type=c.type;marcas.type=c.type}
@@ -317,15 +306,20 @@ function fineAplicar(l,campos,e,ignorados,bonificado){
     if(k==='prazoMeses'){l.years=Math.max(1,Math.round(c[k]/12));marcas[k]=l.years;return}
     l[k]=c[k];marcas[k]=c[k];
   });
+  const ps=fineLimparProdutos(produtos,l.type);
+  if(ps.length){
+    l.produtos=ps.map(x=>normProduto({tipo:x.tipo,spread:x.spread,tan:x.tan,ativo:false}));
+    marcas.produtos=fineAssinaturaProdutos(l);
+  }
+  e.produtosLidos=ps.length;
   e.marcas=marcas;
   e.lidos=Object.keys(marcas).length;
   e.prazoMeses=c.prazoMeses||0;
   e.prestacao=c.prestacao||0;
   e.faltou=quer.concat(['prestacao']).filter(k=>c[k]===undefined).map(k=>FINE_CAMPOS[k].nome);
   e.estranhos=Array.isArray(ignorados)?Object.keys(FINE_CAMPOS).filter(k=>ignorados.indexOf(k)>-1).map(k=>FINE_CAMPOS[k].nome):[];
-  const bon=fineLimparBonificado(bonificado,c);
-  e.bonificado={};e.base={};e.comProdutos=false;
-  Object.keys(bon).forEach(k=>{if(k==='prestacao'||quer.indexOf(k)>-1){e.bonificado[k]=bon[k];e.base[k]=c[k]}});
+  const pc=fineNumero(prestacaoComProdutos,1,50000);
+  e.prestacaoComProdutos=pc!==null&&c.prestacao>0&&pc<c.prestacao?pc:0;
   e.erro='';
   return e.lidos;
 }
@@ -343,8 +337,9 @@ function fineMarca(l,k){
   return ' class="fine-lido"';
 }
 /* Depois de a pessoa escrever (imovel.js:liveLoan e liveLoanAll, já com o
-   collectProp feito): apaga as marcas dos campos que mudaram e refaz o
-   aviso da prestação, sem repintar o formulário nem o resto do bloco.
+   collectProp feito): apaga as marcas dos campos que mudaram (a dos
+   produtos sai do bloco deles) e refaz o aviso da prestação, sem repintar o
+   formulário nem o resto do bloco.
    Recebe: l — a hipoteca (de pForm).
    Devolve: nada — mexe nas classes dos rótulos e na caixa do aviso. */
 function fineRefrescar(l){
@@ -352,6 +347,7 @@ function fineRefrescar(l){
   const e=fineEstado.porHipoteca[l.id];
   Object.keys(e.marcas).forEach(k=>{
     if(fineMarca(l,k))return;
+    if(k==='produtos'){const b=document.getElementById('l_prods_'+l.id);if(b)b.classList.remove('fine-lido');return}
     const suf=(FINE_CAMPOS[k]||{}).campo,el=suf?document.getElementById('l_'+suf+'_'+l.id):null;
     const lab=el&&typeof el.closest==='function'?el.closest('label'):null;
     if(lab)lab.classList.remove('fine-lido');
@@ -359,6 +355,18 @@ function fineRefrescar(l){
   const novo=fineAvisoHtml(l,e),caixa=document.getElementById('fine_av_'+l.id);
   if(novo!==e.aviso&&caixa)caixa.innerHTML=novo;
   e.aviso=novo;
+}
+/* A prestação do documento que se confere com a hipoteca como está: sem
+   produtos ligados, a prestação lida (a base); com todos os produtos
+   ligados, a prestação com eles (sem ela lida, não se confere); com uns
+   ligados e outros não, o documento não diz essa prestação, e não se
+   confere.
+   Recebe: l — a hipoteca; e — o estado dela (fineDe).
+   Devolve: a prestação a conferir, ou 0 quando não há. */
+function finePrestacaoAConferir(l,e){
+  const ps=(l&&l.produtos)||[],lig=ps.filter(p=>p&&p.ativo===true).length;
+  if(!lig)return e.prestacao||0;
+  return lig===ps.length?(e.prestacaoComProdutos||0):0;
 }
 /* A verificação cruzada: a prestação que a app calcula para a hipoteca como
    está (credito.js:loanCalc) contra a da FINE. Compara com a prestação sem
@@ -390,8 +398,9 @@ function fineRecusaLocal(f){
    (nucleo.js:api: o Authorization e o X-Rendorium-Token, e o cookie
    same-origin), e com tempo limite.
    Recebe: f — o File (ou Blob) do PDF.
-   Devolve: Promise que resolve sempre: {campos, ignorados, bonificado} com 200
-   (o bonificado tal como veio: o fineAplicar é que o limpa), ou
+   Devolve: Promise que resolve sempre: {campos, ignorados, produtos,
+   prestacaoComProdutos} com 200 (os dois últimos tal como vieram: o
+   fineAplicar é que os limpa), ou
    {erro} com a frase a mostrar (a do servidor, quando a há). */
 function fineLer(f){
   const h={'Content-Type':'application/pdf'};
@@ -408,7 +417,7 @@ function fineLer(f){
     return corpo.then(j=>{
       j=j&&typeof j==='object'?j:{};
       if(r.ok){
-        if(j.campos&&typeof j.campos==='object'&&!Array.isArray(j.campos))return fim({campos:j.campos,ignorados:Array.isArray(j.ignorados)?j.ignorados:[],bonificado:j.bonificado});
+        if(j.campos&&typeof j.campos==='object'&&!Array.isArray(j.campos))return fim({campos:j.campos,ignorados:Array.isArray(j.ignorados)?j.ignorados:[],produtos:j.produtos,prestacaoComProdutos:j.prestacaoComProdutos});
         return fim({erro:FINE_FRASES.falhou});
       }
       const frase=typeof j.error==='string'&&j.error.trim()?j.error.trim().slice(0,240):FINE_FRASES.falhou;
@@ -454,7 +463,7 @@ function fineFicheiro(input,lid){
     if(res.erro){e.erro=res.erro;fineRedesenhar(lid);return}
     collectProp();
     const l=findLoan(pForm,lid);if(!l)return;
-    const n=fineAplicar(l,res.campos,e,res.ignorados,res.bonificado);
+    const n=fineAplicar(l,res.campos,e,res.ignorados,res.produtos,res.prestacaoComProdutos);
     if(!n){e.lidos=0;e.erro=FINE_FRASES.nada;fineRedesenhar(lid);return}
     repaintProp();
   });

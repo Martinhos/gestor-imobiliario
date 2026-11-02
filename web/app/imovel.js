@@ -642,12 +642,14 @@ function propBody(){
 // Secção de uma hipoteca no formulário: no topo, o «Ler a partir da FINE ou
 // do contrato» (fine.js:fineSect, só fora de produção); depois os campos
 // consoante o tipo de taxa — com a marca dos que vieram do documento
-// (fine.js:fineMarca, no rótulo) —, caixa de simulação e documentos. O i
-// serve só para o título por omissão.
+// (fine.js:fineMarca, no rótulo) —, os produtos facultativos
+// (loanProdSect: com eles, a TAN e o spread dizem-se «sem produtos»), caixa
+// de simulação e documentos. O i serve só para o título por omissão.
 // Recebe: l — a hipoteca (objeto de normLoan); i — a posição dela na lista (a
 // contar do zero), para o título "Hipoteca N" quando não tem nome.
 // Devolve: string de HTML da secção, pronta a inserir com innerHTML.
 function loanSect(l,i){
+  const sem=(l.produtos||[]).length?' sem produtos':'';
   return `<div class="sect">
     <div class="sect-head"><span class="ic">${ic('bank',18)}</span><b>${esc(l.name||'Hipoteca '+(i+1))}</b><span class="spacer"></span>
       <button type="button" class="btn sm danger so-icone" aria-label="Apagar a hipoteca" data-toca="dados" data-risco="destroi" data-click="delLoan('${l.id}')">${ic('trash',16)}</button></div>
@@ -664,19 +666,20 @@ function loanSect(l,i){
       <div class="seg c3">${[['fixa','lock','Fixa','não muda'],['mista','split','Mista','fixa e depois variável'],['variavel','wave','Variável','Euribor + spread']]
         .map(([k,ico,lb,sb])=>`<button type="button" class="opt ${l.type===k?'on':''}" data-toca="rascunho" data-click="setLType('${l.id}','${k}')"><span class="ic">${ic(ico,18)}</span><b>${lb}</b><small>${sb}</small></button>`).join('')}</div></div>
     ${l.type==='fixa'?`<div class="row">
-      <label${fineMarca(l,'rate')}>Taxa anual TAN (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
+      <label${fineMarca(l,'rate')}>${sem?'TAN sem produtos (%)':'Taxa anual TAN (%)'}<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
       <label${fineMarca(l,'amortFeeFix')}>Comissão de amortização (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional" autocomplete="off" data-input="liveLoan('${l.id}')"></label></div>`:''}
     ${l.type==='mista'?`<div class="row">
         <label${fineMarca(l,'fixedYears')}>Anos com taxa fixa<input id="l_fy_${l.id}" type="text" inputmode="numeric" value="${l.fixedYears||''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
-        <label${fineMarca(l,'rate')}>Taxa fixa (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label></div>
+        <label${fineMarca(l,'rate')}>Taxa fixa${sem} (%)<input id="l_rate_${l.id}" type="text" inputmode="decimal" value="${l.rate?dec(l.rate):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label></div>
       <div class="hint u-mt-n4px">Anos com taxa fixa em branco: 5.</div>`:''}
     ${l.type!=='fixa'?`<div class="row3">
       <label${fineMarca(l,'index')}>Indexante${sel('l_index_'+l.id,l.index,['3m','6m','12m'].map(x=>({v:x,label:'Euribor '+x})),'liveLoanAll','rascunho')}</label>
       <label${fineMarca(l,'euribor')}>Indexante (%)<input id="l_eur_${l.id}" type="text" inputmode="decimal" value="${l.euribor?dec(l.euribor):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label>
-      <label${fineMarca(l,'spread')}>Spread (%)<input id="l_spr_${l.id}" type="text" inputmode="decimal" value="${l.spread?dec(l.spread):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label></div>
+      <label${fineMarca(l,'spread')}>Spread${sem} (%)<input id="l_spr_${l.id}" type="text" inputmode="decimal" value="${l.spread?dec(l.spread):''}" placeholder="Opcional" data-input="liveLoan('${l.id}')" autocomplete="off"></label></div>
     <div class="row">
       ${l.type==='mista'?`<label${fineMarca(l,'amortFeeFix')}>Comissão amort. — fase fixa (%)<input id="l_ffix_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeFix!=null?dec(l.amortFeeFix):''}" placeholder="Opcional" autocomplete="off" data-input="liveLoan('${l.id}')"></label>`:''}
       <label${fineMarca(l,'amortFeeVar')}>Comissão amort. — taxa variável (%)<input id="l_fvar_${l.id}" type="text" inputmode="decimal" value="${l.amortFeeVar!=null?dec(l.amortFeeVar):''}" placeholder="Opcional" autocomplete="off" data-input="liveLoan('${l.id}')"></label></div>`:''}
+    ${loanProdSect(l)}
     <label class="check"><input type="checkbox" id="l_stamp_${l.id}" ${l.stampTax?'checked':''} data-change="toggleStamp('${l.id}')">
       Pagar imposto do selo sobre os juros (${dec(db.settings.stampPct??4)}%)</label>
     <div class="hint u-mt-n4px">Créditos mais antigos podem não o ter. Desliga se a tua prestação não o inclui.</div>
@@ -730,6 +733,7 @@ function collectProp(){
     if(g('index'))l.index=val('l_index_'+l.id);
     if(g('ffix'))l.amortFeeFix=Math.max(0,numTaxa(val('l_ffix_'+l.id)));
     if(g('fvar'))l.amortFeeVar=Math.max(0,numTaxa(val('l_fvar_'+l.id)));
+    loanProdColher(l);
     /* o capital em dívida não se escreve: é o do início menos o que os pagamentos registados abateram */
     l.outstanding=saldoEmDivida(l,db.transactions);
   });
@@ -901,19 +905,148 @@ function toggleStamp(lid){collectProp();const l=findLoan(pForm,lid);if(l)l.stamp
 function setLType(lid,t){collectProp();const l=findLoan(pForm,lid);if(l)l.type=t;repaintProp()}
 // Refaz a caixa de simulação da hipoteca lid sem repintar o resto do
 // formulário; sem lid, refaz todas. As marcas da FINE dos campos que a
-// pessoa mudou saem, e o aviso da prestação refaz-se (fine.js:fineRefrescar).
+// pessoa mudou saem, o aviso da prestação refaz-se (fine.js:fineRefrescar) e
+// a linha da taxa com os produtos ligados também (loanProdRefrescar).
 // Recebe: lid (opcional) — o id da hipoteca cuja caixa se refaz; sem lid, todas.
 // Devolve: nada — reescreve a(s) caixa(s) de simulação no DOM.
 function liveLoan(lid){
   collectProp();
-  if(lid){const l=findLoan(pForm,lid),b=document.getElementById('loanBox_'+lid);if(b)b.innerHTML=loanBox(l);fineRefrescar(l)}
+  if(lid){const l=findLoan(pForm,lid),b=document.getElementById('loanBox_'+lid);if(b)b.innerHTML=loanBox(l);loanProdRefrescar(l);fineRefrescar(l)}
   else liveLoanAll();
 }
 // Refaz as caixas de simulação de todas as hipotecas (o select do indexante
-// repinta-se a si próprio, por isso não dá para saber qual mudou).
+// e o do tipo de cada produto repintam-se a si próprios, por isso não dá
+// para saber qual mudou).
 // Devolve: nada — reescreve as caixas de simulação no DOM.
 function liveLoanAll(){collectProp();(pForm.loans||[]).forEach(l=>{
-  const b=document.getElementById('loanBox_'+l.id);if(b)b.innerHTML=loanBox(l);fineRefrescar(l)})}
+  const b=document.getElementById('loanBox_'+l.id);if(b)b.innerHTML=loanBox(l);loanProdRefrescar(l);fineRefrescar(l)})}
+/* ---- os produtos facultativos da hipoteca ----
+   Cada produto (dados.js:normProduto) é uma linha com o tipo (a lista
+   fechada, dados.js:PRODUTOS_HIPOTECA), a redução que dá — no spread na
+   variável, na TAN na fixa, nas duas na mista —, o interruptor de quem o tem
+   e o Remover. O spread e a TAN de cima passam a dizer-se «sem produtos», e
+   uma linha diz a taxa em vigor com os ligados (credito.js:spreadEmVigor,
+   taxaFixaEmVigor). Ligar, adicionar e remover mexem só no formulário
+   (pForm): grava o Guardar. O estado do interruptor diz-se em palavras
+   («Ligado»/«Desligado») e na cor da frente — o contorno da linha e a
+   palavra no --accent —, porque o Samsung Internet escurece à força e só a
+   frente sobrevive (docs/design.md, «Tema escuro e a regra do
+   color-scheme»). */
+var LOAN_PROD_FRASES={
+  dica:'Os produtos que o banco pede para baixar a taxa (seguros, cartões, ordenado domiciliado). Adiciona cada um com a redução que dá, e liga os que tens.',
+  custo:'O custo dos produtos (seguros, cartão) não entra na hipoteca: regista-o à parte, como despesa.',
+};
+/* O bloco «Produtos facultativos» do formulário da hipoteca: o título, a
+   dica, uma linha por produto (loanProdLinha), o «Adicionar produto» e, com
+   produtos, a taxa em vigor e a nota do custo. Lido da FINE e por mexer, o
+   título fica na cor da marca (fine.js:fineMarca).
+   Recebe: l — a hipoteca (de pForm).
+   Devolve: o HTML do bloco (texto). */
+function loanProdSect(l){
+  const id=esc(l.id),ps=l.produtos||[],red=produtosReducoes(l.type),lido=fineMarca(l,'produtos')?' fine-lido':'';
+  return `<div class="hip-prod${lido}" id="l_prods_${id}" role="group" aria-labelledby="l_prods_t_${id}">
+    <div class="flabel" id="l_prods_t_${id}">Produtos facultativos</div>
+    <div class="hint">${esc(LOAN_PROD_FRASES.dica)}</div>
+    ${ps.length?`<ul class="hip-prod-lista">${ps.map(p=>loanProdLinha(l,p,red)).join('')}</ul>`:''}
+    <button type="button" class="btn sm hip-prod-add" id="l_padd_${id}" data-toca="rascunho" data-click="loanProdAdicionar('${jsq(l.id)}')">${ic('plus',16)} Adicionar produto</button>
+    ${ps.length?`<p class="hip-prod-vigor" id="l_pvig_${id}" role="status">${esc(loanProdFraseVigor(l))}</p>
+    <div class="hint">${esc(LOAN_PROD_FRASES.custo)}</div>`:''}</div>`;
+}
+/* Uma linha de produto: o tipo (o sel() da casa, com o nome do produto
+   para o leitor de ecrã) e o Remover em cima; em baixo as reduções que o
+   tipo de taxa tem e o interruptor, que leva o nome do produto escolhido
+   (aria-labelledby no rótulo do sel) e diz o estado em palavras.
+   Recebe: l — a hipoteca; p — o produto; red — as reduções do tipo de taxa
+   (credito.js:produtosReducoes).
+   Devolve: o HTML do <li> (texto). */
+function loanProdLinha(l,p,red){
+  const id=esc(p.id),lid=jsq(l.id),pid=jsq(p.id),on=p.ativo===true;
+  const campo=(k,rot,v)=>`<label>${rot}<input id="l_p${k}_${id}" type="text" inputmode="decimal" value="${v!=null?dec(v):''}" placeholder="Ex: 0,10" autocomplete="off" data-input="liveLoan('${lid}')"></label>`;
+  const campos=(red.spread?campo('spr','Baixa o spread em (%)',p.spread):'')+(red.tan?campo('tan',l.type==='mista'?'Baixa a taxa fixa em (%)':'Baixa a TAN em (%)',p.tan):'');
+  return `<li class="hip-prod-linha${on?' on':''}" id="l_prow_${id}">
+      <div class="hip-prod-cab"><label class="hip-prod-tipo"><span class="imv-so-leitor">Produto</span>${sel('l_ptipo_'+p.id,p.tipo,PRODUTOS_HIPOTECA.map(x=>({v:x.id,label:x.nome})),'liveLoanAll','rascunho')}</label>
+        <button type="button" class="btn ghost so-icone hip-prod-x" id="l_pdel_${id}" aria-label="Remover produto: ${esc(produtoNome(p.tipo))}" data-toca="rascunho" data-click="loanProdRemover('${lid}','${pid}')">${ic('trash',16)}</button></div>
+      <div class="hip-prod-pe"><div class="hip-prod-red">${campos}</div>
+        <button type="button" class="hip-prod-liga" id="l_pon_${id}" role="switch" aria-checked="${on}" aria-labelledby="lab_l_ptipo_${id}" data-toca="rascunho" data-click="loanProdLigar('${lid}','${pid}')"><span class="interruptor" aria-hidden="true"></span><span class="hip-prod-estado" id="l_pest_${id}">${on?'Ligado':'Desligado'}</span></button></div></li>`;
+}
+/* A linha da taxa em vigor com os produtos ligados: «Com os produtos
+   ligados, o spread fica em 0,85 %.» (na fixa a TAN, na mista a taxa fixa e
+   o spread); sem nenhum ligado, a de sem produtos.
+   Recebe: l — a hipoteca.
+   Devolve: a frase. */
+function loanProdFraseVigor(l){
+  const red=produtosReducoes(l.type),partes=[];
+  if(red.tan)partes.push((l.type==='mista'?'a taxa fixa':'a TAN')+' fica em '+dec(taxa3(taxaFixaEmVigor(l)))+' %');
+  if(red.spread)partes.push('o spread '+(partes.length?'':'fica ')+'em '+dec(taxa3(spreadEmVigor(l)))+' %');
+  return (produtosLigados(l).length?'Com os produtos ligados, ':'Sem produtos ligados, ')+partes.join(' e ')+'.';
+}
+/* Refaz só a linha da taxa em vigor (ao escrever uma redução, ao ligar), e
+   só quando o texto muda: é uma região viva, e o leitor de ecrã anuncia-a.
+   E o nome de cada Remover, que diz o produto (o tipo pode ter mudado no sel).
+   Recebe: l — a hipoteca (de pForm; aguenta null).
+   Devolve: nada — mexe no DOM. */
+function loanProdRefrescar(l){
+  if(!l||!(l.produtos||[]).length)return;
+  const el=document.getElementById('l_pvig_'+l.id),t=loanProdFraseVigor(l);
+  if(el&&el.textContent!==t)el.textContent=t;
+  l.produtos.forEach(p=>{const x=document.getElementById('l_pdel_'+p.id);if(x)x.setAttribute('aria-label','Remover produto: '+produtoNome(p.tipo))});
+}
+/* Lê as linhas dos produtos de volta para a hipoteca (do collectProp): o
+   tipo do sel (só um da lista), e as reduções escritas, pelo numTaxa e pela
+   gama (dados.js:produtoReducao — fora de (0, 3] fica vazia). O ligado não
+   se lê: vive em pForm (loanProdLigar). Um campo que não está no ecrã deixa
+   o valor que lá estava.
+   Recebe: l — a hipoteca de pForm.
+   Devolve: nada — muda l.produtos. */
+function loanProdColher(l){
+  const red=v=>String(v==null?'':v).trim()?produtoReducao(numTaxa(v)):null;
+  (l.produtos||[]).forEach(p=>{
+    const t=document.getElementById('l_ptipo_'+p.id),s=document.getElementById('l_pspr_'+p.id),n=document.getElementById('l_ptan_'+p.id);
+    if(t&&PRODUTOS_HIPOTECA.some(x=>x.id===t.value))p.tipo=t.value;
+    if(s)p.spread=red(s.value);
+    if(n)p.tan=red(n.value);
+  });
+}
+/* Liga ou desliga um produto: muda só o formulário e o desenho do
+   interruptor (sem repintar, o foco fica nele), e refaz a simulação e a taxa
+   em vigor (liveLoan).
+   Recebe: lid — o id da hipoteca; pid — o id do produto.
+   Devolve: nada — mexe em pForm e no DOM. */
+function loanProdLigar(lid,pid){
+  collectProp();
+  const l=findLoan(pForm,lid),p=l&&(l.produtos||[]).find(x=>x.id===pid);if(!p)return;
+  p.ativo=!p.ativo;
+  const b=document.getElementById('l_pon_'+pid),e=document.getElementById('l_pest_'+pid),row=document.getElementById('l_prow_'+pid);
+  if(b)b.setAttribute('aria-checked',p.ativo?'true':'false');
+  if(e)e.textContent=p.ativo?'Ligado':'Desligado';
+  if(row)row.classList.toggle('on',p.ativo);
+  liveLoan(lid);
+}
+/* Adiciona uma linha de produto, desligada e sem redução: o primeiro tipo da
+   lista que a hipoteca ainda não tem (ou «Outro produto»). Repinta — os
+   rótulos de cima passam a «sem produtos» — e leva o foco ao tipo novo.
+   Recebe: lid — o id da hipoteca.
+   Devolve: nada — mexe em pForm e repinta o formulário. */
+function loanProdAdicionar(lid){
+  collectProp();
+  const l=findLoan(pForm,lid);if(!l)return;
+  const usados=(l.produtos||[]).map(p=>p.tipo),livre=PRODUTOS_HIPOTECA.find(x=>x.id!=='conjunto'&&x.id!=='outro'&&usados.indexOf(x.id)<0);
+  const p=normProduto({tipo:livre?livre.id:'outro',ativo:false});
+  l.produtos=(l.produtos||[]).concat([p]);
+  repaintProp();
+  const b=document.getElementById('selb_l_ptipo_'+p.id);if(b)try{b.focus()}catch(e){}
+}
+/* Remove a linha de um produto (só do formulário: grava o Guardar), repinta
+   e devolve o foco ao «Adicionar produto».
+   Recebe: lid — o id da hipoteca; pid — o id do produto.
+   Devolve: nada — mexe em pForm e repinta o formulário. */
+function loanProdRemover(lid,pid){
+  collectProp();
+  const l=findLoan(pForm,lid);if(!l)return;
+  l.produtos=(l.produtos||[]).filter(p=>p.id!==pid);
+  repaintProp();
+  const b=document.getElementById('l_padd_'+lid);if(b)try{b.focus()}catch(e){}
+}
 /* HTML da caixa de simulação de uma hipoteca: prestação mensal decomposta em
    capital, juros e selo, o capital em dívida de hoje quando as prestações
    registadas já abateram o do início, prestação após a fase fixa (mista, se

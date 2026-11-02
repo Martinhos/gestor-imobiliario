@@ -2023,6 +2023,8 @@ function dropUnsafe(d) {
       });
       (p.loans || []).forEach(function (l) {
         if (Array.isArray(l.files)) l.files = l.files.filter(safe);
+        // os produtos facultativos da hipoteca: o id vai para os ids dos campos e das ações do formulário
+        if (Array.isArray(l.produtos)) l.produtos = l.produtos.filter(safe);
       });
     });
   }

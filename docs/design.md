@@ -4148,10 +4148,9 @@ No topo do formulário da hipoteca, antes de qualquer campo, está o «Ler a
 partir da FINE ou do contrato» (fine.js:fineSect). É o mesmo loanSect no
 modal «Nova/Editar hipoteca» e na ficha do imóvel. A dica diz que a app
 preenche e a pessoa confirma, e que por baixo se preenche à mão. Uma segunda
-linha diz que, com produtos facultativos associados ao crédito (seguros,
-cartões, ordenado domiciliado), se lêem as condições sem eles — o spread, a
-TAN e a prestação base (lib/fine.js:SISTEMA) — e que, quando o documento traz
-as duas, se escolhe a seguir. Só aparece
+linha diz que os produtos facultativos que o documento indicar (seguros,
+cartões, ordenado domiciliado) aparecem mais abaixo, nos produtos da
+hipoteca, desligados, para a pessoa ligar os que tem. Só aparece
 com sessão, fora de produção e a quem pode editar a casa
 (fine.js:finePodeLer). O PDF fica anexado à hipoteca pelo caminho de sempre
 (web/app/anexos.js:takeFiles), também quando a leitura falha, e o mesmo ficheiro não
@@ -4184,20 +4183,20 @@ guardar.» e «Ficou por ler: …» ficam até se guardar ou fechar. São
 impessoais: a app não fala como «eu», nem conta os campos que preencheu, nem
 o diz num aviso flutuante.
 
-Quando o documento traz também as condições com os produtos facultativos, o
-servidor devolve-as à parte (bonificado: a TAN, o spread e a prestação, só os
-que o tipo de taxa tem e só abaixo da base — lib/fine.js:validar) e, por baixo
-da linha «Lido do documento», aparece «Tens os produtos facultativos deste
-crédito?» com um segmentado Não/Sim (fine.js:fineProdutosHtml). O Não vem
-escolhido e os campos levam as condições sem os produtos. O Sim troca a TAN e
-o spread do formulário pelos bonificados, marca-os outra vez, e a verificação
-cruzada passa a usar a prestação com os produtos (sem ela lida, não confere);
-o Não repõe (fine.js:fineProdutos). Uma nota diz os valores da outra escolha
-(«Com os produtos, o documento dá o spread de 0,85 %.»), e com o Sim outra diz
-que o custo dos produtos não entra na hipoteca: regista-se à parte, como
-despesa. Cada chave bonificada vem no esquema logo a seguir à base
-(lib/fine.js:ESQUEMA): o modelo escreve-as por essa ordem, e lado a lado não as
-troca.
+O servidor lê o spread, a TAN e a prestação base, e à parte a lista dos
+produtos facultativos com a redução de cada um, de uma lista fechada de
+tipos (lib/fine.js:validar): uma redução fora de (0, 3] pontos ou que, somada,
+passe a base conta como valor sem sentido; quando o documento só dá o total
+bonificado, vem um produto só, «Todos os produtos facultativos», com a
+diferença. A app limpa a lista outra vez (fine.js:fineLimparProdutos) e
+substitui os produtos da hipoteca por ela, todos desligados
+(fine.js:fineAplicar); sem nenhum lido, ficam os que lá estavam. O título do
+bloco dos produtos fica com a marca enquanto a lista for a lida (ligar não
+conta), e uma nota na caixa «Lido do documento» diz quantos entraram. A
+verificação cruzada usa a prestação lida sem nenhum produto ligado e a
+prestação com produtos com todos ligados; com uns ligados e outros não, não
+há número do documento para comparar, e não confere
+(fine.js:finePrestacaoAConferir).
 
 Uma FINE com instruções escondidas pode pôr o modelo a mentir, e a defesa não
 é o modelo. São duas contas que a app faz sozinha:
@@ -4210,6 +4209,27 @@ Uma FINE com instruções escondidas pode pôr o modelo a mentir, e a defesa nã
   para conferir cada campo com o original (fine.js:fineFraseEstranhos).
 
 Os erros da rota dizem-se junto ao botão, com a frase do servidor.
+
+### Os produtos facultativos de uma hipoteca
+Cada produto facultativo (seguro de vida, multirriscos, ordenado
+domiciliado…) é uma linha guardada na hipoteca, com o tipo de uma lista
+fechada (dados.js:PRODUTOS_HIPOTECA), a redução do spread e da TAN em pontos
+percentuais e um interruptor (dados.js:normProduto). O spread e a TAN
+guardados são a base, sem produtos. A taxa em vigor é a base menos as
+reduções dos ligados — o spread na variável e na mista, a TAN na fixa e na
+mista —, nunca abaixo de 0 (credito.js:spreadEmVigor,
+credito.js:taxaFixaEmVigor), e é ela que entra em todas as contas e textos.
+
+No formulário (imovel.js:loanProdSect), a seguir às taxas, cada produto é
+uma caixa com o tipo e o Remover em cima e as reduções e o interruptor em
+baixo. Com produtos, os rótulos das taxas dizem «sem produtos», uma linha diz
+a taxa com os ligados («Com os produtos ligados, o spread fica em 0,85 %.») e
+uma nota diz que o custo dos produtos não entra na hipoteca: regista-se à
+parte, como despesa. O interruptor é o botão inteiro (role=switch, com o nome
+do produto), e ligado diz-se na cor da frente: «Ligado» no --accent-text e o
+contorno da caixa no --accent. Ligar não repinta, e o foco fica; adicionar e
+remover levam o foco ao tipo novo ou ao «Adicionar produto». Nada se grava
+sem o Guardar. A ficha da hipoteca nomeia os ligados.
 
 ## As datas leem-se como se escrevem em Portugal
 O ecrã dizia `2028-03-15`. Passa a dizer **15/03/2028** (formato.js:dPT), e

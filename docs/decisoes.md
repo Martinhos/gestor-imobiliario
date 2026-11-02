@@ -3054,7 +3054,7 @@ perguntou se fazia sentido um botão para os produtos; a proposta aceite foi uma
 pergunta, «Tens os produtos facultativos deste crédito?», só quando o
 documento traz as duas condições, com o Não por omissão (a leitura continua
 sem os produtos) e o Sim a trocar a TAN, o spread e a prestação da conferência
-pelos bonificados (fine.js:fineProdutos). Não é um botão para escrever os
+pelos bonificados (a função saiu a 2026-11-02, na nota seguinte). Não é um botão para escrever os
 produtos: o custo deles (seguros, cartão) é uma despesa, não uma condição da
 hipoteca, e a nota do Sim di-lo. Medido na FINE de prova com produtos: com as
 três chaves bonificadas no fim do esquema, o granite não via o spread
@@ -3063,3 +3063,38 @@ que dava o aviso da prestação sem razão. Com cada chave bonificada logo a
 seguir à base (lib/fine.js:ESQUEMA) e a regra das duas prestações no prompt,
 3 em 3 certas no spread e na prestação base; a prestação bonificada fica por
 ler, e com o Sim a prestação não se confere em vez de dar um aviso falso.
+
+Nota de 2026-11-02 (v53): os produtos facultativos, um a um, guardados na
+hipoteca. A pergunta Sim/Não da v52 não apareceu ao Martinho: muitas FINE não
+dão o spread bonificado somado, dão a redução de cada produto (seguro de vida
+−0,10, ordenado −0,25…), e então o modelo não tinha onde pôr nada. E não
+deixava ter só alguns produtos. Decisões dele: os produtos guardam-se na
+hipoteca (também à mão, sem FINE), para se desligar um que se cancelou e o
+spread subir sozinho; o nome é de uma lista fechada da app
+(dados.js:PRODUTOS_HIPOTECA), para uma FINE envenenada não conseguir escrever
+texto no ecrã; o custo dos produtos fica de fora. O spread e a TAN guardados
+passam a ser a base, sem produtos, e a taxa em vigor deriva-se dos ligados
+(credito.js:spreadEmVigor) — assim a base do documento nunca se perde e ligar
+e desligar não acumula arredondamentos. A FINE preenche a lista desligada,
+porque a app não sabe quais a pessoa tem e a leitura é sem produtos. Quando a
+FINE só traz o total bonificado, entra um produto só, «Todos os produtos
+facultativos», com a diferença. A prestação só se confere com nenhum ou com
+todos ligados: são as duas que o documento dá. Uma app anterior à 53 calcula
+com a base: ao promover, a versão mínima tem de subir.
+
+Medido com o granite (3 leituras de cada FINE de prova, todas 3/3): a lista
+de produtos vem logo a seguir ao spread bonificado e antes da prestação
+(lib/fine.js:ESQUEMA). Com ela antes, o modelo voltava a trocar a prestação
+base pela com produtos; com ela no fim, esquecia um produto e punha o total
+num só. As reduções levam minimum 0 no esquema, porque o modelo as escrevia
+negativas apesar do prompt. Quando a ficha dá a lista e também o total, a
+lista só fica se somar ao total: na FINE só com o total, o modelo punha os
+0,4 em cada um dos três produtos. A comissão da taxa variável passou para
+antes da da fixa no esquema, porque na variável o modelo a punha no campo da
+fixa. Numa mista, o modelo escreve os tipos todos da lista com as reduções a
+null; o validar deita-os fora, e para a resposta caber o teto passou de 400
+para 600 tokens (lib/fine.js:MAX_TOKENS_RESPOSTA). O pior caso de uma leitura
+passa a ≈17,7 neurons, e por isso o teto global desce de 500 para 450
+leituras por dia (rotas/fine.js:TETO_GLOBAL). Na variável, o modelo copia às
+vezes a redução do spread para a da TAN; sai sem rasto, porque a variável
+não tem TAN.
