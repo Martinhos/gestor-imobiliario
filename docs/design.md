@@ -4168,7 +4168,8 @@ lê-se na mesma, desde que cortada depois de um valor completo
 (lib/fine.js:respostaDoModelo). Nada do documento fica: nem
 os bytes, nem o texto, nem a resposta vão para a base, para a consola ou para
 um relato de erro. A rota recusa em produção (404 antes da sessão), acima de
-5 MB, o que não começa por %PDF-, mais de 5 leituras por conta e por dia, e
+5 MB, o que não começa por %PDF-, mais de 5 leituras por conta e por dia
+(menos no dev.rendorium.com, onde se testa e não há limite por conta), e
 acima do teto global do dia (rotas/fine.js:TETO_GLOBAL, tirado do custo
 medido a 80% da quota gratuita). Uma digitalização sem texto diz «preenche à
 mão».

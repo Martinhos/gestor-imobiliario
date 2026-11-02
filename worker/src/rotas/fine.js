@@ -84,7 +84,11 @@ export async function rotasFine(c) {
   if (!bytes) return grande();
   if (!comecaPorPdf(bytes)) return err(415, 'Escolhe um PDF.');
 
-  if (!(await rateLimit(env, 'fine:' + me.id, LEITURAS_POR_DIA, DIA))) {
+  /* no dev (ENV_NAME "dev", o dev.rendorium.com) não há limite por conta: é
+     onde se testa, a decisão do Martinho (2026-11-02). Fica no percurso local
+     e na produção, quando se promover; o teto global fica em todo o lado,
+     porque a quota do Workers AI é da conta Cloudflare inteira */
+  if (env.ENV_NAME !== 'dev' && !(await rateLimit(env, 'fine:' + me.id, LEITURAS_POR_DIA, DIA))) {
     return err(429, 'Já leste 5 documentos hoje. Amanhã há mais — até lá, preenche à mão.');
   }
   if (!(await rateLimit(env, 'fineg:', TETO_GLOBAL, DIA))) {

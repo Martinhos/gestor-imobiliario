@@ -185,6 +185,18 @@ describe('POST /api/creditos/fine — as recusas pela ordem do contrato', () => 
     assert.equal((await ler(env, outra, pdf())).status, 200);
   });
 
+  test('no dev (ENV_NAME "dev") não há limite por conta, mas o teto global fica', async () => {
+    const env = ambiente({ ENV_NAME: 'dev', AI: aiFalso() });
+    const quem = await conta(env, 'Ana');
+    for (let i = 0; i < LEITURAS_POR_DIA + 3; i++) assert.equal((await ler(env, quem, pdf())).status, 200, 'leitura ' + (i + 1));
+    assert.equal(await env.DB.prepare('SELECT COUNT(*) AS n FROM rate_limits WHERE k = ?').bind('fine:' + quem.id).first().then((x) => x.n), 0, 'nem se conta');
+    assert.equal((await deSeguranca(env)).length, 0);
+    await env.DB.prepare("INSERT OR REPLACE INTO rate_limits (k, n, expires_at) VALUES ('fineg:', ?, ?)").bind(TETO_GLOBAL, Date.now() + 3600e3).run();
+    const r = await ler(env, quem, pdf());
+    assert.equal(r.status, 429);
+    assert.equal(r.error, 'Hoje já não dá para ler mais documentos. Preenche à mão, ou tenta amanhã.');
+  });
+
   test('o teto global (fineg:) é 429 com a outra frase, depois do da conta, e não abre ticket', async () => {
     const env = ambiente({ AI: aiFalso() });
     const quem = await conta(env, 'Ana');
