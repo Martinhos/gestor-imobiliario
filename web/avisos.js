@@ -27,6 +27,20 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 54,
+    data: '2026-11-02',
+    titulo: 'Na mista, os produtos baixam também a taxa fixa',
+    seccoes: [
+      {
+        titulo: 'Créditos à habitação',
+        afeta: ['creditos'],
+        itens: [
+          'Numa hipoteca mista, um produto facultativo sem redução própria na taxa fixa baixa-a tanto como o spread: a prestação de agora desce logo que o ligas.',
+        ],
+      },
+    ],
+  },
+  {
     v: 53,
     data: '2026-11-02',
     titulo: 'Os produtos facultativos ligam-se um a um na hipoteca',

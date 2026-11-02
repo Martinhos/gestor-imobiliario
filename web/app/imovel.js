@@ -935,6 +935,7 @@ function liveLoanAll(){collectProp();(pForm.loans||[]).forEach(l=>{
 var LOAN_PROD_FRASES={
   dica:'Os produtos que o banco pede para baixar a taxa (seguros, cartões, ordenado domiciliado). Adiciona cada um com a redução que dá, e liga os que tens.',
   custo:'O custo dos produtos (seguros, cartão) não entra na hipoteca: regista-o à parte, como despesa.',
+  mista:'Na mista, um produto sem redução na taxa fixa baixa-a tanto como o spread.',
 };
 /* O bloco «Produtos facultativos» do formulário da hipoteca: o título, a
    dica, uma linha por produto (loanProdLinha), o «Adicionar produto» e, com
@@ -947,6 +948,7 @@ function loanProdSect(l){
   return `<div class="hip-prod${lido}" id="l_prods_${id}" role="group" aria-labelledby="l_prods_t_${id}">
     <div class="flabel" id="l_prods_t_${id}">Produtos facultativos</div>
     <div class="hint">${esc(LOAN_PROD_FRASES.dica)}</div>
+    ${l.type==='mista'?`<div class="hint">${esc(LOAN_PROD_FRASES.mista)}</div>`:''}
     ${ps.length?`<ul class="hip-prod-lista">${ps.map(p=>loanProdLinha(l,p,red)).join('')}</ul>`:''}
     <button type="button" class="btn sm hip-prod-add" id="l_padd_${id}" data-toca="rascunho" data-click="loanProdAdicionar('${jsq(l.id)}')">${ic('plus',16)} Adicionar produto</button>
     ${ps.length?`<p class="hip-prod-vigor" id="l_pvig_${id}" role="status">${esc(loanProdFraseVigor(l))}</p>

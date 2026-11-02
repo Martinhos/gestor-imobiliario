@@ -4217,7 +4217,9 @@ fechada (dados.js:PRODUTOS_HIPOTECA), a redução do spread e da TAN em pontos
 percentuais e um interruptor (dados.js:normProduto). O spread e a TAN
 guardados são a base, sem produtos. A taxa em vigor é a base menos as
 reduções dos ligados — o spread na variável e na mista, a TAN na fixa e na
-mista —, nunca abaixo de 0 (credito.js:spreadEmVigor,
+mista; na mista, um produto sem redução própria na taxa fixa baixa-a tanto
+como o spread (credito.js:reducaoDoProduto), e uma dica no bloco di-lo —,
+nunca abaixo de 0 (credito.js:spreadEmVigor,
 credito.js:taxaFixaEmVigor), e é ela que entra em todas as contas e textos.
 
 No formulário (imovel.js:loanProdSect), a seguir às taxas, cada produto é

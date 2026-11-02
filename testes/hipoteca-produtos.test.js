@@ -96,6 +96,15 @@ describe('a taxa em vigor', () => {
     igual(app.rateAt(l, 0), 2.7);
     igual(app.rateAt(l, 60), 2.2 + 0.85);
   });
+  test('na mista, um produto sem redução na taxa fixa baixa-a tanto como o spread, e a prestação de agora desce', () => {
+    const so = (ativo) => hip({ type: 'mista', fixedYears: 5, rate: 3, spread: 0.95, produtos: [seguro({ spread: 0.1, tan: null, ativo }), ordenado({ spread: 0.2, tan: null, ativo })] });
+    igual(app.taxaFixaEmVigor(so(true)), 2.7);
+    igual(app.spreadEmVigor(so(true)), 0.65);
+    assert.ok(app.loanCalc(so(true)).total < app.loanCalc(so(false)).total, 'ligar baixa a prestação da fase fixa');
+    igual(app.taxaFixaEmVigor(hip({ type: 'mista', rate: 3, produtos: [seguro({ spread: 0.1, tan: 0.05 })] })), 2.95, 'com redução própria na taxa fixa, conta essa');
+    igual(app.taxaFixaEmVigor(hip({ type: 'fixa', rate: 3, produtos: [seguro({ spread: 0.1, tan: null })] })), 3, 'na fixa, a do spread não conta');
+    assert.match(app.loanSect(casa({ type: 'mista', produtos: [seguro()] }), 0), /Na mista, um produto sem redução na taxa fixa baixa-a tanto como o spread\./);
+  });
   test('nunca abaixo de 0, e às milésimas', () => {
     const l = hip({ spread: 0.3, rate: 0.1, type: 'mista', produtos: [seguro({ spread: 0.25 }), ordenado({ spread: 0.15, tan: 0.3 })] });
     igual(app.spreadEmVigor(l), 0);

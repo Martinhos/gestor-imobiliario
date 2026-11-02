@@ -24,13 +24,25 @@ function produtosReducoes(type){return {spread:type==='variavel'||type==='mista'
    Recebe: l — a hipoteca (aguenta uma sem produtos, ou null).
    Devolve: a lista dos produtos com ativo === true. */
 function produtosLigados(l){return (l&&Array.isArray(l.produtos)?l.produtos:[]).filter(p=>p&&p.ativo===true)}
+/* A redução que um produto dá num campo. Na mista, um produto sem redução
+   própria na taxa fixa baixa-a tanto como o spread (a decisão do Martinho:
+   a FINE costuma dar só a do spread, e a prestação de agora, a da fase fixa,
+   ficava parada ao ligar o produto).
+   Recebe: l — a hipoteca; p — o produto; campo — 'spread' ou 'tan'.
+   Devolve: a redução em pontos percentuais (0 quando não há). */
+function reducaoDoProduto(l,p,campo){
+  const v=Number(p[campo]);
+  if(isFinite(v)&&v>0)return v;
+  if(campo==='tan'&&l.type==='mista'){const s=Number(p.spread);return isFinite(s)&&s>0?s:0}
+  return 0;
+}
 /* A soma das reduções dos produtos ligados num campo, quando o tipo de taxa
-   o tem.
+   o tem (reducaoDoProduto).
    Recebe: l — a hipoteca; campo — 'spread' ou 'tan'.
    Devolve: a soma em pontos percentuais (0 sem nada que conte). */
 function reducaoDosLigados(l,campo){
   if(!l||!produtosReducoes(l.type)[campo])return 0;
-  return produtosLigados(l).reduce((s,p)=>{const v=Number(p[campo]);return s+(isFinite(v)&&v>0?v:0)},0);
+  return produtosLigados(l).reduce((s,p)=>s+reducaoDoProduto(l,p,campo),0);
 }
 /* Os produtos ligados que baixam alguma coisa neste tipo de taxa (os que a
    taxa por extenso conta, rateLabel, e os que a ficha nomeia).

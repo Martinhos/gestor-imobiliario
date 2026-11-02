@@ -3098,3 +3098,10 @@ passa a ≈17,7 neurons, e por isso o teto global desce de 500 para 450
 leituras por dia (rotas/fine.js:TETO_GLOBAL). Na variável, o modelo copia às
 vezes a redução do spread para a da TAN; sai sem rasto, porque a variável
 não tem TAN.
+
+Nota do mesmo dia (v54): numa mista, ligar um produto não mexia na
+prestação. A FINE dava só a redução do spread, que só conta depois da fase
+fixa, e a prestação de agora é a da taxa fixa. O Martinho escolheu que, na
+mista, um produto sem redução própria na taxa fixa a baixe tanto como o
+spread (credito.js:reducaoDoProduto), em vez de só explicar que a redução
+vem depois. Com uma redução própria na taxa fixa, conta essa.
