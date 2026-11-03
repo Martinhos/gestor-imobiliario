@@ -236,7 +236,7 @@ describe('os planeados automáticos com Contratos desligado e Planeados ligado',
 describe('a navegação com um separador desligado', () => {
   test('restorePage não restaura um separador desligado: fica no painel; ligado, restaura', () => {
     const { app } = montar();
-    app.localStorage.setItem('gi_page', JSON.stringify({ tab: 'contracts', set: '' }));
+    app.sessionStorage.setItem('gi_page', JSON.stringify({ tab: 'contracts', set: '' }));
     app.definirServicosDesligados(['contracts']);
     app.tab = 'dashboard';
     app.restorePage();
@@ -244,6 +244,33 @@ describe('a navegação com um separador desligado', () => {
     app.definirServicosDesligados([]);
     app.restorePage();
     assert.equal(app.tab, 'contracts');
+  });
+
+  /* Recarregar devolve ao separador onde se estava; abrir a app de novo
+     (fechada, ou noutro separador: um sessionStorage novo) começa na visão
+     geral, mesmo com a página que as versões anteriores deixavam no
+     localStorage — que se apaga. Sair também a esquece. */
+  test('recarregar fica no mesmo separador; abrir de novo começa na visão geral', () => {
+    const { app } = montar();
+    app.tab = 'dashboard';
+    app.go('contracts');
+    assert.equal(app.localStorage.getItem('gi_page'), null, 'a página já não vai para o localStorage');
+    assert.deepEqual(JSON.parse(app.sessionStorage.getItem('gi_page')), { tab: 'contracts', set: '' });
+    // recarregar: o mesmo sessionStorage
+    app.tab = 'dashboard';
+    app.restorePage();
+    assert.equal(app.tab, 'contracts', 'o refresh mantém a página');
+    // abrir de novo: sessionStorage vazio, e uma página antiga no localStorage
+    app.sessionStorage.removeItem('gi_page');
+    app.localStorage.setItem('gi_page', JSON.stringify({ tab: 'contracts', set: '' }));
+    app.tab = 'dashboard';
+    app.restorePage();
+    assert.equal(app.tab, 'dashboard', 'a app aberta de novo fica na visão geral');
+    assert.equal(app.localStorage.getItem('gi_page'), null, 'a página antiga do localStorage apagou-se');
+    // sair esquece a página desta sessão
+    app.sessionStorage.setItem('gi_page', JSON.stringify({ tab: 'contracts', set: '' }));
+    app.encerrarSessao({});
+    assert.equal(app.sessionStorage.getItem('gi_page'), null);
   });
 
   test('go para um separador desligado com o lado armado (_ladoSep) fica onde está, sem deslizar, e diz porquê', () => {

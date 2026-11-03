@@ -220,6 +220,7 @@ function contextoNovo(opcoes) {
   const janela = {
     document: doc,
     localStorage: armazenamentoFalso(),
+    sessionStorage: armazenamentoFalso(),
     location: { origin: 'https://teste.local', pathname: '/', href: 'https://teste.local/' },
     navigator: { userAgent: 'node', vibrate() {}, onLine: true },
     matchMedia: () => ({ matches: false, addEventListener() {}, addListener() {} }),

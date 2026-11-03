@@ -27,6 +27,20 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 56,
+    data: '2026-11-03',
+    titulo: 'Abrir a app começa na visão geral',
+    seccoes: [
+      {
+        titulo: 'A aplicação em geral',
+        afeta: ['app'],
+        itens: [
+          'Quando abres a app depois de a fechares, começa na Visão geral, onde quer que a tenhas deixado. Recarregar a página continua a manter-te onde estavas.',
+        ],
+      },
+    ],
+  },
+  {
     v: 55,
     data: '2026-11-03',
     titulo: 'O cashflow acumulado é o do ano',

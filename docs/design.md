@@ -5845,8 +5845,10 @@ e o contorno (estilos.css:.tabbar), mais a área segura. Só existe abaixo de
 900px e esconde-se com a gaveta aberta (estilos.css:.tabbar dentro de
 estilos.css:@media(max-width:900px)); o destino aceso só muda de cor.
 
-Recarregar devolve-te ao sítio onde estavas: o separador e a subpágina das
-Definições ficam em localStorage (gi_page: web/cloud/nucleo.js:LS_PAGE,
+Recarregar devolve-te ao sítio onde estavas; abrir a app de novo (fechada,
+ou noutro separador do browser) começa na visão geral. O separador e a
+subpágina das Definições ficam no sessionStorage, que é de cada sessão e
+sobrevive ao recarregar (gi_page: web/cloud/nucleo.js:LS_PAGE,
 web/cloud/nucleo.js:restorePage). Entrar e sair levam sempre à visão geral
 (entrada.js:finishLogin; partilha.js:logout). Mudar de separador faz scroll
 ao topo (navegacao.js:go). O «voltar» do sistema fecha primeiro o que

@@ -429,6 +429,8 @@ function encerrarSessao(o) {
   var chaves = [LS_USER, LS_PAGE, 'gi_est_asked', chaveDaLigacao()];
   if (o.apagarDados) chaves.push(LS_OWNER, snapKey(), baseKey());
   chaves.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+  // a página onde se estava vive no sessionStorage (rememberPage)
+  try { sessionStorage.removeItem(LS_PAGE); } catch (e) {}
   if (o.apagarDados) {
     db = JSON.parse(JSON.stringify(blank));
     rawSet(KEY, JSON.stringify(db));
@@ -2106,12 +2108,15 @@ go = function (id) {
   rememberPage();
 };
 
-// recarregar a página devolve o utilizador ao sítio onde estava
+// recarregar a página devolve o utilizador ao sítio onde estava; abrir a app
+// de novo (fechada, ou noutro separador) começa na visão geral. Por isso a
+// página vive no sessionStorage, que é de cada sessão do separador e
+// sobrevive ao recarregar, e não no localStorage, que sobrevivia a fechar.
 var LS_PAGE = 'gi_page';
-// Guarda em localStorage o separador atual (e a sub-página das definições), para o restorePage.
-// Devolve: nada — grava no localStorage (e engole o erro, se ele não deixar).
+// Guarda em sessionStorage o separador atual (e a sub-página das definições), para o restorePage.
+// Devolve: nada — grava no sessionStorage (e engole o erro, se ele não deixar).
 function rememberPage() {
-  try { localStorage.setItem(LS_PAGE, JSON.stringify({ tab: tab, set: setPage || '' })); } catch (e) {}
+  try { sessionStorage.setItem(LS_PAGE, JSON.stringify({ tab: tab, set: setPage || '' })); } catch (e) {}
 }
 var _goSet = goSet;
 /* Navegar dentro das Definições, a lembrar a página. A subpágina antiga dos
@@ -2124,14 +2129,18 @@ goSet = function (p) {
   _goSet(p); rememberPage();
 };
 
-/* No arranque, devolve o utilizador ao separador onde estava; ignora estados
-   guardados que já não existem e não faz nada quando era só o painel inicial.
-   A página guardada antes de os Grupos serem separador ({tab:'settings',
-   set:'groups'}) abre o separador Grupos, nas Casas.
+/* No arranque depois de recarregar, devolve o utilizador ao separador onde
+   estava (o sessionStorage desta sessão); a app aberta de novo não tem página
+   guardada e fica na visão geral. Ignora estados guardados que já não existem
+   e não faz nada quando era só o painel inicial. A página guardada antes de
+   os Grupos serem separador ({tab:'settings', set:'groups'}) abre o separador
+   Grupos, nas Casas. A página que as versões anteriores deixavam no
+   localStorage apaga-se, para não ficar lá esquecida.
    Devolve: nada — repõe o separador e repinta (ou não mexe em nada). */
 function restorePage() {
   var s = null;
-  try { s = JSON.parse(localStorage.getItem(LS_PAGE) || 'null'); } catch (e) {}
+  try { localStorage.removeItem(LS_PAGE); } catch (e) {}
+  try { s = JSON.parse(sessionStorage.getItem(LS_PAGE) || 'null'); } catch (e) {}
   if (s && s.tab === 'settings' && s.set === 'groups') s = { tab: 'groups', set: '' };
   if (!s || !s.tab || s.tab === 'dashboard' && !s.set) return;
   if (!TABS.some(function (t) { return t.id === s.tab; })) return;

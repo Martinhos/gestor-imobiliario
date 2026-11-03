@@ -83,6 +83,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-01 · Os gráficos mês a mês mostram os últimos 12 meses
 - 2026-11-01 · A FINE preenche a hipoteca, com o Workers AI e só no dev
 - 2026-11-03 · O cashflow acumulado da Visão geral é o do ano
+- 2026-11-03 · Abrir a app começa na visão geral; recarregar fica onde estavas
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3121,3 +3122,16 @@ cartão passou a dizer só as do ano. Como a ordem guardada dos cartões
 reconhece cada um pelo título, o cartão diz a chave de antes
 (data-bloco="card:Cashflow acumulado"): com o ano no título, a chave mudava
 todos os janeiros e a ordem perdia-se.
+## 2026-11-03 · Abrir a app começa na visão geral; recarregar fica onde estavas
+
+Pedido do Martinho: quando abre a app depois de a ter fechado noutro
+separador, quer começar na visão geral; o refresh continua a manter a mesma
+página. A página guardava-se no localStorage, que sobrevive a fechar a app,
+e por isso ela reabria onde se tinha ficado. Passou para o sessionStorage
+(web/cloud/nucleo.js:rememberPage), que é de cada sessão do separador ou da
+app instalada: sobrevive ao recarregar (o refresh e as recargas da própria
+app ao mudar de versão) e começa vazio quando se abre de novo. A página que
+as versões anteriores deixaram no localStorage apaga-se no primeiro
+arranque (web/cloud/nucleo.js:restorePage), e sair esquece a desta sessão.
+Ir para segundo plano e voltar não é abrir de novo: a app continua onde
+estava.

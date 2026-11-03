@@ -203,7 +203,7 @@ describe('o despacho pelo registo', () => {
     // a nuvem só se carrega inteira; aqui basta o que restorePage precisa
     vm.runInContext(ler('web/cloud/nucleo.js').split('\n').filter((l) => !/^'use strict'/.test(l)).join('\n')
       .replace(/^[\s\S]*?(var LS_PAGE = 'gi_page';)/, '$1').replace(/\/\/ A guarda de «só o dono apaga o imóvel»[\s\S]*$/, ''), app.__ctx);
-    app.localStorage.setItem('gi_page', JSON.stringify({ tab: 'fisco', set: '' }));
+    app.sessionStorage.setItem('gi_page', JSON.stringify({ tab: 'fisco', set: '' }));
     app.restorePage();
     assert.equal(app.tab, 'fisco', 'controlo positivo: ligado restaura');
     app.tab = 'dashboard';
