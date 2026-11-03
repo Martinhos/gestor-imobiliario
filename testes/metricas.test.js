@@ -371,12 +371,13 @@ describe('a Visão geral', () => {
     assert.equal(app.falaDoMesmo(cartao('17 000,00 €'), s, ano), false, 'um número de outro período cala a faixa');
   });
 
-  /* As entradas e saídas, o acumulado e a janela de um indicador mostram os
-     mesmos últimos 12 meses, a acabar no mês corrente (metricas.js:janelaMeses):
-     nenhum segue por meses que ainda não chegaram, e as barras já não levam
-     os previstos dos planeados. Com um movimento de data futura no ano, vão
-     até ele. A leitura diz o mês com o ano; o eixo, só o mês. */
-  test('as entradas e saídas, o acumulado e a janela de um indicador mostram os últimos 12 meses', () => {
+  /* As entradas e saídas e a janela de um indicador mostram os mesmos últimos
+     12 meses, a acabar no mês corrente (metricas.js:janelaMeses), e o acumulado
+     o ano corrente até esse mesmo fim: nenhum segue por meses que ainda não
+     chegaram, e as barras já não levam os previstos dos planeados. Com um
+     movimento de data futura no ano, vão até ele. A leitura diz o mês com o
+     ano; o eixo, só o mês. */
+  test('as entradas e saídas e a janela de um indicador mostram os últimos 12 meses, e o acumulado o ano', () => {
     const lidoDe = (html) => JSON.parse(/data-lido="([^"]*)"/.exec(html)[1].replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&amp;/g, '&'));
     const rotulos = (html, titulo) => {
       const i = html.indexOf('>' + titulo + '</h3>');
@@ -387,7 +388,7 @@ describe('a Visão geral', () => {
     let html = vista();
     const ultimos12 = janela(ANO, MES);
     assert.equal(ultimos12[0], app.MES[MES % 12] + ' ' + (ANO - 1), 'começa no mesmo mês do ano passado, a seguir ao corrente');
-    igual(rotulos(html, 'Cashflow acumulado'), ultimos12, 'o acumulado acaba no mês corrente');
+    igual(rotulos(html, 'Cashflow acumulado ' + ANO), ultimos12.slice(12 - MES), 'o acumulado vai de janeiro ao mês corrente');
     igual(rotulos(html, 'Entradas e saídas'), ultimos12, 'as entradas e saídas também, sem previstos');
     assert.doesNotMatch(html, /· previsto/);
     const abertas = janelasFalsas(app, 'render', 'toast');
@@ -396,7 +397,7 @@ describe('a Visão geral', () => {
     // um movimento com data futura leva os gráficos até ele
     mov({ kind: 'income', category: 'Rendas', amount: 50, propertyId: 'casa', date: ANO + '-12-10' });
     html = app.vDashboard();
-    igual(rotulos(html, 'Cashflow acumulado'), janela(ANO, 12), 'até dezembro, onde está o movimento');
+    igual(rotulos(html, 'Cashflow acumulado ' + ANO), janela(ANO, 12), 'até dezembro, onde está o movimento');
     igual(rotulos(html, 'Entradas e saídas'), janela(ANO, 12));
   });
 
@@ -438,7 +439,7 @@ describe('a Visão geral', () => {
     assert.match(html, /<strong class="num">1 despesa de 2026 sem imóvel · 50,00 €\.<\/strong>/);
     assert.match(html, /data-click="dashVerSemImovel\(\)">Ver movimentos sem imóvel<\/button>/);
     const filas = html.slice(iCols).split('<div class="cols">').slice(1).map((f) => [...f.matchAll(/<h3 class="title vg-tit">([^<]+)<\/h3>/g)].map((m) => m[1]));
-    igual(filas, [['Entradas e saídas', 'Cashflow acumulado'], ['Despesas por categoria', 'Cashflow por imóvel', 'Renda por contrato'], ['Portefólio', 'Contas entre proprietários']]);
+    igual(filas, [['Entradas e saídas', 'Cashflow acumulado ' + ANO], ['Despesas por categoria', 'Cashflow por imóvel', 'Renda por contrato'], ['Portefólio', 'Contas entre proprietários']]);
     assert.match(html, /id="donutCard"/, 'o donut guarda o id por onde se redesenha');
     assert.doesNotMatch(html, /class="gdestaque"/, 'nenhum mês aceso nas entradas e saídas');
     assert.equal((html.match(/<div class="chartler fixa"/g) || []).length, 2, 'as duas leituras começam num mês (o corrente)');

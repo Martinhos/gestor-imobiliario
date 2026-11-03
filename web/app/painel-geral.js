@@ -143,15 +143,21 @@ function vDashboard(){
      Prestações junto ao eixo e despesas por baixo (o canvas): é a ordem dos
      segmentos que faz a legenda e a leitura, e por isso a descida inverte-se
      no cBars (desceAoContrario), não aqui. */
-  const janela=janelaMeses(null,t=>txWeight(t,pid,true)>0),rj=rotulosDaJanela(janela);
-  const {inc,exp,ln,am,cum}=vgSeriesDaJanela(janela,pid);
+  const naVista=t=>txWeight(t,pid,true)>0,janela=janelaMeses(null,naVista),rj=rotulosDaJanela(janela);
+  const {inc,exp,ln}=vgSeriesDaJanela(janela,pid);
+  /* o acumulado é o do ano corrente, de janeiro ao mesmo fim (o ticket de QA
+     87084237, 2026-11-03): numa janela de 12 meses recomeçava a meio do
+     gráfico, e o título diz o ano. A ordem guardada dos cartões continua a
+     conhecê-lo pela chave de sempre (data-bloco, cloud/painel.js:dashKey). */
+  const janAno=janelaMeses(YEAR,naVista),rjAno=rotulosDaJanela(janAno),{am,cum}=vgSeriesDaJanela(janAno,pid),tituloAcum='Cashflow acumulado '+YEAR;
   const groups=inc.map((v,i)=>[{label:'Receita',value:v,color:COR_SERIE.receita},{label:'Despesas',value:-exp[i],color:COR_SERIE.despesa},{label:'Prestações',value:-ln[i],color:COR_SERIE.prestacao}]);
   /* o mês que a leitura dos dois gráficos mostra antes de alguém tocar (o
      canvas: «nov 2026 · Receita … · Despesas … · Prestações …»): o corrente,
      mesmo vazio no dia 1 — saltar para o último com movimento acendia
      outubro no dia 1 de novembro (o ticket de QA 64aeede6) */
-  const hoje=today(),mesLer=janela.findIndex(x=>x.y===Number(hoje.slice(0,4))&&x.m===Number(hoje.slice(5,7)));
-  const amortizacoes=am.map((v,i)=>v>0.005?'Em '+rj.ler[i]+': amortização de '+euro2(v):'').filter(Boolean);
+  const hoje=today(),noMesCorrente=x=>x.y===Number(hoje.slice(0,4))&&x.m===Number(hoje.slice(5,7));
+  const mesLer=janela.findIndex(noMesCorrente),mesLerAno=janAno.findIndex(noMesCorrente);
+  const amortizacoes=am.map((v,i)=>v>0.005?'Em '+rjAno.ler[i]+': amortização de '+euro2(v):'').filter(Boolean);
   /* por imóvel: o cashflow (verde o que dá, laranja o que custa) e o que o
      explica quando ele é baixo — uma amortização deste ano, o uso próprio */
   const porImovel=m.props.map(p=>{const mp=metrics(YEAR,p.id,{share:true});
@@ -204,7 +210,7 @@ function vDashboard(){
   ${pid?'':orphanCard()}
   <div class="cols">
     ${vgCard('Entradas e saídas','últimos 12 meses',cBars(groups,rj.eixo,{h:GRAF_ALTURA,rotulos:rj.ler,divisoes:rj.divisoes,ler:mesLer,fmt:euro2,desceAoContrario:true})+DICA_DEDO)}
-    ${vgCard('Cashflow acumulado',esc(amortizacoes.join(' · ')),cLine([{name:'Acumulado',values:cum,color:COR_SERIE.cashflow}],rj.eixo,{h:GRAF_ALTURA,rotulos:rj.ler,divisoes:rj.divisoes,ler:mesLer,titulo:'Cashflow acumulado',lerFmt:euro2}))}</div>
+    ${vgCard(tituloAcum,esc(amortizacoes.join(' · ')),cLine([{name:'Acumulado',values:cum,color:COR_SERIE.cashflow}],rjAno.eixo,{h:GRAF_ALTURA,rotulos:rjAno.ler,divisoes:rjAno.divisoes,ler:mesLerAno,titulo:tituloAcum,lerFmt:euro2}),{bloco:'card:Cashflow acumulado'})}</div>
   <div class="cols">
     ${donutCard()}
     ${(!pid||String(pid).startsWith('g:'))&&porImovel.length>1?vgCard('Cashflow por imóvel','',cHBars(porImovel,{fmt:euro2})+(notasImovel.length?`<p class="small vg-nota">${esc(notasImovel.join(' '))}</p>`:'')):''}
@@ -225,14 +231,15 @@ const GRAF_ALTURA=150;
 /* O cartão da Visão geral: o título num h3 na letra dos títulos (como o
    canvas), a nota curta ao lado e, à direita, uma ação opcional (uma ligação);
    por baixo, o corpo. O .title fica no h3: é por ele que o painel arrumável
-   reconhece cada cartão (cloud/painel.js:dashKey).
+   reconhece cada cartão (cloud/painel.js:dashKey), a menos que o cartão diga
+   a sua chave (bloco), para um título que muda não perder a ordem guardada.
    Recebe: t — o título (HTML já escapado); s — a nota ('' sem nota, HTML já
-   escapado); b — o corpo em HTML; o (opcional) — {id, cls, acao} (acao: o HTML
-   do botão da direita).
+   escapado); b — o corpo em HTML; o (opcional) — {id, cls, acao, bloco} (acao:
+   o HTML do botão da direita; bloco: a chave fixa, ex. 'card:Cashflow acumulado').
    Devolve: o HTML do cartão. */
 function vgCard(t,s,b,o){
   o=o||{};
-  return `<div class="card vg-cartao${o.cls?' '+o.cls:''}"${o.id?` id="${o.id}"`:''}><div class="vg-card-cab"><h3 class="title vg-tit">${t}</h3>${s?`<span class="small">${s}</span>`:''}${o.acao||''}</div>${b}</div>`;
+  return `<div class="card vg-cartao${o.cls?' '+o.cls:''}"${o.id?` id="${o.id}"`:''}${o.bloco?` data-bloco="${esc(o.bloco)}"`:''}><div class="vg-card-cab"><h3 class="title vg-tit">${t}</h3>${s?`<span class="small">${s}</span>`:''}${o.acao||''}</div>${b}</div>`;
 }
 /* O corpo do Portefólio: uma grelha de números no computador e linhas no
    telemóvel (o CSS troca, estilos.css:.vg-port), cada número num .stat com o

@@ -82,6 +82,7 @@ confere que cada uma aponta para código que existe.
 - 2026-10-31 · O rasto de uma pessoa lê-se do mais recente para o mais antigo
 - 2026-11-01 · Os gráficos mês a mês mostram os últimos 12 meses
 - 2026-11-01 · A FINE preenche a hipoteca, com o Workers AI e só no dev
+- 2026-11-03 · O cashflow acumulado da Visão geral é o do ano
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3105,3 +3106,18 @@ fixa, e a prestação de agora é a da taxa fixa. O Martinho escolheu que, na
 mista, um produto sem redução própria na taxa fixa a baixe tanto como o
 spread (credito.js:reducaoDoProduto), em vez de só explicar que a redução
 vem depois. Com uma redução própria na taxa fixa, conta essa.
+
+## 2026-11-03 · O cashflow acumulado da Visão geral é o do ano
+
+Ticket de QA do Martinho (87084237, 03/11, no Samsung). Desde a decisão de
+2026-11-01, o acumulado seguia a janela dos últimos 12 meses e recomeçava em
+janeiro, a meio do gráfico: a linha descia a pique sem nada ter acontecido.
+Ele quis só desde janeiro e o ano no título («Cashflow acumulado 2026»). O
+acumulado passou a usar a janela do ano (metricas.js:janelaMeses com o YEAR),
+de janeiro ao mês corrente, estendida pelos movimentos de data futura como as
+outras; as entradas e saídas ao lado ficam nos 12 meses, escolha dele. A
+Visão geral não escolhe ano: é sempre o corrente. A nota das amortizações do
+cartão passou a dizer só as do ano. Como a ordem guardada dos cartões
+reconhece cada um pelo título, o cartão diz a chave de antes
+(data-bloco="card:Cashflow acumulado"): com o ano no título, a chave mudava
+todos os janeiros e a ordem perdia-se.

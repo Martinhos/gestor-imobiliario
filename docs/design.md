@@ -1460,7 +1460,7 @@ perde o estado do DOM (vistas.js:render; index.html:#view).
 ## A Visão geral
 A Visão geral segue a ordem do canvas (painel-geral.js:vDashboard): o «Pede
 atenção», os quatro indicadores do ano, a faixa âmbar das despesas sem
-imóvel, as entradas e saídas mês a mês ao lado do cashflow acumulado, as
+imóvel, as entradas e saídas mês a mês ao lado do cashflow acumulado do ano, as
 despesas por categoria, o cashflow por imóvel e a renda por contrato lado a
 lado, e o Portefólio ao lado das contas entre proprietários. Cada fila é um
 .cols, e a nuvem parte-as em blocos arrumáveis e dá a cada cartão a largura
@@ -1590,9 +1590,12 @@ métricas) e os rótulos de metricas.js:rotulosDaJanela: o eixo só com o mês,
 a leitura com o mês e o ano («dez 2025»), e cada passagem de ano é uma
 divisão (graficos.js:divisoesSvg). Na Visão geral, as entradas e saídas são
 só o registado, sem previsões dos planeados, e nenhum mês fica aceso; o
-cashflow acumulado recomeça em janeiro — os meses do ano anterior são o
-acumulado desse ano, desde janeiro dele, e o último ponto é o Cashflow do
-ano (painel-geral.js:vgSeriesDaJanela). A silhueta de cada indicador e o
+cashflow acumulado é o do ano corrente — a janela do ano (janelaMeses com o
+YEAR), de janeiro ao mesmo fim, com o ano no título («Cashflow acumulado
+2026») —, e o último ponto é o Cashflow do ano
+(painel-geral.js:vgSeriesDaJanela). O cartão diz a sua chave de sempre
+(data-bloco="card:Cashflow acumulado", painel-geral.js:vgCard), para a
+ordem guardada não se perder quando o ano muda (cloud/painel.js:dashKey). A silhueta de cada indicador e o
 «Últimos 12 meses» da janela dele (vistas.js:evoMoney, vistas.js:kpiModal)
 mostram os mesmos meses, com a mesma janela; a silhueta marca a passagem de
 ano com um traço fino (vistas.js:silhuetaKpi). Na Avaliação, as rendas e

@@ -27,6 +27,20 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 55,
+    data: '2026-11-03',
+    titulo: 'O cashflow acumulado é o do ano',
+    seccoes: [
+      {
+        titulo: 'A aplicação em geral',
+        afeta: ['app'],
+        itens: [
+          'Na Visão geral, o Cashflow acumulado mostra o ano corrente, de janeiro até hoje, com o ano no título. Já não recomeça a meio do gráfico. As entradas e saídas ao lado continuam nos últimos 12 meses.',
+        ],
+      },
+    ],
+  },
+  {
     v: 54,
     data: '2026-11-02',
     titulo: 'Na mista, os produtos baixam também a taxa fixa',
