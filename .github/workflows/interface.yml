@@ -84,9 +84,12 @@ jobs:
       # ENV_NAME faz a app comportar-se como fora de produção — é o que
       # permite semear os dados de exemplo. Em produção o seed é recusado de
       # propósito, e sem isto o percurso corria sobre uma app vazia.
+      # --local: o [ai] do wrangler.toml é uma ligação remota, e sem credenciais
+      # da Cloudflare o wrangler dev nem arranca; assim o env.AI fica de fora e
+      # a leitura da FINE dá o 503 dela (o percurso não a usa).
       - name: Levantar a app
         run: |
-          npx wrangler@4 dev --port 8788 --var ENV_NAME:percurso > /tmp/app.log 2>&1 &
+          npx wrangler@4 dev --local --port 8788 --var ENV_NAME:percurso > /tmp/app.log 2>&1 &
           for _ in $(seq 1 40); do
             if curl -sf -o /dev/null http://127.0.0.1:8788/; then echo "a app respondeu"; exit 0; fi
             sleep 2

@@ -170,6 +170,25 @@ function credTabela(l,max){
     ${anos.map(x=>linha(x,euro)).join('')}
     ${corta?`<tr class="cred-tab-fim"><td>…</td><td></td><td></td><td></td><td></td><td>${ult.yr}: ${euro(ult.bal)}</td></tr>`:''}</tbody>`:''}</table></div>`;
 }
+/* Os nomes dos produtos facultativos ligados que baixam a taxa da hipoteca
+   (credito.js:produtosQueBaixam), juntos como numa frase.
+   Recebe: l — a hipoteca.
+   Devolve: o texto («Seguro de vida e Ordenado domiciliado»); '' sem nenhum. */
+function credProdutosNomes(l){
+  const ns=produtosQueBaixam(l).map(p=>produtoNome(p.tipo));
+  return ns.length<2?ns.join(''):ns.slice(0,-1).join(', ')+' e '+ns[ns.length-1];
+}
+/* A linha dos produtos no painel da hipoteca: os ligados e a taxa em vigor
+   com eles («Com Seguro de vida: spread de 0,85 %.»).
+   Recebe: l — a hipoteca.
+   Devolve: o texto, ou '' sem produtos ligados que baixem a taxa. */
+function credProdutosFrase(l){
+  const nomes=credProdutosNomes(l);if(!nomes)return '';
+  const red=produtosReducoes(l.type),partes=[];
+  if(red.tan)partes.push((l.type==='mista'?'taxa fixa de ':'TAN de ')+dec(taxa3(taxaFixaEmVigor(l)))+' %');
+  if(red.spread)partes.push('spread de '+dec(taxa3(spreadEmVigor(l)))+' %');
+  return 'Com '+nomes+': '+partes.join(' e ')+'.';
+}
 /* O painel da hipoteca aberta, ao lado da lista no computador (o canvas
    D-Creditos): o nome e o imóvel, o capital do início, o prazo, as prestações
    registadas e os documentos; Pagamento, Plano e Editar (só a quem pode); a
@@ -179,7 +198,9 @@ function credTabela(l,max){
    abre o plano inteiro e o gráfico (amortModal): no computador tocar numa
    hipoteca escolhe-a aqui e não abre a ficha, e era na ficha que estava a
    amortização. No telemóvel o painel não aparece: lá o plano abre-se no botão
-   «Plano» de cada cartão.
+   «Plano» de cada cartão. Com produtos facultativos ligados, uma linha
+   diz quais e a taxa com eles (credProdutosFrase), e a taxa de depois da
+   fase fixa já leva o spread em vigor.
    Recebe: x — {p,l} da hipoteca a mostrar, ou null.
    Devolve: o HTML do painel (texto), com id credDetalhe para o credEscolher o repintar. */
 function credDetalhe(x){
@@ -196,11 +217,13 @@ function credDetalhe(x){
   const c=loanCalc(l),a=amort(l),depois=credDepois(l),f=depois?credFimFixa(l):null;
   const prox=credPrimeiraData(l);
   const mes=d=>(MES[Number(String(d).slice(5,7))-1]||'')+(String(d).slice(0,4)!==today().slice(0,4)?' '+String(d).slice(0,4):'');
-  const vr=(Number(l.euribor)||0)+(Number(l.spread)||0);
+  /* a taxa em vigor: o spread base menos o dos produtos facultativos ligados (credito.js:spreadEmVigor) */
+  const spr=spreadEmVigor(l),vr=(Number(l.euribor)||0)+spr,prods=credProdutosFrase(l);
   return `<section class="card cred-det" id="credDetalhe">${cab}
+    ${prods?`<p class="small cred-det-prod">${esc(prods)}</p>`:''}
     <div class="cred-det-stats num">
       <div><p class="small">Prestação de ${esc(mes(prox))}</p><p class="cred-v">${euro2(c.total)}</p><p class="small">capital ${euro2(c.principal)} · juros ${euro2(c.interest)}${l.stampTax===false?'':' · selo '+euro2(c.stamp)}</p></div>
-      ${depois?`<div><p class="small">${f?'A partir de '+esc(mes(f.fim)):'Depois da fase fixa'}</p><p class="cred-v">${euro2(depois)}</p><p class="small">Euribor ${esc(l.index||'')} ${esc(dec(l.euribor))}% + ${esc(dec(l.spread))}% = ${esc(dec(Math.round(vr*1000)/1000))}%</p></div>`:''}
+      ${depois?`<div><p class="small">${f?'A partir de '+esc(mes(f.fim)):'Depois da fase fixa'}</p><p class="cred-v">${euro2(depois)}</p><p class="small">Euribor ${esc(l.index||'')} ${esc(dec(l.euribor))}% + ${esc(dec(spr))}% = ${esc(dec(Math.round(vr*1000)/1000))}%</p></div>`:''}
       <div><p class="small">Juros e selo até ao fim</p><p class="cred-v">${euro(a.totInt+a.totStamp)}</p></div></div>
     ${credTabela(l,10)}</section>`;
 }
@@ -404,6 +427,8 @@ function newMort(){
    escreve «fixa 3,2%» ou «Euribor 6m 2,1% + 1% = 3,1%»): a ficha diz a taxa,
    não os campos que a compõem. O custo até ao fim chama-se «Juros e selo até
    ao fim», como no resumo e no painel (só «Juros» numa hipoteca sem selo).
+   A taxa é a em vigor, com os produtos facultativos ligados, e esses
+   produtos nomeiam-se numa linha («Produtos ligados»).
    Recebe: pid — o id do imóvel; lid — o id da hipoteca.
    Devolve: o HTML do corpo, ou vazio se a hipoteca já não existir. */
 function mortFicha(pid,lid){
@@ -423,6 +448,8 @@ function mortFicha(pid,lid){
       valor:'capital '+euro2(c.principal)+' · juros '+euro2(c.interest)+(l.stampTax===false?'':' · selo '+euro2(c.stamp))}:null,
     depois?{rotulo:'Depois da fase fixa',valor:euro2(depois.pay+depois.st)}:null,
     {rotulo:'Taxa',valor:esc(rateLabel(l))},
+    /* os produtos facultativos ligados que baixam a taxa: a taxa de cima já os conta */
+    produtosQueBaixam(l).length?{rotulo:'Produtos ligados',valor:esc(credProdutosNomes(l))}:null,
     l.start?{rotulo:'Início',valor:dPT(l.start)}:null,
     Number(l.years)>0?{rotulo:'Prazo',valor:l.years+(Number(l.years)===1?' ano':' anos')}:null,
     /* o mesmo número e o mesmo nome do resumo e do painel; sem selo, são só juros */

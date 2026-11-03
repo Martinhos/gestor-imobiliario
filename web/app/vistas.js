@@ -656,18 +656,23 @@ function haAnoAnterior(){
   const ant=String(YEAR-1);
   return (db.transactions||[]).some(t=>String(t.date||'').startsWith(ant));
 }
-/* Desenha a linha dos doze meses, pequena, para se ler a forma e não os
-   valores: é uma silhueta, não um gráfico.
-   Recebe: vals — os doze valores do ano (números).
+/* Desenha a linha dos meses da série, pequena, para se ler a forma e não os
+   valores: é uma silhueta, não um gráfico. Os meses são os mesmos que a
+   janela do indicador desenha (o evo devolve os dois), e a passagem de ano
+   leva o mesmo traço fino da divisão dos gráficos (graficos.js:divisoesSvg).
+   Recebe: vals — os valores de cada mês (números); divisoes (opcional) —
+   [{i}], o índice do primeiro mês de cada ano novo.
    Devolve: o HTML do SVG, ou '' se não há nada que se veja. */
-function silhuetaKpi(vals){
+function silhuetaKpi(vals,divisoes){
   const v=(vals||[]).map(x=>+x||0);
   if(v.length<2)return '';
   const min=Math.min(...v),max=Math.max(...v);
   if(max===min)return '';
-  const W=100,H=16;
-  const pts=v.map((x,i)=>`${(i/(v.length-1)*W).toFixed(1)},${(H-((x-min)/(max-min))*H).toFixed(1)}`).join(' ');
-  return `<svg class="ksilhueta" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+  const W=100,H=16,X=i=>i/(v.length-1)*W;
+  const pts=v.map((x,i)=>`${X(i).toFixed(1)},${(H-((x-min)/(max-min))*H).toFixed(1)}`).join(' ');
+  const div=(divisoes||[]).filter(d=>Number.isInteger(d.i)&&d.i>0&&d.i<v.length).map(d=>{const x=((X(d.i-1)+X(d.i))/2).toFixed(1);
+    return `<line class="kdivisao" x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="currentColor" stroke-opacity=".35" stroke-width="1" stroke-dasharray="2 2" vector-effect="non-scaling-stroke"/>`}).join('');
+  return `<svg class="ksilhueta" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${div}
     <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
 }
 /* O número que o cartão mostra é o mesmo que a série diz deste ano?
@@ -794,7 +799,7 @@ function pintarSeriesKpi(){
       txt=`<span class="kvar ${sinal}">${d>0?'▲':d<0?'▼':'='} ${pct===null?(h?'novo':'igual'):pct+'%'}</span>
         <span class="kvsub">${antes.label}: ${s.fmt?s.fmt(a):a}</span>`;
     }
-    cx.innerHTML=silhuetaKpi(s.monthly)+txt;
+    cx.innerHTML=silhuetaKpi(s.monthly,s.divisoes)+txt;
   });
 }
 /* Abre e fecha a explicação de um cartão de indicador sem janela (o .expl do
@@ -868,7 +873,10 @@ function tabelaDoKpi(k,d,fmt){
    — o «Ano a ano» chegou a sair no laranja das despesas em todos os cartões,
    a Receita incluída. O «Mês a mês» acaba no mês corrente
    (vistas.js:mesesAMostrar): os meses que ainda não chegaram desenhavam-se a
-   0 €, como se fossem um valor registado.
+   0 €, como se fossem um valor registado. Um evo que traz os meses da
+   janela (meses, divisoes e mesTitulo, como o evoMoney: os últimos 12
+   meses, ou os de um ano) desenha-os tal e qual, com o título e a divisão da
+   passagem de ano — são os mesmos meses que a silhueta do cartão mostra.
    Recebe: id — o id do cartão KPI ('k1', 'k2', …) registado em KPI_REG.
    Devolve: nada — abre a janela de evolução (ou nada, se o evo falhar). */
 function kpiModal(id){
@@ -877,10 +885,13 @@ function kpiModal(id){
   if(!d)return;
   const fmt=d.fmt||euro,cor=k.cor||COR_SERIE.cashflow;
   const vals=(d.yearly||[]).map(y=>y.value);
-  const ate=d.monthly?mesesAMostrar([d.monthly]):0;
+  let mensal='';
+  if(d.monthly&&d.meses)mensal=`<div><div class="flabel">${esc(d.mesTitulo||'Últimos 12 meses')}</div>${cLine([{name:k.title,values:d.monthly.slice(),color:cor}],d.meses.eixo,{h:170,fmt,rotulos:d.meses.ler,divisoes:d.divisoes})}</div>`;
+  else if(d.monthly){const ate=mesesAMostrar([d.monthly]);
+    mensal=`<div><div class="flabel">Mês a mês em ${YEAR}</div>${cLine([{name:k.title,values:d.monthly.slice(0,ate),color:cor}],MES.slice(0,ate),{h:170,fmt})}</div>`}
   const body=`<div class="form">
     ${k.why?`<div class="hint">${k.why}</div>`:''}
-    ${d.monthly?`<div><div class="flabel">Mês a mês em ${YEAR}</div>${cLine([{name:k.title,values:d.monthly.slice(0,ate),color:cor}],MES.slice(0,ate),{h:170,fmt})}</div>`:''}
+    ${mensal}
     ${(d.yearly||[]).length>1?`<div><div class="flabel">${d.yearlyTitle||'Ano a ano'}</div>${cLine([{name:k.title,values:vals,color:cor}],d.yearly.map(y=>String(y.label)),{h:170,fmt,marks:d.marks})}</div>`:''}
     ${tabelaDoKpi(k,d,fmt)}
     ${d.note?`<div class="hint">${d.note}</div>`:''}</div>`;
@@ -917,12 +928,19 @@ function mesesAMostrar(series){
    e um empréstimo de 2020 fazia o eixo dizer «2020 · 2025 · 2026», com 2020 a
    0 € e à mesma distância de 2025 do que 2026 — a reta lia-se como uma receita
    a crescer aos poucos durante os anos que faltam.
+   O mês a mês são os últimos 12 meses de registos (metricas.js:janelaMeses,
+   a decisão do Martinho de 2026-11-01), os mesmos na silhueta do cartão e no
+   «Mês a mês» da janela.
    Recebe: field — o campo das métricas ('income', 'op', 'loan' ou 'cf'); pid (opcional) — id do imóvel ou de grupo
    ('g:…'), null/vazio para o âmbito todo; fmt (opcional) — função de formatação dos valores.
-   Devolve: objeto {fmt, monthly (12 totais mensais), yearly (array de {label: ano, value}, anos seguidos)} para a janela do KPI. */
+   Devolve: objeto {fmt, monthly (o total de cada mês da janela), meses ({eixo, ler}), divisoes ([{i, label}]),
+   mesTitulo, yearly (array de {label: ano, value}, anos seguidos)} para a janela do KPI. */
 function evoMoney(field,pid,fmt){
   const kind={income:'income',op:'expense',loan:'loan'}[field];
-  const monthly=kind?monthly_(YEAR,pid,kind):[...Array(12)].map((_,i)=>monthly_(YEAR,pid,'income')[i]-monthly_(YEAR,pid,'expense')[i]-monthly_(YEAR,pid,'loan')[i]-monthly_(YEAR,pid,'amort')[i]);
+  const jan=janelaMeses(null,t=>txWeight(t,pid,true)>0),r=rotulosDaJanela(jan),m_=k=>mensalNaJanela(jan,pid,k,true);
+  let monthly;
+  if(kind)monthly=m_(kind);
+  else{const inc=m_('income'),exp=m_('expense'),ln=m_('loan'),am=m_('amort');monthly=inc.map((v,i)=>v-exp[i]-ln[i]-am[i])}
   const valor=y=>metrics(y,pid,{share:true})[field];
   const anos=yearsWithData(pid);
   /* os anos do princípio em que o campo é zero saem; o corrente fica, e o
@@ -932,7 +950,7 @@ function evoMoney(field,pid,fmt){
   let i=0;while(i<anos.length-1&&anos[i]<YEAR-1&&!valor(anos[i]))i++;
   const de=anos[i],a=anos[anos.length-1],yearly=[];
   for(let y=de;y<=a;y++)yearly.push({label:y,value:valor(y)});
-  return {fmt:fmt||euro,monthly,yearly};
+  return {fmt:fmt||euro,monthly,meses:{eixo:r.eixo,ler:r.ler},divisoes:r.divisoes,mesTitulo:'Últimos 12 meses',yearly};
 }
 // atalho: totais mensais na quota-parte (saldos.js:sh — sem titular, por inteiro)
 // Recebe: y — o ano (número); pid — id do imóvel ou de grupo ('g:…'), ou null para o âmbito todo; kind — 'income', 'expense', 'loan' ou 'amort'.

@@ -1,12 +1,14 @@
-// A Visão geral depois das decisões de 2026-10-28. As entradas e saídas vão
-// de janeiro a dezembro: o mês corrente e os passados são o registado, e os
-// seguintes mostram o que os planeados preveem, esbatidos e lidos como
-// «previsto» (painel-geral.js:previstoPorMes, graficos.js:cBars). O cashflow
-// acumulado continua a acabar no mês corrente, e os quatro indicadores não
-// levam previsões. O seletor do topo filtra também por proprietário — «Os
-// meus» e cada proprietário com quem partilho, os imóveis de que é
-// comproprietário (painel-geral.js:dashOpcoesImovel, registos.js:pidProps) —,
-// e as Projeções e a Avaliação continuam sem proprietários.
+// A Visão geral depois das decisões de 2026-11-01 e 2026-11-03. As entradas e
+// saídas mostram os últimos 12 meses de registos, a acabar no mês corrente (ou
+// no de um movimento de data futura do ano), com a divisão entre dezembro e
+// janeiro (metricas.js:janelaMeses); o cashflow acumulado é o do ano corrente,
+// de janeiro a esse mesmo fim, com o ano no título, e acaba no valor do cartão
+// Cashflow (painel-geral.js:vgSeriesDaJanela). Só o registado: os previstos dos
+// planeados saíram, e nenhum mês fica aceso — a leitura começa no mês corrente,
+// mesmo vazio no dia 1. Os quatro indicadores são do ano corrente. O seletor do topo filtra também por proprietário — «Os meus»
+// e cada proprietário com quem partilho, os imóveis de que é comproprietário
+// (painel-geral.js:dashOpcoesImovel, registos.js:pidProps) —, e as Projeções e
+// a Avaliação continuam sem proprietários.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -83,64 +85,163 @@ function planear() {
   app.db.recurring.push(app.normRec({ id: 'r3', name: 'Prestação Lisboa', every: 'month', next: ANO + '-09-20', tx: { kind: 'loan', label: 'Prestação Lisboa', amount: 300, propertyId: 'p1' } }));
 }
 
-describe('as entradas e saídas, de janeiro a dezembro', () => {
+/* O cartão de um gráfico mês a mês da Visão geral, pelo título: o subtítulo,
+   a coluna que a leitura mostra antes de alguém tocar (data-ler), o data-lido
+   e o HTML do cartão até ao fim do desenho.
+   Recebe: html — o HTML da vista; titulo — o título do cartão.
+   Devolve: {sub, ler, lido, parte}. */
+function cartao(html, titulo) {
+  const i = html.indexOf('>' + titulo + '</h3>');
+  assert.ok(i > -1, 'o cartão ' + titulo);
+  const resto = html.slice(i);
+  const parte = resto.slice(0, resto.indexOf('</svg>'));
+  const sub = /^>[^<]*<\/h3>(?:<span class="small">([^<]*)<\/span>)?/.exec(resto)[1] || '';
+  const m = /<div class="chartler fixa" data-ler="(\d+)">/.exec(parte);
+  return { sub, ler: m ? Number(m[1]) : -1, lido: lidos(parte)[0], parte };
+}
+
+/* Os rótulos do eixo X de um desenho, pela ordem (os <text> ao meio).
+   Recebe: parte — o HTML do cartão.
+   Devolve: array de texto. */
+const eixo = (parte) => [...parte.matchAll(/text-anchor="middle">([^<]*)<\/text>/g)].map((m) => m[1]);
+
+const MESES_DA_JANELA = ['out 2025', 'nov 2025', 'dez 2025', 'jan 2026', 'fev 2026', 'mar 2026', 'abr 2026', 'mai 2026', 'jun 2026', 'jul 2026', 'ago 2026', 'set 2026'];
+// o acumulado é o do ano corrente, de janeiro ao mês corrente (o ticket de QA 87084237)
+const ACUM = 'Cashflow acumulado ' + ANO;
+const MESES_DO_ANO = MESES_DA_JANELA.slice(3);
+
+describe('as entradas e saídas nos últimos 12 meses, e o acumulado no ano', () => {
   beforeEach(semear);
 
-  test('doze meses; os depois do corrente (setembro) vêm dos planeados, esbatidos e lidos como previstos', () => {
-    planear();
+  test('as entradas e saídas: doze meses, de out 2025 a set 2026, com a divisão antes de janeiro e o subtítulo «últimos 12 meses»', () => {
     const html = app.vDashboard();
-    const { barras } = graficos(html);
-    igual(barras.rot, ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out · previsto', 'nov · previsto', 'dez · previsto']);
+    const b = cartao(html, 'Entradas e saídas');
+    igual(b.lido.rot, MESES_DA_JANELA, 'a leitura diz o mês com o ano');
+    assert.equal(b.sub, 'últimos 12 meses');
+    assert.equal((b.parte.match(/<line class="gdivisao"/g) || []).length, 1, 'uma divisão, a da passagem de ano');
+    assert.match(b.parte, /<line class="gdivisao" [^>]*\/><text [^>]*>2026<\/text>/, 'com o ano novo ao lado');
+    const ex = eixo(b.parte);
+    assert.equal(ex[0], 'out');
+    assert.ok(ex.includes('jan') && !ex.some((x) => /\d/.test(x)), 'o eixo leva só o mês');
     const e = (v) => app.euro2(v);
-    igual(serie(barras, 'Receita'), [e(800), e(0), e(0), e(0), e(0), e(0), e(0), e(0), e(0), e(800), e(800), e(800)], 'o mês corrente é o registado; out, nov e dez a renda planeada');
-    igual(serie(barras, 'Despesas'), [e(0), e(0), e(-250), e(0), e(0), e(0), e(0), e(0), e(0), e(-120), e(0), e(0)], 'o condomínio trimestral só cai em outubro');
-    igual(serie(barras, 'Prestações'), [e(0), e(0), e(0), e(0), e(0), e(0), e(0), e(0), e(0), e(-300), e(-300), e(-300)]);
-    // as colunas previstas (out, nov, dez) vão cada uma no seu <g> esbatido: 3 + 2 + 2 barras
-    const esbatidas = [...html.matchAll(/<g class="gprevista">([\s\S]*?)<\/g>/g)].map((m) => (m[1].match(/<rect class="gbar/g) || []).length);
-    igual(esbatidas, [3, 2, 2]);
-    assert.equal((html.match(/<rect class="gbar/g) || []).length, 2 + 7, 'as registadas (jan e mar) ficam fora dos <g>');
-    assert.match(html, /<div class="li  prevista"\s*><span class="dot"><\/span>\s*<span class="nm">previsto<\/span>/, 'a legenda diz «previsto»');
-    assert.match(html, /<title>out · previsto · Receita: /, 'a dica também');
-    assert.match(html, /aria-label="Entradas e saídas \(previsto de out em diante\), de jan a dez\./);
+    igual(serie(b.lido, 'Receita'), [0, 0, 0, 800, 0, 0, 0, 0, 0, 0, 0, 0].map(e), 'a renda de janeiro na quarta coluna');
+    igual(serie(b.lido, 'Despesas'), [0, 0, 0, 0, 0, -250, 0, 0, 0, 0, 0, 0].map(e));
   });
 
-  test('sem planeados os meses seguintes ficam a zero, mas estão lá', () => {
-    const { barras } = graficos(app.vDashboard());
-    assert.equal(barras.rot.length, 12);
-    igual(serie(barras, 'Receita').slice(9), [app.euro2(0), app.euro2(0), app.euro2(0)]);
-  });
-
-  test('uma renda já lançada para um mês futuro conta como hoje, e o planeado não a conta outra vez', () => {
-    planear();
-    app.db.transactions.push(app.normTx({ id: 'x3', kind: 'income', label: 'Renda Lisboa', category: 'Rendas', amount: 800, propertyId: 'p1', contractId: 'c1', date: ANO + '-11-01' }));
+  test('o acumulado: «Cashflow acumulado 2026», de jan a set 2026, sem divisão, e a chave de sempre para a ordem dos cartões', () => {
     const html = app.vDashboard();
-    const { barras, acumulado } = graficos(html);
-    igual(serie(barras, 'Receita').slice(9), [app.euro2(800), app.euro2(800), app.euro2(800)], 'novembro tem uma renda, não duas');
-    assert.equal(acumulado.rot.length, 11, 'o acumulado vai até ao último mês com movimento, como antes');
-    assert.match(indicadores(html), new RegExp(app.euro2(1600).replace(/\s/g, '\\s')), 'a Receita conta a de novembro, como sempre');
+    assert.doesNotMatch(html, />Cashflow acumulado<\/h3>/, 'o título leva o ano');
+    const a = cartao(html, ACUM);
+    igual(a.lido.rot, MESES_DO_ANO, 'de janeiro ao mês corrente');
+    assert.doesNotMatch(a.parte, /gdivisao/, 'um ano só não tem divisão');
+    const ex = eixo(a.parte);
+    assert.equal(ex[0], 'jan');
+    assert.ok(!ex.some((x) => /\d/.test(x)), 'o eixo leva só o mês');
+    assert.match(a.parte, /aria-label="Cashflow acumulado 2026/, 'o desenho diz o mesmo título');
+    const i = html.lastIndexOf('<div class="card', html.indexOf('>' + ACUM + '</h3>'));
+    assert.match(html.slice(i, i + 200), /data-bloco="card:Cashflow acumulado"/,
+      'o ano muda, a chave da ordem guardada (cloud/painel.js:dashKey) não');
+    const e = (v) => app.euro2(v);
+    igual(a.lido.s[0].v, [800, 800, 550, 550, 550, 550, 550, 550, 550].map(e));
   });
 
-  test('um planeado silenciado, um que acaba antes e um de outro imóvel em foco ficam de fora', () => {
-    planear();
-    app.db.recurring.find((r) => r.id === 'r2').muted = true;
-    app.db.recurring.find((r) => r.id === 'r3').end = ANO + '-10-31';
-    const p = app.previstoPorMes(null);
-    igual(p.expense.slice(9), [0, 0, 0]);
-    igual(p.loan.slice(8), [0, 300, 0, 0], 'a prestação acaba em outubro; setembro é o registado');
-    igual(app.previstoPorMes('p3').income, Array(12).fill(0));
-    igual(app.previstoPorMes('g:o:o1').income.slice(9), [800, 800, 800], 'o proprietário de Lisboa tem a renda');
-    igual(app.previstoPorMes('g:o:o2').income.slice(9), [0, 0, 0]);
-  });
-
-  test('o cashflow acumulado e os quatro indicadores são os mesmos com e sem planeados', () => {
+  test('só o registado: com planeados, nada previsto, e os gráficos e os quatro indicadores iguais', () => {
     const antes = app.vDashboard();
     planear();
     const depois = app.vDashboard();
     assert.equal(indicadores(depois), indicadores(antes));
-    igual(graficos(depois).acumulado, graficos(antes).acumulado);
-    const acc = graficos(depois).acumulado;
-    igual(acc.rot, ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set'], 'acaba no mês corrente');
-    assert.equal(acc.s[0].v[8], app.euro2(800 - 250));
+    igual(graficos(depois), graficos(antes));
+    assert.doesNotMatch(depois, /gprevista|· previsto|class="li  prevista"|previsto de /, 'nem colunas esbatidas, nem «previsto» na leitura, na legenda ou na descrição');
+    assert.equal(typeof app.previstoPorMes, 'undefined', 'a função dos previstos saiu');
+  });
+
+  test('nenhum mês aceso: a leitura das duas começa no mês corrente, mesmo sem movimentos nele', () => {
+    const html = app.vDashboard();
+    assert.doesNotMatch(html, /gdestaque/);
+    for (const [t, ler] of [['Entradas e saídas', 11], [ACUM, 8]]) {
+      const c = cartao(html, t);
+      assert.equal(c.ler, ler, t + ': setembro, o último da janela, e não março, o último com movimento');
+      assert.equal(c.lido.rot[c.ler], 'set 2026');
+      assert.match(c.parte, new RegExp('data-col="' + ler + '"><b>set 2026</b>'), t);
+    }
+  });
+
+  test('o acumulado é só do ano: o ano passado não entra, o fim bate com o cartão Cashflow, e a nota só diz as amortizações do ano', () => {
+    app.db.transactions.push(app.normTx({ id: 'x4', kind: 'income', label: 'Renda Lisboa', category: 'Rendas', amount: 1000, propertyId: 'p1', date: (ANO - 1) + '-02-10' }));
+    app.db.transactions.push(app.normTx({ id: 'x5', kind: 'expense', label: 'Obra Lisboa', category: 'Obras', amount: 100, propertyId: 'p1', date: (ANO - 1) + '-11-20' }));
+    app.db.transactions.push(app.normTx({ id: 'x6', kind: 'loan', label: 'Amortização', amount: 300, propertyId: 'p1', payType: 'amortizacao', date: (ANO - 1) + '-12-10' }));
+    const e = (v) => app.euro2(v);
+    let a = cartao(app.vDashboard(), ACUM);
+    igual(a.lido.s[0].v, [800, 800, 550, 550, 550, 550, 550, 550, 550].map(e), 'começa do zero em janeiro, sem o ano passado');
+    assert.equal(a.lido.s[0].v[8], e(app.metrics(ANO, null, { share: true }).cf), 'o último ponto é o do cartão Cashflow');
+    assert.equal(a.sub, '', 'a amortização de dez 2025 é do ano passado: fora da nota');
+    app.db.transactions.push(app.normTx({ id: 'x7', kind: 'loan', label: 'Amortização', amount: 200, propertyId: 'p1', payType: 'amortizacao', date: ANO + '-05-10' }));
+    a = cartao(app.vDashboard(), ACUM);
+    assert.equal(a.sub, app.esc('Em mai 2026: amortização de ' + e(200)), 'a do ano, com o mês e o ano');
+    assert.equal(a.lido.s[0].v[8], e(350));
+  });
+
+  test('um movimento de data futura no ano leva a janela até ele (jan–dez, sem divisão)', () => {
+    app.db.transactions.push(app.normTx({ id: 'x3', kind: 'income', label: 'Renda Lisboa', category: 'Rendas', amount: 800, propertyId: 'p1', contractId: 'c1', date: ANO + '-12-01' }));
+    const html = app.vDashboard();
+    const b = cartao(html, 'Entradas e saídas'), a = cartao(html, ACUM);
+    for (const c of [b, a]) {
+      assert.equal(c.lido.rot.length, 12);
+      assert.equal(c.lido.rot[0], 'jan 2026');
+      assert.equal(c.lido.rot[11], 'dez 2026');
+      assert.equal(c.ler, 8, 'a leitura continua em setembro');
+    }
+    assert.doesNotMatch(html, /gdivisao/, 'um ano só não tem divisão');
+    assert.equal(a.lido.s[0].v[11], app.euro2(800 + 800 - 250));
+    assert.match(indicadores(html), new RegExp(app.euro2(1600).replace(/\s/g, '\\s')), 'a Receita conta a de dezembro, como sempre');
+  });
+
+  test('com um proprietário em foco, a janela e o acumulado são os dele', () => {
+    app.db.transactions.push(app.normTx({ id: 'x3', kind: 'income', label: 'Renda Lisboa', category: 'Rendas', amount: 800, propertyId: 'p1', contractId: 'c1', date: ANO + '-12-01' }));
+    app.dashProp = 'g:o:o2';
+    let a = cartao(app.vDashboard(), ACUM);
+    igual(a.lido.rot, MESES_DO_ANO, 'a renda de dezembro é de Lisboa, que não é do Bruno: a janela acaba no mês corrente');
+    assert.equal(a.lido.s[0].v[8], app.euro2(app.metrics(ANO, 'g:o:o2', { share: true }).cf));
+    app.dashProp = 'g:o:o1';
+    a = cartao(app.vDashboard(), ACUM);
+    assert.equal(a.lido.rot[11], 'dez 2026', 'a da Ana vai até dezembro');
+    assert.equal(a.lido.s[0].v[11], app.euro2(app.metrics(ANO, 'g:o:o1', { share: true }).cf));
+  });
+});
+
+/* No dia 1 o mês corrente ainda está vazio: a leitura ficava no mês anterior,
+   e a coluna dele acesa (o ticket de QA 64aeede6, a 1 de novembro). */
+const app2 = carregarApp({ hoje: '2026-11-01' });
+afterEach(() => repor(app2));
+
+describe('no dia 1 de novembro', () => {
+  beforeEach(() => {
+    const db = limpar(app2);
+    db.properties.push(app2.normProp({ id: 'p1', name: 'T2 Lisboa', use: 'investimento', rentalMode: 'inteiro', value: 200000 }));
+    db.transactions.push(app2.normTx({ id: 'a', kind: 'income', label: 'Renda', category: 'Rendas', amount: 700, propertyId: 'p1', date: '2025-12-05' }));
+    db.transactions.push(app2.normTx({ id: 'b', kind: 'income', label: 'Renda', category: 'Rendas', amount: 800, propertyId: 'p1', date: '2026-10-05' }));
+    db.transactions.push(app2.normTx({ id: 'c', kind: 'expense', label: 'Obra', category: 'Obras', amount: 120, propertyId: 'p1', date: '2026-10-12' }));
+    db.recurring = [];
+  });
+
+  test('de dez 2025 a nov 2026, nenhum mês aceso e a leitura em «nov 2026», com novembro vazio', () => {
+    const html = app2.vDashboard();
+    assert.doesNotMatch(html, /gdestaque/, 'outubro não fica aceso');
+    const b = cartao(html, 'Entradas e saídas');
+    assert.equal(b.lido.rot[0], 'dez 2025');
+    assert.equal(b.ler, 11, 'novembro, e não outubro');
+    assert.equal(b.lido.rot[b.ler], 'nov 2026');
+    assert.match(b.parte, /data-col="11"><b>nov 2026<\/b>/);
+    assert.match(b.parte, /<line class="gdivisao" [^>]*\/><text [^>]*>2026<\/text>/, 'a divisão antes de janeiro');
+    assert.equal(serie(b.lido, 'Receita')[11], app2.euro2(0), 'novembro ainda vazio');
+    assert.equal(serie(b.lido, 'Receita')[10], app2.euro2(800));
+    const a = cartao(html, 'Cashflow acumulado 2026');
+    assert.equal(a.lido.rot[0], 'jan 2026', 'o acumulado começa em janeiro');
+    assert.equal(a.ler, 10, 'novembro, e não outubro');
+    assert.equal(a.lido.rot[a.ler], 'nov 2026');
+    assert.match(a.parte, /data-col="10"><b>nov 2026<\/b>/);
+    igual(a.lido.s[0].v.slice(9), [app2.euro2(680), app2.euro2(680)], 'a renda de dez 2025 não entra');
+    assert.equal(a.lido.s[0].v[10], app2.euro2(app2.metrics(2026, null, { share: true }).cf));
   });
 });
 

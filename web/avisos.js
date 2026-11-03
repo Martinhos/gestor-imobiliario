@@ -27,6 +27,138 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 56,
+    data: '2026-11-03',
+    titulo: 'Abrir a app começa na visão geral',
+    seccoes: [
+      {
+        titulo: 'A aplicação em geral',
+        afeta: ['app'],
+        itens: [
+          'Quando abres a app depois de a fechares, começa na Visão geral, onde quer que a tenhas deixado. Recarregar a página continua a manter-te onde estavas.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 55,
+    data: '2026-11-03',
+    titulo: 'O cashflow acumulado é o do ano',
+    seccoes: [
+      {
+        titulo: 'A aplicação em geral',
+        afeta: ['app'],
+        itens: [
+          'Na Visão geral, o Cashflow acumulado mostra o ano corrente, de janeiro até hoje, com o ano no título. Já não recomeça a meio do gráfico. As entradas e saídas ao lado continuam nos últimos 12 meses.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 54,
+    data: '2026-11-02',
+    titulo: 'Na mista, os produtos baixam também a taxa fixa',
+    seccoes: [
+      {
+        titulo: 'Créditos à habitação',
+        afeta: ['creditos'],
+        itens: [
+          'Numa hipoteca mista, um produto facultativo sem redução própria na taxa fixa baixa-a tanto como o spread: a prestação de agora desce logo que o ligas.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 53,
+    data: '2026-11-02',
+    titulo: 'Os produtos facultativos ligam-se um a um na hipoteca',
+    seccoes: [
+      {
+        titulo: 'Créditos à habitação',
+        afeta: ['creditos'],
+        itens: [
+          'Cada hipoteca tem agora os seus produtos facultativos (seguro de vida, multirriscos, ordenado domiciliado…), cada um com a redução que dá. Liga os que tens e o spread ou a TAN em vigor desce sozinho; desliga um que cancelaste e volta a subir.',
+          'O spread e a TAN que escreves são os sem produtos. O custo dos produtos não entra na hipoteca: regista-o à parte, como despesa.',
+        ],
+      },
+      {
+        titulo: 'A leitura da FINE',
+        afeta: ['creditos'],
+        soDev: true,
+        itens: [
+          'A leitura da FINE ou do contrato preenche a lista dos produtos facultativos com a redução de cada um, todos desligados, e deixa de perguntar «Tens os produtos facultativos deste crédito?».',
+        ],
+      },
+    ],
+  },
+  {
+    v: 52,
+    data: '2026-11-01',
+    titulo: 'Os produtos facultativos escolhem-se ao ler a FINE',
+    seccoes: [
+      {
+        titulo: 'Créditos à habitação',
+        afeta: ['creditos'],
+        soDev: true,
+        itens: [
+          'Quando a FINE ou o contrato traz as condições sem e com os produtos facultativos, aparece «Tens os produtos facultativos deste crédito?». O Não vem escolhido; o Sim troca a TAN e o spread pelos bonificados.',
+          'O custo dos produtos (seguros, cartão) não entra na hipoteca: regista-o à parte, como despesa.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 51,
+    data: '2026-11-01',
+    titulo: 'A FINE lê-se sem os produtos facultativos',
+    seccoes: [
+      {
+        titulo: 'Créditos à habitação',
+        afeta: ['creditos'],
+        soDev: true,
+        itens: [
+          'Ao ler a FINE ou o contrato, a app usa as condições sem os produtos facultativos (seguros, cartões, ordenado domiciliado): o spread, a TAN e a prestação base. A dica por baixo do botão di-lo.',
+          'Deixa de aparecer «Preenchi N campos»: ficam o contorno azul e o que ficou por ler.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 50,
+    data: '2026-11-01',
+    titulo: 'A hipoteca lê-se da FINE ou do contrato',
+    seccoes: [
+      {
+        titulo: 'Créditos à habitação',
+        afeta: ['creditos'],
+        soDev: true,
+        itens: [
+          'No topo do formulário da hipoteca há «Ler a partir da FINE ou do contrato»: escolhes o PDF do banco e a app preenche o banco, o capital, o prazo, o tipo de taxa, as taxas e as comissões. Confirmas antes de guardar, ou preenches à mão por baixo. Se tiveres produtos facultativos associados ao crédito (seguros, cartões, ordenado domiciliado), não são tidos em conta: a app lê as condições sem eles.',
+          'Os campos preenchidos ficam com o contorno azul até os mudares, e a app diz o que ficou por ler.',
+          'Se a prestação que a app calcula não bater com a do documento, ou se o documento trouxer valores sem sentido num crédito, aparece um aviso para conferires.',
+          'O PDF fica anexado à hipoteca. Só PDF com texto: uma digitalização preenche-se à mão. Até 5 leituras por dia.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 49,
+    data: '2026-11-01',
+    titulo: 'Os gráficos mostram os últimos 12 meses',
+    seccoes: [
+      {
+        titulo: 'Imóveis e portefólio',
+        afeta: ['imoveis', 'movimentos'],
+        itens: [
+          'Os gráficos mês a mês da vista geral e da avaliação mostram os últimos 12 meses, com uma linha a separar dezembro de janeiro. Já não aparecem os meses que ainda não chegaram.',
+          'A pequena linha de cada indicador da vista geral mostra os mesmos meses que o gráfico que se abre ao tocar-lhe.',
+          'Nas entradas e saídas nenhum mês fica realçado, e o cashflow acumulado recomeça em janeiro.',
+          'Nos movimentos, os gráficos dos totais seguem o período escolhido: um ano mostra os meses desse ano.',
+        ],
+      },
+    ],
+  },
+  {
     v: 48,
     data: '2026-10-30',
     titulo: 'Confirmar o email, e começar os planeados hoje',
@@ -1262,7 +1394,7 @@ var VERSAO = AVISOS[0].v;
 /* Versão mínima aceite. Subir isto obriga toda a gente a atualizar antes de
    continuar a usar a app — é para quando uma versão antiga passa a estar
    errada, não para empurrar novidades. */
-var VERSAO_MINIMA = 41;
+var VERSAO_MINIMA = 53;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { AVISOS: AVISOS, VERSAO: VERSAO, VERSAO_MINIMA: VERSAO_MINIMA, FUNCIONALIDADES: FUNCIONALIDADES };

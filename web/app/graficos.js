@@ -402,9 +402,28 @@ function axisY(min,max,x0,x1,y0,y1,fmt){
     g+=`<text x="${x0-6}" y="${(y+3.2).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${fmt?esc(fmt(v)):kfmt(v,m.passo,emK)}</text>`});
   return g;
 }
+/* As divisões de um gráfico mês a mês: uma linha vertical tracejada entre
+   duas colunas, onde um ano acaba e o seguinte começa (dez | jan), com o ano
+   novo pequeno ao lado — o mesmo traço e a mesma letra das marcas das
+   décadas. O ano fica por cima da área do desenho, na margem de cima: as
+   barras chegam ao topo dela, e dentro dela o ano caía em cima da barra de
+   janeiro. É um traço, na cor da frente, para se ver no escuro forçado do
+   Samsung (design.md «Tema escuro e a regra do color-scheme»).
+   Recebe: divisoes — array de {i, label} (i o índice da primeira coluna do
+   ano novo; as que caem fora de 1..n−1 saltam-se); xDe — função i → o x da
+   fronteira antes da coluna i; n — o número de colunas; y0, y1 — o topo e a
+   base da área do desenho.
+   Devolve: o fragmento SVG (string), vazio sem divisões. */
+function divisoesSvg(divisoes,xDe,n,y0,y1){
+  return (divisoes||[]).filter(d=>Number.isInteger(d.i)&&d.i>0&&d.i<n).map(d=>{const x=xDe(d.i);
+    return `<line class="gdivisao" x1="${x.toFixed(1)}" y1="${y0}" x2="${x.toFixed(1)}" y2="${y1}" stroke="var(--line2)" stroke-width="1" stroke-dasharray="3 3"/>`+
+      (d.label?`<text x="${(x+3).toFixed(1)}" y="${(y0-1.5).toFixed(1)}" font-size="8.5" fill="var(--muted)">${esc(d.label)}</text>`:'')}).join('');
+}
 /* Gráfico de linhas com área sombreada e dica em cada ponto. series=[{name,values,color}],
    labels no eixo X; o: h (altura), fmt (formatação dos valores, por omissão euro),
    area:false tira o sombreado, marks=[{i,label}] põe linhas verticais de referência,
+   divisoes=[{i,label}] põe a linha a meio entre o ponto i−1 e o i, onde muda o
+   ano (graficos.js:divisoesSvg),
    rotulos=[…] dá à leitura (e à descrição e às dicas) os rótulos por extenso quando
    o eixo os leva encurtados — o eixo das projeções diz «30», e a leitura «2030»;
    ler=i deixa a leitura acesa na coluna i antes de alguém tocar (cabecaDaLeitura);
@@ -414,7 +433,7 @@ function axisY(min,max,x0,x1,y0,y1,fmt){
    Substitui valores não finitos por 0 (mexe nos arrays recebidos).
    Recebe: series — array de séries {name, values, color} (values em números;
    color opcional, sai da paleta); labels — etiquetas do eixo X, uma por ponto;
-   o (opcional) — as opções h, fmt, lerFmt, area, marks, rotulos e ler descritas acima.
+   o (opcional) — as opções h, fmt, lerFmt, area, marks, divisoes, rotulos e ler descritas acima.
    Devolve: HTML pronto a inserir — a cabeça com o lugar da leitura no canto
    superior direito (graficos.js:cabecaDaLeitura) e, por baixo, o desenho;
    com mais de uma série, a legenda à esquerda desse lugar. */
@@ -439,6 +458,7 @@ function cLine(series,labels,o){
     g+=`<line x1="${X(m.i).toFixed(1)}" y1="${y0}" x2="${X(m.i).toFixed(1)}" y2="${y1}" stroke="var(--line2)" stroke-width="1" stroke-dasharray="3 3"/>`;
     g+=`<text x="${(X(m.i)+3).toFixed(1)}" y="${(y0+8).toFixed(1)}" font-size="8.5" fill="var(--muted)">${esc(m.label)}</text>`;
   });
+  g+=divisoesSvg(o.divisoes,i=>(X(i-1)+X(i))/2,labels.length,y0,y1);
   if(min<0)g+=`<line x1="${x0}" y1="${Y(0).toFixed(1)}" x2="${x1}" y2="${Y(0).toFixed(1)}" stroke="var(--line2)"/>`;
   series.forEach((s,si)=>{
     const c=s.color||PAL[si%PAL.length];
@@ -475,7 +495,11 @@ function cLine(series,labels,o){
    previstas e não registadas (a Visão geral: os meses depois do corrente, com
    o que os planeados preveem): as barras delas esbatem (.gprevista), a
    legenda ganha a entrada «previsto» e a leitura, a descrição e as dicas
-   dizem «nov · previsto» — o eixo fica «nov».
+   dizem «nov · previsto» — o eixo fica «nov». divisoes=[{i,label}] põe a
+   linha tracejada na fronteira antes da coluna i, onde muda o ano
+   (graficos.js:divisoesSvg), e rotulos=[…] dá à leitura e às dicas os
+   rótulos por extenso quando o eixo os leva curtos (o eixo «nov», a leitura
+   «nov 2026»).
    Devolve: HTML — a cabeça: a legenda (junta-se a partir das etiquetas que
    aparecem nos segmentos) à esquerda e o lugar da leitura no canto superior
    direito (graficos.js:cabecaDaLeitura); e, por baixo, o desenho. */
@@ -483,8 +507,9 @@ function cBars(groups,labels,o){
   o=o||{};const h=o.h||190,x0=44,x1=W-6,y0=10,y1=h-8;
   const pv=Number.isInteger(o.previstoDe)&&o.previstoDe>=0&&o.previstoDe<groups.length?o.previstoDe:-1;
   const prevista=i=>pv>-1&&i>=pv;
-  /* o que a leitura (e a dica e a descrição) diz de cada coluna */
-  const rot=labels.map((l,i)=>prevista(i)?l+' · previsto':l);
+  /* o que a leitura (e a dica e a descrição) diz de cada coluna: por extenso
+     quando vem (rotulos, «nov 2026»), senão o do eixo */
+  const rot=labels.map((l,i)=>{const r=o.rotulos&&o.rotulos[i]!=null?o.rotulos[i]:l;return prevista(i)?r+' · previsto':r});
   const tops=groups.map(g=>sum(g.filter(v=>v.value>0).map(v=>v.value)));
   const bots=groups.map(g=>sum(g.filter(v=>v.value<0).map(v=>v.value)));
   const max=Math.max(1,...tops),min=Math.min(0,...bots);
@@ -496,6 +521,7 @@ function cBars(groups,labels,o){
   const dx=Number.isInteger(o.destaque)&&o.destaque>=0&&o.destaque<groups.length?o.destaque:-1;
   let g=dx<0?'':`<rect class="gdestaque" x="${(x0+bw*dx+1).toFixed(1)}" y="${y0-6}" width="${Math.max(2,bw-2).toFixed(1)}" height="${(h+13-(y0-6)).toFixed(1)}" rx="6" fill="var(--accent-soft)"/>`;
   g+=axisY(min,max,x0,x1,y0,y1);
+  g+=divisoesSvg(o.divisoes,i=>x0+bw*i,groups.length,y0,y1);
   g+=`<line x1="${x0}" y1="${Y(0).toFixed(1)}" x2="${x1}" y2="${Y(0).toFixed(1)}" stroke="var(--line2)"/>`;
   /* conta as colunas que chegam a desenhar alguma coisa, e não os meses: num
      ano com uma só despesa em dezembro, o índice do grupo dava-lhe o último

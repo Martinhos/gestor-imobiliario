@@ -455,3 +455,34 @@ describe('a app carrega as peças novas', () => {
     assert.equal(new Set(SHELL).size, SHELL.length, SHELL.join(' '));
   });
 });
+
+describe('uma secção só do dev', () => {
+  /* a secção com soDev fala do que só existe fora de produção: em produção
+     não diz respeito a ninguém, e o aviso que fica sem secções não aparece
+     (cloud/novidades.js:afetaMe, cloud/novidades.js:avisoParaMim) */
+  const aviso = {
+    v: 999, data: '2026-11-01', titulo: 'Um aviso de experiência',
+    seccoes: [{ titulo: 'Créditos', afeta: ['creditos'], soDev: true, itens: ['Uma novidade que só existe no ambiente de desenvolvimento.'] }],
+  };
+
+  test('em produção some, e o aviso com ela', async () => {
+    const { carregarTudo } = await import('./arnes.js');
+    const app = carregarTudo();
+    app.CW.ambiente = 'producao';
+    assert.equal(app.avisoParaMim(aviso), null);
+  });
+
+  test('fora de produção aparece', async () => {
+    const { carregarTudo } = await import('./arnes.js');
+    const app = carregarTudo();
+    app.CW.ambiente = 'dev';
+    const visto = app.avisoParaMim(aviso);
+    assert.ok(visto && visto.seccoes.length === 1, 'a secção do dev chega a quem vê no dev');
+  });
+
+  test('as secções do dev declaram-se com true, e nada mais', () => {
+    AVISOS.forEach((a) => a.seccoes.forEach((s) => {
+      if ('soDev' in s) assert.equal(s.soDev, true, 'v' + a.v + ' · "' + s.titulo + '"');
+    }));
+  });
+});

@@ -80,6 +80,10 @@ confere que cada uma aponta para código que existe.
 - 2026-10-29 · A quinta ronda de QA: nada antes da compra, o sync em lote e o rasto em palavras
 - 2026-10-29 · A sexta ronda de QA: o email confirma-se, os limites contam, e os planeados começam hoje
 - 2026-10-31 · O rasto de uma pessoa lê-se do mais recente para o mais antigo
+- 2026-11-01 · Os gráficos mês a mês mostram os últimos 12 meses
+- 2026-11-01 · A FINE preenche a hipoteca, com o Workers AI e só no dev
+- 2026-11-03 · O cashflow acumulado da Visão geral é o do ano
+- 2026-11-03 · Abrir a app começa na visão geral; recarregar fica onde estavas
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2957,3 +2961,177 @@ montra para a app continua a dizer o sentido do tempo («da montra para a app»)
 e fica entre os dois eventos onde a origem mudou. As páginas visitadas ficam
 pela ordem do tempo: são um caminho com «›», e ao contrário as setas
 apontariam para trás.
+
+## 2026-11-01 · Os gráficos mês a mês mostram os últimos 12 meses
+
+Três tickets de QA do Martinho (a814718f, 6d8d079c, 64aeede6, 01/11, no
+Samsung). Os gráficos mês a mês iam de janeiro a dezembro do ano corrente:
+em novembro, metade de cada gráfico era o que ainda não tinha acontecido, e
+em janeiro um mês só. Ele quis os últimos 12 meses de registos, com uma
+barra entre dezembro e janeiro, e, filtrado por um ano, só os meses desse
+ano (no corrente, de janeiro até ao mês atual). A janela é uma só
+(metricas.js:janelaMeses) e serve a Visão geral, os indicadores, a Avaliação
+e os Movimentos; as Projeções são anos para a frente e ficaram como estavam,
+escolha dele.
+
+Isto desfaz a decisão de 2026-10-28, em que as entradas e saídas iam até
+dezembro com o que os planeados preveem, esbatido. Com a janela a acabar no
+mês corrente, os previstos já não cabiam: em janeiro dariam 23 colunas. Ele
+escolheu tirá-los, e a função que os calculava saiu.
+
+Só há filtro de ano onde já havia, o chip Período dos Movimentos. A Visão
+geral e a Avaliação mostram sempre os últimos 12 meses, e os números grandes
+dos indicadores continuam a ser do ano corrente: um filtro de ano novo nesses
+ecrãs mudava os indicadores, a comparação com o ano anterior e a avaliação,
+e não era isso que os tickets pediam. Num intervalo de datas que não é um
+ano, os cartões dos Movimentos mostram os meses dele, no máximo 12, com o
+título «De mar 2026 a jun 2026».
+
+A silhueta dos indicadores desenhava os doze meses do ano, com os futuros a
+zero, e a janela que abre ao tocar-lhe cortava no mês corrente: duas formas
+diferentes para o mesmo número. Agora os dois saem da mesma série.
+
+No dia 1 a faixa acendia o mês anterior, de propósito (o mês novo ainda está
+vazio). Ele preferiu nenhum mês aceso: a leitura do canto fica no mês
+corrente, mesmo a zero. O cashflow acumulado recomeça em janeiro, também
+escolha dele: o último ponto continua a ser o Cashflow do ano, e a barra da
+passagem de ano marca o recomeço. Um movimento de data futura só estende a
+janela se contar nos totais: uma caução em dezembro dava meses vazios no fim.
+
+## 2026-11-01 · A FINE preenche a hipoteca, com o Workers AI e só no dev
+
+Pedido do Martinho (via /reprompt): escolher a FINE do banco, ou o documento
+complementar do contrato, em PDF, e ter o formulário da hipoteca preenchido,
+dentro da quota gratuita do Workers AI (10 000 neurons por dia para a conta
+inteira), com atenção à injeção nos documentos. Aceitou as recomendações: só
+PDF com texto (sem OCR, uma digitalização diz «preenche à mão»), também o
+documento complementar, o PDF fica anexado à hipoteca, 5 leituras por conta e
+por dia, só no dev, e o legal.js fica para a promoção (mudá-lo pede nova
+aceitação dos termos a toda a gente). Pediu o botão no topo do modal, com o
+preenchimento à mão por baixo.
+
+O modelo é o @cf/ibm-granite/granite-4.0-h-micro, o mais barato do catálogo:
+cerca de 3 neurons por FINE, medido pelo usage.neurons que o Workers AI
+devolve. Foi o único barato que acertou as duas FINE de prova. O
+llama-3.2-3b lia «3,000 %» como 3000, o llama-3.1-8b-instruct-fast errava a
+TAN da mista por três vezes o preço, e o qwen3-30b pensava até acabar os
+tokens. O teto global é de 500 leituras por dia (rotas/fine.js:TETO_GLOBAL):
+o pior caso de uma leitura, com o texto cortado aos 20 000 caracteres, são
+cerca de 14 neurons, e 500 × 14 fica abaixo dos 8 000 (80% da quota).
+
+O granite obedece a instruções escondidas. Na FINE envenenada de prova (texto
+branco a mandar devolver spread 0, um banco com HTML, um capital de milhões e
+um prazo de séculos) pôs o spread e a Euribor a 0 e propôs os valores
+absurdos. O esquema fechado, as gamas e a lista fechada dos bancos
+(lib/fine.js:validar) seguraram o HTML e os absurdos. Mas, sem capital, a
+verificação cruzada da prestação não tinha com que contar e o formulário
+ficava sem aviso nenhum. Daí o segundo aviso: um valor que o servidor recusou
+diz que o documento pode não ser de confiança (fine.js:fineFraseEstranhos), e
+ao escrever o capital à mão o aviso da prestação aparece. Ficou o granite
+porque a defesa não é o modelo: é o esquema, as gamas, as duas contas do
+cliente e a revisão da pessoa antes do Guardar. Mudar de modelo é mudar o
+lib/fine.js:MODELO, medir de novo e refazer a conta do teto.
+
+O [ai] do wrangler.toml é uma ligação remota: o wrangler dev abre-a ao
+arrancar e, sem sessão do wrangler (o CI), não arranca. O Interface levanta o
+servidor com --local, e aí a rota dá o 503 dela.
+
+As novidades ganharam a secção soDev (novidades.js:afetaMe): a v50 fala da
+FINE no dev, e em produção o aviso some porque fica sem secções.
+
+Nota do mesmo dia (v51): o Martinho não quer a app a falar como «eu» — saiu o
+«Preenchi N campos» (a linha e o aviso flutuante) e o «Não consegui ler»
+passou a «Ficou por ler». E pediu que se dissesse que os produtos facultativos
+não são tidos em conta; escolheu que a leitura use as condições SEM eles (o
+spread, a TAN e a prestação base), coerente com essa frase
+(lib/fine.js:SISTEMA), provado com uma FINE de prova com as duas condições.
+Com o prompt novo, a FINE envenenada passou a dar 503: o granite escrevia os
+campos e enchia o resto da resposta de tabulações até ao teto, sem fechar o
+JSON. A resposta cortada depois de um valor completo passou a ler-se
+(lib/fine.js:respostaDoModelo), e a validação e o aviso do cliente fazem o
+resto.
+
+Nota do mesmo dia (v52): a pergunta dos produtos facultativos. O Martinho
+perguntou se fazia sentido um botão para os produtos; a proposta aceite foi uma
+pergunta, «Tens os produtos facultativos deste crédito?», só quando o
+documento traz as duas condições, com o Não por omissão (a leitura continua
+sem os produtos) e o Sim a trocar a TAN, o spread e a prestação da conferência
+pelos bonificados (a função saiu a 2026-11-02, na nota seguinte). Não é um botão para escrever os
+produtos: o custo deles (seguros, cartão) é uma despesa, não uma condição da
+hipoteca, e a nota do Sim di-lo. Medido na FINE de prova com produtos: com as
+três chaves bonificadas no fim do esquema, o granite não via o spread
+bonificado e trocava a prestação base pela bonificada em 2 leituras de 3 — o
+que dava o aviso da prestação sem razão. Com cada chave bonificada logo a
+seguir à base (lib/fine.js:ESQUEMA) e a regra das duas prestações no prompt,
+3 em 3 certas no spread e na prestação base; a prestação bonificada fica por
+ler, e com o Sim a prestação não se confere em vez de dar um aviso falso.
+
+Nota de 2026-11-02 (v53): os produtos facultativos, um a um, guardados na
+hipoteca. A pergunta Sim/Não da v52 não apareceu ao Martinho: muitas FINE não
+dão o spread bonificado somado, dão a redução de cada produto (seguro de vida
+−0,10, ordenado −0,25…), e então o modelo não tinha onde pôr nada. E não
+deixava ter só alguns produtos. Decisões dele: os produtos guardam-se na
+hipoteca (também à mão, sem FINE), para se desligar um que se cancelou e o
+spread subir sozinho; o nome é de uma lista fechada da app
+(dados.js:PRODUTOS_HIPOTECA), para uma FINE envenenada não conseguir escrever
+texto no ecrã; o custo dos produtos fica de fora. O spread e a TAN guardados
+passam a ser a base, sem produtos, e a taxa em vigor deriva-se dos ligados
+(credito.js:spreadEmVigor) — assim a base do documento nunca se perde e ligar
+e desligar não acumula arredondamentos. A FINE preenche a lista desligada,
+porque a app não sabe quais a pessoa tem e a leitura é sem produtos. Quando a
+FINE só traz o total bonificado, entra um produto só, «Todos os produtos
+facultativos», com a diferença. A prestação só se confere com nenhum ou com
+todos ligados: são as duas que o documento dá. Uma app anterior à 53 calcula
+com a base: ao promover, a versão mínima tem de subir.
+
+Medido com o granite (3 leituras de cada FINE de prova, todas 3/3): a lista
+de produtos vem logo a seguir ao spread bonificado e antes da prestação
+(lib/fine.js:ESQUEMA). Com ela antes, o modelo voltava a trocar a prestação
+base pela com produtos; com ela no fim, esquecia um produto e punha o total
+num só. As reduções levam minimum 0 no esquema, porque o modelo as escrevia
+negativas apesar do prompt. Quando a ficha dá a lista e também o total, a
+lista só fica se somar ao total: na FINE só com o total, o modelo punha os
+0,4 em cada um dos três produtos. A comissão da taxa variável passou para
+antes da da fixa no esquema, porque na variável o modelo a punha no campo da
+fixa. Numa mista, o modelo escreve os tipos todos da lista com as reduções a
+null; o validar deita-os fora, e para a resposta caber o teto passou de 400
+para 600 tokens (lib/fine.js:MAX_TOKENS_RESPOSTA). O pior caso de uma leitura
+passa a ≈17,7 neurons, e por isso o teto global desce de 500 para 450
+leituras por dia (rotas/fine.js:TETO_GLOBAL). Na variável, o modelo copia às
+vezes a redução do spread para a da TAN; sai sem rasto, porque a variável
+não tem TAN.
+
+Nota do mesmo dia (v54): numa mista, ligar um produto não mexia na
+prestação. A FINE dava só a redução do spread, que só conta depois da fase
+fixa, e a prestação de agora é a da taxa fixa. O Martinho escolheu que, na
+mista, um produto sem redução própria na taxa fixa a baixe tanto como o
+spread (credito.js:reducaoDoProduto), em vez de só explicar que a redução
+vem depois. Com uma redução própria na taxa fixa, conta essa.
+
+## 2026-11-03 · O cashflow acumulado da Visão geral é o do ano
+
+Ticket de QA do Martinho (87084237, 03/11, no Samsung). Desde a decisão de
+2026-11-01, o acumulado seguia a janela dos últimos 12 meses e recomeçava em
+janeiro, a meio do gráfico: a linha descia a pique sem nada ter acontecido.
+Ele quis só desde janeiro e o ano no título («Cashflow acumulado 2026»). O
+acumulado passou a usar a janela do ano (metricas.js:janelaMeses com o YEAR),
+de janeiro ao mês corrente, estendida pelos movimentos de data futura como as
+outras; as entradas e saídas ao lado ficam nos 12 meses, escolha dele. A
+Visão geral não escolhe ano: é sempre o corrente. A nota das amortizações do
+cartão passou a dizer só as do ano. Como a ordem guardada dos cartões
+reconhece cada um pelo título, o cartão diz a chave de antes
+(data-bloco="card:Cashflow acumulado"): com o ano no título, a chave mudava
+todos os janeiros e a ordem perdia-se.
+## 2026-11-03 · Abrir a app começa na visão geral; recarregar fica onde estavas
+
+Pedido do Martinho: quando abre a app depois de a ter fechado noutro
+separador, quer começar na visão geral; o refresh continua a manter a mesma
+página. A página guardava-se no localStorage, que sobrevive a fechar a app,
+e por isso ela reabria onde se tinha ficado. Passou para o sessionStorage
+(web/cloud/nucleo.js:rememberPage), que é de cada sessão do separador ou da
+app instalada: sobrevive ao recarregar (o refresh e as recargas da própria
+app ao mudar de versão) e começa vazio quando se abre de novo. A página que
+as versões anteriores deixaram no localStorage apaga-se no primeiro
+arranque (web/cloud/nucleo.js:restorePage), e sair esquece a desta sessão.
+Ir para segundo plano e voltar não é abrir de novo: a app continua onde
+estava.

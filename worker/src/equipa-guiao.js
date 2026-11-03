@@ -1757,6 +1757,7 @@ var ACOES_RASTO = {
   imvGaleria: 'Ver as fotografias', marcarVisitaNoImovel: 'Marcar visita', contratoNoQuarto: 'Novo contrato',
   delPropOwner: 'Remover proprietário', addPropOwner: 'Adicionar proprietário', delRoom: 'Remover quarto', addRoom: 'Adicionar quarto',
   addLoan: 'Adicionar crédito', delLoan: 'Remover crédito', setLType: 'Escolher o tipo de crédito',
+  loanProdAdicionar: 'Adicionar produto', loanProdRemover: 'Remover produto', loanProdLigar: 'Ligar ou desligar um produto facultativo',
   imvTrfLigar: 'Ir para os proprietários', imvTrfPedir: 'Enviar pedido', imvTransferir: 'Transferir o controlo',
   verMovimentosDoImovel: 'Ver os movimentos do imóvel', pagamentoNoImovel: 'Pagamento', despesaNoImovel: 'Despesa',
   openMeta: 'Abrir um anexo', fotoPassar: 'Passar de fotografia', fotoDescarregar: 'Descarregar', downloadMeta: 'Descarregar',

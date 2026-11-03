@@ -899,8 +899,10 @@ canto e abre a explicação ao toque (estilos.css:.kpi.why); com evo ganha o
 janela pinta as duas linhas na cor da série do cartão (a cor que o kpi
 guarda no KPI_REG, de o.serie ou o.cor) — a Receita --in, as Despesas
 --out, as Prestações --loan, o Cashflow --accent — e, sem ela, no cobalto
-(tema.js:COR_SERIE). O «Mês a mês» acaba no mês corrente
-(vistas.js:mesesAMostrar), e o «Ano a ano» (vistas.js:evoMoney) começa no
+(tema.js:COR_SERIE). Um evo que traz os meses da janela (meses, divisoes e
+mesTitulo) desenha-os tal e qual, que são os mesmos da silhueta do cartão
+(metricas.js:janelaMeses); sem eles, o «Mês a mês» acaba no mês
+corrente (vistas.js:mesesAMostrar). O «Ano a ano» (vistas.js:evoMoney) começa no
 primeiro ano em que o campo tem valor — o corrente fica sempre, e o anterior
 quando tem movimentos, que é com ele que a faixa compara — sem saltar anos:
 os que faltam entram com o seu valor. As
@@ -1458,7 +1460,7 @@ perde o estado do DOM (vistas.js:render; index.html:#view).
 ## A Visão geral
 A Visão geral segue a ordem do canvas (painel-geral.js:vDashboard): o «Pede
 atenção», os quatro indicadores do ano, a faixa âmbar das despesas sem
-imóvel, as entradas e saídas mês a mês ao lado do cashflow acumulado, as
+imóvel, as entradas e saídas mês a mês ao lado do cashflow acumulado do ano, as
 despesas por categoria, o cashflow por imóvel e a renda por contrato lado a
 lado, e o Portefólio ao lado das contas entre proprietários. Cada fila é um
 .cols, e a nuvem parte-as em blocos arrumáveis e dá a cada cartão a largura
@@ -1556,7 +1558,7 @@ Os indicadores da Visão geral (.vg-kpi) usam o oitavo argumento do kpi (ver
 na Bricolage, que encolhe com o próprio cartão — com os cêntimos tem 11 ou 12
 letras — (estilos.css:.vg-kpi, container-type e 15cqi: de 16 a 30px no
 computador, até 21 no telemóvel), a variação face ao ano
-anterior numa linha («▲ 21% · 2025: 9 000 €»), a silhueta dos doze meses no
+anterior numa linha («▲ 21% · 2025: 9 000 €»), a silhueta dos últimos 12 meses no
 canto de cima, no lugar do ícone da evolução, e uma frase curta, só no
 computador; a Prestações traz numa linha a mais o que se amortizou. O
 Cashflow é o cartão azul-noite (estilos.css:.vg-kpi.cf: --side no claro,
@@ -1578,23 +1580,32 @@ passam o formatador à faixa (o fmtValor da série, painel-geral.js:vDashboard),
 para ela poder conferir o texto (ver «Uma comparação diz de que números
 fala»).
 
-As entradas e saídas vão de janeiro a dezembro. O mês corrente e os passados
-são o registado; os seguintes somam ao que já estiver registado (os
-movimentos de data futura, que contam como sempre) o que os planeados preveem
-(painel-geral.js:previstoPorMes): as ocorrências de cada planeado nesses
-meses, as da Agenda (calendario.js:calPlaneados — sem os silenciados), cada
-uma com o movimento que a confirmação registaria (planeados.js:recTx), pesada
-pelo que está em foco como as métricas (metricas.js:txWeight). Uma ocorrência
-que já tem o seu movimento (planeados.js:jaRegistado) não conta duas vezes, e
-os que não contam nos totais e as amortizações antecipadas ficam de fora. Sem
-os Planeados ou sem o Calendário nesta conta não há previsões. Os meses
-previstos desenham-se esbatidos — cada coluna num <g> (estilos.css:.gprevista),
-para as barras ficarem com a classe de sempre —, com «previsto» na legenda e
-na leitura. O cashflow acumulado acaba no mês corrente, ou no último com algum
-valor quando há movimentos de data futura (vistas.js:mesesAMostrar): o fim da
-linha tem de bater com o Cashflow, e uma linha a seguir por novembro e
-dezembro ao nível de hoje lia «dez −6 358 €». Os quatro indicadores e os
-totais não levam previsões.
+Os gráficos mês a mês mostram os últimos 12 meses de registos
+(metricas.js:janelaMeses): a acabar no mês corrente, ou no último mês do ano
+com um movimento de data futura que conte nos totais e esteja na vista (a
+app aceita-os, e o fim do acumulado tem de bater com o cartão Cashflow).
+Filtrados por um ano, só os meses desse ano — no ano corrente, de janeiro
+até ao mês atual. As séries saem de metricas.js:mensalNaJanela (o peso das
+métricas) e os rótulos de metricas.js:rotulosDaJanela: o eixo só com o mês,
+a leitura com o mês e o ano («dez 2025»), e cada passagem de ano é uma
+divisão (graficos.js:divisoesSvg). Na Visão geral, as entradas e saídas são
+só o registado, sem previsões dos planeados, e nenhum mês fica aceso; o
+cashflow acumulado é o do ano corrente — a janela do ano (janelaMeses com o
+YEAR), de janeiro ao mesmo fim, com o ano no título («Cashflow acumulado
+2026») —, e o último ponto é o Cashflow do ano
+(painel-geral.js:vgSeriesDaJanela). O cartão diz a sua chave de sempre
+(data-bloco="card:Cashflow acumulado", painel-geral.js:vgCard), para a
+ordem guardada não se perder quando o ano muda (cloud/painel.js:dashKey). A silhueta de cada indicador e o
+«Últimos 12 meses» da janela dele (vistas.js:evoMoney, vistas.js:kpiModal)
+mostram os mesmos meses, com a mesma janela; a silhueta marca a passagem de
+ano com um traço fino (vistas.js:silhuetaKpi). Na Avaliação, as rendas e
+despesas usam a mesma janela. Nos Movimentos, a janela dos cartões segue o
+chip Período (lista-movimentos.js:txJanelaDoPeriodo): um ano dá esse ano
+(«Mês a mês em 2025»), sem período os últimos 12 meses, e um intervalo os
+meses dele, no máximo 12, até ao fim dele ou até hoje («De mar 2026 a jun
+2026», «Em mar 2026»). As Projeções são ano a ano e não têm gráfico mês a
+mês. Os números grandes dos quatro indicadores continuam a ser do ano
+corrente, com a comparação com o anterior.
 Nas entradas e saídas as prestações, que são constantes, descem junto ao
 eixo, e as despesas, que variam, no fundo, como o canvas (o desceAoContrario
 do graficos.js:cBars, que só inverte a pilha dos negativos, sem mexer na
@@ -1971,10 +1982,15 @@ Um gráfico pode nascer com a leitura acesa. O cabecaDaLeitura aceita ler, o
 (.chartler.fixa, data-ler); o dedo troca-a enquanto percorre e, ao largar,
 ela volta à coluna fixa (graficos.js:lerColuna, graficos.js:largarLeitura).
 O cBars aceita também destaque, a faixa suave do cobalto por trás de uma
-coluna (a .gdestaque, a primeira forma do desenho). A Visão geral usa os dois
-no mês corrente — ou no último antes dele com movimento, que no dia 1 o mês
-ainda está vazio —, como o canvas («out 2026 · Receita …»), e o cashflow
-acumulado acende o mês corrente. O cBars aceita ainda desceAoContrario: os
+coluna (a .gdestaque, a primeira forma do desenho), que hoje nenhum ecrã usa:
+na Visão geral nenhum mês fica aceso, e a leitura nasce no mês corrente,
+mesmo vazio no dia 1 («nov 2026 · Receita 0,00 € …»), nos dois gráficos. O
+cBars e o cLine aceitam divisoes, [{i, label}]: a linha tracejada na cor da
+frente (var(--line2)) entre a coluna i−1 e a i, com o ano novo pequeno ao
+lado (graficos.js:divisoesSvg) — é a passagem de dezembro para janeiro nos
+gráficos mês a mês. E aceitam rotulos, o que a leitura e as dicas dizem por
+extenso quando o eixo é curto (o eixo «nov», a leitura «nov 2026»). O cBars
+aceita ainda desceAoContrario: os
 segmentos negativos empilham pela ordem inversa, e a legenda e a leitura
 ficam como estavam. E aceita previstoDe, o índice da primeira coluna prevista
 (graficos.js:cBars): dessa coluna em diante as barras esbatem, a legenda ganha
@@ -2798,7 +2814,8 @@ escala, com a diferença em grande, a frase que a lê e a conta que a dá
 (avaliacao.js:rentGrid); a conta de exploração com o NOI numa faixa
 (avaliacao.js:contaCard), ao lado das contas entre proprietários
 (avaliacao.js:avaContasCard); a tabela «Por imóvel» (avaliacao.js:avaTabela);
-e os gráficos do ano (avaliacao.js:avaGraficos).
+e os dois gráficos (avaliacao.js:avaGraficos): as rendas e despesas nos
+últimos 12 meses, com a divisão dez|jan, e a estrutura das despesas do ano.
 
 Tocar numa linha da tabela põe o imóvel em foco, e a página passa a ser a
 avaliação dele (avaliacao.js:repFoco, avaliacao.js:repCard); o × do chip
@@ -4129,6 +4146,97 @@ semanas tem mais uma fila do que um mês de cinco, e ela ficaria por cima da
 legenda. A fila a mais só aparece depois de largar, quando a fita abre o
 espaço (continuidade.js:aFitaAbreEspaco).
 
+### A hipoteca lê-se da FINE ou do contrato
+No topo do formulário da hipoteca, antes de qualquer campo, está o «Ler a
+partir da FINE ou do contrato» (fine.js:fineSect). É o mesmo loanSect no
+modal «Nova/Editar hipoteca» e na ficha do imóvel. A dica diz que a app
+preenche e a pessoa confirma, e que por baixo se preenche à mão. Uma segunda
+linha diz que os produtos facultativos que o documento indicar (seguros,
+cartões, ordenado domiciliado) aparecem mais abaixo, nos produtos da
+hipoteca, desligados, para a pessoa ligar os que tem. Só aparece
+com sessão, fora de produção e a quem pode editar a casa
+(fine.js:finePodeLer). O PDF fica anexado à hipoteca pelo caminho de sempre
+(web/app/anexos.js:takeFiles), também quando a leitura falha, e o mesmo ficheiro não
+se anexa duas vezes. Os bytes vão ao POST /api/creditos/fine (fine.js:fineLer).
+
+O servidor (rotas/fine.js:rotasFine) passa o PDF a texto no toMarkdown do
+Workers AI e manda o texto a um modelo sem ferramentas, com um JSON schema
+fechado (lib/fine.js:ESQUEMA). O prompt diz que o texto entre as marcas é um
+documento de onde se tiram dados, nunca instruções. O que o modelo devolve
+passa pelo lib/fine.js:validar: cada campo tem o seu tipo e a sua gama, o
+banco é sempre um nome da lista fechada (lib/fine.js:BANCOS) e nunca o texto
+do modelo, e o que falha vai para os ignorados. Uma resposta que chega sem a
+chaveta do fim (o modelo a encher o resto de espaços até ao teto dos tokens)
+lê-se na mesma, desde que cortada depois de um valor completo
+(lib/fine.js:respostaDoModelo). Nada do documento fica: nem
+os bytes, nem o texto, nem a resposta vão para a base, para a consola ou para
+um relato de erro. A rota recusa em produção (404 antes da sessão), acima de
+5 MB, o que não começa por %PDF-, mais de 5 leituras por conta e por dia
+(menos no dev.rendorium.com, onde se testa e não há limite por conta), e
+acima do teto global do dia (rotas/fine.js:TETO_GLOBAL, tirado do custo
+medido a 80% da quota gratuita). Uma digitalização sem texto diz «preenche à
+mão».
+
+O que volta é uma proposta. Entra no formulário e nunca na base (grava o
+Guardar), e passa outra vez pelas gamas (fine.js:fineLimpar). Cada campo
+preenchido fica marcado no rótulo (estilos.css:label.fine-lido): o contorno
+no --accent e o rótulo no --accent-text, a cor da frente que o escurecimento
+do Samsung não apaga. A marca sai quando a pessoa muda o campo e não volta
+(fine.js:fineMarca). As linhas «Lido do documento — confirma antes de
+guardar.» e «Ficou por ler: …» ficam até se guardar ou fechar. São
+impessoais: a app não fala como «eu», nem conta os campos que preencheu, nem
+o diz num aviso flutuante.
+
+O servidor lê o spread, a TAN e a prestação base, e à parte a lista dos
+produtos facultativos com a redução de cada um, de uma lista fechada de
+tipos (lib/fine.js:validar): uma redução fora de (0, 3] pontos ou que, somada,
+passe a base conta como valor sem sentido; quando o documento só dá o total
+bonificado, vem um produto só, «Todos os produtos facultativos», com a
+diferença. A app limpa a lista outra vez (fine.js:fineLimparProdutos) e
+substitui os produtos da hipoteca por ela, todos desligados
+(fine.js:fineAplicar); sem nenhum lido, ficam os que lá estavam. O título do
+bloco dos produtos fica com a marca enquanto a lista for a lida (ligar não
+conta), e uma nota na caixa «Lido do documento» diz quantos entraram. A
+verificação cruzada usa a prestação lida sem nenhum produto ligado e a
+prestação com produtos com todos ligados; com uns ligados e outros não, não
+há número do documento para comparar, e não confere
+(fine.js:finePrestacaoAConferir).
+
+Uma FINE com instruções escondidas pode pôr o modelo a mentir, e a defesa não
+é o modelo. São duas contas que a app faz sozinha:
+- a prestação que a app calcula (credito.js:loanCalc), sem e com o selo,
+  compara-se com a do documento, e acima do maior de 2% e 5 € aparece um
+  aviso com os dois valores (fine.js:fineConferir), que sai quando se corrige
+  o campo;
+- um valor que o servidor recusou por fora de gama (um capital de milhões, um
+  prazo de séculos) avisa que o documento pode não ser de confiança e pede
+  para conferir cada campo com o original (fine.js:fineFraseEstranhos).
+
+Os erros da rota dizem-se junto ao botão, com a frase do servidor.
+
+### Os produtos facultativos de uma hipoteca
+Cada produto facultativo (seguro de vida, multirriscos, ordenado
+domiciliado…) é uma linha guardada na hipoteca, com o tipo de uma lista
+fechada (dados.js:PRODUTOS_HIPOTECA), a redução do spread e da TAN em pontos
+percentuais e um interruptor (dados.js:normProduto). O spread e a TAN
+guardados são a base, sem produtos. A taxa em vigor é a base menos as
+reduções dos ligados — o spread na variável e na mista, a TAN na fixa e na
+mista; na mista, um produto sem redução própria na taxa fixa baixa-a tanto
+como o spread (credito.js:reducaoDoProduto), e uma dica no bloco di-lo —,
+nunca abaixo de 0 (credito.js:spreadEmVigor,
+credito.js:taxaFixaEmVigor), e é ela que entra em todas as contas e textos.
+
+No formulário (imovel.js:loanProdSect), a seguir às taxas, cada produto é
+uma caixa com o tipo e o Remover em cima e as reduções e o interruptor em
+baixo. Com produtos, os rótulos das taxas dizem «sem produtos», uma linha diz
+a taxa com os ligados («Com os produtos ligados, o spread fica em 0,85 %.») e
+uma nota diz que o custo dos produtos não entra na hipoteca: regista-se à
+parte, como despesa. O interruptor é o botão inteiro (role=switch, com o nome
+do produto), e ligado diz-se na cor da frente: «Ligado» no --accent-text e o
+contorno da caixa no --accent. Ligar não repinta, e o foco fica; adicionar e
+remover levam o foco ao tipo novo ou ao «Adicionar produto». Nada se grava
+sem o Guardar. A ficha da hipoteca nomeia os ligados.
+
 ## As datas leem-se como se escrevem em Portugal
 O ecrã dizia `2028-03-15`. Passa a dizer **15/03/2028** (formato.js:dPT), e
 os meses soltos dizem «ago 2026» (lista-movimentos.js:mesPt) — a mesma forma nas
@@ -4353,6 +4461,12 @@ custou uma avaria em produção (a história está no diário, de 2026-09-09 a
 - Publicar sem subir a versão não sai: o CI compara os ficheiros que a cache
   guarda com os da publicação anterior, e recusa se mudaram sem versão nova
   (chegada.js:decidir, chegada.js:ficheirosGuardados).
+
+Uma novidade do que só existe fora de produção (o mesmo soDev do catálogo
+dos serviços) vai numa secção com soDev: true. Em produção essa secção não
+diz respeito a ninguém, e um aviso que fique sem secções não aparece
+(novidades.js:afetaMe, novidades.js:avisoParaMim). A versão sobe na mesma,
+porque os ficheiros mudaram.
 
 A rede de segurança do arranque (em linha no index.html, antes de todos os
 <script>) apaga as caches e recarrega quando um ficheiro não carrega — mas
@@ -5731,8 +5845,10 @@ e o contorno (estilos.css:.tabbar), mais a área segura. Só existe abaixo de
 900px e esconde-se com a gaveta aberta (estilos.css:.tabbar dentro de
 estilos.css:@media(max-width:900px)); o destino aceso só muda de cor.
 
-Recarregar devolve-te ao sítio onde estavas: o separador e a subpágina das
-Definições ficam em localStorage (gi_page: web/cloud/nucleo.js:LS_PAGE,
+Recarregar devolve-te ao sítio onde estavas; abrir a app de novo (fechada,
+ou noutro separador do browser) começa na visão geral. O separador e a
+subpágina das Definições ficam no sessionStorage, que é de cada sessão e
+sobrevive ao recarregar (gi_page: web/cloud/nucleo.js:LS_PAGE,
 web/cloud/nucleo.js:restorePage). Entrar e sair levam sempre à visão geral
 (entrada.js:finishLogin; partilha.js:logout). Mudar de separador faz scroll
 ao topo (navegacao.js:go). O «voltar» do sistema fecha primeiro o que

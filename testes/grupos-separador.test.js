@@ -31,7 +31,7 @@ const cru = (x) => JSON.parse(JSON.stringify(x));
    janelas numa pilha observável (esp.abertas) e esp.puxou as leituras.
    Devolve: {app, esp}. */
 function montar() {
-  const nova = carregarApp({ antes: (janela) => { janela.sessionStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} }; } });
+  const nova = carregarApp();
   nova.document.documentElement.style.removeProperty = () => {};
   const ctx = nova.__ctx;
   const carregar = (nome) => vm.runInContext(le('web/cloud/' + nome + '.js'), ctx, { filename: 'cloud/' + nome + '.js' });
@@ -237,7 +237,7 @@ describe('os caminhos antigos e as portas', () => {
     app.goSet('groups');
     assert.equal(app.tab, 'groups');
     assert.equal(app.setPage, '');
-    assert.deepEqual(JSON.parse(app.localStorage.getItem('gi_page')), { tab: 'groups', set: '' }, 'e é lembrado como separador');
+    assert.deepEqual(JSON.parse(app.sessionStorage.getItem('gi_page')), { tab: 'groups', set: '' }, 'e é lembrado como separador');
     app.go('settings');
     app.goSet('tags');
     assert.equal(app.tab, 'settings');
@@ -246,12 +246,12 @@ describe('os caminhos antigos e as portas', () => {
 
   test('a página guardada antiga {tab:\'settings\', set:\'groups\'} abre o separador Grupos', () => {
     const { app } = comEstado();
-    app.localStorage.setItem('gi_page', JSON.stringify({ tab: 'settings', set: 'groups' }));
+    app.sessionStorage.setItem('gi_page', JSON.stringify({ tab: 'settings', set: 'groups' }));
     app.restorePage();
     assert.equal(app.tab, 'groups');
     assert.equal(app.setPage, '');
     // controlo: outra subpágina guardada continua a abrir nas Definições
-    app.localStorage.setItem('gi_page', JSON.stringify({ tab: 'settings', set: 'filtros' }));
+    app.sessionStorage.setItem('gi_page', JSON.stringify({ tab: 'settings', set: 'filtros' }));
     app.restorePage();
     assert.equal(app.tab, 'settings');
     assert.equal(app.setPage, 'filtros');

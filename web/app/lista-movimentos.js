@@ -573,10 +573,19 @@ function vTransactions(){
   txLinhasPintadas=list.length;
   const tot={income:0,expense:0,loan:0,owed:0,repay:0,settle:0};partes.forEach(t=>{if(countsInTotals(t))tot[t.kind]=(tot[t.kind]||0)+valorNaVista(t)});
   const saldo=tot.income+tot.owed-tot.expense-tot.loan-tot.repay;
+  /* a evolução de um cartão: o mês a mês nos meses que o chip Período dá
+     (txJanelaDoPeriodo: o ano escolhido, os últimos 12 meses, ou os do
+     intervalo), com os rótulos e a divisão da passagem de ano — os mesmos na
+     silhueta do cartão e na janela (vistas.js:kpiModal) — e o ano a ano dos
+     anos com movimentos no filtro */
   const evoTx=k=>()=>{
-    const L=db.transactions.filter(txMatch).filter(countsInTotals),f=t=>k==='saldo'?saldoNaVista(t):(t.kind===k?valorNaVista(t):0);
+    const conta=t=>txMatch(t)&&countsInTotals(t);
+    const L=db.transactions.filter(conta),f=t=>k==='saldo'?saldoNaVista(t):(t.kind===k?valorNaVista(t):0);
     const ys={};ys[YEAR]=1;L.forEach(t=>{const y=Number(String(t.date).slice(0,4));if(y)ys[y]=1});
-    return {fmt:euro,monthly:[...Array(12)].map((_,i)=>sum(L.filter(t=>String(t.date).startsWith(`${YEAR}-${String(i+1).padStart(2,'0')}`)).map(f))),
+    const {jan,titulo}=txJanelaDoPeriodo(conta),r=rotulosDaJanela(jan),porMes={};
+    L.forEach(t=>{const mo=String(t.date).slice(0,7);porMes[mo]=(porMes[mo]||0)+(Number(f(t))||0)});
+    return {fmt:euro,monthly:jan.map(({y,m})=>porMes[`${y}-${String(m).padStart(2,'0')}`]||0),
+      meses:{eixo:r.eixo,ler:r.ler},divisoes:r.divisoes,mesTitulo:titulo,
       yearly:Object.keys(ys).map(Number).sort().map(y=>({label:y,value:sum(L.filter(t=>String(t.date).startsWith(String(y))).map(f))}))};
   };
   /* cada cartão leva a sua lista: abrir o indicador e ficar a ver só esse tipo é
@@ -644,6 +653,35 @@ function txAnos(){
 function txAnoDoFiltro(){
   const y=String(txDe||'').slice(0,4);
   return /^\d{4}$/.test(y)&&txDe===y+'-01-01'&&txAte===y+'-12-31'?y:'';
+}
+/* Os meses das séries mensais dos cartões dos Movimentos, pelo chip Período
+   (a decisão do Martinho de 2026-11-01): um ano inteiro escolhido dá esse ano
+   (o corrente de janeiro até ao mês atual, outro de janeiro a dezembro); sem
+   período, os últimos 12 meses (metricas.js:janelaMeses); um intervalo que não
+   é um ano dá os meses dele, no máximo 12, a acabar no mês do fim — o mais
+   cedo entre o «até» e hoje (só com «desde», hoje), estendido como na janela
+   sem período a um movimento de data futura deste ano que passe no filtro —
+   sem passar do mês do «desde» (só com «até», os 12 meses até lá). Um
+   intervalo todo no futuro acaba no mês do «até».
+   Recebe: conta — quais movimentos de data futura estendem o fim (função
+   t → booleano: os que passam no filtro e contam nos totais).
+   Devolve: {jan, titulo} — jan o array de {y, m} (do mais antigo para o mais
+   recente) e titulo o do «Mês a mês» da janela do cartão («Mês a mês em
+   2025», «Últimos 12 meses» ou «De mar 2026 a jun 2026»). */
+function txJanelaDoPeriodo(conta){
+  const ano=txAnoDoFiltro();
+  if(ano)return {jan:janelaMeses(ano,conta),titulo:'Mês a mês em '+ano};
+  if(!txDe&&!txAte)return {jan:janelaMeses(null,conta),titulo:'Últimos 12 meses'};
+  const hoje=today(),y0=hoje.slice(0,4),num=d=>Number(d.slice(0,4))*12+Number(d.slice(5,7))-1;
+  let fim=num(hoje);
+  (db.transactions||[]).forEach(t=>{const d=String(t.date||'');
+    if(d.slice(0,4)===y0&&num(d)>fim&&conta(t))fim=num(d)});   /* o conta já deixa de fora o que passa do «até» */
+  if(txAte&&num(txAte)<fim)fim=num(txAte);
+  if(txDe&&num(txDe)>fim)fim=txAte?num(txAte):num(txDe);
+  const n=txDe?Math.min(12,Math.max(1,fim-num(txDe)+1)):12;
+  const jan=mesesAte(Math.floor(fim/12),fim%12+1,n),nome=x=>MES[x.m-1]+' '+x.y;
+  const a=jan[0],b=jan[jan.length-1];
+  return {jan,titulo:jan.length>1?'De '+nome(a)+' a '+nome(b):'Em '+nome(a)};
 }
 /* O que o filtro das datas diz, para o rótulo do chip.
    Devolve: o texto (por escapar): o ano, o intervalo, «desde …», «até …», ou ''. */

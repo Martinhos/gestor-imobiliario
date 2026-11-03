@@ -4,10 +4,78 @@
 // a Euribor+spread nas variáveis, ou a fase certa nas mistas.
 function rateAt(l,m){
   l=normLoan(l);
-  const vr=(Number(l.euribor)||0)+(Number(l.spread)||0);
+  const vr=(Number(l.euribor)||0)+spreadEmVigor(l);
   if(l.type==='variavel')return vr;
-  if(l.type==='mista')return m<Math.round((Number(l.fixedYears)||0)*12)?(Number(l.rate)||0):vr;
-  return Number(l.rate)||0;
+  if(l.type==='mista')return m<Math.round((Number(l.fixedYears)||0)*12)?taxaFixaEmVigor(l):vr;
+  return taxaFixaEmVigor(l);
+}
+/* ---- os produtos facultativos: a taxa em vigor ----
+   O spread e a rate guardados na hipoteca são a BASE, sem produtos. Cada
+   produto facultativo (dados.js:normProduto) baixa o spread e/ou a TAN em
+   pontos percentuais, e só conta ligado. Só contam as reduções que o tipo de
+   taxa tem: o spread na variável e na mista, a TAN (a taxa fixa) na fixa e na
+   mista. A taxa em vigor nunca desce abaixo de 0. */
+
+/* As reduções que um tipo de taxa tem.
+   Recebe: type — 'fixa', 'mista' ou 'variavel'.
+   Devolve: {spread, tan} — booleanos. */
+function produtosReducoes(type){return {spread:type==='variavel'||type==='mista',tan:type==='fixa'||type==='mista'}}
+/* Os produtos facultativos ligados de uma hipoteca.
+   Recebe: l — a hipoteca (aguenta uma sem produtos, ou null).
+   Devolve: a lista dos produtos com ativo === true. */
+function produtosLigados(l){return (l&&Array.isArray(l.produtos)?l.produtos:[]).filter(p=>p&&p.ativo===true)}
+/* A redução que um produto dá num campo. Na mista, um produto sem redução
+   própria na taxa fixa baixa-a tanto como o spread (a decisão do Martinho:
+   a FINE costuma dar só a do spread, e a prestação de agora, a da fase fixa,
+   ficava parada ao ligar o produto).
+   Recebe: l — a hipoteca; p — o produto; campo — 'spread' ou 'tan'.
+   Devolve: a redução em pontos percentuais (0 quando não há). */
+function reducaoDoProduto(l,p,campo){
+  const v=Number(p[campo]);
+  if(isFinite(v)&&v>0)return v;
+  if(campo==='tan'&&l.type==='mista'){const s=Number(p.spread);return isFinite(s)&&s>0?s:0}
+  return 0;
+}
+/* A soma das reduções dos produtos ligados num campo, quando o tipo de taxa
+   o tem (reducaoDoProduto).
+   Recebe: l — a hipoteca; campo — 'spread' ou 'tan'.
+   Devolve: a soma em pontos percentuais (0 sem nada que conte). */
+function reducaoDosLigados(l,campo){
+  if(!l||!produtosReducoes(l.type)[campo])return 0;
+  return produtosLigados(l).reduce((s,p)=>s+reducaoDoProduto(l,p,campo),0);
+}
+/* Os produtos ligados que baixam alguma coisa neste tipo de taxa (os que a
+   taxa por extenso conta, rateLabel, e os que a ficha nomeia).
+   Recebe: l — a hipoteca.
+   Devolve: a lista desses produtos. */
+function produtosQueBaixam(l){
+  const red=produtosReducoes(l&&l.type);
+  return produtosLigados(l).filter(p=>(red.spread&&Number(p.spread)>0)||(red.tan&&Number(p.tan)>0));
+}
+/* O nome de um tipo de produto facultativo (dados.js:PRODUTOS_HIPOTECA).
+   Recebe: tipo — o id do tipo.
+   Devolve: o nome; o de 'outro' para um tipo desconhecido. */
+function produtoNome(tipo){
+  const p=PRODUTOS_HIPOTECA.find(x=>x.id===tipo)||PRODUTOS_HIPOTECA.find(x=>x.id==='outro');
+  return p.nome;
+}
+/* O spread em vigor: o base menos as reduções dos produtos ligados (só na
+   variável e na mista), às milésimas e nunca abaixo de 0. Sem nenhuma
+   redução ligada, o base tal e qual.
+   Recebe: l — a hipoteca.
+   Devolve: o spread em percentagem (número). */
+function spreadEmVigor(l){
+  const b=Number(l&&l.spread)||0,r=reducaoDosLigados(l,'spread');
+  return r>0?Math.max(0,taxa3(b-r)):b;
+}
+/* A taxa fixa em vigor (a TAN da fixa, a da fase fixa da mista): a base menos
+   as reduções da TAN dos produtos ligados, às milésimas e nunca abaixo de 0.
+   Sem nenhuma redução ligada, a base tal e qual.
+   Recebe: l — a hipoteca.
+   Devolve: a taxa em percentagem (número). */
+function taxaFixaEmVigor(l){
+  const b=Number(l&&l.rate)||0,r=reducaoDosLigados(l,'tan');
+  return r>0?Math.max(0,taxa3(b-r)):b;
 }
 /* prestações já registadas deste crédito (amortizações antecipadas não contam):
    encurtam o prazo restante e avançam a fase da taxa nas mistas
@@ -140,13 +208,16 @@ function loanCalc(l){
 const loanCost=l=>{const a=amort(l);return a.totInt+a.totStamp};
 // A taxa em palavras, para as listas: "fixa X%", a Euribor com o spread e a
 // soma, ou as duas fases da mista. A soma arredonda às milésimas (taxa3),
-// como no credDetalhe: 2,15 + 0,95 dá 3,1 e não 3,0999999999999996.
+// como no credDetalhe: 2,15 + 0,95 dá 3,1 e não 3,0999999999999996. É a
+// taxa em vigor (spreadEmVigor, taxaFixaEmVigor): com produtos facultativos
+// ligados que a baixam, acaba em «com um produto» ou «com N produtos».
 // Recebe: l — o crédito.
 // Devolve: string com a taxa por extenso, conforme o tipo.
 function rateLabel(l){
-  if(l.type==='fixa')return `fixa ${dec(l.rate)}%`;
-  if(l.type==='variavel')return `Euribor ${l.index} ${dec(l.euribor)}% + ${dec(l.spread)}% = ${dec(taxa3(rateAt(l,0)))}%`;
-  return `${dec(l.rate)}% durante ${dec(l.fixedYears)} anos, depois ${dec(taxa3((Number(l.euribor)||0)+(Number(l.spread)||0)))}%`;
+  const n=produtosQueBaixam(l).length,com=n?(n===1?' com um produto':' com '+n+' produtos'):'';
+  if(l.type==='fixa')return `fixa ${dec(taxaFixaEmVigor(l))}%${com}`;
+  if(l.type==='variavel')return `Euribor ${l.index} ${dec(l.euribor)}% + ${dec(spreadEmVigor(l))}% = ${dec(taxa3(rateAt(l,0)))}%${com}`;
+  return `${dec(taxaFixaEmVigor(l))}% durante ${dec(l.fixedYears)} anos, depois ${dec(taxa3((Number(l.euribor)||0)+spreadEmVigor(l)))}%${com}`;
 }
 // Uma taxa somada, arredondada às milésimas de ponto (a vírgula flutuante
 // deixa restos como 3,0999999999999996).
