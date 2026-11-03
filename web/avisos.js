@@ -1394,7 +1394,7 @@ var VERSAO = AVISOS[0].v;
 /* Versão mínima aceite. Subir isto obriga toda a gente a atualizar antes de
    continuar a usar a app — é para quando uma versão antiga passa a estar
    errada, não para empurrar novidades. */
-var VERSAO_MINIMA = 41;
+var VERSAO_MINIMA = 53;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { AVISOS: AVISOS, VERSAO: VERSAO, VERSAO_MINIMA: VERSAO_MINIMA, FUNCIONALIDADES: FUNCIONALIDADES };
