@@ -27,6 +27,29 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 57,
+    data: '2026-11-04',
+    titulo: 'O visto do menu acompanha a escolha',
+    seccoes: [
+      {
+        titulo: 'A aplicação em geral',
+        afeta: ['app'],
+        itens: [
+          'Nos menus de escolha (o tipo de um produto facultativo, o indexante e os outros), o visto passa para a opção que escolhes. Antes ficava na que estava escolhida quando abriste o formulário.',
+        ],
+      },
+      {
+        titulo: 'A leitura da FINE',
+        afeta: ['creditos'],
+        soDev: true,
+        itens: [
+          'Numa FINE que escreve as condições «base» e «contratada», a hipoteca fica com as base (a taxa fixa e o spread sem produtos), o indexante como a ficha o escreve, e um produto «Todos os produtos facultativos» com as reduções da contratada.',
+          'Uma prestação acima de 1 000 € já não se lê mil vezes mais pequena.',
+        ],
+      },
+    ],
+  },
+  {
     v: 56,
     data: '2026-11-03',
     titulo: 'Abrir a app começa na visão geral',

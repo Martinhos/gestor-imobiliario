@@ -84,6 +84,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-01 · A FINE preenche a hipoteca, com o Workers AI e só no dev
 - 2026-11-03 · O cashflow acumulado da Visão geral é o do ano
 - 2026-11-03 · Abrir a app começa na visão geral; recarregar fica onde estavas
+- 2026-11-03 · A FINE mista com «base» e «contratada», e o visto do menu de escolha
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3135,3 +3136,41 @@ as versões anteriores deixaram no localStorage apaga-se no primeiro
 arranque (web/cloud/nucleo.js:restorePage), e sair esquece a desta sessão.
 Ir para segundo plano e voltar não é abrir de novo: a app continua onde
 estava.
+## 2026-11-03 · A FINE mista com «base» e «contratada», e o visto do menu de escolha
+
+Seis tickets de QA do Martinho (4fcf78ab, 8994d49a, 38420a6f, d7da7025,
+d2d149d8, fc2e9daa, 03/11, no Samsung), todos da mesma FINE mista: escreve as
+condições duas vezes, a «base» (sem produtos) e a «contratada» (só com as
+vendas associadas facultativas da secção 8). O granite punha a contratada no
+lugar da base (taxa fixa 4,0 em vez de 4,8, spread 0,7 em vez de 1,5),
+calculava o indexante (3,335 − 0,8 = 2,535) em vez de ler o 2,635, e
+inventava dois produtos com a redução de 0,1 que vinha do exemplo do prompt.
+O prompt passou a dizer o que são a base e a contratada e que nenhum número é
+uma conta; os números de exemplo que se colavam às respostas saíram (o
+granite copia também os nomes dos exemplos). A chave da taxa fixa passou de
+tan a taxa_fixa (lib/fine.js:ESQUEMA): com «tan», ele punha lá a TAN base do
+período variável, dissesse o prompt o que dissesse. Medido com o Workers AI
+verdadeiro em 3 leituras de cada uma das 7 FINE de prova, 3/3 todas
+(.unlazy/fine-mista-contratada/medir.mjs, .unlazy/fine-produtos/medir-a.mjs).
+
+A redução que só vale com todas as vendas associadas juntas entra como um
+produto só, «Todos os produtos facultativos», com a redução da taxa fixa e a
+do spread (escolha do Martinho, em vez de «Outro produto»). Quando a ficha dá
+o total, uma lista de um produto só também dá esse conjunto: o granite punha
+o total inteiro num dos produtos pedidos. O validar desfaz ainda o ponto dos
+milhares lido como casa decimal nos euros (1.206,73 lido como 1.20673,
+lib/fine.js:euros). O prompt cresceu de ≈1 350 para ≈1 670 tokens, e o
+TETO_TEXTO desceu para 19 000 caracteres para o teto global continuar abaixo
+dos 8 000 neurons diários.
+
+O visto do menu de escolha ficava na opção desenhada à abertura do
+formulário: o selPick mudava o valor, o rótulo e o aria-selected, mas não o on
+nem o visto (no tipo de produto ficava sempre «Seguro de vida»). As opções
+passaram a desenhar-se pela mesma função no sel() e no selPick
+(componentes.js:selOpcaoDesenho), nos mesmos botões, para o foco ficar.
+
+A caixa do indexante que não aceitava outro valor (8994d49a) não se
+reproduziu no browser (384×785, toque, o agente do Samsung, quatro maneiras
+de escrever, com vírgula e com ponto): a caixa, o l.euribor e a prestação
+depois da fase fixa seguem sempre o que se escreve, e Guardar grava-o. Só uma
+leitura nova da FINE o repõe, como está desenhado. Não se inventou correção.

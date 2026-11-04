@@ -30,12 +30,15 @@ export const LEITURAS_POR_DIA = 5;
      · as FINE de prova (≈1 300 caracteres de texto), com a lista dos
        produtos facultativos no esquema e no prompt (2026-11-02,
        .unlazy/fine-produtos/medir-a.mjs): 4,4 a 5,9 neurons cada (≈1 700–1 820
-       tokens de entrada, ≈180–430 de saída; o prompt e o esquema são ≈1 500);
-     · o pior caso, com o texto cheio (TETO_TEXTO, 20 000 caracteres ≈ 7 500
+       tokens de entrada, ≈180–430 de saída); o prompt e o esquema passaram
+       de ≈1 350 para ≈1 670 tokens com a base e a contratada (2026-11-04,
+       .unlazy/fine-mista-contratada), e o TETO_TEXTO desceu de 20 000 para
+       19 000 caracteres para a conta continuar a caber;
+     · o pior caso, com o texto cheio (TETO_TEXTO, 19 000 caracteres ≈ 7 380
        tokens de entrada com o prompt) e a resposta no teto
        (MAX_TOKENS_RESPOSTA, 600 tokens):
-       7 500 × 1 542 / 1 000 000 + 600 × 10 158 / 1 000 000 ≈ 11,6 + 6,1 = 17,7 neurons;
-     · 8 000 / 17,7 ≈ 452 leituras. Arredonda-se para baixo, 450 (eram 500
+       7 380 × 1 542 / 1 000 000 + 600 × 10 158 / 1 000 000 ≈ 11,4 + 6,1 = 17,5 neurons;
+     · 8 000 / 17,5 ≈ 457 leituras. Arredonda-se para baixo, 450 (eram 500
        com a resposta a 400 tokens, antes da lista dos produtos).
    O toMarkdown não gasta neurons nos PDF (só nas imagens). Muda o modelo
    (lib/fine.js:MODELO), mede-se de novo e refaz-se esta conta. */

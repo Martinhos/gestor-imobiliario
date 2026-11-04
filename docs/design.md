@@ -6805,7 +6805,10 @@ tem role=status e aria-live=polite (index.html:#toast).
 O sel() é um listbox: o botão leva aria-haspopup, aria-expanded e
 aria-controls, a lista role=listbox, as opções role=option e aria-selected; as
 setas, o Home e o End andam pelas opções, e o Escape com a lista aberta fecha
-só a lista e devolve o foco ao botão (componentes.js:selTecla). O percurso
+só a lista e devolve o foco ao botão (componentes.js:selTecla). Escolher
+redesenha as opções pela mesma função do sel() (componentes.js:selOpcaoDesenho):
+o on, o aria-selected e o visto ficam só na escolhida, nos mesmos botões, e o
+foco fica onde estava (componentes.js:selPick). O percurso
 mede os alvos num ecrã de toque (testes/ui/invariantes.js, a regra 4): o que
 fica abaixo de 40px conta-se por tipo, e o teto só desce.
 
