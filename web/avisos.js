@@ -27,6 +27,20 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 59,
+    data: '2026-11-06',
+    titulo: 'A pesquisa deixa-te escrever',
+    seccoes: [
+      {
+        titulo: 'Filtros das listas',
+        afeta: ['app'],
+        itens: [
+          'Escrever na pesquisa no telemóvel já não faz o texto saltar nem repetir as sugestões do teclado, e a app deixa de congelar. Vale para os Movimentos e para todas as listas.',
+        ],
+      },
+    ],
+  },
+  {
     v: 58,
     data: '2026-11-06',
     titulo: 'Os filtros mostram o que dizem',

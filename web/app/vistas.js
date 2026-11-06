@@ -470,12 +470,8 @@ function refrescarListasVivas(){
   /* a barra da pesquisa de uma lista (vistas.js:lfBarraHtml) não sai do
      documento: o resto troca-se à volta dela, e quem escreve não perde nada */
   const barra=lfBarraViva(v,molde);
-  if(barra){
-    const filhos=[].slice.call(molde.children),i=filhos.indexOf(barra.novo);
-    [].slice.call(v.children).forEach(n=>{if(n!==barra.vivo)n.remove()});
-    filhos.slice(0,i).forEach(n=>v.insertBefore(n,barra.vivo));
-    filhos.slice(i+1).forEach(n=>v.appendChild(n));
-  }else v.replaceChildren.apply(v,[].slice.call(molde.children));
+  if(barra)trocarAVoltaDaBarra(v,molde,barra);
+  else v.replaceChildren.apply(v,[].slice.call(molde.children));
   abasAssentar();                  // as abas da área vão para a casa delas (navegacao.js)
   reporRolagemDoPainel(rolou);
   tornarFocavel(v);
@@ -565,7 +561,9 @@ function render(){
      cartão. A marca fica até à próxima pintura, e as repinturas locais que
      acontecem lá dentro (o donutDrill) são de quem tocou no gráfico. */
   view().classList.toggle('entra',!!_entrar);_entrar=0;
-  view().innerHTML=html;
+  /* quem está a escrever na pesquisa não perde o campo: a barra fica e a
+     vista troca-se à volta dela (vistas.js:pintarAVoltaDaPesquisa) */
+  if(!pintarAVoltaDaPesquisa(view(),html))view().innerHTML=html;
   /* as abas da área saem da cabeça da vista para a casa delas, por cima do
      #view (navegacao.js:abasAssentar): a mesma fila fica o mesmo nó, e o
      realce desliza para a aba nova em vez de nascer já lá */
@@ -1540,14 +1538,66 @@ function lfAbrirEm(k,id){
    Devolve: {vivo, novo} — a barra do ecrã e a do molde, com o mesmo campo —,
    ou null quando não há as duas. */
 function lfBarraViva(v,molde){
-  const filho=(raiz)=>[].slice.call(raiz.children||[]).find(n=>n.classList&&n.classList.contains('lfm-barra'));
+  return barraDaPesquisaViva(v,molde,null,'lfm-barra');
+}
+/* A barra da pesquisa que fica de uma pintura para a seguinte: a filha direta
+   do #view com a classe dada (a .lfm-barra das listas, ou a .mov-barra, que
+   têm também os Movimentos), quando a vista nova tem a mesma barra, com o
+   campo do mesmo id. O funil (.mov-filt) troca-se pelo novo se conta outra
+   coisa; o campo, o ✕ e o que o teclado está a compor ficam. Com ativo, só
+   fica se o campo com o foco for o da barra viva — é quem está a escrever.
+   Recebe: v — o #view; molde — o elemento com a vista nova, por pôr; ativo
+   (opcional) — o elemento com o foco, que tem de ser o campo da barra; cls —
+   a classe da barra.
+   Devolve: {vivo, novo} — a barra viva e a do molde —, ou null quando não há
+   uma barra para guardar. */
+function barraDaPesquisaViva(v,molde,ativo,cls){
+  const filho=(raiz)=>[].slice.call(raiz.children||[]).find(n=>n.classList&&n.classList.contains(cls));
   const vivo=filho(v),novo=filho(molde);
   if(!vivo||!novo)return null;
   const a=vivo.querySelector('input'),b=novo.querySelector('input');
   if(!a||!b||a.id!==b.id)return null;
+  if(ativo&&ativo!==a)return null;
   const fa=vivo.querySelector('.mov-filt'),fb=novo.querySelector('.mov-filt');
   if(fa&&fb&&fa.outerHTML!==fb.outerHTML)fa.replaceWith(fb);
   return {vivo:vivo,novo:novo};
+}
+/* Põe a vista nova à volta de uma barra que fica: tira do #view tudo menos a
+   barra viva, e mete os irmãos que o molde tem antes e depois da barra nova
+   nos mesmos sítios. A barra nunca sai do documento — é isso que guarda o
+   foco, o cursor e o que o teclado compõe (um nó tirado do documento perde o
+   foco, e o teclado do telemóvel partia a palavra a meio).
+   Recebe: v — o #view; molde — o elemento com a vista nova; barra — {vivo,
+   novo} (vistas.js:barraDaPesquisaViva).
+   Devolve: nada — mexe no #view. */
+function trocarAVoltaDaBarra(v,molde,barra){
+  const filhos=[].slice.call(molde.children),i=filhos.indexOf(barra.novo);
+  [].slice.call(v.children).forEach(n=>{if(n!==barra.vivo)n.remove()});
+  filhos.slice(0,i).forEach(n=>v.insertBefore(n,barra.vivo));
+  filhos.slice(i+1).forEach(n=>v.appendChild(n));
+}
+/* O render com alguém a escrever na pesquisa (ticket de QA ebd1bce7): o
+   render punha a vista inteira por innerHTML, e o campo da pesquisa saía do
+   documento a meio da palavra — quando a pesquisa ficava sem resultados nos
+   Movimentos, quando nascia um cartão numa lista, quando a sincronização
+   repintava. O teclado do telemóvel perdia a composição e voltava a meter a
+   palavra no campo novo, que fazia outra pesquisa e outro render: o texto
+   saltava e duplicava-se, e no Samsung a app congelava. Com o foco no campo
+   de uma barra da pesquisa (a .mov-barra, filha direta do #view) e a mesma
+   barra na vista nova, a barra fica e o resto troca-se à volta dela
+   (vistas.js:trocarAVoltaDaBarra). Sem o foco lá, não faz nada, e o render
+   faz o de sempre.
+   Recebe: v — o #view; html — a vista nova.
+   Devolve: true se pôs a vista à volta da barra; false se o render tem de a
+   pôr pelo innerHTML. */
+function pintarAVoltaDaPesquisa(v,html){
+  const ativo=typeof document!=='undefined'?document.activeElement:null;
+  if(!v||!ativo||ativo.tagName!=='INPUT'||!ativo.id||typeof v.contains!=='function'||!v.contains(ativo))return false;
+  const molde=document.createElement('div');molde.innerHTML=html;
+  const barra=barraDaPesquisaViva(v,molde,ativo,'mov-barra');
+  if(!barra)return false;
+  trocarAVoltaDaBarra(v,molde,barra);
+  return true;
 }
 /* ================= AS LISTAS POR ORIGEM =================
    Os Imóveis, os Inquilinos, as Visitas e os Contratos dividem-se pela origem

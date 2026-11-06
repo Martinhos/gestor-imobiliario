@@ -1016,11 +1016,14 @@ Uma via parcial refaz a vista a partir de um molde, e o molde tem de ser o
 que o render poria — com a casca que ele põe à frente de cada vista: os
 separadores da área (navegacao.js:abasDaArea) — e é dali que o
 navegacao.js:abasAssentar os leva para a casa deles, por cima do #view. Sem
-ela, a primeira tecla da pesquisa levava os separadores do telemóvel. Nos Movimentos o caminho curto guarda ainda dois
-nós da moldura de uma pintura para a seguinte
-(lista-movimentos.js:txGuardarNo): o campo da pesquisa, que não perde o foco
-nem o que o teclado estava a compor, e o painel dos filtros, que não volta
-ao topo a cada escolha e se repinta por dentro.
+ela, a primeira tecla da pesquisa levava os separadores do telemóvel. Nos
+Movimentos o caminho curto deixa a barra da pesquisa no documento
+(vistas.js:barraDaPesquisaViva) — a moldura nova entra à volta dela, e o
+campo não perde o foco nem o que o teclado estava a compor — e guarda o
+painel dos filtros (lista-movimentos.js:txGuardarNo), que não volta ao topo a
+cada escolha e se repinta por dentro. A barra nunca vai para o molde: um
+campo que sai do documento, nem que seja por um instante, perde a
+composição do teclado.
 
 Quem migrar a vista seguinte tem três coisas a respeitar: a chave é o id
 do registo e vive num data-chave que o reconciliar escreve; quem refaz
@@ -1200,8 +1203,12 @@ a barra fica no documento (vistas.js:lfBarraViva) — o resto troca-se à volta
 dela e só o funil se refaz, se mudou —, e quem escreve não perde o foco, o
 cursor nem o que o teclado compunha: um nó que sai do documento perde o
 foco, e o teclado do telemóvel fechava-se a meio de uma palavra. Quando a
-via parcial desiste (nasce um cartão), o render recria o campo e o lfSearch
-devolve-lhe o foco. Ao teclado, o funil abre e fecha o painel com o foco a
+via parcial desiste (nasce um cartão, a lista fica sem resultados) e quando
+outra coisa repinta (a sincronização), o render também não tira do
+documento a barra onde se está a escrever: com o foco no campo de uma
+.mov-barra, a vista nova entra à volta dela (vistas.js:pintarAVoltaDaPesquisa,
+vistas.js:trocarAVoltaDaBarra). Sem o foco lá, o render pinta como sempre.
+Ao teclado, o funil abre e fecha o painel com o foco a
 ficar nele, e o «Fechar» devolve-o ao funil (vistas.js:lfFocarFunil);
 escolher num seletor deixa o foco no seletor refeito (vistas.js:lfReporFoco);
 o «Limpar» do painel, que some, passa o foco ao «Fechar». O Enter na

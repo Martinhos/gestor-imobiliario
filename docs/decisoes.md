@@ -86,6 +86,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-03 · Abrir a app começa na visão geral; recarregar fica onde estavas
 - 2026-11-03 · A FINE mista com «base» e «contratada», e o visto do menu de escolha
 - 2026-11-06 · Os filtros mostram o que dizem, o menu fecha ao toque, e a redução de spread tem prazo
+- 2026-11-06 · A pesquisa não sai do documento enquanto se escreve
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3222,3 +3223,24 @@ código novo (o valor é o loanCalc, que já segue o relógio); os prazos ganhar
 o aviso do fim da redução, a 60 dias. A FINE não a lê. Uma app anterior a esta
 versão faria dela um «Outro produto» sem prazo ao gravar, e por isso a versão
 mínima sobe para a 58.
+
+## 2026-11-06 · A pesquisa não sai do documento enquanto se escreve
+
+Escrever na pesquisa dos Movimentos no telemóvel fazia o texto saltar e
+duplicar-se, e no Samsung a app congelava (ticket de QA ebd1bce7, na v58, mas
+o defeito vinha de antes). A via parcial dos Movimentos guardava o campo da
+pesquisa levando-o para o molde, fora do documento, e repondo-o; e quando a
+pesquisa ficava sem resultados, ou numa lista quando nascia um cartão, o
+render punha a vista inteira por innerHTML. Em qualquer dos casos o campo
+saía do documento a meio da palavra: o teclado perdia a composição, o campo
+herdava-a, o teclado voltava a metê-la e a pesquisa corria outra vez.
+Medido com composição pelo CDP no 384×785: escrever «renda» devagar dava 10
+render, 12 perdas de foco e o valor «rrerenrendrendarendaq…».
+
+Ficou uma regra só, no render e nas vias parciais: com o foco no campo de
+uma barra da pesquisa, a barra fica no documento e o resto troca-se à volta
+dela (vistas.js:pintarAVoltaDaPesquisa, vistas.js:trocarAVoltaDaBarra). Sem o
+foco lá, o render pinta como sempre — guardar a barra sempre deixaria um
+valor posto por código a perder para o do campo. Tornar a via parcial dos
+Movimentos capaz do vazio teria poupado o render inteiro, mas não protegia a
+sincronização nem as listas; ficou como melhoria possível.

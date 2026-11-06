@@ -956,17 +956,25 @@ function refrescarMovimentos(){
   /* A pesquisa fica o MESMO nó, com o foco e o que o teclado estava a compor;
      o painel dos filtros também, para não voltar ao topo a cada escolha — e
      repinta-se por dentro. */
-  txGuardarNo(v,molde,'.mov-busca');
+  /* a barra da pesquisa fica no documento (vistas.js:barraDaPesquisaViva), e
+     a moldura nova entra à volta dela: guardá-la pelo txGuardarNo levava-a
+     para o molde, fora do documento, e o campo perdia o foco e a palavra que
+     o teclado estava a compor a cada tecla com resultados (ticket de QA
+     ebd1bce7). Só sem a mesma barra no molde se guarda o campo como antes. */
+  const barra=barraDaPesquisaViva(v,molde,null,'mov-barra');
+  if(!barra)txGuardarNo(v,molde,'.mov-busca');
   const painel=txGuardarNo(v,molde,'.mov-fwrap');
   if(painel){const fp=painel.querySelector('.fpanel'),c=painel.querySelector('.mov-filtros-card');
     if(fp)fp.classList.toggle('on',!!txFiltAberto);
     if(c&&txFiltAberto)c.innerHTML=txFilterBody()}
   /* a moldura e tudo o que vem antes da lista: troca-se de uma vez, que e
      barato, e a lista fica de fora para ser comparada peca a peca */
-  for(let n=antigaLista.previousElementSibling;n;){const p=n.previousElementSibling;n.remove();n=p}
+  for(let n=antigaLista.previousElementSibling;n;){const p=n.previousElementSibling;if(!barra||n!==barra.vivo)n.remove();n=p}
   const nova=[];
   for(let n=novaLista.previousElementSibling;n;n=n.previousElementSibling)nova.unshift(n);
-  nova.forEach(n=>v.insertBefore(n,antigaLista));
+  /* com a barra viva: o que vem antes da nova vai antes da viva, o resto antes da lista */
+  const ib=barra?nova.indexOf(barra.novo):-1;
+  nova.forEach((n,k)=>{if(k!==ib)v.insertBefore(n,ib>-1&&k<ib?barra.vivo:antigaLista)});
   const r=pintarListaTx();
   tornarFocavel(v);
   marcarDatasVazias(v);

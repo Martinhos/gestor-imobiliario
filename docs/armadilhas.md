@@ -434,3 +434,16 @@ controlo. Foi o menu de escolha que piscava e voltava a abrir
 (componentes.js:selPick, ticket de QA b0c85090). Uma ação que trata o clique
 por inteiro faz preventDefault. O Chromium do percurso já não o mostra: para
 o ver, lança-se com `--disable-blink-features=LabelInteractiveContentCheckBeforeHandler`.
+
+## Um campo que sai do documento perde a composição do teclado
+
+No telemóvel, o teclado compõe a palavra (as sugestões) numa região do campo.
+Se o campo sai do documento, nem que seja por um instante — a vista posta
+por innerHTML, ou o nó levado para um molde e reposto —, a composição
+parte-se: o campo novo herda a palavra, o teclado volta a metê-la, e cada
+pesquisa refaz o ecrã outra vez. O texto salta e duplica-se, e no Samsung a
+app congelava (ticket de QA ebd1bce7). Numa repintura com alguém a escrever,
+o campo fica onde está e o resto troca-se à volta dele
+(vistas.js:trocarAVoltaDaBarra). Num browser sem cabeça vê-se escrevendo por
+composição pelo CDP (Input.imeSetComposition), devagar: o valor acaba com a
+palavra repetida («rrerenrend…»).
