@@ -22,7 +22,7 @@ jobs:
     steps:
       # histórico todo: o guarda da chegada compara esta árvore com a da
       # publicação anterior, e um checkout raso não tem com o que comparar
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

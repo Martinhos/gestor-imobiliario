@@ -45,7 +45,7 @@ jobs:
     steps:
       # histórico todo, e as etiquetas: o guarda da chegada compara esta
       # árvore com a da publicação anterior (a etiqueta «publicado»)
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -106,7 +106,7 @@ jobs:
       # dentro; o de dev leva dev.rendorium.com, chama-se «Rendorium DEV» e
       # instala-se ao lado do de produção. Fica aqui, antes de «Esperar pelos
       # testes», de propósito: é só do runner, e compila enquanto eles correm.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
