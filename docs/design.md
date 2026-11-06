@@ -1912,7 +1912,14 @@ que se vê), o segurar que seleciona vários — só onde o há
 (cloud/selecao-listas.js:TABS_SEL) —, por onde se cria e os filtros, e deixam
 uma dica. O caminho de criar muda com o ecrã: o + da barra de baixo no
 telemóvel, o botão do cabeçalho no computador (apresentacao-casas.js:aprCLargo,
-apresentacao-casas.js:aprCNovo). O portefólio delas continua o do kit
+apresentacao-casas.js:aprCNovo). O mesmo vale para a hipoteca nova dos
+Créditos (apresentacao-dinheiro.js:aprDCreditosNova): no telemóvel o
+«Criar» do + atrás, com a «Hipoteca» à cabeça, e à frente a escolha do
+imóvel que o substitui; no computador o cabeçalho e a escolha por baixo; sem
+imóvel nenhum, o texto manda criar primeiro o imóvel. E para os modelos
+(apresentacao-dinheiro.js:aprDPlaneadosModelosTexto): a secção dos Modelos
+não tem botão, e um modelo novo nasce no + (no computador, no «Criar» da
+barra lateral). O portefólio delas continua o do kit
 (apresentacao-casas.js:aprCExemplo).
 
 As do Dinheiro e da Agenda (cloud/apresentacao-dinheiro.js) ensinam um assunto
@@ -3158,7 +3165,10 @@ substitui a folha, como a da hipoteca, para a folha não crescer. A ação do
 contexto vem primeiro (acessos.js:acaoDoSeparador): na Visão geral e nos
 Movimentos são os tipos; nos outros ecrãs, a linha da ação do ecrã sai do
 resto e sobe para o topo da folha, por cima dos tipos, marcada «neste ecrã».
-Nos Grupos é «Novo grupo de <tipo à vista>», direto, sem a escolha
+Com ela sobem os outros registos desse ecrã, marcados também
+(acessos.js:outrasDoSeparador): nos Planeados, o «Modelo», logo a seguir ao
+«Movimento recorrente» — a secção dos Modelos não tem botão de criar ao lado
+do título. Nos Grupos é «Novo grupo de <tipo à vista>», direto, sem a escolha
 (acessos.js:acaoNaturalDoEcra), e o «Grupo» fica em baixo para os outros
 tipos. Com uma só ação corre-a logo (um cargo que só vê só tem o «Grupo»,
 e o + abre-lhe a escolha do tipo); sem nenhuma não há botão. Cada opção corre pela gramática das ações (navegacao.js:criarEscolha,
@@ -3974,21 +3984,22 @@ Créditos, o imóvel tem os imóveis com hipotecas, a linha e os grupos com
 hipotecas, e um grupo escolhido mostra as hipotecas dos imóveis dele
 (creditos.js:vCredits). O estado (planeados.js:REC_ESTADOS, aplicado pelo
 planeados.js:recChip — o mesmo lf('lrec').st do seletor do painel) tem
-Automáticos, Criados à mão, Silenciados, Por confirmar e Em dia, cada um com
+Automáticos, Personalizados, Silenciados, Por confirmar e Em dia, cada um com
 quantos há pelos olhos dos outros filtros; ligado diz o rótulo curto. A
 ordenação diz a de sempre, a «Próxima data». Cada linha da lista (planeados.js:recLinha) diz
 a periodicidade com o dia («mensal, dia 5», planeados.js:recRepete) e a
 próxima data; o tipo, o imóvel e a categoria; o selo da origem e o do
 estado; e o valor. O selo da origem (planeados.js:recOrigem) é roxo «da
-hipoteca», cobalto «do contrato», e cinzento «do imóvel» e «à mão». Não há
-FAB nem ⋮: o «Novo recorrente» está no cabeçalho e no +, as opções no ⋯ da
-ficha, e o toque longo seleciona vários (ver a seleção dos Planeados, em
-«Os Movimentos»).
+hipoteca», cobalto «do contrato», e cinzento «do imóvel» e «personalizado»
+(o que a pessoa criou; o filtro guarda-o como 'manual'). Não há FAB nem ⋮:
+o «Novo recorrente» está no cabeçalho e no +, o modelo novo no + (à cabeça,
+nos Planeados) e no vazio «Sem modelos», as opções no ⋯ da ficha, e o toque
+longo seleciona vários (ver a seleção dos Planeados, em «Os Movimentos»).
 
 No dedo, os chips dos Modelos têm 44px (estilos.css:.plan-modelo), sem o
 ::after das irmãs: a fila rola de lado e cortava-o. Com filtros, os vazios
 são o vazio dos filtros, com «Limpar filtros» (vistas.js:vazioFiltro), na
-lista e nos Modelos; e com um estado que não o «Criados à mão» —
+lista e nos Modelos; e com um estado que não o «Personalizados» —
 Automáticos, Silenciados, Por confirmar ou Em dia — a secção dos Modelos
 sai, porque um modelo não tem estado.
 
@@ -4061,7 +4072,9 @@ taxa por extenso, o fim da taxa fixa quando cai dentro da janela dos prazos
 depois da fase fixa (creditos.js:credDepois), o capital em dívida com as
 prestações por pagar, a barra do capital do início já pago e, no telemóvel,
 Pagamento e Plano. A coluna é a mesma em todos os ecrãs: o título
-«Ativas» (no computador sem o «Nova hipoteca», que está no cabeçalho), as
+«Ativas», sem botão ao lado — criar uma hipoteca é o + (com a «Hipoteca» à
+cabeça, «neste ecrã») e, no computador, o «Nova hipoteca» do cabeçalho; só
+o vazio «Sem hipotecas» tem o seu, como os vazios dos outros separadores —, as
 ativas e o botão «Liquidadas · N», que as abre por baixo
 (creditos.js:credPagasAlternar; estilos.css:.cred-corpo.abertas). Com o
 estado «Liquidadas», só as pagas, abertas, com o título «Liquidadas». No
@@ -6872,9 +6885,24 @@ Alturas em unidades de ecrã escrevem-se em vh e logo a seguir em dvh
 barras do browser à mostra, vh é maior do que o que se vê e o topo da
 folha saía por cima. A área segura entra por --inset-* (estilos.css::root,
 estilos.css:.brand, estilos.css:header.top, estilos.css:.wrap,
-estilos.css:.fab, estilos.css:.tabbar; tema.js:fitInsets). Os corpos
-que rolam levam overscroll-behavior:contain (estilos.css:.fpanel>.card;
-estilos.css:.sheet, o .body) e a página tranca por baixo de uma janela ou
+estilos.css:.fab, estilos.css:.tabbar; tema.js:fitInsets). O que rola
+por cima da página, ou a cobre, contém o fim: chegar ao fim e continuar não
+rola o que está por trás. Levam overscroll-behavior:contain a lista de um
+sel() e o menu ⋯ (estilos.css:.selpop, estilos.css:.menupop, que rola
+quando o componentes.js:ajustarPop o encolhe), o painel dos filtros
+(estilos.css:.fpanel>.card), o corpo de uma janela (estilos.css:.sheet, o
+.body), a gaveta e a barra lateral (estilos.css:nav), e as camadas de ecrã
+inteiro (estilos.css:.email-portao; o cssText de ajuda.js:showTermsGate,
+ajuda.js:showLegalGate, novidades.js:gateAtualizar,
+novidades.js:ecraAtualizar, entrada.js:showAuth e do CW.readDoc da Ajuda).
+Num Chrome anterior ao 144 o contain numa caixa que não rola não conta (o
+Samsung Internet 30 é um 143): a lista e o menu sem nada para rolar não
+deixam o dedo arrastar a partir das opções (estilos.css:.selopt, num
+@container scroll-state, atrás de @supports). As caixas em linha na página
+deixam o fim seguir para a página, de propósito, porque contê-las prendia o
+dedo a quem quer descer (estilos.css:.cred-plano, estilos.css:.pnm); o que
+rola de lado contém o fim na horizontal, como a fila das abas
+(testes/rolagem-contida.test.js). A página tranca por baixo de uma janela ou
 da gaveta, repondo a posição ao destrancar (vistas.js:lockPage).
 
 ## O que não se faz

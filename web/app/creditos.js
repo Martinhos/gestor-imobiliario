@@ -280,9 +280,12 @@ function credPagasAlternar(){credPagas=!credPagas;render()}
    e do imóvel, quando há mais de um com hipotecas, e a ordenação no ecrã
    largo —; por baixo, as hipotecas em cartões: as ativas e, por um botão, as
    liquidadas, em todos os ecrãs; no computador a lista fica à esquerda e a
-   hipoteca escolhida aberta à direita, com o plano. «Nova hipoteca» está no
-   cabeçalho do computador; no telemóvel, ao lado do título das ativas, e no
-   vazio.
+   hipoteca escolhida aberta à direita, com o plano. Criar uma hipoteca é,
+   como nos outros separadores, a ação do ecrã: a «Hipoteca» à cabeça do +
+   da barra de baixo, «neste ecrã» (acessos.js:acaoDoSeparador), e o «Nova
+   hipoteca» do cabeçalho do computador (navegacao.js:pintarAcaoDoCabecalho).
+   Dentro da página só o vazio tem o botão; o título da coluna («Ativas» ou
+   «Liquidadas») fica sem ele, em todos os ecrãs.
    Devolve: o HTML da vista (texto). */
 function vCredits(){
   const K='lcred',s=lf(K);
@@ -299,7 +302,7 @@ function vCredits(){
     {divida:x=>x.l.outstanding,prestacao:x=>viva(x)?loanCalc(x.l).total:0,nome:x=>loanName(x.l),imovel:x=>x.p.name});
   /* uma hipoteca grava-se na ficha do imóvel: sem «Editar a ficha» em imóvel
      nenhum (o Contabilista de fábrica vê os créditos e não os edita), o botão
-     — o do título e o do vazio — só levava a uma recusa no Guardar */
+     do vazio só levava a uma recusa no Guardar */
   const adiciona=casasComo('house.edit').length;
   /* sem imóveis, o botão do canto só dava um aviso a dizer que faltava um
      imóvel: um caminho que acaba num aviso não é um caminho. E sem hipotecas
@@ -331,8 +334,7 @@ function vCredits(){
   const x=aVista.find(y=>credChave(y.p,y.l)===credSel)||aVista[0]||null;
   const sel=x?credChave(x.p,x.l):'';
   const emLista=(id,xs)=>listaViva(id,xs.map(y=>({chave:'mort:'+y.p.id+':'+y.l.id,html:credCartao(y,sel)})));
-  const novo=adiciona?'<button type="button" class="btn sm ghost plan-novo" data-toca="camada" data-click="newMort()">Nova hipoteca</button>':'';
-  const col=`<div class="plan-cab cred-cab"><h2>${act.length?'Ativas':'Liquidadas'}</h2>${novo}</div>`
+  const col=`<div class="plan-cab cred-cab"><h2>${act.length?'Ativas':'Liquidadas'}</h2></div>`
     +(act.length?`<div class="cred-ativas">${emLista('creditos-ativos',act)}</div>`:'')
     +(paid.length&&act.length?`<button type="button" class="btn cred-liq" aria-expanded="${verPagas?'true':'false'}" data-toca="vista" data-click="credPagasAlternar()"><span>Liquidadas <span class="small">· ${paid.length}</span></span><span class="cred-liq-chev${verPagas?' aberto':''}">${ic('chevD',20)}</span></button>`:'')
     +(paid.length?`<div class="cred-pagas">${emLista('creditos-pagos',paid)}<p class="hint">Se editares um pagamento e a dívida voltar a subir, o crédito volta para as ativas.</p></div>`:'');

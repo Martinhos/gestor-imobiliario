@@ -1079,12 +1079,14 @@ function recSelo(r){
   return recIsLate(r)?'<span class="badge red">Em atraso</span>':'<span class="badge">Por confirmar</span>';
 }
 /* O selo de onde vem um planeado: da hipoteca a roxo, do contrato a cobalto,
-   do imóvel (o IMI, o condomínio e o seguro da ficha) e à mão a cinzento.
+   do imóvel (o IMI, o condomínio e o seguro da ficha) e, o que a pessoa
+   criou, «personalizado» a cinzento (dizia «à mão», que não soava bem:
+   ticket de QA 7df0696b).
    Recebe: r — o planeado ({auto, tx}).
    Devolve: o HTML do selo (texto). */
 function recOrigem(r){
   const t=(r||{}).tx||{};
-  if(!r||!r.auto)return '<span class="badge grey">à mão</span>';
+  if(!r||!r.auto)return '<span class="badge grey">personalizado</span>';
   if(t.loanId)return '<span class="badge loan">da hipoteca</span>';
   if(t.propRec)return '<span class="badge grey">do imóvel</span>';
   return '<span class="badge">do contrato</span>';
@@ -1294,8 +1296,9 @@ function recRetroAgoraNao(id){
 }
 /* Os estados do filtro dos Planeados (o «st» do lf('lrec')): o valor, o que o
    chip ligado diz e o rótulo da escolha. Primeiro os quatro que eram chips
-   (Todos, Automáticos, Criados à mão, Silenciados), depois os do dia. */
-const REC_ESTADOS=[['','Todos','Todos os estados'],['auto','Automáticos','Automáticos (contratos, hipotecas e imóveis)'],['manual','Criados à mão','Criados à mão'],
+   (Todos, Automáticos, Personalizados, Silenciados), depois os do dia. Os
+   personalizados guardam o valor 'manual' de sempre (o filtro guardado). */
+const REC_ESTADOS=[['','Todos','Todos os estados'],['auto','Automáticos','Automáticos (contratos, hipotecas e imóveis)'],['manual','Personalizados','Personalizados'],
   ['muted','Silenciados','Silenciados'],['pend','Por confirmar','Por confirmar'],['ok','Em dia','Em dia']];
 /* O estado dos Planeados mudou — o chip do estado ou o seletor do painel
    (vistas.js:lfCabeca), que são o mesmo filtro lf('lrec').st. Um valor que
@@ -1350,14 +1353,15 @@ function recGrupoTemPlaneados(g){
 /* A página dos Planeados (o canvas M-Planeados): a faixa de quem vem de trás,
    o cartão dos por confirmar e, por cima do que filtram, os filtros dos
    Movimentos (vistas.js:lfCabeca) — a pesquisa à vista com o funil do painel
-   completo e os chips do estado (Automáticos, Criados à mão, Silenciados, Por
-   confirmar, Em dia, cada um com quantos há: planeados.js:recChip), do tipo e,
-   no ecrã largo, do imóvel —; depois a lista dos planeados num cartão e os
-   modelos em chips com o valor. O «Novo recorrente» vive no cabeçalho
-   (navegacao.js:#hdrAcao) e no +; os vazios têm o seu botão, e com filtros
-   são o vazio dos filtros (vistas.js:vazioFiltro, com «Limpar filtros»). Com
-   um estado que não o «Criados à mão», os Modelos saem: um modelo não tem
-   estado.
+   completo e os chips do estado (Automáticos, Personalizados, Silenciados,
+   Por confirmar, Em dia, cada um com quantos há: planeados.js:recChip), do
+   tipo e, no ecrã largo, do imóvel —; depois a lista dos planeados num cartão
+   e os modelos em chips com o valor. O «Novo recorrente» vive no cabeçalho
+   (navegacao.js:#hdrAcao) e no +, e o modelo novo no + (à cabeça, aqui:
+   acessos.js:outrasDoSeparador) — a secção dos Modelos já não tem botão ao
+   lado do título; os vazios têm o seu botão, e com filtros são o vazio dos
+   filtros (vistas.js:vazioFiltro, com «Limpar filtros»). Com um estado que
+   não o «Personalizados», os Modelos saem: um modelo não tem estado.
    Devolve: o HTML da página (texto). */
 function vRecurring(){
   const K='lrec',s=lf(K);
@@ -1396,12 +1400,12 @@ function vRecurring(){
     :filtrado?vazioFiltro():`<div class="empty u-p-24px"><b>Sem movimentos recorrentes</b>Repete-se sozinho e pede confirmação todos os meses.${recOrigensFrase()}${adiciona?saida('Novo movimento recorrente','newRec()','camada'):''}</div>`;
   /* um modelo não tem data nem origem: com um estado escolhido (Automáticos,
      Silenciados, Por confirmar, Em dia) a secção sai, em vez de dizer sempre
-     que não há nada; «Criados à mão» deixa-os, que são todos à mão */
+     que não há nada; «Personalizados» deixa-os, que são todos da pessoa */
   if(s.st&&s.st!=='manual')return recRetroFaixa()+pendingCard(true)+head+recs;
   const tpls=tp.length?listaViva('modelos',tp.map(x=>({chave:'tpl:'+x.id,html:`<button type="button" class="chip plan-modelo" data-lp="tpl:${esc(x.id)}" data-fk="tpl:${esc(x.id)}" data-toca="camada" data-click="tplView('${jsq(x.id)}')"><span class="plan-modelo-nome">${esc(x.name)}</span>${Number(x.tx.amount)>0?` <span class="n">${euro2(x.tx.amount)}</span>`:''}</button>`})),'chips-fila plan-modelos')
     :filtrado?vazioFiltro():`<div class="empty u-p-24px"><b>Sem modelos</b>Um modelo é um movimento guardado para copiar à mão quando precisares.${adiciona?saida('Novo modelo','newTpl()','camada'):''}</div>`;
   return recRetroFaixa()+pendingCard(true)+head+recs
-    +`<div class="plan-cab"><h2>Modelos</h2>${tp.length&&adiciona?'<button type="button" class="btn sm ghost plan-novo" data-toca="camada" data-click="newTpl()">Novo modelo</button>':''}</div>${tpls}`;
+    +`<div class="plan-cab"><h2>Modelos</h2></div>${tpls}`;
 }
 /* secção do formulário de um planeado: a periodicidade, a janela e o fim — os
    campos do planeado, que vivem no modo do formulário (movimento.js:txModo) e

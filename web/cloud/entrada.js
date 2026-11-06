@@ -261,7 +261,7 @@ function showAuth(msg, nota) {
   if (!authEl) {
     authEl = document.createElement('div');
     authEl.id = 'cwAuth';
-    authEl.style.cssText = 'position:fixed;inset:0;z-index:200;background:var(--bg);overflow:auto;' +
+    authEl.style.cssText = 'position:fixed;inset:0;z-index:200;background:var(--bg);overflow:auto;overscroll-behavior:contain;' +
       'display:flex;justify-content:center';
     document.body.appendChild(authEl);
   }
@@ -606,7 +606,7 @@ function fecharRepor() {
   setTimeout(function () {
     var el = document.createElement('div');
     el.id = 'cwRepor';
-    el.style.cssText = 'position:fixed;inset:0;z-index:230;background:var(--bg);overflow:auto;' +
+    el.style.cssText = 'position:fixed;inset:0;z-index:230;background:var(--bg);overflow:auto;overscroll-behavior:contain;' +
       'display:flex;justify-content:center;padding:22px';
     el.innerHTML =
       '<div class="card u-maxw-420px u-w-100pc u-p-24px u-m-auto">' +

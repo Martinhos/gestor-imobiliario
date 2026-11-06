@@ -193,7 +193,7 @@ describe('os Planeados', () => {
     const h = app.vRecurring();
     assert.doesNotMatch(h, /plan-chips|recChip\(/, 'a fila antiga saiu');
     assert.match(h, /aria-label="Filtros dos planeados"><span class="mov-chip"><div class="sel" id="sel_lfc_lrec_st">/);
-    assert.match(h, /id="pop_lfc_lrec_st"[\s\S]*?<span>Todos os estados · 2<\/span>[\s\S]*?<span>Automáticos \(contratos, hipotecas e imóveis\) · 1<\/span>[\s\S]*?<span>Criados à mão · 1<\/span>[\s\S]*?<span>Silenciados · 1<\/span>[\s\S]*?<span>Por confirmar · 0<\/span>[\s\S]*?<span>Em dia · 2<\/span>/);
+    assert.match(h, /id="pop_lfc_lrec_st"[\s\S]*?<span>Todos os estados · 2<\/span>[\s\S]*?<span>Automáticos \(contratos, hipotecas e imóveis\) · 1<\/span>[\s\S]*?<span>Personalizados · 1<\/span>[\s\S]*?<span>Silenciados · 1<\/span>[\s\S]*?<span>Por confirmar · 0<\/span>[\s\S]*?<span>Em dia · 2<\/span>/);
     assert.match(h, /<span class="mov-chip"><div class="sel" id="sel_lfc_lrec_k">/, 'o tipo');
     assert.match(h, /<span class="mov-chip mov-so-largo"><div class="sel" id="sel_lfc_lrec_p">/, 'o imóvel, no ecrã largo');
     let pintou = 0;
@@ -260,7 +260,8 @@ describe('os Créditos', () => {
     assert.match(css, /\.cred-corpo\.abertas \.cred-pagas\{display:flex;flex-direction:column;gap:12px\}/);
     const i = css.indexOf('/* ===== ajustes-v40b: 1.2');
     const sec = css.slice(i, css.indexOf('/* ===== fim: ajustes-v40b 1.2', i));
-    assert.match(sec, /@media\(min-width:901px\)\{\s*\.cred-corpo>\.cred-col>\.plan-cab\{display:flex\}\s*\.cred-corpo>\.cred-col>\.btn\.cred-liq\{display:flex\}\s*\.cred-corpo \.cred-cab>\.btn\.plan-novo\{display:none\}/);
+    assert.match(sec, /@media\(min-width:901px\)\{\s*\.cred-corpo>\.cred-col>\.plan-cab\{display:flex\}\s*\.cred-corpo>\.cred-col>\.btn\.cred-liq\{display:flex\}\s*\}/);
+    assert.doesNotMatch(css, /plan-novo/, 'o título das secções não tem botão de criar: a regra que o escondia saiu com ele');
     assert.match(sec, /@media\(pointer:coarse\)\{\.lfm-chip-abre \.mov-chip-txt::after\{content:"";position:absolute;inset:-5px 0\}\}/, 'o chip que abre o painel tem 44px no dedo');
   });
 });

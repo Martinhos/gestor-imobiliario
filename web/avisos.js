@@ -27,6 +27,35 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 60,
+    data: '2026-11-06',
+    titulo: 'Criar é no +',
+    seccoes: [
+      {
+        titulo: 'Créditos',
+        afeta: ['creditos'],
+        itens: [
+          'O «Nova hipoteca» saiu de ao lado das hipotecas ativas. Uma hipoteca nova cria-se no + da barra de baixo, onde vem à cabeça, ou, no computador, no botão do cabeçalho.',
+        ],
+      },
+      {
+        titulo: 'Planeados',
+        afeta: ['movimentos'],
+        itens: [
+          'Os planeados que crias têm o selo «personalizado», e o filtro do estado chama-lhes «Personalizados».',
+          'O «Novo modelo» saiu de ao lado dos Modelos. Nos Planeados, o + põe o «Modelo» à cabeça, logo a seguir ao «Movimento recorrente».',
+        ],
+      },
+      {
+        titulo: 'A aplicação em geral',
+        afeta: ['app'],
+        itens: [
+          'Uma lista que rola por cima da página, como as categorias nos filtros dos Movimentos, já não faz rolar a página por baixo quando chega ao fim. O mesmo nos menus, no menu lateral e nos ecrãs que cobrem a app.',
+        ],
+      },
+    ],
+  },
+  {
     v: 59,
     data: '2026-11-06',
     titulo: 'A pesquisa deixa-te escrever',

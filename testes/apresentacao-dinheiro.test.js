@@ -132,7 +132,8 @@ describe('os textos', () => {
     assert.match(primeiro('transactions'), /<b>Dinheiro → Movimentos<\/b>/);
     assert.match(primeiro('credits'), /<b>Dinheiro → Créditos<\/b>/);
     assert.match(primeiro('calendar'), /<b>Agenda → Calendário<\/b>/);
-    assert.ok(app.aprImagensDe('recurring').some((im) => /<b>Criar → Movimento recorrente<\/b>/.test(im.texto)));
+    // o Criar do + (e da barra lateral): nos Planeados, o recorrente e o modelo à cabeça
+    assert.ok(app.aprImagensDe('recurring').some((im) => /<b>Modelo<\/b> vem à cabeça, logo a seguir ao <b>Movimento recorrente<\/b>/.test(im.texto)));
   });
 
   test('cada nome a negrito nos textos existe mesmo na app (um botão, um cartão, um caminho)', () => {
@@ -146,8 +147,8 @@ describe('os textos', () => {
       assert.ok(codigo.includes(n), '«' + n + '» existe no código da app');
     }
     // e os que as maquetes desenham como botões
-    for (const b of ['Confirmar', 'Rever', 'Agora não', 'Registar os ', 'Usar modelo', 'Novo modelo', 'Pagamento', 'Plano', 'Nova hipoteca',
-      'Marcar visita', 'Recorrente', 'Hipoteca de que imóvel?', 'A partir de um modelo', 'Transferência entre proprietários', 'Nada marcado para este dia.']) {
+    for (const b of ['Confirmar', 'Rever', 'Agora não', 'Registar os ', 'Usar modelo', 'Pagamento', 'Plano', 'Nova hipoteca',
+      'Marcar visita', 'Recorrente', 'Hipoteca de que imóvel?', 'neste ecrã', 'A partir de um modelo', 'Transferência entre proprietários', 'Nada marcado para este dia.']) {
       assert.ok(codigo.includes(b), '«' + b + '» existe no código da app');
     }
   });
@@ -171,6 +172,17 @@ describe('quem só colabora e os serviços desligados', () => {
     assert.doesNotMatch(im[1].html, /Novo modelo/);
     soColaboro(['tx.view', 'tx.add', 'rec.view', 'rec.add']);
     assert.equal(app.aprImagensDe('recurring').length, 4, 'quem confirma vê as quatro');
+  });
+
+  test('os Modelos: a secção só com o título, sem o «Novo modelo»; um modelo novo nasce no + no telemóvel e no «Criar» da barra lateral no computador', () => {
+    montar();
+    const modelos = () => app.aprImagensDe('recurring').find((x) => x.titulo === 'Os modelos, no fim da página');
+    assert.match(modelos().html, /<div class="apr-d-cab"><b>Modelos<\/b><\/div>/);
+    assert.doesNotMatch(modelos().html, /Novo modelo/);
+    assert.match(modelos().texto, /Um modelo novo nasce no <b>\+<\/b> da barra de baixo: nos Planeados, o <b>Modelo<\/b> vem à cabeça, logo a seguir ao <b>Movimento recorrente<\/b>\.$/);
+    app.matchMedia = (q) => ({ matches: /min-width:\s*901px/.test(q), addEventListener() {}, addListener() {} });
+    assert.match(modelos().texto, /Um modelo novo nasce no <b>Criar<\/b>, na barra lateral: nos Planeados/);
+    assert.doesNotMatch(modelos().html, /Novo modelo/);
   });
 
   test('nos Créditos, sem editar a ficha do imóvel não há hipoteca nova nem Pagamento', () => {
@@ -231,10 +243,11 @@ describe('os números e as datas', () => {
     assert.match(app.aprImagensDe('transactions')[0].html, new RegExp(app.aprDMesCurto(-1)));
   });
 
-  test('os Planeados: as quatro origens na lista, e por confirmar a renda em atraso do contrato e a limpeza à mão', () => {
+  test('os Planeados: as quatro origens na lista, e por confirmar a renda em atraso do contrato e a limpeza personalizada', () => {
     montar();
     const lista = app.aprImagensDe('recurring').find((x) => x.titulo === 'Cada linha diz de onde vem').html;
-    for (const o of ['do contrato', 'da hipoteca', 'do imóvel', 'à mão']) assert.ok(lista.includes(o), o);
+    for (const o of ['do contrato', 'da hipoteca', 'do imóvel', 'personalizado']) assert.ok(lista.includes(o), o);
+    assert.ok(!lista.includes('à mão'), 'o selo do que a pessoa cria é «personalizado», como nos Planeados');
     igual(app.aprDPendentes().map((r) => r.nome).sort(), ['Limpeza das escadas', 'Renda Tomás Matos · Quarto 2']);
     const hoje = app.today();
     for (const r of app.aprDPlaneados()) {

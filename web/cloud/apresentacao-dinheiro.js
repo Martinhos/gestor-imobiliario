@@ -426,12 +426,13 @@ function aprDRetro(alvo) {
     '<span class="apr-d-retro-acoes">' + aprBotao('Registar os ' + datas.length, { primario: true, pequeno: true, alvo: alvo }) + aprBotao('Agora não', { pequeno: true }) + '</span></div>';
 }
 
-/* O cabeçalho de uma secção com um botão de texto à direita (o «Modelos»
-   com o «Novo modelo», o «Ativas» com o «Nova hipoteca»: os .plan-cab).
-   Recebe: titulo — o texto; botao — o rótulo do botão ('' sem botão); alvo — o botão em destaque.
+/* O cabeçalho de uma secção da página (o «Modelos» dos Planeados: o
+   .plan-cab do planeados.js:vRecurring). Sem botão ao lado: um modelo novo,
+   como uma hipoteca nova, cria-se no + e no «Criar» (acessos.js:ACOES_DE_ADICIONAR).
+   Recebe: titulo — o texto.
    Devolve: o HTML. */
-function aprDCabecaSecao(titulo, botao, alvo) {
-  return '<div class="apr-d-cab"><b>' + esc(titulo) + '</b>' + (botao ? '<span class="apr-m-botao pequeno apr-d-fantasma' + (alvo ? ' apr-alvo' : '') + '">' + esc(botao) + '</span>' : '') + '</div>';
+function aprDCabecaSecao(titulo) {
+  return '<div class="apr-d-cab"><b>' + esc(titulo) + '</b></div>';
 }
 
 /* O resumo dos Créditos no telemóvel (creditos.js:credResumo): o cartão
@@ -691,16 +692,17 @@ function aprDPlaneadosRetro() {
 }
 
 /* A lista dos planeados: as abas do Dinheiro e quatro linhas com as quatro
-   origens — o selo de onde vem (do contrato, da hipoteca, do imóvel, à
-   mão) e o do estado —, pela próxima data. Sem o ecrã à volta, sem os
-   chips e sem a linha do tipo e da categoria: as quatro têm de caber à vista.
+   origens — o selo de onde vem (do contrato, da hipoteca, do imóvel,
+   personalizado: planeados.js:recOrigem) e o do estado —, pela próxima
+   data. Sem o ecrã à volta, sem os chips e sem a linha do tipo e da
+   categoria: as quatro têm de caber à vista.
    Devolve: o HTML da imagem. */
 function aprDPlaneadosLista() {
   var ps = aprDPlaneados(), r = function (re) { return ps.filter(function (x) { return re.test(x.nome); })[0]; };
   var imi = ps.filter(function (x) { return /^IMI · T2 Paranhos/.test(x.nome); }).sort(function (a, b) { return aprDProxima(a) < aprDProxima(b) ? -1 : 1; })[0];
   var linhas = [r(/^Renda Tomás/), r(/^Limpeza/), r(/^Prestação/), imi].filter(Boolean)
     .sort(function (a, b) { return aprDProxima(a) < aprDProxima(b) ? -1 : aprDProxima(a) > aprDProxima(b) ? 1 : 0; });
-  var origem = { contrato: ['do contrato', ''], hipoteca: ['da hipoteca', 'loan'], imovel: ['do imóvel', 'grey'], mao: ['à mão', 'grey'] };
+  var origem = { contrato: ['do contrato', ''], hipoteca: ['da hipoteca', 'loan'], imovel: ['do imóvel', 'grey'], mao: ['personalizado', 'grey'] };
   return aprCena(aprColuna([aprAbas(APR_ABAS_DINHEIRO, 'Planeados'),
     aprCartao(linhas.map(function (x) {
       var prox = aprDProxima(x), passo = x.anual ? 'anual' : 'mensal, dia ' + x.dia;
@@ -710,13 +712,14 @@ function aprDPlaneadosLista() {
     }).join(''))]), { tom: 't2', arranjo: 'coluna' });
 }
 
-/* Os modelos: em cima, a secção do fim da página, com o «Novo modelo» (a
-   quem pode criar) e os modelos numa fila de chips com o valor; por baixo,
-   a ficha do primeiro, com o «Usar modelo».
+/* Os modelos: em cima, a secção do fim da página, só com o título (o
+   «Novo modelo» saiu de lá: aprDPlaneadosModelosTexto diz onde nasce um) e
+   os modelos numa fila de chips com o valor; por baixo, a ficha do
+   primeiro, com o «Usar modelo».
    Devolve: o HTML da imagem. */
 function aprDPlaneadosModelos() {
-  var ex = APR_EXEMPLO, md = ex.modelos[0], pode = aprPodeCriar('recurring', 'rec.add');
-  var secao = aprCartao(aprDCabecaSecao('Modelos', pode ? 'Novo modelo' : '') + '<div class="apr-m-chips apr-d-fila">' + ex.modelos.map(function (m, k) {
+  var ex = APR_EXEMPLO, md = ex.modelos[0];
+  var secao = aprCartao(aprDCabecaSecao('Modelos') + '<div class="apr-m-chips apr-d-fila">' + ex.modelos.map(function (m, k) {
     return '<span class="apr-m-chip' + (k === 0 ? ' apr-alvo' : '') + '">' + esc(m.nome) + (m.valor ? '<span class="apr-d-n2">' + esc(aprDinheiro(m.valor)) + '</span>' : '') + '</span>';
   }).join('') + '</div>');
   var ficha = aprDFicha(md.nome, aprLinha({ titulo: 'Montante', valor: aprDinheiro(md.valor) }) +
@@ -732,11 +735,16 @@ function aprDPlaneadosListaTexto() {
     (aprPodeCriar('recurring', 'rec.add') ? 'Toca num para a ficha, ou segura para silenciar ou apagar vários.' : 'Toca num para veres a ficha.');
 }
 
-/* O texto dos modelos: como nasce um planeado novo, só a quem o pode criar.
+/* O texto dos modelos e, só a quem os pode criar, onde nasce um modelo
+   novo, conforme o ecrã (apresentacao-casas.js:aprCLargo): no telemóvel o
+   + da barra de baixo, no computador o «Criar» da barra lateral — a mesma
+   folha (navegacao.js:abrirAdicionar), que nos Planeados põe à cabeça o
+   «Movimento recorrente» e o «Modelo».
    Devolve: o HTML (de confiança). */
 function aprDPlaneadosModelosTexto() {
   return 'No fim da página estão os <b>Modelos</b>, em chips com o valor; tocar num abre a ficha, com <b>Usar modelo</b>.' +
-    (aprPodeCriar('recurring', 'rec.add') ? ' Um planeado novo nasce em <b>Criar → Movimento recorrente</b>.' : '');
+    (aprPodeCriar('recurring', 'rec.add') ? ' Um modelo novo nasce ' + (aprCLargo() ? 'no <b>Criar</b>, na barra lateral' : 'no <b>+</b> da barra de baixo') +
+      ': nos Planeados, o <b>Modelo</b> vem à cabeça, logo a seguir ao <b>Movimento recorrente</b>.' : '');
 }
 
 registarApresentacao('recurring', {
@@ -787,18 +795,22 @@ function aprDCreditosCapital() {
   return aprCena(aprPar(ficha, frente), { tom: 't1', arranjo: 'par' });
 }
 
-/* A hipoteca nova: atrás, o título «Ativas» com o «Nova hipoteca» em
-   destaque e o cartão; à frente, a escolha do imóvel (creditos.js:newMort),
-   com quantas hipotecas cada um já tem.
+/* A hipoteca nova, por onde se cria em todos os separadores (a página dos
+   Créditos não tem botão fora do vazio: creditos.js:vCredits): no
+   telemóvel, atrás, a folha «Criar» do + com a «Hipoteca» à cabeça, «neste
+   ecrã» (acessos.js:acaoDoSeparador); no computador, o «Nova hipoteca» do
+   cabeçalho (navegacao.js:ROTULO_ACAO). À frente, ou por baixo, a escolha
+   do imóvel que os dois abrem (creditos.js:newMort), com quantas hipotecas
+   cada um já tem.
    Devolve: o HTML da imagem. */
 function aprDCreditosNova() {
   var ex = APR_EXEMPLO;
-  var atras = aprCartao(aprDCabecaSecao('Ativas', 'Nova hipoteca', true) + aprDCartaoHipoteca({ pagar: aprDPodePagar() }), { classe: 'apr-d-ativas' });
   var escolha = aprFolha('Hipoteca de que imóvel?', ex.imoveis.map(function (p) {
     var n = ex.creditos.filter(function (h) { return h.imovel === p.id; }).length;
     return aprLinha({ icone: 'building', titulo: p.nome, sub: n ? n + (n === 1 ? ' hipoteca' : ' hipotecas') : 'sem hipotecas' });
   }).join(''), { flutua: true });
-  return aprCena(aprPar(atras, escolha), { tom: 't3', arranjo: 'par' });
+  return aprCNovo({ rotulo: 'Hipoteca', icone: 'bank', outros: [['building', 'Imóvel'], ['contract', 'Contrato'], ['users', 'Inquilino'], ['door', 'Visita']], tom: 't3',
+    id: 'credits', titulo: 'Créditos', acao: 'Nova hipoteca', semSelecao: true, folha: escolha, frente: true });
 }
 
 /* Quem pode registar um pagamento de crédito daqui (o botão Pagamento do
@@ -825,10 +837,20 @@ function aprDCreditosCapitalTexto() {
     (servicoLigado('recurring') ? 'Confirmar a prestação nos <b>Planeados</b> chega para ele descer.' : 'Registar a prestação nos <b>Movimentos</b> chega para ele descer.');
 }
 
-/* O texto da hipoteca nova: a prestação lembrada só com os Planeados ligados.
+/* O texto da hipoteca nova, conforme o ecrã (apresentacao-casas.js:aprCLargo):
+   no computador o «Nova hipoteca» do cabeçalho, no telemóvel a «Hipoteca»
+   à cabeça do +; a prestação lembrada só com os Planeados ligados. Sem
+   imóvel nenhum, nem o + nem o cabeçalho a oferecem
+   (acessos.js:ACOES_DE_ADICIONAR): o texto manda criar primeiro o imóvel,
+   como o vazio da página (creditos.js:vCredits).
    Devolve: o HTML (de confiança). */
 function aprDCreditosNovaTexto() {
-  return '<b>Nova hipoteca</b> pergunta primeiro o imóvel, porque fica na ficha dele' +
+  if (!aprCComCasas('house.edit')) {
+    return 'Uma hipoteca fica na ficha de um imóvel: cria primeiro o imóvel, em <b>Casas → Imóveis</b>, e ' +
+      (aprCLargo() ? 'o <b>Nova hipoteca</b> passa a estar no cabeçalho.' : 'a <b>Hipoteca</b> passa a estar no <b>+</b>.');
+  }
+  return (aprCLargo() ? '<b>Nova hipoteca</b>, no cabeçalho, pergunta primeiro o imóvel'
+    : 'No <b>+</b> da barra de baixo, <b>Hipoteca</b> vem à cabeça e pergunta primeiro o imóvel') + ', porque fica na ficha dele' +
     (servicoLigado('recurring') ? ', e a prestação passa a ser lembrada nos <b>Planeados</b>' : '') + '. As que acabares de pagar descem para <b>Liquidadas</b>.';
 }
 

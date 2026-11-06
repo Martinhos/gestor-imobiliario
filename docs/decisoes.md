@@ -87,6 +87,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-03 · A FINE mista com «base» e «contratada», e o visto do menu de escolha
 - 2026-11-06 · Os filtros mostram o que dizem, o menu fecha ao toque, e a redução de spread tem prazo
 - 2026-11-06 · A pesquisa não sai do documento enquanto se escreve
+- 2026-11-06 · Criar é no +, o selo «personalizado», e o que rola por cima não rola a página
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3244,3 +3245,42 @@ foco lá, o render pinta como sempre — guardar a barra sempre deixaria um
 valor posto por código a perder para o do campo. Tornar a via parcial dos
 Movimentos capaz do vazio teria poupado o render inteiro, mas não protegia a
 sincronização nem as listas; ficou como melhoria possível.
+
+## 2026-11-06 · Criar é no +, o selo «personalizado», e o que rola por cima não rola a página
+
+Três tickets de QA do Martinho, da v59 no Samsung Internet.
+
+O «Nova hipoteca» ao lado do título «Ativas» (ticket 8ef0d039) era o único
+botão de criar o registo principal de um ecrã dentro de uma lista com
+registos: nos outros separadores cria-se no + da barra de baixo, com a ação
+do ecrã à cabeça, e no botão do cabeçalho do computador. Saiu; o vazio
+«Sem hipotecas» ficou com o seu, como os outros vazios. O parecido era o
+«Novo modelo» ao lado de «Modelos», nos Planeados. Perguntado, o Martinho
+respondeu «Retira e no + adiciona a opção de adicionar modelo»: o «Modelo»
+já estava no +, mas lá em baixo, em «Outros registos»; nos Planeados passou
+a subir com o «Movimento recorrente», os dois marcados «neste ecrã»
+(acessos.js:outrasDoSeparador). A apresentação dos Créditos e a dos Modelos
+mostram o + (e o cabeçalho, no computador) em vez dos botões que saíram.
+
+O selo «à mão» dos planeados que a pessoa cria (ticket 7df0696b) passou a
+«personalizado», a palavra que o Martinho sugeriu, e o filtro do estado a
+«Personalizados»; o valor guardado do filtro continua 'manual', para um
+filtro aberto não se perder.
+
+A lista das categorias nos filtros dos Movimentos (ticket 4e947e54), presa ao
+ecrã pelo cloud/filtros.js, rolava os movimentos por baixo quando chegava ao
+fim: o .selpop rolava sem overscroll-behavior, e de uma caixa fixa o gesto
+salta para o documento. Medido no 384×785 com o dedo pelo CDP: 410px de
+página no fim da lista comprida, 185px por cima de uma lista curta, 111px no
+corpo de uma janela, 480px na barra lateral do computador e 282px por baixo
+do ecrã «A atualizar»; todos a 0 depois. A varredura conteve tudo o que rola
+por cima da página ou a cobre, e o que rola de lado; as caixas em linha
+(o plano da hipoteca, o nome de uma foto) deixam o fim seguir para a página,
+porque contê-las prendia o dedo. Uma lista curta não é uma caixa que rola, e
+o contain nela só conta a partir do Chrome 144 — o Samsung Internet 30 é um
+143 —, por isso as opções de uma lista sem nada para rolar não deixam o dedo
+arrastar (touch-action, num @container scroll-state). Uma consequência
+aceite: num ecrã alto, onde a barra lateral cabe inteira, a roda por cima
+dela deixa de rolar a página. Ficou por decidir o html.noscroll com
+overscroll-behavior:none, que tiraria o puxar para recarregar com uma janela
+aberta.

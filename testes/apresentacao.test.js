@@ -337,8 +337,10 @@ describe('as boas-vindas', () => {
     assert.match(im[2].texto, /Casas → Pessoas → Inquilinos/);
     assert.match(im[3].texto, /Casas → Contratos/);
     assert.match(im[4].texto, /Dinheiro → Planeados/);
-    for (const o of ['renda dos contratos', 'prestação das hipotecas', 'o IMI, o condomínio e o seguro', 'à mão', 'Confirmar']) assert.ok(im[4].texto.includes(o), o);
-    for (const o of ['do contrato', 'da hipoteca', 'do imóvel', 'à mão', 'Confirmar']) assert.ok(im[4].html.includes(o), 'a maquete mostra «' + o + '»');
+    for (const o of ['renda dos contratos', 'prestação das hipotecas', 'o IMI, o condomínio e o seguro', 'os personalizados', 'Confirmar']) assert.ok(im[4].texto.includes(o), o);
+    for (const o of ['do contrato', 'da hipoteca', 'do imóvel', 'personalizado', 'Confirmar']) assert.ok(im[4].html.includes(o), 'a maquete mostra «' + o + '»');
+    // a origem do que a pessoa cria chama-se «personalizado», como o selo dos Planeados (planeados.js:recOrigem)
+    assert.ok(!im[4].texto.includes('à mão') && !im[4].html.includes('à mão'), 'nem o texto nem a maquete dizem «à mão»');
     assert.match(im[5].texto, /movimento guardado para copiar/);
     assert.match(im[5].texto, /A partir de um modelo/);
     assert.equal(im[6].titulo, 'Cria o teu primeiro imóvel');
@@ -923,7 +925,7 @@ describe('o kit das maquetes', () => {
       app.aprTela({ titulo: 'Casas', abas: app.APR_ABAS_CASAS, aba: 'Imóveis', barra: 'casas', mais: true, corpo: 'c' }),
       app.aprPesquisa({ alvo: true }), app.aprChips(['a', 'b'], [1], 0), app.aprSecao('Os meus imóveis', 4),
       app.aprCartao('x', { flutua: true, alvo: true, classe: 'apr-c-x' }), app.aprFolha('Novo', 'x'),
-      app.aprLinha({ titulo: 't', sub: 's', sub2: 's2', valor: app.aprDinheiro(950), tom: 'pos', selos: [['do contrato'], ['à mão', 'grey']], avatar: 'Ana Ribeiro', seta: true, botao: app.aprBotao('Confirmar', { primario: true }) }),
+      app.aprLinha({ titulo: 't', sub: 's', sub2: 's2', valor: app.aprDinheiro(950), tom: 'pos', selos: [['do contrato'], ['personalizado', 'grey']], avatar: 'Ana Ribeiro', seta: true, botao: app.aprBotao('Confirmar', { primario: true }) }),
       app.aprLinha({ icone: 'building', titulo: 'i' }), app.aprLinha({ capa: 't2', titulo: 'c' }),
       app.aprSelo('Vago', 'amber'), app.aprCampo('Nome', '', { obrigatorio: true, vazio: 'Ex: T2 Lisboa' }), app.aprSegmentado(['A', 'B'], 'A'),
       app.aprCartaoImovel(app.APR_EXEMPLO.imovel('bonfim')), app.aprBarras([1, 5, 10], { aceso: 2, tom: 'in' }), app.aprProgresso(37.5, { tom: 'loan' }),
