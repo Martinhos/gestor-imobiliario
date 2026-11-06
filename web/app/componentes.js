@@ -265,11 +265,23 @@ function selTecla(e){
    on, o aria-selected e o visto só na escolhida: selOpcaoDesenho), fecha o
    menu e chama o onchange registado (pelo nome, em window) — é por aí que os
    formulários reagem à mudança. Escolhida pelo teclado, o foco volta ao botão.
+
+   O clique na opção acaba aqui: além de não subir (stopPropagation), não tem
+   ação por omissão (preventDefault). Quase todos os sel() vivem dentro de um
+   <label> (o rótulo do campo), e o label passa o clique ao botão do sel(),
+   que é o controlo dele, sempre que o clique não vem de um botão de dentro.
+   O Chromium de antes da correção de janeiro de 2026 (o Samsung Internet 30
+   é um Chrome 143) decide isso pelo DOM DEPOIS de os ouvintes correrem; e
+   aqui o <span> tocado acabou de ser trocado pelo innerHTML do redesenho das
+   opções, já não está dentro de botão nenhum. O label clicava então no botão, o selOpen
+   reabria o menu e ele piscava e ficava aberto (ticket de QA b0c85090). O
+   preventDefault desliga essa ação em qualquer browser, faça o onchange ao
+   DOM o que fizer.
    Recebe: e — o evento do clique (pode vir null); id — o id dado ao sel();
    i — o índice da opção escolhida em window.__sel[id].options.
    Devolve: nada — atualiza o input, o rótulo e as opções no DOM e chama o onchange. */
 function selPick(e,id,i){
-  if(e)e.stopPropagation();
+  if(e){e.stopPropagation();if(typeof e.preventDefault==='function')e.preventDefault()}
   const cfg=window.__sel[id]||{options:[]},o=cfg.options[i];if(!o)return;
   const inp=document.getElementById(id);if(inp)inp.value=o.v;
   const lab=document.getElementById('lab_'+id);if(lab)lab.textContent=o.label;

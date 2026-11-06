@@ -85,6 +85,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-03 · O cashflow acumulado da Visão geral é o do ano
 - 2026-11-03 · Abrir a app começa na visão geral; recarregar fica onde estavas
 - 2026-11-03 · A FINE mista com «base» e «contratada», e o visto do menu de escolha
+- 2026-11-06 · Os filtros mostram o que dizem, o menu fecha ao toque, e a redução de spread tem prazo
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3174,3 +3175,50 @@ reproduziu no browser (384×785, toque, o agente do Samsung, quatro maneiras
 de escrever, com vírgula e com ponto): a caixa, o l.euribor e a prestação
 depois da fase fixa seguem sempre o que se escreve, e Guardar grava-o. Só uma
 leitura nova da FINE o repõe, como está desenhado. Não se inventou correção.
+
+## 2026-11-06 · Os filtros mostram o que dizem, o menu fecha ao toque, e a redução de spread tem prazo
+
+«Pago ou recebido por X» deixava entrar os movimentos sem pessoa: o
+interruptor «Incluir movimentos sem pessoa atribuída» está ligado por
+omissão, e a regra juntava-os aos de X. Com uma pesquisa, muitas vezes só
+sobravam esses, e o filtro parecia não fazer nada (ticket de QA ea46d9cd). O
+Martinho escolheu «só os de X»: com uma pessoa escolhida, passam só os
+movimentos que ela pagou ou recebeu (lista-movimentos.js:txMatch), e o
+interruptor sai do painel enquanto ela lá está. A pesquisa com cada um dos
+outros filtros, nos Movimentos e nas outras listas, foi conferida num teste e
+estava certa.
+
+O «Limpar» escondia-se no telemóvel quando só havia um filtro com o seu ×, e
+não aparecia só com a pesquisa: poupava uma linha à fila, mas quem procurava
+como limpar não o achava (tickets aca2564c e 9d5c886e). O Martinho preferiu a
+fila em duas linhas, e em todas as listas: o «Limpar» aparece sempre que há
+alguma coisa para limpar (vistas.js:lfChipsHtml,
+lista-movimentos.js:txChipsHtml). O Enter na pesquisa aplica logo e fecha o
+teclado (vistas.js:enterDaPesquisa); no computador o foco fica no campo,
+porque lá não há teclado a fechar. O painel passou a secções sem nome
+(vistas.js:filtrosEmSeccoes): numa grelha só, conforme apareciam a
+subcategoria ou o «Pago por», o «De» e o «Até» e a ordenação caíam em linhas
+trocadas (ticket 79389e90).
+
+O menu de escolha piscava e ficava aberto ao escolher no telemóvel (ticket
+b0c85090). Desde a v57 o selPick redesenha as opções pelo innerHTML, também a
+tocada; o sel() vive quase sempre dentro de um <label>, e o Chromium de antes
+de 2026 (o Samsung Internet 30) decide a ação do label pelo DOM de depois dos
+ouvintes — com o <span> tocado fora do documento, o label clicava no botão do
+sel() e o selOpen reabria o menu. Em vez de desfazer o redesenho da v57 (que
+pôs o visto na opção escolhida), o selPick passou a cancelar a ação por
+omissão do clique (componentes.js:selPick): é uma linha, vale para todos os
+browsers e não depende do que o onchange faça ao DOM. O Chromium do percurso
+já não tinha o defeito, e por isso o CI não o viu.
+
+Os bancos oferecem às vezes um spread mais baixo durante um tempo (ticket
+1cfb57ac). O Martinho escolheu «meses desde o início»: um produto facultativo
+novo, «Redução de spread», com a redução e «Durante (meses)» obrigatório,
+contado pelo relógio da rateAt (as prestações registadas, o mesmo da fase
+fixa da mista). Na mista baixa só o spread — fica fora da regra que faz um
+produto sem redução própria baixar a taxa fixa como o spread
+(credito.js:reducaoDoProduto) — e na fixa não conta. Os planeados seguiram sem
+código novo (o valor é o loanCalc, que já segue o relógio); os prazos ganharam
+o aviso do fim da redução, a 60 dias. A FINE não a lê. Uma app anterior a esta
+versão faria dela um «Outro produto» sem prazo ao gravar, e por isso a versão
+mínima sobe para a 58.

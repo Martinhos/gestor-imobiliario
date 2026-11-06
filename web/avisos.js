@@ -27,6 +27,37 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 58,
+    data: '2026-11-06',
+    titulo: 'Os filtros mostram o que dizem',
+    seccoes: [
+      {
+        titulo: 'Filtros das listas',
+        afeta: ['app'],
+        itens: [
+          'Nos Movimentos, «Pago ou recebido por» mostra só os movimentos dessa pessoa. Os que não têm pessoa atribuída ficam de fora, e o interruptor deles só aparece sem pessoa escolhida.',
+          'O «Limpar» aparece sempre que há alguma coisa para limpar, também no telemóvel e também só com a pesquisa.',
+          'O Enter na pesquisa aplica logo e fecha o teclado.',
+          'O painel dos filtros arruma-se em secções, com o «De» ao lado do «Até» e o «Ordenar por» ao lado da «Ordem».',
+        ],
+      },
+      {
+        titulo: 'A aplicação em geral',
+        afeta: ['app'],
+        itens: [
+          'Nos menus de escolha, escolher uma opção fecha o menu de uma vez. No telemóvel, o menu voltava a abrir logo a seguir.',
+        ],
+      },
+      {
+        titulo: 'Créditos à habitação',
+        afeta: ['creditos'],
+        itens: [
+          'Há um produto facultativo novo, «Redução de spread», para quando o banco baixa o spread só durante uns meses. Dizes quanto baixa e durante quantos meses, e a simulação, a ficha e os prazos mostram quando a prestação volta a subir.',
+        ],
+      },
+    ],
+  },
+  {
     v: 57,
     data: '2026-11-04',
     titulo: 'O visto do menu acompanha a escolha',
@@ -1417,7 +1448,7 @@ var VERSAO = AVISOS[0].v;
 /* Versão mínima aceite. Subir isto obriga toda a gente a atualizar antes de
    continuar a usar a app — é para quando uma versão antiga passa a estar
    errada, não para empurrar novidades. */
-var VERSAO_MINIMA = 53;
+var VERSAO_MINIMA = 58;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { AVISOS: AVISOS, VERSAO: VERSAO, VERSAO_MINIMA: VERSAO_MINIMA, FUNCIONALIDADES: FUNCIONALIDADES };

@@ -182,7 +182,7 @@ describe('as visitas', () => {
     app.lf('lvis').h1 = '18:00';
     const h = app.vVisits();
     assert.match(h, /<span class="mov-chip on lfm-chip-abre"><button type="button" class="mov-chip-txt" aria-label="Dias e horas: desde 18:00\. Mudar nos filtros" data-toca="vista" data-click="lfAbrirEm\('lvis','lfi_lvis_d1'\)">desde 18:00<\/button>/);
-    assert.match(h, /<button type="button" class="chip limpar mov-so-largo" data-toca="vista" data-click="lfClear\('lvis'\)">Limpar<\/button>/, 'um só filtro, com o seu ×: o «Limpar» da fila só no ecrã largo');
+    assert.match(h, /<button type="button" class="chip limpar" data-toca="vista" data-click="lfClear\('lvis'\)">Limpar<\/button>/, 'um só filtro, com o seu ×: o «Limpar» da fila também, em todos os ecrãs');
   });
 });
 
@@ -283,7 +283,9 @@ describe('o componente: o que esta passagem lhe juntou', () => {
     const h = app.lfChipsHtml('lvis', o, app.lfCampos('lvis', o));
     assert.ok(h.indexOf('sel_lfc_lvis_es') < h.indexOf('id="extra"') && h.indexOf('id="extra"') < h.indexOf('chip limpar'));
     assert.doesNotMatch(h, /lfc_lvis_d1/);
-    assert.match(h, /class="chip limpar mov-so-largo"/, 'o filtro ligado tem o × do chip junto');
+    assert.match(h, /class="chip limpar"/, 'o filtro ligado tem o × do chip junto, e o «Limpar» fica à vista na mesma');
+    assert.match(app.lfChipsHtml('lvis', { campos: [] }, []), /^<div class="chips-fila mov-chips"[^>]*><button type="button" class="chip limpar"[^>]*>Limpar<\/button><\/div>$/, 'sem chips, mas com o que limpar: a fila só com o «Limpar»');
+    app.lf('lvis').d1 = '';
     igual(app.lfChipsHtml('lvis', { campos: [] }, []), '');
   });
 });

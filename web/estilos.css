@@ -2743,7 +2743,7 @@ a.pes-liga:focus-visible,.pes-kv.tap:focus-visible,.pes-linha-f.tap:focus-visibl
 @media(pointer:coarse){.mov-chip .selbtn::after,.mov-chip-x::after{content:"";position:absolute;inset:-5px 0}.mov-chip-x::after{inset:-7px}}
 .mov-chip.mov-comum{border-style:dashed}
 .mov-so-largo{display:none}
-@media(min-width:901px){.mov-chip.mov-so-largo,.chip.limpar.mov-so-largo{display:inline-flex}}
+@media(min-width:901px){.mov-chip.mov-so-largo{display:inline-flex}}
 /* no telemóvel a fila tem de caber numa linha, como no canvas: sem a seta */
 @media(max-width:900px){.mov-chip .selbtn svg{display:none}.mov-chip .selbtn{padding:0 12px}.mov-chip.on .selbtn{padding-right:2px}}
 
@@ -5837,3 +5837,24 @@ label.fine-lido>input,label.fine-lido .selbtn{border-color:var(--accent);box-sha
 /* a linha dos produtos ligados no painel da hipoteca (creditos.js:credDetalhe) */
 .cred-det-prod{margin:0 0 4px;color:var(--muted)}
 /* === fim: os produtos facultativos da hipoteca === */
+/* === qa-filtros-hipoteca: o painel dos filtros em secções sem nome === */
+/* (lista-movimentos.js:txFilterBody, vistas.js:lfPainelCorpo,
+   vistas.js:filtrosEmSeccoes; o ticket de QA 79389e90) O painel dos filtros,
+   nos Movimentos e em todas as listas, arruma-se em secções sem título: nos
+   Movimentos os chips do tipo e das etiquetas (.mov-seccao-campos); depois os
+   seletores; depois as datas e as horas; depois a ordenação. Cada grelha de
+   duas colunas (.mov-grelha) começa numa linha nova, e por isso o «De» fica
+   ao lado do «Até» e o «Ordenar por» ao lado da «Ordem» — numa grelha só, a
+   subcategoria e o «Pago por», que aparecem e somem, trocavam-lhes as
+   linhas. Separa-as uma linha fina e espaço; uma secção sem campos não chega
+   a existir, e não deixa espaço vazio. O interruptor dos Movimentos fica no
+   fim, com a moldura dele.
+   O «Limpar» da fila dos chips (os tickets aca2564c e 9d5c886e) já não leva a
+   classe que o escondia no telemóvel (.mov-so-largo): aparece sempre que há
+   alguma coisa para limpar, e a fila parte em duas linhas quando não cabe
+   (.chips-fila já quebra; nunca rola de lado). No dedo parece o mesmo chip
+   de 36px, mas acerta-se em 46px, como os outros da fila (.mov-chip). */
+.mov-seccao-campos{display:flex;flex-direction:column;gap:16px}
+.mov-seccao+.mov-seccao{padding-top:16px;border-top:1px solid var(--line)}
+@media(pointer:coarse){.mov-chips>.chip.limpar{position:relative}.mov-chips>.chip.limpar::after{content:"";position:absolute;inset:-5px 0}}
+/* === fim: o painel dos filtros em secções sem nome === */

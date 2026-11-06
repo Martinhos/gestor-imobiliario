@@ -422,3 +422,15 @@ sessão, o wrangler dev local gasta da mesma quota diária que a produção.
 E o TaskStop de uma tarefa em fundo mata a shell mas deixa vivos o node e o
 workerd do wrangler dev: um servidor esquecido continua a responder na porta,
 com a base de antes.
+
+## Trocar o nó tocado a meio de um clique dentro de um label
+
+Um <label> passa o clique ao controlo dele quando o clique não vem de um
+botão ou de um campo de dentro. O Chromium de antes da correção de janeiro de
+2026 (bug 452084024; o Samsung Internet 30 é um Chrome 143) decide isso pelo
+DOM de DEPOIS de os ouvintes correrem: se a ação troca o nó tocado
+(innerHTML), o alvo já não está dentro de botão nenhum e o label clica no
+controlo. Foi o menu de escolha que piscava e voltava a abrir
+(componentes.js:selPick, ticket de QA b0c85090). Uma ação que trata o clique
+por inteiro faz preventDefault. O Chromium do percurso já não o mostra: para
+o ver, lança-se com `--disable-blink-features=LabelInteractiveContentCheckBeforeHandler`.

@@ -114,15 +114,17 @@ describe('a página das visitas', () => {
     try { assert.match(app.vVisits(), /<span id="lab_lfc_lvis_pr">Casa \$&amp; Cia<\/span>/); } finally { app.lf('lvis').pr = ''; }
   });
 
-  test('os intervalos do painel: cada campo de dia e de hora diz o nome inteiro, lado a lado na grelha', () => {
+  test('os intervalos do painel: cada campo de dia e de hora diz o nome inteiro, lado a lado na secção deles, depois dos seletores', () => {
     monta();
     app.db.visits = [app.normVisit({ id: 'V1', nomes: 'Ana', propertyId: 'P1', date: '2999-01-01' })];
     const html = app.vVisits();
     const campos = [...html.matchAll(/<label>([^<]*)<input id="lfi_lvis_(\w+)" type="(date|time)"[^>]*data-change="lfMudar\('lvis','\2',this\.value\)">/g)].map((m) => [m[3], m[1], m[2]]);
     assert.deepEqual(campos, [['date', 'Dia — de', 'd1'], ['date', 'Dia — até', 'd2'], ['time', 'Hora de início — de', 'h1'], ['time', 'Hora de início — até', 'h2']]);
-    const grelha = html.slice(html.indexOf('<div class="mov-grelha">'));
-    const ordem = ['lfsel_lvis_pr', 'lfsel_lvis_es', 'lfi_lvis_d1', 'lfi_lvis_d2', 'lfi_lvis_h1', 'lfi_lvis_h2', 'lfsel_lvis_rs'].map((id) => grelha.indexOf('id="' + id + '"'));
-    assert.ok(ordem.every((i, n) => i > 0 && (!n || i > ordem[n - 1])), 'o imóvel e o estado, os dias, as horas, o desfecho: ' + ordem.join(','));
+    const grelha = html.slice(html.indexOf('<div class="mov-grelha mov-seccao">'));
+    const ordem = ['lfsel_lvis_pr', 'lfsel_lvis_es', 'lfsel_lvis_rs', 'lfi_lvis_d1', 'lfi_lvis_d2', 'lfi_lvis_h1', 'lfi_lvis_h2'].map((id) => grelha.indexOf('id="' + id + '"'));
+    assert.ok(ordem.every((i, n) => i > 0 && (!n || i > ordem[n - 1])), 'os seletores (o imóvel, o estado, o desfecho), depois os dias e as horas: ' + ordem.join(','));
+    const datas = grelha.indexOf('<div class="mov-grelha mov-seccao">', 1);
+    assert.ok(ordem[2] < datas && datas < ordem[3], 'os dias e as horas começam a sua secção: o «de» fica ao lado do «até»');
   });
 });
 

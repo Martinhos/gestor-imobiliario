@@ -110,7 +110,12 @@ export function bancoCanonico(texto) {
    mesma ordem, que a app tem (PLAN.md › PRODUTOS). O «conjunto» é o de quando
    a ficha só dá a redução de todos juntos (o spread bonificado): quem o
    escreve é o validar, não o modelo. O `id` é o que a hipoteca guarda; o
-   `nome` é o que a pessoa lê. */
+   `nome` é o que a pessoa lê. A app tem um tipo a mais, a «Redução de
+   spread» (reducao_spread, antes do «Outro produto»): um spread mais baixo
+   durante uns meses desde o início, que a pessoa escreve à mão com a
+   duração. Não se oferece ao modelo: não é uma venda associada, a FINE não a
+   lê, e sem os meses, que ela obriga, não contava na app (que também a
+   recusa ao ler a resposta, web/app/fine.js:fineLimparProdutos). */
 export const PRODUTOS = [
   { id: 'seguro_vida', nome: 'Seguro de vida' },
   { id: 'seguro_multirriscos', nome: 'Seguro multirriscos' },

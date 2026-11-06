@@ -22,15 +22,27 @@ function credFimFixa(l){
   if(!fim)return null;
   return {fim,dias:Math.round((new Date(fim+'T00:00:00')-new Date(today()+'T00:00:00'))/864e5)};
 }
-/* A prestação depois da fase fixa de uma mista: a linha da amortização do mês
-   em que a taxa muda (a mesma conta da ficha, creditos.js:mortFicha).
+/* A próxima mudança da prestação de uma hipoteca: o fim da fase fixa de uma
+   mista ou o fim de uma redução de spread temporária, a primeira que cai
+   dentro do plano (credito.js:mudancasComData), com o dia pelo mesmo relógio
+   dos prazos e da simulação.
    Recebe: l — a hipoteca viva.
-   Devolve: euros com o selo (número), ou null fora de uma mista em fase fixa. */
+   Devolve: {m, tipo, fim, row} — o mês do crédito, 'fixa' ou 'reducao', o
+   dia em 'AAAA-MM-DD' e a linha do plano —, ou null sem mudança por vir. */
+function credProximaMudanca(l){
+  if(!mudancasDaPrestacao(l).length)return null;
+  const r0=servicoLigado('recurring')?loanRecOf(l):null;
+  return mudancasComData(l,amort(l),r0&&r0.next)[0]||null;
+}
+/* A prestação depois da próxima mudança de taxa — o fim da fase fixa de uma
+   mista, ou o fim de uma redução de spread —: a linha da amortização do mês
+   em que a taxa muda (credProximaMudanca; a mesma conta da ficha,
+   creditos.js:mortFicha).
+   Recebe: l — a hipoteca viva.
+   Devolve: euros com o selo (número), ou null sem mudança por vir. */
 function credDepois(l){
-  if(l.type!=='mista')return null;
-  const k=Math.round((Number(l.fixedYears)||0)*12)-loanMes(l);if(k<=0)return null;
-  const row=amort(l).rows[k];
-  return row?row.pay+row.st:null;
+  const x=credProximaMudanca(l);
+  return x?x.row.pay+x.row.st:null;
 }
 /* O selo do fim da taxa fixa, só dentro da janela de aviso dos prazos
    (prazos.js:PZ_ANTECEDENCIA, a taxa): âmbar, e vermelho a sete dias ou menos.
@@ -170,12 +182,22 @@ function credTabela(l,max){
     ${anos.map(x=>linha(x,euro)).join('')}
     ${corta?`<tr class="cred-tab-fim"><td>…</td><td></td><td></td><td></td><td></td><td>${ult.yr}: ${euro(ult.bal)}</td></tr>`:''}</tbody>`:''}</table></div>`;
 }
+/* O nome de um produto ligado como a ficha o diz: o do tipo
+   (credito.js:produtoNome) e, na redução de spread, quanto tempo dura desde o
+   início («Redução de spread nos primeiros 12 meses»).
+   Recebe: p — o produto.
+   Devolve: o texto. */
+function credProdutoNome(p){
+  const n=Number(p&&p.meses)||0;
+  return produtoNome(p.tipo)+(p.tipo==='reducao_spread'&&n?(n===1?' no primeiro mês':' nos primeiros '+n+' meses'):'');
+}
 /* Os nomes dos produtos facultativos ligados que baixam a taxa da hipoteca
-   (credito.js:produtosQueBaixam), juntos como numa frase.
+   (credito.js:produtosQueBaixam), juntos como numa frase, a redução de spread
+   com a duração (credProdutoNome).
    Recebe: l — a hipoteca.
    Devolve: o texto («Seguro de vida e Ordenado domiciliado»); '' sem nenhum. */
 function credProdutosNomes(l){
-  const ns=produtosQueBaixam(l).map(p=>produtoNome(p.tipo));
+  const ns=produtosQueBaixam(l).map(credProdutoNome);
   return ns.length<2?ns.join(''):ns.slice(0,-1).join(', ')+' e '+ns[ns.length-1];
 }
 /* A linha dos produtos no painel da hipoteca: os ligados e a taxa em vigor
@@ -200,7 +222,8 @@ function credProdutosFrase(l){
    amortização. No telemóvel o painel não aparece: lá o plano abre-se no botão
    «Plano» de cada cartão. Com produtos facultativos ligados, uma linha
    diz quais e a taxa com eles (credProdutosFrase), e a taxa de depois da
-   fase fixa já leva o spread em vigor.
+   próxima mudança (o fim da fase fixa, ou de uma redução de spread:
+   credProximaMudanca) leva o spread em vigor nesse mês.
    Recebe: x — {p,l} da hipoteca a mostrar, ou null.
    Devolve: o HTML do painel (texto), com id credDetalhe para o credEscolher o repintar. */
 function credDetalhe(x){
@@ -214,16 +237,17 @@ function credDetalhe(x){
     +(pode(p.id,'house.edit')?`<button type="button" class="btn sm" data-toca="camada" data-click="mortModal('${id}','${lid}')">Editar</button>`:'');
   const cab=`<div class="cred-det-cab"><div class="cred-det-nome"><h2>${esc(loanName(l))} · ${esc(p.name)}</h2><p class="small num">${esc(meta)}</p></div>${acoes?`<div class="cred-det-acoes">${acoes}</div>`:''}</div>`;
   if(!viva)return `<section class="card cred-det" id="credDetalhe">${cab}<p class="hint cred-det-nada">Crédito liquidado: já não há capital em dívida nem plano por cumprir.</p></section>`;
-  const c=loanCalc(l),a=amort(l),depois=credDepois(l),f=depois?credFimFixa(l):null;
+  const c=loanCalc(l),a=amort(l),mud=credProximaMudanca(l),depois=mud?mud.row.pay+mud.row.st:null;
   const prox=credPrimeiraData(l);
   const mes=d=>(MES[Number(String(d).slice(5,7))-1]||'')+(String(d).slice(0,4)!==today().slice(0,4)?' '+String(d).slice(0,4):'');
-  /* a taxa em vigor: o spread base menos o dos produtos facultativos ligados (credito.js:spreadEmVigor) */
-  const spr=spreadEmVigor(l),vr=(Number(l.euribor)||0)+spr,prods=credProdutosFrase(l);
+  /* a taxa de depois da mudança: o spread base menos o dos produtos facultativos ligados nesse mês
+     (credito.js:spreadEmVigor — uma redução de spread temporária já acabada não conta) */
+  const spr=mud?spreadEmVigor(l,mud.m):spreadEmVigor(l),vr=(Number(l.euribor)||0)+spr,prods=credProdutosFrase(l);
   return `<section class="card cred-det" id="credDetalhe">${cab}
     ${prods?`<p class="small cred-det-prod">${esc(prods)}</p>`:''}
     <div class="cred-det-stats num">
       <div><p class="small">Prestação de ${esc(mes(prox))}</p><p class="cred-v">${euro2(c.total)}</p><p class="small">capital ${euro2(c.principal)} · juros ${euro2(c.interest)}${l.stampTax===false?'':' · selo '+euro2(c.stamp)}</p></div>
-      ${depois?`<div><p class="small">${f?'A partir de '+esc(mes(f.fim)):'Depois da fase fixa'}</p><p class="cred-v">${euro2(depois)}</p><p class="small">Euribor ${esc(l.index||'')} ${esc(dec(l.euribor))}% + ${esc(dec(spr))}% = ${esc(dec(Math.round(vr*1000)/1000))}%</p></div>`:''}
+      ${depois?`<div><p class="small">A partir de ${esc(mes(mud.fim))}</p><p class="cred-v">${euro2(depois)}</p><p class="small">Euribor ${esc(l.index||'')} ${esc(dec(l.euribor))}% + ${esc(dec(spr))}% = ${esc(dec(Math.round(vr*1000)/1000))}%</p></div>`:''}
       <div><p class="small">Juros e selo até ao fim</p><p class="cred-v">${euro(a.totInt+a.totStamp)}</p></div></div>
     ${credTabela(l,10)}</section>`;
 }
@@ -428,7 +452,9 @@ function newMort(){
    não os campos que a compõem. O custo até ao fim chama-se «Juros e selo até
    ao fim», como no resumo e no painel (só «Juros» numa hipoteca sem selo).
    A taxa é a em vigor, com os produtos facultativos ligados, e esses
-   produtos nomeiam-se numa linha («Produtos ligados»).
+   produtos nomeiam-se numa linha («Produtos ligados»; a redução de spread com
+   a duração, credProdutoNome). Com uma redução de spread temporária por
+   acabar, a prestação de depois dela («Depois da redução de spread»).
    Recebe: pid — o id do imóvel; lid — o id da hipoteca.
    Devolve: o HTML do corpo, ou vazio se a hipoteca já não existir. */
 function mortFicha(pid,lid){
@@ -438,6 +464,8 @@ function mortFicha(pid,lid){
   const a=c?amort(l):null;
   const faseFixa=l.type==='mista'?Math.round((Number(l.fixedYears)||0)*12)-loanMes(l):0;
   const depois=(a&&faseFixa>0)?a.rows[faseFixa]:null;
+  /* e a de depois da redução de spread temporária que acaba a seguir (credito.js:fimDaReducaoMes) */
+  const fimRed=a?fimDaReducaoMes(l):0,semRed=fimRed?a.rows[fimRed-loanMes(l)]:null;
   return ficha([
     pode(pid,'house.edit')?null:{tipo:'nota',valor:'Hipoteca de <b>'+esc(p.name)+'</b>, um imóvel onde colaboras — a ficha é só de leitura.'},
     viva?null:{tipo:'nota',valor:'Crédito liquidado: já não há capital em dívida.'},
@@ -447,6 +475,7 @@ function mortFicha(pid,lid){
     c?{tipo:'bloco',rotulo:'A prestação por dentro',
       valor:'capital '+euro2(c.principal)+' · juros '+euro2(c.interest)+(l.stampTax===false?'':' · selo '+euro2(c.stamp))}:null,
     depois?{rotulo:'Depois da fase fixa',valor:euro2(depois.pay+depois.st)}:null,
+    semRed?{rotulo:'Depois da redução de spread',valor:euro2(semRed.pay+semRed.st)}:null,
     {rotulo:'Taxa',valor:esc(rateLabel(l))},
     /* os produtos facultativos ligados que baixam a taxa: a taxa de cima já os conta */
     produtosQueBaixam(l).length?{rotulo:'Produtos ligados',valor:esc(credProdutosNomes(l))}:null,
@@ -504,7 +533,8 @@ function mortModal(pid,lid){
    mortModal tratam disso primeiro). Liga o repaint ao mortBody, põe o menu de
    apagar quando é edição, e define o onSave: sem capital em dívida (nova ou
    editada) recusa e aponta o campo, e o mesmo com um início novo antes da
-   compra da casa (imovel.js:creditoAntesDaCompra); senão grava o imóvel inteiro na db, sincroniza os
+   compra da casa (imovel.js:creditoAntesDaCompra) e com uma redução de spread
+   sem os meses (imovel.js:loanProdSemMeses); senão grava o imóvel inteiro na db, sincroniza os
    movimentos planeados das prestações e fecha. A nova diz «Hipoteca
    adicionada.» com o «Ver» para a ficha dela (componentes.js:avisoComVer).
    Recebe: lid — o id da hipoteca dentro de pForm; isNew — verdadeiro quando
@@ -528,6 +558,9 @@ function mortOpen(lid,isNew){
     /* nem antes da compra da casa, quando o início é novo ou mudou (imovel.js:creditoAntesDaCompra) */
     const cedo=creditoAntesDaCompra(pForm,prop(pForm.id));
     if(cedo)return falhaCampo('l_start_'+cedo.id,cedo.msg);
+    /* a redução de spread tem «Durante (meses)» obrigatório (imovel.js:loanProdSemMeses) */
+    const semMeses=loanProdSemMeses(l?[l]:[]);
+    if(semMeses)return falhaCampo(semMeses,LOAN_PROD_FRASES.semMeses);
     if(l)l.name=l.name||l.bank||'Hipoteca';   /* a recorrência identifica-se pelo nome */
     /* a pergunta pelas prestações desde o início cria movimentos: com os
        Movimentos ligados; o planeado da prestação só com os Planeados */

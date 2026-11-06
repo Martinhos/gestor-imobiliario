@@ -171,7 +171,10 @@ function migrateInline(){
    hipoteca é um destes tipos; um tipo desconhecido passa a 'outro'. Vive aqui,
    ao lado do normLoan, porque a base é o primeiro ficheiro a carregar: o
    formulário (imovel.js:loanProdSect), a ficha (creditos.js:mortFicha) e a
-   leitura da FINE (fine.js:fineLimparProdutos) leem-na todos. */
+   leitura da FINE (fine.js:fineLimparProdutos) leem-na todos. A «Redução de
+   spread» é a única que a lista do servidor não tem: é o spread mais baixo
+   que o banco dá durante um tempo, contado em meses desde o início
+   (normProduto: meses), e não uma venda associada que a FINE indique. */
 var PRODUTOS_HIPOTECA=[
   {id:'seguro_vida',nome:'Seguro de vida'},
   {id:'seguro_multirriscos',nome:'Seguro multirriscos'},
@@ -181,6 +184,7 @@ var PRODUTOS_HIPOTECA=[
   {id:'cartao_debito',nome:'Cartão de débito'},
   {id:'poupanca',nome:'Poupança ou PPR'},
   {id:'conjunto',nome:'Todos os produtos facultativos'},
+  {id:'reducao_spread',nome:'Redução de spread'},
   {id:'outro',nome:'Outro produto'},
 ];
 /* A redução de um produto, em pontos percentuais: um número em (0, 3],
@@ -193,15 +197,27 @@ function produtoReducao(v){
   const r=Math.round(v*1000)/1000;
   return r>0&&r<=3?r:null;
 }
+/* Os meses de uma redução de spread temporária: um inteiro de 1 a 600 (os 50
+   anos do prazo mais longo). O que não for um número inteiro nessa gama não é
+   duração nenhuma.
+   Recebe: v — o valor (só um number conta; o texto do campo já passou pelo
+   imovel.js:loanProdColher).
+   Devolve: o número, ou null. */
+function produtoMeses(v){
+  return typeof v==='number'&&Number.isInteger(v)&&v>=1&&v<=600?v:null;
+}
 /* normaliza um produto facultativo de uma hipoteca: o id seguro (ou um novo),
    o tipo da lista fechada (PRODUTOS_HIPOTECA, senão 'outro'), as reduções do
-   spread e da TAN (produtoReducao, null quando não há) e se está ligado.
+   spread e da TAN (produtoReducao, null quando não há), os meses que dura
+   (produtoMeses: só na «Redução de spread»; nos outros tipos é sempre null) e
+   se está ligado.
    Recebe: x — o produto em bruto (objeto parcial, ou nada).
-   Devolve: um objeto novo {id, tipo, spread, tan, ativo}. */
+   Devolve: um objeto novo {id, tipo, spread, tan, meses, ativo}. */
 function normProduto(x){
   const o=x&&typeof x==='object'&&!Array.isArray(x)?x:{};
-  return {id:idSeguro(o.id||uid()),tipo:PRODUTOS_HIPOTECA.some(p=>p.id===o.tipo)?o.tipo:'outro',
-    spread:produtoReducao(o.spread),tan:produtoReducao(o.tan),ativo:o.ativo===true};
+  const tipo=PRODUTOS_HIPOTECA.some(p=>p.id===o.tipo)?o.tipo:'outro';
+  return {id:idSeguro(o.id||uid()),tipo,
+    spread:produtoReducao(o.spread),tan:produtoReducao(o.tan),meses:tipo==='reducao_spread'?produtoMeses(o.meses):null,ativo:o.ativo===true};
 }
 /* normaliza uma hipoteca: omissões preenchidas, campos extintos (active, taeg, mtic) fora, anexos pelo normFile
    e os produtos facultativos pelo normProduto (o spread e a rate são a BASE, sem eles: a taxa em vigor

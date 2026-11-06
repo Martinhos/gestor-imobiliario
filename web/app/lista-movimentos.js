@@ -21,11 +21,12 @@ function txFilterCount(){
   const datas=(txDe||txAte)?1:0;
   return datas+txFilterCountSem();
 }
-// a mesma contagem sem as datas; atenção: desligar "sem pessoa atribuída" conta como um filtro;
+// a mesma contagem sem as datas; atenção: desligar "sem pessoa atribuída" conta como um filtro,
+// mas só sem pessoa escolhida — com uma, o interruptor não entra na conta (txMatch);
 // as etiquetas, como as datas, contam como UM, sejam uma ou várias
 // Devolve: número de filtros ativos, sem contar as datas.
 function txFilterCountSem(){
-  return (txFilter?1:0)+(txProp?1:0)+(txPaid?1:0)+(txCat?1:0)+(txSub?1:0)+(txNoPayer?0:1)+(txEtiq.length?1:0);
+  return (txFilter?1:0)+(txProp?1:0)+(txPaid?1:0)+(txCat?1:0)+(txSub?1:0)+(txNoPayer||txPaid?0:1)+(txEtiq.length?1:0);
 }
 /* As etiquetas que se podem escolher no filtro: as da lista mestra
    (db.settings.tags, pela ordem de lá), as que algum movimento usa e já não
@@ -105,6 +106,15 @@ function txqLimpar(botao){
   botao.classList.add('u-d-none');
   i.focus();
 }
+/* O Enter na pesquisa dos Movimentos (o ticket 9d5c886e): aplica logo o que
+   se escreveu, sem esperar os 280 ms do onTxSearch (a espera morre), e fecha
+   o teclado do telemóvel — no computador o foco fica no campo
+   (vistas.js:enterDaPesquisa).
+   Recebe: ev — o evento da tecla; v — o texto do campo.
+   Devolve: nada — muda a pesquisa e repinta (refrescarMovimentos). */
+function txqTecla(ev,v){
+  enterDaPesquisa(ev,'tx_q',()=>{clearTimeout(_qT);txSearch=String(v==null?'':v);refrescarMovimentos()});
+}
 /* um movimento passa em TODOS os filtros ativos? Tipo ('debt' junta owed e
    repay), imóvel/grupo ('__none__' = sem imóvel atribuído; um imóvel apanha
    os movimentos dele, as partes dos lotes que lhe cabem e os movimentos de
@@ -115,6 +125,12 @@ function txqLimpar(botao){
    grupo e sem «Todos os imóveis» não é de nenhum imóvel, e um filtro por
    imóvel deixa-o de fora (entrava, como se fosse de todos). Passa sem filtro
    e em «Sem imóvel atribuído».
+   «Pago ou recebido por X» são só os movimentos que X pagou ou recebeu (o
+   ticket ea46d9cd e a decisão do Martinho de 2026-11-06, «só os de X»): os
+   sem pessoa passavam com o interruptor «Incluir movimentos sem pessoa
+   atribuída» ligado, que é a omissão, e com uma pesquisa sobravam muitas
+   vezes só esses — o filtro parecia não fazer nada. O interruptor só conta
+   sem pessoa escolhida, e sai do painel enquanto há uma (txFilterBody).
    Recebe: t — o movimento (objeto de transação).
    Devolve: true se passa em todos os filtros ativos, false caso contrário. */
 function txMatch(t){
@@ -130,8 +146,8 @@ function txMatch(t){
   if(t.propertyId){if(!inScope(t.propertyId))return false}
   else if(t.groupId||t.todos){if(ownerFilter&&!txProps(t).some(p=>inScope(p.id)))return false}
   else if(ownerFilter)return false;
-  if(txPaid&&!(t.paidBy===txPaid||t.toId===txPaid||(!t.paidBy&&txNoPayer)))return false;
-  if(!txNoPayer&&!t.paidBy)return false;
+  if(txPaid){if(t.paidBy!==txPaid&&t.toId!==txPaid)return false}
+  else if(!txNoPayer&&!t.paidBy)return false;
   if(txSearch.trim()){const hay=txHay(t);for(const term of txTerms())if(hay.indexOf(term)<0)return false}
   if(txCat==='__none__'){if(t.category)return false}
   else if(txCat&&t.category!==txCat)return false;
@@ -257,7 +273,7 @@ function filterSummary(){
   if(txCat==='__none__')p.push('sem categoria');else if(txCat)p.push(txCat+(txSub&&txSub!=='__none__'?' / '+txSub:''));
   if(txSub==='__none__')p.push('sem subcategoria');
   if(txEtiq.length)p.push((txEtiq.length===1?'etiqueta ':'etiquetas ')+txEtiq.join(' ou '));
-  if(!txNoPayer)p.push('só com pessoa atribuída');
+  if(!txNoPayer&&!txPaid)p.push('só com pessoa atribuída');   /* com uma pessoa escolhida não conta (txMatch) */
   return esc(p.join(' · '));
 }
 /* um movimento novo assume os filtros ativos; sem filtro, o campo fica vazio
@@ -393,11 +409,15 @@ function txEtiqAbrir(){
   if(b)try{b.focus()}catch(e){}
 }
 /* O corpo do painel dos filtros (o M-Filtros do canvas): o título com o
-   «Limpar» e o «Fechar», quantos movimentos passam, os filtros comuns, o tipo
-   e as etiquetas em chips e, numa grelha, o imóvel, a categoria e a subcategoria, o
-   proprietário, quem pagou ou recebeu, as datas e a ordenação; por fim o
-   interruptor dos movimentos sem pessoa. Cada controlo aplica logo (os onTx*),
-   sem «Aplicar». A pesquisa vive na própria vista (txBarraHtml).
+   «Limpar» (com alguma coisa para limpar, a pesquisa incluída: é ela também
+   que ele limpa) e o «Fechar», quantos movimentos passam e, em secções sem
+   nome (o ticket 79389e90; vistas.js:filtrosEmSeccoes), os filtros comuns, o
+   tipo e as etiquetas em chips; os seletores — o imóvel, a categoria, a
+   subcategoria e quem pagou ou recebeu —; o «De» ao lado do «Até»; e o
+   «Ordenar por» ao lado da «Ordem». Por fim o interruptor dos movimentos sem
+   pessoa, só sem pessoa escolhida (com uma, não conta: txMatch). Cada
+   controlo aplica logo (os onTx*), sem «Aplicar». A pesquisa vive na própria
+   vista (txBarraHtml).
    Devolve: string HTML do corpo do painel. */
 function txFilterBody(){
   /* na grelha de duas colunas o campo já diz o que é (o rótulo por cima): a
@@ -414,27 +434,29 @@ function txFilterBody(){
   const n=linhasDaLista(db.transactions.filter(txMatch)).length;
   /* um campo com o filtro posto veste o cobalto, como os chips (o canvas) */
   const lig=v=>v?' class="mov-ligado"':'';
+  /* as secções, por esta ordem: os seletores; o «De» e o «Até»; a ordenação */
+  const seletores=(servicoLigado('properties')?`<label${lig(txProp)}>Imóvel${sel('txPropF',txProp,curto(txOpcoesImovel(),'Todos'),'onTxProp','vista')}</label>`:'')
+    +`<label${lig(txCat)}>Categoria${sel('txCatF',txCat,curto(txOpcoesCategoria(),'Todas'),'onTxCat','vista')}</label>`
+    +(txCat&&txCat!=='__none__'?`<label${lig(txSub)}>Subcategoria${sel('txSubF',txSub,subOpts,'onTxSub','vista')}</label>`:'')
+    +(donos?`<label${lig(txPaid)}>Pago ou recebido por${sel('txPaidF',txPaid,payers,'onTxPaid','vista')}</label>`:'');
+  const datas=`<label>De<input id="txDeF" type="date" value="${txDe}" data-change="onTxDatas()"></label>
+      <label>Até<input id="txAteF" type="date" value="${txAte}" data-change="onTxDatas()"></label>`;
+  const ordem=`<label>Ordenar por${sel('txSortF',txSort,[{v:'date',label:'Data'},{v:'amount',label:'Valor'}],'onTxSort','vista')}</label>
+      <label>Ordem${sel('txDirF',txDir,[{v:'desc',label:'Descendente'},{v:'asc',label:'Ascendente'}],'onTxDir','vista')}</label>`;
   return `<div class="mov-filtros">
     <div class="mov-filtros-cab"><h2 class="mov-filtros-tit" id="txFtit">Filtros</h2>
-      ${txFilterCount()?`<button type="button" class="btn ghost" data-toca="vista" data-click="clearTxFilters()">Limpar</button>`:''}
+      ${txFiltrosN()?`<button type="button" class="btn ghost" data-toca="vista" data-click="clearTxFilters()">Limpar</button>`:''}
       <button type="button" class="btn" data-toca="camada" data-click="txFilterFechar()">Fechar</button></div>
     <p class="small mov-filtros-n">Aplicam-se ao mexer · ${txNMov(n)}</p>
+    <div class="mov-seccao mov-seccao-campos">
     ${comuns.length?`<div class="mov-campo"><span class="lbl">Filtros comuns</span><div class="chips-fila">${comuns.map(txChipDoComum).join('')}</div></div>`:''}
     <div class="mov-campo"><span class="flabel" id="txKindL">Tipo</span>
       <div class="chips-fila" id="txKind" role="radiogroup" aria-labelledby="txKindL">${TX_FILTRO_TIPOS.map(([k,l])=>{const on=txFilter===k;
         return `<button type="button" class="chip${on?' on':''}" role="radio" aria-checked="${on}" data-toca="vista" data-click="txPorTipo('${k}')">${l}</button>`}).join('')}</div></div>
     ${txEtiquetasHtml()}
-    <div class="mov-grelha">
-      ${servicoLigado('properties')?`<label${lig(txProp)}>Imóvel${sel('txPropF',txProp,curto(txOpcoesImovel(),'Todos'),'onTxProp','vista')}</label>`:''}
-      <label${lig(txCat)}>Categoria${sel('txCatF',txCat,curto(txOpcoesCategoria(),'Todas'),'onTxCat','vista')}</label>
-      ${txCat&&txCat!=='__none__'?`<label${lig(txSub)}>Subcategoria${sel('txSubF',txSub,subOpts,'onTxSub','vista')}</label>`:''}
-      ${donos?`<label${lig(txPaid)}>Pago ou recebido por${sel('txPaidF',txPaid,payers,'onTxPaid','vista')}</label>`:''}
-      <label>De<input id="txDeF" type="date" value="${txDe}" data-change="onTxDatas()"></label>
-      <label>Até<input id="txAteF" type="date" value="${txAte}" data-change="onTxDatas()"></label>
-      <label>Ordenar por${sel('txSortF',txSort,[{v:'date',label:'Data'},{v:'amount',label:'Valor'}],'onTxSort','vista')}</label>
-      <label>Ordem${sel('txDirF',txDir,[{v:'desc',label:'Descendente'},{v:'asc',label:'Ascendente'}],'onTxDir','vista')}</label>
     </div>
-    ${donos?`<label class="mov-interr"><span id="txNoPayerL">Incluir movimentos sem pessoa atribuída</span>
+    ${filtrosEmSeccoes([seletores,datas,ordem])}
+    ${donos&&!txPaid?`<label class="mov-interr"><span id="txNoPayerL">Incluir movimentos sem pessoa atribuída</span>
       <button type="button" class="interruptor" id="txNoPayer" role="switch" aria-checked="${txNoPayer?'true':'false'}" aria-labelledby="txNoPayerL" data-toca="vista" data-click="onTxNoPayer()"></button></label>`:''}
   </div>`;
 }
@@ -628,15 +650,15 @@ function txCabTabela(){
 /* A pesquisa (sempre à vista, o canvas) e o botão que abre o painel dos
    filtros, com quantos estão ligados. A pesquisa é um nó que a lista viva
    guarda de pintura para pintura (refrescarMovimentos): escrever não perde o
-   foco nem o que o teclado estava a compor. A lupa é desenhada na folha
-   (estilos.css:.mov-lupa).
+   foco nem o que o teclado estava a compor. O Enter aplica logo e fecha o
+   teclado (txqTecla). A lupa é desenhada na folha (estilos.css:.mov-lupa).
    Devolve: o HTML da barra (texto). */
 function txBarraHtml(){
   const n=txFilterCount(),res=filterSummary();
   return `<div class="mov-barra">
     <label class="mov-busca"><span class="mov-lupa" aria-hidden="true"></span>
       <input id="tx_q" type="search" value="${esc(txSearch)}" placeholder="Pesquisar…" aria-label="Pesquisar movimentos: palavras soltas ou uma frase entre aspas" autocomplete="off" enterkeyhint="search"
-        data-input="onTxSearch(this.value);txqMostrarLimpar(this)"><button type="button" class="qclear${txSearch?'':' u-d-none'}" aria-label="Limpar a pesquisa" data-toca="vista" data-click="txqLimpar(this)">${ic('x',14)}</button></label>
+        data-input="onTxSearch(this.value);txqMostrarLimpar(this)" data-keydown="txqTecla(event,this.value)"><button type="button" class="qclear${txSearch?'':' u-d-none'}" aria-label="Limpar a pesquisa" data-toca="vista" data-click="txqLimpar(this)">${ic('x',14)}</button></label>
     <button type="button" class="btn so-icone mov-filt${txFiltAberto?' on':''}" id="txFiltBtn" aria-expanded="${txFiltAberto?'true':'false'}" aria-controls="txFpanel"
       aria-label="${n?'Filtros: '+n+(n===1?' ativo':' ativos'):'Filtros'}"${res?` title="${res}"`:''} data-toca="vista" data-click="txFiltrosAlternar()">${ic('filter',18)}${n?`<span class="mov-filt-n" aria-hidden="true">${n}</span>`:''}</button>
   </div>`;
@@ -710,9 +732,9 @@ function txChipSel(id,valor,opcoes,onchange,nome,rotulo,ligado,limpar,cls){
    imóvel, a categoria e quem pagou ou recebeu — cada um abre a sua escolha e,
    ligado, mostra o valor com o × —, as etiquetas quando há escolhidas (o
    texto abre o painel, o × limpa-as), o «só com pessoa atribuída» quando está
-   ligado, os filtros comuns (só no ecrã largo; no telemóvel vivem no painel) e
-   o «Limpar». No telemóvel o «Pago por» desligado sai, para a fila caber: está
-   no painel.
+   ligado e não há pessoa escolhida (com uma, não conta: txMatch), os filtros
+   comuns (só no ecrã largo; no telemóvel vivem no painel) e o «Limpar». No
+   telemóvel o «Pago por» desligado sai, para a fila caber: está no painel.
    Devolve: o HTML da fila de chips (texto). */
 function txChipsHtml(){
   const L=[],anos=txAnos(),y=txAnoDoFiltro(),per=!!(txDe||txAte);
@@ -733,14 +755,16 @@ function txChipsHtml(){
   if(db.owners.length&&servicoLigado('owners')){
     const payers=[{v:'',label:'Qualquer proprietário'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
     L.push(txChipSel('txcPago',txPaid,payers,'txChipPago','Pago ou recebido por',(owner(txPaid)||{}).name||'',!!txPaid,"txLimparFiltro('pago')",txPaid?'':'mov-so-largo'));
-    if(!txNoPayer)L.push(`<span class="mov-chip on"><span class="mov-chip-txt">Só com pessoa atribuída</span><button type="button" class="mov-chip-x" aria-label="Incluir os movimentos sem pessoa atribuída" data-toca="vista" data-click="txLimparFiltro('pessoa')">${ic('x',14)}</button></span>`);
+    if(!txNoPayer&&!txPaid)L.push(`<span class="mov-chip on"><span class="mov-chip-txt">Só com pessoa atribuída</span><button type="button" class="mov-chip-x" aria-label="Incluir os movimentos sem pessoa atribuída" data-toca="vista" data-click="txLimparFiltro('pessoa')">${ic('x',14)}</button></span>`);
   }
   const comuns=txComuns();
   if(comuns.length)L.push(txChipSel('txcComum','',[{v:'',label:'Nenhum'}].concat(comuns.map(f=>({v:f.id,label:f.name}))),'txChipComum','Filtros comuns','',false,'','mov-comum mov-so-largo'));
-  /* com um filtro só, no telemóvel, o × do chip já o limpa: o «Limpar» só se
-     mostra lá com dois ou mais, para a fila não partir em duas */
-  const nf=txFiltrosN();
-  if(nf)L.push(`<button type="button" class="chip limpar${nf>1?'':' mov-so-largo'}" data-toca="vista" data-click="clearTxFilters()">Limpar</button>`);
+  /* o «Limpar» sempre que há alguma coisa para limpar — um chip, um filtro só
+     do painel ou só a pesquisa —, no telemóvel também (os tickets aca2564c e
+     9d5c886e): com um filtro só, escondia-se no telemóvel para a fila não
+     partir em duas, e quem procurava como limpar não o achava. A fila parte
+     em duas linhas, se for preciso (a decisão do Martinho de 2026-11-06) */
+  if(txFiltrosN())L.push(`<button type="button" class="chip limpar" data-toca="vista" data-click="clearTxFilters()">Limpar</button>`);
   return `<div class="chips-fila mov-chips" role="group" aria-label="Filtros dos movimentos">${L.join('')}</div>`;
 }
 /* O chip do período: um ano escolhe-o de 1 de janeiro a 31 de dezembro, «Todo
@@ -981,6 +1005,7 @@ function lpMovimento(a){
   return lpShow(t.label,opts);
 }
 // nº de filtros ativos nos movimentos, pesquisa incluída — o ponto no botão do cabeçalho
+// e o que acende o «Limpar» da fila e do painel (que também limpam a pesquisa)
 // Devolve: número de filtros ativos.
 function txFiltrosN(){return txFilterCount()+(String(txSearch||'').trim()?1:0)}
 // o botão de filtros do cabeçalho, nos movimentos: abre ou fecha o painel dos filtros

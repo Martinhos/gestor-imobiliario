@@ -1170,22 +1170,27 @@ aparece a partir de 901px, ou ligado (o «Pago por» dos Movimentos). Um chip
 que não é um seletor leva ao painel com o foco no campo dele
 (vistas.js:lfAbrirEm; estilos.css:.lfm-chip-abre) — o «Dias e horas» das
 Visitas, como o «Escolher datas…» dos Movimentos. Depois dos chips, o
-«Limpar» (vistas.js:lfChipsHtml), que no telemóvel só se mostra quando a
-única coisa ligada não tem o seu × à vista. A fila parte em linhas e não
-rola de lado. O chip diz o nome ao leitor de ecrã uma vez: quando o rótulo
+«Limpar» (vistas.js:lfChipsHtml), em todos os ecrãs sempre que há alguma
+coisa para limpar — um chip, um filtro só do painel ou só a pesquisa
+(vistas.js:lfCount); uma lista sem chips rápidos fica com a fila só com ele.
+A fila parte em linhas e não rola de lado. O chip diz o nome ao leitor de ecrã uma vez: quando o rótulo
 já começa por ele («Ordenar: renda»), só o rótulo.
 
 O painel é o dos Movimentos (vistas.js:lfPainelCorpo, as classes
 estilos.css:.mov-fwrap, estilos.css:.mov-filtros-card,
-estilos.css:.mov-grelha): o título com o «Limpar» (só com filtros ligados) e
-o «Fechar» NO TOPO, «Aplicam-se ao mexer · N imóveis» e a grelha de duas
-colunas, com a
-ordenação no fim (vistas.js:lfCampos: «Ordenar por» e, escolhida, «Ordem»).
+estilos.css:.mov-grelha): o título com o «Limpar» (com alguma coisa para
+limpar, a pesquisa incluída) e o «Fechar» NO TOPO, «Aplicam-se ao mexer · N
+imóveis» e os campos em secções sem nome (vistas.js:filtrosEmSeccoes,
+estilos.css:.mov-seccao): os seletores; os campos de data e de hora, cada
+intervalo lado a lado e os soltos depois; o «Ordenar por» com a «Ordem» ao
+lado (vistas.js:lfCampos: a «Ordem» só com uma ordenação escolhida). Cada
+secção é uma grelha de duas colunas que começa numa linha nova, separada da
+de cima por uma linha fina e sem título; uma secção sem campos não aparece.
 Na grelha, a opção vazia diz o curto («Todos»), e o campo ligado veste o
 cobalto (estilos.css:.mov-ligado). Além dos seletores (vistas.js:lfSel, que
-aplica pelo vistas.js:lfMudar e respeita o `aplicar` do campo), a grelha
-tem campos de data e de hora (vistas.js:lfCampoNaGrelha), lado a lado como o
-«De» e o «Até» dos Movimentos; um intervalo conta como um filtro no funil (o
+aplica pelo vistas.js:lfMudar e respeita o `aplicar` do campo), há campos de
+data e de hora (vistas.js:lfCampoNaGrelha), lado a lado como o «De» e o
+«Até» dos Movimentos; um intervalo conta como um filtro no funil (o
 `junto`, vistas.js:lfCount).
 
 O estado é o lf(k) da lista, e nada mais. O «Limpar» (vistas.js:lfClear)
@@ -1199,7 +1204,11 @@ via parcial desiste (nasce um cartão), o render recria o campo e o lfSearch
 devolve-lhe o foco. Ao teclado, o funil abre e fecha o painel com o foco a
 ficar nele, e o «Fechar» devolve-o ao funil (vistas.js:lfFocarFunil);
 escolher num seletor deixa o foco no seletor refeito (vistas.js:lfReporFoco);
-o «Limpar» do painel, que some, passa o foco ao «Fechar».
+o «Limpar» do painel, que some, passa o foco ao «Fechar». O Enter na
+pesquisa (vistas.js:lqTecla, lista-movimentos.js:txqTecla,
+vistas.js:enterDaPesquisa) aplica logo, sem os 280 ms; no telemóvel tira o
+foco ao campo, e o teclado fecha; com rato e teclado
+(`(hover:hover) and (pointer:fine)`) o foco fica no campo.
 
 Nos Imóveis, nos Contratos, nos Inquilinos, nas Visitas e nos Planeados o
 botão do cabeçalho é o «Selecionar vários», a caixa com o visto
@@ -3736,18 +3745,26 @@ e quem pagou ou recebeu, cada um o menu da casa vestido de chip
 (lista-movimentos.js:txChipSel), com o × que limpa só esse
 (lista-movimentos.js:txLimparFiltro). O período escolhe um ano inteiro, ou
 abre o painel para as datas (lista-movimentos.js:txChipPeriodo). Os filtros
-comuns são um chip no ecrã largo e chips no painel. No telemóvel o «Limpar»
-só aparece com dois filtros ou mais: com um, o × chega, e a fila não parte.
+comuns são um chip no ecrã largo e chips no painel. O «Limpar» aparece
+sempre que há alguma coisa para limpar, a pesquisa incluída, em todos os
+ecrãs (lista-movimentos.js:txFiltrosN); a fila parte em duas linhas quando
+não cabe, e no dedo acerta-se em 46px (estilos.css:.mov-chips).
+«Pago ou recebido por X» são só os movimentos que X pagou ou recebeu
+(lista-movimentos.js:txMatch): os sem pessoa ficam de fora. O interruptor
+«Incluir movimentos sem pessoa atribuída» só existe sem pessoa escolhida:
+com uma, sai do painel e não conta no funil, no «Limpar», no resumo nem no
+chip «Só com pessoa atribuída».
 As listas dos chips flutuam presas ao ecrã, com largura para se lerem e sem
 sair dele pelo lado (cloud/filtros.js:popAnchor).
 
 O painel dos filtros tem o desenho do M-Filtros e continua a ser o painel
-ancorado, que não tapa a lista: o título com o Limpar e o Fechar,
-«Aplicam-se ao mexer · N movimentos», os filtros comuns em chips, o tipo em
-chips (role radio), uma grelha de duas colunas — o imóvel, a categoria, a
-subcategoria, quem pagou, o proprietário, as datas e a ordenação — e o
-interruptor dos movimentos sem pessoa (lista-movimentos.js:txFilterBody,
-lista-movimentos.js:txPorTipo). Na grelha a opção vazia diz só «Todos»,
+ancorado, que não tapa a lista: o título com o Limpar (que conta a
+pesquisa) e o Fechar, «Aplicam-se ao mexer · N movimentos» e, em secções sem
+nome (vistas.js:filtrosEmSeccoes), os filtros comuns, o tipo em chips (role
+radio) e as etiquetas; os seletores — o imóvel, a categoria, a subcategoria,
+quem pagou ou recebeu; o «De» ao lado do «Até»; o «Ordenar por» ao lado da
+«Ordem»; e no fim o interruptor dos movimentos sem pessoa
+(lista-movimentos.js:txFilterBody, lista-movimentos.js:txPorTipo). Na grelha a opção vazia diz só «Todos»,
 «Todas» ou «Qualquer um»; os chips continuam com as listas inteiras
 (lista-movimentos.js:txOpcoesImovel, lista-movimentos.js:txOpcoesCategoria).
 O interruptor vai num <label> com o texto, de 44px (estilos.css:.mov-interr):
@@ -4236,6 +4253,21 @@ do produto), e ligado diz-se na cor da frente: «Ligado» no --accent-text e o
 contorno da caixa no --accent. Ligar não repinta, e o foco fica; adicionar e
 remover levam o foco ao tipo novo ou ao «Adicionar produto». Nada se grava
 sem o Guardar. A ficha da hipoteca nomeia os ligados.
+
+A «Redução de spread» é o único produto que dura um tempo: baixa só o
+spread, e só nos primeiros meses do crédito, contados pelo relógio da
+credito.js:rateAt (as prestações registadas, credito.js:loanMes — o mesmo da
+fase fixa da mista). Nunca baixa a taxa fixa da mista (fica fora da regra da
+credito.js:reducaoDoProduto) e na fixa não conta: o tipo não se oferece, e
+uma que já lá estava diz que não conta. A linha dela tem «Baixa o spread em
+(%)» e «Durante (meses)», obrigatório (imovel.js:loanProdSemMeses); o
+«Adicionar produto» não a escolhe sozinho. O spread em vigor sem mês é o do
+primeiro mês em que o spread entra na taxa (credito.js:mesDoSpread: na mista,
+o início da fase variável). A frase do bloco (imovel.js:loanProdFraseReducao),
+a caixa da simulação, a ficha e o aviso dos prazos dizem quando a prestação
+volta a subir (credito.js:mudancasDaPrestacao, credito.js:fimDaReducao, pelo
+relógio do credito.js:fimDaFaseFixa). A FINE não a lê
+(fine.js:fineLimparProdutos).
 
 ## As datas leem-se como se escrevem em Portugal
 O ecrã dizia `2028-03-15`. Passa a dizer **15/03/2028** (formato.js:dPT), e
@@ -6808,7 +6840,12 @@ setas, o Home e o End andam pelas opções, e o Escape com a lista aberta fecha
 só a lista e devolve o foco ao botão (componentes.js:selTecla). Escolher
 redesenha as opções pela mesma função do sel() (componentes.js:selOpcaoDesenho):
 o on, o aria-selected e o visto ficam só na escolhida, nos mesmos botões, e o
-foco fica onde estava (componentes.js:selPick). O percurso
+foco fica onde estava (componentes.js:selPick). Escolher uma opção não tem
+ação por omissão: o selPick trava a propagação e o default. Quase todos os
+sel() vivem dentro de um <label>, e o label passa ao botão do sel() o clique
+que não vem de um botão de dentro; num Chromium de antes de 2026 (o Samsung
+Internet 30) ele decide pelo DOM de depois dos ouvintes, com o <span> tocado
+já trocado pelo redesenho, e o menu voltava a abrir. O percurso
 mede os alvos num ecrã de toque (testes/ui/invariantes.js, a regra 4): o que
 fica abaixo de 40px conta-se por tipo, e o teto só desce.
 

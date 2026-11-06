@@ -131,9 +131,9 @@ describe('os chips dos filtros (o canvas: abrem a escolha e, ligados, mostram o 
     assert.match(html, /data-click="txLimparFiltro\('cat'\)"/);
     assert.match(html, /<button type="button" class="chip limpar" data-toca="vista" data-click="clearTxFilters\(\)">Limpar<\/button>/, 'com dois ou mais, o Limpar vê-se em todo o lado');
     assert.match(html, /aria-label="Filtros: 4 ativos"/);
-    // com um só, no telemóvel o × chega: o Limpar fica só para o ecrã largo
+    // com um só, o Limpar continua à vista em todos os ecrãs, ao lado do × do chip
     app.txProp = ''; app.txCat = ''; app.txSub = '';
-    assert.match(app.vTransactions(), /class="chip limpar mov-so-largo"/);
+    assert.match(app.vTransactions(), /<button type="button" class="chip limpar" data-toca="vista" data-click="clearTxFilters\(\)">Limpar<\/button>/);
   });
 
   test('o × limpa só o seu filtro; o do tipo leva a categoria, que era da árvore dele', () => {

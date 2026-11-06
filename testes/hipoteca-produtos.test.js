@@ -64,7 +64,8 @@ describe('o modelo', () => {
     assert.match(l.produtos[3].id, /^[A-Za-z0-9_-]{1,64}$/, 'sem id, ganha um');
   });
   test('a lista fechada é a do contrato, pela mesma ordem', () => {
-    igual(app.PRODUTOS_HIPOTECA.map((p) => p.id), ['seguro_vida', 'seguro_multirriscos', 'ordenado', 'debitos', 'cartao_credito', 'cartao_debito', 'poupanca', 'conjunto', 'outro']);
+    igual(app.PRODUTOS_HIPOTECA.map((p) => p.id), ['seguro_vida', 'seguro_multirriscos', 'ordenado', 'debitos', 'cartao_credito', 'cartao_debito', 'poupanca', 'conjunto', 'reducao_spread', 'outro']);
+    igual(app.produtoNome('reducao_spread'), 'Redução de spread');
     igual(app.produtoNome('ordenado'), 'Ordenado domiciliado');
     igual(app.produtoNome('iate'), 'Outro produto');
   });

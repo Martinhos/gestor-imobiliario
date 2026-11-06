@@ -2,7 +2,8 @@
 let pForm={};
 /* Abre o modal de criar/editar imóvel. Com id, trabalha sobre uma cópia
    profunda do imóvel (nada muda na base até Guardar); sem id, começa um novo.
-   Ao guardar valida o nome, escreve em db.properties e repinta a app; o
+   Ao guardar valida o nome (e, nas hipotecas, o capital, o início e os meses
+   de uma redução de spread), escreve em db.properties e repinta a app; o
    novo diz «Imóvel adicionado.» com o «Ver» para a ficha (componentes.js:avisoComVer).
    Recebe: id (opcional) — o id do imóvel a editar; sem id, cria um imóvel novo.
    Devolve: nada — abre o modal e deixa a gravação pendurada em onSave. */
@@ -31,6 +32,9 @@ function propModal(id){
     /* nenhuma hipoteca começa antes da compra (a data do próprio formulário) */
     const cedo=servicoLigado('credits')?creditoAntesDaCompra(pForm,prop(pForm.id)):null;
     if(cedo)return falhaCampo('l_start_'+cedo.id,cedo.msg);
+    /* a redução de spread tem «Durante (meses)» obrigatório (loanProdLinha) */
+    const semMeses=servicoLigado('credits')?loanProdSemMeses(pForm.loans):'';
+    if(semMeses)return falhaCampo(semMeses,LOAN_PROD_FRASES.semMeses);
     (pForm.loans||[]).forEach(l=>{l.name=l.name||l.bank||'Hipoteca'});   /* a recorrência identifica-se pelo nome */
     /* a pergunta pelas prestações desde o início (creditos.js) cria movimentos numa hipoteca:
        corre com os Créditos e os Movimentos ligados nesta conta; o planeado da prestação só
@@ -936,6 +940,9 @@ var LOAN_PROD_FRASES={
   dica:'Os produtos que o banco pede para baixar a taxa (seguros, cartões, ordenado domiciliado). Adiciona cada um com a redução que dá, e liga os que tens.',
   custo:'O custo dos produtos (seguros, cartão) não entra na hipoteca: regista-o à parte, como despesa.',
   mista:'Na mista, um produto sem redução na taxa fixa baixa-a tanto como o spread.',
+  mistaReducao:'A redução de spread não segue esta regra: baixa só o spread, e só nos meses dela, contados desde o início.',
+  fixaReducao:'Na taxa fixa não há spread: esta redução não conta. Remove-a, ou escolhe outro tipo de taxa.',
+  semMeses:'Diz durante quantos meses baixa o spread.',
 };
 /* O bloco «Produtos facultativos» do formulário da hipoteca: o título, a
    dica, uma linha por produto (loanProdLinha), o «Adicionar produto» e, com
@@ -948,7 +955,7 @@ function loanProdSect(l){
   return `<div class="hip-prod${lido}" id="l_prods_${id}" role="group" aria-labelledby="l_prods_t_${id}">
     <div class="flabel" id="l_prods_t_${id}">Produtos facultativos</div>
     <div class="hint">${esc(LOAN_PROD_FRASES.dica)}</div>
-    ${l.type==='mista'?`<div class="hint">${esc(LOAN_PROD_FRASES.mista)}</div>`:''}
+    ${l.type==='mista'?`<div class="hint">${esc(LOAN_PROD_FRASES.mista)}${ps.some(p=>p.tipo==='reducao_spread')?' '+esc(LOAN_PROD_FRASES.mistaReducao):''}</div>`:''}
     ${ps.length?`<ul class="hip-prod-lista">${ps.map(p=>loanProdLinha(l,p,red)).join('')}</ul>`:''}
     <button type="button" class="btn sm hip-prod-add" id="l_padd_${id}" data-toca="rascunho" data-click="loanProdAdicionar('${jsq(l.id)}')">${ic('plus',16)} Adicionar produto</button>
     ${ps.length?`<p class="hip-prod-vigor" id="l_pvig_${id}" role="status">${esc(loanProdFraseVigor(l))}</p>
@@ -957,30 +964,64 @@ function loanProdSect(l){
 /* Uma linha de produto: o tipo (o sel() da casa, com o nome do produto
    para o leitor de ecrã) e o Remover em cima; em baixo as reduções que o
    tipo de taxa tem e o interruptor, que leva o nome do produto escolhido
-   (aria-labelledby no rótulo do sel) e diz o estado em palavras.
+   (aria-labelledby no rótulo do sel) e diz o estado em palavras. A «Redução
+   de spread» pede só a redução do spread e, obrigatório, «Durante (meses)»;
+   na fixa não se oferece no tipo e, se já lá estava, a linha explica que não
+   conta (LOAN_PROD_FRASES.fixaReducao).
    Recebe: l — a hipoteca; p — o produto; red — as reduções do tipo de taxa
    (credito.js:produtosReducoes).
    Devolve: o HTML do <li> (texto). */
 function loanProdLinha(l,p,red){
-  const id=esc(p.id),lid=jsq(l.id),pid=jsq(p.id),on=p.ativo===true;
+  const id=esc(p.id),lid=jsq(l.id),pid=jsq(p.id),on=p.ativo===true,temp=p.tipo==='reducao_spread';
   const campo=(k,rot,v)=>`<label>${rot}<input id="l_p${k}_${id}" type="text" inputmode="decimal" value="${v!=null?dec(v):''}" placeholder="Ex: 0,10" autocomplete="off" data-input="liveLoan('${lid}')"></label>`;
-  const campos=(red.spread?campo('spr','Baixa o spread em (%)',p.spread):'')+(red.tan?campo('tan',l.type==='mista'?'Baixa a taxa fixa em (%)':'Baixa a TAN em (%)',p.tan):'');
+  const meses=`<label>Durante (meses) <span class="req">*</span><input id="l_pmes_${id}" type="text" inputmode="numeric" value="${p.meses?esc(p.meses):''}" placeholder="Ex: 12" autocomplete="off" data-input="liveLoan('${lid}')"></label>`;
+  const campos=temp?(red.spread?campo('spr','Baixa o spread em (%)',p.spread)+meses:`<div class="hint">${esc(LOAN_PROD_FRASES.fixaReducao)}</div>`)
+    :(red.spread?campo('spr','Baixa o spread em (%)',p.spread):'')+(red.tan?campo('tan',l.type==='mista'?'Baixa a taxa fixa em (%)':'Baixa a TAN em (%)',p.tan):'');
+  /* na fixa a redução de spread não se oferece; a que já lá estava continua escolhida */
+  const tipos=PRODUTOS_HIPOTECA.filter(x=>x.id!=='reducao_spread'||red.spread||temp);
   return `<li class="hip-prod-linha${on?' on':''}" id="l_prow_${id}">
-      <div class="hip-prod-cab"><label class="hip-prod-tipo"><span class="imv-so-leitor">Produto</span>${sel('l_ptipo_'+p.id,p.tipo,PRODUTOS_HIPOTECA.map(x=>({v:x.id,label:x.nome})),'liveLoanAll','rascunho')}</label>
+      <div class="hip-prod-cab"><label class="hip-prod-tipo"><span class="imv-so-leitor">Produto</span>${sel('l_ptipo_'+p.id,p.tipo,tipos.map(x=>({v:x.id,label:x.nome})),'loanProdTipoMudou','rascunho')}</label>
         <button type="button" class="btn ghost so-icone hip-prod-x" id="l_pdel_${id}" aria-label="Remover produto: ${esc(produtoNome(p.tipo))}" data-toca="rascunho" data-click="loanProdRemover('${lid}','${pid}')">${ic('trash',16)}</button></div>
       <div class="hip-prod-pe"><div class="hip-prod-red">${campos}</div>
         <button type="button" class="hip-prod-liga" id="l_pon_${id}" role="switch" aria-checked="${on}" aria-labelledby="lab_l_ptipo_${id}" data-toca="rascunho" data-click="loanProdLigar('${lid}','${pid}')"><span class="interruptor" aria-hidden="true"></span><span class="hip-prod-estado" id="l_pest_${id}">${on?'Ligado':'Desligado'}</span></button></div></li>`;
 }
 /* A linha da taxa em vigor com os produtos ligados: «Com os produtos
    ligados, o spread fica em 0,85 %.» (na fixa a TAN, na mista a taxa fixa e
-   o spread); sem nenhum ligado, a de sem produtos.
+   o spread); sem nenhum ligado, a de sem produtos. O spread é o deste mês (na
+   mista, o do primeiro da fase variável: credito.js:mesDoSpread). Com uma
+   redução de spread ligada, diz até quando dura (loanProdFraseReducao).
    Recebe: l — a hipoteca.
    Devolve: a frase. */
 function loanProdFraseVigor(l){
   const red=produtosReducoes(l.type),partes=[];
   if(red.tan)partes.push((l.type==='mista'?'a taxa fixa':'a TAN')+' fica em '+dec(taxa3(taxaFixaEmVigor(l)))+' %');
   if(red.spread)partes.push('o spread '+(partes.length?'':'fica ')+'em '+dec(taxa3(spreadEmVigor(l)))+' %');
-  return (produtosLigados(l).length?'Com os produtos ligados, ':'Sem produtos ligados, ')+partes.join(' e ')+'.';
+  const extra=loanProdFraseReducao(l);
+  return (produtosLigados(l).length?'Com os produtos ligados, ':'Sem produtos ligados, ')+partes.join(' e ')+'.'+(extra?' '+extra:'');
+}
+/* O que a linha da taxa em vigor diz da redução de spread ligada: quando
+   acaba e para quanto sobe o spread (credito.js:fimDaReducao, o relógio do
+   fim da fase fixa); que já acabou; que na mista acaba antes do fim da taxa
+   fixa e não muda nada; ou que sem os meses não conta. Na fixa, nada (a linha
+   do produto já o diz).
+   Recebe: l — a hipoteca.
+   Devolve: a frase, ou '' sem redução de spread ligada. */
+function loanProdFraseReducao(l){
+  const rs=produtosLigados(l).filter(p=>p.tipo==='reducao_spread'&&Number(p.spread)>0);
+  if(!rs.length||!produtosReducoes(l.type).spread)return '';
+  if(!rs.some(p=>Number(p.meses)>=1))return 'A redução de spread só conta com os meses que dura.';
+  const m=fimDaReducaoMes(l),N=Math.round((Number(l.years)||0)*12);
+  if(m&&N&&m>=N)return 'A redução de spread dura até ao fim do crédito.';
+  if(m){
+    const r0=servicoLigado('recurring')?loanRecOf(l):null;
+    const fim=fimDaReducao(l,db.transactions||[],today(),r0&&r0.next);
+    const depois=dec(taxa3(spreadEmVigor(l,m)));
+    return fim?'A redução de spread acaba em '+pzMes(fim)+': a partir daí o spread passa a '+depois+' %, e a prestação sobe.'
+      :'Quando a redução de spread acabar, o spread passa a '+depois+' %, e a prestação sobe.';
+  }
+  const ja=loanMes(l),mais=Math.max.apply(null,rs.map(p=>Number(p.meses)||0));
+  if(mais<=ja)return 'A redução de spread já acabou.';
+  return 'A redução de spread acaba antes do fim da taxa fixa: não muda a prestação.';
 }
 /* Refaz só a linha da taxa em vigor (ao escrever uma redução, ao ligar), e
    só quando o texto muda: é uma região viva, e o leitor de ecrã anuncia-a.
@@ -1002,12 +1043,30 @@ function loanProdRefrescar(l){
    Devolve: nada — muda l.produtos. */
 function loanProdColher(l){
   const red=v=>String(v==null?'':v).trim()?produtoReducao(numTaxa(v)):null;
+  /* os meses: só um inteiro escrito com algarismos (dados.js:produtoMeses dá a gama) */
+  const meses=v=>{const t=String(v==null?'':v).trim();return /^\d{1,4}$/.test(t)?produtoMeses(Number(t)):null};
   (l.produtos||[]).forEach(p=>{
-    const t=document.getElementById('l_ptipo_'+p.id),s=document.getElementById('l_pspr_'+p.id),n=document.getElementById('l_ptan_'+p.id);
+    const t=document.getElementById('l_ptipo_'+p.id),s=document.getElementById('l_pspr_'+p.id),n=document.getElementById('l_ptan_'+p.id),me=document.getElementById('l_pmes_'+p.id);
     if(t&&PRODUTOS_HIPOTECA.some(x=>x.id===t.value))p.tipo=t.value;
     if(s)p.spread=red(s.value);
     if(n)p.tan=red(n.value);
+    if(me)p.meses=meses(me.value);
+    if(p.tipo!=='reducao_spread')p.meses=null;
   });
+}
+/* O campo «Durante (meses)» que falta: o da primeira redução de spread sem
+   meses numa hipoteca que tem spread (na fixa a linha não tem o campo, e a
+   redução não conta). É o que o Guardar recusa, junto ao campo
+   (componentes.js:falhaCampo), no imóvel e na hipoteca (creditos.js:mortOpen).
+   Recebe: loans — as hipotecas do formulário (array; aguenta nada).
+   Devolve: o id do campo ('l_pmes_<id do produto>'), ou '' sem nenhum em falta. */
+function loanProdSemMeses(loans){
+  for(const l of loans||[]){
+    if(!l||!produtosReducoes(l.type).spread)continue;
+    const p=(l.produtos||[]).find(x=>x&&x.tipo==='reducao_spread'&&!produtoMeses(x.meses));
+    if(p)return 'l_pmes_'+p.id;
+  }
+  return '';
 }
 /* Liga ou desliga um produto: muda só o formulário e o desenho do
    interruptor (sem repintar, o foco fica nele), e refaz a simulação e a taxa
@@ -1024,15 +1083,36 @@ function loanProdLigar(lid,pid){
   if(row)row.classList.toggle('on',p.ativo);
   liveLoan(lid);
 }
+/* O tipo de um produto mudou no sel(). Quando passa de ou para a «Redução de
+   spread», a linha muda de campos (os meses, a TAN): repinta o formulário e
+   devolve o foco ao tipo. Senão, como os outros campos, refaz só as caixas
+   da simulação e a taxa em vigor (liveLoanAll), sem tirar o foco a ninguém.
+   O sel() não diz qual mudou: compara-se o tipo de cada produto antes e
+   depois de ler o ecrã.
+   Devolve: nada — mexe em pForm e no DOM. */
+function loanProdTipoMudou(){
+  const antes={};
+  (pForm.loans||[]).forEach(l=>(l.produtos||[]).forEach(p=>{antes[p.id]=p.tipo}));
+  collectProp();
+  let mudou=null;
+  (pForm.loans||[]).forEach(l=>(l.produtos||[]).forEach(p=>{
+    if(!mudou&&antes[p.id]!==undefined&&(antes[p.id]==='reducao_spread')!==(p.tipo==='reducao_spread'))mudou=p;
+  }));
+  if(!mudou)return liveLoanAll();
+  repaintProp();
+  const b=document.getElementById('selb_l_ptipo_'+mudou.id);if(b)try{b.focus()}catch(e){}
+}
 /* Adiciona uma linha de produto, desligada e sem redução: o primeiro tipo da
-   lista que a hipoteca ainda não tem (ou «Outro produto»). Repinta — os
-   rótulos de cima passam a «sem produtos» — e leva o foco ao tipo novo.
+   lista que a hipoteca ainda não tem (ou «Outro produto»). A «Redução de
+   spread» não se escolhe sozinha: não é um produto que o banco peça, e tem
+   os meses obrigatórios. Repinta — os rótulos de cima passam a «sem
+   produtos» — e leva o foco ao tipo novo.
    Recebe: lid — o id da hipoteca.
    Devolve: nada — mexe em pForm e repinta o formulário. */
 function loanProdAdicionar(lid){
   collectProp();
   const l=findLoan(pForm,lid);if(!l)return;
-  const usados=(l.produtos||[]).map(p=>p.tipo),livre=PRODUTOS_HIPOTECA.find(x=>x.id!=='conjunto'&&x.id!=='outro'&&usados.indexOf(x.id)<0);
+  const usados=(l.produtos||[]).map(p=>p.tipo),livre=PRODUTOS_HIPOTECA.find(x=>x.id!=='conjunto'&&x.id!=='reducao_spread'&&x.id!=='outro'&&usados.indexOf(x.id)<0);
   const p=normProduto({tipo:livre?livre.id:'outro',ativo:false});
   l.produtos=(l.produtos||[]).concat([p]);
   repaintProp();
@@ -1051,11 +1131,12 @@ function loanProdRemover(lid,pid){
 }
 /* HTML da caixa de simulação de uma hipoteca: prestação mensal decomposta em
    capital, juros e selo, o capital em dívida de hoje quando as prestações
-   registadas já abateram o do início, prestação após a fase fixa (mista, se
-   ainda não chegou — descontando as prestações já registadas) e custo total
-   do crédito. Sem capital ou prazo devolve só a dica do que falta; liquidado,
-   diz que está; com o prazo já esgotado pelas prestações registadas, avisa em
-   vez de fingir uma prestação.
+   registadas já abateram o do início, a prestação de cada mudança de taxa
+   por vir — o fim da fase fixa de uma mista e o fim de uma redução de spread
+   temporária, dentro do plano e descontando as prestações já registadas — e
+   custo total do crédito. Sem capital ou prazo devolve só a dica do que
+   falta; liquidado, diz que está; com o prazo já esgotado pelas prestações
+   registadas, avisa em vez de fingir uma prestação.
    Recebe: l — a hipoteca (objeto; aguenta null/undefined).
    Devolve: string de HTML da caixa, pronta a inserir com innerHTML; '' sem hipoteca. */
 function loanBox(l){
@@ -1065,13 +1146,14 @@ function loanBox(l){
   if(!(Number(l.outstanding)>0))return `<div class="hint">Crédito liquidado: as prestações registadas já pagaram o capital todo.</div>`;
   const c=loanCalc(l),a=amort(l);
   let extra='';
-  if(l.type==='mista'){
-    /* as linhas do plano começam na próxima por pagar: a fase muda em rows[fixedYears*12 − registadas],
-       e o mês diz-se pelo mesmo relógio do aviso dos prazos (credito.js:fimDaFaseFixa) */
-    const k=Math.round((Number(l.fixedYears)||0)*12)-loanMes(l),r=k>0?a.rows[k]:null;
-    const r0=r&&servicoLigado('recurring')?loanRecOf(l):null;
-    const fim=r?fimDaFaseFixa(l,db.transactions,today(),r0&&r0.next):'';
-    if(r&&fim)extra=`<div class="stat"><span>Prestação a partir de ${MES[Number(fim.slice(5,7))-1]} ${fim.slice(0,4)}</span><b>${euro2(r.pay+r.st)}</b></div>`;
+  /* as linhas do plano começam na próxima por pagar: a taxa muda em rows[mês − registadas], e o
+     mês diz-se pelo mesmo relógio do aviso dos prazos (credito.js:mudancasComData, fimDaFaseFixa) */
+  const ms=mudancasDaPrestacao(l);
+  if(ms.length){
+    const r0=servicoLigado('recurring')?loanRecOf(l):null;
+    mudancasComData(l,a,r0&&r0.next).forEach(x=>{
+      extra+=`<div class="stat"><span>Prestação a partir de ${MES[Number(x.fim.slice(5,7))-1]} ${x.fim.slice(0,4)}</span><b>${euro2(x.row.pay+x.row.st)}</b></div>`;
+    });
   }
   if(a.esgotado)extra+=`<div class="hint u-bl-3px-solid-v-warn u-pl-10px"><b>Prazo esgotado</b> — as prestações já registadas cobrem o prazo inteiro e ainda há dívida. Confirma o prazo e as prestações registadas.</div>`;
   /* o campo acima é o capital da data de início: o de hoje diz-se aqui, quando já é outro */
