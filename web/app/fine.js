@@ -228,7 +228,9 @@ function fineLimpar(campos){
 /* Os produtos facultativos da resposta passados outra vez pelas regras do
    contrato (a rota já o fez; a app não confia no que não escreveu): só os
    tipos da lista fechada (dados.js:PRODUTOS_HIPOTECA — um desconhecido não
-   entra), sem tipos repetidos (fica o primeiro), só as reduções que o tipo
+   entra; a «Redução de spread» também não, que a FINE não a lê e o servidor
+   não a tem: sem os meses, que ela pede, não contava), sem tipos repetidos
+   (fica o primeiro), só as reduções que o tipo
    de taxa tem (credito.js:produtosReducoes) e dentro de (0, 3]
    (dados.js:produtoReducao), um produto sem redução nenhuma não entra, e no
    máximo FINE_MAX_PRODUTOS.
@@ -241,7 +243,7 @@ function fineLimparProdutos(lista,tipo){
   for(const x of lista){
     if(out.length>=FINE_MAX_PRODUTOS)break;
     if(!x||typeof x!=='object'||Array.isArray(x)||typeof x.tipo!=='string')continue;
-    if(!PRODUTOS_HIPOTECA.some(p=>p.id===x.tipo)||vistos[x.tipo])continue;
+    if(!PRODUTOS_HIPOTECA.some(p=>p.id===x.tipo)||x.tipo==='reducao_spread'||vistos[x.tipo])continue;
     const spread=red.spread?produtoReducao(x.spread):null,tan=red.tan?produtoReducao(x.tan):null;
     if(spread===null&&tan===null)continue;
     vistos[x.tipo]=true;

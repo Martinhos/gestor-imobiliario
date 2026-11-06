@@ -46,10 +46,24 @@ function sel(id,value,options,onchange,toca){
     <input type="hidden" id="${e}" value="${esc(value==null?'':value)}">
     <button type="button" class="selbtn" id="selb_${e}" aria-haspopup="listbox" aria-expanded="false" aria-controls="pop_${e}" data-toca="camada" data-click="selOpen(event,'${jsq(id)}')"><span id="lab_${e}">${esc(cur.label)}</span>${ic('chevD',16)}</button>
     <div class="selpop" id="pop_${e}" role="listbox">
-      ${options.map((o,i)=>{if(o.div)return '<div class="sdiv" aria-hidden="true"></div>';const sim=String(o.v)===String(value);
-        return `<button type="button" class="selopt ${sim?'on':''}" role="option" aria-selected="${sim}" data-i="${i}"${toca?` data-toca="${toca}"`:''} data-click="selPick(event,'${jsq(id)}',${i})">
-        <span>${esc(o.label)}</span>${sim?ic('check',16):''}</button>`}).join('')}
+      ${options.map((o,i)=>{if(o.div)return '<div class="sdiv" aria-hidden="true"></div>';const d=selOpcaoDesenho(o,String(o.v)===String(value));
+        return `<button type="button" class="${d.cls}" role="option" aria-selected="${d.sel}" data-i="${i}"${toca?` data-toca="${toca}"`:''} data-click="selPick(event,'${jsq(id)}',${i})">
+        ${d.miolo}</button>`}).join('')}
     </div></div>`;
+}
+/* O que no desenho de uma opção de um sel() depende de ela ser a escolhida:
+   a classe (com o on), o aria-selected e o miolo (o rótulo, e o visto só na
+   escolhida). É o mesmo para o sel(), que monta a lista, e para o selPick,
+   que o volta a aplicar a cada opção quando se escolhe. Antes, o selPick só
+   mudava o aria-selected, e o on e o visto ficavam na opção que o sel()
+   tinha desenhado (ticket de QA d7da7025: no tipo de produto da hipoteca, o
+   visto ficava sempre no «Seguro de vida»). O selPick aplica-o ao próprio
+   botão, sem o trocar por outro: o foco e os ouvintes ficam onde estavam.
+   Recebe: o — a opção ({v, label}); sim — true se é a escolhida.
+   Devolve: {cls, sel, miolo} — a classe do botão, o valor do aria-selected
+   ('true' ou 'false') e o HTML de dentro. */
+function selOpcaoDesenho(o,sim){
+  return {cls:sim?'selopt on':'selopt',sel:sim?'true':'false',miolo:`<span>${esc(o.label)}</span>${sim?ic('check',16):''}`};
 }
 /* grupos no fim do dropdown, separados por uma linha
    Recebe: arr — as opções dos grupos (array).
@@ -247,21 +261,38 @@ function selTecla(e){
   return true;
 }
 /* Escolha de uma opção: escreve o valor no input escondido, troca o rótulo do
-   botão, marca a opção como a escolhida (aria-selected), fecha o menu e chama
-   o onchange registado (pelo nome, em window) — é por aí que os formulários
-   reagem à mudança. Escolhida pelo teclado, o foco volta ao botão.
+   botão, redesenha as opções como o sel() as desenharia com o valor novo (o
+   on, o aria-selected e o visto só na escolhida: selOpcaoDesenho), fecha o
+   menu e chama o onchange registado (pelo nome, em window) — é por aí que os
+   formulários reagem à mudança. Escolhida pelo teclado, o foco volta ao botão.
+
+   O clique na opção acaba aqui: além de não subir (stopPropagation), não tem
+   ação por omissão (preventDefault). Quase todos os sel() vivem dentro de um
+   <label> (o rótulo do campo), e o label passa o clique ao botão do sel(),
+   que é o controlo dele, sempre que o clique não vem de um botão de dentro.
+   O Chromium de antes da correção de janeiro de 2026 (o Samsung Internet 30
+   é um Chrome 143) decide isso pelo DOM DEPOIS de os ouvintes correrem; e
+   aqui o <span> tocado acabou de ser trocado pelo innerHTML do redesenho das
+   opções, já não está dentro de botão nenhum. O label clicava então no botão, o selOpen
+   reabria o menu e ele piscava e ficava aberto (ticket de QA b0c85090). O
+   preventDefault desliga essa ação em qualquer browser, faça o onchange ao
+   DOM o que fizer.
    Recebe: e — o evento do clique (pode vir null); id — o id dado ao sel();
    i — o índice da opção escolhida em window.__sel[id].options.
    Devolve: nada — atualiza o input, o rótulo e as opções no DOM e chama o onchange. */
 function selPick(e,id,i){
-  if(e)e.stopPropagation();
+  if(e){e.stopPropagation();if(typeof e.preventDefault==='function')e.preventDefault()}
   const cfg=window.__sel[id]||{options:[]},o=cfg.options[i];if(!o)return;
   const inp=document.getElementById(id);if(inp)inp.value=o.v;
   const lab=document.getElementById('lab_'+id);if(lab)lab.textContent=o.label;
   const pop=document.getElementById('pop_'+id);
   if(pop){
     pop.classList.remove('on');
-    [].slice.call(pop.querySelectorAll('.selopt')).forEach(b=>b.setAttribute('aria-selected',b.getAttribute('data-i')===String(i)?'true':'false'));
+    [].slice.call(pop.querySelectorAll('.selopt')).forEach(b=>{
+      const j=Number(b.getAttribute('data-i')),oj=cfg.options[j];if(!oj)return;
+      const d=selOpcaoDesenho(oj,j===i);
+      b.className=d.cls;b.setAttribute('aria-selected',d.sel);b.innerHTML=d.miolo;
+    });
   }
   selAberto(id,false);
   if(e&&e.detail===0){const b=document.getElementById('selb_'+id);try{if(b)b.focus()}catch(x){}}

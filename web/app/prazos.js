@@ -28,7 +28,7 @@
    prazos nasce dele, e nenhum texto o julga. */
 
 // dias de antecedência com que cada tipo de prazo começa a avisar
-const PZ_ANTECEDENCIA = { oposicao: 150, fim: 60, aumento: 45, cc: 60, energia: 90, taxa: 90,
+const PZ_ANTECEDENCIA = { oposicao: 150, fim: 60, aumento: 45, cc: 60, energia: 90, taxa: 90, spread: 60,
   modelo2: 45, cessacao: 45, recibos: 40, irs: 90, fev15: 45, rsaa: 45, modelo44: 45 };
 
 /* O Modelo 44 (a declaração anual das rendas de quem está dispensado do recibo
@@ -99,7 +99,8 @@ function pzMes(iso){
    As fontes: contratos ativos com fim (a janela de oposição de 120 dias e o
    próprio fim), contratos com aumento anual configurado (o aviso de 30 dias
    ao inquilino), cartões de cidadão de inquilinos ativos e de proprietários,
-   certificados energéticos dos imóveis, e o fim da fase fixa das mistas.
+   certificados energéticos dos imóveis, o fim da fase fixa das mistas e o
+   fim de uma redução de spread temporária (a prestação volta a subir).
    E a AT: o Modelo 2 dos contratos por indicar (fim do mês seguinte ao
    início), a cessação dos declarados que terminaram (fim do mês seguinte ao
    fim), os recibos por emitir das rendas dos últimos três meses (fim do mês
@@ -262,6 +263,16 @@ function prazosDe(hoje){
         servicoLigado('properties')?`propView('${jsq(p.id)}')`:'',true);
     }
     (p.loans||[]).forEach(l=>{
+      /* o fim de uma redução de spread temporária: a prestação volta a subir,
+         pelo mesmo relógio do fim da fase fixa (credito.js:fimDaReducao) */
+      const abrirCred=servicoLigado('credits')?`mortView('${jsq(p.id)}','${jsq(l.id)}')`:(servicoLigado('properties')?`propView('${jsq(p.id)}')`:'');
+      if(Number(l.outstanding)>0&&fimDaReducaoMes(l)){
+        const r1=servicoLigado('recurring')?loanRecOf(l):null;
+        const fimR=fimDaReducao(l,db.transactions||[],h,r1&&r1.next),mR=fimDaReducaoMes(l);
+        if(fimR&&mR<Math.round((Number(l.years)||0)*12))poe('spread',l.id+':'+fimR,fimR,'Fim da redução do spread — '+(l.name||l.bank||'crédito')+' ('+(p.name||'imóvel')+')',
+          'A '+dPT(fimR)+' acaba a redução de spread: o spread passa de '+dec(taxa3(spreadEmVigor(l,mR-1)))+'% para '+dec(taxa3(spreadEmVigor(l,mR)))+'%, e a prestação sobe.',
+          abrirCred,false);
+      }
       if(l.type!=='mista'||!l.fixedYears||!(Number(l.outstanding)>0))return;
       /* o mesmo relógio da simulação (credito.js:fimDaFaseFixa): as prestações
          registadas, e não o calendário desde o início — os dois discordavam por

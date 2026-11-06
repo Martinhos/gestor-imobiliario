@@ -434,7 +434,7 @@ CW.readDoc = function (e, page) {
   if (old) old.remove();
   var el = document.createElement('div');
   el.id = 'cwDoc';
-  el.style.cssText = 'position:fixed;inset:0;z-index:210;background:var(--bg);overflow:auto;' +
+  el.style.cssText = 'position:fixed;inset:0;z-index:210;background:var(--bg);overflow:auto;overscroll-behavior:contain;' +
     'padding:calc(var(--inset-top,0px) + 16px) 16px calc(var(--inset-bottom,0px) + 24px)';
   el.innerHTML =
     '<div class="u-maxw-720px u-m-0-auto">' +
@@ -469,7 +469,7 @@ function showTermsGate() {
   if (document.getElementById('cwTerms')) return;
   var el = document.createElement('div');
   el.id = 'cwTerms';
-  el.style.cssText = 'position:fixed;inset:0;z-index:196;background:var(--bg);overflow:auto;' +
+  el.style.cssText = 'position:fixed;inset:0;z-index:196;background:var(--bg);overflow:auto;overscroll-behavior:contain;' +
     'display:flex;justify-content:center;padding:calc(28px + var(--inset-top,0px)) 20px calc(24px + var(--inset-bottom,0px))';
   el.setAttribute('role', 'alertdialog');
   el.setAttribute('aria-modal', 'true');
@@ -576,7 +576,7 @@ function showLegalGate() {
   CW._legalShown = true;
   var el = document.createElement('div');
   el.id = 'cwLegal';
-  el.style.cssText = 'position:fixed;inset:0;z-index:195;background:var(--bg);overflow:auto;' +
+  el.style.cssText = 'position:fixed;inset:0;z-index:195;background:var(--bg);overflow:auto;overscroll-behavior:contain;' +
     'display:flex;justify-content:center;padding:22px';
   el.innerHTML =
     '<div class="card u-maxw-400px u-w-100pc u-p-24px u-m-auto">' +

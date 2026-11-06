@@ -350,7 +350,8 @@ function abrirAdicionar(){
      depois o resto dos registos. «A ação do contexto vem primeiro» (o
      contrato): num ecrã cuja ação não é o movimento (os Contratos, as
      Visitas…), essa linha sai do resto e sobe para o topo da folha, por
-     cima dos tipos, marcada «neste ecrã». As posições dos tipos registam-se
+     cima dos tipos, marcada «neste ecrã» — com os outros registos desse
+     ecrã (nos Planeados, o Modelo: acessos.js:outrasDoSeparador). As posições dos tipos registam-se
      primeiro, para criarEscolha(0…4) serem sempre os cinco tipos. Nos
      Grupos a linha de cima é «Novo grupo de <o tipo à vista>», que abre
      direto esse tipo (acessos.js:acaoNaturalDoEcra), e o «Grupo» fica em
@@ -358,6 +359,10 @@ function abrirAdicionar(){
      separador já não tem botões de criar. */
   const nat=acaoNaturalDoEcra(tab),mov=todas.find(a=>a.id==='movimento');
   const outras=todas.filter(a=>a.id!=='movimento'),destaque=nat&&nat.id!=='movimento'?nat:null;
+  /* com a ação do ecrã sobem os outros registos dele (nos Planeados, o
+     Modelo: acessos.js:outrasDoSeparador), que esta pessoa possa criar —
+     marcados também, e fora do resto */
+  const aqui=destaque?[destaque].concat(outrasDoSeparador(tab).map(id=>outras.find(a=>a.id===id)).filter(Boolean)):[];
   _criar=[];
   const regista=act=>{_criar.push(act);return _criar.length-1};
   /* a cor de cada tipo é a do dinheiro dele (o canvas): receita verde, despesa
@@ -367,9 +372,9 @@ function abrirAdicionar(){
   /* os modelos são dos Planeados: sem esse serviço nesta conta, não se oferecem */
   const modelos=mov&&servicoLigado('recurring')?(db.templates||[]).slice(0,8):[];
   const chips=modelos.map(x=>`<button type="button" class="chip" data-toca="camada" data-click="criarEscolha(${regista(`newFromTemplate('${jsq(x.id)}')`)})">${esc(x.name)}${x.tx&&x.tx.propertyId?' <span class="n">· '+esc(propName(x.tx.propertyId))+'</span>':''}</button>`).join('');
-  const linha=a=>`<button type="button" class="criar-outro" data-toca="camada" data-click="criarEscolha(${regista(a.act)})">${ic(a.icon,20)}<span>${esc(a.label)}${a===destaque?'<small>neste ecrã</small>':''}</span></button>`;
-  const topo=destaque?`<div class="criar-outros criar-aqui">${linha(destaque)}</div>`:'';
-  const resto=outras.filter(a=>!destaque||a.id!==destaque.id||a.id==='grupo').map(linha).join('');
+  const linha=a=>`<button type="button" class="criar-outro" data-toca="camada" data-click="criarEscolha(${regista(a.act)})">${ic(a.icon,20)}<span>${esc(a.label)}${aqui.indexOf(a)>-1?'<small>neste ecrã</small>':''}</span></button>`;
+  const topo=aqui.length?`<div class="criar-outros criar-aqui">${aqui.map(linha).join('')}</div>`:'';
+  const resto=outras.filter(a=>!aqui.some(x=>x.id===a.id)||a.id==='grupo').map(linha).join('');
   const corpo=topo+(tipos?`<p class="lbl criar-tit">Novo movimento</p><div class="criar-tipos">${tipos}</div>`:'')+
     (chips?`<p class="lbl criar-tit">A partir de um modelo</p><div class="chips-fila">${chips}</div>`:'')+
     (resto?`<p class="lbl criar-tit">Outros registos</p><div class="criar-outros">${resto}</div>`:'');

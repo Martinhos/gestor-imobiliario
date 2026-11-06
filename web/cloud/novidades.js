@@ -234,7 +234,7 @@ function gateAtualizar(minima) {
      entrada, e portanto invisível a quem ainda não entrou — que é justamente
      quem o comentário do fim deste ficheiro diz que ele existe para servir:
      quem está preso no ecrã de entrada por causa de um erro já corrigido. */
-  el.style.cssText = 'position:fixed;inset:0;z-index:235;overflow:auto';
+  el.style.cssText = 'position:fixed;inset:0;z-index:235;overflow:auto;overscroll-behavior:contain';
   el.className = 'upd-ecra';
   el.setAttribute('role', 'alertdialog');
   el.setAttribute('aria-modal', 'true');
@@ -473,7 +473,7 @@ function ecraAtualizar(versao, passo) {
     el.id = 'cwUpd2';
     // acima de tudo, portao de login incluido (z 200): enquanto se atualiza,
     // atualizar E o estado da app
-    el.style.cssText = 'position:fixed;inset:0;z-index:240;overflow:auto';
+    el.style.cssText = 'position:fixed;inset:0;z-index:240;overflow:auto;overscroll-behavior:contain';
     el.className = 'upd-ecra';
     el.innerHTML = ecraDaVersao(versao === 'nova' ? 'A atualizar a app' : 'A atualizar para a versão ' + versao,
       'Atualizar não apaga nada: os teus dados ficam onde estão, e o que registaste neste aparelho sobe logo a seguir.',

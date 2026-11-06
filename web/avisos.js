@@ -27,6 +27,103 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 60,
+    data: '2026-11-06',
+    titulo: 'Criar é no +',
+    seccoes: [
+      {
+        titulo: 'Créditos',
+        afeta: ['creditos'],
+        itens: [
+          'O «Nova hipoteca» saiu de ao lado das hipotecas ativas. Uma hipoteca nova cria-se no + da barra de baixo, onde vem à cabeça, ou, no computador, no botão do cabeçalho.',
+        ],
+      },
+      {
+        titulo: 'Planeados',
+        afeta: ['movimentos'],
+        itens: [
+          'Os planeados que crias têm o selo «personalizado», e o filtro do estado chama-lhes «Personalizados».',
+          'O «Novo modelo» saiu de ao lado dos Modelos. Nos Planeados, o + põe o «Modelo» à cabeça, logo a seguir ao «Movimento recorrente».',
+        ],
+      },
+      {
+        titulo: 'A aplicação em geral',
+        afeta: ['app'],
+        itens: [
+          'Uma lista que rola por cima da página, como as categorias nos filtros dos Movimentos, já não faz rolar a página por baixo quando chega ao fim. O mesmo nos menus, no menu lateral e nos ecrãs que cobrem a app.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 59,
+    data: '2026-11-06',
+    titulo: 'A pesquisa deixa-te escrever',
+    seccoes: [
+      {
+        titulo: 'Filtros das listas',
+        afeta: ['app'],
+        itens: [
+          'Escrever na pesquisa no telemóvel já não faz o texto saltar nem repetir as sugestões do teclado, e a app deixa de congelar. Vale para os Movimentos e para todas as listas.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 58,
+    data: '2026-11-06',
+    titulo: 'Os filtros mostram o que dizem',
+    seccoes: [
+      {
+        titulo: 'Filtros das listas',
+        afeta: ['app'],
+        itens: [
+          'Nos Movimentos, «Pago ou recebido por» mostra só os movimentos dessa pessoa. Os que não têm pessoa atribuída ficam de fora, e o interruptor deles só aparece sem pessoa escolhida.',
+          'O «Limpar» aparece sempre que há alguma coisa para limpar, também no telemóvel e também só com a pesquisa.',
+          'O Enter na pesquisa aplica logo e fecha o teclado.',
+          'O painel dos filtros arruma-se em secções, com o «De» ao lado do «Até» e o «Ordenar por» ao lado da «Ordem».',
+        ],
+      },
+      {
+        titulo: 'A aplicação em geral',
+        afeta: ['app'],
+        itens: [
+          'Nos menus de escolha, escolher uma opção fecha o menu de uma vez. No telemóvel, o menu voltava a abrir logo a seguir.',
+        ],
+      },
+      {
+        titulo: 'Créditos à habitação',
+        afeta: ['creditos'],
+        itens: [
+          'Há um produto facultativo novo, «Redução de spread», para quando o banco baixa o spread só durante uns meses. Dizes quanto baixa e durante quantos meses, e a simulação, a ficha e os prazos mostram quando a prestação volta a subir.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 57,
+    data: '2026-11-04',
+    titulo: 'O visto do menu acompanha a escolha',
+    seccoes: [
+      {
+        titulo: 'A aplicação em geral',
+        afeta: ['app'],
+        itens: [
+          'Nos menus de escolha (o tipo de um produto facultativo, o indexante e os outros), o visto passa para a opção que escolhes. Antes ficava na que estava escolhida quando abriste o formulário.',
+        ],
+      },
+      {
+        titulo: 'A leitura da FINE',
+        afeta: ['creditos'],
+        soDev: true,
+        itens: [
+          'Numa FINE que escreve as condições «base» e «contratada», a hipoteca fica com as base (a taxa fixa e o spread sem produtos), o indexante como a ficha o escreve, e um produto «Todos os produtos facultativos» com as reduções da contratada.',
+          'Uma prestação acima de 1 000 € já não se lê mil vezes mais pequena.',
+        ],
+      },
+    ],
+  },
+  {
     v: 56,
     data: '2026-11-03',
     titulo: 'Abrir a app começa na visão geral',
@@ -1394,7 +1491,7 @@ var VERSAO = AVISOS[0].v;
 /* Versão mínima aceite. Subir isto obriga toda a gente a atualizar antes de
    continuar a usar a app — é para quando uma versão antiga passa a estar
    errada, não para empurrar novidades. */
-var VERSAO_MINIMA = 53;
+var VERSAO_MINIMA = 58;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { AVISOS: AVISOS, VERSAO: VERSAO, VERSAO_MINIMA: VERSAO_MINIMA, FUNCIONALIDADES: FUNCIONALIDADES };

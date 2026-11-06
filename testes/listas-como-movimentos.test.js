@@ -50,7 +50,7 @@ describe('o componente: a barra, os chips e o painel', () => {
   test('a barra tem a pesquisa à vista e o funil com quantos filtros estão ligados; depois vêm o painel e os chips', () => {
     const h = app.lfCabeca('lprops', { nome: ['imóvel', 'imóveis'], dos: 'dos imóveis', n: 2, campos: [campo()] });
     assert.match(h, /^<div class="mov-barra lfm-barra">\s*<label class="mov-busca"><span class="mov-lupa" aria-hidden="true"><\/span>/);
-    assert.match(h, /<input id="lq_lprops" type="search" value="" placeholder="Pesquisar…" aria-label="Pesquisar imóveis: palavras soltas ou uma frase entre aspas"[^>]*data-input="lfSearch\('lprops',this\.value\);lqMostrarLimpar\(this\)">/);
+    assert.match(h, /<input id="lq_lprops" type="search" value="" placeholder="Pesquisar…" aria-label="Pesquisar imóveis: palavras soltas ou uma frase entre aspas"[^>]*data-input="lfSearch\('lprops',this\.value\);lqMostrarLimpar\(this\)" data-keydown="lqTecla\(event,'lprops',this\.value\)">/);
     assert.match(h, /<button type="button" class="qclear u-d-none" aria-label="Limpar a pesquisa" data-toca="vista" data-click="lqLimpar\(this,'lprops'\)"><svg/, 'o ✕ é o ícone da casa, com nome');
     assert.match(h, /<button type="button" class="btn so-icone mov-filt" id="lfb_lprops" aria-expanded="false" aria-controls="lfp_lprops"\s+aria-label="Filtros" data-toca="vista" data-click="lfToggle\('lprops'\)">/);
     assert.ok(h.indexOf('lfm-barra') < h.indexOf('mov-fwrap') && h.indexOf('mov-fwrap') < h.indexOf('mov-chips'), 'a barra, o painel, os chips');
@@ -91,7 +91,7 @@ describe('o componente: a barra, os chips e o painel', () => {
     assert.equal(pintou, 1);
   });
 
-  test('o chip só do ecrã largo, e o «Limpar» da fila: no telemóvel sai quando a única coisa ligada já tem o seu ×', () => {
+  test('o chip só do ecrã largo, e o «Limpar» da fila: em todos os ecrãs, sempre que há alguma coisa para limpar', () => {
     const o = { dos: 'dos imóveis', campos: [campo(), campo({ chave: 'md', nome: 'Arrendamento', rapido: 'largo' }), campo({ chave: 'g', nome: 'Grupo', rapido: false })] };
     let h = app.lfChipsHtml('lprops', o, app.lfCampos('lprops', o));
     assert.match(h, /^<div class="chips-fila mov-chips" role="group" aria-label="Filtros dos imóveis">/);
@@ -101,10 +101,13 @@ describe('o componente: a barra, os chips e o painel', () => {
     app.lf('lprops').md = 'quartos';
     h = app.lfChipsHtml('lprops', o, app.lfCampos('lprops', o));
     assert.match(h, /<span class="mov-chip on"><div class="sel" id="sel_lfc_lprops_md">/, 'ligado, em todos os ecrãs');
-    assert.match(h, /<button type="button" class="chip limpar mov-so-largo" data-toca="vista" data-click="lfClear\('lprops'\)">Limpar<\/button>/, 'um só, com o seu ×');
+    assert.match(h, /<button type="button" class="chip limpar" data-toca="vista" data-click="lfClear\('lprops'\)">Limpar<\/button>/, 'um só, com o seu ×: o «Limpar» também, no telemóvel incluído');
     app.lf('lprops').q = 'mar';
     h = app.lfChipsHtml('lprops', o, app.lfCampos('lprops', o));
     assert.match(h, /<button type="button" class="chip limpar" data-toca="vista"/, 'dois: o «Limpar» em todos os ecrãs');
+    app.lf('lprops').md = '';
+    h = app.lfChipsHtml('lprops', o, app.lfCampos('lprops', o));
+    assert.match(h, /<button type="button" class="chip limpar" data-toca="vista"/, 'só a pesquisa: o «Limpar» também');
     app.lf('lprops').q = ''; app.lf('lprops').md = ''; app.lf('lprops').g = 'x';
     h = app.lfChipsHtml('lprops', o, app.lfCampos('lprops', o));
     assert.match(h, /<button type="button" class="chip limpar" data-toca="vista"/, 'um só, mas escondido no painel: o «Limpar» fica à vista');

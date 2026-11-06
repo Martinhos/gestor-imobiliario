@@ -84,6 +84,10 @@ confere que cada uma aponta para código que existe.
 - 2026-11-01 · A FINE preenche a hipoteca, com o Workers AI e só no dev
 - 2026-11-03 · O cashflow acumulado da Visão geral é o do ano
 - 2026-11-03 · Abrir a app começa na visão geral; recarregar fica onde estavas
+- 2026-11-03 · A FINE mista com «base» e «contratada», e o visto do menu de escolha
+- 2026-11-06 · Os filtros mostram o que dizem, o menu fecha ao toque, e a redução de spread tem prazo
+- 2026-11-06 · A pesquisa não sai do documento enquanto se escreve
+- 2026-11-06 · Criar é no +, o selo «personalizado», e o que rola por cima não rola a página
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3135,3 +3139,148 @@ as versões anteriores deixaram no localStorage apaga-se no primeiro
 arranque (web/cloud/nucleo.js:restorePage), e sair esquece a desta sessão.
 Ir para segundo plano e voltar não é abrir de novo: a app continua onde
 estava.
+## 2026-11-03 · A FINE mista com «base» e «contratada», e o visto do menu de escolha
+
+Seis tickets de QA do Martinho (4fcf78ab, 8994d49a, 38420a6f, d7da7025,
+d2d149d8, fc2e9daa, 03/11, no Samsung), todos da mesma FINE mista: escreve as
+condições duas vezes, a «base» (sem produtos) e a «contratada» (só com as
+vendas associadas facultativas da secção 8). O granite punha a contratada no
+lugar da base (taxa fixa 4,0 em vez de 4,8, spread 0,7 em vez de 1,5),
+calculava o indexante (3,335 − 0,8 = 2,535) em vez de ler o 2,635, e
+inventava dois produtos com a redução de 0,1 que vinha do exemplo do prompt.
+O prompt passou a dizer o que são a base e a contratada e que nenhum número é
+uma conta; os números de exemplo que se colavam às respostas saíram (o
+granite copia também os nomes dos exemplos). A chave da taxa fixa passou de
+tan a taxa_fixa (lib/fine.js:ESQUEMA): com «tan», ele punha lá a TAN base do
+período variável, dissesse o prompt o que dissesse. Medido com o Workers AI
+verdadeiro em 3 leituras de cada uma das 7 FINE de prova, 3/3 todas
+(.unlazy/fine-mista-contratada/medir.mjs, .unlazy/fine-produtos/medir-a.mjs).
+
+A redução que só vale com todas as vendas associadas juntas entra como um
+produto só, «Todos os produtos facultativos», com a redução da taxa fixa e a
+do spread (escolha do Martinho, em vez de «Outro produto»). Quando a ficha dá
+o total, uma lista de um produto só também dá esse conjunto: o granite punha
+o total inteiro num dos produtos pedidos. O validar desfaz ainda o ponto dos
+milhares lido como casa decimal nos euros (1.206,73 lido como 1.20673,
+lib/fine.js:euros). O prompt cresceu de ≈1 350 para ≈1 670 tokens, e o
+TETO_TEXTO desceu para 19 000 caracteres para o teto global continuar abaixo
+dos 8 000 neurons diários.
+
+O visto do menu de escolha ficava na opção desenhada à abertura do
+formulário: o selPick mudava o valor, o rótulo e o aria-selected, mas não o on
+nem o visto (no tipo de produto ficava sempre «Seguro de vida»). As opções
+passaram a desenhar-se pela mesma função no sel() e no selPick
+(componentes.js:selOpcaoDesenho), nos mesmos botões, para o foco ficar.
+
+A caixa do indexante que não aceitava outro valor (8994d49a) não se
+reproduziu no browser (384×785, toque, o agente do Samsung, quatro maneiras
+de escrever, com vírgula e com ponto): a caixa, o l.euribor e a prestação
+depois da fase fixa seguem sempre o que se escreve, e Guardar grava-o. Só uma
+leitura nova da FINE o repõe, como está desenhado. Não se inventou correção.
+
+## 2026-11-06 · Os filtros mostram o que dizem, o menu fecha ao toque, e a redução de spread tem prazo
+
+«Pago ou recebido por X» deixava entrar os movimentos sem pessoa: o
+interruptor «Incluir movimentos sem pessoa atribuída» está ligado por
+omissão, e a regra juntava-os aos de X. Com uma pesquisa, muitas vezes só
+sobravam esses, e o filtro parecia não fazer nada (ticket de QA ea46d9cd). O
+Martinho escolheu «só os de X»: com uma pessoa escolhida, passam só os
+movimentos que ela pagou ou recebeu (lista-movimentos.js:txMatch), e o
+interruptor sai do painel enquanto ela lá está. A pesquisa com cada um dos
+outros filtros, nos Movimentos e nas outras listas, foi conferida num teste e
+estava certa.
+
+O «Limpar» escondia-se no telemóvel quando só havia um filtro com o seu ×, e
+não aparecia só com a pesquisa: poupava uma linha à fila, mas quem procurava
+como limpar não o achava (tickets aca2564c e 9d5c886e). O Martinho preferiu a
+fila em duas linhas, e em todas as listas: o «Limpar» aparece sempre que há
+alguma coisa para limpar (vistas.js:lfChipsHtml,
+lista-movimentos.js:txChipsHtml). O Enter na pesquisa aplica logo e fecha o
+teclado (vistas.js:enterDaPesquisa); no computador o foco fica no campo,
+porque lá não há teclado a fechar. O painel passou a secções sem nome
+(vistas.js:filtrosEmSeccoes): numa grelha só, conforme apareciam a
+subcategoria ou o «Pago por», o «De» e o «Até» e a ordenação caíam em linhas
+trocadas (ticket 79389e90).
+
+O menu de escolha piscava e ficava aberto ao escolher no telemóvel (ticket
+b0c85090). Desde a v57 o selPick redesenha as opções pelo innerHTML, também a
+tocada; o sel() vive quase sempre dentro de um <label>, e o Chromium de antes
+de 2026 (o Samsung Internet 30) decide a ação do label pelo DOM de depois dos
+ouvintes — com o <span> tocado fora do documento, o label clicava no botão do
+sel() e o selOpen reabria o menu. Em vez de desfazer o redesenho da v57 (que
+pôs o visto na opção escolhida), o selPick passou a cancelar a ação por
+omissão do clique (componentes.js:selPick): é uma linha, vale para todos os
+browsers e não depende do que o onchange faça ao DOM. O Chromium do percurso
+já não tinha o defeito, e por isso o CI não o viu.
+
+Os bancos oferecem às vezes um spread mais baixo durante um tempo (ticket
+1cfb57ac). O Martinho escolheu «meses desde o início»: um produto facultativo
+novo, «Redução de spread», com a redução e «Durante (meses)» obrigatório,
+contado pelo relógio da rateAt (as prestações registadas, o mesmo da fase
+fixa da mista). Na mista baixa só o spread — fica fora da regra que faz um
+produto sem redução própria baixar a taxa fixa como o spread
+(credito.js:reducaoDoProduto) — e na fixa não conta. Os planeados seguiram sem
+código novo (o valor é o loanCalc, que já segue o relógio); os prazos ganharam
+o aviso do fim da redução, a 60 dias. A FINE não a lê. Uma app anterior a esta
+versão faria dela um «Outro produto» sem prazo ao gravar, e por isso a versão
+mínima sobe para a 58.
+
+## 2026-11-06 · A pesquisa não sai do documento enquanto se escreve
+
+Escrever na pesquisa dos Movimentos no telemóvel fazia o texto saltar e
+duplicar-se, e no Samsung a app congelava (ticket de QA ebd1bce7, na v58, mas
+o defeito vinha de antes). A via parcial dos Movimentos guardava o campo da
+pesquisa levando-o para o molde, fora do documento, e repondo-o; e quando a
+pesquisa ficava sem resultados, ou numa lista quando nascia um cartão, o
+render punha a vista inteira por innerHTML. Em qualquer dos casos o campo
+saía do documento a meio da palavra: o teclado perdia a composição, o campo
+herdava-a, o teclado voltava a metê-la e a pesquisa corria outra vez.
+Medido com composição pelo CDP no 384×785: escrever «renda» devagar dava 10
+render, 12 perdas de foco e o valor «rrerenrendrendarendaq…».
+
+Ficou uma regra só, no render e nas vias parciais: com o foco no campo de
+uma barra da pesquisa, a barra fica no documento e o resto troca-se à volta
+dela (vistas.js:pintarAVoltaDaPesquisa, vistas.js:trocarAVoltaDaBarra). Sem o
+foco lá, o render pinta como sempre — guardar a barra sempre deixaria um
+valor posto por código a perder para o do campo. Tornar a via parcial dos
+Movimentos capaz do vazio teria poupado o render inteiro, mas não protegia a
+sincronização nem as listas; ficou como melhoria possível.
+
+## 2026-11-06 · Criar é no +, o selo «personalizado», e o que rola por cima não rola a página
+
+Três tickets de QA do Martinho, da v59 no Samsung Internet.
+
+O «Nova hipoteca» ao lado do título «Ativas» (ticket 8ef0d039) era o único
+botão de criar o registo principal de um ecrã dentro de uma lista com
+registos: nos outros separadores cria-se no + da barra de baixo, com a ação
+do ecrã à cabeça, e no botão do cabeçalho do computador. Saiu; o vazio
+«Sem hipotecas» ficou com o seu, como os outros vazios. O parecido era o
+«Novo modelo» ao lado de «Modelos», nos Planeados. Perguntado, o Martinho
+respondeu «Retira e no + adiciona a opção de adicionar modelo»: o «Modelo»
+já estava no +, mas lá em baixo, em «Outros registos»; nos Planeados passou
+a subir com o «Movimento recorrente», os dois marcados «neste ecrã»
+(acessos.js:outrasDoSeparador). A apresentação dos Créditos e a dos Modelos
+mostram o + (e o cabeçalho, no computador) em vez dos botões que saíram.
+
+O selo «à mão» dos planeados que a pessoa cria (ticket 7df0696b) passou a
+«personalizado», a palavra que o Martinho sugeriu, e o filtro do estado a
+«Personalizados»; o valor guardado do filtro continua 'manual', para um
+filtro aberto não se perder.
+
+A lista das categorias nos filtros dos Movimentos (ticket 4e947e54), presa ao
+ecrã pelo cloud/filtros.js, rolava os movimentos por baixo quando chegava ao
+fim: o .selpop rolava sem overscroll-behavior, e de uma caixa fixa o gesto
+salta para o documento. Medido no 384×785 com o dedo pelo CDP: 410px de
+página no fim da lista comprida, 185px por cima de uma lista curta, 111px no
+corpo de uma janela, 480px na barra lateral do computador e 282px por baixo
+do ecrã «A atualizar»; todos a 0 depois. A varredura conteve tudo o que rola
+por cima da página ou a cobre, e o que rola de lado; as caixas em linha
+(o plano da hipoteca, o nome de uma foto) deixam o fim seguir para a página,
+porque contê-las prendia o dedo. Uma lista curta não é uma caixa que rola, e
+o contain nela só conta a partir do Chrome 144 — o Samsung Internet 30 é um
+143 —, por isso as opções de uma lista sem nada para rolar não deixam o dedo
+arrastar (touch-action, num @container scroll-state). Uma consequência
+aceite: num ecrã alto, onde a barra lateral cabe inteira, a roda por cima
+dela deixa de rolar a página. Ficou por decidir o html.noscroll com
+overscroll-behavior:none, que tiraria o puxar para recarregar com uma janela
+aberta.

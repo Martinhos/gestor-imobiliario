@@ -16,7 +16,9 @@
    o kit não tem — a ficha com o ⋮ e o rodapé, a seleção, a folha «Criar»,
    o cabeçalho do computador, as linhas das pessoas e das visitas, o mês da
    Agenda — vivem aqui, com o prefixo aprC, e o CSS delas no bloco da folha
-   1.3 do estilos.css (.apr-c-…).
+   1.3 do estilos.css (.apr-c-…). A imagem de criar (aprCNovo) serve também
+   a hipoteca nova dos Créditos (apresentacao-dinheiro.js:aprDCreditosNova),
+   que carrega depois e só a chama quando a janela abre.
 
    Duas coisas mudam com quem vê e onde, lidas quando a janela abre:
    - quem só colabora (aprSoColabora) não vê as imagens de criar o que o
@@ -301,23 +303,29 @@ function aprCCartaoTit(titulo, html, o) {
     { flutua: o.flutua, alvo: o.alvo });
 }
 
-/* A folha «Criar» do + da barra de baixo (navegacao.js:abrirAdicionar), no
-   ecrã do telemóvel: a ação deste ecrã à cabeça, marcada «neste ecrã» (e
-   em destaque), os tipos de movimento e os outros registos.
+/* O que a folha «Criar» do + da barra de baixo (navegacao.js:abrirAdicionar)
+   tem dentro: a ação deste ecrã à cabeça, marcada «neste ecrã» (e em
+   destaque), os tipos de movimento e os outros registos.
    Recebe: rotulo, icone — a ação deste ecrã; outros — [[ícone, rótulo]] dos
    outros registos a mostrar.
    Devolve: o HTML. */
-function aprCCriar(rotulo, icone, outros) {
+function aprCCriarCorpo(rotulo, icone, outros) {
   var tipo = function (i, tom, r) { return '<span class="apr-c-criar-tipo">' + aprIcone(i, { tom: tom }) + '<b>' + esc(r) + '</b></span>'; };
+  return '<span class="apr-c-criar-aqui apr-alvo">' + ic(icone, 13) + '<span><b>' + esc(rotulo) + '</b><span class="apr-c-neste">neste ecrã</span></span></span>' +
+    '<span class="apr-m-rot apr-m-maiusc">Novo movimento</span>' +
+    '<span class="apr-c-criar-tipos">' + tipo('up', 'in', 'Receita') + tipo('dn', 'out', 'Despesa') + tipo('bank', 'loan', 'Pagamento de crédito') + '</span>' +
+    '<span class="apr-m-rot apr-m-maiusc">Outros registos</span>' +
+    '<span class="apr-c-criar-outros">' + (outros || []).map(function (x) { return '<span>' + ic(x[0], 12) + '<b>' + esc(x[1]) + '</b></span>'; }).join('') + '</span>';
+}
+
+/* A folha «Criar» do + da barra de baixo, no ecrã do telemóvel: o
+   cabeçalho com o ✕ e, por baixo, o aprCCriarCorpo.
+   Recebe: rotulo, icone, outros — os do aprCCriarCorpo.
+   Devolve: o HTML. */
+function aprCCriar(rotulo, icone, outros) {
   return '<div class="apr-tela apr-c-criar">' +
     '<div class="apr-m-folha-cab"><b>Criar</b>' + ic('x', 12) + '</div>' +
-    '<div class="apr-tela-corpo">' +
-      '<span class="apr-c-criar-aqui apr-alvo">' + ic(icone, 13) + '<span><b>' + esc(rotulo) + '</b><span class="apr-c-neste">neste ecrã</span></span></span>' +
-      '<span class="apr-m-rot apr-m-maiusc">Novo movimento</span>' +
-      '<span class="apr-c-criar-tipos">' + tipo('up', 'in', 'Receita') + tipo('dn', 'out', 'Despesa') + tipo('bank', 'loan', 'Pagamento de crédito') + '</span>' +
-      '<span class="apr-m-rot apr-m-maiusc">Outros registos</span>' +
-      '<span class="apr-c-criar-outros">' + (outros || []).map(function (x) { return '<span>' + ic(x[0], 12) + '<b>' + esc(x[1]) + '</b></span>'; }).join('') + '</span>' +
-    '</div></div>';
+    '<div class="apr-tela-corpo">' + aprCCriarCorpo(rotulo, icone, outros) + '</div></div>';
 }
 
 /* O cabeçalho do computador (index.html:header.top): o título e o
@@ -334,13 +342,21 @@ function aprCCabecaLarga(titulo, sub, acao, o) {
 
 /* A imagem de criar um registo, conforme o ecrã: no telemóvel a folha
    «Criar» do +, com este registo à cabeça; no computador o botão do
-   cabeçalho e, por baixo, o formulário que ele abre.
+   cabeçalho e, por baixo, a folha que ele abre. Com o.frente, a folha vai
+   também no telemóvel, à frente do «Criar» — é a escolha que o substitui
+   (a hipoteca pergunta primeiro o imóvel: creditos.js:newMort) —, e o
+   «Criar» fica atrás, numa folha.
    Recebe: o — {rotulo, icone, outros (os da aprCCriar), id (o separador,
-   para o subtítulo), titulo, acao, folha (o HTML do formulário), tom}.
+   para o subtítulo), titulo, acao, folha (o HTML do formulário ou da
+   escolha), frente (verdade: a folha também no telemóvel), semSelecao
+   (verdade num separador sem o «Selecionar vários»), tom}.
    Devolve: o HTML da imagem. */
 function aprCNovo(o) {
+  if (!aprCLargo() && o.frente) {
+    return aprCena(aprPar(aprFolha('Criar', aprCCriarCorpo(o.rotulo, o.icone, o.outros), { classe: 'apr-c-criar' }), o.folha), { tom: o.tom, arranjo: 'par' });
+  }
   if (!aprCLargo()) return aprCena(aprCCriar(o.rotulo, o.icone, o.outros), { tom: o.tom, arranjo: 'tela' });
-  return aprCena(aprColuna([aprCCabecaLarga(o.titulo, aprCSub(o.id), o.acao), '<span class="apr-m-desce">' + ic('down', 13) + '</span>', o.folha]),
+  return aprCena(aprColuna([aprCCabecaLarga(o.titulo, aprCSub(o.id), o.acao, { semSelecao: o.semSelecao }), '<span class="apr-m-desce">' + ic('down', 13) + '</span>', o.folha]),
     { tom: o.tom, arranjo: 'coluna' });
 }
 

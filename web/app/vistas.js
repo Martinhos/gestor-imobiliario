@@ -470,12 +470,8 @@ function refrescarListasVivas(){
   /* a barra da pesquisa de uma lista (vistas.js:lfBarraHtml) não sai do
      documento: o resto troca-se à volta dela, e quem escreve não perde nada */
   const barra=lfBarraViva(v,molde);
-  if(barra){
-    const filhos=[].slice.call(molde.children),i=filhos.indexOf(barra.novo);
-    [].slice.call(v.children).forEach(n=>{if(n!==barra.vivo)n.remove()});
-    filhos.slice(0,i).forEach(n=>v.insertBefore(n,barra.vivo));
-    filhos.slice(i+1).forEach(n=>v.appendChild(n));
-  }else v.replaceChildren.apply(v,[].slice.call(molde.children));
+  if(barra)trocarAVoltaDaBarra(v,molde,barra);
+  else v.replaceChildren.apply(v,[].slice.call(molde.children));
   abasAssentar();                  // as abas da área vão para a casa delas (navegacao.js)
   reporRolagemDoPainel(rolou);
   tornarFocavel(v);
@@ -565,7 +561,9 @@ function render(){
      cartão. A marca fica até à próxima pintura, e as repinturas locais que
      acontecem lá dentro (o donutDrill) são de quem tocou no gráfico. */
   view().classList.toggle('entra',!!_entrar);_entrar=0;
-  view().innerHTML=html;
+  /* quem está a escrever na pesquisa não perde o campo: a barra fica e a
+     vista troca-se à volta dela (vistas.js:pintarAVoltaDaPesquisa) */
+  if(!pintarAVoltaDaPesquisa(view(),html))view().innerHTML=html;
   /* as abas da área saem da cabeça da vista para a casa delas, por cima do
      #view (navegacao.js:abasAssentar): a mesma fila fica o mesmo nó, e o
      realce desliza para a aba nova em vez de nascer já lá */
@@ -1157,6 +1155,39 @@ function lqLimpar(botao,k){
   botao.classList.add('u-d-none');
   i.focus();
 }
+/* O Enter na pesquisa de uma lista (o ticket 9d5c886e), como o dos Movimentos
+   (lista-movimentos.js:txqTecla): aplica logo o que se escreveu, sem esperar
+   os 280 ms do lfSearch (a espera morre), pela via parcial quando dá, e fecha
+   o teclado do telemóvel (vistas.js:enterDaPesquisa).
+   Recebe: ev — o evento da tecla; k — a chave da lista; v — o texto do campo.
+   Devolve: nada — muda a pesquisa e repinta. */
+function lqTecla(ev,k,v){
+  enterDaPesquisa(ev,'lq_'+k,()=>{clearTimeout(_lqT);lf(k).q=String(v==null?'':v);if(!refrescarListasVivas())render()});
+}
+/* O Enter de uma pesquisa: trava o Enter, aplica (quem chama diz como) e
+   trata do foco. No telemóvel e no tablet tira o foco ao campo, que é o que
+   fecha o teclado do ecrã — o pedido do ticket; o foco não fica em nenhum
+   botão, onde o Samsung Internet o pintava (eventos.js:largarFocoDoToque). Com
+   rato e teclado (o portão dos :hover, (hover:hover) and (pointer:fine)) não
+   há teclado a fechar, e largar o foco atirava-o para a página sem rasto:
+   fica no campo, com o cursor no fim, para continuar a escrever ou seguir
+   com o Tab; se a pintura recriou o campo, volta ao novo. Um Enter a meio de
+   uma composição (um IME) no computador é do IME, e não se toca.
+   Recebe: ev — o evento da tecla; id — o id do campo da pesquisa ('tx_q',
+   'lq_<k>'); aplicar — a função que aplica o texto e repinta.
+   Devolve: true se era o Enter e se aplicou; false para as outras teclas. */
+function enterDaPesquisa(ev,id,aplicar){
+  if(!ev||ev.key!=='Enter')return false;
+  let rato=false;
+  try{rato=typeof matchMedia==='function'&&!!matchMedia('(hover:hover) and (pointer:fine)').matches}catch(e){}
+  if(ev.isComposing&&rato)return false;
+  try{ev.preventDefault()}catch(e){}
+  aplicar();
+  const i=document.getElementById(id);if(!i)return true;
+  if(!rato){try{i.blur()}catch(e){}return true}
+  if(document.activeElement!==i)try{i.focus();i.setSelectionRange(i.value.length,i.value.length)}catch(e){}
+  return true;
+}
 /* limpa o filtro do separador atual, seja ele qual for — para o botão dos
    estados vazios não ter de saber onde está
    Devolve: nada — limpa os filtros e redesenha a vista. */
@@ -1242,9 +1273,10 @@ function lfSort(k,list,keys){
    lista-movimentos.js:txFilterPainel): a pesquisa sempre à vista, com o funil
    ao lado, que diz quantos filtros estão ligados e abre o painel completo;
    por baixo, os chips rápidos — cada um um seletor com o × que o limpa — e o
-   «Limpar» quando há algum; o painel tem o «Limpar» e o «Fechar» no TOPO, ao
-   lado do título, a linha «Aplicam-se ao mexer · N imóveis» e a grelha dos
-   seletores, com a ordenação no fim. Veste as mesmas classes
+   «Limpar» quando há algum, ou a pesquisa; o painel tem o «Limpar» e o
+   «Fechar» no TOPO, ao lado do título, a linha «Aplicam-se ao mexer · N
+   imóveis» e os campos em secções sem nome — os seletores, os intervalos, a
+   ordenação (vistas.js:filtrosEmSeccoes). Veste as mesmas classes
    (estilos.css:.mov-barra, estilos.css:.mov-chip, estilos.css:.mov-fwrap,
    estilos.css:.mov-grelha), para ser o mesmo desenho e não uma cópia dele.
 
@@ -1359,14 +1391,16 @@ function lfReporFoco(antes){
    Devolve: nada — limpa e repinta (vistas.js:lfMudar). */
 function lfLimparCampo(k,chave){lfMudar(k,chave,'')}
 /* Quantos filtros estão ligados na lista, sem a pesquisa: o número do funil
-   e o que acende o «Limpar» do painel (a pesquisa está à vista, ao lado).
+   (a pesquisa está à vista, ao lado). O «Limpar» da fila e o do painel
+   contam também a pesquisa, que eles limpam (vistas.js:lfCount).
    Recebe: k — a chave da lista.
    Devolve: o número. */
 function lfNFiltros(k){return lfCount(k)-(String(lf(k).q||'').trim()?1:0)}
 /* A barra: a pesquisa, sempre à vista, e o funil que abre o painel, com
    quantos filtros estão ligados (lista-movimentos.js:txBarraHtml). É um filho
    direto do #view, e a via parcial guarda-a de pintura para pintura
-   (vistas.js:lfBarraViva): escrever não perde o foco nem o cursor.
+   (vistas.js:lfBarraViva): escrever não perde o foco nem o cursor. O Enter
+   aplica logo e fecha o teclado (vistas.js:lqTecla).
    Recebe: k — a chave da lista; o — a declaração (vistas.js:lfCabeca).
    Devolve: o HTML da barra. */
 function lfBarraHtml(k,o){
@@ -1374,7 +1408,7 @@ function lfBarraHtml(k,o){
   return `<div class="mov-barra lfm-barra">
     <label class="mov-busca"><span class="mov-lupa" aria-hidden="true"></span>
       <input id="lq_${esc(k)}" type="search" value="${esc(q)}" placeholder="Pesquisar…" aria-label="Pesquisar ${esc(nome[1])}: palavras soltas ou uma frase entre aspas" autocomplete="off" enterkeyhint="search"
-        data-input="lfSearch('${jsq(k)}',this.value);lqMostrarLimpar(this)"><button type="button" class="qclear${q?'':' u-d-none'}" aria-label="Limpar a pesquisa" data-toca="vista" data-click="lqLimpar(this,'${jsq(k)}')">${ic('x',14)}</button></label>
+        data-input="lfSearch('${jsq(k)}',this.value);lqMostrarLimpar(this)" data-keydown="lqTecla(event,'${jsq(k)}',this.value)"><button type="button" class="qclear${q?'':' u-d-none'}" aria-label="Limpar a pesquisa" data-toca="vista" data-click="lqLimpar(this,'${jsq(k)}')">${ic('x',14)}</button></label>
     <button type="button" class="btn so-icone mov-filt${aberto?' on':''}" id="lfb_${esc(k)}" aria-expanded="${aberto?'true':'false'}" aria-controls="lfp_${esc(k)}"
       aria-label="${n?'Filtros: '+n+(n===1?' ativo':' ativos'):'Filtros'}" data-toca="vista" data-click="lfToggle('${jsq(k)}')">${ic('filter',18)}${n?`<span class="mov-filt-n" aria-hidden="true">${n}</span>`:''}</button>
   </div>`;
@@ -1388,19 +1422,42 @@ function lfPainelHtml(k,o,cs){
   return `<div class="fwrap u-h-0 mov-fwrap"><div class="fpanel ${lf(k)._open?'on':''} u-t-0" id="lfp_${esc(k)}" role="region" aria-labelledby="lft_${esc(k)}">
     <div class="card mov-filtros-card lfm-caixa">${lfPainelCorpo(k,o,cs)}</div></div></div>`;
 }
-/* O corpo do painel (o M-Filtros): o título com o «Limpar» (só com filtros
-   ligados) e o «Fechar», quantos passam e a grelha de duas colunas. Cada seletor aplica logo, sem «Aplicar».
+/* O corpo do painel (o M-Filtros): o título com o «Limpar» (com alguma coisa
+   para limpar, a pesquisa incluída, que ele também limpa) e o «Fechar»,
+   quantos passam e os campos em secções sem nome (o ticket 79389e90;
+   vistas.js:filtrosEmSeccoes): os seletores; os campos de data e de hora, cada
+   intervalo (o junto) lado a lado e os soltos depois; e o «Ordenar por» com a
+   «Ordem» ao lado, quando escolhida. Cada seletor aplica logo, sem «Aplicar».
    Recebe: k — a chave da lista; o — a declaração; cs — os campos.
    Devolve: o HTML do corpo. */
 function lfPainelCorpo(k,o,cs){
   const n=Number(o&&o.n)||0,nome=(o&&o.nome)||['registo','registos'];
+  const ordem=c=>c.chave==='sb'||c.chave==='sd',campos=xs=>xs.map(c=>lfCampoNaGrelha(k,c)).join('');
+  /* os intervalos pela ordem do primeiro campo de cada um, os pares antes dos
+     soltos: numa grelha de duas colunas, um solto no meio empurrava o «até»
+     do par seguinte para a linha de baixo */
+  const grupos=[],por={};
+  cs.filter(c=>c.tipo&&!ordem(c)).forEach(c=>{const j=c.junto||c.chave;if(!por[j]){por[j]=[];grupos.push(por[j])}por[j].push(c)});
+  const datas=[].concat.apply([],grupos.filter(g=>g.length===2).concat(grupos.filter(g=>g.length!==2)));
   return `<div class="mov-filtros">
     <div class="mov-filtros-cab"><h2 class="mov-filtros-tit" id="lft_${esc(k)}">Filtros</h2>
-      ${lfNFiltros(k)?`<button type="button" class="btn ghost" data-toca="vista" data-click="lfClear('${jsq(k)}')">Limpar</button>`:''}
+      ${lfCount(k)?`<button type="button" class="btn ghost" data-toca="vista" data-click="lfClear('${jsq(k)}')">Limpar</button>`:''}
       <button type="button" class="btn" data-toca="camada" data-click="lfApply('${jsq(k)}')">Fechar</button></div>
     <p class="small mov-filtros-n">Aplicam-se ao mexer · ${n} ${esc(n===1?nome[0]:nome[1])}</p>
-    ${cs.length?`<div class="mov-grelha">${cs.map(c=>lfCampoNaGrelha(k,c)).join('')}</div>`:''}
+    ${filtrosEmSeccoes([campos(cs.filter(c=>!c.tipo&&!ordem(c))),campos(datas),campos(cs.filter(ordem))])}
   </div>`;
+}
+/* As secções sem nome de um painel de filtros (o ticket 79389e90), as da
+   grelha de duas colunas: cada uma é uma .mov-grelha que começa numa linha
+   nova — o «De» fica ao lado do «Até» e o «Ordenar por» ao lado da «Ordem»,
+   o que os campos condicionais por cima já não trocam —, separada da de cima
+   por uma linha fina, sem título (estilos.css:.mov-seccao). Uma secção sem
+   campos não aparece. Servem os Movimentos (lista-movimentos.js:txFilterBody)
+   e as listas (vistas.js:lfPainelCorpo).
+   Recebe: blocos — o HTML dos campos de cada secção, pela ordem (array de texto).
+   Devolve: o HTML das secções (texto; '' sem campos nenhuns). */
+function filtrosEmSeccoes(blocos){
+  return (blocos||[]).filter(b=>String(b||'').trim()).map(b=>`<div class="mov-grelha mov-seccao">${b}</div>`).join('');
 }
 /* Um campo na grelha do painel: o nome por cima e o seletor da casa, que
    veste o cobalto com o filtro posto (estilos.css:.mov-ligado) — ou, num
@@ -1436,18 +1493,18 @@ function lfChip(k,c){
 }
 /* A fila dos chips rápidos: os campos com rapido (nunca os de data ou hora),
    os chips que a lista junta (o.chips) e, com algum filtro ou a pesquisa, o
-   «Limpar». No telemóvel o «Limpar» sai quando só há uma coisa ligada e ela
-   tem o seu × à vista (o de um chip, ou o da pesquisa): a fila não parte em
-   duas por um botão que repete outro.
+   «Limpar» — em todos os ecrãs, como o dos Movimentos
+   (lista-movimentos.js:txChipsHtml; os tickets aca2564c e 9d5c886e): com uma
+   coisa só ligada, o telemóvel escondia-o, e quem procurava como limpar não
+   o achava. A fila parte em duas linhas, se for preciso. Uma lista sem chips
+   rápidos fica com a fila só com o «Limpar», quando há o que limpar.
    Recebe: k — a chave da lista; o — a declaração; cs — os campos.
-   Devolve: o HTML da fila, ou '' sem chips. */
+   Devolve: o HTML da fila, ou '' sem chips nem nada para limpar. */
 function lfChipsHtml(k,o,cs){
   const rapidos=cs.filter(c=>c.rapido&&!c.tipo),extra=((o&&o.chips)||[]).filter(x=>x&&x.html);
   const L=rapidos.map(c=>lfChip(k,c)).concat(extra.map(x=>x.html));
+  if(lfCount(k))L.push(`<button type="button" class="chip limpar" data-toca="vista" data-click="lfClear('${jsq(k)}')">Limpar</button>`);
   if(!L.length)return '';
-  const s=lf(k),nf=lfCount(k);
-  const comX=rapidos.filter(c=>c.chave!=='sb'&&c.chave!=='sd'&&s[c.chave]).length+extra.filter(x=>x.x).length+(String(s.q||'').trim()?1:0);
-  if(nf)L.push(`<button type="button" class="chip limpar${nf===1&&comX===1?' mov-so-largo':''}" data-toca="vista" data-click="lfClear('${jsq(k)}')">Limpar</button>`);
   return `<div class="chips-fila mov-chips" role="group" aria-label="Filtros ${esc((o&&o.dos)||'')}">${L.join('')}</div>`;
 }
 /* Depois de repintar, o foco volta ao funil de uma lista — quando lá estava
@@ -1481,14 +1538,66 @@ function lfAbrirEm(k,id){
    Devolve: {vivo, novo} — a barra do ecrã e a do molde, com o mesmo campo —,
    ou null quando não há as duas. */
 function lfBarraViva(v,molde){
-  const filho=(raiz)=>[].slice.call(raiz.children||[]).find(n=>n.classList&&n.classList.contains('lfm-barra'));
+  return barraDaPesquisaViva(v,molde,null,'lfm-barra');
+}
+/* A barra da pesquisa que fica de uma pintura para a seguinte: a filha direta
+   do #view com a classe dada (a .lfm-barra das listas, ou a .mov-barra, que
+   têm também os Movimentos), quando a vista nova tem a mesma barra, com o
+   campo do mesmo id. O funil (.mov-filt) troca-se pelo novo se conta outra
+   coisa; o campo, o ✕ e o que o teclado está a compor ficam. Com ativo, só
+   fica se o campo com o foco for o da barra viva — é quem está a escrever.
+   Recebe: v — o #view; molde — o elemento com a vista nova, por pôr; ativo
+   (opcional) — o elemento com o foco, que tem de ser o campo da barra; cls —
+   a classe da barra.
+   Devolve: {vivo, novo} — a barra viva e a do molde —, ou null quando não há
+   uma barra para guardar. */
+function barraDaPesquisaViva(v,molde,ativo,cls){
+  const filho=(raiz)=>[].slice.call(raiz.children||[]).find(n=>n.classList&&n.classList.contains(cls));
   const vivo=filho(v),novo=filho(molde);
   if(!vivo||!novo)return null;
   const a=vivo.querySelector('input'),b=novo.querySelector('input');
   if(!a||!b||a.id!==b.id)return null;
+  if(ativo&&ativo!==a)return null;
   const fa=vivo.querySelector('.mov-filt'),fb=novo.querySelector('.mov-filt');
   if(fa&&fb&&fa.outerHTML!==fb.outerHTML)fa.replaceWith(fb);
   return {vivo:vivo,novo:novo};
+}
+/* Põe a vista nova à volta de uma barra que fica: tira do #view tudo menos a
+   barra viva, e mete os irmãos que o molde tem antes e depois da barra nova
+   nos mesmos sítios. A barra nunca sai do documento — é isso que guarda o
+   foco, o cursor e o que o teclado compõe (um nó tirado do documento perde o
+   foco, e o teclado do telemóvel partia a palavra a meio).
+   Recebe: v — o #view; molde — o elemento com a vista nova; barra — {vivo,
+   novo} (vistas.js:barraDaPesquisaViva).
+   Devolve: nada — mexe no #view. */
+function trocarAVoltaDaBarra(v,molde,barra){
+  const filhos=[].slice.call(molde.children),i=filhos.indexOf(barra.novo);
+  [].slice.call(v.children).forEach(n=>{if(n!==barra.vivo)n.remove()});
+  filhos.slice(0,i).forEach(n=>v.insertBefore(n,barra.vivo));
+  filhos.slice(i+1).forEach(n=>v.appendChild(n));
+}
+/* O render com alguém a escrever na pesquisa (ticket de QA ebd1bce7): o
+   render punha a vista inteira por innerHTML, e o campo da pesquisa saía do
+   documento a meio da palavra — quando a pesquisa ficava sem resultados nos
+   Movimentos, quando nascia um cartão numa lista, quando a sincronização
+   repintava. O teclado do telemóvel perdia a composição e voltava a meter a
+   palavra no campo novo, que fazia outra pesquisa e outro render: o texto
+   saltava e duplicava-se, e no Samsung a app congelava. Com o foco no campo
+   de uma barra da pesquisa (a .mov-barra, filha direta do #view) e a mesma
+   barra na vista nova, a barra fica e o resto troca-se à volta dela
+   (vistas.js:trocarAVoltaDaBarra). Sem o foco lá, não faz nada, e o render
+   faz o de sempre.
+   Recebe: v — o #view; html — a vista nova.
+   Devolve: true se pôs a vista à volta da barra; false se o render tem de a
+   pôr pelo innerHTML. */
+function pintarAVoltaDaPesquisa(v,html){
+  const ativo=typeof document!=='undefined'?document.activeElement:null;
+  if(!v||!ativo||ativo.tagName!=='INPUT'||!ativo.id||typeof v.contains!=='function'||!v.contains(ativo))return false;
+  const molde=document.createElement('div');molde.innerHTML=html;
+  const barra=barraDaPesquisaViva(v,molde,ativo,'mov-barra');
+  if(!barra)return false;
+  trocarAVoltaDaBarra(v,molde,barra);
+  return true;
 }
 /* ================= AS LISTAS POR ORIGEM =================
    Os Imóveis, os Inquilinos, as Visitas e os Contratos dividem-se pela origem

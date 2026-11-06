@@ -147,8 +147,8 @@ describe('contadas, ditas, com chip rápido e limpas', () => {
     assert.match(h, /<span class="mov-chip-etiq-t">Urgente \+2<\/span>/);
     assert.match(h, /aria-label="Etiquetas: Urgente ou Dedutível ou A reembolsar\. Mudar nos filtros"[^>]*data-click="txEtiqAbrir\(\)"/);
     assert.match(h, /aria-label="Limpar as etiquetas"[^>]*data-click="txLimparFiltro\('etiq'\)"/);
-    // com as etiquetas há dois filtros ou mais? Não: um só — o «Limpar» da fila fica só no ecrã largo
-    assert.match(h, /class="chip limpar mov-so-largo"/);
+    // as etiquetas são um filtro só, e o «Limpar» da fila fica à vista em todos os ecrãs na mesma
+    assert.match(h, /<button type="button" class="chip limpar" data-toca="vista" data-click="clearTxFilters\(\)">Limpar<\/button>/);
   });
 
   test('o × do chip, o «Limpar» e o limpar dos estados vazios tiram as etiquetas', () => {

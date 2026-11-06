@@ -121,7 +121,11 @@ aside{width:var(--rail);flex:0 0 var(--rail);background:var(--side);color:var(--
 .brand{display:flex;align-items:center;gap:10px;padding:calc(20px + var(--inset-top)) 22px 10px;min-height:60px}
 .brand .txt{flex:1;min-width:0}
 .brand b{font-family:var(--letra-titulo);font-size:20px;font-weight:650;letter-spacing:-.015em;color:var(--side-ink);display:block;white-space:nowrap}
-nav{display:grid;gap:2px;padding:10px 14px calc(16px + var(--inset-bottom));flex:1;align-content:start;overflow:auto}
+/* a gaveta (e a barra lateral do computador) rola por si, e no fim não passa
+   o gesto à página: no computador a página não tranca e rolava os
+   movimentos; no telemóvel tranca (vistas.js:lockPage), e o que ia para trás
+   era o puxar do fim do documento */
+nav{display:grid;gap:2px;padding:10px 14px calc(16px + var(--inset-bottom));flex:1;align-content:start;overflow:auto;overscroll-behavior:contain}
 nav a{display:flex;align-items:center;gap:12px;min-height:40px;padding:0 12px;border-radius:10px;color:var(--side-text);cursor:pointer;white-space:nowrap;position:relative;font-size:14.5px;font-weight:500;text-decoration:none}
 nav a svg{flex:0 0 20px}
 /* o realce de passar por cima só onde há rato: no telemóvel um toque deixava-o
@@ -344,7 +348,10 @@ button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none
 .table th{font-size:12px;color:var(--muted);font-weight:600}
 .table th:first-child,.table td:first-child{text-align:left}
 .table tr:last-child td{border-bottom:0}
-.tablewrap{overflow-x:auto;margin:0 -4px}
+/* O que rola de lado contém o fim, como a fila das abas (#abasArea): a página
+   nunca rola de lado, e o resto do gesto ia para o voltar do browser (o
+   arrastar de dois dedos num touchpad, o deslizar no Android). */
+.tablewrap{overflow-x:auto;overscroll-behavior-x:contain;margin:0 -4px}
 .hint{font-size:13px;color:var(--muted);line-height:1.5}
 .rich{white-space:normal;line-height:1.55}
 .rich div,.rich p{margin:0}
@@ -369,7 +376,9 @@ button,.tap,.selbtn,.selopt,.fold-head{-webkit-user-select:none;user-select:none
 .prow .capa{position:absolute;left:4px;bottom:4px;z-index:2;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:700;padding:1px 6px;border-radius:999px;letter-spacing:.03em}
 .prow .pnm{flex:1;min-width:0}
 /* o nome inteiro, a partir da linha seguinte: cresce até três linhas e
-   depois rola dentro (componentes.js:fotoNomeEscrito mantém-no numa linha só) */
+   depois rola dentro (componentes.js:fotoNomeEscrito mantém-no numa linha só).
+   No fim, o gesto segue para a lista das fotos à volta, de propósito: é uma
+   caixa pequena no meio dela, e contê-la prendia o dedo a quem só quer descer */
 .prow textarea.pnm{min-height:46px;max-height:calc(4.05em + 24px);resize:none;overflow-y:auto;overflow-wrap:anywhere}
 /* com o nome numa linha, o puxador e o apagar ficam ao meio dela */
 .prow>.pgrab,.prow>.btn{margin-top:3px}
@@ -859,7 +868,7 @@ main.sep-arrasto{overflow-x:clip}
 .atencao{display:flex;flex-direction:column;gap:10px}
 /* uma fila só, que rola de lado: com as duas classes, para ganhar ao
    .chips-fila{flex-wrap:wrap}, que vem depois na folha */
-.chips-fila.atencao-chips{margin-bottom:4px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-left:-2px;padding:2px}
+.chips-fila.atencao-chips{margin-bottom:4px;flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;margin-left:-2px;padding:2px}
 .atencao-cab{display:flex;align-items:baseline;gap:8px;padding:8px 2px 0}
 .atencao-cab h3{margin:0;font-size:16px}
 .atencao-lista{padding:0;overflow:hidden}
@@ -926,7 +935,15 @@ textarea{min-height:90px;max-height:60vh;max-height:60dvh;resize:vertical;field-
 .check input{width:auto;min-height:0;margin:0;flex:0 0 auto;accent-color:var(--accent)}
 input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;padding:0;accent-color:var(--accent)}
 
-/* menu de escolha próprio, em vez do <select> do sistema */
+/* menu de escolha próprio, em vez do <select> do sistema. A lista aberta é
+   dona do gesto que começa nela (o ticket de QA 4e947e54): rola-se a si, e no
+   fim não passa o resto para trás (overscroll-behavior:contain) — nos chips
+   e no painel dos filtros ela flutua presa ao ecrã (cloud/filtros.js) e o que
+   rolava era a página; numa janela, o corpo. Uma lista curta não rola, e antes
+   do Chrome 144 o contain numa caixa que não rola não contava (o Samsung
+   Internet 30 é um Chrome 143): o dedo atravessava-a e rolava a de trás.
+   Quem o trava aí é o touch-action das opções, só quando a lista não tem o
+   que rolar (o @container scroll-state abaixo). */
 .sel{position:relative;width:100%;max-width:100%;min-width:0}.form>label,.row>label,.row3>label{min-width:0}.selbtn{box-sizing:border-box;max-width:100%}
 .selbtn{width:100%;display:flex;align-items:center;gap:8px;min-height:46px;padding:0 14px;border:1px solid var(--line2);
   border-radius:12px;background:var(--field);cursor:pointer;text-align:left;font-weight:400}
@@ -934,7 +951,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 @media(hover:hover) and (pointer:fine){.selbtn:hover{border-color:var(--faint)}}
 .selbtn svg{color:var(--faint);flex:0 0 auto}
 .selpop{display:none;position:absolute;left:0;right:0;top:calc(100% + 5px);z-index:15;background:var(--card);
-  border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;max-height:260px;overflow:auto}
+  border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;max-height:260px;overflow:auto;overscroll-behavior:contain;container-type:scroll-state}
 .selpop.on{display:block}
 .selopt{width:100%;display:flex;align-items:center;gap:9px;min-height:40px;padding:8px 12px;border:0;background:transparent;
   border-radius:10px;cursor:pointer;text-align:left;font-size:15px}
@@ -943,15 +960,29 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .selopt.on{color:var(--accent-text);font-weight:600;background:var(--accent-soft)}
 .sdiv{height:1px;background:var(--line);margin:5px 6px}
 .selopt svg{color:var(--accent);flex:0 0 auto}
+/* A lista (ou o menu ⋯) que não tem o que rolar não deixa o dedo arrastar a
+   partir das opções: num browser que não aplica o contain a uma caixa que
+   não rola (o Chrome antes do 144), um traço por cima dela rolava a página,
+   ou o corpo da janela, por baixo. O pinch-zoom fica, e o toque continua a
+   escolher. Com o que rolar, o touch-action volta ao de sempre e o contain
+   trata do fim. Só num browser que saiba perguntar se a caixa rola (o
+   scroll-state, desde o Chrome 133): sem o @supports, um que aplicasse a
+   regra às cegas deixava as listas compridas presas. */
+@supports (container-type:scroll-state){
+  @container not scroll-state(scrollable:y){.selopt,.sdiv,.menupop>button{touch-action:pinch-zoom}}
+}
 
 /* menu de ações (⋯). Com a largura do texto: preso à direita de um botão de
    44px, o shrink-to-fit ficava nos 200px do mínimo e partia «Preencher 3 em
    falta» e «Começar a partir de hoje» em duas linhas. O teto é de 320px, e
-   nunca mais do que o ecrã menos 16px de cada lado. */
+   nunca mais do que o ecrã menos 16px de cada lado. Quando não cabe, o
+   componentes.js:ajustarPop dá-lhe um max-height: sem o overflow, as opções
+   saíam da caixa por baixo (ou ficavam cortadas pela janela); assim rola por
+   dentro, e no fim não passa o gesto para trás, como a lista do sel(). */
 .menuwrap{position:relative}
 .menupop{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:30;background:var(--card);
   border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;min-width:200px;
-  width:max-content;max-width:min(320px,calc(100vw - 32px))}
+  width:max-content;max-width:min(320px,calc(100vw - 32px));overflow-y:auto;overscroll-behavior:contain;container-type:scroll-state}
 .menupop.on{display:block}
 .menupop button{width:100%;display:flex;align-items:center;gap:10px;min-height:42px;padding:8px 12px;border:0;background:transparent;
   border-radius:10px;cursor:pointer;text-align:left;font-size:15px;color:var(--ink)}
@@ -2038,7 +2069,7 @@ button.vg-item-abrir:active{background:var(--press)}
    que desliza de lado no telemóvel e que, no computador, cabe inteira. O
    enchimento à volta deixa o anel do foco por inteiro dentro da fila que
    corta. */
-.imv-acoes{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:4px;margin:-4px}
+.imv-acoes{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;padding:4px;margin:-4px}
 .imv-acoes::-webkit-scrollbar{display:none}
 /* No dedo, o chip cresce dos 36px do desenho para os 40 (os das ações
    rápidas do canvas, e o mínimo do .btn.sm), e a área de toque chega aos 44:
@@ -2339,7 +2370,7 @@ button.vg-item-abrir:active{background:var(--press)}
    colunas são áreas com nome: em seleção entra a da caixa à cabeça. Abaixo
    de ~1360px a tabela rola de lado dentro do cartão, como o canvas. */
 @media(min-width:1100px){
-  .ct-tabela{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow-x:auto}
+  .ct-tabela{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow-x:auto;overscroll-behavior-x:contain}
   .ct-cab,.list.ct-lista{min-width:980px}
   .ct-cab,.row-between.ct-cols{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1.5fr) 112px 128px 112px minmax(0,1.4fr) 24px;
     grid-template-areas:"quem per renda imp liq at seta";align-items:center;column-gap:12px;row-gap:0;padding:8px 16px}
@@ -2568,7 +2599,7 @@ label.ct-sw-linha{display:flex;align-items:center;gap:12px;min-height:44px;font-
    inteira. O enchimento à volta deixa o anel do foco por inteiro dentro da
    fila que corta. No dedo, o chip cresce dos 36px do desenho para os 40, e a
    área de toque chega aos 44 (dois pixéis por cima e por baixo, invisíveis). */
-.pes-acoes{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:4px;margin:-4px}
+.pes-acoes{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;padding:4px;margin:-4px}
 .pes-acoes::-webkit-scrollbar{display:none}
 .pes-acoes>.chip{position:relative;flex:0 0 auto}
 @media(pointer:coarse){.pes-acoes>.chip{min-height:40px}
@@ -2743,7 +2774,7 @@ a.pes-liga:focus-visible,.pes-kv.tap:focus-visible,.pes-linha-f.tap:focus-visibl
 @media(pointer:coarse){.mov-chip .selbtn::after,.mov-chip-x::after{content:"";position:absolute;inset:-5px 0}.mov-chip-x::after{inset:-7px}}
 .mov-chip.mov-comum{border-style:dashed}
 .mov-so-largo{display:none}
-@media(min-width:901px){.mov-chip.mov-so-largo,.chip.limpar.mov-so-largo{display:inline-flex}}
+@media(min-width:901px){.mov-chip.mov-so-largo{display:inline-flex}}
 /* no telemóvel a fila tem de caber numa linha, como no canvas: sem a seta */
 @media(max-width:900px){.mov-chip .selbtn svg{display:none}.mov-chip .selbtn{padding:0 12px}.mov-chip.on .selbtn{padding-right:2px}}
 
@@ -2757,7 +2788,7 @@ a.pes-liga:focus-visible,.pes-kv.tap:focus-visible,.pes-linha-f.tap:focus-visibl
 .mov-tot .kic{display:none}
 /* no telemóvel numa fila que se arrasta de lado e sai pela borda do ecrã */
 @media(max-width:600px){
-  .mov-tot{display:flex;overflow-x:auto;scroll-snap-type:x proximity;scroll-padding:0 16px;scrollbar-width:none;margin:0 calc(-16px - var(--inset-right)) 2px calc(-16px - var(--inset-left));padding:0 16px 2px}
+  .mov-tot{display:flex;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scroll-padding:0 16px;scrollbar-width:none;margin:0 calc(-16px - var(--inset-right)) 2px calc(-16px - var(--inset-left));padding:0 16px 2px}
   .mov-tot::-webkit-scrollbar{display:none}
   .mov-tot .kpi{flex:0 0 auto;min-width:124px;scroll-snap-align:start}
 }
@@ -2977,13 +3008,12 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
    ecrãs (creditos.js:credPagasAlternar), e o estado é o chip do
    vistas.js:lfCabeca — os chips Ativas / Liquidadas do computador saíram.
    Abertas (ou as únicas que o filtro deixa), as liquidadas mostram-se; no
-   computador o título e o botão das liquidadas ficam na coluna, e o «Nova
-   hipoteca» fica só no cabeçalho. */
+   computador o título e o botão das liquidadas ficam na coluna. O título não
+   tem botão ao lado: criar é o + e o cabeçalho (creditos.js:vCredits). */
 .cred-corpo.abertas .cred-pagas{display:flex;flex-direction:column;gap:12px}
 @media(min-width:901px){
   .cred-corpo>.cred-col>.plan-cab{display:flex}
   .cred-corpo>.cred-col>.btn.cred-liq{display:flex}
-  .cred-corpo .cred-cab>.btn.plan-novo{display:none}
 }
 /* ===== fim: ajustes-v40b 1.2 ===== */
 /* ===== ajustes-v40c: 1.2 — contratos e visitas ===== */
@@ -3104,7 +3134,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
    dos Modelos também (sem o ::after das irmãs: a fila rola de lado com 2px de
    folga, e o que passasse disso ficava cortado) */
 @media(pointer:coarse){
-  .plan-acoes .btn,.plan-retro-acoes .btn,.btn.plan-novo,.cred-hp-acoes .btn,.cred-det-acoes .btn,.cred-aviso .btn,.cal-nav .btn{min-height:44px}
+  .plan-acoes .btn,.plan-retro-acoes .btn,.cred-hp-acoes .btn,.cred-det-acoes .btn,.cred-aviso .btn,.cal-nav .btn{min-height:44px}
   .plan-modelo{min-height:44px}
 }
 /* --- a página dos Planeados (o canvas M-Planeados) --- */
@@ -3128,10 +3158,10 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .plan-lista .plan-linha:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .plan-linha>.plan-num{flex:0 0 auto}
 .plan-selos{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-/* o título de uma secção com a ação ao lado (Modelos, Ativas) */
+/* o título de uma secção (Modelos, Ativas), sem botão de criar ao lado:
+   criar é o + e o cabeçalho (acessos.js:acaoDoSeparador) */
 .plan-cab{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:36px;margin:22px 2px 10px}
 .plan-cab h2{margin:0;font-size:16px}
-.btn.ghost.plan-novo{color:var(--accent-text)}
 /* os modelos: chips com o valor */
 .plan-modelos.list{display:flex;flex-wrap:wrap;gap:8px}
 .plan-modelo{max-width:100%}
@@ -3194,8 +3224,12 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .cred-barra i{display:block;width:0;height:100%;border-radius:3px;background:var(--loan)}
 .cred-hp-acoes{display:flex;gap:6px;padding:0 14px 14px}
 .cred-hp-acoes .btn{flex:1 1 0;min-width:0}
-/* o plano ano a ano: a tabela rola dentro da sua caixa, com o cabeçalho preso */
-.cred-plano{overflow:auto;border:1px solid var(--line);border-radius:12px;max-height:52vh;max-height:52dvh;-webkit-overflow-scrolling:touch}
+/* o plano ano a ano: a tabela rola dentro da sua caixa, com o cabeçalho preso.
+   Na vertical, no fim, o gesto segue para a página (ou para o corpo da
+   janela do plano), de propósito: a caixa ocupa metade do ecrã, e contê-la
+   prendia o dedo a quem pousou nela para descer. De lado contém, como as
+   outras caixas que rolam de lado. */
+.cred-plano{overflow:auto;overscroll-behavior-x:contain;border:1px solid var(--line);border-radius:12px;max-height:52vh;max-height:52dvh;-webkit-overflow-scrolling:touch}
 .cred-plano:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cred-tab{min-width:560px}
 .cred-tab th,.cred-tab td{padding:9px 14px}
@@ -4297,7 +4331,7 @@ div.pt-quota b{text-align:right}
 /* «Marcar todas como vistas», por baixo dos mosaicos das apresentações (cloud/ajuda.js:apresentacoesNaAjuda) */
 .aj-apr-pe{margin-top:10px}
 @media(pointer:coarse){.aj-apr-pe .btn.sm{min-height:44px}}
-.aj-tutoriais{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:2px}
+.aj-tutoriais{display:flex;gap:10px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:2px}
 .aj-tutoriais::-webkit-scrollbar{display:none}
 @media(max-width:900px){.aj-tutoriais{margin:0 calc(-16px - var(--inset-right)) 0 calc(-16px - var(--inset-left));padding-left:calc(16px + var(--inset-left));padding-right:calc(16px + var(--inset-right));scroll-padding:0 16px}}
 /* no ecrã largo cabem todos: uma grelha em vez do carrossel */
@@ -5236,12 +5270,9 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 .apr-d-retro>b{font-family:var(--letra-titulo);font-size:12px;font-weight:650}
 .apr-d-retro>span{font-size:10px;line-height:1.35}
 .apr-d-retro-acoes{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:2px}
-/* o cabeçalho de uma secção com o botão de texto (o «Novo modelo», o «Nova hipoteca») */
+/* o cabeçalho de uma secção (o «Modelos»: apresentacao-dinheiro.js:aprDCabecaSecao), sem botão ao lado */
 .apr-d-cab{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 0 5px}
 .apr-d-cab b{font-family:var(--letra-titulo);font-size:13px;font-weight:650}
-.apr-d-fantasma{border-color:transparent;background:transparent;color:var(--accent-text)}
-.apr-d-ativas{padding:8px}
-.apr-d-ativas>.apr-d-cab{padding:0 2px 6px}
 /* o resumo dos Créditos: o cartão azul-noite, com as barras da dívida no fim de cada ano */
 .apr-d-cred{display:flex;flex-direction:column;gap:3px;padding:10px 11px;border-radius:12px;background:var(--side);color:var(--side-ink);border:1px solid transparent;box-shadow:var(--shadow)}
 :root.dark .apr-d-cred{border-color:var(--line)}
@@ -5757,7 +5788,7 @@ p.qa-quem{margin:0}
    termos (196), abaixo da entrada (200), que é para onde o «Sair» leva. O
    que diz, diz-se nele: #cwe_info em --accent-text, #cwe_err em --danger,
    ambas cor da frente; vazias, não ocupam lugar. */
-.email-portao{position:fixed;inset:0;z-index:198;background:var(--bg);overflow:auto;display:flex;justify-content:center;
+.email-portao{position:fixed;inset:0;z-index:198;background:var(--bg);overflow:auto;overscroll-behavior:contain;display:flex;justify-content:center;
   padding:calc(28px + var(--inset-top,0px)) calc(20px + var(--inset-right)) calc(24px + var(--inset-bottom,0px)) calc(20px + var(--inset-left))}
 #cweTit:focus-visible{outline:none} /* como o #tgTit: o foco só põe o leitor de ecrã a começar ali */
 .email-endereco{font-weight:650;color:var(--ink);overflow-wrap:anywhere}
@@ -5837,3 +5868,24 @@ label.fine-lido>input,label.fine-lido .selbtn{border-color:var(--accent);box-sha
 /* a linha dos produtos ligados no painel da hipoteca (creditos.js:credDetalhe) */
 .cred-det-prod{margin:0 0 4px;color:var(--muted)}
 /* === fim: os produtos facultativos da hipoteca === */
+/* === qa-filtros-hipoteca: o painel dos filtros em secções sem nome === */
+/* (lista-movimentos.js:txFilterBody, vistas.js:lfPainelCorpo,
+   vistas.js:filtrosEmSeccoes; o ticket de QA 79389e90) O painel dos filtros,
+   nos Movimentos e em todas as listas, arruma-se em secções sem título: nos
+   Movimentos os chips do tipo e das etiquetas (.mov-seccao-campos); depois os
+   seletores; depois as datas e as horas; depois a ordenação. Cada grelha de
+   duas colunas (.mov-grelha) começa numa linha nova, e por isso o «De» fica
+   ao lado do «Até» e o «Ordenar por» ao lado da «Ordem» — numa grelha só, a
+   subcategoria e o «Pago por», que aparecem e somem, trocavam-lhes as
+   linhas. Separa-as uma linha fina e espaço; uma secção sem campos não chega
+   a existir, e não deixa espaço vazio. O interruptor dos Movimentos fica no
+   fim, com a moldura dele.
+   O «Limpar» da fila dos chips (os tickets aca2564c e 9d5c886e) já não leva a
+   classe que o escondia no telemóvel (.mov-so-largo): aparece sempre que há
+   alguma coisa para limpar, e a fila parte em duas linhas quando não cabe
+   (.chips-fila já quebra; nunca rola de lado). No dedo parece o mesmo chip
+   de 36px, mas acerta-se em 46px, como os outros da fila (.mov-chip). */
+.mov-seccao-campos{display:flex;flex-direction:column;gap:16px}
+.mov-seccao+.mov-seccao{padding-top:16px;border-top:1px solid var(--line)}
+@media(pointer:coarse){.mov-chips>.chip.limpar{position:relative}.mov-chips>.chip.limpar::after{content:"";position:absolute;inset:-5px 0}}
+/* === fim: o painel dos filtros em secções sem nome === */

@@ -1384,7 +1384,7 @@ var APR_EXEMPLO = {
     { id: 'h1', imovel: 'bonfim', nome: 'Caixa', banco: 'Caixa Geral de Depósitos', capital: 248000, divida: 231800, prestacao: 1106.4,
       taxa: 'Variável', dia: 15 },
   ],
-  // os planeados criados à mão (os outros saem dos contratos, da hipoteca e das despesas fixas)
+  // os planeados personalizados, que a pessoa cria (os outros saem dos contratos, da hipoteca e das despesas fixas)
   aMao: [
     { nome: 'Limpeza das escadas', imovel: 'bonfim', valor: -35, dia: 1 },
   ],
@@ -1539,8 +1539,8 @@ function aprBVContrato() {
 
 /* A imagem dos planeados: o ecrã do Dinheiro → Planeados, com a renda por
    confirmar e o Confirmar em destaque, e o que vem a seguir das outras três
-   origens — a hipoteca, as despesas fixas do imóvel e à mão
-   (planeados.js:recOrigem).
+   origens — a hipoteca, as despesas fixas do imóvel e o personalizado, que
+   a pessoa cria (planeados.js:recOrigem).
    Devolve: o HTML da imagem. */
 function aprBVPlaneados() {
   var ex = APR_EXEMPLO, ct = ex.contrato('c4'), p = ex.imovel('paranhos'), b = ex.imovel('bonfim'), h = ex.creditos[0], m = ex.aMao[0];
@@ -1557,7 +1557,7 @@ function aprBVPlaneados() {
         botao: aprSelo('da hipoteca', 'loan'), valor: aprDinheiro(-h.prestacao), tom: 'prest' }) +
       aprLinha({ titulo: 'IMI · ' + p.nome, sub: 'maio e novembro · ' + aprData(imi), botao: aprSelo('do imóvel', 'grey'),
         valor: aprDinheiro(-p.imi / 2), tom: 'neg' }) +
-      aprLinha({ titulo: m.nome, sub: 'mensal, dia ' + m.dia + ' · ' + aprData(aprProximoDia(m.dia)), botao: aprSelo('à mão', 'grey'),
+      aprLinha({ titulo: m.nome, sub: 'mensal, dia ' + m.dia + ' · ' + aprData(aprProximoDia(m.dia)), botao: aprSelo('personalizado', 'grey'),
         valor: aprDinheiro(m.valor), tom: 'neg' })),
   ]), { tom: 't0', arranjo: 'coluna' });
 }
@@ -1652,7 +1652,7 @@ registarApresentacao('boas-vindas', {
       texto: 'Em <b>Casas → Contratos</b>, um contrato liga o imóvel aos inquilinos, com a renda e as datas. Ao guardares, a renda de cada mês fica planeada.',
       maquete: aprBVContrato, quando: function () { return aprPodeCriar('contracts', 'contract.add'); } },
     { titulo: 'O que se repete fica planeado',
-      texto: 'Em <b>Dinheiro → Planeados</b> chega a renda dos contratos, a prestação das hipotecas, o IMI, o condomínio e o seguro, e o que crias à mão. Na data, <b>Confirmar</b> regista o movimento e agenda o seguinte.',
+      texto: 'Em <b>Dinheiro → Planeados</b> chega a renda dos contratos, a prestação das hipotecas, o IMI, o condomínio e o seguro, e os personalizados, que crias tu. Na data, <b>Confirmar</b> regista o movimento e agenda o seguinte.',
       maquete: aprBVPlaneados, quando: function () { return aprPodeCriar('recurring', 'rec.add'); } },
     { titulo: 'Modelos para o que não tem data',
       texto: 'Um modelo é um movimento guardado para copiar. Depois de o criares (<b>Criar → Modelo</b>), um toque em <b>Criar → A partir de um modelo</b> preenche o tipo, o valor, o imóvel e a categoria: escreves uma vez, e das outras só revês e guardas.',

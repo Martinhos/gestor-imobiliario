@@ -341,7 +341,7 @@ describe('um botão em cada vazio', () => {
     assert.ok(!f.includes(botao('newRec()')) && !f.includes(botao('newTpl()')));
   });
 
-  test('Hipotecas: com imóveis «Nova hipoteca»; sem imóveis fica o caminho para os imóveis; o filtro não convida', () => {
+  test('Hipotecas: com imóveis «Nova hipoteca» no vazio, e só lá; sem imóveis fica o caminho para os imóveis; o filtro não convida', () => {
     limpar(app);
     const semImoveis = app.vCredits();
     assert.match(semImoveis, /Sem hipotecas/);
@@ -350,6 +350,10 @@ describe('um botão em cada vazio', () => {
     app.db.properties = [app.normProp({ id: 'P1', name: 'T2 Lisboa' })];
     assert.ok(app.vCredits().includes(botao('newMort()')));
     app.db.properties[0].loans = [app.normLoan({ id: 'L1', name: 'Aquisição', outstanding: 100000, rate: 3 })];
+    // com hipotecas, o botão é só do vazio: criar é o + e o cabeçalho, como nos outros separadores
+    const comHipoteca = app.vCredits();
+    assert.match(comHipoteca, /<h2>Ativas<\/h2>/);
+    assert.ok(!comHipoteca.includes('newMort()'));
     app.lf('lcred').q = 'zzz';
     const f = app.vCredits();
     assert.match(f, /Nada neste filtro/);

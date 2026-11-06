@@ -1,10 +1,12 @@
 /* ================= CRÉDITO ================= */
 // Recebe: l — o crédito (passa pelo normLoan); m — o mês do crédito, contado do início e a começar no 0.
 // Devolve: número — a taxa anual em percentagem que vigora nesse mês: a fixa,
-// a Euribor+spread nas variáveis, ou a fase certa nas mistas.
+// a Euribor+spread nas variáveis, ou a fase certa nas mistas. O spread é o
+// desse mês (spreadEmVigor): uma redução de spread temporária só conta nos
+// primeiros meses dela.
 function rateAt(l,m){
   l=normLoan(l);
-  const vr=(Number(l.euribor)||0)+spreadEmVigor(l);
+  const vr=(Number(l.euribor)||0)+spreadEmVigor(l,m);
   if(l.type==='variavel')return vr;
   if(l.type==='mista')return m<Math.round((Number(l.fixedYears)||0)*12)?taxaFixaEmVigor(l):vr;
   return taxaFixaEmVigor(l);
@@ -14,7 +16,12 @@ function rateAt(l,m){
    produto facultativo (dados.js:normProduto) baixa o spread e/ou a TAN em
    pontos percentuais, e só conta ligado. Só contam as reduções que o tipo de
    taxa tem: o spread na variável e na mista, a TAN (a taxa fixa) na fixa e na
-   mista. A taxa em vigor nunca desce abaixo de 0. */
+   mista. A taxa em vigor nunca desce abaixo de 0.
+   A «Redução de spread» (reducao_spread) é a única que dura um tempo: baixa
+   só o spread, e só nos primeiros `meses` do crédito, contados pelo relógio
+   da rateAt (o mês do crédito a contar do 0, o das prestações registadas,
+   loanMes — o mesmo da fase fixa da mista, decisão do Martinho). Sem meses
+   não conta. Na mista nunca baixa a taxa fixa, e na fixa não faz nada. */
 
 /* As reduções que um tipo de taxa tem.
    Recebe: type — 'fixa', 'mista' ou 'variavel'.
@@ -24,13 +31,39 @@ function produtosReducoes(type){return {spread:type==='variavel'||type==='mista'
    Recebe: l — a hipoteca (aguenta uma sem produtos, ou null).
    Devolve: a lista dos produtos com ativo === true. */
 function produtosLigados(l){return (l&&Array.isArray(l.produtos)?l.produtos:[]).filter(p=>p&&p.ativo===true)}
+/* O produto é uma redução de spread temporária com tudo o que precisa para
+   contar: o tipo, uma redução do spread e os meses.
+   Recebe: p — o produto.
+   Devolve: true ou false. */
+function reducaoTemporaria(p){
+  return !!p&&p.tipo==='reducao_spread'&&Number(p.spread)>0&&Number(p.meses)>=1;
+}
+/* O mês do crédito a que se pergunta: o dado, ou — sem ele — o primeiro em
+   que o spread conta a partir de agora (mesDoSpread).
+   Recebe: l — a hipoteca; m (opcional) — o mês do crédito, a contar do 0.
+   Devolve: número inteiro ≥ 0. */
+function mesDoCredito(l,m){return typeof m==='number'&&isFinite(m)?m:mesDoSpread(l)}
+/* O primeiro mês do crédito, a partir de agora (loanMes), em que o spread
+   entra na taxa: na variável é este; na mista, o primeiro da fase variável
+   (ou este, se ela já começou). É o mês de que falam o spread em vigor sem
+   mês (spreadEmVigor), a taxa por extenso e as frases dos produtos: na fase
+   fixa de uma mista, o spread de hoje não entra em conta nenhuma.
+   Recebe: l — a hipoteca.
+   Devolve: número inteiro ≥ 0. */
+function mesDoSpread(l){
+  const ja=loanMes(l);
+  return l&&l.type==='mista'?Math.max(ja,Math.round((Number(l.fixedYears)||0)*12)):ja;
+}
 /* A redução que um produto dá num campo. Na mista, um produto sem redução
    própria na taxa fixa baixa-a tanto como o spread (a decisão do Martinho:
    a FINE costuma dar só a do spread, e a prestação de agora, a da fase fixa,
-   ficava parada ao ligar o produto).
-   Recebe: l — a hipoteca; p — o produto; campo — 'spread' ou 'tan'.
+   ficava parada ao ligar o produto). A redução de spread temporária fica de
+   fora dessa regra: baixa só o spread, e só enquanto m < meses.
+   Recebe: l — a hipoteca; p — o produto; campo — 'spread' ou 'tan'; m
+   (opcional) — o mês do crédito (mesDoCredito: sem ele, o do spread de agora).
    Devolve: a redução em pontos percentuais (0 quando não há). */
-function reducaoDoProduto(l,p,campo){
+function reducaoDoProduto(l,p,campo,m){
+  if(p.tipo==='reducao_spread')return campo==='spread'&&reducaoTemporaria(p)&&mesDoCredito(l,m)<Number(p.meses)?Number(p.spread):0;
   const v=Number(p[campo]);
   if(isFinite(v)&&v>0)return v;
   if(campo==='tan'&&l.type==='mista'){const s=Number(p.spread);return isFinite(s)&&s>0?s:0}
@@ -38,19 +71,66 @@ function reducaoDoProduto(l,p,campo){
 }
 /* A soma das reduções dos produtos ligados num campo, quando o tipo de taxa
    o tem (reducaoDoProduto).
-   Recebe: l — a hipoteca; campo — 'spread' ou 'tan'.
+   Recebe: l — a hipoteca; campo — 'spread' ou 'tan'; m (opcional) — o mês
+   do crédito (conta só para a redução de spread temporária).
    Devolve: a soma em pontos percentuais (0 sem nada que conte). */
-function reducaoDosLigados(l,campo){
+function reducaoDosLigados(l,campo,m){
   if(!l||!produtosReducoes(l.type)[campo])return 0;
-  return produtosLigados(l).reduce((s,p)=>s+reducaoDoProduto(l,p,campo),0);
+  return produtosLigados(l).reduce((s,p)=>s+reducaoDoProduto(l,p,campo,m),0);
 }
 /* Os produtos ligados que baixam alguma coisa neste tipo de taxa (os que a
-   taxa por extenso conta, rateLabel, e os que a ficha nomeia).
+   taxa por extenso conta, rateLabel, e os que a ficha nomeia). Uma redução de
+   spread temporária só entra enquanto baixa o spread do mês em que ele conta
+   (mesDoSpread): numa mista, se acaba antes do fim da taxa fixa, não baixa nada.
    Recebe: l — a hipoteca.
    Devolve: a lista desses produtos. */
 function produtosQueBaixam(l){
   const red=produtosReducoes(l&&l.type);
-  return produtosLigados(l).filter(p=>(red.spread&&Number(p.spread)>0)||(red.tan&&Number(p.tan)>0));
+  return produtosLigados(l).filter(p=>p.tipo==='reducao_spread'?red.spread&&reducaoDoProduto(l,p,'spread')>0
+    :(red.spread&&Number(p.spread)>0)||(red.tan&&Number(p.tan)>0));
+}
+/* As reduções de spread temporárias ligadas que contam neste tipo de taxa
+   (reducaoTemporaria; na fixa, nenhuma).
+   Recebe: l — a hipoteca.
+   Devolve: a lista desses produtos. */
+function reducoesTemporarias(l){
+  return produtosReducoes(l&&l.type).spread?produtosLigados(l).filter(reducaoTemporaria):[];
+}
+/* O mês do crédito em que acaba a próxima redução de spread temporária que
+   ainda mexe na taxa: o primeiro sem ela, depois do mês em que o spread conta
+   (mesDoSpread). É aí que a prestação volta a subir.
+   Recebe: l — a hipoteca.
+   Devolve: o mês (inteiro, a contar do 0), ou 0 sem nenhuma por acabar. */
+function fimDaReducaoMes(l){
+  const desde=mesDoSpread(l),ms=reducoesTemporarias(l).map(p=>Number(p.meses)).filter(n=>n>desde);
+  return ms.length?Math.min.apply(null,ms):0;
+}
+/* Os meses do crédito, daqui para a frente, em que a prestação muda de taxa:
+   o fim da fase fixa de uma mista e o fim de cada redução de spread
+   temporária que ainda mexe na taxa, por ordem. A caixa da simulação
+   (imovel.js:loanBox) e a ficha (creditos.js:mortFicha) dizem a prestação de
+   cada um.
+   Recebe: l — a hipoteca.
+   Devolve: [{m, tipo}] — m o mês do crédito (a contar do 0, depois de
+   loanMes), tipo 'fixa' ou 'reducao'; [] sem mudanças por vir. */
+function mudancasDaPrestacao(l){
+  if(!l)return [];
+  const ja=loanMes(l),out=[];
+  if(l.type==='mista'){const f=Math.round((Number(l.fixedYears)||0)*12);if(f>ja)out.push({m:f,tipo:'fixa'})}
+  const desde=mesDoSpread(l),vistos={};
+  reducoesTemporarias(l).forEach(p=>{const n=Number(p.meses);if(n>desde&&!vistos[n]){vistos[n]=1;out.push({m:n,tipo:'reducao'})}});
+  return out.sort((a,b)=>a.m-b.m||(a.tipo==='fixa'?-1:1));
+}
+/* As mudanças da prestação (mudancasDaPrestacao) com o dia em que cada uma
+   começa (dataDoMesDoCredito: o relógio do fim da fase fixa) e a linha do
+   plano desse mês — só as que caem dentro do plano.
+   Recebe: l — a hipoteca; a — o plano dela (amort(l)); proxima (opcional) —
+   a próxima prestação por confirmar (o next da recorrência).
+   Devolve: [{m, tipo, fim, row}] — fim em 'AAAA-MM-DD', row a linha do amort. */
+function mudancasComData(l,a,proxima){
+  const ja=loanMes(l),txs=(db&&db.transactions)||[],hoje=today();
+  return mudancasDaPrestacao(l).map(x=>({m:x.m,tipo:x.tipo,row:(a&&a.rows[x.m-ja])||null,fim:dataDoMesDoCredito(l,txs,hoje,proxima,x.m)}))
+    .filter(x=>x.row&&x.fim);
 }
 /* O nome de um tipo de produto facultativo (dados.js:PRODUTOS_HIPOTECA).
    Recebe: tipo — o id do tipo.
@@ -59,13 +139,15 @@ function produtoNome(tipo){
   const p=PRODUTOS_HIPOTECA.find(x=>x.id===tipo)||PRODUTOS_HIPOTECA.find(x=>x.id==='outro');
   return p.nome;
 }
-/* O spread em vigor: o base menos as reduções dos produtos ligados (só na
-   variável e na mista), às milésimas e nunca abaixo de 0. Sem nenhuma
-   redução ligada, o base tal e qual.
-   Recebe: l — a hipoteca.
+/* O spread em vigor num mês: o base menos as reduções dos produtos ligados
+   (só na variável e na mista; a redução de spread temporária só nos meses
+   dela), às milésimas e nunca abaixo de 0. Sem nenhuma redução ligada, o base
+   tal e qual. Sem mês, o do primeiro em que o spread conta a partir de agora
+   (mesDoSpread): na variável, o deste mês.
+   Recebe: l — a hipoteca; m (opcional) — o mês do crédito, a contar do 0.
    Devolve: o spread em percentagem (número). */
-function spreadEmVigor(l){
-  const b=Number(l&&l.spread)||0,r=reducaoDosLigados(l,'spread');
+function spreadEmVigor(l,m){
+  const b=Number(l&&l.spread)||0,r=reducaoDosLigados(l,'spread',m);
   return r>0?Math.max(0,taxa3(b-r)):b;
 }
 /* A taxa fixa em vigor (a TAN da fixa, a da fase fixa da mista): a base menos
@@ -210,13 +292,16 @@ const loanCost=l=>{const a=amort(l);return a.totInt+a.totStamp};
 // soma, ou as duas fases da mista. A soma arredonda às milésimas (taxa3),
 // como no credDetalhe: 2,15 + 0,95 dá 3,1 e não 3,0999999999999996. É a
 // taxa em vigor (spreadEmVigor, taxaFixaEmVigor): com produtos facultativos
-// ligados que a baixam, acaba em «com um produto» ou «com N produtos».
+// ligados que a baixam, acaba em «com um produto» ou «com N produtos». É a
+// taxa deste mês (loanMes) — o spread da mista é o do primeiro mês da fase
+// variável (mesDoSpread) —: uma redução de spread temporária conta enquanto
+// dura, e acabada já não.
 // Recebe: l — o crédito.
 // Devolve: string com a taxa por extenso, conforme o tipo.
 function rateLabel(l){
   const n=produtosQueBaixam(l).length,com=n?(n===1?' com um produto':' com '+n+' produtos'):'';
   if(l.type==='fixa')return `fixa ${dec(taxaFixaEmVigor(l))}%${com}`;
-  if(l.type==='variavel')return `Euribor ${l.index} ${dec(l.euribor)}% + ${dec(spreadEmVigor(l))}% = ${dec(taxa3(rateAt(l,0)))}%${com}`;
+  if(l.type==='variavel')return `Euribor ${l.index} ${dec(l.euribor)}% + ${dec(spreadEmVigor(l))}% = ${dec(taxa3(rateAt(l,loanMes(l))))}%${com}`;
   return `${dec(taxaFixaEmVigor(l))}% durante ${dec(l.fixedYears)} anos, depois ${dec(taxa3((Number(l.euribor)||0)+spreadEmVigor(l)))}%${com}`;
 }
 // Uma taxa somada, arredondada às milésimas de ponto (a vírgula flutuante
@@ -312,9 +397,33 @@ function acertarCreditos(d){
    (opcional) — a data da próxima prestação por confirmar (o next da recorrência).
    Devolve: 'AAAA-MM-DD'; '' quando não é mista ou a fase fixa já acabou. */
 function fimDaFaseFixa(l,txs,hoje,proxima){
-  if(!l||l.type!=='mista'||!/^\d{4}-\d{2}/.test(String(hoje||'')))return '';
+  if(!l||l.type!=='mista')return '';
+  return dataDoMesDoCredito(l,txs,hoje,proxima,Math.round((Number(l.fixedYears)||0)*12));
+}
+/* O dia em que vence a primeira prestação sem a redução de spread temporária
+   que acaba a seguir (fimDaReducaoMes): é aí que a prestação volta a subir.
+   O mesmo relógio do fim da fase fixa (fimDaFaseFixa).
+   Recebe: l — a hipoteca; txs — os movimentos; hoje — 'AAAA-MM-DD'; proxima
+   (opcional) — a data da próxima prestação por confirmar.
+   Devolve: 'AAAA-MM-DD'; '' sem redução por acabar. */
+function fimDaReducao(l,txs,hoje,proxima){
+  const m=l?fimDaReducaoMes(l):0;
+  return m?dataDoMesDoCredito(l,txs,hoje,proxima,m):'';
+}
+/* O dia em que vence a prestação do mês `alvo` do crédito, pelo relógio das
+   prestações registadas: a linha rows[0] do plano (amort) é a próxima por
+   pagar — a da recorrência, quando se sabe (proxima); senão a deste mês, ou a
+   do mês seguinte quando a deste já está registada — e o mês alvo é
+   rows[alvo − registadas]. É a conta do fim da fase fixa (fimDaFaseFixa) e do
+   fim de uma redução de spread (fimDaReducao).
+   Recebe: l — a hipoteca; txs — os movimentos; hoje — 'AAAA-MM-DD'; proxima
+   (opcional) — a data da próxima por confirmar; alvo — o mês do crédito (a
+   contar do 0).
+   Devolve: 'AAAA-MM-DD'; '' quando esse mês já passou (ou é o de agora). */
+function dataDoMesDoCredito(l,txs,hoje,proxima,alvo){
+  if(!l||!/^\d{4}-\d{2}/.test(String(hoje||'')))return '';
   const pagas=(txs||[]).filter(t=>t.kind==='loan'&&t.loanId===l.id&&t.payType!=='amortizacao');
-  const k=Math.round((Number(l.fixedYears)||0)*12)-Math.max(0,pagas.length+(Number(l._paidOfs)||0));
+  const k=(Number(alvo)||0)-Math.max(0,pagas.length+(Number(l._paidOfs)||0));
   if(k<=0)return '';
   const tem=/^\d{4}-\d{2}-\d{2}$/.test(String(proxima||'')),ref=tem?proxima:hoje;
   const jaEste=!tem&&pagas.some(t=>String(t.date||'').slice(0,7)===hoje.slice(0,7));

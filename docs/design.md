@@ -1016,11 +1016,14 @@ Uma via parcial refaz a vista a partir de um molde, e o molde tem de ser o
 que o render poria — com a casca que ele põe à frente de cada vista: os
 separadores da área (navegacao.js:abasDaArea) — e é dali que o
 navegacao.js:abasAssentar os leva para a casa deles, por cima do #view. Sem
-ela, a primeira tecla da pesquisa levava os separadores do telemóvel. Nos Movimentos o caminho curto guarda ainda dois
-nós da moldura de uma pintura para a seguinte
-(lista-movimentos.js:txGuardarNo): o campo da pesquisa, que não perde o foco
-nem o que o teclado estava a compor, e o painel dos filtros, que não volta
-ao topo a cada escolha e se repinta por dentro.
+ela, a primeira tecla da pesquisa levava os separadores do telemóvel. Nos
+Movimentos o caminho curto deixa a barra da pesquisa no documento
+(vistas.js:barraDaPesquisaViva) — a moldura nova entra à volta dela, e o
+campo não perde o foco nem o que o teclado estava a compor — e guarda o
+painel dos filtros (lista-movimentos.js:txGuardarNo), que não volta ao topo a
+cada escolha e se repinta por dentro. A barra nunca vai para o molde: um
+campo que sai do documento, nem que seja por um instante, perde a
+composição do teclado.
 
 Quem migrar a vista seguinte tem três coisas a respeitar: a chave é o id
 do registo e vive num data-chave que o reconciliar escreve; quem refaz
@@ -1170,22 +1173,27 @@ aparece a partir de 901px, ou ligado (o «Pago por» dos Movimentos). Um chip
 que não é um seletor leva ao painel com o foco no campo dele
 (vistas.js:lfAbrirEm; estilos.css:.lfm-chip-abre) — o «Dias e horas» das
 Visitas, como o «Escolher datas…» dos Movimentos. Depois dos chips, o
-«Limpar» (vistas.js:lfChipsHtml), que no telemóvel só se mostra quando a
-única coisa ligada não tem o seu × à vista. A fila parte em linhas e não
-rola de lado. O chip diz o nome ao leitor de ecrã uma vez: quando o rótulo
+«Limpar» (vistas.js:lfChipsHtml), em todos os ecrãs sempre que há alguma
+coisa para limpar — um chip, um filtro só do painel ou só a pesquisa
+(vistas.js:lfCount); uma lista sem chips rápidos fica com a fila só com ele.
+A fila parte em linhas e não rola de lado. O chip diz o nome ao leitor de ecrã uma vez: quando o rótulo
 já começa por ele («Ordenar: renda»), só o rótulo.
 
 O painel é o dos Movimentos (vistas.js:lfPainelCorpo, as classes
 estilos.css:.mov-fwrap, estilos.css:.mov-filtros-card,
-estilos.css:.mov-grelha): o título com o «Limpar» (só com filtros ligados) e
-o «Fechar» NO TOPO, «Aplicam-se ao mexer · N imóveis» e a grelha de duas
-colunas, com a
-ordenação no fim (vistas.js:lfCampos: «Ordenar por» e, escolhida, «Ordem»).
+estilos.css:.mov-grelha): o título com o «Limpar» (com alguma coisa para
+limpar, a pesquisa incluída) e o «Fechar» NO TOPO, «Aplicam-se ao mexer · N
+imóveis» e os campos em secções sem nome (vistas.js:filtrosEmSeccoes,
+estilos.css:.mov-seccao): os seletores; os campos de data e de hora, cada
+intervalo lado a lado e os soltos depois; o «Ordenar por» com a «Ordem» ao
+lado (vistas.js:lfCampos: a «Ordem» só com uma ordenação escolhida). Cada
+secção é uma grelha de duas colunas que começa numa linha nova, separada da
+de cima por uma linha fina e sem título; uma secção sem campos não aparece.
 Na grelha, a opção vazia diz o curto («Todos»), e o campo ligado veste o
 cobalto (estilos.css:.mov-ligado). Além dos seletores (vistas.js:lfSel, que
-aplica pelo vistas.js:lfMudar e respeita o `aplicar` do campo), a grelha
-tem campos de data e de hora (vistas.js:lfCampoNaGrelha), lado a lado como o
-«De» e o «Até» dos Movimentos; um intervalo conta como um filtro no funil (o
+aplica pelo vistas.js:lfMudar e respeita o `aplicar` do campo), há campos de
+data e de hora (vistas.js:lfCampoNaGrelha), lado a lado como o «De» e o
+«Até» dos Movimentos; um intervalo conta como um filtro no funil (o
 `junto`, vistas.js:lfCount).
 
 O estado é o lf(k) da lista, e nada mais. O «Limpar» (vistas.js:lfClear)
@@ -1195,11 +1203,19 @@ a barra fica no documento (vistas.js:lfBarraViva) — o resto troca-se à volta
 dela e só o funil se refaz, se mudou —, e quem escreve não perde o foco, o
 cursor nem o que o teclado compunha: um nó que sai do documento perde o
 foco, e o teclado do telemóvel fechava-se a meio de uma palavra. Quando a
-via parcial desiste (nasce um cartão), o render recria o campo e o lfSearch
-devolve-lhe o foco. Ao teclado, o funil abre e fecha o painel com o foco a
+via parcial desiste (nasce um cartão, a lista fica sem resultados) e quando
+outra coisa repinta (a sincronização), o render também não tira do
+documento a barra onde se está a escrever: com o foco no campo de uma
+.mov-barra, a vista nova entra à volta dela (vistas.js:pintarAVoltaDaPesquisa,
+vistas.js:trocarAVoltaDaBarra). Sem o foco lá, o render pinta como sempre.
+Ao teclado, o funil abre e fecha o painel com o foco a
 ficar nele, e o «Fechar» devolve-o ao funil (vistas.js:lfFocarFunil);
 escolher num seletor deixa o foco no seletor refeito (vistas.js:lfReporFoco);
-o «Limpar» do painel, que some, passa o foco ao «Fechar».
+o «Limpar» do painel, que some, passa o foco ao «Fechar». O Enter na
+pesquisa (vistas.js:lqTecla, lista-movimentos.js:txqTecla,
+vistas.js:enterDaPesquisa) aplica logo, sem os 280 ms; no telemóvel tira o
+foco ao campo, e o teclado fecha; com rato e teclado
+(`(hover:hover) and (pointer:fine)`) o foco fica no campo.
 
 Nos Imóveis, nos Contratos, nos Inquilinos, nas Visitas e nos Planeados o
 botão do cabeçalho é o «Selecionar vários», a caixa com o visto
@@ -1896,7 +1912,14 @@ que se vê), o segurar que seleciona vários — só onde o há
 (cloud/selecao-listas.js:TABS_SEL) —, por onde se cria e os filtros, e deixam
 uma dica. O caminho de criar muda com o ecrã: o + da barra de baixo no
 telemóvel, o botão do cabeçalho no computador (apresentacao-casas.js:aprCLargo,
-apresentacao-casas.js:aprCNovo). O portefólio delas continua o do kit
+apresentacao-casas.js:aprCNovo). O mesmo vale para a hipoteca nova dos
+Créditos (apresentacao-dinheiro.js:aprDCreditosNova): no telemóvel o
+«Criar» do + atrás, com a «Hipoteca» à cabeça, e à frente a escolha do
+imóvel que o substitui; no computador o cabeçalho e a escolha por baixo; sem
+imóvel nenhum, o texto manda criar primeiro o imóvel. E para os modelos
+(apresentacao-dinheiro.js:aprDPlaneadosModelosTexto): a secção dos Modelos
+não tem botão, e um modelo novo nasce no + (no computador, no «Criar» da
+barra lateral). O portefólio delas continua o do kit
 (apresentacao-casas.js:aprCExemplo).
 
 As do Dinheiro e da Agenda (cloud/apresentacao-dinheiro.js) ensinam um assunto
@@ -3142,7 +3165,10 @@ substitui a folha, como a da hipoteca, para a folha não crescer. A ação do
 contexto vem primeiro (acessos.js:acaoDoSeparador): na Visão geral e nos
 Movimentos são os tipos; nos outros ecrãs, a linha da ação do ecrã sai do
 resto e sobe para o topo da folha, por cima dos tipos, marcada «neste ecrã».
-Nos Grupos é «Novo grupo de <tipo à vista>», direto, sem a escolha
+Com ela sobem os outros registos desse ecrã, marcados também
+(acessos.js:outrasDoSeparador): nos Planeados, o «Modelo», logo a seguir ao
+«Movimento recorrente» — a secção dos Modelos não tem botão de criar ao lado
+do título. Nos Grupos é «Novo grupo de <tipo à vista>», direto, sem a escolha
 (acessos.js:acaoNaturalDoEcra), e o «Grupo» fica em baixo para os outros
 tipos. Com uma só ação corre-a logo (um cargo que só vê só tem o «Grupo»,
 e o + abre-lhe a escolha do tipo); sem nenhuma não há botão. Cada opção corre pela gramática das ações (navegacao.js:criarEscolha,
@@ -3736,18 +3762,26 @@ e quem pagou ou recebeu, cada um o menu da casa vestido de chip
 (lista-movimentos.js:txChipSel), com o × que limpa só esse
 (lista-movimentos.js:txLimparFiltro). O período escolhe um ano inteiro, ou
 abre o painel para as datas (lista-movimentos.js:txChipPeriodo). Os filtros
-comuns são um chip no ecrã largo e chips no painel. No telemóvel o «Limpar»
-só aparece com dois filtros ou mais: com um, o × chega, e a fila não parte.
+comuns são um chip no ecrã largo e chips no painel. O «Limpar» aparece
+sempre que há alguma coisa para limpar, a pesquisa incluída, em todos os
+ecrãs (lista-movimentos.js:txFiltrosN); a fila parte em duas linhas quando
+não cabe, e no dedo acerta-se em 46px (estilos.css:.mov-chips).
+«Pago ou recebido por X» são só os movimentos que X pagou ou recebeu
+(lista-movimentos.js:txMatch): os sem pessoa ficam de fora. O interruptor
+«Incluir movimentos sem pessoa atribuída» só existe sem pessoa escolhida:
+com uma, sai do painel e não conta no funil, no «Limpar», no resumo nem no
+chip «Só com pessoa atribuída».
 As listas dos chips flutuam presas ao ecrã, com largura para se lerem e sem
 sair dele pelo lado (cloud/filtros.js:popAnchor).
 
 O painel dos filtros tem o desenho do M-Filtros e continua a ser o painel
-ancorado, que não tapa a lista: o título com o Limpar e o Fechar,
-«Aplicam-se ao mexer · N movimentos», os filtros comuns em chips, o tipo em
-chips (role radio), uma grelha de duas colunas — o imóvel, a categoria, a
-subcategoria, quem pagou, o proprietário, as datas e a ordenação — e o
-interruptor dos movimentos sem pessoa (lista-movimentos.js:txFilterBody,
-lista-movimentos.js:txPorTipo). Na grelha a opção vazia diz só «Todos»,
+ancorado, que não tapa a lista: o título com o Limpar (que conta a
+pesquisa) e o Fechar, «Aplicam-se ao mexer · N movimentos» e, em secções sem
+nome (vistas.js:filtrosEmSeccoes), os filtros comuns, o tipo em chips (role
+radio) e as etiquetas; os seletores — o imóvel, a categoria, a subcategoria,
+quem pagou ou recebeu; o «De» ao lado do «Até»; o «Ordenar por» ao lado da
+«Ordem»; e no fim o interruptor dos movimentos sem pessoa
+(lista-movimentos.js:txFilterBody, lista-movimentos.js:txPorTipo). Na grelha a opção vazia diz só «Todos»,
 «Todas» ou «Qualquer um»; os chips continuam com as listas inteiras
 (lista-movimentos.js:txOpcoesImovel, lista-movimentos.js:txOpcoesCategoria).
 O interruptor vai num <label> com o texto, de 44px (estilos.css:.mov-interr):
@@ -3950,21 +3984,22 @@ Créditos, o imóvel tem os imóveis com hipotecas, a linha e os grupos com
 hipotecas, e um grupo escolhido mostra as hipotecas dos imóveis dele
 (creditos.js:vCredits). O estado (planeados.js:REC_ESTADOS, aplicado pelo
 planeados.js:recChip — o mesmo lf('lrec').st do seletor do painel) tem
-Automáticos, Criados à mão, Silenciados, Por confirmar e Em dia, cada um com
+Automáticos, Personalizados, Silenciados, Por confirmar e Em dia, cada um com
 quantos há pelos olhos dos outros filtros; ligado diz o rótulo curto. A
 ordenação diz a de sempre, a «Próxima data». Cada linha da lista (planeados.js:recLinha) diz
 a periodicidade com o dia («mensal, dia 5», planeados.js:recRepete) e a
 próxima data; o tipo, o imóvel e a categoria; o selo da origem e o do
 estado; e o valor. O selo da origem (planeados.js:recOrigem) é roxo «da
-hipoteca», cobalto «do contrato», e cinzento «do imóvel» e «à mão». Não há
-FAB nem ⋮: o «Novo recorrente» está no cabeçalho e no +, as opções no ⋯ da
-ficha, e o toque longo seleciona vários (ver a seleção dos Planeados, em
-«Os Movimentos»).
+hipoteca», cobalto «do contrato», e cinzento «do imóvel» e «personalizado»
+(o que a pessoa criou; o filtro guarda-o como 'manual'). Não há FAB nem ⋮:
+o «Novo recorrente» está no cabeçalho e no +, o modelo novo no + (à cabeça,
+nos Planeados) e no vazio «Sem modelos», as opções no ⋯ da ficha, e o toque
+longo seleciona vários (ver a seleção dos Planeados, em «Os Movimentos»).
 
 No dedo, os chips dos Modelos têm 44px (estilos.css:.plan-modelo), sem o
 ::after das irmãs: a fila rola de lado e cortava-o. Com filtros, os vazios
 são o vazio dos filtros, com «Limpar filtros» (vistas.js:vazioFiltro), na
-lista e nos Modelos; e com um estado que não o «Criados à mão» —
+lista e nos Modelos; e com um estado que não o «Personalizados» —
 Automáticos, Silenciados, Por confirmar ou Em dia — a secção dos Modelos
 sai, porque um modelo não tem estado.
 
@@ -4037,7 +4072,9 @@ taxa por extenso, o fim da taxa fixa quando cai dentro da janela dos prazos
 depois da fase fixa (creditos.js:credDepois), o capital em dívida com as
 prestações por pagar, a barra do capital do início já pago e, no telemóvel,
 Pagamento e Plano. A coluna é a mesma em todos os ecrãs: o título
-«Ativas» (no computador sem o «Nova hipoteca», que está no cabeçalho), as
+«Ativas», sem botão ao lado — criar uma hipoteca é o + (com a «Hipoteca» à
+cabeça, «neste ecrã») e, no computador, o «Nova hipoteca» do cabeçalho; só
+o vazio «Sem hipotecas» tem o seu, como os vazios dos outros separadores —, as
 ativas e o botão «Liquidadas · N», que as abre por baixo
 (creditos.js:credPagasAlternar; estilos.css:.cred-corpo.abertas). Com o
 estado «Liquidadas», só as pagas, abertas, com o título «Liquidadas». No
@@ -4236,6 +4273,21 @@ do produto), e ligado diz-se na cor da frente: «Ligado» no --accent-text e o
 contorno da caixa no --accent. Ligar não repinta, e o foco fica; adicionar e
 remover levam o foco ao tipo novo ou ao «Adicionar produto». Nada se grava
 sem o Guardar. A ficha da hipoteca nomeia os ligados.
+
+A «Redução de spread» é o único produto que dura um tempo: baixa só o
+spread, e só nos primeiros meses do crédito, contados pelo relógio da
+credito.js:rateAt (as prestações registadas, credito.js:loanMes — o mesmo da
+fase fixa da mista). Nunca baixa a taxa fixa da mista (fica fora da regra da
+credito.js:reducaoDoProduto) e na fixa não conta: o tipo não se oferece, e
+uma que já lá estava diz que não conta. A linha dela tem «Baixa o spread em
+(%)» e «Durante (meses)», obrigatório (imovel.js:loanProdSemMeses); o
+«Adicionar produto» não a escolhe sozinho. O spread em vigor sem mês é o do
+primeiro mês em que o spread entra na taxa (credito.js:mesDoSpread: na mista,
+o início da fase variável). A frase do bloco (imovel.js:loanProdFraseReducao),
+a caixa da simulação, a ficha e o aviso dos prazos dizem quando a prestação
+volta a subir (credito.js:mudancasDaPrestacao, credito.js:fimDaReducao, pelo
+relógio do credito.js:fimDaFaseFixa). A FINE não a lê
+(fine.js:fineLimparProdutos).
 
 ## As datas leem-se como se escrevem em Portugal
 O ecrã dizia `2028-03-15`. Passa a dizer **15/03/2028** (formato.js:dPT), e
@@ -6805,7 +6857,15 @@ tem role=status e aria-live=polite (index.html:#toast).
 O sel() é um listbox: o botão leva aria-haspopup, aria-expanded e
 aria-controls, a lista role=listbox, as opções role=option e aria-selected; as
 setas, o Home e o End andam pelas opções, e o Escape com a lista aberta fecha
-só a lista e devolve o foco ao botão (componentes.js:selTecla). O percurso
+só a lista e devolve o foco ao botão (componentes.js:selTecla). Escolher
+redesenha as opções pela mesma função do sel() (componentes.js:selOpcaoDesenho):
+o on, o aria-selected e o visto ficam só na escolhida, nos mesmos botões, e o
+foco fica onde estava (componentes.js:selPick). Escolher uma opção não tem
+ação por omissão: o selPick trava a propagação e o default. Quase todos os
+sel() vivem dentro de um <label>, e o label passa ao botão do sel() o clique
+que não vem de um botão de dentro; num Chromium de antes de 2026 (o Samsung
+Internet 30) ele decide pelo DOM de depois dos ouvintes, com o <span> tocado
+já trocado pelo redesenho, e o menu voltava a abrir. O percurso
 mede os alvos num ecrã de toque (testes/ui/invariantes.js, a regra 4): o que
 fica abaixo de 40px conta-se por tipo, e o teto só desce.
 
@@ -6825,9 +6885,24 @@ Alturas em unidades de ecrã escrevem-se em vh e logo a seguir em dvh
 barras do browser à mostra, vh é maior do que o que se vê e o topo da
 folha saía por cima. A área segura entra por --inset-* (estilos.css::root,
 estilos.css:.brand, estilos.css:header.top, estilos.css:.wrap,
-estilos.css:.fab, estilos.css:.tabbar; tema.js:fitInsets). Os corpos
-que rolam levam overscroll-behavior:contain (estilos.css:.fpanel>.card;
-estilos.css:.sheet, o .body) e a página tranca por baixo de uma janela ou
+estilos.css:.fab, estilos.css:.tabbar; tema.js:fitInsets). O que rola
+por cima da página, ou a cobre, contém o fim: chegar ao fim e continuar não
+rola o que está por trás. Levam overscroll-behavior:contain a lista de um
+sel() e o menu ⋯ (estilos.css:.selpop, estilos.css:.menupop, que rola
+quando o componentes.js:ajustarPop o encolhe), o painel dos filtros
+(estilos.css:.fpanel>.card), o corpo de uma janela (estilos.css:.sheet, o
+.body), a gaveta e a barra lateral (estilos.css:nav), e as camadas de ecrã
+inteiro (estilos.css:.email-portao; o cssText de ajuda.js:showTermsGate,
+ajuda.js:showLegalGate, novidades.js:gateAtualizar,
+novidades.js:ecraAtualizar, entrada.js:showAuth e do CW.readDoc da Ajuda).
+Num Chrome anterior ao 144 o contain numa caixa que não rola não conta (o
+Samsung Internet 30 é um 143): a lista e o menu sem nada para rolar não
+deixam o dedo arrastar a partir das opções (estilos.css:.selopt, num
+@container scroll-state, atrás de @supports). As caixas em linha na página
+deixam o fim seguir para a página, de propósito, porque contê-las prendia o
+dedo a quem quer descer (estilos.css:.cred-plano, estilos.css:.pnm); o que
+rola de lado contém o fim na horizontal, como a fila das abas
+(testes/rolagem-contida.test.js). A página tranca por baixo de uma janela ou
 da gaveta, repondo a posição ao destrancar (vistas.js:lockPage).
 
 ## O que não se faz

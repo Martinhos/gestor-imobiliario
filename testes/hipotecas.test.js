@@ -722,10 +722,10 @@ describe('o cartão dos por confirmar e a página dos Créditos na linguagem de 
     const html = app.vRecurring();
     assert.match(html, /<span class="badge loan">da hipoteca<\/span>/);
     assert.match(html, /mensal, dia 5 · próxima 05\/10/);
-    assert.match(html, /<span class="badge grey">à mão<\/span><span class="badge grey">Silenciado<\/span>/);
+    assert.match(html, /<span class="badge grey">personalizado<\/span><span class="badge grey">Silenciado<\/span>/);
     // o estado é um chip do vistas.js:lfCabeca, com quantos há em cada escolha
     assert.match(html, /<span class="mov-chip"><div class="sel" id="sel_lfc_lrec_st">[\s\S]*?<span id="lab_lfc_lrec_st">Estado<\/span>/);
-    assert.match(html, /id="pop_lfc_lrec_st"[\s\S]*?<span>Todos os estados · 2<\/span>[\s\S]*?<span>Automáticos \(contratos, hipotecas e imóveis\) · 1<\/span>[\s\S]*?<span>Criados à mão · 1<\/span>[\s\S]*?<span>Silenciados · 1<\/span>/);
+    assert.match(html, /id="pop_lfc_lrec_st"[\s\S]*?<span>Todos os estados · 2<\/span>[\s\S]*?<span>Automáticos \(contratos, hipotecas e imóveis\) · 1<\/span>[\s\S]*?<span>Personalizados · 1<\/span>[\s\S]*?<span>Silenciados · 1<\/span>/);
     app.recChip('muted');
     const so = app.vRecurring();
     assert.match(so, /data-lp="rec:rm"/);
@@ -855,7 +855,7 @@ describe('o cartão dos por confirmar e a página dos Créditos na linguagem de 
     assert.ok(so.includes(app.vazioFiltro()), 'nenhum silenciado: o vazio com «Limpar filtros»');
     assert.doesNotMatch(so, /<h2>Modelos<\/h2>|plan-modelo/, 'um modelo não tem estado: a secção sai');
     app.recChip('manual');
-    assert.match(app.vRecurring(), /<h2>Modelos<\/h2>[\s\S]*tplView\('m1'\)/, 'os modelos são todos criados à mão');
+    assert.match(app.vRecurring(), /<h2>Modelos<\/h2>[\s\S]*tplView\('m1'\)/, 'os modelos são todos personalizados');
     app.recChip('');
     app.lf('lrec').q = 'zzz';
     const f = app.vRecurring();

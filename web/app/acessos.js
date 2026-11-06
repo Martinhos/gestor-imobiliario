@@ -479,6 +479,16 @@ function acaoDoSeparador(tab){
   return ({dashboard:'movimento',transactions:'movimento',properties:'imovel',groups:'grupo',contracts:'contrato',tenants:'inquilino',
     visits:'visita',calendar:'visita',recurring:'planeado',credits:'hipoteca'})[tab]||'';
 }
+/* Os outros registos de um ecrã, que a folha do + sobe para junto da ação
+   natural, marcados «neste ecrã» também (navegacao.js:abrirAdicionar). Hoje
+   é um: o modelo, nos Planeados, cuja secção já não tem o «Novo modelo» ao
+   lado do título (o pedido do Martinho no ticket de QA 8ef0d039). O
+   cabeçalho do computador continua só com a ação natural.
+   Recebe: tab — o id do separador.
+   Devolve: array de ids de ACOES_DE_ADICIONAR (vazio na maioria dos ecrãs). */
+function outrasDoSeparador(tab){
+  return ({recurring:['modelo']})[tab]||[];
+}
 /* Os destinos da barra de baixo que esta pessoa vê: um separador, se não
    está escondido; uma área (Casas, Dinheiro — navegacao.js:AREAS), se
    alguma das portas dela está à vista. Já não há substitutos: as áreas

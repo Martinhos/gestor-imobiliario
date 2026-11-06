@@ -182,7 +182,7 @@ describe('as visitas', () => {
     app.lf('lvis').h1 = '18:00';
     const h = app.vVisits();
     assert.match(h, /<span class="mov-chip on lfm-chip-abre"><button type="button" class="mov-chip-txt" aria-label="Dias e horas: desde 18:00\. Mudar nos filtros" data-toca="vista" data-click="lfAbrirEm\('lvis','lfi_lvis_d1'\)">desde 18:00<\/button>/);
-    assert.match(h, /<button type="button" class="chip limpar mov-so-largo" data-toca="vista" data-click="lfClear\('lvis'\)">Limpar<\/button>/, 'um só filtro, com o seu ×: o «Limpar» da fila só no ecrã largo');
+    assert.match(h, /<button type="button" class="chip limpar" data-toca="vista" data-click="lfClear\('lvis'\)">Limpar<\/button>/, 'um só filtro, com o seu ×: o «Limpar» da fila também, em todos os ecrãs');
   });
 });
 
@@ -193,7 +193,7 @@ describe('os Planeados', () => {
     const h = app.vRecurring();
     assert.doesNotMatch(h, /plan-chips|recChip\(/, 'a fila antiga saiu');
     assert.match(h, /aria-label="Filtros dos planeados"><span class="mov-chip"><div class="sel" id="sel_lfc_lrec_st">/);
-    assert.match(h, /id="pop_lfc_lrec_st"[\s\S]*?<span>Todos os estados · 2<\/span>[\s\S]*?<span>Automáticos \(contratos, hipotecas e imóveis\) · 1<\/span>[\s\S]*?<span>Criados à mão · 1<\/span>[\s\S]*?<span>Silenciados · 1<\/span>[\s\S]*?<span>Por confirmar · 0<\/span>[\s\S]*?<span>Em dia · 2<\/span>/);
+    assert.match(h, /id="pop_lfc_lrec_st"[\s\S]*?<span>Todos os estados · 2<\/span>[\s\S]*?<span>Automáticos \(contratos, hipotecas e imóveis\) · 1<\/span>[\s\S]*?<span>Personalizados · 1<\/span>[\s\S]*?<span>Silenciados · 1<\/span>[\s\S]*?<span>Por confirmar · 0<\/span>[\s\S]*?<span>Em dia · 2<\/span>/);
     assert.match(h, /<span class="mov-chip"><div class="sel" id="sel_lfc_lrec_k">/, 'o tipo');
     assert.match(h, /<span class="mov-chip mov-so-largo"><div class="sel" id="sel_lfc_lrec_p">/, 'o imóvel, no ecrã largo');
     let pintou = 0;
@@ -260,7 +260,8 @@ describe('os Créditos', () => {
     assert.match(css, /\.cred-corpo\.abertas \.cred-pagas\{display:flex;flex-direction:column;gap:12px\}/);
     const i = css.indexOf('/* ===== ajustes-v40b: 1.2');
     const sec = css.slice(i, css.indexOf('/* ===== fim: ajustes-v40b 1.2', i));
-    assert.match(sec, /@media\(min-width:901px\)\{\s*\.cred-corpo>\.cred-col>\.plan-cab\{display:flex\}\s*\.cred-corpo>\.cred-col>\.btn\.cred-liq\{display:flex\}\s*\.cred-corpo \.cred-cab>\.btn\.plan-novo\{display:none\}/);
+    assert.match(sec, /@media\(min-width:901px\)\{\s*\.cred-corpo>\.cred-col>\.plan-cab\{display:flex\}\s*\.cred-corpo>\.cred-col>\.btn\.cred-liq\{display:flex\}\s*\}/);
+    assert.doesNotMatch(css, /plan-novo/, 'o título das secções não tem botão de criar: a regra que o escondia saiu com ele');
     assert.match(sec, /@media\(pointer:coarse\)\{\.lfm-chip-abre \.mov-chip-txt::after\{content:"";position:absolute;inset:-5px 0\}\}/, 'o chip que abre o painel tem 44px no dedo');
   });
 });
@@ -283,7 +284,9 @@ describe('o componente: o que esta passagem lhe juntou', () => {
     const h = app.lfChipsHtml('lvis', o, app.lfCampos('lvis', o));
     assert.ok(h.indexOf('sel_lfc_lvis_es') < h.indexOf('id="extra"') && h.indexOf('id="extra"') < h.indexOf('chip limpar'));
     assert.doesNotMatch(h, /lfc_lvis_d1/);
-    assert.match(h, /class="chip limpar mov-so-largo"/, 'o filtro ligado tem o × do chip junto');
+    assert.match(h, /class="chip limpar"/, 'o filtro ligado tem o × do chip junto, e o «Limpar» fica à vista na mesma');
+    assert.match(app.lfChipsHtml('lvis', { campos: [] }, []), /^<div class="chips-fila mov-chips"[^>]*><button type="button" class="chip limpar"[^>]*>Limpar<\/button><\/div>$/, 'sem chips, mas com o que limpar: a fila só com o «Limpar»');
+    app.lf('lvis').d1 = '';
     igual(app.lfChipsHtml('lvis', { campos: [] }, []), '');
   });
 });

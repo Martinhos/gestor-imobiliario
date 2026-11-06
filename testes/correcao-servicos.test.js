@@ -481,13 +481,15 @@ describe('os botões que acabavam numa recusa', () => {
     app.db.owners = [app.normPerson({ id: 'eu', name: 'Eu' }), Object.assign(app.normPerson({ id: 'rui', name: 'Rui' }), { _userId: 'rui' })];
     app.window.CW = { user: { id: 'eu' }, cargos: { P2: { dono: false, nome: 'Contabilista', perms: ['loan.view', 'report.view', 'tx.view'] } }, pessoas: {} };
     app.db.properties = [meu, doRui];
-    assert.match(app.vCredits(), /newMort\(\)/, 'com um imóvel meu há botão');
+    // o botão é a ação do ecrã (o + e o cabeçalho do computador): a página só o tem no vazio
+    assert.equal((app.acaoNaturalDoEcra('credits') || {}).act, 'newMort()', 'com um imóvel meu há botão');
     let itens = null;
     app.pickModal = (t, o) => { itens = o; };
     app.newMort();
     igual(itens.map((o) => o.v), ['P1'], 'e só lista os imóveis que posso editar');
     app.db.properties = [doRui];
-    assert.doesNotMatch(app.vCredits(), /newMort\(\)/, 'o contabilista não vê o botão');
+    assert.equal(app.acaoNaturalDoEcra('credits'), null, 'o contabilista não vê o botão');
+    assert.doesNotMatch(app.vCredits(), /newMort\(\)/, 'nem na página');
     let dito = ''; app.toast = (m) => { dito = m; }; itens = null;
     app.newMort();
     assert.equal(itens, null, 'nem a escolha abre');
