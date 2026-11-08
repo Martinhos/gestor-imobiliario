@@ -175,25 +175,42 @@ function qaHtmlPilula(n, comEtiqueta) {
     (comEtiqueta ? '<span class="qa-etiqueta" aria-hidden="true">Arrasta para mudar de sítio</span>' : '');
 }
 
-/* As opções do menu da pílula: «Novo ticket», «Ver tickets» e, na app,
-   «Ver a montra». A montra fora da raiz é o /montra (worker/src/index.js),
-   e no dev só abre com a sessão de uma conta de teste: a APK de dev não tem
-   barra de endereços, e as ligações do /test abrem nela, não no browser —
-   sem esta opção não havia como lá chegar no telemóvel. No back office não
-   aparece: a sessão de lá é da equipa, e a porta do dev dava-lhe o 404.
+/* As opções do menu da pílula, conforme o sítio (qaLugar):
+   - na app: «Novo ticket», «Ver tickets», «Ver a montra» e «Back office»;
+   - nas páginas públicas (a montra e o guia): «Novo ticket», «Ver tickets»,
+     «Voltar à app» e «Back office»;
+   - no back office: só «Novo ticket» e «Ver tickets».
+   A montra fora da raiz é o /montra (worker/src/index.js), e no dev só abre
+   com a sessão de uma conta de teste: a APK de dev não tem barra de
+   endereços, e as ligações do /test abrem nela, não no browser — sem estas
+   opções não havia como andar entre a app, a montra e o back office no
+   telemóvel. No back office a sessão é da equipa, e a porta do dev dava o
+   404 à app e à montra: lá não há para onde ir.
    Recebe: n — quantos tickets por resolver (null se ainda não se sabe).
    Devolve: o HTML (texto). */
 function qaHtmlMenu(n) {
+  var lugar = qaLugar();
   return '<button type="button" data-toca="camada" data-click="closePops();qaNovoTicket()">' + ic('plus', 17) + ' Novo ticket</button>' +
     '<button type="button" class="qa-menu-ver" data-toca="camada" data-click="closePops();qaVerTickets()">' + ic('lista', 17) + ' ' + esc(qaRotuloVer(n)) + '</button>' +
-    (qaNaEquipa() ? '' : '<button type="button" class="qa-menu-montra" data-toca="camada" data-click="closePops();qaVerMontra()">' + ic('door', 17) + ' Ver a montra</button>');
+    (lugar === 'app' ? '<button type="button" class="qa-menu-montra" data-toca="camada" data-click="closePops();qaVerMontra()">' + ic('door', 17) + ' Ver a montra</button>' : '') +
+    (lugar === 'paginas' ? '<button type="button" class="qa-menu-app" data-toca="camada" data-click="closePops();qaVoltarApp()">' + ic('home', 17) + ' Voltar à app</button>' : '') +
+    (lugar === 'equipa' ? '' : '<button type="button" class="qa-menu-equipa" data-toca="camada" data-click="closePops();qaBackOffice()">' + ic('users', 17) + ' Back office</button>');
 }
 
-/* A pílula está no back office? Lá, a camada (worker/src/equipa-qa.js)
-   define o QA_EQUIPA no mesmo âmbito que este ficheiro; na app não existe.
+/* Onde está a pílula. A camada do worker (worker/src/equipa-qa.js) define,
+   no mesmo âmbito que este ficheiro, o QA_PAGINAS nas páginas públicas e o
+   QA_EQUIPA no back office; na app não existe nenhum dos dois.
+   Devolve: 'paginas', 'equipa' ou 'app'. */
+function qaLugar() {
+  if (typeof QA_PAGINAS !== 'undefined') return 'paginas';
+  if (typeof QA_EQUIPA !== 'undefined') return 'equipa';
+  return 'app';
+}
+
+/* A pílula está no back office?
    Devolve: true ou false. */
 function qaNaEquipa() {
-  return typeof QA_EQUIPA !== 'undefined';
+  return qaLugar() === 'equipa';
 }
 
 /* Vai para a montra (e daí para os guias) neste separador — na APK de dev,
@@ -202,6 +219,19 @@ function qaNaEquipa() {
    Devolve: nada. */
 function qaVerMontra() {
   location.href = '/montra';
+}
+
+/* Das páginas públicas, volta à app (o / do dev), neste separador.
+   Devolve: nada. */
+function qaVoltarApp() {
+  location.href = '/';
+}
+
+/* Vai para o back office (/equipa), neste separador. Lá a sessão é a da
+   equipa, pelo Discord: sem ela, o /equipa diz como se entra.
+   Devolve: nada. */
+function qaBackOffice() {
+  location.href = '/equipa';
 }
 
 /* O número da pílula, curto: 99+ a partir de cem.
@@ -286,7 +316,8 @@ function qaLimites() {
     if (rs && rs.width > 0 && rs.height > 0) seg = rs;
   }
   var cx = { esq: seg.left + QA_MARGEM, dir: seg.right - QA_MARGEM, topo: seg.top + QA_MARGEM, fundo: seg.bottom - QA_MARGEM };
-  var aside = document.querySelector('aside');
+  // nas páginas públicas um <aside> é um cartão do texto, não a barra lateral
+  var aside = qaLugar() === 'paginas' ? null : document.querySelector('aside');
   if (aside && typeof aside.getBoundingClientRect === 'function') {
     var ra = aside.getBoundingClientRect(), fixo = false;
     try { fixo = getComputedStyle(aside).position === 'fixed'; } catch (e) {}

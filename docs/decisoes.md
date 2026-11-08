@@ -89,6 +89,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-06 · A pesquisa não sai do documento enquanto se escreve
 - 2026-11-06 · Criar é no +, o selo «personalizado», e o que rola por cima não rola a página
 - 2026-11-08 · Um guia de declarar as rendas, sem prometer a Declaração
+- 2026-11-08 · O IRS na montra como guia, e a pílula do QA nas páginas públicas
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3303,3 +3304,25 @@ As fontes foram confirmadas a abrir uma a uma. Do artigo 41.º, o n.º 1 diz
 «suportados e pagos» e o n.º 9 a comprovação documental, que é o «n.os 1 e 9»
 do guia; as fichas de 2016 a 2018 ainda citam «n.os 1 e 8», a numeração de
 antes de o n.º 8 passar a ser o da habitação própria a mais de 100 km.
+
+## 2026-11-08 · O IRS na montra como guia, e a pílula do QA nas páginas públicas
+
+O Martinho autorizou o IRS na montra («vou autorizar o IRS no futuro
+próximo») e pediu SEO para ele. A regra «nada do IRS» deu lugar a outra mais
+estreita: o IRS pode aparecer como guia (o «IRS» do cabeçalho, o cartão, o
+rodapé, o title e o h1 do guia), e o que continua proibido é prometer a
+funcionalidade enquanto a Declaração for só de dev — nenhuma frase diz que a
+app declara, calcula, preenche ou entrega o IRS (testes/landing.test.js,
+«promessasDoIrs»). O botão do topo diz «IRS» enquanto houver um guia só; com
+o segundo passa a «Guias», para uma página /guias que hoje não existe.
+
+O cabeçalho não levava quatro coisas a 360 px. Esconder o «Entrar» no
+telemóvel foi proposto e o Martinho preferiu uma gaveta: marca, «Criar conta»
+e ☰ à vista, «IRS» e «Entrar» lá dentro, num <details> para não pôr
+JavaScript na montra de produção.
+
+A pílula do QA deixou de acabar na app: o Martinho quer reportar a partir da
+montra e do guia no dev, e ir ao back office a partir dela. As páginas
+públicas ganharam uma camada como a do back office, com o mesmo qa.js, mas a
+falar com as /api/qa pelo cookie da conta; só no dev, só com sessão de conta,
+e nunca na raiz.

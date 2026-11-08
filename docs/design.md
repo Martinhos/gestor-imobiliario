@@ -5958,8 +5958,23 @@ declara ou calcula alguma coisa. O que se deduz leva um visto verde e o que
 não se deduz uma cruz vermelha, e cada linha diz o sentido também ao leitor
 de ecrã; as condições levam um ponto, as notas âmbar o que pede cuidado. As
 fontes só ligam para endereços oficiais confirmados a abrir. A montra leva
-até ele num cartão antes do fecho e no rodapé, com o botão secundário, sem a
-palavra IRS: a promessa de produção continua sem a Declaração.
+até ele pelo «IRS» do cabeçalho, por um cartão antes do fecho e pelo rodapé.
+O IRS aparece como guia, e só como guia: nenhuma frase diz que a app declara,
+calcula, preenche ou entrega o IRS, porque a Declaração ainda só existe em
+dev (testes/landing.test.js, «promessasDoIrs»). Quando houver mais guias, o
+«IRS» passa a «Guias» e leva a uma página /guias.
+
+O guia navega-se: um caminho no topo («Início › Guia do IRS das rendas», com
+a página atual em aria-current) e um «Voltar ao início» levam à montra — «/»
+na raiz, «/montra» fora dela. Na raiz leva, como blocos de dados que a CSP
+não corre, o BreadcrumbList e o Article em ld+json (guia-vista.js:paginaGuia);
+o robots.txt e o sitemap.xml (landing.js:robotsTxt, landing.js:sitemapXml)
+abrem a montra e o guia aos motores de busca e fecham tudo fora da raiz.
+
+No telemóvel, o cabeçalho da montra e do guia fica com a marca, o «Criar
+conta» (a ação principal, sempre à vista) e um ☰ que abre uma gaveta com o
+«IRS» e o «Entrar»; no computador as três ligações ficam em linha. A gaveta
+é um <details>: abre e fecha sem JavaScript.
 
 Os emails (worker/src/lib/correio.js:molde) não são páginas: não há CSP, mas
 há o Gmail e o Outlook. Estilos em linha, tabelas com o cartão a 560px (uma
@@ -6261,6 +6276,19 @@ o que a mantém no sítio ao rodar o telemóvel ou encolher a janela. As setas
 fazem o mesmo sem rato (cloud/qa.js:qaTecla). O arrasto não anima (é
 manipulação direta); o encaixe anima o transform no --medio, ou no --lento
 quando atravessa o ecrã, e de uma vez sem movimento (cloud/qa.js:qaDeslizar).
+
+A pílula aparece em todo o lado fora de produção: na app, no back office e
+nas páginas públicas que o worker escreve (a montra e o guia). Nas páginas
+públicas entra pela camada das páginas (equipa-qa.js:pilulaDasPaginas, com o
+/paginas/qa.js e o /paginas/qa.css de equipa-qa.js:recursoDoQaDasPaginas): o
+mesmo cloud/qa.js, a falar com as /api/qa pelo cookie da sessão da conta,
+e só quando a página tem essa sessão (no dev.rendorium.com, a de uma conta de
+teste). A montra da raiz nunca a leva. O menu depende do sítio
+(cloud/qa.js:qaLugar): na app, «Novo ticket», «Ver tickets», «Ver a montra»
+e «Back office»; nas páginas públicas, «Voltar à app» no lugar de «Ver a
+montra»; no back office, só os dois primeiros. «Ver a montra», «Voltar à
+app» e «Back office» abrem no mesmo separador — na APK de dev, no mesmo
+WebView, que leva o cookie e não tem barra de endereços.
 
 O menu é o menu de ações da casa (data-menu="acoes"). Abri-lo guarda o ecrã
 de agora (cloud/qa.js:qaMenuAbriu): o contexto do ticket é o de quando se

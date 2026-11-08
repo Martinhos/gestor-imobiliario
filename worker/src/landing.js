@@ -41,7 +41,7 @@
    é isto?». */
 
 import { CSP_ESTRITA } from './lib/http.js';
-import { CAMINHO_GUIA } from './guia-vista.js';
+import { CAMINHO_GUIA, GUIA_REVISTO } from './guia-vista.js';
 
 const APP = 'https://app.rendorium.com';
 const IMG = '/img/landing';
@@ -279,8 +279,11 @@ const DADOS = [
 
 /* O que os motores de busca e as redes mostram. Com os termos que um senhorio
    procura (gestão de arrendamento, controlo de rendas, rendas em atraso), e
-   sem o IRS: a Declaração ainda só existe em dev. O título fica nos 60
-   caracteres e a descrição nos 160, o que o Google mostra sem cortar. */
+   sem o IRS: a montra fala da app, e a Declaração ainda só existe em dev. A
+   pesquisa pelo IRS chega ao guia (guia-vista.js), que tem os metadados
+   dele, e a montra só lhe dá ligações: o botão do cabeçalho, o cartão e o
+   rodapé. O título fica nos 60 caracteres e a descrição nos 160, o que o
+   Google mostra sem cortar. */
 const TITULO = 'Rendorium — gestão de arrendamento para senhorios';
 const DESCRICAO = 'App grátis para senhorios: imóveis, contratos e rendas num só sítio. ' +
   'Controlo de rendas com avisos de rendas em atraso, IMI, condomínio e crédito.';
@@ -290,6 +293,31 @@ const AVISO = 'M12 8v5M12 16.5v.5M10.3 3.8L2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 
 const VISTO = 'M5 12.5l4.5 4.5L19 7';
 // a folha com as linhas de texto, do cartão do guia
 const DOCUMENTO = 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6';
+// o endereço canónico da montra, o do robots e do mapa do sítio
+const SITIO = 'https://rendorium.com';
+// os traços da gaveta do cabeçalho: as três riscas, a cruz de a fechar e o chevron de cada linha
+const MENU = 'M4 7h16M4 12h16M4 17h16';
+const FECHAR = 'M6.5 6.5l11 11M17.5 6.5l-11 11';
+const SEGUIR = 'M9 6l6 6-6 6';
+
+/* A gaveta do cabeçalho, para o telemóvel (decisão do Martinho,
+   2026-11-08): os quatro elementos não cabem até aos 439 px, e em vez de
+   esconder o «Entrar», o topo fica com a marca, o «Criar conta» (sempre à
+   vista, nunca aqui dentro) e o ☰, que abre por baixo do cabeçalho o «IRS»
+   e o «Entrar» — e, um dia, os «Guias». Sem JavaScript: é um <details>, que
+   o browser abre e fecha sozinho, e no computador nem aparece (as ligações
+   estão em linha, no próprio cabeçalho). O ☰ passa a cruz quando está
+   aberto, e o nome «Menu» é o que o leitor de ecrã ouve.
+   Devolve: o HTML do <details>. */
+function gavetaDoCabecalho() {
+  return `<details class="gaveta">
+      <summary class="gaveta-botao" aria-label="Menu">${icone(MENU, 'riscas')}${icone(FECHAR, 'cruz')}</summary>
+      <nav class="gaveta-painel" aria-label="Menu">
+        <a href="${CAMINHO_GUIA}"><span>IRS</span>${icone(SEGUIR, 'seguir')}</a>
+        <a href="${APP}"><span>Entrar</span>${icone(SEGUIR, 'seguir')}</a>
+      </nav>
+    </details>`;
+}
 
 /* A faixa da pergunta do rasto, para quem ainda não respondeu: um formulário
    sem JavaScript para o /consentimento, com «Recusar» e «Aceitar» iguais (a
@@ -345,15 +373,18 @@ function rodapeDaEscolha(escolha, volta) {
    fica em cache nenhuma. Duas cópias da mesma página indexadas são uma a
    competir com a outra, e um og que aponta para produção a partir de um sítio
    que não é produção mente a quem partilhar a ligação.
-   Recebe: op — { raiz, escolha }: raiz verdadeiro quando isto está mesmo a
-   ser servido em rendorium.com (qualquer outra coisa vale pré-visualização);
-   escolha — 'sim', 'nao' ou null, a resposta ao rasto lida do cookie
-   rd_escolha (outro valor vale null).
+   Recebe: op — { raiz, escolha, qa }: raiz verdadeiro quando isto está mesmo
+   a ser servido em rendorium.com (qualquer outra coisa vale
+   pré-visualização); escolha — 'sim', 'nao' ou null, a resposta ao rasto lida
+   do cookie rd_escolha (outro valor vale null); qa — o HTML da pílula do QA
+   (equipa-qa.js:pilulaDasPaginas), já pronto e escrito tal e qual antes do
+   </body>; só o index.js o passa, e só no dev (por omissão, nada).
    Devolve: uma Response HTML com a página completa: a faixa da pergunta com
    escolha null, o script do rasto só com 'sim'. */
 export function paginaLanding(op) {
   const raiz = !!(op && op.raiz);
   const escolha = op && (op.escolha === 'sim' || op.escolha === 'nao') ? op.escolha : null;
+  const qa = op && typeof op.qa === 'string' ? op.qa : '';
   // o /montra é o caminho da pré-visualização; em produção a montra é a raiz
   const volta = raiz ? '/' : '/montra';
   const hoje = new Date();
@@ -387,8 +418,10 @@ ${escolha === 'sim' ? '<script src="/paginas/rasto-montra.js" defer></script>\n'
 <div class="faixa-topo">
   <header>
     <span class="marca"><span class="mark" aria-hidden="true"></span><span class="tit">Rendorium</span></span>
-    <a class="btn fantasma pequeno entrar" href="${APP}">Entrar</a>
+    <a class="btn fantasma pequeno em-linha guias" href="${CAMINHO_GUIA}" aria-label="Guia do IRS das rendas">IRS</a>
+    <a class="btn fantasma pequeno em-linha entrar" href="${APP}">Entrar</a>
     <a class="btn primary pequeno" href="${APP}/?criar=1">Criar conta</a>
+    ${gavetaDoCabecalho()}
   </header>
 </div>
 <main>
@@ -513,9 +546,9 @@ ${e.ecra(hoje)}
       <span class="ic ac">${icone(DOCUMENTO)}</span>
       <div class="guia-texto">
         <p class="chapeu">Guia</p>
-        <h2 id="t-guia">Na hora de declarar as rendas</h2>
-        <p>O que podes e não podes deduzir às rendas: IMI, condomínio, obras, seguros, e os documentos a guardar
-        para cada imóvel.</p>
+        <h2 id="t-guia">IRS: o que podes deduzir às rendas</h2>
+        <p>Os encargos que a lei deixa abater às rendas e os que não deixa: IMI, condomínio, obras, seguros, e os
+        documentos a guardar para cada imóvel.</p>
       </div>
       <a class="btn" href="${CAMINHO_GUIA}">Ler o guia</a>
     </div>
@@ -535,13 +568,13 @@ ${e.ecra(hoje)}
 </main>
 <footer class="wrap rodape">
   <span class="rodape-marca"><span class="mark" aria-hidden="true"></span><span>© ${new Date().getFullYear()} Rendorium</span></span>
-  <a href="${CAMINHO_GUIA}">Guia: declarar as rendas</a>
+  <a href="${CAMINHO_GUIA}">Guia do IRS das rendas</a>
   <a href="/termos">Termos e Condições</a>
   <a href="/privacidade">Política de Privacidade</a>
   <a href="${APP}">Abrir a app</a>
   ${escolha ? rodapeDaEscolha(escolha, volta) : ''}
 </footer>
-</body></html>`;
+${qa}</body></html>`;
   return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
@@ -552,6 +585,37 @@ ${e.ecra(hoje)}
       Vary: 'Cookie',
       'Content-Security-Policy': CSP_ESTRITA,
     },
+  });
+}
+
+/* O robots.txt (a rota é do index.js). Na raiz deixa indexar e diz onde está
+   o mapa do sítio, para o guia do IRS ser encontrado sem esperar por uma
+   ligação de fora. Fora dela (a app, o dev, o servidor local) fecha tudo: a
+   app não tem nada para os motores, e uma cópia do dev indexada competia com
+   a de produção.
+   Recebe: op — {raiz: true} quando o pedido chega a rendorium.com.
+   Devolve: uma Response text/plain, em cache uma hora. */
+export function robotsTxt(op) {
+  const raiz = !!(op && op.raiz);
+  const texto = raiz
+    ? 'User-agent: *\nAllow: /\n\nSitemap: ' + SITIO + '/sitemap.xml\n'
+    : 'User-agent: *\nDisallow: /\n';
+  return new Response(texto, {
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' },
+  });
+}
+
+/* O mapa do sítio (a rota é do index.js): as duas páginas indexáveis da
+   raiz, a montra e o guia, este com a data da última revisão do texto.
+   Devolve: uma Response application/xml, em cache uma hora. */
+export function sitemapXml() {
+  const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    '  <url><loc>' + SITIO + '/</loc></url>\n' +
+    '  <url><loc>' + SITIO + CAMINHO_GUIA + '</loc><lastmod>' + GUIA_REVISTO + '</lastmod></url>\n' +
+    '</urlset>\n';
+  return new Response(xml, {
+    headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' },
   });
 }
 
@@ -963,9 +1027,56 @@ ${alturasDasBarras()}
   .hero{padding-top:32px;padding-bottom:56px}
   .hero .sub{font-size:18px}
 }
-/* num ecrã muito estreito não cabem dois botões ao lado da marca: o
-   «Já tenho conta» do hero faz as vezes do «Entrar» */
-@media(max-width:359px){a.btn.entrar{display:none}}
+/* ------------------------------------------------- a gaveta do cabeçalho
+   Medido no Chromium com as letras da casa (2026-11-08): a marca ocupa 136
+   px, o «IRS» 55, o «Entrar» 75 e o «Criar conta» 110, com 6 de intervalo e
+   16 de margem de cada lado — os quatro pedem 426 px. Até aos 439 (com folga
+   para a letra de outro motor) o «IRS» e o «Entrar» passam para a gaveta (um
+   <details>, landing.js:gavetaDoCabecalho), e o topo fica com a marca, o
+   «Criar conta» e o ☰ (136 + 110 + 44, 334 px). Dos 440 para cima vão em
+   linha, e a gaveta não existe. As duas metades nunca se mostram juntas. */
+@media(max-width:439px){a.btn.em-linha{display:none}}
+@media(min-width:440px){.gaveta{display:none}}
+/* abaixo dos 360 (o ecrã de fora de um dobrável, 320) aperta-se tudo um
+   pouco, e a marca continua inteira */
+@media(max-width:359px){
+  header{gap:4px}
+  .marca .tit{font-size:18px}
+  a.btn.pequeno{padding:0 10px}
+}
+.gaveta{flex:none}
+/* o ☰: o botão secundário da app, 44 por 44; o marcador do <details> sai */
+.gaveta-botao{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:12px;
+  border:1px solid var(--line2);color:var(--ink);cursor:pointer;list-style:none;-webkit-tap-highlight-color:transparent;
+  transition:transform var(--rapido) var(--curva),border-color var(--rapido) var(--curva),color var(--rapido) var(--curva)}
+.gaveta-botao::-webkit-details-marker{display:none}
+.gaveta-botao::marker{content:''}
+.gaveta-botao:active{transform:scale(.97)}
+.gaveta-botao:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+/* aberto, mostra-se pela frente e não pelo fundo (o Samsung Internet escurece
+   os fundos à força): o contorno e o ícone a cobalto, e as riscas viram cruz */
+.gaveta[open] .gaveta-botao{border-color:var(--accent);color:var(--accent-text)}
+.gaveta .i.cruz,.gaveta[open] .i.riscas{display:none}
+.gaveta[open] .i.cruz{display:block}
+/* o painel desce por baixo do cabeçalho, a toda a largura: o bloco que o
+   contém é a .faixa-topo (pegajosa), e não o cabeçalho */
+.gaveta-painel{position:absolute;top:100%;left:0;right:0;display:flex;flex-direction:column;
+  padding:8px clamp(16px,4vw,40px) 16px;background:var(--bg);border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);animation:gaveta-desce .2s var(--curva)}
+/* abre de cima para baixo: o recorte larga o painel a partir do topo. Só a
+   entrada anima (um <details> fecha de uma vez, sem JavaScript), e o estado
+   de base é o aberto: um motor sem animações mostra-o logo */
+@keyframes gaveta-desce{from{clip-path:inset(0 0 100% 0);opacity:0}}
+.gaveta-painel a{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;
+  color:var(--ink);text-decoration:none;font-weight:600;font-size:16px;border-bottom:1px solid var(--line)}
+.gaveta-painel a:last-child{border-bottom:0}
+.gaveta-painel a:active{color:var(--accent-text)}
+.gaveta-painel a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.gaveta-painel .i{width:20px;height:20px;color:var(--muted)}
+@media(hover:hover) and (pointer:fine){
+  .gaveta-botao:hover{border-color:var(--accent)}
+  .gaveta-painel a:hover{color:var(--accent-text)}
+}
 
 /* ======================= MOVIMENTO =======================
    Uma entrada só, para a página inteira: subir e desvanecer. É transform e
@@ -1026,6 +1137,8 @@ ${alturasDasBarras()}
   a.btn:hover,a.btn:active{transform:none}
   .escolha-botao:active{transform:none}
 }
+/* a gaveta abre já aberta, e o ☰ não encolhe */
+@media(prefers-reduced-motion:reduce){.gaveta-painel{animation:none}.gaveta-botao:active{transform:none}}
 /* quem pediu menos transparência recebe o cabeçalho sólido */
 @media(prefers-reduced-transparency:reduce){
   .faixa-topo{background:var(--bg);-webkit-backdrop-filter:none;backdrop-filter:none}}

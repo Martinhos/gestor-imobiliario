@@ -14,24 +14,43 @@
    leva JavaScript nenhum: o conteúdo vive como dados (GUIA) e o HTML sai
    deles no servidor. O que se pode deduzir leva um visto, o que não se pode
    leva uma cruz — formas diferentes, e não só cores, porque o Samsung
-   Internet escurece à força e pode trocar a cor de fundo. */
+   Internet escurece à força e pode trocar a cor de fundo.
+
+   Desde 2026-11-08 o guia é a porta do IRS na pesquisa (decisão do
+   Martinho): o título, a descrição e o h1 dizem IRS, e na raiz vão os dados
+   estruturados (o caminho e o artigo). A montra leva até ele pelo botão
+   «IRS» do cabeçalho, pelo cartão e pelo rodapé; daqui volta-se a ela pelo
+   caminho no topo (Início › o guia) e pelo «Voltar ao início». */
 
 import { CSP_ESTRITA } from './lib/http.js';
 
 const APP = 'https://app.rendorium.com';
+const SITIO = 'https://rendorium.com';
 // o endereço do guia, o mesmo em todos os hosts (index.js) e no rodapé da montra
 export const CAMINHO_GUIA = '/guias/declarar-rendas';
+// a última revisão do texto com o Martinho: a data do Article e do mapa do sítio
+// (a ficha da página escreve-a por extenso, «Verificado a»: as duas mudam juntas)
+export const GUIA_REVISTO = '2026-11-08';
 
-// o que os motores de busca e as redes mostram (≤ 60 e ≤ 160 caracteres)
-const TITULO = 'Despesas dedutíveis nas rendas: o guia do IRS — Rendorium';
+/* O que os motores de busca e as redes mostram (≤ 60 e ≤ 160 caracteres),
+   com os termos de quem pesquisa: IRS, rendas, despesas dedutíveis, Anexo F.
+   O h1 é o título do cartão da montra (landing.js), e o nome curto é o do
+   caminho, do rodapé da montra e do rasto (equipa-guiao.js). */
+const TITULO = 'IRS das rendas: despesas dedutíveis no Anexo F — Rendorium';
 const DESCRICAO = 'O que o senhorio pode e não pode deduzir às rendas no IRS (categoria F, artigo 41.º): ' +
   'IMI, condomínio, obras, seguros e os documentos a guardar.';
+const H1 = 'IRS: o que podes deduzir às rendas';
+const NOME_CURTO = 'Guia do IRS das rendas';
 
 // os ícones de traço da casa (grelha de 24, traço 1.8), como os da montra
 const VISTO = 'M5 12.5l4.5 4.5L19 7';
 const CRUZ = 'M6.5 6.5l11 11M17.5 6.5l-11 11';
 const AVISO = 'M12 8v5M12 16.5v.5M10.3 3.8L2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z';
 const ESCUDO = 'M12 3l7 3v5.5c0 4.3-2.9 8-7 9.5-4.1-1.5-7-5.2-7-9.5V6z';
+const VOLTAR = 'M19 12H5M11 6l-6 6 6 6';
+// a gaveta do cabeçalho (a mesma da montra, landing.js:gavetaDoCabecalho): as riscas e o chevron
+const MENU = 'M4 7h16M4 12h16M4 17h16';
+const SEGUIR = 'M9 6l6 6-6 6';
 
 /* As fontes oficiais, pela ordem do guia. `url` só quando o endereço oficial
    se confirmou a abrir (AT, Diário da República), verificados a 2026-11-08;
@@ -278,25 +297,56 @@ export function seccoesDoGuia() {
   return GUIA.map((s) => ({ id: s.id, titulo: s.titulo }));
 }
 
+/* Os dados estruturados do guia, para os motores de busca: o caminho
+   (BreadcrumbList, Início › o guia) e o artigo (Article), com a data da
+   última revisão. Vão num <script type="application/ld+json">, um bloco de
+   dados que não corre (a CSP_ESTRITA deixa-o), e só na raiz: a
+   pré-visualização não se apresenta como a original. O «<» sai escapado
+   (a sequência unicode 003C do JSON), para nenhum texto futuro fechar o
+   bloco antes do tempo.
+   Devolve: o HTML do bloco. */
+function dadosEstruturados() {
+  const url = SITIO + CAMINHO_GUIA;
+  const casa = { '@type': 'Organization', name: 'Rendorium', url: SITIO + '/' };
+  const dados = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      { '@type': 'BreadcrumbList', itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Início', item: SITIO + '/' },
+        { '@type': 'ListItem', position: 2, name: NOME_CURTO, item: url },
+      ] },
+      { '@type': 'Article', headline: H1, description: DESCRICAO, inLanguage: 'pt-PT', url,
+        mainEntityOfPage: url, datePublished: GUIA_REVISTO, dateModified: GUIA_REVISTO, author: casa,
+        publisher: { ...casa, logo: { '@type': 'ImageObject', url: SITIO + '/icon-512.png' } } },
+    ],
+  };
+  return '<script type="application/ld+json">' + JSON.stringify(dados).replace(/</g, '\\u003c') + '</script>';
+}
+
 /* A página do guia.
 
    Fora do domínio raiz é uma pré-visualização, como os documentos legais:
-   leva `noindex`, não declara canonical, e o «início» aponta para /montra —
-   ali a raiz é a app.
-   Recebe: op — {raiz: true} quando está a ser servido em rendorium.com.
+   leva `noindex`, não declara canonical nem dados estruturados, e o «início»
+   aponta para /montra — ali a raiz é a app.
+   Recebe: op — {raiz, qa}: raiz verdadeiro quando está a ser servido em
+   rendorium.com; qa — o HTML da pílula do QA (equipa-qa.js:pilulaDasPaginas),
+   já pronto e escrito tal e qual antes do </body>; só o index.js o passa, e
+   só no dev (por omissão, nada).
    Devolve: uma Response HTML. */
 export function paginaGuia(op) {
   const raiz = !!(op && op.raiz);
+  const qa = op && typeof op.qa === 'string' ? op.qa : '';
   const inicio = raiz ? '/' : '/montra';
   const cabecaRaiz = raiz
     ? `<meta name="robots" content="index,follow">
-<link rel="canonical" href="https://rendorium.com${CAMINHO_GUIA}">
+<link rel="canonical" href="${SITIO}${CAMINHO_GUIA}">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Declarar as rendas: o que podes deduzir">
+<meta property="og:title" content="${esc(H1)}">
 <meta property="og:description" content="${esc(DESCRICAO)}">
-<meta property="og:url" content="https://rendorium.com${CAMINHO_GUIA}">
+<meta property="og:url" content="${SITIO}${CAMINHO_GUIA}">
 <meta property="og:locale" content="pt_PT">
-<meta name="twitter:card" content="summary">`
+<meta name="twitter:card" content="summary">
+${dadosEstruturados()}`
     : '<meta name="robots" content="noindex,nofollow">';
   const html = `<!doctype html>
 <html lang="pt-PT"><head>
@@ -318,14 +368,28 @@ ${cabecaRaiz}
 <div class="faixa-topo">
   <header>
     <a class="marca" href="${inicio}"><span class="mark" aria-hidden="true"></span><span>Rendorium</span></a>
-    <a class="btn fantasma entrar" href="${APP}">Entrar</a>
+    <a class="btn fantasma em-linha guias" href="${CAMINHO_GUIA}" aria-label="Guia do IRS das rendas" aria-current="page">IRS</a>
+    <a class="btn fantasma em-linha entrar" href="${APP}">Entrar</a>
     <a class="btn primary" href="${APP}/?criar=1">Criar conta</a>
+    <details class="gaveta">
+      <summary class="gaveta-botao" aria-label="Menu">${icone(MENU, 'riscas')}${icone(CRUZ, 'cruz')}</summary>
+      <nav class="gaveta-painel" aria-label="Menu">
+        <a href="${CAMINHO_GUIA}" aria-current="page"><span>IRS</span>${icone(SEGUIR, 'seguir')}</a>
+        <a href="${APP}"><span>Entrar</span>${icone(SEGUIR, 'seguir')}</a>
+      </nav>
+    </details>
   </header>
 </div>
 <main class="wrap" id="conteudo">
+  <nav class="caminho" aria-label="Caminho">
+    <ol>
+      <li><a href="${inicio}">Início</a></li>
+      <li><span class="separador" aria-hidden="true">›</span><span class="atual" aria-current="page">${esc(NOME_CURTO)}</span></li>
+    </ol>
+  </nav>
   <div class="cabeca">
     <p class="chapeu">Guia · IRS do senhorio</p>
-    <h1>Declarar as rendas: o que podes deduzir</h1>
+    <h1>${esc(H1)}</h1>
     <p class="sub">Os encargos que a lei deixa abater às rendas, os que não deixa, e os documentos que tens de guardar
     para cada imóvel.</p>
   </div>
@@ -365,6 +429,8 @@ ${GUIA.map((s, i) => `  <section class="bloco" id="${s.id}" aria-labelledby="t-$
     </div>
   </aside>
 
+  <p class="voltar"><a class="btn" href="${inicio}">${icone(VOLTAR, 'seta')}<span>Voltar ao início</span></a></p>
+
   <section class="fecho" aria-labelledby="t-fecho">
     <div class="fecho-texto">
       <h2 id="t-fecho">As rendas e as despesas, imóvel a imóvel</h2>
@@ -373,7 +439,6 @@ ${GUIA.map((s, i) => `  <section class="bloco" id="${s.id}" aria-labelledby="t-$
     </div>
     <div class="fecho-botoes">
       <a class="btn claro" href="${APP}/?criar=1">Criar conta grátis</a>
-      <a class="btn contorno" href="${inicio}">Conhecer a Rendorium</a>
     </div>
   </section>
 </main>
@@ -383,7 +448,7 @@ ${GUIA.map((s, i) => `  <section class="bloco" id="${s.id}" aria-labelledby="t-$
   <a href="/termos">Termos e Condições</a>
   <a href="/privacidade">Política de Privacidade</a>
 </footer>
-</body></html>`;
+${qa}</body></html>`;
   return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
@@ -470,8 +535,24 @@ a.btn.fantasma{background:transparent;border-color:transparent}
 a.btn:active{transform:scale(.97)}
 a.btn:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:12px}
 
+/* ------------------------------------------------------------ o caminho
+   Início › o guia, no topo. A página atual distingue-se pela tinta e pelo
+   peso, e a ligação pelo cobalto e pelo sublinhado: o escuro forçado do
+   Samsung Internet mexe nos fundos, e a frente sobrevive. */
+.caminho{padding-top:16px;font-size:14px}
+.caminho ol{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;align-items:center;column-gap:8px}
+.caminho li{display:flex;align-items:center;gap:8px;min-width:0}
+.caminho a{position:relative;display:inline-flex;align-items:center;min-height:44px;font-weight:500;
+  text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--accent-text) 40%,transparent);
+  text-underline-offset:3px}
+/* o «Início» é curto: o alvo do dedo alarga-se 8 px para cada lado, sem
+   empurrar o separador (44 px ou mais) */
+.caminho a::after{content:'';position:absolute;top:0;bottom:0;left:-8px;right:-8px}
+.caminho .separador{color:var(--muted)}
+.caminho .atual{color:var(--ink);font-weight:600}
+
 /* ------------------------------------------------------------ a cabeça */
-.cabeca{display:flex;flex-direction:column;gap:12px;padding-top:48px;max-width:680px}
+.cabeca{display:flex;flex-direction:column;gap:12px;padding-top:16px;max-width:680px}
 .chapeu{font-size:14px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent-text)}
 h1{font-size:clamp(30px,5.4vw,48px);line-height:1.08}
 .sub{font-size:18px;color:var(--muted)}
@@ -536,6 +617,11 @@ h3{font-size:20px;line-height:1.25}
 .seguranca p{max-width:70ch}
 .i.escudo{color:var(--accent);width:32px;height:32px}
 
+/* o voltar ao início: o botão secundário, com a seta da casa, no fim da leitura */
+.voltar{margin-top:32px}
+.voltar a.btn{gap:8px;padding-left:12px}
+.i.seta{width:20px;height:20px}
+
 /* o fecho: o bloco cobalto da montra, em ponto pequeno */
 .fecho{margin-top:48px;display:flex;flex-wrap:wrap;align-items:center;gap:24px;padding:clamp(24px,5vw,48px);
   border-radius:20px;background:var(--fecho-fundo);color:var(--fecho-tinta)}
@@ -544,7 +630,6 @@ h3{font-size:20px;line-height:1.25}
 .fecho p{color:var(--fecho-sub)}
 .fecho-botoes{display:flex;flex-wrap:wrap;gap:12px}
 .fecho a.btn.claro{background:var(--fecho-botao);border-color:var(--fecho-botao);color:var(--fecho-botao-tinta)}
-.fecho a.btn.contorno{background:transparent;border-color:var(--fecho-sub);color:var(--fecho-tinta)}
 .fecho a.btn:focus-visible{outline-color:var(--fecho-tinta)}
 
 .rodape{display:flex;flex-wrap:wrap;align-items:center;gap:4px 24px;margin-top:48px;padding-top:24px;padding-bottom:40px;
@@ -559,8 +644,8 @@ h3{font-size:20px;line-height:1.25}
   a.btn.primary:hover{background:var(--accent-press);border-color:var(--accent-press)}
   a.btn.fantasma:hover{background:var(--press);border-color:var(--press)}
   .fecho a.btn.claro:hover{background:var(--fecho-botao-hover);border-color:var(--fecho-botao-hover)}
-  .fecho a.btn.contorno:hover{background:color-mix(in srgb,var(--fecho-tinta) 12%,transparent)}
   .indice a:hover,.rodape a:hover{text-decoration:underline}
+  .caminho a:hover{text-decoration-color:currentColor}
 }
 
 /* ------------------------------------------------------------ telemóvel */
@@ -569,15 +654,61 @@ h3{font-size:20px;line-height:1.25}
   .seguranca{flex-direction:column;gap:12px}
 }
 @media(max-width:480px){
-  .cabeca{padding-top:32px}
+  /* os botões do cabeçalho mais justos num telemóvel, como os da montra */
+  header{gap:4px}
+  header a.btn{padding:0 12px}
+  .caminho{padding-top:8px}
+  .cabeca{padding-top:8px}
   .ficha,.indice{padding:16px}
   .nota{padding:16px}
   .fecho-botoes,.fecho-botoes a.btn{flex:1 1 100%}
 }
-/* num ecrã muito estreito não cabem dois botões ao lado da marca */
-@media(max-width:359px){a.btn.entrar{display:none}}
+/* ------------------------------------------------- a gaveta do cabeçalho
+   A mesma da montra (landing.js, «a gaveta do cabeçalho»). Medido no
+   Chromium (2026-11-08): a marca 141 px, o «IRS» 50, o «Entrar» 74 e o
+   «Criar conta» 111, com 4 de intervalo e 16 de margem, pedem 420 px. Até
+   aos 439 o «IRS» e o «Entrar» passam para a gaveta, e o topo fica com a
+   marca, o «Criar conta» e o ☰ (141 + 111 + 44, 336 px); dos 440 para cima
+   vão em linha. Aqui o «IRS» é a página atual: diz-se com aria-current e na
+   tinta da frente, no cabeçalho e na gaveta. */
+@media(max-width:439px){a.btn.em-linha{display:none}}
+@media(min-width:440px){.gaveta{display:none}}
+/* abaixo dos 360 (o ecrã de fora de um dobrável, 320) aperta-se tudo um
+   pouco, e a marca continua inteira */
+@media(max-width:359px){
+  .marca{font-size:18px}
+  header a.btn{padding:0 8px}
+}
+a.btn[aria-current="page"]{color:var(--accent-text);text-decoration:underline;text-decoration-thickness:2px;
+  text-underline-offset:6px}
+.gaveta{flex:none}
+.gaveta-botao{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:12px;
+  border:1px solid var(--line2);color:var(--ink);cursor:pointer;list-style:none;-webkit-tap-highlight-color:transparent;
+  transition:transform var(--rapido) var(--curva),border-color var(--rapido) var(--curva),color var(--rapido) var(--curva)}
+.gaveta-botao::-webkit-details-marker{display:none}
+.gaveta-botao::marker{content:''}
+.gaveta-botao:active{transform:scale(.97)}
+.gaveta-botao:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.gaveta[open] .gaveta-botao{border-color:var(--accent);color:var(--accent-text)}
+.gaveta .i.cruz,.gaveta[open] .i.riscas{display:none}
+.gaveta[open] .i.cruz{display:block}
+.gaveta-painel{position:absolute;top:100%;left:0;right:0;display:flex;flex-direction:column;
+  padding:8px clamp(16px,4vw,32px) 16px;background:var(--bg);border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);animation:gaveta-desce .2s var(--curva)}
+@keyframes gaveta-desce{from{clip-path:inset(0 0 100% 0);opacity:0}}
+.gaveta-painel a{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;
+  color:var(--ink);text-decoration:none;font-weight:600;font-size:16px;border-bottom:1px solid var(--line)}
+.gaveta-painel a:last-child{border-bottom:0}
+.gaveta-painel a[aria-current="page"]{color:var(--accent-text)}
+.gaveta-painel a:active{color:var(--accent-text)}
+.gaveta-painel a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.gaveta-painel .i{width:20px;height:20px;color:var(--muted)}
+@media(hover:hover) and (pointer:fine){
+  .gaveta-botao:hover{border-color:var(--accent)}
+  .gaveta-painel a:hover{color:var(--accent-text)}
+}
 
-@media(prefers-reduced-motion:reduce){a.btn:active{transform:none}}
+@media(prefers-reduced-motion:reduce){a.btn:active,.gaveta-botao:active{transform:none}.gaveta-painel{animation:none}}
 /* quem pediu menos transparência recebe o cabeçalho sólido, e quem pediu
    mais contraste recebe contornos e texto secundário que se veem */
 @media(prefers-reduced-transparency:reduce){

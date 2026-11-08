@@ -9,6 +9,8 @@
 // e resolvidos, pela ordem certa, e o número de abertos); as secções da lista
 // que abrem e fecham (os resolvidos recolhidos por nascença, o estado
 // guardado no aparelho); a pega do lado da borda, trocada só ao largar;
+// o menu conforme o sítio (na app, Ver a montra e Back office; nas páginas
+// públicas, Voltar à app e Back office; no back office, só os tickets);
 // remover com Anular;
 // reabrir; o HTML gerado sem style= nem on…=, com o texto escapado; o autor
 // de uma conta apagada como «Conta apagada»; e a pílula acima das janelas,
@@ -119,6 +121,54 @@ describe('a pílula só fora de produção', () => {
       assert.match(app.qaHtmlMenu(0), /Novo ticket[\s\S]*Ver tickets/, 'as outras duas continuam');
     } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
     assert.equal(app.qaNaEquipa(), false);
+  });
+
+  /* Os rótulos dos botões de um menu, sem os ícones.
+     Recebe: h — o HTML do menu.
+     Devolve: a lista dos textos. */
+  const rotulos = (h) => [...h.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)].map((m) => m[1].replace(/<svg[\s\S]*?<\/svg>/g, '').trim());
+
+  test('o menu conforme o sítio: a app com a montra e o Back office, as páginas com Voltar à app e o Back office, o back office só com os tickets', () => {
+    apiFalsa();
+    noDev();
+    // na app
+    assert.equal(app.qaLugar(), 'app');
+    const naApp = app.qaHtmlMenu(2);
+    assert.deepEqual(rotulos(naApp), ['Novo ticket', 'Ver tickets (2)', 'Ver a montra', 'Back office']);
+    assert.ok(naApp.includes(app.ic('door', 17) + ' Ver a montra'), 'a montra com a porta');
+    assert.ok(naApp.includes(app.ic('users', 17) + ' Back office'), 'o back office com a equipa');
+    assert.match(naApp, /class="qa-menu-equipa" data-toca="camada" data-click="closePops\(\);qaBackOffice\(\)"/);
+    assert.doesNotMatch(naApp, /Voltar à app|qaVoltarApp/);
+    const antes = app.location.href;
+    try {
+      app.qaBackOffice();
+      assert.equal(app.location.href, '/equipa', 'o Back office abre o /equipa, neste separador');
+      app.qaVerMontra();
+      assert.equal(app.location.href, '/montra', 'e o Ver a montra continua');
+    } finally { app.location.href = antes; }
+    // nas páginas públicas (a montra e o guia), a camada define o QA_PAGINAS
+    vm.runInContext('globalThis.QA_PAGINAS = { ambiente: "dev" };', app.__ctx);
+    try {
+      assert.equal(app.qaLugar(), 'paginas');
+      assert.equal(app.qaNaEquipa(), false);
+      const nasPaginas = app.qaHtmlMenu(null);
+      assert.deepEqual(rotulos(nasPaginas), ['Novo ticket', 'Ver tickets', 'Voltar à app', 'Back office']);
+      assert.ok(nasPaginas.includes(app.ic('home', 17) + ' Voltar à app'), 'a app com a casa');
+      assert.match(nasPaginas, /class="qa-menu-app" data-toca="camada" data-click="closePops\(\);qaVoltarApp\(\)"/);
+      assert.doesNotMatch(nasPaginas, /Ver a montra|qaVerMontra/, 'já se está na montra');
+      try {
+        app.qaVoltarApp();
+        assert.equal(app.location.href, '/', 'Voltar à app vai para o /');
+      } finally { app.location.href = antes; }
+    } finally { vm.runInContext('delete globalThis.QA_PAGINAS;', app.__ctx); }
+    // no back office, a camada define o QA_EQUIPA: só os tickets
+    vm.runInContext('globalThis.QA_EQUIPA = { ambiente: "dev" };', app.__ctx);
+    try {
+      assert.equal(app.qaLugar(), 'equipa');
+      assert.deepEqual(rotulos(app.qaHtmlMenu(0)), ['Novo ticket', 'Ver tickets (0)']);
+      assert.doesNotMatch(app.qaHtmlMenu(0), /Back office|Voltar à app|Ver a montra/);
+    } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
+    assert.equal(app.qaLugar(), 'app');
   });
 
   test('o render traz a pílula quando o ambiente chega do servidor', () => {

@@ -80,7 +80,7 @@ var el = function (id) { return document.getElementById(id); };
 
 // dois algarismos: 7 → 07
 var dois = function (n) { return (n < 10 ? '0' : '') + n; };
-// o dia de um instante, à portuguesa e na hora de quem vê: 17/10/2026
+// o dia de um instante, à portuguesa e no fuso horário de quem vê: 17/10/2026
 var dia = function (t) {
   if (!t) return '—';
   var d = new Date(t);
@@ -1729,12 +1729,12 @@ var SUBPAGINAS_RASTO = {
 };
 // as páginas da montra e dos documentos, pelo caminho
 var PAGINAS_RASTO = { '/': 'Início da montra', '/privacidade': 'Política de Privacidade', '/termos': 'Termos e Condições',
-  '/guias/declarar-rendas': 'Guia: declarar as rendas' };
+  '/guias/declarar-rendas': 'Guia do IRS das rendas' };
 // as secções da montra, pelo id (worker/src/landing.js)
 var SECCOES_RASTO = {
   inicio: 'Início', ligado: 'Do imóvel à renda, tudo ligado', imoveis: 'Imóveis', contratos: 'Contratos',
   planeados: 'Planeados', computador: 'No computador', resto: 'O resto da gestão', contas: 'Contas entre donos',
-  dados: 'Os dados são teus', guia: 'Na hora de declarar as rendas', comecar: 'Começa pelo primeiro imóvel',
+  dados: 'Os dados são teus', guia: 'IRS: o que podes deduzir às rendas', comecar: 'Começa pelo primeiro imóvel',
   'rasto-de-utilizacao': 'Rasto de utilização',
 };
 // as janelas e os portões com nome próprio (web/cloud/rasto.js:rstIdDaCamada e rstPortao), já com as aspas
@@ -1882,7 +1882,7 @@ var ACOES_RASTO = {
   'CW.grupoLigacaoCriar': 'Criar ligação',
 };
 // os elementos que respondem ao toque sem data-click, pela classe ou pelo id
-var BOTOES_RASTO = { 'escolha-botao': 'Aceitar ou Recusar o rasto', bg: 'Fora da janela' };
+var BOTOES_RASTO = { 'escolha-botao': 'Aceitar ou Recusar o rasto', 'gaveta-botao': 'Abrir ou fechar o menu', bg: 'Fora da janela' };
 // os campos e os outros elementos que respondem ao toque, pela etiqueta (com o artigo, para a frase)
 var CAMPOS_RASTO = {
   input: 'num campo', textarea: 'numa caixa de texto', select: 'numa lista de escolha', label: 'no rótulo de um campo',
@@ -1992,7 +1992,7 @@ function ligacaoRasto(d) {
   if (host && !/(?:^|\.)rendorium\.com$/.test(host)) return '';
   if (caminho.indexOf('/privacidade') === 0) return 'Política de Privacidade';
   if (caminho.indexOf('/termos') === 0) return 'Termos e Condições';
-  if (caminho.indexOf('/guias/declarar-rendas') === 0) return 'Guia: declarar as rendas';
+  if (caminho.indexOf('/guias/declarar-rendas') === 0) return 'Guia do IRS das rendas';
   if (caminho === '/' && !host) return chaves.indexOf('criar') > -1 ? 'Criar conta' : 'Início';
   return '';
 }

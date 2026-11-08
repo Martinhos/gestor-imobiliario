@@ -94,6 +94,35 @@ function harden(res) {
   return out;
 }
 
+/* A conta da sessão de quem pede uma página pública, para a pílula do QA.
+   Em produção (sem env.ENV_NAME) nem se lê a sessão: a pílula não existe lá.
+   Uma falha do KV ou da D1 conta como sem conta — a pílula não aparece, e a
+   página serve-se na mesma.
+   Recebe: env — o ambiente do worker; request — o pedido.
+   Devolve: promessa de {id, name, email} ou null. */
+async function contaDaPagina(env, request) {
+  if (!env.ENV_NAME) return null;
+  try {
+    const { getSessionUser } = await import('./auth.js');
+    return (await getSessionUser(env, request)) || null;
+  } catch (e) {
+    console.error('conta da página', e && e.message);
+    return null;
+  }
+}
+
+/* O HTML da pílula do QA para a montra e o guia (equipa-qa.js:pilulaDasPaginas):
+   '' na raiz (a montra de produção, que se guarda em cache) e fora do dev.
+   Recebe: env; request; naRaiz — true no rendorium.com.
+   Devolve: promessa do texto ('' sem pílula). */
+async function pilulaDaPagina(env, request, naRaiz) {
+  if (naRaiz || !env.ENV_NAME) return '';
+  const conta = await contaDaPagina(env, request);
+  if (!conta) return '';
+  const { pilulaDasPaginas } = await import('./equipa-qa.js');
+  return pilulaDasPaginas(env, conta);
+}
+
 export default {
   // Uma vez por dia: cópia da base para o R2 e resumo do consumo. A cópia
   // vai primeiro para o resumo do mesmo dia já poder dizer se correu bem —
@@ -234,6 +263,23 @@ export default {
         : await rotaRastoDaMontra(env, request, url));
     }
 
+    /* O robots.txt e o sitemap.xml (landing.js): na raiz abrem a montra e o
+       guia aos motores de busca, fora dela fecham tudo. Antes do
+       reencaminhamento da raiz para a app, que os engolia. */
+    if (url.pathname === '/robots.txt' || url.pathname === '/sitemap.xml') {
+      const { robotsTxt, sitemapXml } = await import('./landing.js');
+      return harden(url.pathname === '/robots.txt' ? robotsTxt({ raiz: naRaiz }) : sitemapXml());
+    }
+
+    /* A pílula do QA nas páginas públicas (equipa-qa.js): o /paginas/qa.js e
+       o /paginas/qa.css, antes do recursoDePagina, que não os conhece. Só fora
+       de produção — em produção o recurso dá 404 sem ler a sessão. */
+    if (url.pathname === '/paginas/qa.js' || url.pathname === '/paginas/qa.css') {
+      const { recursoDoQaDasPaginas } = await import('./equipa-qa.js');
+      const r = await recursoDoQaDasPaginas(env, url, request.method, await contaDaPagina(env, request));
+      if (r) return harden(r);
+    }
+
     /* Os CSS e os JavaScript das páginas que o worker escreve, que vão com a
        CSP_ESTRITA e já não trazem nada em linha (paginas-recursos.js).
        Antes de tudo: a landing e os documentos legais também os pedem no
@@ -256,7 +302,7 @@ export default {
        qualquer endereço, e antes do reencaminhamento da raiz para a app. */
     if (caminho === 'guias/declarar-rendas') {
       const { paginaGuia } = await import('./guia-vista.js');
-      return harden(paginaGuia({ raiz: naRaiz }));
+      return harden(paginaGuia({ raiz: naRaiz, qa: await pilulaDaPagina(env, request, naRaiz) }));
     }
 
     /* A montra tem de poder ver-se ANTES de ser publicada. Fora do domínio
@@ -267,7 +313,7 @@ export default {
       const { paginaLanding } = await import('./landing.js');
       // a escolha do rasto deste aparelho (o cookie rd_escolha): sem ela, a faixa
       const { lerCookiesDoRasto } = await import('./lib/rasto.js');
-      return harden(paginaLanding({ raiz: naRaiz, escolha: lerCookiesDoRasto(request).escolha }));
+      return harden(paginaLanding({ raiz: naRaiz, escolha: lerCookiesDoRasto(request).escolha, qa: await pilulaDaPagina(env, request, naRaiz) }));
     }
 
     /* O domínio raiz é a montra; a app vive em app.rendorium.com. Qualquer

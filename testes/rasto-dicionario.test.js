@@ -27,7 +27,8 @@ import { fileURLToPath } from 'node:url';
 import { paginaEquipa } from '../worker/src/equipa-vista.js';
 import { recursoDePagina } from '../worker/src/paginas-recursos.js';
 import { KINDS_DOS_DADOS } from '../worker/src/lib/rasto.js';
-import { GUIAO_RASTO_MONTRA } from '../worker/src/landing.js';
+import { GUIAO_RASTO_MONTRA, paginaLanding } from '../worker/src/landing.js';
+import { paginaGuia } from '../worker/src/guia-vista.js';
 import { carregarTudo } from './arnes.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
@@ -150,9 +151,17 @@ describe('o dicionário do rasto não fica para trás', () => {
     assert.equal(rot('a:app.rendorium.com/?criar'), 'Criar conta');
     assert.equal(rot('a:/privacidade'), 'Política de Privacidade');
     assert.equal(rot('a:/termos'), 'Termos e Condições');
-    assert.equal(rot('a:/guias/declarar-rendas'), 'Guia: declarar as rendas');
+    assert.equal(rot('a:/guias/declarar-rendas'), 'Guia do IRS das rendas');
+    // a secção do cartão do guia tem o nome que o cartão mostra, e o caminho do guia também
+    const montra = await paginaLanding({ raiz: true }).text();
+    assert.equal(g.SECCOES_RASTO.guia, /<h2 id="t-guia">([^<]+)<\/h2>/.exec(montra)[1], 'o título do cartão do guia');
+    assert.equal(g.PAGINAS_RASTO['/guias/declarar-rendas'], /<span class="atual" aria-current="page">([^<]+)<\/span>/
+      .exec(await paginaGuia({ raiz: true }).text())[1], 'o nome do guia no caminho dele');
     assert.equal(rot('a:mailto:'), 'Enviar um email');
     assert.equal(rot('button.escolha-botao'), 'Aceitar ou Recusar o rasto');
+    // o ☰ da gaveta do cabeçalho (um <summary>); as ligações de dentro dizem-se pelo destino, como as outras
+    assert.ok(/<summary class="gaveta-botao"/.test(landing), 'controlo: a montra tem o ☰ com esta classe à cabeça');
+    assert.equal(rot('summary.gaveta-botao'), 'Abrir ou fechar o menu');
     assert.equal(rot('a:outro.site/coisa'), '', 'um sítio de fora fica sem nome');
   });
 

@@ -24,7 +24,17 @@
    Só existe no dev (env.ENV_NAME) e só para quem tem sessão de equipa; as
    rotas que a pílula chama são as /api/equipa/qa (rotas/qa.js:rotasQaDaEquipa).
 
-   A CAMADA_QA é um String.raw, como o guião: nem crases nem cifrão com
+   As páginas públicas (a montra e o guia, que o worker escreve) também a
+   levam no dev, para quem lá chega com a sessão de uma conta (a decisão do
+   Martinho, 2026-11-08). A mesma montagem, noutra variante: o
+   /paginas/qa.js leva a CAMADA_DAS_PAGINAS (o mesmo núcleo, com o
+   QA_PAGINAS no lugar do QA_EQUIPA e as rotas da app, /api/qa, com o
+   cookie da sessão da conta) e o FIM_DAS_PAGINAS (o contexto diz a página);
+   o /paginas/qa.css leva, além do do back office, os tokens e os
+   componentes da app presos às classes do QA (CSS_QA_PAGINAS), para não
+   mexer nos da página. O HTML que as páginas recebem é o pilulaDasPaginas.
+
+   As camadas são String.raw, como o guião: nem crases nem cifrão com
    chaveta cá dentro (testes/qa-equipa.test.js guarda-o). */
 
 const JS = 'text/javascript; charset=utf-8';
@@ -38,17 +48,50 @@ export const MARCA_CSS_FIM = '/* === fim: tickets de QA === */';
 // as funções da camada que as ações do qa.js chamam (as do qa.js juntam-se na montagem)
 export const ACOES_DA_CAMADA = ['closePops', 'closeModal', 'menuOpen', 'abrirSeletorFicheiros', 'toggleFold'];
 
-/* O que o qa.js usa da app, feito para o back office. Corre antes do
-   icones.js, do formato.js e do qa.js, dentro da mesma função. */
-export const CAMADA_QA = String.raw`
-/* os dados da página (equipa-vista.js: o <script type="application/json" id="dados-qa">) */
-var QA_EQUIPA = (function () {
+/* O começo da camada, igual nos dois sítios: os dados que a página traz. */
+const DADOS_DA_CAMADA = String.raw`
+/* os dados da página: o <script type="application/json" id="dados-qa"> que o
+   equipa-vista.js:htmlDoQa (back office) ou o pilulaDasPaginas (montra e guia) escrevem */
+var QA_DADOS = (function () {
   try { return JSON.parse(document.getElementById('dados-qa').textContent); } catch (e) { return null; }
 })();
+`;
+
+/* O que só o back office tem: o QA_EQUIPA, por onde o qa.js sabe que está
+   lá (qa.js:qaLugar), e as rotas da equipa. */
+const CABECA_DA_EQUIPA = String.raw`
+var QA_EQUIPA = QA_DADOS;
+
+/* O caminho do QA no back office: o qa.js pede /api/qa…, aqui é /api/equipa/qa….
+   Recebe: p — o caminho que o qa.js pediu.
+   Devolve: o caminho a pedir. */
+function qaCaminho(p) {
+  return String(p).replace(/^\/api\/qa(?=\/|$)/, '/api/equipa/qa');
+}
+`;
+
+/* O que só as páginas públicas têm: o QA_PAGINAS (qa.js:qaLugar) e as
+   rotas da app, as mesmas /api/qa, com a sessão da conta no cookie. */
+const CABECA_DAS_PAGINAS = String.raw`
+var QA_PAGINAS = QA_DADOS;
+
+/* O caminho do QA nas páginas públicas: o mesmo que o qa.js pediu (as
+   rotas da app, rotas/qa.js:rotasQa, que leem a sessão do cookie).
+   Recebe: p — o caminho que o qa.js pediu.
+   Devolve: o caminho a pedir. */
+function qaCaminho(p) {
+  return String(p);
+}
+`;
+
+/* O que o qa.js usa da app, igual no back office e nas páginas. Corre
+   depois da cabeça de cada sítio e antes do icones.js, do formato.js e do
+   qa.js, dentro da mesma função. */
+const NUCLEO_DA_CAMADA = String.raw`
 // o CW que o qa.js lê do window: o ambiente, quem está (o mesmo id que o autor dos tickets) e o rasto
 window.CW = window.CW || {};
-CW.ambiente = QA_EQUIPA && QA_EQUIPA.ambiente ? String(QA_EQUIPA.ambiente) : 'producao';
-CW.user = QA_EQUIPA && QA_EQUIPA.id ? { id: String(QA_EQUIPA.id), name: String(QA_EQUIPA.nome || '') } : null;
+CW.ambiente = QA_DADOS && QA_DADOS.ambiente ? String(QA_DADOS.ambiente) : 'producao';
+CW.user = QA_DADOS && QA_DADOS.id ? { id: String(QA_DADOS.id), name: String(QA_DADOS.nome || '') } : null;
 CW._rasto = Array.isArray(CW._rasto) ? CW._rasto : [];
 // quantos passos o rasto guarda (o qa.js leva os últimos dez)
 var QA_RASTO_GUARDA = 30;
@@ -63,22 +106,15 @@ function rastoPoe(s) {
   if (CW._rasto.length > QA_RASTO_GUARDA) CW._rasto.splice(0, CW._rasto.length - QA_RASTO_GUARDA);
 }
 
-/* O caminho do QA no back office: o qa.js pede /api/qa…, aqui é /api/equipa/qa….
-   Recebe: p — o caminho que o qa.js pediu.
-   Devolve: o caminho a pedir. */
-function qaCaminho(p) {
-  return String(p).replace(/^\/api\/qa(?=\/|$)/, '/api/equipa/qa');
-}
-
-/* O fetch que o qa.js vê, cá dentro: o do browser, com o caminho trocado.
-   Os pedidos do guião ficam no rasto pelo ouvinte de baixo.
+/* O fetch que o qa.js vê, cá dentro: o do browser, com o caminho do sítio
+   (qaCaminho, da cabeça). Os pedidos da página ficam no rasto pelo ouvinte de baixo.
    Recebe: url — o endereço; o — as opções do fetch.
    Devolve: a promessa da Response. */
 var fetch = function (url, o) {
   return window.fetch(typeof url === 'string' ? qaCaminho(url) : url, o);
 };
 
-// os pedidos do back office também entram no rasto (método, caminho e estado)
+// os pedidos da página também entram no rasto (método, caminho e estado)
 (function () {
   var doBrowser = window.fetch;
   if (typeof doBrowser !== 'function' || doBrowser.qaRasto) return;
@@ -114,9 +150,18 @@ function api(method, path, data) {
   });
 }
 
-/* A sessão do back office vai no cookie: não há cabeçalhos a juntar.
+/* A sessão vai no cookie (a da equipa no back office, a da conta nas
+   páginas públicas), que um pedido à mesma origem leva sozinho: não há
+   cabeçalhos a juntar (o Bearer e o X-Rendorium-Token são da app).
    Devolve: um objeto vazio. */
 function cabecalhosDaSessao() { return {}; }
+
+/* Quem pediu menos movimento (o continuidade.js:semMovimento da app, que
+   o qa.js chama ao encaixar a pílula e ao tirar a etiqueta).
+   Devolve: true ou false. */
+function semMovimento() {
+  try { return !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
+}
 
 /* O render da app: aqui não pinta nada, mas o qa.js embrulha-o para pôr a
    pílula, e a montagem chama-o uma vez no fim.
@@ -424,6 +469,11 @@ document.addEventListener('keydown', function (e) {
 });
 `;
 
+// a camada do back office: os dados, o QA_EQUIPA com as rotas da equipa, e o núcleo
+export const CAMADA_QA = DADOS_DA_CAMADA + CABECA_DA_EQUIPA + NUCLEO_DA_CAMADA;
+// a camada das páginas públicas: os dados, o QA_PAGINAS com as rotas da app, e o mesmo núcleo
+export const CAMADA_DAS_PAGINAS = DADOS_DA_CAMADA + CABECA_DAS_PAGINAS + NUCLEO_DA_CAMADA;
+
 /* O fim do /equipa/qa.js, depois do qa.js: o contexto passa a dizer a
    secção do back office, e a pílula aparece. */
 export const FIM_DA_CAMADA = String.raw`
@@ -441,6 +491,33 @@ qaContexto = function () {
   try { c.tema = { escolhido: 'auto', escuro: !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) }; } catch (e) {}
   return c;
 };
+render();
+`;
+
+/* O fim do /paginas/qa.js, depois do qa.js: o contexto passa a dizer a
+   página pública onde se estava, a abertura dela entra no rasto, e a
+   pílula aparece. */
+export const FIM_DAS_PAGINAS = String.raw`
+/* O contexto de um ticket de uma página pública: o da app, com a página (o
+   caminho e o título) no lugar do separador, e o tema do sistema (a montra
+   e o guia seguem o prefers-color-scheme; o Samsung Internet pode escurecer
+   à força a que se mostra clara, e diz-se que pode, como na app).
+   Devolve: o objeto do contexto. */
+var qaContextoDaApp = qaContexto;
+qaContexto = function () {
+  var c = qaContextoDaApp(), caminho = '', titulo = '';
+  try { caminho = String(location.pathname || ''); } catch (e) {}
+  try { titulo = String(document.title || '').trim(); } catch (e) {}
+  c.ecra = c.ecra || {};
+  c.ecra.pagina = (caminho + (titulo ? ' · ' + titulo : '')).slice(0, 200);
+  try {
+    var escuro = !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+    c.tema = { escolhido: 'auto', escuro: escuro };
+    if (!escuro && /SamsungBrowser/i.test(String(navigator.userAgent || ''))) c.tema.forcado = 'possivel';
+  } catch (e) {}
+  return c;
+};
+try { rastoPoe('Abriu ' + location.pathname); } catch (e) {}
 render();
 `;
 
@@ -546,6 +623,73 @@ export const CSS_QA_EQUIPA = String.raw`/* Os tokens da app que o back office n�
 @media(prefers-reduced-motion:reduce){.qa-camada .bg,.qa-camada .sheet,.qa-pilula .menupop.on{animation:none}.qa-aviso{transition:none}}
 `;
 
+/* O que as páginas públicas (a montra e o guia) pedem a mais, depois do
+   CSS do back office e do bloco do QA: os tokens da app presos às caixas
+   do QA (e não ao :root, que é da página: a montra tem os seus, com os
+   mesmos nomes e outro conjunto), os componentes da app que o back office
+   tem e a página não (o botão, o selo, o asterisco, a roda) e o que a folha
+   da página mudava nos títulos. A pílula (60), as janelas (70) e o aviso
+   (90) ficam por cima do cabeçalho pegajoso da montra (20). No escurecimento
+   forçado do Samsung Internet o fundo muda e a frente fica: a gravidade
+   escolhida leva também um contorno da cor da frente. */
+export const CSS_QA_PAGINAS = String.raw`/* Os tokens da app, só dentro do QA */
+.qa-pilula,.qa-sonda,.qa-camada,.qa-aviso{
+  --bg:#f2f3f6;--card:#ffffff;--field:#ffffff;--chip:#f6f7f9;--tint:#f6f7f9;--press:#e9ecf2;
+  --ink:#121826;--muted:#4f586b;--line:#e2e5eb;--line2:#cdd2db;
+  --accent:#2952d9;--accent-ink:#ffffff;--accent-soft:#e9eefc;--accent-text:#1d3fb0;--accent-press:#1d3fb0;
+  --in:#16775a;--in-soft:#e2f3eb;--loan:#6845c2;--loan-soft:#efeafb;
+  --danger:#b42318;--danger-soft:#fde8e6;--warn:#8f5600;--warn-soft:#fff1d1;
+  --toast:#121826;--toast-ink:#ffffff;--shadow:0 16px 40px rgba(16,24,40,.16);--veu:rgba(9,14,28,.55);
+  --letra:'Geist',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --letra-titulo:'Bricolage Grotesque','Geist',system-ui,-apple-system,"Segoe UI",sans-serif;
+  --rapido:.12s;--medio:.2s;--lento:.34s;--volta:.9s;
+  --curva:cubic-bezier(.22,1,.36,1);--curva-entra:cubic-bezier(0,0,.2,1);--curva-sai:cubic-bezier(.4,0,1,1);
+  --inset-top:env(safe-area-inset-top,0px);--inset-bottom:env(safe-area-inset-bottom,0px);
+  --inset-left:env(safe-area-inset-left,0px);--inset-right:env(safe-area-inset-right,0px)}
+@media(prefers-color-scheme:dark){.qa-pilula,.qa-sonda,.qa-camada,.qa-aviso{
+  --bg:#0b111e;--card:#141c2c;--field:#141c2c;--chip:#1a2335;--tint:#1a2335;--press:#253049;
+  --ink:#e9edf5;--muted:#aeb7c9;--line:#253049;--line2:#33405c;
+  --accent:#7c9bff;--accent-ink:#0b111e;--accent-soft:#1e2a4d;--accent-text:#b5c6ff;--accent-press:#9db3ff;
+  --in:#4cc79a;--in-soft:#123327;--loan:#b49bff;--loan-soft:#2a2247;
+  --danger:#ff8a80;--danger-soft:#3d1a1a;--warn:#f2c25a;--warn-soft:#352a12;
+  --toast:#e9edf5;--toast-ink:#121826;--shadow:0 24px 60px rgba(0,0,0,.6);--veu:rgba(2,5,12,.66)}}
+@media(prefers-contrast:more){.qa-pilula,.qa-sonda,.qa-camada,.qa-aviso{--line:#8a93a5;--line2:#6b7385;--muted:#384152}}
+@media(prefers-contrast:more) and (prefers-color-scheme:dark){.qa-pilula,.qa-sonda,.qa-camada,.qa-aviso{--line:#56627d;--line2:#6e7a96;--muted:#c9d0dd}}
+.qa-pilula,.qa-camada,.qa-aviso{font-family:var(--letra);line-height:1.45}
+/* Os títulos das janelas: a folha do guia põe os h2 em linha flexível */
+.qa-camada .head h2{display:block;letter-spacing:normal}
+/* O botão da app (o .btn), com o premido e o rato à parte */
+.qa-camada .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:12px;
+  border:1px solid var(--line2);background:var(--card);color:var(--ink);font:inherit;font-weight:600;font-size:15px;line-height:1.2;
+  text-decoration:none;white-space:nowrap;cursor:pointer;transition:background-color var(--rapido) var(--curva),border-color var(--rapido) var(--curva)}
+.qa-camada .btn:active{background:var(--press)}
+.qa-camada .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.qa-camada .btn.primary:active{background:var(--accent-press);border-color:var(--accent-press)}
+.qa-camada .btn.sm{min-height:36px;padding:0 12px;font-size:14px;border-radius:10px}
+.qa-camada .btn.qa-remover{color:var(--danger)}
+.qa-camada .btn:disabled{opacity:.5;cursor:not-allowed}
+.qa-camada .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(hover:hover) and (pointer:fine){
+  .qa-camada .btn:not(:disabled):hover{background:var(--tint)}
+  .qa-camada .btn.primary:not(:disabled):hover{background:var(--accent-press);border-color:var(--accent-press)}
+}
+@media(pointer:coarse){.qa-camada .btn.sm{min-height:44px}}
+/* O selo, o asterisco dos obrigatórios, a roda e a espera */
+.qa-camada .badge,.qa-pilula .badge{display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:2px 8px;background:var(--accent-soft);
+  color:var(--accent-text);font-size:12px;font-weight:600;line-height:1.3;white-space:nowrap}
+.qa-camada .req{color:var(--danger)}
+@keyframes qaRoda{to{transform:rotate(1turn)}}
+.qa-camada .roda{display:inline-block;flex:0 0 18px;width:18px;height:18px;border-radius:50%;border:2.5px solid var(--line2);
+  border-top-color:var(--accent);animation:qaRoda var(--volta) linear infinite}
+.qa-camada .espera{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:14px;background:var(--chip);font-size:14px;color:var(--muted)}
+.qa-camada .espera b{color:var(--ink);font-weight:600}
+.qa-camada .qa-ver-img.a-carregar::after{content:"";position:absolute;inset:0;width:22px;height:22px;margin:auto;border-radius:50%;
+  border:2.5px solid var(--line2);border-top-color:var(--accent);animation:qaRoda var(--volta) linear infinite}
+/* A gravidade escolhida também na cor da frente (o escurecimento forçado muda os fundos) */
+.qa-camada .segm>[aria-checked="true"]{box-shadow:inset 0 0 0 1.5px currentColor,0 1px 2px rgba(16,24,40,.14)}
+@media(prefers-reduced-motion:reduce){.qa-camada .roda{animation-duration:2.4s}.qa-camada .qa-ver-img.a-carregar::after{animation:none}}
+`;
+
 /* O bloco do QA do web/estilos.css, cortado pelos marcadores (com eles).
    Recebe: estilos — o texto do web/estilos.css.
    Devolve: o bloco (texto); lança um Error se os marcadores não estiverem
@@ -569,30 +713,59 @@ export function funcoesDeTopo(src) {
   return nomes;
 }
 
-/* O /equipa/qa.js inteiro: a camada, os ficheiros da app e o fim, dentro de
-   uma função só, e a tabela QA_ACOES com as funções do qa.js e as da camada
-   (cada entrada chama o nome no momento: o qa.js troca o openModal e o
-   closeModal por embrulhos dele, e é o de agora que tem de correr).
-   Recebe: textos — {'/app/icones.js': …, '/app/formato.js': …, '/cloud/qa.js': …}.
+/* As duas variantes da montagem: o back office (/equipa/qa.js e
+   /equipa/qa.css) e as páginas públicas (/paginas/qa.js e /paginas/qa.css). */
+const VARIANTES = {
+  equipa: {
+    camada: CAMADA_QA, fim: FIM_DA_CAMADA, js: '/equipa/qa.js', css: '/equipa/qa.css',
+    cabeca: '/* A pílula do QA no back office (worker/src/equipa-qa.js): a camada, o\n'
+      + '   icones.js, o formato.js e o qa.js da app, numa função só. */\n',
+  },
+  paginas: {
+    camada: CAMADA_DAS_PAGINAS, fim: FIM_DAS_PAGINAS, js: '/paginas/qa.js', css: '/paginas/qa.css',
+    cabeca: '/* A pílula do QA nas páginas públicas do dev (worker/src/equipa-qa.js): a\n'
+      + '   camada, o icones.js, o formato.js e o qa.js da app, numa função só. */\n',
+  },
+};
+
+/* A variante pedida, com o back office por omissão.
+   Recebe: variante — 'equipa', 'paginas' ou nada.
+   Devolve: o objeto da variante; lança um Error com outro nome. */
+function varianteDe(variante) {
+  const v = variante == null ? 'equipa' : variante;
+  if (!Object.prototype.hasOwnProperty.call(VARIANTES, v)) throw new Error('Não há a variante «' + v + '» da pílula do QA.');
+  return VARIANTES[v];
+}
+
+/* O guião da pílula inteiro (o /equipa/qa.js ou o /paginas/qa.js): a camada
+   do sítio, os ficheiros da app e o fim, dentro de uma função só, e a
+   tabela QA_ACOES com as funções do qa.js e as da camada (cada entrada
+   chama o nome no momento: o qa.js troca o openModal e o closeModal por
+   embrulhos dele, e é o de agora que tem de correr).
+   Recebe: textos — {'/app/icones.js': …, '/app/formato.js': …, '/cloud/qa.js': …};
+   variante (opcional) — 'equipa' (por omissão) ou 'paginas'.
    Devolve: o JavaScript (texto). */
-export function montarGuiaoDoQa(textos) {
+export function montarGuiaoDoQa(textos, variante) {
+  const v = varianteDe(variante);
   const partes = FICHEIROS_DO_QA.map((f) => {
     const t = textos && textos[f];
-    if (typeof t !== 'string' || !t) throw new Error('Falta o ' + f + ' para montar o /equipa/qa.js.');
+    if (typeof t !== 'string' || !t) throw new Error('Falta o ' + f + ' para montar o ' + v.js + '.');
     return '/* ---- ' + f + ' ---- */\n' + t;
   });
   const nomes = funcoesDeTopo(textos['/cloud/qa.js']).filter((n) => /^qa/.test(n)).concat(ACOES_DA_CAMADA);
   const tabela = 'var QA_ACOES = {\n' + nomes.map((n) => '  ' + n + ': function () { return ' + n + '.apply(this, arguments); }').join(',\n') + '\n};\n';
-  return '/* A pílula do QA no back office (worker/src/equipa-qa.js): a camada, o\n'
-    + '   icones.js, o formato.js e o qa.js da app, numa função só. */\n'
-    + '(function () {\n' + CAMADA_QA + '\n' + tabela + partes.join('\n') + '\n' + FIM_DA_CAMADA + '\n})();\n';
+  return v.cabeca + '(function () {\n' + v.camada + '\n' + tabela + partes.join('\n') + '\n' + v.fim + '\n})();\n';
 }
 
-/* O /equipa/qa.css inteiro: o CSS da camada e o bloco do QA da app.
-   Recebe: estilos — o texto do web/estilos.css.
+/* O CSS da pílula inteiro: o da camada e o bloco do QA da app (o
+   /equipa/qa.css) e, nas páginas públicas, o CSS_QA_PAGINAS no fim (o
+   /paginas/qa.css).
+   Recebe: estilos — o texto do web/estilos.css; variante (opcional) —
+   'equipa' (por omissão) ou 'paginas'.
    Devolve: o CSS (texto). */
-export function montarCssDoQa(estilos) {
-  return CSS_QA_EQUIPA + '\n' + cortarCssDoQa(estilos) + '\n';
+export function montarCssDoQa(estilos, variante) {
+  const base = CSS_QA_EQUIPA + '\n' + cortarCssDoQa(estilos) + '\n';
+  return varianteDe(variante) === VARIANTES.paginas ? base + CSS_QA_PAGINAS + '\n' : base;
 }
 
 /* Lê um ficheiro dos assets (a pasta web/), como o browser o receberia.
@@ -605,25 +778,73 @@ async function lerAsset(env, base, caminho) {
   return r.text();
 }
 
-/* Serve o /equipa/qa.js e o /equipa/qa.css: só no dev (sem env.ENV_NAME,
-   404 como se não existissem) e só com sessão de equipa (401 sem ela).
+/* Serve o guião e o CSS de uma variante da pílula: só no dev (sem
+   env.ENV_NAME, 404 como se não existissem), só por GET ou HEAD (405), e só
+   com sessão (401 sem ela); nunca em cache.
    Recebe: env — o ambiente do worker; url — o URL do pedido; metodo — o
-   método HTTP; eu — a sessão de equipa (ou null).
-   Devolve: promessa da Response, ou de null quando o caminho não é destes. */
-export async function recursoDoQa(env, url, metodo, eu) {
-  const js = url.pathname === '/equipa/qa.js', css = url.pathname === '/equipa/qa.css';
+   método HTTP; comSessao — true quando o pedido traz a sessão que a
+   variante pede; variante — 'equipa' ou 'paginas'; semSessao — a frase do 401.
+   Devolve: promessa da Response, ou de null quando o caminho não é desta variante. */
+async function servirDoQa(env, url, metodo, comSessao, variante, semSessao) {
+  const v = varianteDe(variante);
+  const caminho = (typeof url === 'string' ? new URL(url) : url).pathname;
+  const js = caminho === v.js, css = caminho === v.css;
   if (!js && !css) return null;
-  const texto = (status, t) => new Response(t, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
-  if (!env.ENV_NAME) return texto(404, 'Não encontrado');
-  if (metodo !== 'GET' && metodo !== 'HEAD') return texto(405, 'Método não permitido.');
-  if (!eu) return texto(401, 'Sem sessão de equipa.');
+  const texto = (status, t, extra) => new Response(t, { status, headers: Object.assign({ 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }, extra) });
+  if (!env || !env.ENV_NAME) return texto(404, 'Não encontrado');
+  if (metodo !== 'GET' && metodo !== 'HEAD') return texto(405, 'Método não permitido.', { Allow: 'GET, HEAD' });
+  if (!comSessao) return texto(401, semSessao);
   let corpo;
   if (js) {
     const textos = {};
     for (const f of FICHEIROS_DO_QA) textos[f] = await lerAsset(env, url, f);
-    corpo = montarGuiaoDoQa(textos);
+    corpo = montarGuiaoDoQa(textos, variante);
   } else {
-    corpo = montarCssDoQa(await lerAsset(env, url, '/estilos.css'));
+    corpo = montarCssDoQa(await lerAsset(env, url, '/estilos.css'), variante);
   }
   return new Response(metodo === 'HEAD' ? null : corpo, { headers: { 'Content-Type': js ? JS : CSS, 'Cache-Control': 'no-store' } });
+}
+
+/* Serve o /equipa/qa.js e o /equipa/qa.css: só no dev e só com sessão de equipa.
+   Recebe: env — o ambiente do worker; url — o URL do pedido; metodo — o
+   método HTTP; eu — a sessão de equipa (ou null).
+   Devolve: promessa da Response, ou de null quando o caminho não é destes. */
+export async function recursoDoQa(env, url, metodo, eu) {
+  return servirDoQa(env, url, metodo, !!eu, 'equipa', 'Sem sessão de equipa.');
+}
+
+/* Serve o /paginas/qa.js e o /paginas/qa.css, a pílula da montra e do guia:
+   só no dev (404 sem env.ENV_NAME), só por GET ou HEAD (405) e só com a
+   sessão de uma conta (401 sem ela), sempre no-store.
+   Recebe: env — o ambiente do worker; url — o URL do pedido; metodo — o
+   método HTTP; conta — a conta da sessão, {id, name, email} (o
+   auth.js:getSessionUser), ou null.
+   Devolve: promessa da Response, ou de null quando o caminho não é destes. */
+export async function recursoDoQaDasPaginas(env, url, metodo, conta) {
+  return servirDoQa(env, url, metodo, !!(conta && conta.id), 'paginas', 'Sem sessão.');
+}
+
+/* Um valor posto dentro de um <script> (o bloco application/json dos dados
+   da pílula): o JSON dele, com o < trocado pelo escape, e as quebras U+2028 e
+   U+2029 também (o mesmo que o equipa-vista.js:paraScript). Um </script>
+   num nome fechava o bloco; o escape lê-se < no JSON.parse da camada.
+   Recebe: v — o valor (qualquer coisa que o JSON aceite).
+   Devolve: o texto JSON, seguro dentro de um <script>. */
+function jsonParaScript(v) {
+  return JSON.stringify(v).replace(/</g, '\\u003c').replace(/[\u2028\u2029]/g, (c) => '\\u' + c.charCodeAt(0).toString(16));
+}
+
+/* O HTML da pílula nas páginas públicas (a montra e o guia), escrito tal e
+   qual antes do </body> (o op.qa do landing.js e do guia-vista.js): o CSS,
+   os dados da conta da própria sessão num bloco de dados (que não corre) e
+   o guião, da mesma origem (a CSP_ESTRITA só deixa script-src 'self').
+   Recebe: env — o ambiente do worker (env.ENV_NAME só existe fora de
+   produção); conta — a conta da sessão, {id, name, email}, ou null.
+   Devolve: promessa do HTML (texto); '' em produção ou sem conta. */
+export async function pilulaDasPaginas(env, conta) {
+  if (!env || !env.ENV_NAME || !conta || !conta.id) return '';
+  const dados = { ambiente: String(env.ENV_NAME), id: String(conta.id), nome: String(conta.name || '') };
+  return '<link rel="stylesheet" href="/paginas/qa.css">'
+    + '<script type="application/json" id="dados-qa">' + jsonParaScript(dados) + '</script>'
+    + '<script src="/paginas/qa.js"></script>';
 }
