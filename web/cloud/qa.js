@@ -175,12 +175,33 @@ function qaHtmlPilula(n, comEtiqueta) {
     (comEtiqueta ? '<span class="qa-etiqueta" aria-hidden="true">Arrasta para mudar de sítio</span>' : '');
 }
 
-/* As duas opções do menu da pílula.
+/* As opções do menu da pílula: «Novo ticket», «Ver tickets» e, na app,
+   «Ver a montra». A montra fora da raiz é o /montra (worker/src/index.js),
+   e no dev só abre com a sessão de uma conta de teste: a APK de dev não tem
+   barra de endereços, e as ligações do /test abrem nela, não no browser —
+   sem esta opção não havia como lá chegar no telemóvel. No back office não
+   aparece: a sessão de lá é da equipa, e a porta do dev dava-lhe o 404.
    Recebe: n — quantos tickets por resolver (null se ainda não se sabe).
    Devolve: o HTML (texto). */
 function qaHtmlMenu(n) {
   return '<button type="button" data-toca="camada" data-click="closePops();qaNovoTicket()">' + ic('plus', 17) + ' Novo ticket</button>' +
-    '<button type="button" class="qa-menu-ver" data-toca="camada" data-click="closePops();qaVerTickets()">' + ic('lista', 17) + ' ' + esc(qaRotuloVer(n)) + '</button>';
+    '<button type="button" class="qa-menu-ver" data-toca="camada" data-click="closePops();qaVerTickets()">' + ic('lista', 17) + ' ' + esc(qaRotuloVer(n)) + '</button>' +
+    (qaNaEquipa() ? '' : '<button type="button" class="qa-menu-montra" data-toca="camada" data-click="closePops();qaVerMontra()">' + ic('door', 17) + ' Ver a montra</button>');
+}
+
+/* A pílula está no back office? Lá, a camada (worker/src/equipa-qa.js)
+   define o QA_EQUIPA no mesmo âmbito que este ficheiro; na app não existe.
+   Devolve: true ou false. */
+function qaNaEquipa() {
+  return typeof QA_EQUIPA !== 'undefined';
+}
+
+/* Vai para a montra (e daí para os guias) neste separador — na APK de dev,
+   no mesmo WebView, que leva o cookie da sessão de teste. O «voltar» do
+   telemóvel ou do browser regressa à app.
+   Devolve: nada. */
+function qaVerMontra() {
+  location.href = '/montra';
 }
 
 /* O número da pílula, curto: 99+ a partir de cem.

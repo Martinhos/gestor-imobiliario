@@ -101,6 +101,26 @@ describe('a pílula só fora de produção', () => {
     assert.equal(app.qaPil, null, 'e a pílula saiu');
   });
 
+  test('na app o menu leva à montra (o /montra, neste separador); no back office não', () => {
+    apiFalsa();
+    noDev();
+    assert.equal(app.qaSincronizar(), true);
+    assert.match(app.qaPil.innerHTML, /class="qa-menu-montra"[^>]*data-click="closePops\(\);qaVerMontra\(\)"[^>]*>[\s\S]*? Ver a montra<\/button>/);
+    const antes = app.location.href;
+    try {
+      app.qaVerMontra();
+      assert.equal(app.location.href, '/montra');
+    } finally { app.location.href = antes; }
+    // no back office a camada define o QA_EQUIPA, e a sessão de lá não passa a porta do dev
+    vm.runInContext('globalThis.QA_EQUIPA = { ambiente: "dev" };', app.__ctx);
+    try {
+      assert.equal(app.qaNaEquipa(), true);
+      assert.doesNotMatch(app.qaHtmlMenu(0), /Ver a montra|qaVerMontra/);
+      assert.match(app.qaHtmlMenu(0), /Novo ticket[\s\S]*Ver tickets/, 'as outras duas continuam');
+    } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
+    assert.equal(app.qaNaEquipa(), false);
+  });
+
   test('o render traz a pílula quando o ambiente chega do servidor', () => {
     apiFalsa();
     limpar(app);
