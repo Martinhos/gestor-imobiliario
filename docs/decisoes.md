@@ -90,6 +90,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-06 · Criar é no +, o selo «personalizado», e o que rola por cima não rola a página
 - 2026-11-08 · Um guia de declarar as rendas, sem prometer a Declaração
 - 2026-11-08 · O IRS na montra como guia, e a pílula do QA nas páginas públicas
+- 2026-11-08 · O «O que podes fazer» fecha-se, e a gaveta da montra fechada não ocupa espaço
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3326,3 +3327,18 @@ montra e do guia no dev, e ir ao back office a partir dela. As páginas
 públicas ganharam uma camada como a do back office, com o mesmo qa.js, mas a
 falar com as /api/qa pelo cookie da conta; só no dev, só com sessão de conta,
 e nunca na raiz.
+
+## 2026-11-08 · O «O que podes fazer» fecha-se, e a gaveta da montra fechada não ocupa espaço
+
+Dois tickets de QA do Martinho. No primeiro, a montra no Samsung Internet
+ficava mais larga do que o ecrã, com «botões do lado direito»: era o painel da
+gaveta do ☰, que, fechado, ficava preso ao botão e saía pela direita. O
+contexto do ticket dizia 434 px de janela num telemóvel de 384, a mesma
+largura até onde o painel chegava. Com a gaveta fechada, o painel deixou de
+existir, na montra e no guia.
+
+No segundo, o Martinho pediu para se poder fechar o cartão «O que podes
+fazer». Escolheu um X no canto, como o do tutorial, em vez de um «Dispensar» no
+fundo, e que o cartão volte quando o cargo muda, em vez de ficar fechado para
+sempre ou só até à próxima visita: um cargo novo deixa fazer outras coisas, e
+isso merece ser lido outra vez.

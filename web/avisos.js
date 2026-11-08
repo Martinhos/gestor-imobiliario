@@ -27,6 +27,20 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 61,
+    data: '2026-11-08',
+    titulo: 'Fechar o «O que podes fazer»',
+    seccoes: [
+      {
+        titulo: 'Colaboradores',
+        afeta: ['colaboradores'],
+        itens: [
+          'O cartão «O que podes fazer», no topo da Visão geral de quem colabora, tem um X no canto. Fica fechado nesta conta e neste aparelho, e volta sozinho quando o teu cargo muda.',
+        ],
+      },
+    ],
+  },
+  {
     v: 60,
     data: '2026-11-06',
     titulo: 'Criar é no +',

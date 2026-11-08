@@ -695,6 +695,9 @@ a.btn[aria-current="page"]{color:var(--accent-text);text-decoration:underline;te
 .gaveta-painel{position:absolute;top:100%;left:0;right:0;display:flex;flex-direction:column;
   padding:8px clamp(16px,4vw,32px) 16px;background:var(--bg);border-top:1px solid var(--line);
   border-bottom:1px solid var(--line);animation:gaveta-desce .2s var(--curva)}
+/* fechada, o painel não existe: preso ao ::details-content do <details>
+   fechado, saía pela direita do ecrã (o mesmo da montra, landing.js) */
+.gaveta:not([open]) .gaveta-painel{display:none}
 @keyframes gaveta-desce{from{clip-path:inset(0 0 100% 0);opacity:0}}
 .gaveta-painel a{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;
   color:var(--ink);text-decoration:none;font-weight:600;font-size:16px;border-bottom:1px solid var(--line)}

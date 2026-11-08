@@ -17,7 +17,7 @@ import { webcrypto } from 'node:crypto';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 import { paginaLanding, CSS_LANDING, robotsTxt, sitemapXml } from '../worker/src/landing.js';
-import { CAMINHO_GUIA } from '../worker/src/guia-vista.js';
+import { CAMINHO_GUIA, CSS_GUIA } from '../worker/src/guia-vista.js';
 import { CSS_LEGAL } from '../worker/src/legal-vista.js';
 import { CSS_TESTE } from '../worker/src/teste.js';
 
@@ -410,6 +410,18 @@ describe('a página de entrada', () => {
       'aberto, diz-se pela frente: o contorno e o ícone');
     assert.match(css, /\.gaveta-botao:focus-visible\{outline:2px solid var\(--accent\)/, 'o foco vê-se');
     assert.match(css, /\.gaveta-painel\{position:absolute;top:100%;left:0;right:0;/, 'por baixo do cabeçalho, a toda a largura');
+  });
+
+  /* Ticket de QA 379eac34 (2026-11-08): no Chrome 143 o conteúdo de um
+     <details> fechado fica no ::details-content com content-visibility:hidden,
+     e a contenção faz dele o bloco que contém o painel absoluto. Fechada, a
+     gaveta deixava o painel preso ao ☰, a sair pela direita (até ~434 px num
+     ecrã de 384), e o Samsung Internet alargava a página para o mostrar. O
+     painel só existe com a gaveta aberta, na montra e no guia. */
+  test('fechada, o painel da gaveta não ocupa espaço (nem na montra, nem no guia)', () => {
+    for (const [nome, folha] of [['montra', css], ['guia', CSS_GUIA]]) {
+      assert.match(folha, /\.gaveta:not\(\[open\]\) \.gaveta-painel\{display:none\}/, nome + ': o painel fechado sai do layout');
+    }
   });
 
   /* A gaveta desce de cima para baixo (o recorte larga-a a partir do topo),

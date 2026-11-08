@@ -1789,7 +1789,7 @@ var ACOES_RASTO = {
   newTplForTx: 'Criar modelo novo', newTagFromTx: 'Criar etiqueta nova', setKind: 'Escolher o tipo de movimento',
   txMudaTipo: 'Mudar o tipo', txPagoPor: 'Escolher quem pagou', setPayType: 'Escolher a forma de pagamento',
   onAmtReset: 'Repor', onLoanReset: 'Repor', pagarCredor: 'Pagar', 'CW.kpiToTx': 'Ver nos movimentos',
-  dashVerSemImovel: 'Ver movimentos sem imóvel',
+  dashVerSemImovel: 'Ver movimentos sem imóvel', podesFechar: 'Fechar «O que podes fazer»',
   // planeados
   newRec: 'Novo planeado', editRec: 'Editar o planeado', recView: 'Abrir o planeado', delRec: 'Apagar o planeado',
   confirmRec: 'Rever', quickConfirmRec: 'Confirmar', skipRec: 'Silenciar', 'CW.rejectRec': 'Rejeitar o planeado',

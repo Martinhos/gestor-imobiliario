@@ -114,9 +114,11 @@ function vDashboard(){
       ${servicoLigado('properties')?`<button class="btn primary" data-toca="camada" data-click="propModal()">Adicionar imóvel</button>`:''}
       ${podeExemplo()?`<button class="btn" data-toca="dados" data-click="seed()">Carregar exemplo</button>`:''}</div></div>`;
   /* quem só colabora vê primeiro o que o cargo lhe deixa fazer; sem finanças,
-     é isso (e as próximas visitas) em vez das contas */
+     é isso (e as próximas visitas) em vez das contas. Com o cartão fechado
+     (podesFechar), fica no lugar dele um vazio curto que diz porque não há
+     contas, para o Início não ficar em branco. */
   const podes=cartaoPodes();
-  if(souSoColaborador()&&!scope().length)return podes+proximasVisitasColab();
+  if(souSoColaborador()&&!scope().length)return (podes||vazioSemContasColab())+proximasVisitasColab();
   const nColab=scope().filter(p=>!souDono(p.id)).length;
   const colabHint=nColab?`<div class="hint u-m-n4px-0-12px">Inclui ${nColab} ${nColab===1?'imóvel':'imóveis'} onde colaboras (valores por inteiro).</div>`:'';
   /* com imóveis e sem movimentos, quando a jornada não é a vista (dispensada,
@@ -342,17 +344,62 @@ function portefolioInicial(m){
    fazer, sem abrir a gaveta. Um botão por ação (acessos.js:acoesDoColaborador),
    o primeiro primário. Sem finanças, diz porque não há contas e leva aos
    imóveis. O comentário no fim marca onde o cartão acaba: é lá que o guia
-   (cloud/guia.js) pendura os primeiros passos, depois deste.
-   Devolve: o HTML do cartão, ou '' a quem tem imóveis seus. */
+   (cloud/guia.js) pendura os primeiros passos, depois deste. O X do canto
+   fecha-o (podesFechar) até o cargo mudar (podesFechado).
+   Recebe: nada.
+   Devolve: o HTML do cartão, ou '' a quem tem imóveis seus e com o cartão
+   fechado. */
 function cartaoPodes(){
-  if(!souSoColaborador())return '';
+  if(!souSoColaborador()||podesFechado())return '';
   const acoes=acoesDoColaborador(),semFin=!scope().length,imoveis=servicoLigado('properties');
   const botoes=acoes.map((a,i)=>`<button type="button" class="btn${i?'':' primary'}" data-toca="${a.toca}" data-click="${a.act}">${ic(a.icon,16)} ${esc(a.rotulo)}</button>`).join('');
-  return `<div class="card u-mb-14px" id="colabPodes"><div class="title">O que podes fazer</div>
+  return `<div class="card u-mb-14px colab-podes" id="colabPodes"><div class="title colab-podes-tit">O que podes fazer</div>
+    <button type="button" class="btn sm ghost so-icone colab-podes-fechar" aria-label="Fechar" title="Fechar" data-toca="vista" data-click="podesFechar()">${ic('x',18)}</button>
     <div class="small">${fraseColaborador()}</div>
     ${acoes.length?`<div class="colab-acoes u-mt-12px">${botoes}</div>`:'<div class="hint u-mt-10px">O teu cargo deixa-te consultar estes imóveis, sem adicionar nada.</div>'}
     ${semFin?'<div class="hint u-mt-12px">As finanças destes imóveis ficam com o dono: o teu cargo não as abre, e por isso aqui não há contas.</div>':''}
     ${semFin&&imoveis?`<div class="toolbar u-mt-10px"><button type="button" class="btn${acoes.length?'':' primary'}" data-toca="ecra" data-click="go('properties')">${ic('building',16)} Ver os imóveis</button></div>`:''}<!--fim-podes--></div>`;
+}
+/* A chave do fecho do «O que podes fazer» no localStorage: por conta (o id
+   de acessos.js:meuId), para quem partilha o aparelho não fechar o cartão a
+   outra pessoa.
+   Recebe: nada.
+   Devolve: o nome da chave (texto), ex.: 'gi_podes_fora:u123'. */
+function podesChave(){return 'gi_podes_fora:'+meuId()}
+/* A assinatura do que o cartão diz: as ações do cargo
+   (acessos.js:acoesDoColaborador, pelo act, ordenadas) e se há finanças à
+   vista. O fecho guarda-a, e o cartão volta quando ela muda — o Martinho
+   decidiu (2026-11-08) que um cargo novo merece ser lido outra vez.
+   Recebe: nada.
+   Devolve: texto, ex.: 'go(…)|visitModal()#semfin'. */
+function podesAssinatura(){
+  return acoesDoColaborador().map(a=>a.act).sort().join('|')+'#'+(scope().length?'fin':'semfin');
+}
+/* O cartão está fechado para o cargo de agora? Só quando a assinatura
+   guardada é igual à de agora; com o armazenamento a falhar, não (o cartão
+   aparece, que é o lado seguro).
+   Recebe: nada.
+   Devolve: true se está fechado, false caso contrário (booleano). */
+function podesFechado(){
+  try{const v=localStorage.getItem(podesChave());return v!=null&&v===podesAssinatura()}catch(e){return false}
+}
+/* O X do «O que podes fazer»: guarda o fecho com a assinatura do cargo de
+   agora e redesenha a vista, já sem o cartão. Se o armazenamento falhar, o
+   cartão continua lá — não se finge que fechou.
+   Recebe: nada.
+   Devolve: nada — grava no localStorage e chama o render(). */
+function podesFechar(){
+  try{localStorage.setItem(podesChave(),podesAssinatura())}catch(e){}
+  render();
+}
+/* O lugar do «O que podes fazer» fechado na vista de quem só colabora e não
+   tem finanças: um vazio curto que diz porque não há contas, com a porta dos
+   imóveis quando o serviço está ligado. Sem ele, o Início ficava em branco.
+   Recebe: nada.
+   Devolve: o HTML do vazio (texto). */
+function vazioSemContasColab(){
+  return `<div class="empty u-mb-14px"><b>As finanças ficam com o dono</b>O teu cargo não abre as finanças destes imóveis, e por isso aqui não há contas.
+    ${servicoLigado('properties')?`<div class="toolbar"><button type="button" class="btn" data-toca="ecra" data-click="go('properties')">${ic('building',16)} Ver os imóveis</button></div>`:''}</div>`;
 }
 /* As próximas visitas (até 3) de quem só colabora e vê visitas, com a porta
    para a lista toda. Sem visitas por vir, nada.

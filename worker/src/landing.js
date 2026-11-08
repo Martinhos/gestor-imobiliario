@@ -1063,6 +1063,12 @@ ${alturasDasBarras()}
 .gaveta-painel{position:absolute;top:100%;left:0;right:0;display:flex;flex-direction:column;
   padding:8px clamp(16px,4vw,40px) 16px;background:var(--bg);border-top:1px solid var(--line);
   border-bottom:1px solid var(--line);animation:gaveta-desce .2s var(--curva)}
+/* fechada, o painel não existe. No Chrome 143 o conteúdo de um <details>
+   fechado fica no ::details-content com content-visibility:hidden, e essa
+   contenção faz dele o bloco que contém o painel: preso ao ☰, saía pela
+   direita do ecrã (até ~434 px num telemóvel de 384), e o Samsung Internet
+   alargava a página para o mostrar (ticket de QA 379eac34) */
+.gaveta:not([open]) .gaveta-painel{display:none}
 /* abre de cima para baixo: o recorte larga o painel a partir do topo. Só a
    entrada anima (um <details> fecha de uma vez, sem JavaScript), e o estado
    de base é o aberto: um motor sem animações mostra-o logo */

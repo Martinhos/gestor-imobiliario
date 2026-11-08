@@ -690,6 +690,14 @@ chega mesmo a um guardar sem permissão, recusa-se com a frase de
 acessos.js:motivoRecusa num toast, nunca com um selo vermelho mais tarde.
 Sem sessão nada disto existe: tudo é «dono» (acessos.js:cargoDe).
 
+A vista geral de quem só colabora abre com o cartão «O que podes fazer»
+(painel-geral.js:cartaoPodes), com um X no canto que o fecha
+(painel-geral.js:podesFechar). O fecho é desta conta e deste aparelho, e vale
+para o cargo de agora: guarda a assinatura das ações e de haver finanças
+(painel-geral.js:podesAssinatura), e o cartão volta quando ela muda. Sem
+finanças, o cartão fechado dá lugar a um vazio curto que diz porque não há
+contas (painel-geral.js:vazioSemContasColab).
+
 openModal(title,body,foot,menuHtml) (componentes.js:openModal) abre uma
 janela por cima do que houver; a anterior desce na pilha, escurecida e
 inerte, e volta quando a de cima fecha (componentes.js:modalStack,
@@ -5974,7 +5982,10 @@ abrem a montra e o guia aos motores de busca e fecham tudo fora da raiz.
 No telemóvel, o cabeçalho da montra e do guia fica com a marca, o «Criar
 conta» (a ação principal, sempre à vista) e um ☰ que abre uma gaveta com o
 «IRS» e o «Entrar»; no computador as três ligações ficam em linha. A gaveta
-é um <details>: abre e fecha sem JavaScript.
+é um <details>: abre e fecha sem JavaScript. Fechada, o painel não existe
+(.gaveta:not([open]) .gaveta-painel{display:none}): o conteúdo de um
+<details> fechado é um bloco com contenção, que prende o painel absoluto ao
+☰ e o deixa sair pela direita do ecrã.
 
 Os emails (worker/src/lib/correio.js:molde) não são páginas: não há CSP, mas
 há o Gmail e o Outlook. Estilos em linha, tabelas com o cartão a 560px (uma

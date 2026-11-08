@@ -1715,6 +1715,23 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
    de os ler de relance. */
 #raiz#raiz .colab-acoes{display:flex;flex-wrap:wrap;gap:8px}
 #raiz#raiz .colab-acoes .btn{flex:1 1 auto;justify-content:center;min-height:44px;white-space:nowrap}
+/* O X do «O que podes fazer» (painel-geral.js:cartaoPodes, podesFechar): no
+   canto de cima à direita, como o «Fechar o tutorial» (.guia-fechar), 36px no
+   rato e 44 no dedo. O título guarda à direita o espaço do X, para um nome
+   comprido não lhe passar por baixo. O premido diz-se pela cor da frente (o
+   --accent), que sobrevive ao escurecimento à força do Samsung Internet; o
+   fundo --press vem do .btn:active. Com .btn.sm.so-icone no seletor, para
+   ganhar à largura de 36 e à altura de 40 do botão pequeno no dedo. */
+.card.colab-podes{position:relative}
+.colab-podes-tit{padding-right:36px}
+.btn.sm.so-icone.colab-podes-fechar{position:absolute;top:10px;right:10px;width:36px;min-height:36px;color:var(--muted)}
+@media(hover:hover) and (pointer:fine){.btn.sm.so-icone.colab-podes-fechar:hover{color:var(--ink);background:var(--tint)}}
+.btn.sm.so-icone.colab-podes-fechar:active{color:var(--accent);background:var(--press)}
+@media(max-width:520px){.btn.sm.so-icone.colab-podes-fechar{top:6px;right:6px}}
+@media(pointer:coarse){
+  .btn.sm.so-icone.colab-podes-fechar{top:4px;right:4px;width:44px;min-height:44px}
+  .colab-podes-tit{padding-right:40px}
+}
 /* ---- web/app/tarefas.js ---- */
 /* A lista de tarefas de um imóvel ou de um contrato (tarefas.js:tfLista): uma
    secção é um cabeçalho com o nome, a conta e o ⋯ dela, e as tarefas por
