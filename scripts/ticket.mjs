@@ -836,7 +836,7 @@ export function erroDoWrangler(texto) {
     return { tipo: 'coluna', coluna: nome, mensagem: 'A base não tem a coluna ' + nome + (COLUNAS_0024.includes(nome) ? ' (falta a migração 0024: à produção chega com o «promove», ao dev com o próximo deploy do ramo dev).' : ' (falta uma migração).') };
   }
   if (/not (?:logged in|authenticated)|wrangler login|Authentication error|code:?\s*10000|Invalid access token|CLOUDFLARE_API_TOKEN/i.test(t)) {
-    return { tipo: 'sem-sessao', mensagem: 'O wrangler não tem sessão na Cloudflare: corre `npx wrangler login` (ou define CLOUDFLARE_API_TOKEN) e repete.' };
+    return { tipo: 'sem-sessao', mensagem: 'O wrangler não tem sessão na Cloudflare, nem depois de o `wrangler whoami` tentar renovar o token: corre `npx wrangler whoami` para ver; só se disser «not authenticated» é preciso o `npx wrangler login` (no browser, pelo Martinho).' };
   }
   if (/fetch failed|ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|getaddrinfo|socket hang up|network/i.test(t)) {
     return { tipo: 'rede', mensagem: 'Sem ligação à Cloudflare (rede): repete daqui a pouco.' };
@@ -894,13 +894,22 @@ function mostraChamada(quem, args) {
 function correWrangler(args) {
   if (!existsSync(WRANGLER)) throw new ErroTicket('Não encontro o wrangler em ' + WRANGLER + ': corre `npm install` no app/.');
   mostraChamada('wrangler', args);
-  return comRepeticao(() => {
-    const r = spawnSync(process.execPath, [WRANGLER].concat(args), {
+  const umaVez = (a) => {
+    const r = spawnSync(process.execPath, [WRANGLER].concat(a), {
       cwd: RAIZ, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 180000, windowsHide: true,
       env: Object.assign({}, process.env, { WRANGLER_SEND_METRICS: 'false', NO_COLOR: '1', FORCE_COLOR: '0' }),
     });
     if (r.error) throw new ErroTicket('O wrangler não correu: ' + r.error.message);
     return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
+  };
+  // a sessão é OAuth com token de uma hora: com ele expirado, o `whoami` renova-o
+  // (pelo refresh token) e repete-se uma vez antes de dizer que não há sessão
+  return comRepeticao(() => {
+    const r = umaVez(args);
+    if (r.status === 0 || erroDoWrangler(r.stdout + '\n' + r.stderr).tipo !== 'sem-sessao') return r;
+    mostraChamada('wrangler', ['whoami']);
+    umaVez(['whoami']);
+    return umaVez(args);
   });
 }
 

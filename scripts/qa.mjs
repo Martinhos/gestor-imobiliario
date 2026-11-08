@@ -518,7 +518,7 @@ export function erroDoWrangler(texto) {
     return { tipo: 'por-migrar', mensagem: 'A tabela qa_tickets ainda não existe nesta base (falta a migração 0023).' };
   }
   if (/not (?:logged in|authenticated)|wrangler login|Authentication error|code:?\s*10000|CLOUDFLARE_API_TOKEN|Invalid access token/i.test(t)) {
-    return { tipo: 'sem-sessao', mensagem: 'O wrangler não tem sessão na Cloudflare: corre `npx wrangler login` (ou define CLOUDFLARE_API_TOKEN) e repete.' };
+    return { tipo: 'sem-sessao', mensagem: 'O wrangler não tem sessão na Cloudflare, nem depois de o `wrangler whoami` tentar renovar o token: corre `npx wrangler whoami` para ver; só se disser «not authenticated» é preciso o `npx wrangler login` (no browser, pelo Martinho).' };
   }
   if (/The specified key does not exist|object not found|NoSuchKey|not found in bucket/i.test(t)) {
     return { tipo: 'sem-objeto', mensagem: 'A imagem não está no R2 (o ticket diz que tem, mas o objeto não existe).' };
@@ -545,12 +545,10 @@ export function mensagemPorMigrar(local) {
     : 'A tabela qa_tickets ainda não existe no dev: a migração 0023 chega lá com o próximo deploy do ramo dev. Até lá não há tickets no dev para ler.';
 }
 
-/* Corre o wrangler do repositório (node_modules), sem shell: os argumentos
-   vão tal e qual, com plicas, ponto e vírgula e quebras de linha das notas.
+/* Corre o wrangler uma vez, sem shell.
    Recebe: args — os argumentos do wrangler (array de texto).
-   Devolve: { status, stdout, stderr }; lança ErroQa se o wrangler não estiver instalado. */
-function correWrangler(args) {
-  if (!existsSync(WRANGLER)) throw new ErroQa('Não encontro o wrangler em ' + WRANGLER + ': corre `npm install` no app/.');
+   Devolve: { status, stdout, stderr }; lança ErroQa se não correr. */
+function correWranglerUmaVez(args) {
   if (process.env.QA_VERBOSO === '1') process.stderr.write('[qa] wrangler ' + args.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(' ') + '\n');
   const r = spawnSync(process.execPath, [WRANGLER].concat(args), {
     cwd: RAIZ, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 180000, windowsHide: true,
@@ -558,6 +556,22 @@ function correWrangler(args) {
   });
   if (r.error) throw new ErroQa('O wrangler não correu: ' + r.error.message);
   return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
+}
+
+/* Corre o wrangler do repositório (node_modules), sem shell: os argumentos
+   vão tal e qual, com plicas, ponto e vírgula e quebras de linha das notas.
+   A sessão do wrangler nesta máquina é OAuth, com um token de uma hora e um
+   refresh token (%APPDATA%\xdg.config\.wrangler\config\default.toml). Com o
+   token expirado, a primeira chamada pode falhar com erro de sessão: corre-se
+   o `wrangler whoami` (que o renova) e repete-se uma vez.
+   Recebe: args — os argumentos do wrangler (array de texto).
+   Devolve: { status, stdout, stderr }; lança ErroQa se o wrangler não estiver instalado. */
+function correWrangler(args) {
+  if (!existsSync(WRANGLER)) throw new ErroQa('Não encontro o wrangler em ' + WRANGLER + ': corre `npm install` no app/.');
+  const r = correWranglerUmaVez(args);
+  if (r.status === 0 || erroDoWrangler(r.stdout + '\n' + r.stderr).tipo !== 'sem-sessao') return r;
+  correWranglerUmaVez(['whoami']);
+  return correWranglerUmaVez(args);
 }
 
 /* Lê o JSON que o wrangler escreve com --json, mesmo com avisos à volta.
