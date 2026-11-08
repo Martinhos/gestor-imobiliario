@@ -183,7 +183,9 @@ describe('a página de entrada', () => {
     criar.forEach((b) => assert.match(b.href, /\?criar=1$/, 'leva ao registo'));
     const entrar = botoes.filter((b) => /Abrir a app|Já tenho conta/.test(b.texto));
     entrar.forEach((b) => assert.ok(!/criar=1/.test(b.href), 'e estes não'));
-    assert.equal(new Set(botoes.map((b) => b.href)).size, 2, 'dois destinos, não um');
+    // os da conta: o «Ler o guia» leva a uma página de leitura, não à app
+    const daConta = botoes.filter((b) => !b.href.startsWith('/guias/'));
+    assert.equal(new Set(daConta.map((b) => b.href)).size, 2, 'dois destinos, não um');
   });
 
   /* A página tem mais de quatro mil pixéis: a marca e a porta de entrada não
@@ -297,6 +299,20 @@ describe('a página de entrada', () => {
      metadados. */
   test('não promete o IRS, que ainda só existe em dev', () => {
     assert.ok(!/IRS|Anexo F|Modelo 2|\bAT\b|Finanças/.test(html), 'nem no texto nem nos metadados');
+  });
+
+  /* O guia de declarar as rendas (guia-vista.js) é informação, não uma
+     função da app: a montra leva até ele num cartão antes do fecho e no
+     rodapé, com o botão secundário — a ação principal continua a ser criar
+     conta —, e sem dizer que a app declara ou calcula alguma coisa. */
+  test('leva ao guia de declarar as rendas, sem o prometer como função da app', () => {
+    const cartao = /<section class="wrap guia-seccao" id="guia"[\s\S]*?<\/section>/.exec(html);
+    assert.ok(cartao, 'o cartão do guia existe');
+    assert.match(cartao[0], /<a class="btn" href="\/guias\/declarar-rendas">Ler o guia<\/a>/);
+    assert.doesNotMatch(cartao[0], /btn primary|Rendorium (?:declara|calcula)|a app/i);
+    assert.ok(html.indexOf('id="guia"') < html.indexOf('id="comecar"'), 'antes do fecho');
+    const rodape = /<footer[\s\S]*?<\/footer>/.exec(html)[0];
+    assert.match(rodape, /<a href="\/guias\/declarar-rendas">Guia: declarar as rendas<\/a>/);
   });
 
   /* O que o Google mostra sem cortar: o título nos 60 caracteres e a

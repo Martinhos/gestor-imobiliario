@@ -88,6 +88,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-06 · Os filtros mostram o que dizem, o menu fecha ao toque, e a redução de spread tem prazo
 - 2026-11-06 · A pesquisa não sai do documento enquanto se escreve
 - 2026-11-06 · Criar é no +, o selo «personalizado», e o que rola por cima não rola a página
+- 2026-11-08 · Um guia de declarar as rendas, sem prometer a Declaração
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3284,3 +3285,21 @@ aceite: num ecrã alto, onde a barra lateral cabe inteira, a roda por cima
 dela deixa de rolar a página. Ficou por decidir o html.noscroll com
 overscroll-behavior:none, que tiraria o puxar para recarregar com uma janela
 aberta.
+## 2026-11-08 · Um guia de declarar as rendas, sem prometer a Declaração
+
+O Martinho escreveu e verificou (a 2026-11-08, contra o artigo 41.º do Código
+do IRS e oito fontes da AT e do Diário da República) um guia do que o
+senhorio pode e não pode deduzir às rendas, e pediu-o na montra. Ficou em
+/guias/declarar-rendas (guia-vista.js:paginaGuia), a pasta pensada para mais
+guias. A montra tinha uma regra contra o IRS (testes/landing.test.js «não
+promete o IRS»), porque a Declaração da app só existe em dev; a regra fica,
+e o guia não a fura: é informação, e o cartão e a ligação da montra não usam
+a palavra nem dizem que a app declara. Perguntado, o Martinho escolheu o
+cartão e o rodapé, o endereço, as listas só de leitura (visto e cruz, sem
+caixas de marcar nem JavaScript) e o texto por tu; o conteúdo fiscal ficou
+como ele o escreveu, só com a pessoa do verbo trocada.
+
+As fontes foram confirmadas a abrir uma a uma. Do artigo 41.º, o n.º 1 diz
+«suportados e pagos» e o n.º 9 a comprovação documental, que é o «n.os 1 e 9»
+do guia; as fichas de 2016 a 2018 ainda citam «n.os 1 e 8», a numeração de
+antes de o n.º 8 passar a ser o da habitação própria a mais de 100 km.

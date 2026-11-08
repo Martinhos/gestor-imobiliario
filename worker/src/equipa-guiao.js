@@ -1728,12 +1728,14 @@ var SUBPAGINAS_RASTO = {
   privacidade: 'Política de Privacidade',
 };
 // as páginas da montra e dos documentos, pelo caminho
-var PAGINAS_RASTO = { '/': 'Início da montra', '/privacidade': 'Política de Privacidade', '/termos': 'Termos e Condições' };
+var PAGINAS_RASTO = { '/': 'Início da montra', '/privacidade': 'Política de Privacidade', '/termos': 'Termos e Condições',
+  '/guias/declarar-rendas': 'Guia: declarar as rendas' };
 // as secções da montra, pelo id (worker/src/landing.js)
 var SECCOES_RASTO = {
   inicio: 'Início', ligado: 'Do imóvel à renda, tudo ligado', imoveis: 'Imóveis', contratos: 'Contratos',
   planeados: 'Planeados', computador: 'No computador', resto: 'O resto da gestão', contas: 'Contas entre donos',
-  dados: 'Os dados são teus', comecar: 'Começa pelo primeiro imóvel', 'rasto-de-utilizacao': 'Rasto de utilização',
+  dados: 'Os dados são teus', guia: 'Na hora de declarar as rendas', comecar: 'Começa pelo primeiro imóvel',
+  'rasto-de-utilizacao': 'Rasto de utilização',
 };
 // as janelas e os portões com nome próprio (web/cloud/rasto.js:rstIdDaCamada e rstPortao), já com as aspas
 var JANELAS_RASTO = {
@@ -1990,6 +1992,7 @@ function ligacaoRasto(d) {
   if (host && !/(?:^|\.)rendorium\.com$/.test(host)) return '';
   if (caminho.indexOf('/privacidade') === 0) return 'Política de Privacidade';
   if (caminho.indexOf('/termos') === 0) return 'Termos e Condições';
+  if (caminho.indexOf('/guias/declarar-rendas') === 0) return 'Guia: declarar as rendas';
   if (caminho === '/' && !host) return chaves.indexOf('criar') > -1 ? 'Criar conta' : 'Início';
   return '';
 }

@@ -41,6 +41,7 @@
    é isto?». */
 
 import { CSP_ESTRITA } from './lib/http.js';
+import { CAMINHO_GUIA } from './guia-vista.js';
 
 const APP = 'https://app.rendorium.com';
 const IMG = '/img/landing';
@@ -287,6 +288,8 @@ const DESCRICAO = 'App grátis para senhorios: imóveis, contratos e rendas num 
 // os traços dos dois ícones que não são de capacidade: o aviso e o visto
 const AVISO = 'M12 8v5M12 16.5v.5M10.3 3.8L2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z';
 const VISTO = 'M5 12.5l4.5 4.5L19 7';
+// a folha com as linhas de texto, do cartão do guia
+const DOCUMENTO = 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6';
 
 /* A faixa da pergunta do rasto, para quem ainda não respondeu: um formulário
    sem JavaScript para o /consentimento, com «Recusar» e «Aceitar» iguais (a
@@ -505,6 +508,19 @@ ${e.ecra(hoje)}
     </div>
   </section>
 
+  <section class="wrap guia-seccao" id="guia" aria-labelledby="t-guia">
+    <div class="guia-cartao">
+      <span class="ic ac">${icone(DOCUMENTO)}</span>
+      <div class="guia-texto">
+        <p class="chapeu">Guia</p>
+        <h2 id="t-guia">Na hora de declarar as rendas</h2>
+        <p>O que podes e não podes deduzir às rendas: IMI, condomínio, obras, seguros, e os documentos a guardar
+        para cada imóvel.</p>
+      </div>
+      <a class="btn" href="${CAMINHO_GUIA}">Ler o guia</a>
+    </div>
+  </section>
+
   <section class="wrap fecho-seccao" id="comecar">
     <div class="fecho">
       <div class="tile fecho-mosaico" aria-hidden="true"></div>
@@ -519,6 +535,7 @@ ${e.ecra(hoje)}
 </main>
 <footer class="wrap rodape">
   <span class="rodape-marca"><span class="mark" aria-hidden="true"></span><span>© ${new Date().getFullYear()} Rendorium</span></span>
+  <a href="${CAMINHO_GUIA}">Guia: declarar as rendas</a>
   <a href="/termos">Termos e Condições</a>
   <a href="/privacidade">Política de Privacidade</a>
   <a href="${APP}">Abrir a app</a>
@@ -863,6 +880,16 @@ ${alturasDasBarras()}
   background:var(--card);border:1px solid var(--line)}
 .projeto .sub{font-size:17px;color:var(--muted)}
 
+/* o cartão do guia (guia-vista.js), antes do fecho: informação para quem
+   declara as rendas, e não uma promessa da app — o botão é o secundário */
+.guia-seccao{padding-bottom:48px}
+.guia-cartao{display:flex;flex-wrap:wrap;align-items:center;gap:16px 24px;padding:24px;border-radius:20px;
+  background:var(--card);border:1px solid var(--line)}
+.guia-texto{flex:1 1 360px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.guia-texto h2{font-size:clamp(24px,3vw,30px);line-height:1.15}
+.guia-texto p:last-child{color:var(--muted);font-size:16px}
+.guia-cartao .ic{align-self:flex-start}
+
 .fecho-seccao{padding-bottom:clamp(56px,8vw,88px)}
 .fecho{position:relative;overflow:hidden;border-radius:28px;background:var(--fecho-fundo);color:var(--fecho-tinta);
   padding:clamp(32px,6vw,64px);display:flex;flex-wrap:wrap;align-items:center;gap:24px}
@@ -965,7 +992,7 @@ ${alturasDasBarras()}
    visível, e um motor sem view() não esconde conteúdo a ninguém. */
 @supports (animation-timeline: view()){
   .ligado-cab,.ecra-texto,.ecra-visual,
-  .grelha .cartao,.pc-texto,.computador,.par-texto,.acerto,.dados-lista .lista li,.projeto,.fecho{
+  .grelha .cartao,.pc-texto,.computador,.par-texto,.acerto,.dados-lista .lista li,.projeto,.guia-cartao,.fecho{
     animation:sobe linear both;animation-timeline:view();
     animation-range:entry 8% entry 42%}
   /* as colunas da grelha entram por degraus, senão a fila chega em bloco —

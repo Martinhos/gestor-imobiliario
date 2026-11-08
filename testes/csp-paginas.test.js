@@ -100,6 +100,7 @@ const PAGINAS = [
   ['a montra', '/montra', {}, 200],
   ['os termos', '/termos', {}, 200],
   ['a privacidade', '/privacidade', {}, 200],
+  ['o guia de declarar as rendas', '/guias/declarar-rendas', {}, 200],
   // sem sessão, o /equipa e o /equipa/docs mostram o ecrã de entrada com 401 (já era assim antes da CSP)
   ['o ecrã de entrada da equipa (sem sessão)', '/equipa', {}, 401],
   ['a ligação de entrada da equipa (que não existe)', '/equipa/entrar?t=' + 'a'.repeat(64), {}, 410],

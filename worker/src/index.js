@@ -252,6 +252,13 @@ export default {
       return harden(paginaLegal(caminho, { raiz: naRaiz }));
     }
 
+    /* O guia «Declarar as rendas» (guia-vista.js), pelo mesmo motivo: em
+       qualquer endereço, e antes do reencaminhamento da raiz para a app. */
+    if (caminho === 'guias/declarar-rendas') {
+      const { paginaGuia } = await import('./guia-vista.js');
+      return harden(paginaGuia({ raiz: naRaiz }));
+    }
+
     /* A montra tem de poder ver-se ANTES de ser publicada. Fora do domínio
        raiz é o /montra que a serve — a raiz do dev continua a ser a app, que é
        para isso que esse ambiente serve. Em produção o /montra é só um atalho

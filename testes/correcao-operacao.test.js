@@ -678,7 +678,7 @@ describe('o guião do back office', () => {
 describe('os comentários', () => {
   const MEUS = ['worker/src/discord.js', 'worker/src/equipa.js', 'worker/src/equipa-api.js', 'worker/src/equipa-vista.js',
     'worker/src/equipa-guiao.js', 'worker/src/docs-vista.js', 'worker/src/landing.js', 'worker/src/legal-vista.js',
-    'worker/src/notify.js', 'worker/src/salvaguarda.js', 'worker/src/teste.js', 'worker/src/acessos.js',
+    'worker/src/guia-vista.js', 'worker/src/notify.js', 'worker/src/salvaguarda.js', 'worker/src/teste.js', 'worker/src/acessos.js',
     'worker/src/lib/bot.js', 'worker/src/lib/papeis.js', 'worker/src/lib/correio.js', 'worker/src/lib/enderecos.js'];
 
   // achado A.5-19

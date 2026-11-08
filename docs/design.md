@@ -5948,6 +5948,19 @@ partilha (og:image), que as redes mostram sem correr CSS, e que o
 scripts/capturas.js tira. Os documentos legais e a entrada de teste
 (worker/src/legal-vista.js, worker/src/teste.js) são da mesma família.
 
+O guia «Declarar as rendas» (guia-vista.js:paginaGuia, em
+/guias/declarar-rendas, em qualquer endereço como os documentos) também é:
+cabeçalho de vidro, leitura a 820 px, as secções em cartões numerados com um
+índice de âncoras, e nenhum JavaScript — o conteúdo vive como dados no
+módulo e o HTML sai deles. É informação, não uma função da app: diz o que a
+lei deixa deduzir às rendas e o que não deixa, e nunca que a Rendorium
+declara ou calcula alguma coisa. O que se deduz leva um visto verde e o que
+não se deduz uma cruz vermelha, e cada linha diz o sentido também ao leitor
+de ecrã; as condições levam um ponto, as notas âmbar o que pede cuidado. As
+fontes só ligam para endereços oficiais confirmados a abrir. A montra leva
+até ele num cartão antes do fecho e no rodapé, com o botão secundário, sem a
+palavra IRS: a promessa de produção continua sem a Declaração.
+
 Os emails (worker/src/lib/correio.js:molde) não são páginas: não há CSP, mas
 há o Gmail e o Outlook. Estilos em linha, tabelas com o cartão a 560px (uma
 tabela condicional para o Outlook do Windows), dois <style> só a

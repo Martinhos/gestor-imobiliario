@@ -150,6 +150,7 @@ describe('o dicionário do rasto não fica para trás', () => {
     assert.equal(rot('a:app.rendorium.com/?criar'), 'Criar conta');
     assert.equal(rot('a:/privacidade'), 'Política de Privacidade');
     assert.equal(rot('a:/termos'), 'Termos e Condições');
+    assert.equal(rot('a:/guias/declarar-rendas'), 'Guia: declarar as rendas');
     assert.equal(rot('a:mailto:'), 'Enviar um email');
     assert.equal(rot('button.escolha-botao'), 'Aceitar ou Recusar o rasto');
     assert.equal(rot('a:outro.site/coisa'), '', 'um sítio de fora fica sem nome');

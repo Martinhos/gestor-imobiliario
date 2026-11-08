@@ -26,6 +26,7 @@ const RECURSOS = {
   '/paginas/rasto-montra.js': { tipo: JS, texto: async () => (await import('./landing.js')).GUIAO_RASTO_MONTRA },
   '/paginas/legal.css': { tipo: CSS, texto: async () => (await import('./legal-vista.js')).CSS_LEGAL },
   '/paginas/documento.js': { tipo: JS, texto: async () => (await import('./legal-vista.js')).GUIAO_LEGAL },
+  '/paginas/guia.css': { tipo: CSS, texto: async () => (await import('./guia-vista.js')).CSS_GUIA },
   '/paginas/teste.css': { tipo: CSS, texto: async () => (await import('./teste.js')).CSS_TESTE },
   // o ecrã de entrada da equipa também o usa, e esse é de quem ainda não entrou
   '/equipa/estilos.css': { tipo: CSS, texto: async () => (await import('./equipa-vista.js')).CSS_EQUIPA },
