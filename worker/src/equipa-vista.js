@@ -109,6 +109,11 @@ export const CSS_EQUIPA = `/* As letras da app, servidas de /fonts/ (a CSP só d
   --danger:#FF8A80;--danger-soft:#3D1A1A;--danger-ink:#1A0605;--danger-press:#FFB1AA;
   --toast:#E9EDF5;--toast-ink:#121826;--shadow:0 24px 60px rgba(0,0,0,.6);--veu:rgba(2,5,12,.66);--eq-vidro:rgba(11,17,30,.92)}}
 *{box-sizing:border-box}
+/* o realce nativo do toque (o retângulo azul do Chrome e do Samsung Internet)
+   fica desligado em tudo, como na app (web/estilos.css): o sinal do dedo é o
+   :active de cada botão, e o foco que o toque deixava sai depois da ação
+   (equipa-guiao.js:largarFocoDoToque) */
+*{-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--letra);font-size:15px;line-height:1.45;
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -321,6 +326,7 @@ code{font-family:var(--letra-mono);font-size:.88em}
   background:var(--card);color:var(--ink);font-size:14px;font-weight:500;white-space:nowrap;cursor:pointer;
   transition:background-color var(--rapido) var(--curva)}
 @media(hover:hover) and (pointer:fine){.chip:hover{background:var(--tint)}}
+.chip:active{background:var(--press)}
 .chip.on,.chip:has(input:checked){background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text)}
 .chip:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
 .chip .n{opacity:.8}
@@ -362,6 +368,7 @@ textarea.campo{min-height:110px;padding:12px 14px;resize:vertical;line-height:1.
   background:transparent;color:inherit;font-size:14px;text-align:left}
 .linha.tocavel{cursor:pointer;transition:background-color var(--rapido) var(--curva)}
 @media(hover:hover) and (pointer:fine){.linha.tocavel:hover{background:var(--tint)}}
+.linha.tocavel:active{background:var(--press)}
 .linha.tocavel:focus-visible{outline-offset:-2px}
 .linha-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .avatar{width:56px;height:56px;border-radius:50%;background:var(--accent-soft);color:var(--accent-text);display:flex;align-items:center;

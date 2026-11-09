@@ -6040,7 +6040,11 @@ recebe.
 O back office (worker/src/equipa-vista.js, worker/src/equipa-guiao.js) tem a
 barra lateral GRAFITE e a marca em ardósia, de propósito diferente do
 azul-noite da app, para nunca se confundir uma com a outra; o resto é a
-linguagem da app (cobalto, cartões, selos, chips, interruptores). A navegação
+linguagem da app (cobalto, cartões, selos, chips, interruptores). O toque
+também: o realce nativo do browser (o retângulo azul) fica desligado em tudo,
+o sinal do dedo é o :active de cada botão, e o foco que um toque deixa no
+botão sai depois da ação, menos num campo e com o teclado
+(worker/src/equipa-guiao.js:largarFocoDoToque). A navegação
 é a da app (ver «Navegação»): a barra lateral arruma as secções em grupos
 (equipa-guiao.js:GRUPOS_NAV) — ao cimo, sem título, o Kanban, só fora de
 produção; «Atendimento», com os Pedidos e as Pessoas; e «Plataforma», com os
@@ -6493,7 +6497,11 @@ não lhe toca.
 
 As colunas são as do board — A fazer, Auto Tests, Human Tests, Concluído e
 Para depois — e o master acrescenta, muda de nome, reordena e remove as que
-estão vazias (worker/src/equipa-kanban-janela.js:kbColunas). As quatro primeiras
+estão vazias (worker/src/equipa-kanban-janela.js:kbColunas): uma linha por
+coluna, com a pega, o nome, os selos e a contagem, e um ⋯ com as ações dela
+(Renomear, Marcar de fim, Remover, e Subir e Descer para o teclado); a ordem
+muda-se a arrastar pela pega, como as tarefas da app, e grava-se ao largar
+(worker/src/equipa-kanban-janela.js:kbColunasGravar). As quatro primeiras
 são fixas: a sincronização usa-as, e mudam de nome mas não saem; o
 Concluído é a coluna de fim (o progresso dos épicos, a data de feito). Um
 cartão tem a chave, o tipo (Épico, História, Tarefa, Subtarefa ou Erro), o
@@ -6511,7 +6519,21 @@ etiqueta, responsável («Os meus»), prioridade e épico — aplicam-se no
 browser sobre o quadro inteiro (worker/src/equipa-kanban-filtros.js:kbPassa), para
 um arrasto com filtros ligados mandar ao servidor a posição certa entre os
 cartões escondidos; a pesquisa vai ao servidor, porque procura também na
-descrição. Os filtros ficam na sessão. No computador as colunas estão lado a
+descrição. Os filtros ficam na sessão. São como os da app: a pesquisa sempre
+à vista e o funil, com o número dos ligados, que abre por baixo um painel com
+Limpar e Fechar, quantos cartões passam e um seletor por campo, que abre a
+lista e aplica logo (worker/src/equipa-kanban-filtros.js:kbFiltrosHtml). O
+seletor é um só componente, de uma escolha ou de várias, um botão e uma lista
+de botões, nunca o seletor nativo (worker/src/equipa-kanban-filtros.js:kbSelHtml);
+é ele que escolhe as etiquetas de um cartão, das que já há no quadro, com
+«Nova etiqueta» no fim da lista, como a «Nova categoria» dos movimentos. Cada
+coluna ordena-se à parte, pelo botão do cabeçalho
+(worker/src/equipa-kanban-filtros.js:kbOrdenar): a ordem do quadro (a de
+omissão, a que o arrasto muda), Prioridade, Título, Criação, Última alteração
+ou Prazo, cada uma nos dois sentidos, guardada no aparelho; o cabeçalho diz
+quando a coluna está ordenada, e numa coluna ordenada arrastar muda o cartão
+de coluna mas não de lugar dentro dela
+(worker/src/equipa-kanban-filtros.js:kbOrdemManual). No computador as colunas estão lado a
 lado e a rolagem de lado é do quadro, nunca da página; no telemóvel vê-se
 uma coluna de cada vez, com um segmentado das colunas e as contagens por
 cima, e passa-se à vizinha a deslizar. O escolhido mostra-se no contorno e na
@@ -6519,8 +6541,14 @@ letra, e não só no fundo, por causa do escuro forçado.
 
 Arrasta-se com o rato e com o dedo (worker/src/equipa-kanban-arrasto.js:kbPousar). No
 dedo, pela pega, e não com um toque longo, que disputava a rolagem; tocar na
-pega sem arrastar abre o «Mover para…», que é também o caminho do teclado e
-do leitor de ecrã (worker/src/equipa-kanban.js:kbMoverPara). Largar move o
+pega sem arrastar abre o «Mover para…», que lista só as outras colunas e põe
+o cartão no topo da escolhida — reordenar na mesma coluna é a arrastar
+(worker/src/equipa-kanban.js:kbMoverPara). Quando o lugar onde o cartão vai
+cair muda, os cartões à volta deslizam para lhe abrir espaço, e não saltam
+(worker/src/equipa-kanban-arrasto.js:kbDeslizar). No telemóvel, levar o cartão
+pela pega até à borda do ecrã e mantê-lo lá passa o quadro à coluna do lado,
+uma de cada vez, com a borda acesa e uma seta
+(worker/src/equipa-kanban-arrasto.js:kbArrBorda). Largar move o
 cartão logo; se o servidor recusar, volta ao sítio e o aviso diz porquê
 (worker/src/equipa-kanban-arrasto.js:kbMover). O servidor põe-no a meio dos vizinhos
 e renumera a coluna de uma vez quando o intervalo fica pequeno
@@ -6529,9 +6557,24 @@ linha no histórico; reordenar na mesma não.
 
 Tocar num cartão é lê-lo: um painel ao lado no computador, a folha inteira no
 telemóvel, acima da barra de baixo, e o endereço passa a #kanban/KAN-N, que
-abre o cartão de fresco (worker/src/equipa-kanban.js:verKanban). Editar é um
-botão à parte. O formulário pede o Tipo e o Título, com o asterisco; o resto
-diz «Opcional» ou dá um exemplo, e o erro aparece ao lado do campo.
+abre o cartão de fresco (worker/src/equipa-kanban.js:verKanban). Editar e
+Remover vivem no ⋯ do cimo do cartão aberto, ao lado do fechar, como nas
+fichas da app (worker/src/equipa-kanban.js:kbMenuPainel); «Mover para…» e
+«Copiar a ligação» ficam lado a lado por baixo do título. A prioridade lê-se
+num selo com o ícone e a palavra, na cor dela, e a Média, a de omissão, não
+tem selo (worker/src/equipa-kanban.js:kbPrioridadeHtml). Numa coluna sem
+cartão nenhum, o sítio do vazio é o próprio «Adicionar cartão». O formulário
+pede o Tipo e o Título, com o asterisco; o resto diz «Opcional» ou dá um
+exemplo, e o erro aparece ao lado do campo.
+
+As janelas do kanban (as escolhas, os formulários, o ⋯, as colunas) têm o
+cabeçalho, o corpo que rola sozinho e o pé com os botões sempre à vista
+(worker/src/equipa-kanban-janela.js:kbJanela). Abaixo dos 520px são a folha de
+baixo da app: sobem do fundo com a barra no topo e fecham-se a arrastar para
+baixo pelo cabeçalho, ou pelo corpo no topo do scroll, com o véu a aclarar
+(worker/src/equipa-kanban-janela.js:kbFolhaPousar). Nunca arrancam de um
+campo nem do que tem gesto próprio (a pega das colunas, a lista de um
+seletor), que se marca com data-gesto.
 
 Os tickets criam o seu cartão sozinhos, e movem-no quando mudam de estado
 (worker/src/lib/kanban.js:passosDaSincronizacao, a regra única que as rotas,

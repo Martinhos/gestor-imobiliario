@@ -2917,7 +2917,26 @@ function despachar(evento, tipo) {
   var nome = alvo.getAttribute('data-' + tipo);
   if (!Object.prototype.hasOwnProperty.call(ACOES, nome)) throw new Error('ação desconhecida: ' + nome);
   if (tipo === 'enter' && evento.preventDefault) evento.preventDefault();
-  ACOES[nome](alvo.dataset, alvo, evento);
+  try { ACOES[nome](alvo.dataset, alvo, evento); } finally { if (tipo === 'acao') largarFocoDoToque(evento, alvo); }
+}
+/* Larga o foco que um toque deixou no botão da ação, como a app
+   (web/app/eventos.js:largarFocoDoToque): o Chrome e o Samsung Internet focam
+   o botão tocado, e o foco ficava lá aceso. Só num clique do dedo ou da caneta
+   (o do teclado e o do rato ficam), só se o foco ainda está no elemento tocado
+   ou dentro dele (uma ação que levou o foco a outro sítio manda ela), e nunca
+   num campo. O anel do teclado (:focus-visible) continua para o Tab.
+   Recebe: evento — o click; alvo — o elemento com a ação.
+   Devolve: nada. */
+function largarFocoDoToque(evento, alvo) {
+  try {
+    var ponteiro = evento && evento.pointerType;
+    if (ponteiro !== 'touch' && ponteiro !== 'pen') return;
+    var a = document.activeElement;
+    if (!a || !alvo || a === document.body || a === document.documentElement) return;
+    if (a !== alvo && !(typeof alvo.contains === 'function' && alvo.contains(a))) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName || '') || a.isContentEditable) return;
+    if (typeof a.blur === 'function') a.blur();
+  } catch (e) { /* largar o foco é um cuidado: nunca trava a ação */ }
 }
 
 document.addEventListener('click', function (e) { despachar(e, 'acao'); });

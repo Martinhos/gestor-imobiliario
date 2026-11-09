@@ -102,6 +102,10 @@ ICONES.kbFiltro = '<path d="M4 6h16M7 12h10M10 18h4"/>';
 ICONES.kbColunas = '<path d="M4 4h4v16H4zM10 4h4v10h-4zM16 4h4v13h-4z"/>';
 ICONES.kbVisto = '<path d="M5 12l5 5 9-10"/>';
 ICONES.kbPrazo = '<path d="M5 5h14v15H5zM5 10h14M9 3v4M15 3v4"/>';
+// as opções do cartão: mover (uma seta a entrar noutra coluna), abrir (o painel ao lado) e remover (o caixote)
+ICONES.kbMover = '<path d="M4 4h6v16H4zM13 12h8M18 9l3 3-3 3"/>';
+ICONES.kbAbrirCartao = '<path d="M4 4h16v16H4zM14 4v16M7 9h4M7 13h4"/>';
+ICONES.kbRemover = '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>';
 
 /* ------------------------------ peças soltas ----------------------------- */
 
@@ -294,14 +298,20 @@ function kbPintarQuadro() {
 function kbColunaHtml(c) {
   var todos = kbDaColuna(c.id), vis = kbVisiveis(c.id), filtrado = kbQuantosFiltros(kbFiltros) > 0;
   var n = filtrado ? vis.length + ' de ' + todos.length : String(todos.length);
-  var vazio = vis.length ? '' : '<p class="kb-col-vazio">' + (todos.length ? 'Nada com estes filtros.' : 'Nenhum cartão.') + '</p>';
+  /* sem cartão nenhum, o vazio é o próprio «Adicionar cartão» (e o pé não o
+     repete); com cartões que os filtros escondem, diz só que não há nada */
+  var semNenhum = !todos.length;
+  var mais = function (classe) {
+    return '<button type="button" class="' + classe + '"' + comAcao('kbNovo', [c.id]) + '>' +
+      ic('mais', 'i-sm') + 'Adicionar cartão<span class="so-leitor"> em ' + esc(c.nome) + '</span></button>';
+  };
+  var vazio = vis.length ? '' : semNenhum ? mais('kb-col-vazio kb-col-vazio-mais') : '<p class="kb-col-vazio">Nada com estes filtros.</p>';
   return '<section class="kb-col' + (c.fim ? ' kb-col-fim' : '') + '" data-coluna="' + esc(c.id) + '" aria-labelledby="kbCol-' + esc(c.id) + '">' +
     '<header class="kb-col-cab"><h2 class="kb-col-nome" id="kbCol-' + esc(c.id) + '">' + esc(c.nome) + '</h2>' +
     '<span class="kb-col-n n"><span class="so-leitor">, </span>' + n + '<span class="so-leitor"> ' + (todos.length === 1 && !filtrado ? 'cartão' : 'cartões') + '</span></span>' +
-    (c.fim ? '<span class="kb-col-marca" title="Coluna de fim: o que chega aqui conta como feito">' + ic('kbVisto', 'i-sm') + '<span class="so-leitor">coluna de fim</span></span>' : '') + '</header>' +
+    (c.fim ? '<span class="kb-col-marca" title="Coluna de fim: o que chega aqui conta como feito">' + ic('kbVisto', 'i-sm') + '<span class="so-leitor">coluna de fim</span></span>' : '') + kbColunaCabAcoes(c) + '</header>' +
     '<div class="kb-col-lista" data-coluna="' + esc(c.id) + '">' + vis.map(kbCartaoHtml).join('') + vazio + '</div>' +
-    '<div class="kb-col-pe"><button type="button" class="btn sm ghost kb-col-mais"' + comAcao('kbNovo', [c.id]) + '>' +
-    ic('mais', 'i-sm') + 'Adicionar cartão<span class="so-leitor"> em ' + esc(c.nome) + '</span></button></div></section>';
+    (semNenhum ? '' : '<div class="kb-col-pe">' + mais('btn sm ghost kb-col-mais') + '</div>') + '</section>';
 }
 // O ícone do tipo de um cartão, com o nome para o leitor de ecrã.
 // Recebe: tipo — epico, historia, tarefa, subtarefa ou erro.
@@ -311,13 +321,18 @@ function kbTipoHtml(tipo) {
   return '<span class="kb-tipo kb-t-' + t + '" title="' + KB_NOMES_TIPOS[t] + '">' + ic('kb' + maiuscula(t), 'i-sm') +
     '<span class="so-leitor">' + KB_NOMES_TIPOS[t] + '</span></span>';
 }
-// O ícone da prioridade, na cor dela e com o nome para o leitor de ecrã.
-// Recebe: p — de 1 (mais alta) a 5 (mais baixa).
-// Devolve: o HTML.
+/* O selo da prioridade no cartão do quadro: o ícone e a palavra («Mais alta»,
+   «Alta», «Baixa», «Mais baixa»), na cor dela — letra e contorno, que o
+   escuro forçado do Samsung não apaga como apaga um fundo. A Média é a de
+   omissão e não leva selo: um cartão sem selo é de prioridade média (o
+   ícone sozinho, as «duas linhas» da Média, ninguém percebia o que era).
+   Recebe: p — de 1 (mais alta) a 5 (mais baixa).
+   Devolve: o HTML ('' na Média). */
 function kbPrioridadeHtml(p) {
   p = KB_PRIORIDADES[p] ? Number(p) : 3;
-  return '<span class="kb-prio kb-p' + p + '" title="Prioridade ' + KB_PRIORIDADES[p].toLowerCase() + '">' + ic('kbP' + p, 'i-sm') +
-    '<span class="so-leitor">Prioridade ' + KB_PRIORIDADES[p].toLowerCase() + '</span></span>';
+  if (p === 3) return '';
+  return '<span class="kb-prio kb-prio-selo kb-p' + p + '">' + ic('kbP' + p, 'i-sm') +
+    '<span class="so-leitor">Prioridade: </span>' + KB_PRIORIDADES[p] + '</span>';
 }
 /* Um cartão no quadro. O botão do título abre-o e, pelo ::after, cobre o
    cartão inteiro; a pega (arrastar no dedo, ou «Mover para…» com um toque)
@@ -445,26 +460,22 @@ function kbMedirTopo() {
   v.style.setProperty('--kb-topo', Math.max(0, Math.round(topo)) + 'px');
 }
 
-/* «Mover para…»: o caminho do teclado e do leitor de ecrã (e do telemóvel,
-   para mudar de coluna). Outra coluna põe o cartão no topo dela; na mesma,
-   sobe, desce, vai ao topo ou ao fim.
+/* «Mover para…»: mudar de coluna sem arrastar — o caminho do teclado, do
+   leitor de ecrã e do toque na pega. Lista só as outras colunas, com quantos
+   cartões tem cada uma, e o cartão vai para o topo da que se escolhe; a
+   ordem dentro da coluna muda-se a arrastar.
    Recebe: chave.
    Devolve: nada — abre a janela. */
 function kbMoverPara(chave) {
   var c = kbCartao(chave);
   if (!c) return;
-  var ordem = kbDaColuna(c.coluna_id).map(function (x) { return x.chave; }), i = ordem.indexOf(chave), n = ordem.length;
-  var linha = function (rotulo, coluna, indice) {
-    return '<button type="button" class="btn lista kb-opcao"' + comAcao('kbMover', [chave, coluna, indice]) + '>' + rotulo + '</button>';
-  };
   var outras = kbEstado.colunas.filter(function (x) { return x.id !== c.coluna_id; }).map(function (x) {
-    return linha('<span class="flex1">' + esc(x.nome) + '</span><span class="sub n">' + kbDaColuna(x.id).length + '</span>', x.id, 0);
+    var n = kbDaColuna(x.id).length;
+    return '<button type="button" class="btn lista kb-opcao"' + comAcao('kbMover', [chave, x.id, 0]) + '>' + ic('kbMover', 'i-sm') +
+      '<span class="kb-opcao-txt">' + esc(x.nome) + '</span><span class="sub n kb-opcao-n">' + n + '<span class="so-leitor"> ' + (n === 1 ? 'cartão' : 'cartões') + '</span></span></button>';
   }).join('');
-  var aqui = (i > 0 ? linha('Para o topo', c.coluna_id, 0) + (i > 1 ? linha('Subir um lugar', c.coluna_id, i - 1) : '') : '') +
-    (i < n - 1 ? (i < n - 2 ? linha('Descer um lugar', c.coluna_id, i + 1) : '') + linha('Para o fim', c.coluna_id, n - 1) : '');
-  kbJanela('Mover ' + chave, '<p class="sub">Está em <b>' + esc(kbNomeColuna(c.coluna_id)) + '</b>, ' + (i + 1) + '.º de ' + n + '.</p>' +
-    (outras ? '<p class="lbl">Para a coluna</p><div class="kb-opcoes">' + outras + '</div>' : '') +
-    (aqui ? '<p class="lbl">Nesta coluna</p><div class="kb-opcoes">' + aqui + '</div>' : ''), { foco: '.kb-opcao' });
+  kbJanela('Mover ' + chave, '<p class="sub">Está em <b>' + esc(kbNomeColuna(c.coluna_id)) + '</b>. Vai para o topo da coluna que escolheres.</p>' +
+    (outras ? '<div class="kb-opcoes">' + outras + '</div>' : '<p class="sub">Não há outras colunas.</p>'), { foco: '.kb-opcao' });
 }
 
 /* ------------------------------ o cartão aberto ---------------------------- */
@@ -537,25 +548,28 @@ function kbFechar() {
   var q = el('kbQuadro'), b = q && q.querySelector('.kb-cartao[data-chave="' + chave + '"] .kb-abrir');
   if (b && b.focus) b.focus({ preventScroll: true });
 }
-/* O cimo do painel: fechar, o tipo e a chave.
+/* O cimo do painel: o tipo e a chave, e à direita o ⋯ (as opções: Editar e,
+   ao master, Remover — como o ⋯ das fichas da app, ao lado do fechar) e o
+   fechar. Enquanto o cartão não chega, só o fechar.
    Recebe: c — o cartão (null enquanto espera); chave.
    Devolve: o HTML. */
 function kbPainelCabHtml(c, chave) {
   return '<div class="kb-p-cab"><span class="kb-p-chave">' + (c ? kbTipoHtml(c.tipo) + '<span>' + esc(KB_NOMES_TIPOS[c.tipo] || c.tipo) + '</span> · ' : '') +
     '<span class="n">' + esc(chave) + '</span></span>' +
+    (c ? '<button type="button" class="btn sm ghost so-icone kb-p-mais" aria-label="Opções de ' + esc(chave) + '" aria-haspopup="dialog"' + comAcao('kbMenuPainel', [chave]) + '>' +
+      ic('kbMais') + '</button>' : '') +
     '<button type="button" class="btn sm ghost so-icone kb-p-fechar" aria-label="Fechar o cartão"' + comAcao('kbFechar') + '>' + ic('fechar') + '</button></div>';
 }
-/* O cartão aberto inteiro: o título, as ações («Editar» à parte), os
+/* O cartão aberto inteiro: o título, as duas ações à mão (Mover para… e
+   Copiar a ligação, lado a lado; Editar e Remover vivem no ⋯ do cimo), os
    campos, a descrição, a origem, as subtarefas, as ligações, os anexos, os
    comentários e o histórico.
    Recebe: d — a resposta do GET do cartão; entra — true para a entrada animada.
    Devolve: o HTML. */
 function kbPainelHtml(d, entra) {
-  var c = d.cartao || {}, chave = c.chave, master = kbEu().master;
-  var acoes = '<div class="kb-p-acoes"><button type="button" class="btn sm"' + comAcao('kbEditar', [chave]) + '>' + ic('kbEditar', 'i-sm') + 'Editar</button>' +
-    '<button type="button" class="btn sm"' + comAcao('kbMoverPara', [chave]) + '>Mover para…</button>' +
-    '<button type="button" class="btn sm"' + comAcao('kbCopiar', [chave]) + '>' + ic('kbCopiar', 'i-sm') + 'Copiar a ligação</button>' +
-    (master ? '<button type="button" class="btn sm ghost texto-perigo"' + comAcao('kbRemover', [chave]) + '>Remover</button>' : '') + '</div>';
+  var c = d.cartao || {}, chave = c.chave;
+  var acoes = '<div class="kb-p-acoes"><button type="button" class="btn sm"' + comAcao('kbMoverPara', [chave]) + '>' + ic('kbMover', 'i-sm') + 'Mover para…</button>' +
+    '<button type="button" class="btn sm"' + comAcao('kbCopiar', [chave]) + '>' + ic('kbCopiar', 'i-sm') + 'Copiar a ligação</button></div>';
   return '<section class="kb-painel card' + (entra ? ' kb-entra' : '') + '" aria-labelledby="kbPainelTit">' + kbPainelCabHtml(c, chave) +
     '<div class="kb-p-corpo"><h2 class="kb-p-tit" id="kbPainelTit" tabindex="-1">' + esc(c.titulo) + '</h2>' + acoes +
     kbCamposHtml(c) +
@@ -726,17 +740,41 @@ function kbLigacaoEmTexto(t) {
 
 /* ------------------------- o que se faz no cartão ------------------------ */
 
-/* O ⋯ de um cartão no quadro: as ações dele numa lista.
+/* Uma opção de um ⋯ do kanban, como as dos menus da app: o ícone e o
+   rótulo, e o que remove a vermelho.
+   Recebe: acao — a ação (kb…); chave; icone — o nome do desenho; rotulo; perigo (opcional) — true para o vermelho.
+   Devolve: o HTML. */
+function kbOpcaoHtml(acao, chave, icone, rotulo, perigo) {
+  return '<button type="button" class="btn lista kb-opcao' + (perigo ? ' texto-perigo' : '') + '"' + comAcao(acao, [chave]) + '>' +
+    ic(icone, 'i-sm') + '<span class="kb-opcao-txt">' + rotulo + '</span></button>';
+}
+/* O título da janela de um ⋯: a chave e o título do cartão. O espaço antes
+   do ponto não parte, para a chave nunca ficar sozinha no fim da linha.
+   Recebe: chave; titulo.
+   Devolve: o texto (por escapar: o kbJanela escapa-o). */
+function kbTituloOpcoes(chave, titulo) {
+  return chave + (titulo ? ' · ' + titulo : '');
+}
+/* O ⋯ de um cartão no quadro: as ações dele numa lista, cada uma com o
+   ícone e o rótulo; Remover, a vermelho, só ao master.
    Recebe: chave.
    Devolve: nada — abre a janela. */
 function kbMenuCartao(chave) {
   var c = kbCartao(chave);
   if (!c) return;
-  var op = function (acao, rotulo, classe) {
-    return '<button type="button" class="btn lista kb-opcao' + (classe ? ' ' + classe : '') + '"' + comAcao(acao, [chave]) + '>' + rotulo + '</button>';
-  };
-  kbJanela(chave + ' · ' + c.titulo, '<div class="kb-opcoes">' + op('kbAbrir', 'Abrir o cartão') + op('kbMoverPara', 'Mover para…') +
-    op('kbEditar', 'Editar') + op('kbCopiar', 'Copiar a ligação') + (kbEu().master ? op('kbRemover', 'Remover', 'texto-perigo') : '') + '</div>', { foco: '.kb-opcao' });
+  kbJanela(kbTituloOpcoes(chave, c.titulo), '<div class="kb-opcoes">' + kbOpcaoHtml('kbAbrir', chave, 'kbAbrirCartao', 'Abrir o cartão') +
+    kbOpcaoHtml('kbMoverPara', chave, 'kbMover', 'Mover para…') + kbOpcaoHtml('kbEditar', chave, 'kbEditar', 'Editar') +
+    kbOpcaoHtml('kbCopiar', chave, 'kbCopiar', 'Copiar a ligação') +
+    (kbEu().master ? kbOpcaoHtml('kbRemover', chave, 'kbRemover', 'Remover', true) : '') + '</div>', { foco: '.kb-opcao' });
+}
+/* O ⋯ do cartão aberto: Editar e, ao master, Remover (Mover para… e Copiar
+   a ligação estão à vista no painel).
+   Recebe: chave.
+   Devolve: nada — abre a janela. */
+function kbMenuPainel(chave) {
+  var c = (kbDetalhe && kbDetalhe.cartao && kbDetalhe.cartao.chave === chave) ? kbDetalhe.cartao : kbCartao(chave);
+  kbJanela(kbTituloOpcoes(chave, c && c.titulo), '<div class="kb-opcoes">' + kbOpcaoHtml('kbEditar', chave, 'kbEditar', 'Editar') +
+    (kbEu().master ? kbOpcaoHtml('kbRemover', chave, 'kbRemover', 'Remover', true) : '') + '</div>', { foco: '.kb-opcao' });
 }
 /* Abre o formulário de editar o cartão (com a descrição, que só o detalhe traz).
    Recebe: chave.
@@ -922,6 +960,7 @@ ACOES.kbAbrir = function (d, alvo) { if (kbDepoisDeArrastar()) return; kbSairDaJ
 ACOES.kbFechar = function () { kbFechar(); };
 ACOES.kbTentar = function (d) { verKanban(d.arg || ''); };
 ACOES.kbMenuCartao = function (d) { if (!kbDepoisDeArrastar()) kbMenuCartao(d.arg); };
+ACOES.kbMenuPainel = function (d) { kbMenuPainel(d.arg); };
 ACOES.kbMoverPara = function (d) { if (!kbDepoisDeArrastar()) kbMoverPara(d.arg); };
 ACOES.kbEditar = function (d, alvo) { kbSairDaJanela(alvo); kbEditar(d.arg); };
 ACOES.kbCopiar = function (d, alvo) { kbSairDaJanela(alvo); kbCopiar(d.arg); };
@@ -978,11 +1017,18 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
 .kb-col-cab{display:flex;align-items:center;gap:8px;padding:12px 14px 8px}
 .kb-col-nome{font-family:var(--letra);font-size:13px;font-weight:650;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);min-width:0;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.kb-col-n{min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--muted);
+.kb-col-n{flex:none;min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--muted);
   font-size:12px;font-weight:650;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
-.kb-col-marca{display:inline-flex;color:var(--in);margin-left:auto}
+.kb-col-marca{flex:none;display:inline-flex;color:var(--in);margin-left:auto}
 .kb-col-lista{flex:1 1 auto;min-height:48px;overflow-y:auto;overscroll-behavior-y:contain;padding:2px 8px 6px;display:flex;flex-direction:column;gap:8px}
 .kb-col-vazio{color:var(--faint);font-size:13px;padding:14px 8px;text-align:center;border:1px dashed var(--line2);border-radius:12px}
+/* a coluna sem cartão nenhum: o vazio é o botão de adicionar, no sítio onde o cartão ficaria */
+.kb-col-vazio-mais{flex:none;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:88px;margin:0;background:transparent;
+  color:var(--accent-text);font:inherit;font-size:14px;font-weight:600;cursor:pointer;
+  transition:background-color var(--rapido) var(--curva),border-color var(--rapido) var(--curva)}
+.kb-col-vazio-mais .i{color:var(--accent)}
+.kb-col-vazio-mais:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.kb-col-vazio-mais:active{background:var(--press);border-color:var(--accent)}
 .kb-col-lista:has(.kb-lugar) .kb-col-vazio{display:none}
 .kb-col-pe{padding:4px 8px 8px}
 .kb-col-mais{width:100%;justify-content:flex-start;color:var(--muted)}
@@ -990,7 +1036,9 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
 /* ---- o cartão ---- */
 .kb-cartao{position:relative;display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px;background:var(--card);border:1px solid var(--line);
   border-radius:12px;box-shadow:0 1px 2px color-mix(in srgb,var(--ink) 8%,transparent);user-select:none;-webkit-user-select:none;cursor:grab;
-  transition:border-color var(--rapido) var(--curva),box-shadow var(--rapido) var(--curva)}
+  transition:border-color var(--rapido) var(--curva),box-shadow var(--rapido) var(--curva),background-color var(--rapido) var(--curva)}
+/* o dedo (ou o rato) a premir o cartão: o fundo do premido e o contorno mais forte */
+.kb-cartao:has(.kb-abrir:active){background:var(--press);border-color:var(--line2)}
 .kb-cartao.kb-aberto{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .kb-cartao.kb-bloq{box-shadow:inset 3px 0 0 var(--danger)}
 .kb-cartao.kb-bloq.kb-aberto{box-shadow:inset 3px 0 0 var(--danger),0 0 0 1px var(--accent)}
@@ -1002,14 +1050,20 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
 .kb-t-subtarefa{color:var(--accent-text)}
 .kb-t-erro{color:var(--danger)}
 .kb-chave{font-size:12.5px;font-weight:600;color:var(--muted);letter-spacing:.01em}
-.kb-prio{display:inline-flex;margin-left:auto}
+.kb-prio{display:inline-flex}
+/* o selo: o ícone e a palavra, na cor da prioridade na letra e no contorno (sem fundo, que o escuro forçado apagava) */
+.kb-prio-selo{flex:none;align-items:center;gap:3px;height:22px;padding:0 7px 0 4px;border:1px solid currentColor;border-radius:6px;
+  font-size:11.5px;font-weight:650;line-height:1;white-space:nowrap}
+.kb-prio-selo .i{width:14px;height:14px}
 .kb-p1{color:var(--danger)}
 .kb-p2{color:var(--warn)}
 .kb-p3{color:var(--faint)}
 .kb-p4{color:var(--accent)}
-.kb-p5{color:var(--accent-text)}
+.kb-p5{color:var(--muted)}
 .kb-pega,.kb-mais{position:relative;z-index:2;flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:28px;
   margin:-4px -6px -4px 0;padding:0;border:0;border-radius:8px;background:transparent;color:var(--faint);cursor:pointer}
+/* a pega e o ⋯ encostados à direita (com rato não há pega: o ⋯ encosta-se sozinho, no portão de baixo) */
+.kb-c-topo .kb-pega{margin-left:auto}
 .kb-pega{touch-action:none;cursor:grab}
 .kb-pega .i,.kb-mais .i{stroke-width:2.8}
 .kb-pega:focus-visible,.kb-mais:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
@@ -1057,7 +1111,15 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
 .kb-p-tit{font-size:21px;overflow-wrap:anywhere}
 .kb-p-tit:focus{outline:0}
 .kb-p-tit:focus-visible{outline:2px solid var(--accent);outline-offset:4px;border-radius:4px}
-.kb-p-acoes{display:flex;flex-wrap:wrap;gap:8px}
+/* Mover para… e Copiar a ligação: uma linha, as duas com o mesmo peso */
+.kb-p-acoes{display:flex;gap:8px}
+.kb-p-acoes .btn{flex:1 1 0;min-width:0;padding:0 10px;white-space:nowrap}
+.kb-p-mais{flex:none;color:var(--ink)}
+.kb-p-mais .i{stroke-width:2.8}
+/* as opções dos ⋯ e do Mover para: o rótulo a encher, a contagem à direita, o Remover todo a vermelho */
+.kb-opcao-txt{flex:1;min-width:0}
+.kb-opcao-n{flex:none}
+.kb-opcao.texto-perigo .i{color:currentColor}
 .kb-campos{margin:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;padding:2px 14px}
 .kb-kv{display:flex;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:14px;align-items:baseline}
 .kb-kv:first-child{border-top:0}
@@ -1075,8 +1137,9 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
 .kb-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .kb-lista>li+li{border-top:1px solid var(--line)}
 .kb-linha{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:8px 12px;border:0;background:transparent;color:var(--ink);
-  text-align:left;font-size:14px;cursor:pointer}
+  text-align:left;font-size:14px;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
 .kb-linha:focus-visible{outline-offset:-2px}
+.kb-linha:active{background:var(--press)}
 .kb-linha-tit{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .kb-ligacao{display:flex;align-items:center;gap:4px;padding-left:12px}
 .kb-ligacao .kb-linha{padding-left:4px}
@@ -1111,6 +1174,10 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
   .kb-cartao.kb-aberto:hover{border-color:var(--accent)}
   .kb-pega:hover,.kb-mais:hover{background:var(--tint);color:var(--ink)}
   .kb-linha:hover{background:var(--tint)}
+  .kb-linha:active{background:var(--press)}
+  .kb-col-vazio-mais:hover{background:var(--tint);border-color:var(--accent)}
+  .kb-col-vazio-mais:active{background:var(--press)}
+  .kb-c-topo .kb-mais{margin-left:auto}
   .kb-anular:hover{background:color-mix(in srgb,currentColor 12%,transparent)}
   .kb-hist>summary:hover .lbl{color:var(--ink)}
   .kb-pega{display:none}
@@ -1131,6 +1198,7 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
     transition:background-color var(--rapido) var(--curva),border-color var(--rapido) var(--curva),color var(--rapido) var(--curva)}
   .kb-seg-op[aria-current="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-text);font-weight:650;
     box-shadow:0 0 0 1px var(--accent)}
+  .kb-seg-op:active{background:var(--press);border-color:var(--accent)}
   .kb-seg-n{min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--chip);border:1px solid currentColor;font-size:12px;
     display:inline-flex;align-items:center;justify-content:center}
   .kb-quadro{gap:16px;scroll-snap-type:x mandatory;margin:0 -16px;padding:2px 16px 10px;scroll-padding:0 16px;scrollbar-width:none}

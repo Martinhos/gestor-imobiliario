@@ -93,6 +93,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-08 · O «O que podes fazer» fecha-se, e a gaveta da montra fechada não ocupa espaço
 - 2026-11-09 · O back office do dev abre com a sessão de teste
 - 2026-11-09 · O back office com a navegação da app, e o kanban da equipa no lugar do Jira
+- 2026-11-09 · O kanban à maneira da app: folhas, seletores, a prioridade em palavras e a ordem por coluna
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3488,3 +3489,30 @@ worker liga com bind e os scripts escrevem em texto
 estado da origem muda, e mover um cartão à mão nunca mexe no ticket: era a
 maneira de a sincronização nunca brigar com quem arruma o quadro. Um cartão
 que ele já passou a Concluído só sai de lá sozinho se o ticket reabrir.
+
+## 2026-11-09 · O kanban à maneira da app: folhas, seletores, a prioridade em palavras e a ordem por coluna
+
+O Martinho testou o kanban no Samsung no próprio dia e escreveu dezasseis tickets de QA, quase todos a
+dizer «como na app». O kanban tinha nascido com peças próprias — a janela centrada, os chips que abriam
+janelas, as etiquetas escritas à mão, um ícone por prioridade — e no telemóvel isso lia-se como outro
+produto. Passou a usar as maneiras da app: as janelas são a folha de baixo com a barra e o pé fixo
+(worker/src/equipa-kanban-janela.js:kbJanela), os filtros um painel com seletores
+(worker/src/equipa-kanban-filtros.js:kbFiltrosHtml), as etiquetas um seletor com «Nova etiqueta», e as
+colunas reordenam-se a arrastar como as tarefas.
+
+Três decisões foram dele, com mockups à frente. A prioridade é um selo com a palavra, e a Média, que é a
+de omissão, fica sem selo: as duas linhas do ícone dela eram o que não se percebia, e um selo «Média» em
+quase todos os cartões seria ruído (worker/src/equipa-kanban.js:kbPrioridadeHtml). A ordem é de cada
+coluna e de cada aparelho, e não do quadro para todos: ordenar é uma maneira de ler, e a ordem manual,
+que é a que se partilha, continua intacta por baixo; numa coluna ordenada o arrasto deixa de reordenar,
+porque o lugar onde se largava não seria o lugar onde o cartão ficava
+(worker/src/equipa-kanban-filtros.js:kbOrdemManual). E deslizar entre colunas no telemóvel é levar o
+cartão até à borda, e não um gesto rápido de lado: é o arrasto que já existia, que deixa escolher o
+lugar na coluna nova, e um deslize de lado num cartão disputaria a rolagem das colunas
+(worker/src/equipa-kanban-arrasto.js:kbArrBorda).
+
+O «Mover para» deixou de reordenar dentro da coluna, a pedido dele: só muda de coluna, e reordenar é a
+arrastar. O retângulo azul do toque já tinha sido resolvido na app; o back office ficou sem a regra até
+agora (worker/src/equipa-guiao.js:largarFocoDoToque). Para quatro agentes trabalharem ao mesmo tempo, o
+guião do kanban, que tinha 2080 linhas num só texto, ficou em quatro pedaços — o quadro, os filtros, o
+arrasto e a janela —, juntos num só script como antes.
