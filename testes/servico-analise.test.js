@@ -124,7 +124,7 @@ describe('autonomia: cada serviço de análise carrega e rende só com a base', 
     assert.ok(r.avisos.length >= 3, 'há avisos (contrato por indicar, inquilino sem NIF, imóvel sem dados, renda sem contrato)');
     for (const a of r.avisos) assert.equal(a.abrir, '', a.texto + ' fica sem toque');
     const html = app.vFisco();
-    assert.match(html, /Anexo F · quadro 4\.1/);
+    assert.match(html, /Quadro 4\.1 · sem redução pela duração/);
     assert.doesNotMatch(html, /ctView\(|personView\(|propView\(|txView\(/);
   });
 });
@@ -234,7 +234,7 @@ describe('desligado: com os serviços que usam desligados, cada vista rende sem 
     desligar(app);
     html = app.vFisco();
     assert.doesNotMatch(html, /ctView\(|personView\(|propView\(|txView\(|go\('contracts'\)|go\('transactions'\)|go\('properties'\)/);
-    assert.match(html, /Anexo F · quadro 4\.1/, 'o quadro fica');
+    assert.match(html, /Quadro 4\.1 · sem redução pela duração/, 'o quadro fica');
     assert.match(html, /A tratar antes de entregar/, 'as obrigações ficam, sem toque');
     assert.match(html, /Fora da declaração/);
     assert.match(html, /Rendas sem contrato/);

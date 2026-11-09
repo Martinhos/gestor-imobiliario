@@ -249,16 +249,17 @@ describe('a vista, o texto e o CSV', () => {
     assert.match(html, /<span id="lab_fiscoAnoSel">2024<\/span>/, 'com o da página escolhido');
     assert.doesNotMatch(html, /fiscoEscolherAno/, 'sem uma pílula por ano');
     assert.match(html, /<div class="fis-cts">/, 'os campos de cada quadro em cartões');
-    /* o resumo dos quadros numa tabela só, com as colunas da prancheta */
-    assert.match(html, /<th>Quadro<\/th><th class="u-ta-left">Contrato · imóvel<\/th><th class="u-ta-left">N\.º AT<\/th><th class="u-ta-left">Taxa<\/th><th>Rendas<\/th><th>Gastos<\/th><th>Líquido<\/th><th>Imposto<\/th><th class="u-ta-left">Falta<\/th>/);
+    /* um cartão por quadro, que abre com onde se preenche e o resumo dos contratos dele */
+    assert.doesNotMatch(html, /Quadros 4\.1 e 4\.2|<th>Quadro<\/th>/, 'sem o resumo misto dos dois quadros');
+    assert.match(html, /<p class="fis-onde">Preenche no <b>quadro 4\.1<\/b> do Anexo F: uma linha por contrato\.<\/p>/);
     const r = app.resumoFiscal(ANO, '');
-    assert.ok(html.includes('<td><b>' + app.euro2(r.totais.imposto) + '</b></td>'), 'o total do imposto no resumo é o dos cartões');
+    assert.ok(html.includes('<span class="small">imposto ' + app.euro2(r.totais.imposto) + '</span>'), 'com um quadro só, o imposto do total do quadro é o dos cartões');
     /* as obrigações, a situação e os prazos numa grelha; os quadros numa
        pilha com intervalo, e a coluna encolhe para a tabela do resumo rolar */
     const grelha = html.indexOf('class="fis-grelha"'), pilha = html.indexOf('class="fiscoPilha u-d-grid u-gtc-minmax-0-1fr u-g-14px"');
     assert.ok(grelha > -1 && pilha > grelha, 'a grelha vem antes da pilha');
     assert.ok(html.indexOf('A tratar antes de entregar') > grelha && html.indexOf('A tratar antes de entregar') < pilha, 'as obrigações vivem na grelha');
-    assert.ok(html.indexOf('Anexo F · quadro 4.1') > pilha && html.indexOf('Obras antes do arrendamento') > pilha,
+    assert.ok(html.indexOf('Quadro 4.1 · sem redução pela duração') > pilha && html.indexOf('Obras antes do arrendamento') > pilha,
       'o quadro e as obras vivem dentro da pilha');
     assert.match(html, /1234567/);
     assert.match(html, /<dt>Freguesia \(código\)<\/dt><dd>110623<\/dd>/);
@@ -295,7 +296,7 @@ describe('a vista, o texto e o CSV', () => {
     assert.match(html, /Sem rendas em 2027/);
     assert.match(html, /Há rendas em 2024/);
     assert.match(html, /Escolher outro ano/);
-    assert.doesNotMatch(html, /Anexo F · quadro/);
+    assert.doesNotMatch(html, /Quadro 4\.[12] · /);
   });
 
   test('sem imóveis convida a criar o primeiro', () => {
@@ -383,7 +384,7 @@ describe('a barra, a partilha e os cartões dos quadros', () => {
 
   test('no quadro, cada contrato é um cartão sem tabela, o total vem no fim e o NIF não parte entre linhas', () => {
     const html = app.vFisco();
-    const q = html.slice(html.indexOf('Anexo F · quadro 4.1'));
+    const q = html.slice(html.indexOf('Quadro 4.1 · sem redução pela duração'));
     assert.doesNotMatch(q.slice(0, q.indexOf('</section>')), /<table/, 'o quadro já não é uma tabela larga');
     assert.match(q, /<b>Total do quadro 4\.1<\/b><span class="small">1 contrato<\/span>/);
     assert.ok(html.includes('<dt>NIF do inquilino<span class="small">Tiago</span></dt><dd><span class="u-ws-nowrap">' + app.fmtNIF('123456789') + '</span></dd>'));

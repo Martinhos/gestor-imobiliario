@@ -2922,11 +2922,17 @@ no guia. Um ano sem versão própria das regras, ou com uma provisória, di-lo
 em «A tratar antes de entregar» (fisco.js:fiscoAvisos). Depois, os cinco
 números do ano, com as retenções na fonte à cabeça e o imposto estimado no
 cartão azul-noite (fisco.js:fiscoKpis); a grelha «A tratar antes de
-entregar», «A tua situação fiscal» e «Prazos da AT»; o resumo dos quadros
-4.1 e 4.2 numa tabela só (fisco.js:fisResumoQuadros); e os campos de cada
-quadro num cartão por contrato, campo → valor pela ordem do impresso, sem
-rolar de lado (fisco.js:fiscoQuadroCard, fisco.js:fiscoContratoHtml,
-fisco.js:fiscoCamposDe), com um cartão do total no fim. O PDF leva os mesmos
+entregar», «A tua situação fiscal» e «Prazos da AT»; e um cartão por
+quadro, o 4.1 e o 4.2, com tudo o que é desse quadro lá dentro e nada do
+outro (fisco.js:fiscoQuadroCard): o título diz o quadro e o que lá vai
+(«Quadro 4.1 · sem redução pela duração»); abre com onde se preenche e o
+resumo dos contratos dele, um por linha, com as rendas, o imposto estimado e
+o que falta, e o total do quadro (fisco.js:fiscoQuadroResumoHtml); e depois
+os campos, num cartão por contrato, campo → valor pela ordem do impresso, sem
+rolar de lado (fisco.js:fiscoContratoHtml, fisco.js:fiscoCamposDe), com um
+cartão do total no fim. Nenhum cartão fala dos dois quadros ao mesmo tempo:
+uma tabela só, com o quadro numa coluna, não dizia onde se preenchia cada
+contrato. O PDF leva os mesmos
 campos e os mesmos números. Não há simulação do englobamento: comparar com
 os escalões pedia os outros rendimentos do agregado e não se lia; o guia
 explica a escolha, e o imposto à cabeça diz «sem englobamento». «Fora da

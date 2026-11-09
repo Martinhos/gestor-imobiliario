@@ -135,11 +135,51 @@ describe('o que saiu', () => {
   });
 });
 
+/* o HTML do cartão de um quadro, do título ao fim da secção
+   Recebe: html — a página; q — '4.1' ou '4.2'.
+   Devolve: o HTML do cartão. */
+function quadroDe(html, q) {
+  const i = html.indexOf('<h2 class="ana-tit">Quadro ' + q + ' · ');
+  assert.ok(i > -1, 'há o cartão do quadro ' + q);
+  return html.slice(i, html.indexOf('</section>', i));
+}
+
+// o ticket de QA 5cbde185: «Fala sobre o quadro 4.1 e 4.2 no mesmo cartão e fico sem perceber onde preencher»
+describe('um cartão por quadro', () => {
+  test('sem o resumo misto: cada quadro diz onde se preenche e resume só os seus contratos', () => {
+    const html = app.vFisco(), r = app.resumoFiscal(ANO, '');
+    assert.doesNotMatch(html, /Quadros 4\.1 e 4\.2|<th>Quadro<\/th>/, 'nenhum cartão fala dos dois quadros');
+    const q1 = quadroDe(html, '4.1'), q2 = quadroDe(html, '4.2');
+    assert.match(q1, /^<h2 class="ana-tit">Quadro 4\.1 · sem redução pela duração<\/h2><span class="small">2025 · valores por inteiro<\/span>/);
+    assert.match(q2, /^<h2 class="ana-tit">Quadro 4\.2 · com redução pela duração<\/h2>/);
+    assert.match(q1, /<p class="fis-onde">Preenche no <b>quadro 4\.1<\/b> do Anexo F: uma linha por contrato\.<\/p>/);
+    assert.match(q2, /<p class="fis-onde">Preenche no <b>quadro 4\.2<\/b> do Anexo F: uma linha por contrato, e no 4\.2A as datas de cada um\.<\/p>/);
+    // o resumo de cada quadro só tem os contratos dele, antes dos campos
+    const res1 = q1.slice(0, q1.indexOf('Os campos, contrato a contrato')), res2 = q2.slice(0, q2.indexOf('Os campos, contrato a contrato'));
+    assert.match(res1, /<div class="fis-qr-nome"><b>Arroios<\/b>/);
+    assert.doesNotMatch(res1, /Benfica longo/, 'o contrato do 4.2 não aparece no resumo do 4.1');
+    assert.match(res2, /<div class="fis-qr-nome"><b>Benfica longo<\/b>/);
+    assert.doesNotMatch(res2, /<b>Arroios<\/b>/, 'nem o do 4.1 no do 4.2');
+    // as rendas e o imposto de cada contrato, e o total do quadro
+    const l1 = r.linhas.find((x) => x.contratoId === 'C1');
+    assert.ok(res1.includes('<div class="fis-qr-num"><b>' + app.euro2(l1.rendas) + '</b><span class="small">imposto ' + app.euro2(l1.imposto) + '</span></div>'));
+    assert.match(res1, /<b>Total do quadro 4\.1<\/b><span class="small">1 contrato · líquido /);
+    assert.match(res1, /T2 Arroios · art\. 4651 · fr\. A · n\.º 1234567 · 25 % taxa base/, 'o imóvel, o n.º na AT e a taxa');
+    assert.match(res2, /<span class="fis-qr-falta"><span class="badge red">N\.º do contrato na AT<\/span> <span class="small">\+3<\/span><\/span>/, 'o que falta num selo');
+    // tocar numa linha do resumo abre o contrato; sem os Contratos, é só de leitura
+    assert.match(res1, /<div class="fis-qr-linha tap" data-toca="camada" data-click="ctView\('C1'\)" aria-label="Arroios: abrir o contrato">/);
+    assert.doesNotMatch(res1, /<table|tablewrap/, 'linhas, e não uma tabela a rolar de lado');
+    app.definirServicosDesligados(['contracts']);
+    const so = quadroDe(app.vFisco(), '4.1');
+    assert.doesNotMatch(so.slice(0, so.indexOf('Os campos')), /data-click|fis-qr-linha tap/);
+  });
+});
+
 describe('os quadros em cartões', () => {
   test('o 4.1: um cartão por contrato, campo → valor pela ordem do impresso, com os números do resumo', () => {
     const html = app.vFisco(), r = app.resumoFiscal(ANO, '');
     const l = r.linhas.find((x) => x.contratoId === 'C1');
-    const q = html.slice(html.indexOf('Anexo F · quadro 4.1'), html.indexOf('Anexo F · quadro 4.2'));
+    const q = quadroDe(html, '4.1');
     assert.doesNotMatch(q, /<table|tablewrap/, 'sem tabela larga a rolar de lado');
     const c = cartaoDe(html, 'Arroios');
     assert.match(c, /<span class="small">T2 Arroios · taxa 25 % · base<\/span>/, 'o imóvel e a taxa à cabeça');
@@ -171,7 +211,7 @@ describe('os quadros em cartões', () => {
 
   test('o total do quadro no fim, com as somas das linhas', () => {
     const html = app.vFisco(), r = app.resumoFiscal(ANO, '');
-    const q = html.slice(html.indexOf('Anexo F · quadro 4.1'), html.indexOf('Anexo F · quadro 4.2'));
+    const q0 = quadroDe(html, '4.1'), q = q0.slice(q0.indexOf('Os campos, contrato a contrato'));
     const t = q.slice(q.indexOf('<b>Total do quadro 4.1</b>'));
     assert.ok(q.indexOf('<b>Total do quadro 4.1</b>') > q.indexOf('Arroios</b>'), 'depois dos contratos');
     const ls = r.linhas.filter((l) => l.quadro === '4.1');

@@ -297,10 +297,10 @@ describe('a página Declaração', () => {
       'sem a faixa das regras do ano nem a dobra do guia: isso vive no guia público');
     assert.doesNotMatch(html, /Ainda não há versão das regras/, 'um ano com versão oficial não tem aviso das regras');
     assert.match(html, /<a class="btn" href="\/guias\/declarar-rendas" target="_blank" rel="noopener"[^>]*>Guia de preenchimento<\/a>/);
-    assert.match(html, /Anexo F · quadro 4\.2/);
+    assert.match(html, /Quadro 4\.2 · com redução pela duração/);
     assert.match(html, /Quadro 4\.2A · datas de cada contrato/);
     assert.match(html, /<p class="lbl fis-ctc-grupo">Quadro 4\.2A<\/p>/, 'e o 4.2A no cartão do contrato');
-    assert.doesNotMatch(html, /Anexo F · quadro 4\.1/, 'sem contratos sem redução, o 4.1 não se escreve');
+    assert.doesNotMatch(html, /Quadro 4\.1 · sem redução/, 'sem contratos sem redução, o 4.1 não se escreve');
     assert.match(html, /taxa 15 % · pela duração/);
   });
 

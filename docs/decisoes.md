@@ -3435,3 +3435,12 @@ isso os nomes ficam. As letras não entram na cache offline: sem rede o PDF
 sai na Helvetica em vez de não sair, e cada instalação poupa 52 KB que
 quase ninguém usa. O mesmo estilo foi para o PDF do Anexo F, que nasceu no
 mesmo dia.
+
+Na Declaração, o resumo dos quadros 4.1 e 4.2 numa tabela só, com o quadro
+numa coluna, lia-se como um cartão que falava dos dois quadros, e o Martinho
+ficou «sem perceber onde preencher» (ticket de QA 5cbde185). Das três saídas
+(um cartão por quadro, o resumo em duas tabelas, ou só mudar o texto) escolheu
+um cartão por quadro: o resumo misto saiu, e cada quadro abre com onde se
+preenche e os contratos dele (fisco.js:fiscoQuadroResumoHtml), em linhas e não
+numa tabela, para não voltar a rolar de lado no telemóvel. O PDF já ia por
+quadro e não mudou.

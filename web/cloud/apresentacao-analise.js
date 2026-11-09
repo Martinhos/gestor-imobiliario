@@ -309,12 +309,12 @@ function aprADonut(itens, centro, sub, n) {
    linha em destaque leva o contorno, que numa <tr> não se desenha).
    Recebe: cab — os títulos das colunas (array); linhas — as células de cada
    linha (arrays de HTML de confiança); o (opcional) — {alvo: o índice da
-   linha em destaque, cols: a classe das colunas — 'c2' a 'c6', ou 'q4', a
-   dos quadros do IRS, com o selo do quadro à frente}.
+   linha em destaque, cols: a classe das colunas — 'c2' a 'c6'; a 'c3' é a
+   do cartão de um quadro do IRS: o contrato, as rendas e o imposto}.
    Devolve: o HTML. */
 function aprATabela(cab, linhas, o) {
   o = o || {};
-  var cols = /^(c[2-6]|q4)$/.test(o.cols || '') ? o.cols : 'c4';
+  var cols = /^c[2-6]$/.test(o.cols || '') ? o.cols : 'c4';
   return '<div class="apr-a-tabela ' + cols + '"><div class="apr-a-tl apr-a-tcab">' + cab.map(function (c) { return '<span>' + esc(c) + '</span>'; }).join('') + '</div>' +
     linhas.map(function (l, k) {
       return '<div class="apr-a-tl' + (o.alvo === k ? ' apr-alvo' : '') + '">' + l.map(function (c) { return '<span>' + c + '</span>'; }).join('') + '</div>';
@@ -896,21 +896,22 @@ registarApresentacao('projections', {
 function aprAFiscoAqui() { return typeof servicoLigado === 'function' && servicoLigado('fisco'); }
 
 /* A imagem do resumo: o ecrã do IRS · Anexo F com o ano dos rendimentos no
-   seletor e o titular (fisco.js:fisBarra), e o começo do resumo dos quadros
-   4.1 e 4.2, uma linha por contrato com as rendas e o imposto estimado
-   (fisco.js:fisResumoQuadros).
+   seletor e o titular (fisco.js:fisBarra), e o começo do cartão do quadro
+   4.1 — onde se preenche e um contrato por linha, com as rendas e o imposto
+   estimado (fisco.js:fiscoQuadroResumoHtml). Um cartão por quadro, como a
+   página: o 4.2 tem o seu.
    Devolve: o HTML da imagem. */
 function aprAFiscoResumo() {
   var ex = APR_EXEMPLO, ano = aprAFiscoAno(), f = aprAFisco(ano), n = ex.receitaMes.length;
   // a parte do imposto de cada linha, pelas rendas dela (o resumo da app reparte os gastos por imóvel)
-  var linha = function (q, id) {
+  var linha = function (id) {
     var c = ex.contrato(id), r = c.renda * n;
-    return [aprSelo(q), esc(c.inquilino), esc(aprDinheiro(r)), '<b>' + esc(aprDinheiro(f.imposto * r / f.rendas)) + '</b>'];
+    return [esc(c.inquilino), esc(aprDinheiro(r)), '<b>' + esc(aprDinheiro(f.imposto * r / f.rendas)) + '</b>'];
   };
   return aprCena(aprAEcra('IRS · Anexo F', aprADireita('funil'),
     '<span class="apr-a-anos">' + aprASeletor(String(ano)) + '<span class="apr-m-chip apr-a-chip">Todos · por inteiro' + ic('chevD', 10) + '</span></span>' +
-    aprACartao('Quadros 4.1 e 4.2', 'um contrato por linha', aprATabela(['Quadro', 'Contrato', 'Rendas', 'Imposto'],
-      [linha('4.2', 'c4'), linha('4.1', 'c5'), linha('4.1', 'c1')], { cols: 'q4' }), { classe: 'apr-a-cartao-quadros' })),
+    aprACartao('Quadro 4.1 · sem redução', 'preenche no quadro 4.1', aprATabela(['Contrato', 'Rendas', 'Imposto'],
+      [linha('c5'), linha('c1')], { cols: 'c3' }), { classe: 'apr-a-cartao-quadros' })),
     { tom: 't0', arranjo: 'tela' });
 }
 
