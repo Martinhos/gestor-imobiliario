@@ -3541,12 +3541,21 @@ deixa-a com o que mudou. O «Descarregar PDF» do rodapé fecha-a e gera
 (contrato-pdf.js:ctPdfDescarregar), ou, enquanto falta alguma coisa, diz a
 primeira e fica.
 
-O ficheiro veste as cores do tema claro, seja qual for o da app
-(contrato-pdf.js:PDF_COR, contrato-pdf.js:pdfCor): os títulos das cláusulas
-e das secções a cobalto, o total numa caixa cobalto suave, os traços na cor
-do contorno e as notas a cinzento. A letra é a Helvetica, uma das catorze
-que todo o leitor de PDF tem: a Geist e a Bricolage só entravam embutidas
-(o porquê está no diário, a 2026-10-17).
+O ficheiro tem o aspeto da app no tema claro, seja qual for o da app
+(contrato-pdf.js:PDF_COR, contrato-pdf.js:pdfCor). A letra é a da app,
+embutida: a Geist no texto e a Bricolage Grotesque nos títulos, em TTF
+estáticos só com o latim (web/fonts/geist-400.ttf, geist-600.ttf,
+bricolage-grotesque-700.ttf), que se vão buscar uma vez por sessão, só ao
+gerar (contrato-pdf.js:pdfLetras). Sem rede, ou sem resposta em 5 s, o PDF
+sai na Helvetica, com as larguras dela, e nunca deixa de se gerar. O título
+leva um traço cobalto curto; o imóvel e as partes vão em cartões
+arredondados de fundo suave; cada cláusula tem o número numa pílula cobalto
+ao lado do «CLÁUSULA PRIMEIRA — …», que fica escrito por ser texto legal; o
+total vai numa caixa cobalto suave; as tabelas têm o cabeçalho num fundo
+suave; as assinaturas vão duas por linha, num traço desenhado. Todas as
+páginas têm o rodapé «Feito com o Rendorium» e «Página N de M», escrito no
+fim, quando já se sabe o M. O escritor é o mesmo para o Anexo F
+(fisco-pdf.js:fiscoPdf), com os quadros num cartão por contrato.
 
 ## As Pessoas e as Visitas
 «Pessoas» é a porta da casca para os Inquilinos, os Proprietários e os

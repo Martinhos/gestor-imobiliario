@@ -74,21 +74,26 @@ beforeEach(() => {
 afterEach(() => repor(app));
 
 describe('o PDF do Anexo F', () => {
-  test('descarrega um PDF com o nome do ano e de hoje, e diz que exportou', () => {
-    app.fiscoPdf();
+  test('descarrega um PDF com o nome do ano e de hoje, e diz que exportou', async () => {
+    await app.fiscoPdf();
     assert.ok(guardado, 'descarregou');
     assert.equal(guardado.nome, 'anexo-f-2025-2026-03-15.pdf');
     assert.equal(guardado.mime, 'application/pdf');
     assert.ok(guardado.bytes.startsWith('%PDF-1.4\n'));
     assert.ok(guardado.bytes.endsWith('%%EOF'));
     assert.deepEqual(avisos, ['PDF exportado.']);
+    // o aspeto do contrato: cartões arredondados (curvas «c») e o rodapé em cada página
+    const n = (guardado.bytes.match(/\/Type \/Page /g) || []).length, t = textos(guardado.bytes);
+    for (let p = 1; p <= n; p++) assert.ok(t.includes('Página ' + p + ' de ' + n), 'o rodapé da página ' + p);
+    assert.equal(t.filter((s) => s === 'Feito com o Rendorium').length, n);
+    assert.match(guardado.bytes, / c\n?[^\n]* c h f Q|c h f Q/, 'um cartão arredondado');
     for (let i = 0; i < guardado.bytes.length; i++) assert.ok(guardado.bytes.charCodeAt(i) < 256, 'um carácter por byte, na posição ' + i);
   });
 
-  test('os números são os da página: rendas, retenções, gastos e totais, por contrato e por quadro', () => {
+  test('os números são os da página: rendas, retenções, gastos e totais, por contrato e por quadro', async () => {
     const r = app.resumoFiscal(ANO, '');
     igual(r.linhas.map((l) => [l.contratoId, l.quadro]), [['C1', '4.1'], ['L1', '4.2']]);
-    app.fiscoPdf();
+    await app.fiscoPdf();
     const t = textos(guardado.bytes), junto = t.join('\n');
     // à cabeça, os totais do ano
     assert.ok(t.includes('IRS · Anexo F'));
@@ -117,18 +122,18 @@ describe('o PDF do Anexo F', () => {
     assert.ok(junto.includes('quem declara és tu, no Portal das'), 'a nota final');
   });
 
-  test('o que o escritor latin-1 não escreve não vira «?»', () => {
+  test('o que o escritor latin-1 não escreve não vira «?»', async () => {
     app.db.transactions.push(app.normTx({ kind: 'expense', category: 'Sem regra', amount: 30000, date: ANO + '-05-01', propertyId: 'v1' }));
-    app.fiscoPdf();
+    await app.fiscoPdf();
     const t = textos(guardado.bytes);
     assert.ok(t.every((s) => !s.includes('?')), 'sem «?»: ' + t.filter((s) => s.includes('?')).join(' | '));
     assert.equal(app.fiscoPdfTxt('1 250,50 € − Definições → IRS'), '1 250,50 € - Definições › IRS');
     assert.equal(app.fiscoPdfTxt('Łukasz Ōta'), '?ukasz Ota', 'a letra base quando a há');
   });
 
-  test('com um titular: a quota-parte dele e o nome dele no ficheiro', () => {
+  test('com um titular: a quota-parte dele e o nome dele no ficheiro', async () => {
     app.ownerFilter = 'ana';
-    app.fiscoPdf();
+    await app.fiscoPdf();
     assert.equal(guardado.nome, 'anexo-f-2025-ana-simoes-2026-03-15.pdf');
     assert.match(guardado.nome, /^[a-z0-9-]+\.pdf$/);
     const t = textos(guardado.bytes);
@@ -138,14 +143,14 @@ describe('o PDF do Anexo F', () => {
     assert.ok(!t.some((s) => s.startsWith('Benfica longo')), 'o T1 Benfica não é da Ana');
   });
 
-  test('um contrato isento fica na linha do 4.1 e no 6D, com o programa e o código; o AIMI no quadro 9', () => {
+  test('um contrato isento fica na linha do 4.1 e no 6D, com o programa e o código; o AIMI no quadro 9', async () => {
     app.db.properties.push(app.normProp({ id: 'v3', name: 'T0 Graça', ownerIds: ['ana'], freguesiaCodigo: '110610', tipoPredio: 'U', matrix: '12', vpt: 50000 }));
     app.db.contracts.push(app.normContract({ id: 'I1', name: 'Graça PAA', propertyId: 'v3', tenantIds: ['t1'], rent: 500, start: '2024-01-01', active: true,
       fisco: { estado: 'declarado', numero: '222', finalidade: 'hp', isencao: 'paa' } }));
     rendas('I1', 500, 'v3');
     mov({ kind: 'expense', category: 'Impostos', sub: 'AIMI', amount: 400, date: ANO + '-09-10' });
     const r = app.resumoFiscal(ANO, '');
-    app.fiscoPdf();
+    await app.fiscoPdf();
     const t = textos(guardado.bytes), junto = t.join('\n');
     const d6 = t.slice(t.findIndex((s) => s.startsWith('Quadro 6D')));
     for (const s of ['Graça PAA · T0 Graça', '222', '01', '6 000,00 €', 'Rendimento líquido isento', app.fiscoPdfEuro(r.totais.isentos.liquido)]) {
@@ -157,18 +162,18 @@ describe('o PDF do Anexo F', () => {
     assert.ok(q9.includes('falta o VPT de T2 Arroios e T1 Benfica'), 'sem VPT, o 9102 diz o que falta');
   });
 
-  test('sem rendas no ano não descarrega e diz porquê', () => {
+  test('sem rendas no ano não descarrega e diz porquê', async () => {
     app.fiscoAno = '2019';
-    app.fiscoPdf();
+    await app.fiscoPdf();
     assert.equal(guardado, null);
     assert.deepEqual(avisos, ['Sem contratos nos quadros 4.1 e 4.2 em 2019: não há PDF para exportar.']);
   });
 
-  test('no Android vai para o seletor nativo, em base64', () => {
+  test('no Android vai para o seletor nativo, em base64', async () => {
     let pedido = null;
     app.window.Android = { saveAs: (nome, mime, b64) => { pedido = { nome, mime, b64 }; } };
     app.btoa = (x) => Buffer.from(x, 'latin1').toString('base64');   // o do browser; o arnês não o traz
-    try { app.fiscoPdf(); } finally { delete app.window.Android; }
+    try { await app.fiscoPdf(); } finally { delete app.window.Android; }
     assert.equal(guardado, null);
     assert.equal(pedido.nome, 'anexo-f-2025-2026-03-15.pdf');
     assert.ok(Buffer.from(pedido.b64, 'base64').toString('latin1').startsWith('%PDF-1.4'));
@@ -176,13 +181,13 @@ describe('o PDF do Anexo F', () => {
 });
 
 describe('sem o serviço Contratos', () => {
-  test('não há escritor: um aviso a dizer porquê, e nada descarregado', () => {
+  test('não há escritor: um aviso a dizer porquê, e nada descarregado', async () => {
     const so = comPdf(carregarServico(['fisco'], { hoje: '2026-03-15' }));
     assert.equal(typeof so.PDF, 'undefined', 'o escritor é do serviço Contratos');
     let baixou = false; const ditos = [];
     so.downloadBytes = () => { baixou = true; };
     so.toast = (m) => { ditos.push(m); };
-    so.fiscoPdf();
+    await so.fiscoPdf();
     assert.equal(baixou, false);
     assert.equal(ditos.length, 1);
     assert.match(ditos[0], /^O PDF faz-se com o serviço Contratos\. O serviço Contratos está desligado nesta conta\./);

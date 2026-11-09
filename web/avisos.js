@@ -27,6 +27,20 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 62,
+    data: '2026-11-09',
+    titulo: 'O contrato em PDF com a cara da app',
+    seccoes: [
+      {
+        titulo: 'Contratos',
+        afeta: ['contratos'],
+        itens: [
+          'O contrato em PDF tem agora a letra e o aspeto da app: o imóvel e as partes em cartões, o número de cada cláusula em destaque, as assinaturas lado a lado e o número da página em todas as folhas. O texto do contrato é o mesmo.',
+        ],
+      },
+    ],
+  },
+  {
     v: 61,
     data: '2026-11-08',
     titulo: 'Fechar o «O que podes fazer»',

@@ -3422,3 +3422,16 @@ Ao passar para o guia, uma das novidades da versão de 2025 não se confirmou:
 o limite abaixo do qual o senhorio pode dispensar a retenção já era 15 000 €
 (o art. 53.º do CIVA, na redação de 2022), e não «subiu». Saiu do irs-2025.js
 e o guia di-lo como o que não mudou.
+
+O PDF do contrato deixou a Helvetica (que ficara a 2026-10-17 por o woff2
+vir em Brotli): o Martinho pediu-o com o estilo da app (KAN-76) e escolheu
+as letras da app embutidas, o aspeto com cartões e pílulas, e a marca só no
+rodapé, discreta, por ser um documento que as partes assinam. O Brotli
+desfaz-se uma vez, fora da app: um script converte os woff2 variáveis em TTF
+estáticos nos pesos usados (Geist 400 e 600, Bricolage 700 com o tamanho
+ótico a 24), cortados ao WinAnsi, cerca de 16 a 20 KB cada
+(.unlazy/pdf-estilo/letras.py). A licença é a OFL sem nome reservado, por
+isso os nomes ficam. As letras não entram na cache offline: sem rede o PDF
+sai na Helvetica em vez de não sair, e cada instalação poupa 52 KB que
+quase ninguém usa. O mesmo estilo foi para o PDF do Anexo F, que nasceu no
+mesmo dia.
