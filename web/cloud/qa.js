@@ -175,25 +175,33 @@ function qaHtmlPilula(n, comEtiqueta) {
     (comEtiqueta ? '<span class="qa-etiqueta" aria-hidden="true">Arrasta para mudar de sítio</span>' : '');
 }
 
+/* global QA_EQUIPA -- definido pela camada do back office (worker/src/equipa-qa.js:CABECA_DA_EQUIPA); só se lê depois de o qaLugar dizer 'equipa' */
+
 /* As opções do menu da pílula, conforme o sítio (qaLugar):
    - na app: «Novo ticket», «Ver tickets», «Ver a montra» e «Back office»;
    - nas páginas públicas (a montra e o guia): «Novo ticket», «Ver tickets»,
      «Voltar à app» e «Back office»;
-   - no back office: só «Novo ticket» e «Ver tickets».
+   - no back office: «Novo ticket» e «Ver tickets» e, quando a sessão de
+     teste de quem lá está abre a app (QA_EQUIPA.app, que o worker calcula
+     com a porta do dev), também «Ver a montra» e «Voltar à app» — sem
+     «Back office», que é onde já se está.
    A montra fora da raiz é o /montra (worker/src/index.js), e no dev só abre
    com a sessão de uma conta de teste: a APK de dev não tem barra de
    endereços, e as ligações do /test abrem nela, não no browser — sem estas
    opções não havia como andar entre a app, a montra e o back office no
-   telemóvel. No back office a sessão é da equipa, e a porta do dev dava o
-   404 à app e à montra: lá não há para onde ir.
+   telemóvel. No back office, quem entrou pela sessão de teste
+   (equipa.js:entrarPelaSessaoDeTeste) tem o cookie dela e passa a porta do
+   dev; quem entrou pelo /entrar do Discord, sem ela, levaria o 404 da
+   porta, e então o menu fica só com os tickets.
    Recebe: n — quantos tickets por resolver (null se ainda não se sabe).
    Devolve: o HTML (texto). */
 function qaHtmlMenu(n) {
   var lugar = qaLugar();
+  var daEquipaComApp = lugar === 'equipa' && !!QA_EQUIPA && QA_EQUIPA.app === true;
   return '<button type="button" data-toca="camada" data-click="closePops();qaNovoTicket()">' + ic('plus', 17) + ' Novo ticket</button>' +
     '<button type="button" class="qa-menu-ver" data-toca="camada" data-click="closePops();qaVerTickets()">' + ic('lista', 17) + ' ' + esc(qaRotuloVer(n)) + '</button>' +
-    (lugar === 'app' ? '<button type="button" class="qa-menu-montra" data-toca="camada" data-click="closePops();qaVerMontra()">' + ic('door', 17) + ' Ver a montra</button>' : '') +
-    (lugar === 'paginas' ? '<button type="button" class="qa-menu-app" data-toca="camada" data-click="closePops();qaVoltarApp()">' + ic('home', 17) + ' Voltar à app</button>' : '') +
+    (lugar === 'app' || daEquipaComApp ? '<button type="button" class="qa-menu-montra" data-toca="camada" data-click="closePops();qaVerMontra()">' + ic('door', 17) + ' Ver a montra</button>' : '') +
+    (lugar === 'paginas' || daEquipaComApp ? '<button type="button" class="qa-menu-app" data-toca="camada" data-click="closePops();qaVoltarApp()">' + ic('home', 17) + ' Voltar à app</button>' : '') +
     (lugar === 'equipa' ? '' : '<button type="button" class="qa-menu-equipa" data-toca="camada" data-click="closePops();qaBackOffice()">' + ic('users', 17) + ' Back office</button>');
 }
 

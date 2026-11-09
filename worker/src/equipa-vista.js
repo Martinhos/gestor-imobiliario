@@ -619,11 +619,14 @@ function cartaoDeEntrada(titulo, corpo) {
 /* A pílula do QA no back office do dev: os dados dela (o ambiente e quem
    está, com o id de autor dos tickets — rotas/qa.js:autorDaEquipa) e o
    /equipa/qa.js, depois do guião (equipa-qa.js).
-   Recebe: eu — a sessão de equipa; ambiente — o env.ENV_NAME ('' ou nada em produção).
+   Recebe: eu — a sessão de equipa; ambiente — o env.ENV_NAME ('' ou nada em
+   produção); app — true quando a porta do dev deixa esta sessão abrir a app
+   e a montra (o menu da pílula só oferece «Ver a montra» e «Voltar à app» então).
    Devolve: o HTML (texto, vazio sem ambiente). */
-function htmlDoQa(eu, ambiente) {
+function htmlDoQa(eu, ambiente, app) {
   if (!ambiente) return '';
   const dados = { ambiente: String(ambiente), id: autorDaEquipa(eu), nome: eu.nome || '' };
+  if (app === true) dados.app = true;
   return `\n<script type="application/json" id="dados-qa">${paraScript(dados)}</script>
 <script src="/equipa/qa.js"></script>`;
 }
@@ -631,8 +634,9 @@ function htmlDoQa(eu, ambiente) {
 // Quem não tem sessão não vê a ferramenta, nem sabe o que lá está.
 // Recebe: eu — a sessão de equipa (objeto com nome, discordId e papeis/papel),
 // ou nada quando não há sessão válida; opcoes (opcional) — {qa: o
-// env.ENV_NAME do dev, '' em produção}: com ele a página leva a pílula do QA
-// (equipa-qa.js), o seu CSS e os dados dela.
+// env.ENV_NAME do dev, '' em produção; app: true quando a sessão passa a
+// porta do dev e o menu da pílula pode levar à app e à montra}: com ele a
+// página leva a pílula do QA (equipa-qa.js), o seu CSS e os dados dela.
 // Devolve: Response HTML — a ferramenta inteira com sessão; sem ela, o ecrã
 // que manda ir ao /entrar do Discord (401).
 export function paginaEquipa(eu, opcoes) {
@@ -679,7 +683,7 @@ export function paginaEquipa(eu, opcoes) {
   <div class="eq-toast" id="aviso" role="status" aria-live="polite"></div>
   <dialog class="janela" id="dialogo" aria-labelledby="janelaTit"></dialog>
 <script type="application/json" id="dados-equipa">${paraScript({ eu: dados, ESTADOS, CATS })}</script>
-<script src="/equipa/guiao.js"></script>${htmlDoQa(eu, opcoes && opcoes.qa)}`;
+<script src="/equipa/guiao.js"></script>${htmlDoQa(eu, opcoes && opcoes.qa, opcoes && opcoes.app)}`;
 
   return new Response(pagina(corpo, 'Equipa', !!(opcoes && opcoes.qa)), {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': CSP_ESTRITA },

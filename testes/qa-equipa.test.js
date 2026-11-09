@@ -138,6 +138,17 @@ describe('a página do back office', () => {
       assert.doesNotMatch(prod, /qa\.js|qa\.css|dados-qa/);
     }
   });
+
+  test('os dados levam "app":true só quando a opção vem (a porta do dev deixa abrir a app)', async () => {
+    const lerDados = (h) => JSON.parse(/id="dados-qa">([^<]+)</.exec(h)[1]);
+    const com = lerDados(await paginaEquipa(DEV, { qa: 'dev', app: true }).text());
+    assert.deepEqual(com, { ambiente: 'dev', id: 'equipa:d1', nome: 'Dina', app: true });
+    for (const opcoes of [{ qa: 'dev' }, { qa: 'dev', app: false }, { qa: 'dev', app: 'sim' }]) {
+      assert.equal('app' in lerDados(await paginaEquipa(DEV, opcoes).text()), false, JSON.stringify(opcoes));
+    }
+    // sem ambiente (produção) não há dados, mesmo com o app
+    assert.doesNotMatch(await paginaEquipa(DEV, { qa: '', app: true }).text(), /dados-qa/);
+  });
 });
 
 /* ------------------------------ os recursos ----------------------------- */

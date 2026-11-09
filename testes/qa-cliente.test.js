@@ -10,7 +10,8 @@
 // que abrem e fecham (os resolvidos recolhidos por nascença, o estado
 // guardado no aparelho); a pega do lado da borda, trocada só ao largar;
 // o menu conforme o sítio (na app, Ver a montra e Back office; nas páginas
-// públicas, Voltar à app e Back office; no back office, só os tickets);
+// públicas, Voltar à app e Back office; no back office, os tickets e, quando a
+// app abre daí, Ver a montra e Voltar à app);
 // remover com Anular;
 // reabrir; o HTML gerado sem style= nem on…=, com o texto escapado; o autor
 // de uma conta apagada como «Conta apagada»; e a pílula acima das janelas,
@@ -103,7 +104,7 @@ describe('a pílula só fora de produção', () => {
     assert.equal(app.qaPil, null, 'e a pílula saiu');
   });
 
-  test('na app o menu leva à montra (o /montra, neste separador); no back office não', () => {
+  test('na app o menu leva à montra (o /montra, neste separador); no back office só quando a app abre daí', () => {
     apiFalsa();
     noDev();
     assert.equal(app.qaSincronizar(), true);
@@ -113,12 +114,17 @@ describe('a pílula só fora de produção', () => {
       app.qaVerMontra();
       assert.equal(app.location.href, '/montra');
     } finally { app.location.href = antes; }
-    // no back office a camada define o QA_EQUIPA, e a sessão de lá não passa a porta do dev
+    // no back office a camada define o QA_EQUIPA; sem o app (a sessão de lá não passa a porta do dev) não há montra
     vm.runInContext('globalThis.QA_EQUIPA = { ambiente: "dev" };', app.__ctx);
     try {
       assert.equal(app.qaNaEquipa(), true);
       assert.doesNotMatch(app.qaHtmlMenu(0), /Ver a montra|qaVerMontra/);
       assert.match(app.qaHtmlMenu(0), /Novo ticket[\s\S]*Ver tickets/, 'as outras duas continuam');
+    } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
+    // com o app (a porta do dev deixa abrir a app), a montra aparece também no back office
+    vm.runInContext('globalThis.QA_EQUIPA = { ambiente: "dev", app: true };', app.__ctx);
+    try {
+      assert.match(app.qaHtmlMenu(0), /class="qa-menu-montra"[^>]*data-click="closePops\(\);qaVerMontra\(\)"/);
     } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
     assert.equal(app.qaNaEquipa(), false);
   });
@@ -128,7 +134,7 @@ describe('a pílula só fora de produção', () => {
      Devolve: a lista dos textos. */
   const rotulos = (h) => [...h.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)].map((m) => m[1].replace(/<svg[\s\S]*?<\/svg>/g, '').trim());
 
-  test('o menu conforme o sítio: a app com a montra e o Back office, as páginas com Voltar à app e o Back office, o back office só com os tickets', () => {
+  test('o menu conforme o sítio: a app com a montra e o Back office, as páginas com Voltar à app e o Back office, o back office com os tickets e, se a app abre daí, a montra e a volta à app', () => {
     apiFalsa();
     noDev();
     // na app
@@ -161,12 +167,27 @@ describe('a pílula só fora de produção', () => {
         assert.equal(app.location.href, '/', 'Voltar à app vai para o /');
       } finally { app.location.href = antes; }
     } finally { vm.runInContext('delete globalThis.QA_PAGINAS;', app.__ctx); }
-    // no back office, a camada define o QA_EQUIPA: só os tickets
+    // no back office, a camada define o QA_EQUIPA: sem o app, só os tickets
     vm.runInContext('globalThis.QA_EQUIPA = { ambiente: "dev" };', app.__ctx);
     try {
       assert.equal(app.qaLugar(), 'equipa');
       assert.deepEqual(rotulos(app.qaHtmlMenu(0)), ['Novo ticket', 'Ver tickets (0)']);
       assert.doesNotMatch(app.qaHtmlMenu(0), /Back office|Voltar à app|Ver a montra/);
+    } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
+    // dados que não chegaram (QA_EQUIPA nulo) também ficam só com os tickets
+    vm.runInContext('globalThis.QA_EQUIPA = null;', app.__ctx);
+    try {
+      assert.deepEqual(rotulos(app.qaHtmlMenu(0)), ['Novo ticket', 'Ver tickets (0)']);
+    } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
+    // com o app (a sessão de teste abre a app), a montra e a volta à app, sem o Back office
+    vm.runInContext('globalThis.QA_EQUIPA = { ambiente: "dev", app: true };', app.__ctx);
+    try {
+      const naEquipa = app.qaHtmlMenu(0);
+      assert.deepEqual(rotulos(naEquipa), ['Novo ticket', 'Ver tickets (0)', 'Ver a montra', 'Voltar à app']);
+      assert.ok(naEquipa.includes(app.ic('door', 17) + ' Ver a montra'), 'a montra com a porta');
+      assert.ok(naEquipa.includes(app.ic('home', 17) + ' Voltar à app'), 'a app com a casa');
+      assert.match(naEquipa, /class="qa-menu-app" data-toca="camada" data-click="closePops\(\);qaVoltarApp\(\)"/);
+      assert.doesNotMatch(naEquipa, /Back office|qaBackOffice/, 'já se está no back office');
     } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
     assert.equal(app.qaLugar(), 'app');
   });

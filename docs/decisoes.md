@@ -3381,3 +3381,15 @@ não há marca.
 O discordDoAutor passou do rotas/qa.js para o teste.js
 (worker/src/teste.js:discordDoAutor): usá-lo do teste.js fazia um ciclo de
 importações (testes/quatro-olhos.test.js), e é ao teste.js que pertence.
+
+O menu da pílula no back office tinha só os tickets, porque a sessão da equipa não passava a porta do dev e a app e a montra davam 404. Desde que o back office se abre com a sessão de teste (equipa.js:entrarPelaSessaoDeTeste), quem lá está costuma ter o cookie dela, e na APK de dev, sem barra de endereços, ficava-se preso (ticket 895366f1, bloqueia). O menu passa a oferecer «Ver a montra» e «Voltar à app», mas só quando o servidor diz que a app abre daí: o index.js pergunta à porta do dev (teste.js:portaDoDev) para o / e põe o resultado nos dados da pílula (equipa-vista.js:htmlDoQa, QA_EQUIPA.app). Quem entrou pelo /entrar do Discord, sem sessão de teste, continua com os tickets apenas, em vez de um botão que dá 404. Fica de fora o «Back office», que é onde já se está.
+
+O guia do IRS das rendas (worker/src/guia-vista.js) lia-se como um parecer:
+«nos termos de», «cumulativamente», «documentalmente comprovados». O Martinho
+pediu um tom amigável e próximo, o da frase que deu para a abertura («Neste
+guia podes encontrar se tens de declarar as rendas no IRS, como o fazer e
+algumas despesas que podes descontar»), e escolheu o guia todo, incluindo a
+parte 4, o texto que ele próprio verificou (ticket 8615e719, KAN-72). Ficaram
+os factos, os números, os artigos, as fontes, os ids e o número de linhas de
+cada lista; mudaram as frases. O H1 e o título ficaram, porque a montra e o
+rasto os importam e o SEO depende deles.

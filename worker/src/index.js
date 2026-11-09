@@ -373,7 +373,9 @@ export default {
           const eu = await getEquipa(env, request);
           const entrou = eu ? null : await entrarPelaSessaoDeTeste(env, request, url);
           if (entrou) return harden(entrou);
-          return harden(paginaEquipa(eu, { qa: env.ENV_NAME || '' }));
+          // a pílula só oferece a app e a montra se a porta do dev as deixa abrir a este pedido
+          const appAbre = (!!eu && !!env.ENV_NAME) ? (await portaDoDev(env, request, new URL('/', url))) === null : false;
+          return harden(paginaEquipa(eu, { qa: env.ENV_NAME || '', app: appAbre }));
         }
         // a documentação da casa: gerada do código no deploy, para a equipa
         if (url.pathname === '/equipa/docs') {

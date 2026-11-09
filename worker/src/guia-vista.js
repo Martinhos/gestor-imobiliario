@@ -49,7 +49,7 @@ export const GUIA_REVISTO = '2026-11-08';
    o nome curto é o do caminho, do rodapé da montra e do rasto. */
 export const H1 = 'IRS das rendas: como declarar e o que podes deduzir';
 const TITULO = H1;
-const DESCRICAO = 'Se tens de declarar as rendas no IRS, onde e como preenches o Anexo F, e o que podes deduzir: ' +
+const DESCRICAO = 'Vê se tens de declarar as rendas no IRS, como preencher o Anexo F e que despesas podes deduzir: ' +
   'IMI, condomínio, obras, seguros e os documentos a guardar.';
 const NOME_CURTO = 'Guia do IRS das rendas';
 
@@ -141,47 +141,46 @@ const FONTES = [
    com a chave da fonte) e `ir` (o botão para um sítio oficial, idem).
 
    A parte 4, «As deduções», são as cinco secções do texto verificado pelo
-   Martinho, tal e qual, cada uma com o id de antes (há ligações de fora para
-   #pode-deduzir e as outras). */
+   Martinho, com os mesmos factos, artigos e linhas, escritas no tom próximo
+   que ele pediu para o guia todo (ticket 8615e719), cada uma com o id de
+   antes (há ligações de fora para #pode-deduzir e as outras). */
 const DEDUCOES = [
   { id: 'regra', titulo: 'A regra geral', blocos: [
-    { p: 'Nos termos do artigo 41.º, n.os 1 e 9, do Código do IRS, podes deduzir aos rendimentos prediais brutos, ' +
-      'relativamente a cada prédio ou parte de prédio, os gastos que sejam, cumulativamente:' },
+    { p: 'Às rendas brutas de cada prédio, ou de cada parte de um prédio, podes abater os gastos que cumpram estas ' +
+      'cinco condições, todas ao mesmo tempo (artigo 41.º, n.os 1 e 9, do Código do IRS):' },
     { cond: [
-      'Efetivamente suportados por ti, senhorio.',
-      'Efetivamente pagos.',
-      'Necessários para obter ou garantir as rendas.',
-      'Relativos ao imóvel que gerou os rendimentos.',
-      'Documentalmente comprovados.',
+      'Foste tu, senhorio, quem os suportou.',
+      'Já estão pagos.',
+      'Foram precisos para receberes ou garantires as rendas.',
+      'São do imóvel que te deu essas rendas.',
+      'Tens os documentos que os provam.',
     ] },
-    { p: 'A lei exclui expressamente gastos financeiros, depreciações, mobiliário, eletrodomésticos, artigos de ' +
-      'conforto ou decoração e o Adicional ao IMI (AIMI).' },
+    { p: 'E há gastos que a lei deixa de fora com todas as letras: os gastos financeiros, as depreciações, o ' +
+      'mobiliário, os eletrodomésticos, os artigos de conforto ou decoração e o Adicional ao IMI (AIMI).' },
     { fonte: 'cirs41', texto: 'Fonte principal: artigo 41.º do Código do IRS, AT.' },
   ] },
 
   { id: 'pode-deduzir', titulo: 'O que podes deduzir', blocos: [
     { grupo: 'Impostos e contrato', blocos: [{ sim: [
-      'IMI pago no ano, desde que respeite a imóvel ou parte de imóvel cujo rendimento seja tributado nesse mesmo ' +
-        'ano. A lei não exige rateio pelos meses arrendados: a AT já aceitou o valor anual integral quando o imóvel ' +
-        'produziu rendas nesse ano.',
-      'Imposto do Selo do contrato de arrendamento, pago no ano e referente a imóvel que produziu rendas tributadas ' +
-        'nesse ano.',
-      'Seguro de renda, expressamente incluído no artigo 41.º, n.º 1.',
+      'O IMI que pagaste no ano, se for de um imóvel, ou de parte dele, cujas rendas são tributadas nesse mesmo ano. ' +
+        'Não tens de o dividir pelos meses em que esteve arrendado: a AT já aceitou o valor do ano inteiro quando o ' +
+        'imóvel deu rendas nesse ano.',
+      'O Imposto do Selo do contrato de arrendamento, pago no ano, de um imóvel que deu rendas tributadas nesse ano.',
+      'O seguro de renda, que o artigo 41.º, n.º 1, inclui expressamente.',
     ] }] },
     { grupo: 'Condomínio', blocos: [
       { sim: [
-        'Quotas e encargos obrigatórios de condomínio, efetivamente pagos por ti, relativos à fração arrendada.',
-        'Se tiveres várias frações no mesmo edifício, apenas a parte correspondente à fração arrendada, imputada de ' +
-          'acordo com a respetiva permilagem.',
-        'Obras nas partes comuns, no ano em que o condomínio utiliza efetivamente as verbas para pagar a obra, com ' +
-          'documento do administrador que identifique a obra e a quota-parte da fração.',
+        'As quotas e os encargos obrigatórios do condomínio da fração arrendada, desde que tenhas sido tu a pagá-los.',
+        'Se tens várias frações no mesmo prédio, só a parte da fração arrendada, calculada pela permilagem dela.',
+        'As obras nas partes comuns, no ano em que o condomínio usa mesmo o dinheiro para pagar a obra, com um ' +
+          'documento do administrador que diga qual é a obra e a parte que cabe à tua fração.',
       ] },
-      { nota: 'Fundo comum de reserva', texto: 'A mera entrega de dinheiro ao fundo não é dedutível no ano da entrega ' +
-        'se a verba ainda não tiver sido utilizada. A despesa conta no ano em que o condomínio usa o fundo para pagar ' +
-        'obras elegíveis e te emite o respetivo documento, como condómino.' },
+      { nota: 'Fundo comum de reserva', texto: 'O dinheiro que entregas ao fundo não se abate no ano em que o ' +
+        'entregas, se ainda não tiver sido usado. Conta no ano em que o condomínio o usa para pagar obras que se podem ' +
+        'abater e te passa o documento, como condómino.' },
     ] },
     { grupo: 'Conservação e manutenção', blocos: [
-      { p: 'Desde que se destinem a manter ou repor o imóvel e estejam devidamente documentadas:' },
+      { p: 'Desde que sirvam para manter ou repor o imóvel, e tenhas os documentos que o provam:' },
       { sim: [
         'Pintura.',
         'Reparação de paredes, tetos e pavimentos.',
@@ -195,92 +194,92 @@ const DEDUCOES = [
       ] },
     ] },
     { grupo: 'Despesas anteriores ao arrendamento', blocos: [{ sim: [
-      'Obras de conservação e manutenção pagas nos 24 meses anteriores ao início do arrendamento, desde que o imóvel ' +
-        'não tenha sido utilizado entretanto para fim diferente do arrendamento.',
+      'As obras de conservação e manutenção que pagaste nos 24 meses antes de o arrendamento começar, desde que, ' +
+        'entretanto, não tenhas usado o imóvel para outro fim que não o de o arrendar.',
     ] }] },
     { grupo: 'Serviços ligados ao arrendamento', blocos: [{ sim: [
-      'Certificado energético, por ser necessário à operação de arrendamento.',
-      'Comissão de mediação imobiliária para encontrar inquilino, se a ligação ao contrato e ao imóvel estiver ' +
-        'inequivocamente documentada.',
-      'Gestão do arrendamento por agência imobiliária, nas mesmas condições de prova e conexão direta.',
+      'O certificado energético, porque precisas dele para arrendar.',
+      'A comissão da imobiliária por te encontrar inquilino, se os documentos mostrarem, sem margem para dúvidas, a ' +
+        'ligação ao contrato e ao imóvel.',
+      'A gestão do arrendamento por uma imobiliária, com a mesma prova e a mesma ligação direta.',
     ] }] },
     { grupo: 'Situação especial: mudança da habitação própria', blocos: [
-      { p: 'Podes abater, até ao valor das rendas prediais brutas, as rendas que pagas por uma nova habitação própria ' +
-        'e permanente, quando se verificarem cumulativamente as condições do artigo 41.º, n.º 8:' },
+      { p: 'Se mudaste de casa e arrendaste a antiga, podes abater às rendas que recebes as que pagas pela tua nova ' +
+        'habitação própria e permanente, até ao valor das rendas brutas. Para isso, têm de se cumprir todas estas ' +
+        'condições (artigo 41.º, n.º 8):' },
       { cond: [
-        'O imóvel agora arrendado foi habitação própria e permanente tua ou do teu agregado durante pelo menos 12 meses.',
-        'O domicílio fiscal foi transferido para local situado a mais de 100 km.',
-        'O imóvel de origem é objeto de arrendamento habitacional.',
+        'A casa que agora arrendas foi a tua habitação própria e permanente, ou a do teu agregado, durante pelo menos ' +
+          '12 meses.',
+        'Mudaste o domicílio fiscal para mais de 100 km de distância.',
+        'A casa de onde saíste está arrendada para habitação.',
         'Os dois contratos de arrendamento estão registados no Portal das Finanças.',
       ] },
     ] },
   ] },
 
   { id: 'nao-pode-deduzir', titulo: 'O que não podes deduzir', blocos: [{ nao: [
-    'AIMI, Adicional ao Imposto Municipal sobre Imóveis. Está expressamente excluído no artigo 41.º, n.º 1.',
-    'Juros do crédito à habitação ou de outro financiamento.',
-    'Amortização do capital do empréstimo.',
-    'Comissões bancárias e outros gastos financeiros.',
-    'Seguro de vida associado ao empréstimo.',
-    'Depreciação ou desvalorização contabilística do imóvel.',
-    'Compra ou substituição de eletrodomésticos, incluindo frigorífico, forno, placa, máquina de lavar, televisão e similares.',
-    'Reparação de eletrodomésticos, incluindo esquentadores classificados como eletrodomésticos, segundo a posição ' +
+    'O AIMI, o Adicional ao Imposto Municipal sobre Imóveis: o artigo 41.º, n.º 1, deixa-o de fora expressamente.',
+    'Os juros do crédito à habitação ou de outro financiamento.',
+    'A amortização do capital do empréstimo.',
+    'As comissões bancárias e outros gastos financeiros.',
+    'O seguro de vida do empréstimo.',
+    'A depreciação ou desvalorização contabilística do imóvel.',
+    'Comprar ou substituir eletrodomésticos, como o frigorífico, o forno, a placa, a máquina de lavar, a televisão e ' +
+      'afins.',
+    'Reparar eletrodomésticos, incluindo os esquentadores que contam como eletrodomésticos, segundo a posição ' +
       'expressa da AT.',
-    'Móveis, como camas, sofás, mesas, cadeiras e armários não incorporados no imóvel.',
+    'Móveis, como camas, sofás, mesas, cadeiras e armários que não fazem parte do imóvel.',
     'Lâmpadas, artigos de conforto e decoração.',
-    'Seguro multirriscos facultativo da habitação, segundo a informação vinculativa da AT de 2017. O seguro ' +
-      'obrigatório do prédio pode integrar as despesas de manutenção, mas a componente facultativa ou de recheio não ' +
-      'deve ser deduzida sem separação documental.',
-    'Entrega para o fundo comum de reserva enquanto a verba não tiver sido efetivamente usada pelo condomínio numa ' +
-      'obra elegível.',
-    'Despesas pagas pelo inquilino.',
-    'Trabalho feito por ti próprio, sem fatura nem pagamento comprovável.',
-    'Despesas relativas a frações não arrendadas.',
+    'O seguro multirriscos facultativo da casa, segundo a informação vinculativa da AT de 2017. O seguro obrigatório ' +
+      'do prédio pode entrar nas despesas de manutenção, mas a parte facultativa ou do recheio não a deves deduzir se ' +
+      'não estiver separada nos documentos.',
+    'O dinheiro que entregas ao fundo comum de reserva, enquanto o condomínio não o usar numa obra que se possa abater.',
+    'As despesas que o inquilino pagou.',
+    'O trabalho que fizeste tu, sem fatura nem pagamento que o prove.',
+    'As despesas das frações que não estão arrendadas.',
     'Multas, coimas e juros de mora.',
-    'Na sublocação, quaisquer deduções à diferença entre a renda recebida e a renda paga pelo sublocador.',
+    'Na sublocação, nenhuma dedução à diferença entre a renda que recebes e a que pagas como sublocador.',
   ] }] },
 
   { id: 'cuidado', titulo: 'O que pede cuidado', blocos: [
-    { nota: 'Água, eletricidade, gás e Internet', texto: 'Não são dedutíveis só porque as pagaste. De acordo com as ' +
-      'informações vinculativas mais recentes da AT, só as deves considerar quando:',
+    { nota: 'Água, eletricidade, gás e Internet', texto: 'Pagá-las não chega para as abateres. Pelas informações ' +
+      'vinculativas mais recentes da AT, só contam quando:',
     cond: [
-      'O contrato declare expressamente que estão incluídas na renda e são responsabilidade do senhorio.',
-      'Essa estrutura esteja refletida na declaração Modelo 2 do Imposto do Selo, incluindo o campo aplicável ao ' +
-        'valor das despesas.',
-      'Existam faturas e prova legal do pagamento.',
+      'O contrato diz expressamente que estão incluídas na renda e que ficam a cargo do senhorio.',
+      'Isso aparece na declaração Modelo 2 do Imposto do Selo, incluindo o campo do valor das despesas.',
+      'Tens as faturas e a prova legal do pagamento.',
     ],
-    fim: 'Se estas condições não estiverem cumpridas, não deduzas os consumos do inquilino.' },
-    { nota: 'Honorários de advogado, solicitador, contabilista ou custos judiciais', texto: 'O artigo 41.º contém uma ' +
-      'regra geral ampla, mas, para este guia, não foi localizada orientação oficial suficientemente específica que ' +
-      'permita classificar todas estas despesas como automaticamente dedutíveis. Não as incluas só com base numa ' +
-      'descrição genérica. Para montantes relevantes, obtém resposta escrita através do e-balcão ou apresenta um ' +
-      'pedido de informação vinculativa, identificando o serviço, o imóvel e a ligação direta à obtenção ou garantia ' +
-      'das rendas.' },
-    { nota: 'Obras de melhoria ou ampliação', texto: 'Conservação e manutenção são dedutíveis; uma ampliação, ' +
-      'valorização ou transformação substancial pode não o ser. Quando uma fatura mistura reparação com melhoria, ' +
-      'pede ao empreiteiro a discriminação de materiais e mão de obra por intervenção.' },
+    fim: 'Se faltar alguma destas condições, não deduzas os consumos do inquilino.' },
+    { nota: 'Honorários de advogado, solicitador, contabilista ou custos judiciais', texto: 'O artigo 41.º tem uma ' +
+      'regra geral ampla, mas não encontrámos orientação oficial concreta o bastante para dizer que todas estas ' +
+      'despesas se abatem sempre. Não as incluas só por uma descrição genérica. Se o valor for alto, pede uma ' +
+      'resposta escrita no e-balcão ou uma informação vinculativa, e diz qual é o serviço, o imóvel e a ligação ' +
+      'direta às rendas que recebes ou garantes.' },
+    { nota: 'Obras de melhoria ou ampliação', texto: 'A conservação e a manutenção abatem-se; uma ampliação, uma ' +
+      'valorização ou uma transformação de fundo podem não se abater. Se a fatura junta reparação e melhoria, pede ao ' +
+      'empreiteiro que separe os materiais e a mão de obra de cada intervenção.' },
   ] },
 
   { id: 'documentos', titulo: 'Os documentos a guardar', blocos: [
-    { p: 'Para cada imóvel e ano, conserva:' },
+    { p: 'De cada imóvel, e em cada ano, guarda:' },
     { doc: [
-      'Fatura ou documento fiscal com o teu NIF.',
-      'Descrição que identifique o serviço e, idealmente, a morada ou o artigo matricial.',
-      'Recibo e prova bancária do pagamento.',
-      'Liquidação e comprovativo do IMI.',
-      'Comprovativo do Imposto do Selo.',
-      'Contrato de arrendamento e aditamentos.',
-      'Declaração e recibos do condomínio.',
-      'Atas que aprovaram quotas extraordinárias ou obras.',
-      'Declaração do administrador sobre a utilização do fundo de reserva e a quota-parte da obra.',
-      'Orçamento, contrato e fatura discriminada das obras.',
-      'Fotografias antes e depois, sobretudo em obras relevantes.',
-      'Apólices e recibos de seguros, com separação das coberturas.',
-      'Contrato e fatura da agência imobiliária.',
-      'Certificado energético e respetiva fatura.',
+      'A fatura ou o documento fiscal com o teu NIF.',
+      'Uma descrição que diga qual foi o serviço e, de preferência, a morada ou o artigo matricial.',
+      'O recibo e a prova bancária do pagamento.',
+      'A liquidação e o comprovativo do IMI.',
+      'O comprovativo do Imposto do Selo.',
+      'O contrato de arrendamento e os aditamentos.',
+      'A declaração e os recibos do condomínio.',
+      'As atas que aprovaram quotas extraordinárias ou obras.',
+      'A declaração do administrador sobre o uso do fundo de reserva e a parte da obra que cabe à tua fração.',
+      'O orçamento, o contrato e a fatura discriminada das obras.',
+      'Fotografias do antes e do depois, sobretudo nas obras maiores.',
+      'As apólices e os recibos dos seguros, com as coberturas separadas.',
+      'O contrato e a fatura da imobiliária.',
+      'O certificado energético e a fatura dele.',
     ] },
-    { nota: 'Os três elementos', texto: 'Uma fatura isolada pode não demonstrar o pagamento nem a ligação ao imóvel. ' +
-      'Guarda os três: a natureza da despesa, a identificação do imóvel e a prova do pagamento.' },
+    { nota: 'Os três elementos', texto: 'Uma fatura sozinha pode não provar que pagaste, nem que é daquele imóvel. ' +
+      'Guarda os três: o que foi a despesa, de que imóvel é e a prova de que a pagaste.' },
   ] },
 ];
 
@@ -293,16 +292,16 @@ const DEDUCOES = [
 const GUIA = [
   { id: 'tens-de-declarar', titulo: 'Tens de declarar?', blocos: [
     { p: 'As rendas que recebes de um prédio arrendado são rendimentos prediais, da categoria F do IRS, a não ser ' +
-      'que optes pela tributação segundo as regras da categoria B (artigo 8.º do Código do IRS).' },
-    { p: 'Se tu ou um dependente do teu agregado receberam rendas num ano, declaras-as na declaração de IRS desse ' +
-      'ano, a Modelo 3, com o Anexo F (artigo 57.º e instruções do Anexo F).' },
+      'que tenhas escolhido ser tributado pelas regras da categoria B (artigo 8.º do Código do IRS).' },
+    { p: 'Recebeste rendas num ano, tu ou um dependente do teu agregado? Então declara-las no IRS desse ano, na ' +
+      'Modelo 3, com o Anexo F (artigo 57.º e instruções do Anexo F).' },
     { grupo: 'O prazo', blocos: [
-      { p: 'Entregas a declaração de 1 de abril a 30 de junho do ano seguinte ao das rendas: as de 2026 declaram-se ' +
-        'de 1 de abril a 30 de junho de 2027 (artigo 60.º, n.º 1).' },
+      { p: 'Entregas a declaração de 1 de abril a 30 de junho do ano seguinte ao das rendas. Ou seja, as rendas de ' +
+        '2026 declaras de 1 de abril a 30 de junho de 2027 (artigo 60.º, n.º 1).' },
     ] },
     { grupo: 'A taxa', blocos: [
-      { p: 'Por regra, as rendas não se somam aos teus outros rendimentos: pagam uma taxa autónoma (artigos 22.º, ' +
-        'n.º 3, e 72.º).' },
+      { p: 'Normalmente, as rendas não se juntam aos teus outros rendimentos: pagam uma taxa só delas, a taxa ' +
+        'autónoma (artigos 22.º, n.º 3, e 72.º).' },
       { info: [
         '25 % nas rendas de arrendamento habitacional (artigo 72.º, n.º 2).',
         '28 % nas outras rendas prediais, como as de um arrendamento não habitacional (artigo 72.º, n.º 1, alínea e)).',
@@ -312,39 +311,39 @@ const GUIA = [
       ] },
     ] },
     { grupo: 'Os contratos longos', blocos: [
-      { p: 'Nas rendas de um contrato de arrendamento para habitação permanente, a taxa autónoma baixa com a duração ' +
-        'do contrato (artigo 72.º, n.os 3 a 5):' },
+      { p: 'Num contrato de arrendamento para habitação permanente, a taxa autónoma baixa quanto mais longo for o ' +
+        'contrato (artigo 72.º, n.os 3 a 5):' },
       { info: [
         'De 5 a menos de 10 anos: menos 10 pontos percentuais, e menos 2 por cada renovação com a mesma duração, até ' +
           'mais 10 pontos.',
         'De 10 a menos de 20 anos: menos 15 pontos percentuais.',
         '20 anos ou mais: menos 20 pontos percentuais.',
       ] },
-      { p: 'Não há redução nos contratos de arrendamento habitacional celebrados desde 1 de janeiro de 2024 cuja ' +
+      { p: 'A redução não vale para os contratos de arrendamento habitacional feitos desde 1 de janeiro de 2024 cuja ' +
         'renda mensal exceda em 50 % os limites gerais de preço de renda por tipologia e concelho, da Portaria ' +
         'n.º 176/2019 (artigo 72.º, n.º 23).' },
-      { p: 'Se o contrato acabar antes do prazo por motivo imputável a ti, senhorio, perdes as reduções desde o início ' +
-        'do contrato ou da renovação, e no ano em que acabou declaras esse facto, para pagares a diferença com juros ' +
-        'compensatórios (artigo 72.º, n.º 20).' },
-      { p: 'Para teres direito à redução, além de comunicares o contrato com a declaração Modelo 2 do Imposto do Selo, ' +
-        'indicas no Portal das Finanças, até 15 de fevereiro do ano seguinte, a data de início e a duração do ' +
-        'contrato, e depois as renovações e a cessação (Portaria n.º 110/2019, nas instruções do Anexo F).' },
+      { p: 'Se o contrato acabar antes do prazo por causa tua, senhorio, perdes as reduções desde o início do contrato ' +
+        'ou da renovação. No ano em que acabou, declaras isso, para pagares a diferença com juros compensatórios ' +
+        '(artigo 72.º, n.º 20).' },
+      { p: 'Para teres direito à redução, além de comunicares o contrato na declaração Modelo 2 do Imposto do Selo, ' +
+        'indicas no Portal das Finanças, até 15 de fevereiro do ano seguinte, quando começou e quanto dura o ' +
+        'contrato, e mais tarde as renovações e o fim dele (Portaria n.º 110/2019, nas instruções do Anexo F).' },
     ] },
     { grupo: 'Ou o englobamento', blocos: [
-      { p: 'Em vez da taxa autónoma, podes optar por englobar as rendas: somam-se aos teus outros rendimentos e pagam ' +
-        'as taxas gerais do artigo 68.º (artigo 72.º, n.º 13; instruções do quadro 6G do Anexo F).' },
-      { p: 'Se optares, englobas todas as rendas da categoria F desse ano, e não só as de um imóvel (artigo 22.º, ' +
-        'n.º 5).' },
+      { p: 'Em vez da taxa autónoma, podes optar por englobar as rendas: juntam-se aos teus outros rendimentos e ' +
+        'pagam as taxas gerais do artigo 68.º (artigo 72.º, n.º 13; instruções do quadro 6G do Anexo F).' },
+      { p: 'Se escolheres englobar, entram todas as rendas da categoria F desse ano, e não só as de um imóvel ' +
+        '(artigo 22.º, n.º 5).' },
     ] },
     { fonte: 'cirs72', texto: 'Fonte principal: artigo 72.º do Código do IRS, AT.' },
   ] },
 
   { id: 'onde-declarar', titulo: 'Onde declaras', blocos: [
-    { p: 'No Portal das Finanças, pela Internet: a declaração Modelo 3 e os anexos, como o Anexo F, são ' +
-      'obrigatoriamente entregues por transmissão eletrónica de dados (Portaria n.º 104/2026/1, artigos 2.º e 3.º).' },
+    { p: 'É tudo pela Internet, no Portal das Finanças: a declaração Modelo 3 e os anexos, como o Anexo F, só se ' +
+      'entregam por transmissão eletrónica de dados (Portaria n.º 104/2026/1, artigos 2.º e 3.º).' },
     { ir: 'Ir ao Portal das Finanças', fonte: 'portal' },
     { p: 'Para entrar, usas o teu NIF e a senha de acesso, ou a Autenticação.gov, com a Chave Móvel Digital ou o ' +
-      'Cartão de Cidadão. Se ainda não tens senha, registas-te no Portal para a obter (folheto da AT sobre o acesso ' +
+      'Cartão de Cidadão. Se ainda não tens senha, registas-te no Portal e pedes uma (folheto da AT sobre o acesso ' +
       'ao Portal).' },
     { fonte: 'portaria104', texto: 'Fonte principal: Portaria n.º 104/2026/1, artigos 2.º e 3.º, AT.' },
   ] },
@@ -352,11 +351,11 @@ const GUIA = [
   { id: 'como-preencher', titulo: 'Como preenches', blocos: [
     { p: 'No Anexo F da declaração Modelo 3, declara:' },
     { cond: [
-      'As rendas pelo valor bruto, sem retirar antes os encargos.',
-      'Os gastos em campos separados, associados ao imóvel correto.',
-      'Apenas o montante correspondente à tua quota de propriedade e ao imóvel ou parte efetivamente arrendada.',
-      'As obras em partes comuns no campo de conservação e manutenção, e não como simples quota de condomínio, quando ' +
-        'essa for a natureza efetiva da despesa.',
+      'As rendas pelo valor bruto, sem descontar antes os gastos.',
+      'Os gastos à parte, cada um no seu campo e no imóvel certo.',
+      'Só a parte que te cabe: a da tua quota no imóvel, e só do imóvel, ou da parte dele, que esteve mesmo arrendada.',
+      'As obras nas partes comuns no campo de conservação e manutenção, e não como uma simples quota de condomínio, ' +
+        'quando a despesa foi mesmo uma obra.',
     ] },
     { grupo: 'Linha a linha', blocos: [
       { p: 'Cada prédio vai numa linha própria, e cada fração em separado, mesmo que sejam do mesmo contrato. Um ' +
@@ -378,7 +377,7 @@ const GUIA = [
       ] },
     ] },
     { grupo: 'O quadro de cada contrato', blocos: [
-      { p: 'No modelo do Anexo F em vigor desde janeiro de 2025, mantido pela Portaria n.º 104/2026/1:' },
+      { p: 'No modelo do Anexo F em vigor desde janeiro de 2025, que a Portaria n.º 104/2026/1 manteve:' },
       { info: [
         'Quadro 4.1: os contratos sem redução de taxa pela duração.',
         'Quadro 4.2: os contratos para habitação permanente com essa redução, celebrados ou renovados desde 1 de ' +
@@ -392,12 +391,10 @@ const GUIA = [
   ] },
 
   { id: 'deducoes', titulo: 'As deduções', intro: [
-    'Os encargos que a lei deixa abater às rendas, os que não deixa, e os documentos que tens de guardar para cada ' +
-      'imóvel.',
-    'Este guia segue a redação vigente do artigo 41.º do Código do IRS publicada pela Autoridade Tributária e ' +
-      'Aduaneira (AT), complementada por informações vinculativas da AT. Quando uma despesa não está claramente ' +
-      'coberta pela lei ou por orientação administrativa específica, fica assinalada como duvidosa, em vez de ' +
-      'aparecer como seguramente dedutível.',
+    'Aqui vês o que a lei te deixa abater às rendas, o que não deixa e os documentos que deves guardar de cada imóvel.',
+    'Seguimos a redação atual do artigo 41.º do Código do IRS, publicada pela Autoridade Tributária e Aduaneira ' +
+      '(AT), e as informações vinculativas da AT. Quando uma despesa não está claramente coberta pela lei, nem por ' +
+      'uma orientação concreta da AT, dizemos-te que é duvidosa, em vez de a darmos como certa.',
   ], seccoes: DEDUCOES },
 
   { id: 'fontes', titulo: 'As fontes oficiais', blocos: [{ fontes: true }] },
@@ -633,18 +630,18 @@ ${cabecaRaiz}
   <div class="cabeca">
     <p class="chapeu">Guia · IRS do senhorio</p>
     <h1>${esc(H1)}</h1>
-    <p class="sub">Se tens de declarar as rendas, onde as declaras, como preenches o Anexo F e o que podes abater em
-    cada imóvel.</p>
+    <p class="sub">Neste guia podes encontrar se tens de declarar as rendas no IRS, como o fazer e algumas despesas que
+    podes descontar.</p>
   </div>
 
   <dl class="ficha">
-    <div><dt>Para quem</dt><dd>Pessoa singular, residente em Portugal, com rendas declaradas como rendimentos prediais
-    da categoria F, sem opção pela tributação segundo as regras da categoria B.</dd></div>
+    <div><dt>Para quem</dt><dd>Para ti, se és residente em Portugal e declaras as rendas como rendimentos prediais, da
+    categoria F, sem teres escolhido as regras da categoria B.</dd></div>
     <div><dt>Verificado a</dt><dd>8 de novembro de 2026</dd></div>
   </dl>
 
-  <p class="intro">Primeiro vês se tens de declarar, depois onde e como, e por fim o que podes deduzir. Cada regra
-  vem da lei ou da Autoridade Tributária e Aduaneira (AT), e as fontes oficiais estão no fim.</p>
+  <p class="intro">Começas por ver se tens de declarar, depois onde e como, e no fim o que podes deduzir. Tudo o que
+  aqui está vem da lei ou da Autoridade Tributária e Aduaneira (AT), e tens as fontes oficiais no fim.</p>
 
   <nav class="indice" aria-label="Neste guia">
     <p class="indice-tit">Neste guia</p>
@@ -660,10 +657,10 @@ ${GUIA.map(parteDoGuia).join('\n\n')}
     ${icone(ESCUDO, 'escudo')}
     <div>
       <h2 id="t-seguranca">Uma nota de segurança</h2>
-      <p>As informações vinculativas publicadas mostram a interpretação administrativa da AT para factos concretos.
-      Não substituem uma informação vinculativa pedida por ti quando os factos forem diferentes ou a despesa for
-      atípica. Para uma despesa relevante que não se enquadre claramente nas listas anteriores, a opção sem risco é não
-      a deduzir até teres resposta escrita da AT.</p>
+      <p>As informações vinculativas que a AT publica mostram como ela leu casos concretos. Se o teu caso for
+      diferente, ou a despesa for fora do comum, não substituem uma informação vinculativa pedida por ti. Se tiveres
+      uma despesa importante que não encaixe bem nas listas de cima, o mais seguro é não a deduzir até teres uma
+      resposta escrita da AT.</p>
     </div>
   </aside>
 

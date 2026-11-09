@@ -6301,7 +6301,11 @@ e só quando a página tem essa sessão (no dev.rendorium.com, a de uma conta de
 teste). A montra da raiz nunca a leva. O menu depende do sítio
 (cloud/qa.js:qaLugar): na app, «Novo ticket», «Ver tickets», «Ver a montra»
 e «Back office»; nas páginas públicas, «Voltar à app» no lugar de «Ver a
-montra»; no back office, só os dois primeiros. «Ver a montra», «Voltar à
+montra»; no back office, os dois primeiros e, quando a sessão de teste de
+quem lá está abre a app, também «Ver a montra» e «Voltar à app» (o worker
+diz-o nos dados da pílula, QA_EQUIPA.app, com a porta do dev para o /;
+sem ela o menu fica só com os tickets, para não oferecer um botão que dá
+404), sem «Back office». «Ver a montra», «Voltar à
 app» e «Back office» abrem no mesmo separador — na APK de dev, no mesmo
 WebView, que leva o cookie e não tem barra de endereços. No dev, o «Back
 office» entra sem o /entrar: uma página do back office sem sessão de equipa,

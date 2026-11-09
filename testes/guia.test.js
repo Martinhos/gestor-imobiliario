@@ -101,19 +101,19 @@ describe('o guia «Declarar as rendas»', () => {
     assert.match(como, /<p>No Anexo F da declaração Modelo 3, declara:<\/p>/);
     const t = texto(html);
     for (const frase of [
-      'Seguro de renda, expressamente incluído no artigo 41.º, n.º 1',
-      'imputada de acordo com a respetiva permilagem',
-      'nos 24 meses anteriores ao início do arrendamento',
-      'a mais de 100 km',
-      'AIMI, Adicional ao Imposto Municipal sobre Imóveis',
-      'Seguro multirriscos facultativo da habitação',
+      'O seguro de renda, que o artigo 41.º, n.º 1, inclui expressamente',
+      'calculada pela permilagem dela',
+      'nos 24 meses antes de o arrendamento começar',
+      'para mais de 100 km de distância',
+      'O AIMI, o Adicional ao Imposto Municipal sobre Imóveis',
+      'O seguro multirriscos facultativo da casa',
       'Na sublocação',
       'declaração Modelo 2 do Imposto do Selo',
       'e-balcão',
       'No Anexo F da declaração Modelo 3',
-      'a opção sem risco é não a deduzir até teres resposta escrita da AT',
+      'o mais seguro é não a deduzir até teres uma resposta escrita da AT',
       '8 de novembro de 2026',
-      'sem opção pela tributação segundo as regras da categoria B',
+      'sem teres escolhido as regras da categoria B',
     ]) assert.ok(t.includes(frase), 'falta: ' + frase);
   });
 
@@ -137,8 +137,8 @@ describe('o guia «Declarar as rendas»', () => {
       'peça ao empreiteiro', 'Modelo 3, declare', 'ano, conserve']) {
       assert.ok(!t.includes(voce), 'por você: ' + voce);
     }
-    for (const tu of ['Guarda os três', 'não deduzas', 'Não as incluas', 'obtém resposta', 'apresenta um pedido',
-      'pede ao empreiteiro', 'Modelo 3, declara', 'ano, conserva']) {
+    for (const tu of ['Guarda os três', 'não deduzas', 'Não as incluas', 'pede uma resposta escrita', 'ou uma informação vinculativa',
+      'pede ao empreiteiro', 'Modelo 3, declara', 'em cada ano, guarda']) {
       assert.ok(t.includes(tu), 'por tu: ' + tu);
     }
     assert.doesNotMatch(t, /\(s\)|\bpôr\b|\btirar\b/, 'as regras de escrita da casa');
@@ -162,7 +162,7 @@ describe('o guia «Declarar as rendas»', () => {
     // o dinheiro e as percentagens como na casa: o espaço fino que não parte a linha (o texto() de cima troca-o)
     for (const v of ['25 %', '28 %', '10 %', '50 %', '2 300 €']) assert.ok(p1.includes(v), 'com o espaço fino: ' + v);
     assert.doesNotMatch(p1, /\d %|\d €/, 'nenhum espaço normal antes de % ou €');
-    for (const frase of ['obrigatoriamente entregues por transmissão eletrónica de dados', 'o teu NIF e a senha de acesso',
+    for (const frase of ['só se entregam por transmissão eletrónica de dados', 'o teu NIF e a senha de acesso',
       'Chave Móvel Digital', 'registas-te no Portal']) assert.ok(t2.includes(frase), '2, falta: ' + frase);
     assert.match(p2, /<p class="ir"><a class="btn" href="https:\/\/www\.portaldasfinancas\.gov\.pt\/" rel="noopener"><span>Ir ao Portal das Finanças<\/span><svg class="i seguir"/);
     for (const frase of ['Cada prédio vai numa linha própria', 'código da freguesia, de seis dígitos', 'pelo valor ilíquido',
