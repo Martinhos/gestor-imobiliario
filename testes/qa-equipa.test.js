@@ -475,6 +475,68 @@ describe('a camada das páginas no browser', () => {
     assert.equal(c.ambiente, 'dev', 'o resto do da app fica');
   });
 
+  /* O documento e a janela de brincar, com a classe do <html>, o top do body e
+     o scroll de verdade, para ver a camada travar e destravar a página.
+     Recebe: b — o browserFalso; classes (opcional) — as que o <html> já tem.
+     Devolve: {html, body, scrolls: os scrollTo que a camada fez}. */
+  function paginaQueRola(b, classes) {
+    const html = new Set(classes || []), body = { style: { top: '' } }, scrolls = [];
+    const el = () => {
+      const filhos = { h2: { textContent: '' }, '.body': { innerHTML: '' }, '.foot': { innerHTML: '' }, '.sheet': { focus() {} } };
+      return { className: '', innerHTML: '', classList: { add() {}, remove() {}, contains: () => false }, parentNode: { removeChild() {} },
+        querySelector: (q) => filhos[q.replace('.head ', '')] || null };
+    };
+    Object.assign(b.ctx.document.documentElement, { classList: { add: (c) => html.add(c), remove: (c) => html.delete(c), contains: (c) => html.has(c) } });
+    Object.assign(b.ctx.document, { createElement: el, contains: () => false });
+    Object.assign(b.ctx.document.body, { style: body.style, appendChild() {}, removeChild() {} });
+    b.ctx.scrollY = 640;
+    b.ctx.scrollTo = (x, y) => { scrolls.push(y); b.ctx.scrollY = y; };
+    return { html, body, scrolls };
+  }
+
+  for (const [nome, camadaTexto] of [['do back office', CAMADA_QA], ['das páginas', CAMADA_DAS_PAGINAS]]) {
+    test('as janelas ' + nome + ' travam o scroll da página e repõem-no ao fechar a última', () => {
+      const b = browserFalso();
+      const pg = paginaQueRola(b);
+      vm.runInContext('(function () {\nvar ic = function () { return ""; };\n' + camadaTexto + '\nvar QA_ACOES = {};\nwindow.t = { openModal: openModal, closeModal: closeModal, closeAllModals: closeAllModals };\n})();', b.ctx);
+      const t = b.ctx.t;
+      assert.ok(!pg.html.has('qa-trava'), 'antes de abrir, nada travado');
+      t.openModal('Novo ticket', '', '');
+      assert.ok(pg.html.has('qa-trava'), 'aberta, o <html> trava');
+      assert.equal(b.ctx.document.body.style.top, '-640px', 'e o body guarda o scroll de antes');
+      b.ctx.scrollY = 0; // com o body fixo, o scrollY lê 0
+      t.openModal('Ficha', '', '');
+      assert.equal(b.ctx.document.body.style.top, '-640px', 'a segunda por cima não volta a medir o scroll');
+      t.closeModal();
+      assert.ok(pg.html.has('qa-trava'), 'com uma ainda aberta, continua travado');
+      assert.deepEqual(pg.scrolls, []);
+      t.closeModal();
+      assert.ok(!pg.html.has('qa-trava'), 'fechada a última, destrava');
+      assert.equal(b.ctx.document.body.style.top, '');
+      assert.deepEqual(Array.from(pg.scrolls), [640], 'e repõe o scroll exato');
+      t.openModal('Outra', '', ''); t.openModal('E outra', '', '');
+      t.closeAllModals();
+      assert.ok(!pg.html.has('qa-trava'), 'o closeAllModals também destrava');
+      assert.deepEqual(Array.from(pg.scrolls), [640, 640]);
+    });
+  }
+
+  test('a camada não destrava o que outra coisa travou', () => {
+    const b = browserFalso();
+    const pg = paginaQueRola(b, ['noscroll']);
+    vm.runInContext('(function () {\nvar ic = function () { return ""; };\n' + CAMADA_QA + '\nvar QA_ACOES = {};\nwindow.t = { openModal: openModal, closeModal: closeModal };\n})();', b.ctx);
+    b.ctx.t.openModal('Novo ticket', '', '');
+    assert.ok(!pg.html.has('qa-trava'), 'já travado por outro: a camada não trava');
+    b.ctx.t.closeModal();
+    assert.ok(pg.html.has('noscroll'), 'e o que era de outro fica');
+    assert.deepEqual(Array.from(pg.scrolls), [], 'sem repor scroll que não guardou');
+  });
+
+  test('o CSS da camada trava o <html> e fixa o body', () => {
+    assert.match(CSS_QA_EQUIPA, /html\.qa-trava\{overflow:hidden\}/);
+    assert.match(CSS_QA_EQUIPA, /html\.qa-trava body\{position:fixed;left:0;right:0;width:100%\}/);
+  });
+
   test('os caminhos das páginas são os da app', async () => {
     const b = browserFalso({}, NA_MONTRA);
     vm.runInContext('(function () {\n' + CAMADA_DAS_PAGINAS + '\nvar QA_ACOES = {};\nwindow.t = { qaCaminho: qaCaminho, api: api };\n})();', b.ctx);

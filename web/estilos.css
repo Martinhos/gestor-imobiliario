@@ -3312,6 +3312,17 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .cal-dia{display:flex;flex-direction:column;gap:12px;min-width:0}
 .cal-dia-tit{margin:2px 2px 0;font-size:17px}
 .cal-dia-lista{padding:0;overflow:hidden}
+/* A mudar de dia o painel cresce ou encolhe (calendario.js:calSel →
+   continuidade.js:crescerEmAltura), mas a caixa animada é o .cal-dia, que é
+   transparente: o que se vê é o cartão dos eventos e os botões. A encolher, o
+   painel é mais alto do que o que leva, e numa coluna flex a sobra ficava
+   vazia por baixo dos botões — o cartão e os botões tomavam o tamanho novo no
+   primeiro fotograma (medido a 384px: 236→49px num fotograma, 100% do
+   caminho) e só o «Por confirmar» por baixo deslizava. Durante a viagem o
+   cartão fica com a sobra: encolhe com o painel e os botões sobem com a borda.
+   A crescer já acompanhava: o overflow:hidden deixa-o encolher abaixo do
+   conteúdo (o min-height:auto de um item flex com overflow é 0). */
+.cal-dia.a-crescer>.cal-dia-lista{flex-grow:1}
 .cal-dia-lista .lbl{margin:0;padding:12px 14px 8px}
 .cal-dia-lista .cal-ev+.lbl{border-top:1px solid var(--line)}
 .cal-ev{display:flex;align-items:center;gap:12px;min-height:60px;padding:12px 14px;border-top:1px solid var(--line);cursor:pointer;transition:background-color var(--rapido) var(--curva)}

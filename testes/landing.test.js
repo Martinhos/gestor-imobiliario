@@ -17,7 +17,7 @@ import { webcrypto } from 'node:crypto';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 import { paginaLanding, CSS_LANDING, robotsTxt, sitemapXml } from '../worker/src/landing.js';
-import { CAMINHO_GUIA, CSS_GUIA } from '../worker/src/guia-vista.js';
+import { CAMINHO_GUIA, CSS_GUIA, H1 as TITULO_GUIA } from '../worker/src/guia-vista.js';
 import { CSS_LEGAL } from '../worker/src/legal-vista.js';
 import { CSS_TESTE } from '../worker/src/teste.js';
 
@@ -37,6 +37,9 @@ const css = CSS_LANDING;
    que junte o IRS (ou a app) a declarar, calcular, preencher ou entregar.
    As frases partem-se nos blocos (parágrafos, títulos, ligações, metadados),
    e os valores do content, do aria-label, do alt e do title também contam.
+   O título do guia (guia-vista.js:H1, «… como declarar …», decisão do
+   Martinho de 2026-11-09) passa, e só ele, tal e qual: é o nome de uma
+   página de informação, não uma promessa da app.
    Recebe: h — o HTML. Devolve: a lista do que prometeria (vazia quando não há). */
 function promessasDoIrs(h) {
   const fora = [];
@@ -48,6 +51,7 @@ function promessasDoIrs(h) {
     .split(/\n|(?<=[.;!?])\s/)
     .map((f) => f.replace(/\s+/g, ' ').trim()).filter(Boolean);
   for (const f of frases) {
+    if (f === TITULO_GUIA) continue;
     const verbo = /\b(?:declar|calcul|preench|entreg)\w*/i;
     if ((/IRS/.test(f) && verbo.test(f)) || /\b(?:Rendorium|app)\b.{0,30}\b(?:declara|calcula|preenche|entrega)\b/i.test(f)) fora.push(f);
   }
@@ -347,17 +351,25 @@ describe('a página de entrada', () => {
       assert.ok(promessasDoIrs(mau).length > 0, mau);
     }
     assert.deepEqual(promessasDoIrs('<h2>IRS: o que podes deduzir às rendas</h2><a>Guia do IRS das rendas</a>'), []);
+    // o título do guia passa tal e qual; o mesmo verbo noutra frase com IRS, não
+    assert.deepEqual(promessasDoIrs('<h2>' + TITULO_GUIA + '</h2>'), []);
+    for (const mau of ['<h2>IRS das rendas: como declarar com a app</h2>', '<p>' + TITULO_GUIA + ' na Rendorium</p>',
+      '<p>Como declarar o IRS num toque</p>']) {
+      assert.ok(promessasDoIrs(mau).length > 0, mau);
+    }
   });
 
   /* O guia é informação, não uma função da app: a montra leva até ele num
      cartão antes do fecho e no rodapé, com o botão secundário — a ação
      principal continua a ser criar conta. O título é português de Portugal
-     (o «Na hora de declarar as rendas» de antes era do Brasil) e diz IRS,
-     que é o que se pesquisa. */
+     (o «Na hora de declarar as rendas» de antes era do Brasil), diz IRS, que
+     é o que se pesquisa, e é o h1 do guia (desde 2026-11-09, «como declarar
+     e o que podes deduzir»): quem clica encontra o que lhe prometeram. */
   test('leva ao guia do IRS das rendas, sem o prometer como função da app', () => {
     const cartao = /<section class="wrap guia-seccao" id="guia"[\s\S]*?<\/section>/.exec(html);
     assert.ok(cartao, 'o cartão do guia existe');
-    assert.match(cartao[0], /<h2 id="t-guia">IRS: o que podes deduzir às rendas<\/h2>/);
+    assert.equal(TITULO_GUIA, 'IRS das rendas: como declarar e o que podes deduzir');
+    assert.match(cartao[0], /<h2 id="t-guia">IRS das rendas: como declarar e o que podes deduzir<\/h2>/);
     assert.match(cartao[0], /<a class="btn" href="\/guias\/declarar-rendas">Ler o guia<\/a>/);
     assert.doesNotMatch(cartao[0], /btn primary|Rendorium (?:declara|calcula)|a app/i);
     assert.doesNotMatch(html, /na hora de/i, 'nada do português do Brasil');

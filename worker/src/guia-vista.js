@@ -1,13 +1,22 @@
 /* O guia «Declarar as rendas», em público.
    ---------------------------------------
-   Um senhorio que pesquisa o que pode abater às rendas no IRS chega aqui: o
-   que a lei deixa deduzir, o que não deixa, o que pede cuidado, os papéis a
-   guardar e onde se declara. É informação, não uma função da app — a montra
-   continua a não prometer a Declaração, que só existe em dev
-   (web/app/servicos.js, soDev). O texto é o que o Martinho verificou a
-   2026-11-08 contra o artigo 41.º do Código do IRS e as informações
-   vinculativas da AT, escrito por tu, como o resto da casa. Nenhuma regra
-   fiscal se acrescenta aqui sem passar por ele.
+   Um senhorio que pesquisa como declarar as rendas no IRS chega aqui, e o
+   guia acompanha-o do princípio ao fim (ticket a89a5fcb, 2026-11-09): 1. se
+   tem de declarar, 2. onde, 3. como preenche o Anexo F, 4. o que pode
+   deduzir — e as fontes oficiais no fim. É informação, não uma função da
+   app — a montra continua a não prometer a Declaração, que só existe em dev
+   (web/app/servicos.js, soDev).
+
+   A parte 4 (a regra geral, o que podes, o que não podes, o que pede
+   cuidado, os documentos) e os quatro pontos do Anexo F na parte 3 são o
+   texto que o Martinho verificou a 2026-11-08 contra o artigo 41.º do Código
+   do IRS e as informações vinculativas da AT, palavra a palavra. As partes
+   1 a 3 escreveram-se a 2026-11-09 só a partir de fontes oficiais abertas
+   (o Código do IRS e o EBF na AT, as instruções do Anexo F, a Portaria
+   104/2026/1, o folheto das senhas, o Diário da República), cada frase com a
+   sua fonte em FONTES; o Martinho verifica-as antes de promover. Escrito por
+   tu, como o resto da casa. Nenhuma regra fiscal se acrescenta aqui sem
+   passar por ele.
 
    A página é da família dos documentos legais (legal-vista.js): o cabeçalho
    de vidro, a leitura num cartão a 820 px, as duas letras auto-alojadas. Não
@@ -33,13 +42,15 @@ export const CAMINHO_GUIA = '/guias/declarar-rendas';
 export const GUIA_REVISTO = '2026-11-08';
 
 /* O que os motores de busca e as redes mostram (≤ 60 e ≤ 160 caracteres),
-   com os termos de quem pesquisa: IRS, rendas, despesas dedutíveis, Anexo F.
-   O h1 é o título do cartão da montra (landing.js), e o nome curto é o do
-   caminho, do rodapé da montra e do rasto (equipa-guiao.js). */
-const TITULO = 'IRS das rendas: despesas dedutíveis no Anexo F — Rendorium';
-const DESCRICAO = 'O que o senhorio pode e não pode deduzir às rendas no IRS (categoria F, artigo 41.º): ' +
+   com os termos de quem pesquisa: IRS, rendas, declarar, Anexo F, deduzir.
+   O título é o h1 (decisão do Martinho, 2026-11-09), sem o « — Rendorium»,
+   que o passava dos 60. O h1 é também o título do cartão da montra
+   (landing.js, que o importa) e da secção dele no rasto (equipa-guiao.js);
+   o nome curto é o do caminho, do rodapé da montra e do rasto. */
+export const H1 = 'IRS das rendas: como declarar e o que podes deduzir';
+const TITULO = H1;
+const DESCRICAO = 'Se tens de declarar as rendas no IRS, onde e como preenches o Anexo F, e o que podes deduzir: ' +
   'IMI, condomínio, obras, seguros e os documentos a guardar.';
-const H1 = 'IRS: o que podes deduzir às rendas';
 const NOME_CURTO = 'Guia do IRS das rendas';
 
 // os ícones de traço da casa (grelha de 24, traço 1.8), como os da montra
@@ -52,12 +63,66 @@ const VOLTAR = 'M19 12H5M11 6l-6 6 6 6';
 const MENU = 'M4 7h16M4 12h16M4 17h16';
 const SEGUIR = 'M9 6l6 6-6 6';
 
-/* As fontes oficiais, pela ordem do guia. `url` só quando o endereço oficial
-   se confirmou a abrir (AT, Diário da República), verificados a 2026-11-08;
-   sem ele, a fonte fica como texto — uma ligação errada num guia fiscal é
-   pior do que nenhuma. */
+/* As fontes oficiais, pela ordem do guia; as das partes 1 a 3 e a do artigo
+   41.º têm uma chave (`id`), por que os blocos `fonte` e `ir` as citam. `url`
+   só quando o endereço oficial
+   se confirmou a abrir (AT, Portal das Finanças, Diário da República); sem
+   ele, a fonte fica como texto — uma ligação errada num guia fiscal é pior
+   do que nenhuma.
+
+   As das partes 1 a 3 abriram-se a 2026-11-09: as páginas do Código do IRS
+   e do EBF na AT pelo texto em vigor; os PDF da AT (as instruções do Anexo
+   F, «modelo em vigor a partir de janeiro de 2025»; a Portaria 104/2026/1,
+   arts. 1.º e 2.º; o folheto das senhas) lidos por inteiro; o Portal das
+   Finanças pela página de entrada; as do Diário da República (a app deles
+   só mostra o texto com JavaScript) no headless, com o diploma e o artigo
+   citados à vista (.unlazy/qa-ronda8/guia-fontes-dr.mjs). O que se cita de
+   cada uma:
+   - cirs8: n.º 1, as rendas são rendimentos da categoria F, salvo a opção
+     pela categoria B;
+   - cirs57: n.º 1, a declaração anual, relativa aos rendimentos do ano
+     anterior;
+   - cirs60: n.º 1, de 1 de abril a 30 de junho;
+   - cirs22: n.º 3 b), as rendas do art. 72.º não se englobam, salvo opção;
+     n.º 5, quem opta engloba todos os rendimentos da mesma categoria;
+   - cirs72: n.º 1 e) 28 %; n.º 2 25 % no habitacional; n.os 3 a 5 as
+     reduções da habitação permanente; n.º 13 a opção pelo englobamento;
+     n.º 20 a perda das reduções; n.º 23 sem reduções acima do limite;
+   - ebf45c: n.º 1, 10 % nos contratos só para habitação com renda até aos
+     limites do DL 97/2026, rendimentos até 31 de dezembro de 2029, salvo
+     taxa mais favorável;
+   - dl97: art. 2.º n.º 2 a), o limite é 2,5 vezes a retribuição mínima
+     mensal de 2026; art. 18.º n.º 2, o 45.º-C produz efeitos desde 1 de
+     janeiro de 2026;
+   - dl139: art. 3.º, a retribuição mínima mensal de 2026 é 920 € (art. 2.º:
+     no continente);
+   - portaria104: art. 2.º n.º 1, a Modelo 3 e os anexos entregam-se por
+     transmissão eletrónica de dados; art. 1.º n.º 3 a), o Anexo F e as
+     instruções da Portaria 72-B/2025/1 mantêm-se em vigor;
+   - portal: o endereço do Portal das Finanças (o da Portaria 104/2026/1,
+     art. 3.º);
+   - senhas: os meios de entrar no Portal (NIF e senha, ou Autenticação.gov
+     com o Cartão de Cidadão ou a Chave Móvel Digital) e o registo;
+   - anexoF: quem apresenta o anexo, uma linha por prédio e por fração, o
+     número do contrato, a identificação matricial, o titular, as rendas e
+     a natureza (06 e 07), as retenções, o inquilino, os gastos, as obras
+     dos 24 meses, os quadros 4.1, 4.2, 4.2A e 6G, e a comunicação da
+     Portaria 110/2019 até 15 de fevereiro.
+   As da parte 4, do texto do Martinho, verificadas a 2026-11-08. */
 const FONTES = [
-  { nome: 'AT, Código do IRS, artigo 41.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs41.aspx' },
+  { id: 'cirs8', nome: 'AT, Código do IRS, artigo 8.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs8.aspx' },
+  { id: 'cirs57', nome: 'AT, Código do IRS, artigo 57.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs57.aspx' },
+  { id: 'cirs60', nome: 'AT, Código do IRS, artigo 60.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs60.aspx' },
+  { id: 'cirs22', nome: 'AT, Código do IRS, artigo 22.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs22.aspx' },
+  { id: 'cirs72', nome: 'AT, Código do IRS, artigo 72.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs72.aspx' },
+  { id: 'ebf45c', nome: 'AT, Estatuto dos Benefícios Fiscais, artigo 45.º-C', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/bf_rep/Pages/ebf45c.aspx' },
+  { id: 'dl97', nome: 'Diário da República, Decreto-Lei n.º 97/2026, de 20 de maio', url: 'https://diariodarepublica.pt/dr/detalhe/decreto-lei/97-2026-1124493227' },
+  { id: 'dl139', nome: 'Diário da República, Decreto-Lei n.º 139/2025, de 29 de dezembro', url: 'https://diariodarepublica.pt/dr/detalhe/decreto-lei/139-2025-992879809' },
+  { id: 'portaria104', nome: 'AT, Portaria n.º 104/2026/1, de 5 de março: os modelos da declaração Modelo 3', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/legislacao/diplomas_legislativos/Documents/portaria-104-2026-1.pdf' },
+  { id: 'portal', nome: 'Portal das Finanças', url: 'https://www.portaldasfinancas.gov.pt/' },
+  { id: 'senhas', nome: 'AT, folheto «Acesso ao Portal das Finanças: autenticação e senhas»', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_contribuinte/Folhetos_informativos/Documents/senhas.pdf' },
+  { id: 'anexoF', nome: 'AT, Anexo F da declaração Modelo 3 e instruções de preenchimento, modelo em vigor desde janeiro de 2025', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_contribuinte/modelos_formularios/irs/Documents/Mod_3_anexo_F.pdf' },
+  { id: 'cirs41', nome: 'AT, Código do IRS, artigo 41.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs41.aspx' },
   { nome: 'AT, página de apoio sobre rendimentos prediais', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_ao_contribuinte/Cidadaos/Rendimentos/Prediais/Paginas/default.aspx' },
   { nome: 'AT, Informação Vinculativa, processo 1115/2017: certificado energético, seguro, IMI, condomínio e reparações', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/rendimento/cirs/Documents/PIV_11676_Cat_F_Despesas_elegiveis_certificado_energetico_pintura_proporcionalidade_mensal_IMI.pdf' },
   { nome: 'AT, Informação Vinculativa, processo 4074/2017: instalações, sanita e eletrodomésticos', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/rendimento/cirs/Documents/PIV_12846.pdf' },
@@ -70,9 +135,15 @@ const FONTES = [
 
 /* O conteúdo do guia. Cada secção tem o id da âncora, o título e os blocos,
    por ordem: `p` (parágrafo), `sim`/`nao` (listas com visto ou cruz), `cond`
-   (condições, que se cumprem todas), `doc` (papéis a guardar), `grupo` (um
-   subtítulo com os seus blocos) e `nota` (uma caixa âmbar). */
-const GUIA = [
+   (condições, que se cumprem todas), `info` (factos soltos, com o ponto das
+   condições), `doc` (papéis a guardar), `grupo` (um subtítulo com os seus
+   blocos), `nota` (uma caixa âmbar), `fonte` (a linha da fonte principal,
+   com a chave da fonte) e `ir` (o botão para um sítio oficial, idem).
+
+   A parte 4, «As deduções», são as cinco secções do texto verificado pelo
+   Martinho, tal e qual, cada uma com o id de antes (há ligações de fora para
+   #pode-deduzir e as outras). */
+const DEDUCOES = [
   { id: 'regra', titulo: 'A regra geral', blocos: [
     { p: 'Nos termos do artigo 41.º, n.os 1 e 9, do Código do IRS, podes deduzir aos rendimentos prediais brutos, ' +
       'relativamente a cada prédio ou parte de prédio, os gastos que sejam, cumulativamente:' },
@@ -85,7 +156,7 @@ const GUIA = [
     ] },
     { p: 'A lei exclui expressamente gastos financeiros, depreciações, mobiliário, eletrodomésticos, artigos de ' +
       'conforto ou decoração e o Adicional ao IMI (AIMI).' },
-    { fonte: 0, texto: 'Fonte principal: artigo 41.º do Código do IRS, AT.' },
+    { fonte: 'cirs41', texto: 'Fonte principal: artigo 41.º do Código do IRS, AT.' },
   ] },
 
   { id: 'pode-deduzir', titulo: 'O que podes deduzir', blocos: [
@@ -211,8 +282,74 @@ const GUIA = [
     { nota: 'Os três elementos', texto: 'Uma fatura isolada pode não demonstrar o pagamento nem a ligação ao imóvel. ' +
       'Guarda os três: a natureza da despesa, a identificação do imóvel e a prova do pagamento.' },
   ] },
+];
 
-  { id: 'onde-declarar', titulo: 'Onde declarar', blocos: [
+/* O guia, pela ordem de quem declara: se tens de declarar, onde, como, o
+   que podes deduzir (a parte com `intro` e `seccoes`, numeradas 4.1 a 4.5)
+   e as fontes. Nas partes 1 a 3 cada frase fiscal tem a fonte entre
+   parênteses e em FONTES (o comentário diz o artigo de cada uma). O id
+   `onde-declarar` era o da nota curta do Anexo F, que passou para a parte 3:
+   fica com a parte 2, que é onde quem chega por ele quer ir. */
+const GUIA = [
+  { id: 'tens-de-declarar', titulo: 'Tens de declarar?', blocos: [
+    { p: 'As rendas que recebes de um prédio arrendado são rendimentos prediais, da categoria F do IRS, a não ser ' +
+      'que optes pela tributação segundo as regras da categoria B (artigo 8.º do Código do IRS).' },
+    { p: 'Se tu ou um dependente do teu agregado receberam rendas num ano, declaras-as na declaração de IRS desse ' +
+      'ano, a Modelo 3, com o Anexo F (artigo 57.º e instruções do Anexo F).' },
+    { grupo: 'O prazo', blocos: [
+      { p: 'Entregas a declaração de 1 de abril a 30 de junho do ano seguinte ao das rendas: as de 2026 declaram-se ' +
+        'de 1 de abril a 30 de junho de 2027 (artigo 60.º, n.º 1).' },
+    ] },
+    { grupo: 'A taxa', blocos: [
+      { p: 'Por regra, as rendas não se somam aos teus outros rendimentos: pagam uma taxa autónoma (artigos 22.º, ' +
+        'n.º 3, e 72.º).' },
+      { info: [
+        '25 % nas rendas de arrendamento habitacional (artigo 72.º, n.º 2).',
+        '28 % nas outras rendas prediais, como as de um arrendamento não habitacional (artigo 72.º, n.º 1, alínea e)).',
+        '10 % nas rendas de 2026 a 2029 de contratos só para habitação com renda mensal até 2,5 vezes a retribuição ' +
+          'mínima mensal de 2026, ou seja, 2 300 € no continente, salvo se te couber uma taxa mais baixa (artigo ' +
+          '45.º-C do Estatuto dos Benefícios Fiscais; Decreto-Lei n.º 97/2026, artigo 2.º; Decreto-Lei n.º 139/2025).',
+      ] },
+    ] },
+    { grupo: 'Os contratos longos', blocos: [
+      { p: 'Nas rendas de um contrato de arrendamento para habitação permanente, a taxa autónoma baixa com a duração ' +
+        'do contrato (artigo 72.º, n.os 3 a 5):' },
+      { info: [
+        'De 5 a menos de 10 anos: menos 10 pontos percentuais, e menos 2 por cada renovação com a mesma duração, até ' +
+          'mais 10 pontos.',
+        'De 10 a menos de 20 anos: menos 15 pontos percentuais.',
+        '20 anos ou mais: menos 20 pontos percentuais.',
+      ] },
+      { p: 'Não há redução nos contratos de arrendamento habitacional celebrados desde 1 de janeiro de 2024 cuja ' +
+        'renda mensal exceda em 50 % os limites gerais de preço de renda por tipologia e concelho, da Portaria ' +
+        'n.º 176/2019 (artigo 72.º, n.º 23).' },
+      { p: 'Se o contrato acabar antes do prazo por motivo imputável a ti, senhorio, perdes as reduções desde o início ' +
+        'do contrato ou da renovação, e no ano em que acabou declaras esse facto, para pagares a diferença com juros ' +
+        'compensatórios (artigo 72.º, n.º 20).' },
+      { p: 'Para teres direito à redução, além de comunicares o contrato com a declaração Modelo 2 do Imposto do Selo, ' +
+        'indicas no Portal das Finanças, até 15 de fevereiro do ano seguinte, a data de início e a duração do ' +
+        'contrato, e depois as renovações e a cessação (Portaria n.º 110/2019, nas instruções do Anexo F).' },
+    ] },
+    { grupo: 'Ou o englobamento', blocos: [
+      { p: 'Em vez da taxa autónoma, podes optar por englobar as rendas: somam-se aos teus outros rendimentos e pagam ' +
+        'as taxas gerais do artigo 68.º (artigo 72.º, n.º 13; instruções do quadro 6G do Anexo F).' },
+      { p: 'Se optares, englobas todas as rendas da categoria F desse ano, e não só as de um imóvel (artigo 22.º, ' +
+        'n.º 5).' },
+    ] },
+    { fonte: 'cirs72', texto: 'Fonte principal: artigo 72.º do Código do IRS, AT.' },
+  ] },
+
+  { id: 'onde-declarar', titulo: 'Onde declaras', blocos: [
+    { p: 'No Portal das Finanças, pela Internet: a declaração Modelo 3 e os anexos, como o Anexo F, são ' +
+      'obrigatoriamente entregues por transmissão eletrónica de dados (Portaria n.º 104/2026/1, artigos 2.º e 3.º).' },
+    { ir: 'Ir ao Portal das Finanças', fonte: 'portal' },
+    { p: 'Para entrar, usas o teu NIF e a senha de acesso, ou a Autenticação.gov, com a Chave Móvel Digital ou o ' +
+      'Cartão de Cidadão. Se ainda não tens senha, registas-te no Portal para a obter (folheto da AT sobre o acesso ' +
+      'ao Portal).' },
+    { fonte: 'portaria104', texto: 'Fonte principal: Portaria n.º 104/2026/1, artigos 2.º e 3.º, AT.' },
+  ] },
+
+  { id: 'como-preencher', titulo: 'Como preenches', blocos: [
     { p: 'No Anexo F da declaração Modelo 3, declara:' },
     { cond: [
       'As rendas pelo valor bruto, sem retirar antes os encargos.',
@@ -221,7 +358,47 @@ const GUIA = [
       'As obras em partes comuns no campo de conservação e manutenção, e não como simples quota de condomínio, quando ' +
         'essa for a natureza efetiva da despesa.',
     ] },
+    { grupo: 'Linha a linha', blocos: [
+      { p: 'Cada prédio vai numa linha própria, e cada fração em separado, mesmo que sejam do mesmo contrato. Um ' +
+        'prédio que não deu rendas no ano não se declara. Em cada linha indicas:' },
+      { info: [
+        'O número do contrato, que vem da declaração Modelo 2 do Imposto do Selo (ou do registo do contrato no Portal ' +
+          'das Finanças, se for anterior a 1 de abril de 2015), e a data de início.',
+        'A identificação matricial: o código da freguesia, de seis dígitos, que está nos documentos de cobrança do ' +
+          'IMI, o tipo de prédio (U, urbano, ou R, rústico), o artigo e a fração.',
+        'O titular das rendas: A ou B, como no rosto da declaração, ou o código do dependente (D1, D2…).',
+        'As rendas pelo valor ilíquido, pagas ou colocadas à tua disposição no ano, e a natureza: 07 no arrendamento ' +
+          'habitacional, 06 no não habitacional.',
+        'As retenções na fonte de IRS feitas sobre essas rendas.',
+        'O NIF português do inquilino ou, se ele não o tiver, o código do país.',
+        'Os gastos suportados e pagos no ano, enquanto o prédio esteve arrendado, cada um na sua coluna: conservação ' +
+          'e manutenção, condomínio, IMI pago no ano, imposto do selo, taxas autárquicas e outros.',
+        'As obras de conservação e manutenção pagas nos 24 meses antes do arrendamento, nas colunas próprias, só no ' +
+          'ano em que o arrendamento começa.',
+      ] },
+    ] },
+    { grupo: 'O quadro de cada contrato', blocos: [
+      { p: 'No modelo do Anexo F em vigor desde janeiro de 2025, mantido pela Portaria n.º 104/2026/1:' },
+      { info: [
+        'Quadro 4.1: os contratos sem redução de taxa pela duração.',
+        'Quadro 4.2: os contratos para habitação permanente com essa redução, celebrados ou renovados desde 1 de ' +
+          'janeiro de 2019, com o quadro 4.2A preenchido (as datas do contrato e da última renovação). Um contrato ' +
+          'celebrado desde 1 de janeiro de 2024 com a renda acima do limite do artigo 72.º, n.º 23, vai para o 4.1.',
+        'Quadro 6G: a opção pelo englobamento (campo 06).',
+      ] },
+      { p: 'Se sair um modelo novo para o ano das tuas rendas, confirma os quadros nas instruções dele.' },
+    ] },
+    { fonte: 'anexoF', texto: 'Fonte principal: instruções de preenchimento do Anexo F, AT.' },
   ] },
+
+  { id: 'deducoes', titulo: 'As deduções', intro: [
+    'Os encargos que a lei deixa abater às rendas, os que não deixa, e os documentos que tens de guardar para cada ' +
+      'imóvel.',
+    'Este guia segue a redação vigente do artigo 41.º do Código do IRS publicada pela Autoridade Tributária e ' +
+      'Aduaneira (AT), complementada por informações vinculativas da AT. Quando uma despesa não está claramente ' +
+      'coberta pela lei ou por orientação administrativa específica, fica assinalada como duvidosa, em vez de ' +
+      'aparecer como seguramente dedutível.',
+  ], seccoes: DEDUCOES },
 
   { id: 'fontes', titulo: 'As fontes oficiais', blocos: [{ fontes: true }] },
 ];
@@ -242,15 +419,18 @@ function icone(d, classe) {
 
 /* Uma lista do guia. O sentido (pode, não pode, condição, papel) vai no
    ícone e na classe, e também no texto escondido de cada linha — quem ouve a
-   página não vê o visto nem a cruz.
-   Recebe: tipo — 'sim', 'nao', 'cond' ou 'doc'; linhas — os textos.
+   página não vê o visto nem a cruz. Os factos soltos (`info`) levam o mesmo
+   ponto das condições: não dizem que se pode nem que não se pode.
+   Recebe: tipo — 'sim', 'nao', 'cond', 'info' ou 'doc'; linhas — os textos.
    Devolve: o HTML da <ul>. */
 function lista(tipo, linhas) {
+  const ponto = '<span class="ponto" aria-hidden="true"></span>';
   const marca = {
     sim: icone(VISTO, 'sim') + '<span class="so-leitor">Podes deduzir: </span>',
     nao: icone(CRUZ, 'nao') + '<span class="so-leitor">Não podes deduzir: </span>',
     doc: icone(VISTO, 'doc'),
-    cond: '<span class="ponto" aria-hidden="true"></span>',
+    cond: ponto,
+    info: ponto,
   }[tipo];
   return `<ul class="lista ${tipo}">
 ${linhas.map((t) => `      <li>${marca}<span>${esc(t)}</span></li>`).join('\n')}
@@ -267,12 +447,23 @@ ${FONTES.map((f) => `      <li>${f.url
     </ul>`;
 }
 
-/* Um bloco do guia em HTML (ver o formato em GUIA).
-   Recebe: b — o bloco. Devolve: o HTML dele. */
-function bloco(b) {
+/* Uma fonte de FONTES pela chave.
+   Recebe: id — a chave. Devolve: a fonte; falha alto se a chave não existe
+   (um bloco a citar uma fonte que não está na lista partia a regra do guia). */
+function fontePorId(id) {
+  const f = FONTES.find((x) => x.id === id);
+  if (!f) throw new Error('fonte do guia sem entrada em FONTES: ' + id);
+  return f;
+}
+
+/* Um bloco do guia em HTML (ver o formato em DEDUCOES).
+   Recebe: b — o bloco; nivel — o nível do subtítulo de um grupo (3 numa
+   secção das partes 1 a 3, 4 numa secção da parte 4, que já é um h3).
+   Devolve: o HTML dele. */
+function bloco(b, nivel = 3) {
   if (b.grupo) return `<div class="grupo">
-    <h3>${esc(b.grupo)}</h3>
-    ${b.blocos.map(bloco).join('\n    ')}
+    <h${nivel}>${esc(b.grupo)}</h${nivel}>
+    ${b.blocos.map((x) => bloco(x, nivel)).join('\n    ')}
     </div>`;
   if (b.nota) return `<div class="nota" role="note">
       ${icone(AVISO, 'aviso')}
@@ -282,19 +473,71 @@ function bloco(b) {
       </div>
     </div>`;
   if (b.fontes) return listaDeFontes();
+  if (b.ir) {
+    const f = fontePorId(b.fonte);
+    return `<p class="ir"><a class="btn" href="${esc(f.url)}" rel="noopener"><span>${esc(b.ir)}</span>${icone(SEGUIR, 'seguir')}</a></p>`;
+  }
   if (b.fonte != null) {
-    const f = FONTES[b.fonte];
+    const f = fontePorId(b.fonte);
     return `<p class="fonte">${f.url ? `<a href="${esc(f.url)}" rel="noopener">${esc(b.texto)}</a>` : esc(b.texto)}</p>`;
   }
   if (b.p) return `<p>${esc(b.p)}</p>`;
-  for (const tipo of ['sim', 'nao', 'cond', 'doc']) if (b[tipo]) return lista(tipo, b[tipo]);
+  for (const tipo of ['sim', 'nao', 'cond', 'info', 'doc']) if (b[tipo]) return lista(tipo, b[tipo]);
   throw new Error('bloco do guia sem tipo');
 }
 
-/* As secções e o índice, para os testes conferirem o que a página mostra.
-   Devolve: [{id, titulo}] pela ordem do guia. */
+/* As secções pela ordem de leitura, com o número que a página lhes mostra
+   — as partes (1 a 5) e, dentro da 4, as cinco secções (4.1 a 4.5) —, para
+   os testes conferirem a página e o índice.
+   Devolve: [{id, titulo, num, parte}] — parte é o id da parte de uma secção
+   de dentro, ou null. */
 export function seccoesDoGuia() {
-  return GUIA.map((s) => ({ id: s.id, titulo: s.titulo }));
+  return GUIA.flatMap((s, i) => {
+    const num = String(i + 1);
+    return [{ id: s.id, titulo: s.titulo, num, parte: null },
+      ...(s.seccoes || []).map((x, j) => ({ id: x.id, titulo: x.titulo, num: num + '.' + (j + 1), parte: s.id }))];
+  });
+}
+
+/* Uma secção em cartão: o título com o número e os blocos.
+   Recebe: s — a secção ({id, titulo, blocos}); num — o número à vista
+   ('2', '4.1'); nivel — 2 numa parte, 3 numa secção da parte 4.
+   Devolve: o HTML da <section>. */
+function seccaoEmCartao(s, num, nivel) {
+  return `  <section class="bloco" id="${s.id}" aria-labelledby="t-${s.id}">
+    <h${nivel} id="t-${s.id}"><span class="num" aria-hidden="true">${num}</span>${esc(s.titulo)}</h${nivel}>
+    ${s.blocos.map((b) => bloco(b, nivel + 1)).join('\n    ')}
+  </section>`;
+}
+
+/* Uma parte do guia. A que tem secções dentro (a 4, as deduções) abre com o
+   título e a introdução sobre o fundo, e as secções seguem em cartões, cada
+   uma com o seu h3 e o seu número (4.1…); as outras são um cartão só.
+   Recebe: s — a parte; i — a posição em GUIA. Devolve: o HTML dela. */
+function parteDoGuia(s, i) {
+  const num = String(i + 1);
+  if (!s.seccoes) return seccaoEmCartao(s, num, 2);
+  return `  <section class="parte" id="${s.id}" aria-labelledby="t-${s.id}">
+    <div class="parte-cabeca">
+      <h2 id="t-${s.id}"><span class="num" aria-hidden="true">${num}</span>${esc(s.titulo)}</h2>
+      ${s.intro.map((t) => `<p>${esc(t)}</p>`).join('\n      ')}
+    </div>
+${s.seccoes.map((x, j) => seccaoEmCartao(x, num + '.' + (j + 1), 3)).join('\n')}
+  </section>`;
+}
+
+/* O índice: as partes numeradas pela lista e, dentro da 4, as secções com
+   o número escrito (4.1…), que a lista não sabe fazer.
+   Devolve: o HTML das <li> do índice (sem a da nota de segurança). */
+function linhasDoIndice() {
+  return GUIA.map((s, i) => {
+    if (!s.seccoes) return `      <li><a href="#${s.id}">${esc(s.titulo)}</a></li>`;
+    return `      <li><a href="#${s.id}">${esc(s.titulo)}</a>
+        <ol>
+${s.seccoes.map((x, j) => `          <li><a href="#${x.id}"><span class="num-ind" aria-hidden="true">${i + 1}.${j + 1}</span>${esc(x.titulo)}</a></li>`).join('\n')}
+        </ol>
+      </li>`;
+  }).join('\n');
 }
 
 /* Os dados estruturados do guia, para os motores de busca: o caminho
@@ -390,8 +633,8 @@ ${cabecaRaiz}
   <div class="cabeca">
     <p class="chapeu">Guia · IRS do senhorio</p>
     <h1>${esc(H1)}</h1>
-    <p class="sub">Os encargos que a lei deixa abater às rendas, os que não deixa, e os documentos que tens de guardar
-    para cada imóvel.</p>
+    <p class="sub">Se tens de declarar as rendas, onde as declaras, como preenches o Anexo F e o que podes abater em
+    cada imóvel.</p>
   </div>
 
   <dl class="ficha">
@@ -400,23 +643,18 @@ ${cabecaRaiz}
     <div><dt>Verificado a</dt><dd>8 de novembro de 2026</dd></div>
   </dl>
 
-  <p class="intro">Este guia segue a redação vigente do artigo 41.º do Código do IRS publicada pela Autoridade
-  Tributária e Aduaneira (AT), complementada por informações vinculativas da AT. Quando uma despesa não está
-  claramente coberta pela lei ou por orientação administrativa específica, fica assinalada como duvidosa, em vez de
-  aparecer como seguramente dedutível.</p>
+  <p class="intro">Primeiro vês se tens de declarar, depois onde e como, e por fim o que podes deduzir. Cada regra
+  vem da lei ou da Autoridade Tributária e Aduaneira (AT), e as fontes oficiais estão no fim.</p>
 
   <nav class="indice" aria-label="Neste guia">
     <p class="indice-tit">Neste guia</p>
     <ol>
-${GUIA.map((s) => `      <li><a href="#${s.id}">${esc(s.titulo)}</a></li>`).join('\n')}
+${linhasDoIndice()}
       <li><a href="#seguranca">A nota de segurança</a></li>
     </ol>
   </nav>
 
-${GUIA.map((s, i) => `  <section class="bloco" id="${s.id}" aria-labelledby="t-${s.id}">
-    <h2 id="t-${s.id}"><span class="num" aria-hidden="true">${i + 1}</span>${esc(s.titulo)}</h2>
-    ${s.blocos.map(bloco).join('\n    ')}
-  </section>`).join('\n\n')}
+${GUIA.map(parteDoGuia).join('\n\n')}
 
   <aside class="seguranca" id="seguranca" aria-labelledby="t-seguranca">
     ${icone(ESCUDO, 'escudo')}
@@ -494,7 +732,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
   font-family:'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;
   font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;
   padding:0 env(safe-area-inset-right) 0 env(safe-area-inset-left)}
-h1,h2,h3{font-family:'Bricolage Grotesque','Geist',system-ui,sans-serif;font-weight:650;letter-spacing:-.02em;
+h1,h2,h3,h4{font-family:'Bricolage Grotesque','Geist',system-ui,sans-serif;font-weight:650;letter-spacing:-.02em;
   margin:0;text-wrap:balance}
 p{margin:0;text-wrap:pretty}
 a{color:var(--accent-text)}
@@ -564,12 +802,19 @@ h1{font-size:clamp(30px,5.4vw,48px);line-height:1.08}
 .ficha dd{margin:4px 0 0}
 .intro{margin-top:24px;color:var(--muted);max-width:70ch}
 
-/* o índice: as secções numeradas, com os alvos de 44 px de um dedo */
+/* o índice: as partes numeradas, com os alvos de 44 px de um dedo; dentro
+   da parte 4, as secções com o número escrito (4.1…), sem o da lista. A
+   parte 4 pode partir-se entre as duas colunas do computador (os números
+   dizem a ordem), para as colunas ficarem do mesmo tamanho */
 .indice{margin-top:32px;padding:16px 24px;border-radius:16px;border:1px solid var(--line);background:var(--card)}
 .indice-tit{font-weight:600;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .indice ol{margin:8px 0 0;padding-left:24px;columns:2 240px;column-gap:32px}
 .indice li{break-inside:avoid}
+.indice li:has(> ol){break-inside:auto}
+.indice ol ol{columns:auto;margin:0;padding-left:0;list-style:none}
 .indice a{display:inline-flex;align-items:center;min-height:44px;font-weight:500;text-decoration:none}
+.indice ol ol a{gap:8px}
+.num-ind{min-width:3ch;color:var(--muted);font-variant-numeric:tabular-nums}
 
 /* ------------------------------------------------------------ as secções */
 .bloco{margin-top:32px;padding:clamp(24px,4vw,40px);border-radius:16px;background:var(--card);
@@ -579,13 +824,27 @@ h1{font-size:clamp(30px,5.4vw,48px);line-height:1.08}
 .bloco > p,.grupo > p{max-width:70ch}
 h2{font-size:clamp(24px,3.6vw,30px);line-height:1.15;display:flex;align-items:baseline;gap:12px}
 .num{display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:32px;height:32px;
-  border-radius:999px;background:var(--accent-soft);color:var(--accent-text);
+  padding:0 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent-text);
   font-family:'Geist',system-ui,sans-serif;font-size:16px;font-weight:600;letter-spacing:0;
   font-variant-numeric:tabular-nums;align-self:center}
 .grupo{display:flex;flex-direction:column;gap:12px;padding-top:16px;border-top:1px solid var(--line)}
-.bloco > h2 + .grupo{border-top:0;padding-top:0}
-h3{font-size:20px;line-height:1.25}
+.bloco > h2 + .grupo,.bloco > h3 + .grupo{border-top:0;padding-top:0}
+h3,h4{font-size:20px;line-height:1.25}
 .fonte{font-size:14px;color:var(--muted)}
+
+/* a parte 4, as deduções: o título e a introdução sobre o fundo, como a
+   cabeça da página, e as cinco secções em cartões mais juntos (24 px) do
+   que as partes (48 px), cada uma com o seu h3 numerado (4.1…) */
+.parte{margin-top:48px;scroll-margin-top:80px}
+.parte-cabeca{display:flex;flex-direction:column;gap:12px}
+.parte-cabeca p{max-width:70ch;color:var(--muted)}
+.parte .bloco{margin-top:24px}
+.bloco > h3{font-size:24px;line-height:1.15;display:flex;align-items:baseline;gap:12px}
+
+/* o botão para o sítio oficial (o Portal das Finanças), o secundário da
+   casa, com o chevron */
+.ir a.btn{gap:8px;padding-right:12px}
+.ir .i{width:20px;height:20px}
 
 /* as listas: o visto do que podes deduzir, a cruz do que não podes, o visto
    neutro dos papéis, e o ponto das condições — formas diferentes, para o

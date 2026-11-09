@@ -567,7 +567,11 @@ A caixa que cresce não mexe o que fica. Durante a viagem leva a classe
 estilos.css:.a-crescer, que encosta as linhas ao topo: a encolher, a caixa é
 maior do que o que já leva dentro, e numa grelha (o .sect) a altura a mais
 repartia-se pelas linhas — o nome, a morada e o segmentado afastavam-se até
-280px e voltavam. O scroll de quem rola (continuidade.js:quemRola)
+280px e voltavam. Quando a caixa animada é transparente e o que se vê é um
+cartão lá dentro (o painel do dia do Calendário), é o cartão que fica com a
+sobra durante a viagem (estilos.css:.cal-dia.a-crescer>.cal-dia-lista): numa
+coluna flex a altura a mais ficava vazia por baixo, e o cartão e os botões
+tomavam o tamanho novo no primeiro fotograma. O scroll de quem rola (continuidade.js:quemRola)
 guarda-se antes de pintar e repõe-se depois de a animação começar: pintar
 com o conteúdo já curto prende o scroll ao fundo novo, e o conteúdo saltava;
 daí em diante encolhe com a caixa. As peças com chave (data-parte;
@@ -6299,7 +6303,16 @@ teste). A montra da raiz nunca a leva. O menu depende do sítio
 e «Back office»; nas páginas públicas, «Voltar à app» no lugar de «Ver a
 montra»; no back office, só os dois primeiros. «Ver a montra», «Voltar à
 app» e «Back office» abrem no mesmo separador — na APK de dev, no mesmo
-WebView, que leva o cookie e não tem barra de endereços.
+WebView, que leva o cookie e não tem barra de endereços. No dev, o «Back
+office» entra sem o /entrar: uma página do back office sem sessão de equipa,
+aberta com a sessão de uma conta de teste, abre uma sessão de equipa em nome
+de quem pediu a ligação do /test, com os cargos que o Discord lhe dá nesse
+momento, e fica na auditoria como entrada; sem cargo, com o Discord em baixo
+ou vinda de outro site fica a página de entrada, e a API do back office pede
+sempre o cookie da equipa (worker/src/equipa.js:entrarPelaSessaoDeTeste).
+«Sair» fica fora até um /test novo: o sair deixa uma marca
+(worker/src/teste.js:cookieSaiuDaEquipa), com ela a sessão de teste não abre
+o back office, e tiram-na uma ligação nova do /test e o /entrar.
 
 O menu é o menu de ações da casa (data-menu="acoes"). Abri-lo guarda o ecrã
 de agora (cloud/qa.js:qaMenuAbriu): o contexto do ticket é o de quando se
@@ -6345,7 +6358,7 @@ assinado (teste.js:ligacaoTeste, o parâmetro n; a assinatura só o conta
 quando vem, por isso as ligações de um worker sem esta versão continuam a
 valer), abri-la guarda-o no KV (teste.js:chaveNomeDev), e criar o ticket
 copia o id (users.test_owner) e o nome para o próprio ticket
-(worker/src/rotas/qa.js:discordDoAutor), porque o /test limpar apaga as
+(worker/src/teste.js:discordDoAutor), porque o /test limpar apaga as
 contas de teste. Quando a ligação não trouxe o nome (as do bot de produção
 antes de o saberem pôr), pergunta-se ao Discord com o token do bot e guarda-se
 no mesmo sítio por 30 dias (teste.js:nomeDoDevNoDiscord, lib/bot.js:nomeNoDiscord);

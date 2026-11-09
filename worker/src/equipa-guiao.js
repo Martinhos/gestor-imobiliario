@@ -1734,7 +1734,7 @@ var PAGINAS_RASTO = { '/': 'Início da montra', '/privacidade': 'Política de Pr
 var SECCOES_RASTO = {
   inicio: 'Início', ligado: 'Do imóvel à renda, tudo ligado', imoveis: 'Imóveis', contratos: 'Contratos',
   planeados: 'Planeados', computador: 'No computador', resto: 'O resto da gestão', contas: 'Contas entre donos',
-  dados: 'Os dados são teus', guia: 'IRS: o que podes deduzir às rendas', comecar: 'Começa pelo primeiro imóvel',
+  dados: 'Os dados são teus', guia: 'IRS das rendas: como declarar e o que podes deduzir', comecar: 'Começa pelo primeiro imóvel',
   'rasto-de-utilizacao': 'Rasto de utilização',
 };
 // as janelas e os portões com nome próprio (web/cloud/rasto.js:rstIdDaCamada e rstPortao), já com as aspas

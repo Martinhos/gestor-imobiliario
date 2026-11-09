@@ -411,7 +411,10 @@ function calMarcarVisita(iso){
    O painel muda de ALTURA com o dia — um dia cheio tem mais do dobro de um
    dia vazio —, e trocá-lo de repente fazia a legenda por baixo saltar até
    207px. Por isso passa pelo crescerEmAltura (continuidade.js), que o deixa
-   crescer ou encolher até ao tamanho novo.
+   crescer ou encolher até ao tamanho novo. O painel é transparente e o que se
+   vê é o cartão: a encolher, a sobra da viagem vai para ele
+   (estilos.css:.cal-dia.a-crescer>.cal-dia-lista), senão o cartão e os botões
+   tomavam o tamanho novo no primeiro fotograma (ticket e1dda4c0).
    Recebe: iso — o dia, em 'AAAA-MM-DD'.
    Devolve: nada — atualiza calDiaSel e o DOM. */
 function calSel(iso){

@@ -330,6 +330,37 @@ var modalStack = [];
 // para os ids dos títulos
 var qaJanelasN = 0;
 
+// o scroll da página quando a camada a travou (null: não foi ela a travar)
+var qaTravaY = null;
+
+/* Trava o scroll da página enquanto houver uma janela aberta, como o lockPage
+   da app: a classe qa-trava no <html>, o body fixo e deslocado pelo scroll que
+   a página tinha. Se outra coisa já a travou (noscroll), não faz nada, para
+   não ser a camada a destravar o que não travou.
+   Devolve: nada. */
+function qaTravar() {
+  try {
+    var h = document.documentElement;
+    if (qaTravaY !== null || h.classList.contains('noscroll') || h.classList.contains('qa-trava')) return;
+    qaTravaY = window.scrollY || 0;
+    h.classList.add('qa-trava');
+    document.body.style.top = (-qaTravaY) + 'px';
+  } catch (e) {}
+}
+
+/* Destrava a página, se foi a camada a travá-la, e repõe o scroll exato.
+   Devolve: nada. */
+function qaDestravar() {
+  try {
+    if (qaTravaY === null) return;
+    var y = qaTravaY;
+    qaTravaY = null;
+    document.documentElement.classList.remove('qa-trava');
+    document.body.style.top = '';
+    window.scrollTo(0, y);
+  } catch (e) {}
+}
+
 /* A janela de cima.
    Devolve: a camada, ou null. */
 function modalTop() {
@@ -360,6 +391,7 @@ function openModal(title, body, foot) {
   document.body.appendChild(el);
   var L = { el: el, title: title, gatilho: document.activeElement, tocado: false };
   modalStack.push(L);
+  qaTravar();
   fillModal(el, title, body, foot);
   focarModal(el);
   return L;
@@ -392,6 +424,7 @@ function closeModal(origem) {
   if (L.el && L.el.parentNode) L.el.parentNode.removeChild(L.el);
   var top = modalTop();
   if (top && top.el) { top.el.classList.remove('under'); }
+  if (!modalStack.length) qaDestravar();
   try { if (L.gatilho && document.contains(L.gatilho)) L.gatilho.focus(); else if (top) focarModal(top.el); } catch (e) {}
 }
 
@@ -546,6 +579,8 @@ export const CSS_QA_EQUIPA = String.raw`/* Os tokens da app que o back office n�
 .qa-pilula .menupop button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .qa-pilula svg,.qa-camada svg{flex:0 0 auto}
 /* As janelas (o .modal e a .sheet da app): ao centro no computador, folha de baixo no telemóvel */
+html.qa-trava{overflow:hidden}
+html.qa-trava body{position:fixed;left:0;right:0;width:100%}
 .qa-camada{position:fixed;inset:0;height:100dvh;z-index:70}
 .qa-camada .bg{position:absolute;inset:0;background:var(--veu);animation:qaVeuEntra var(--lento) var(--curva-entra)}
 .qa-camada.under .bg{background:rgba(9,14,28,.3)}

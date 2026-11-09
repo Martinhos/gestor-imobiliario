@@ -199,6 +199,82 @@ export async function nomeDoDevNoDiscord(env, quem) {
   return nome;
 }
 
+/* A conta do Discord por trás de uma conta de teste: quem pediu a ligação
+   do /test (users.test_owner, o id de Discord) e o nome que essa ligação
+   trouxe ou, sem ele, o que o bot diz (nomeDoDevNoDiscord). É ela o autor
+   dos tickets de QA (rotas/qa.js:autorDaConta), e não a conta de teste, que
+   o /test limpar apaga; e é ela que abre o back office do dev
+   (discordDaSessaoDeTeste). Uma conta normal não tem. Vive aqui e não no
+   rotas/qa.js para as importações irem num sentido só (rotas/qa.js →
+   teste.js).
+   Recebe: env — o ambiente do worker (D1 em env.DB, KV em env.SESSIONS);
+   me — o utilizador com sessão.
+   Devolve: promessa de {id, nome} — os dois null numa conta que não é de
+   teste; o nome null quando não se soube. */
+export async function discordDoAutor(env, me) {
+  const r = await env.DB.prepare('SELECT test_owner FROM users WHERE id = ?').bind(me.id).first();
+  const id = r && r.test_owner ? String(r.test_owner) : null;
+  if (!id) return { id: null, nome: null };
+  let nome = null;
+  try {
+    nome = (await nomeDoDevNoDiscord(env, id)) || null;
+  } catch (e) { nome = null; }
+  return { id, nome };
+}
+
+/* A marca de quem saiu do back office do dev: «Sair» lá fica fora até um
+   /test novo (decisão do Martinho, 2026-11-09). Sem ela, o recarregar que
+   se segue ao Sair voltava a entrar pela sessão de teste
+   (equipa.js:entrarPelaSessaoDeTeste). Põe-na o sair do back office
+   (equipa.js:rotasEquipa) e tiram-na uma ligação nova do /test (rotaTeste)
+   e o /entrar do Discord; tudo só com o ENV_NAME 'dev'. Vive aqui, e não no
+   equipa.js, porque o equipa.js importa este ficheiro e não o contrário.
+   Dura o mesmo que a sessão de uma conta: depois disso já é preciso um
+   /test novo de qualquer maneira. */
+const COOKIE_SAIU = 'gi_equipa_saiu';
+const SAIU_TTL = 30 * 86400;
+
+/* A linha Set-Cookie da marca de quem saiu do back office do dev.
+   Recebe: apagar (opcional) — true para a variante que a apaga (Max-Age=0).
+   Devolve: a linha Set-Cookie completa (texto), HttpOnly, Secure e SameSite=Lax. */
+export function cookieSaiuDaEquipa(apagar) {
+  return COOKIE_SAIU + '=' + (apagar ? '' : '1') + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + (apagar ? 0 : SAIU_TTL);
+}
+
+/* O pedido traz a marca de quem saiu do back office do dev?
+   Recebe: request — o pedido HTTP (pode faltar).
+   Devolve: true/false. */
+export function saiuDaEquipa(request) {
+  const c = request && request.headers ? request.headers.get('Cookie') || '' : '';
+  return new RegExp('(?:^|;\\s*)' + COOKIE_SAIU + '=1(?:;|$)').test(c);
+}
+
+/* A pessoa do Discord por trás da sessão de teste deste pedido: a conta da
+   sessão (auth.js:getSessionUser), que tem de ser de teste (eContaDeTeste),
+   e quem pediu a ligação do /test que a criou (discordDoAutor,
+   o users.test_owner — que só o rotaTeste escreve, a partir do dono
+   assinado na ligação, e a ligação com dono só o bot a dá a quem correu o
+   /test e o back office a quem tem a sessão). É o que abre o back office do
+   dev em nome dela (equipa.js:entrarPelaSessaoDeTeste).
+   Recebe: env — o ambiente do worker (KV SESSIONS, D1 DB); request — o
+   pedido, de onde saem os tokens.
+   Devolve: promessa de {conta, id, nome} — o id da conta de teste, o id de
+   Discord do dono e o nome dele (null quando não se sabe) —, ou de null sem
+   sessão, numa conta normal, numa conta de teste sem dono, com um dono que
+   não tem a forma de um id de Discord, ou quando a base ou o KV falham. */
+export async function discordDaSessaoDeTeste(env, request) {
+  try {
+    const u = await getSessionUser(env, request);
+    if (!u || !eContaDeTeste(u.email)) return null;
+    const d = await discordDoAutor(env, u);
+    if (!d.id || !/^\d{1,20}$/.test(d.id)) return null;
+    return { conta: u.id, id: d.id, nome: d.nome };
+  } catch (e) {
+    console.error('dono da sessão de teste', e && e.message);
+    return null;
+  }
+}
+
 /* A conta de teste em si: email no subdomínio, palavra-passe impossível,
    termos aceites, e o dono (o dev que a pediu) gravado para o seletor.
    Nasce com o email por confirmar, como uma conta a sério (migração 0027):
@@ -419,15 +495,15 @@ export async function rotaTeste(c) {
         (dados === '1' ? ' · com dados de exemplo' : ''));
 
   const comExemplo = !retomada && dados === '1';
-  return new Response(null, {
-    status: 302,
-    headers: {
-      Location: '/?entrar=' + token + (comExemplo ? '&exemplo=1' : ''),
-      'Set-Cookie': sessionCookie(token),
-      'Cache-Control': 'no-store',
-      'Referrer-Policy': 'no-referrer',
-    },
+  const cabecalhos = new Headers({
+    Location: '/?entrar=' + token + (comExemplo ? '&exemplo=1' : ''),
+    'Set-Cookie': sessionCookie(token),
+    'Cache-Control': 'no-store',
+    'Referrer-Policy': 'no-referrer',
   });
+  // um /test novo devolve a entrada no back office a quem tinha saído dele (cookieSaiuDaEquipa)
+  if (env.ENV_NAME === 'dev' && saiuDaEquipa(c.request)) cabecalhos.append('Set-Cookie', cookieSaiuDaEquipa(true));
+  return new Response(null, { status: 302, headers: cabecalhos });
 }
 
 /* Depois de se apagar uma conta de teste, a sessão seguinte: a irmã mais
@@ -515,7 +591,8 @@ export async function rotasContasDeTeste(c) {
    · as interações do bot do Discord (POST /api/discord), que se provam pela
      assinatura Ed25519;
    · o back office (/equipa, /equipa/…, /api/equipa/…), com a entrada da
-     equipa pelo Discord, como sempre;
+     equipa pelo Discord, como sempre — e, com a sessão de teste de quem tem
+     cargo, também por ela (equipa.js:entrarPelaSessaoDeTeste);
    · o que as páginas de erro do /t/entrar pedem (o CSS, as duas letras e o
      ícone) — o back office pede o CSS dele debaixo de /equipa/;
    · o /versao.json, que o deploy lê para confirmar a publicação

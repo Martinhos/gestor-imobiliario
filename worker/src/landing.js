@@ -41,7 +41,7 @@
    é isto?». */
 
 import { CSP_ESTRITA } from './lib/http.js';
-import { CAMINHO_GUIA, GUIA_REVISTO } from './guia-vista.js';
+import { CAMINHO_GUIA, GUIA_REVISTO, H1 as TITULO_GUIA } from './guia-vista.js';
 
 const APP = 'https://app.rendorium.com';
 const IMG = '/img/landing';
@@ -546,9 +546,9 @@ ${e.ecra(hoje)}
       <span class="ic ac">${icone(DOCUMENTO)}</span>
       <div class="guia-texto">
         <p class="chapeu">Guia</p>
-        <h2 id="t-guia">IRS: o que podes deduzir às rendas</h2>
-        <p>Os encargos que a lei deixa abater às rendas e os que não deixa: IMI, condomínio, obras, seguros, e os
-        documentos a guardar para cada imóvel.</p>
+        <h2 id="t-guia">${TITULO_GUIA}</h2>
+        <p>Se tens de declarar as rendas, onde e como o fazes, e o que a lei deixa abater: IMI, condomínio, obras,
+        seguros, e os documentos a guardar para cada imóvel.</p>
       </div>
       <a class="btn" href="${CAMINHO_GUIA}">Ler o guia</a>
     </div>

@@ -99,10 +99,11 @@ export function autorDaEquipa(eu) {
 }
 
 /* O autor de um ticket escrito numa conta da app: o id da conta e, numa
-   conta de teste, a conta do Discord que pediu o /test (discordDoAutor).
+   conta de teste, a conta do Discord que pediu o /test (teste.js:discordDoAutor).
    Recebe: env — o ambiente do worker; me — o utilizador com sessão.
    Devolve: promessa de {id, discordId, discordNome}. */
 async function autorDaConta(env, me) {
+  const { discordDoAutor } = await import('../teste.js');
   const d = await discordDoAutor(env, me);
   return { id: me.id, discordId: d.id, discordNome: d.nome };
 }
@@ -137,27 +138,6 @@ async function criarTicket(env, request, autor) {
      VALUES (?, ?, ?, ?, ?, ?, ?, 'aberto', ?, ?)`
   ).bind(id, autor.id, autor.discordId || null, autor.discordNome || null, texto, gravidade, contexto, t, t).run();
   return json({ ok: true, id }, 201);
-}
-
-/* A conta do Discord por trás de uma conta de teste: quem pediu a ligação
-   do /test (users.test_owner, o id de Discord) e o nome que essa ligação
-   trouxe ou, sem ele, o que o bot diz (teste.js:nomeDoDevNoDiscord). É ela
-   o autor do ticket, e não a conta de teste, que o /test limpar apaga. Uma
-   conta normal não tem.
-   Recebe: env — o ambiente do worker (D1 em env.DB, KV em env.SESSIONS);
-   me — o utilizador com sessão.
-   Devolve: promessa de {id, nome} — os dois null numa conta que não é de
-   teste; o nome null quando não se soube. */
-async function discordDoAutor(env, me) {
-  const r = await env.DB.prepare('SELECT test_owner FROM users WHERE id = ?').bind(me.id).first();
-  const id = r && r.test_owner ? String(r.test_owner) : null;
-  if (!id) return { id: null, nome: null };
-  let nome = null;
-  try {
-    const { nomeDoDevNoDiscord } = await import('../teste.js');
-    nome = (await nomeDoDevNoDiscord(env, id)) || null;
-  } catch (e) { nome = null; }
-  return { id, nome };
 }
 
 /* O contexto de um ticket pronto a gravar: o objeto em JSON até 16 KB.

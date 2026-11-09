@@ -353,9 +353,12 @@ export default {
 
     /* A ferramenta de equipa. Vive fora da API de quem usa a app e tem a sua
        própria sessão — quem entra aqui não tem casas nem movimentos, e uma
-       sessão de cliente não abre nada disto. */
+       sessão de cliente não abre nada disto. No dev, as páginas (não a API)
+       sem sessão de equipa abrem-na com a sessão de teste de quem tem cargo
+       no Discord (equipa.js:entrarPelaSessaoDeTeste, que fora do dev devolve
+       null sem ler nada). */
     if (url.pathname.startsWith('/equipa') || url.pathname.startsWith('/api/equipa/')) {
-      const { rotasEquipa, getEquipa } = await import('./equipa.js');
+      const { rotasEquipa, getEquipa, entrarPelaSessaoDeTeste } = await import('./equipa.js');
       const c = { env, request, ctx, url, path: url.pathname.replace(/\/+$/, ''), method: request.method };
       try {
         // a pílula do QA no back office do dev (equipa-qa.js): o guião e o CSS dela
@@ -368,12 +371,16 @@ export default {
         if (url.pathname === '/equipa' || url.pathname === '/equipa/') {
           const { paginaEquipa } = await import('./equipa-vista.js');
           const eu = await getEquipa(env, request);
+          const entrou = eu ? null : await entrarPelaSessaoDeTeste(env, request, url);
+          if (entrou) return harden(entrou);
           return harden(paginaEquipa(eu, { qa: env.ENV_NAME || '' }));
         }
         // a documentação da casa: gerada do código no deploy, para a equipa
         if (url.pathname === '/equipa/docs') {
           const eu = await getEquipa(env, request);
           if (!eu) {
+            const entrou = await entrarPelaSessaoDeTeste(env, request, url);
+            if (entrou) return harden(entrou);
             const { paginaEquipa } = await import('./equipa-vista.js');
             return harden(paginaEquipa(null));
           }

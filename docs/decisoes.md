@@ -91,6 +91,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-08 · Um guia de declarar as rendas, sem prometer a Declaração
 - 2026-11-08 · O IRS na montra como guia, e a pílula do QA nas páginas públicas
 - 2026-11-08 · O «O que podes fazer» fecha-se, e a gaveta da montra fechada não ocupa espaço
+- 2026-11-09 · O back office do dev abre com a sessão de teste
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2538,7 +2539,7 @@ dev, por isso passou a viajar assinado na ligação (worker/src/teste.js:ligacao
 A assinatura só conta o nome quando ele vem, para as ligações emitidas por um
 worker ainda sem esta versão (o bot de produção, até à promoção) continuarem a
 valer; essas aparecem como «Discord <id>». O ticket copia o id e o nome ao
-ser criado (worker/src/rotas/qa.js:discordDoAutor), para o autor sobreviver à
+ser criado (worker/src/teste.js:discordDoAutor), para o autor sobreviver à
 conta de teste.
 
 A seguir, o Martinho quis ver o nome logo, e não «Discord <id>» até à
@@ -3342,3 +3343,41 @@ fazer». Escolheu um X no canto, como o do tutorial, em vez de um «Dispensar» 
 fundo, e que o cartão volte quando o cargo muda, em vez de ficar fechado para
 sempre ou só até à próxima visita: um cargo novo deixa fazer outras coisas, e
 isso merece ser lido outra vez.
+
+## 2026-11-09 · O back office do dev abre com a sessão de teste
+
+Um ticket de QA do Martinho (68c59ce4, bloqueia): no dev, «Back office» na
+pílula dava a página «Entra-se a partir do Discord», que ele leu como um erro.
+Não era: a sessão de equipa é outra, e só nascia do /entrar. Perguntado, ele
+escolheu que a sessão de teste abrisse o back office «como quem pediu o
+/test»: em nome da pessoa do Discord que pediu a ligação, com os cargos que
+ela tem no Discord, e quem não tem cargo continua a ver a página de entrada.
+Ficaram de fora dar acesso total a qualquer conta de teste e deixar como
+estava.
+
+A sessão de teste não passou a valer como sessão de equipa: ela abre uma
+sessão de equipa nova, igual à do /entrar (worker/src/equipa.js:guardarSessao),
+e daí para a frente nada sabe por onde se entrou — os papéis revistos de 15
+em 15 minutos, o sair, a pílula e os autores «equipa:<id>». A API do back
+office continua a pedir o cookie da equipa, e só as páginas (um GET ao
+/equipa, ao /equipa/ ou ao /equipa/docs) abrem a sessão, de volta ao próprio
+endereço. A pessoa é o users.test_owner, que só uma ligação assinada escreve;
+os cargos perguntam-se ao Discord nesse pedido, e como a ligação do /test não
+diz o servidor, perguntam-se nos servidores onde o bot do dev está
+(worker/src/equipa.js:servidoresDoBot) — os mesmos onde vivem os cargos das
+listas do dev. Uma navegação vinda de outro site não abre nada (o cookie da
+sessão de teste é SameSite=Lax e iria com ela), e sem a linha da auditoria a
+sessão apaga-se. Em produção e no percurso a função sai na primeira linha,
+sem ler nada.
+
+O «Sair» do back office apagava a sessão, mas o recarregar que se lhe segue
+voltava a entrar pela sessão de teste. Perguntado, o Martinho escolheu «Sair
+fica fora até novo /test»: no dev, o sair deixa uma marca num cookie
+(worker/src/teste.js:cookieSaiuDaEquipa, HttpOnly, um mês), com ela a sessão
+de teste não abre o back office, e tiram-na uma ligação nova do /test e o
+/entrar do Discord — as duas maneiras de dizer «quero entrar». Fora do dev
+não há marca.
+
+O discordDoAutor passou do rotas/qa.js para o teste.js
+(worker/src/teste.js:discordDoAutor): usá-lo do teste.js fazia um ciclo de
+importações (testes/quatro-olhos.test.js), e é ao teste.js que pertence.
