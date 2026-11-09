@@ -3500,11 +3500,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .ana .table tr[data-click]:active td{background:var(--press)}
 .ana .table tr[data-click]:focus-visible td{background:var(--tint)}
 .ana .table .ana-total td{background:var(--chip)}
-.ana-fixa th:first-child,.ana-fixa td:first-child,.ana-fixa-1 .table th:first-child,.ana-fixa-1 .table td:first-child{position:sticky;left:0;z-index:1;background:var(--card)}
-.ana-fixa-1 .table td:first-child{min-width:150px}
-/* a célula presa da linha dos totais é cinzenta como o resto da linha (a
-   regra de cima, da mesma força, pintava-a de branco) */
-.ana-fixa-1 .table tr.ana-total td{background:var(--chip)}
+.ana-fixa th:first-child,.ana-fixa td:first-child{position:sticky;left:0;z-index:1;background:var(--card)}
 
 /* ---- a Avaliação ---- */
 /* o herói: o valor de mercado e o valor por rendimento em barras à mesma
@@ -3586,40 +3582,28 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 @media(min-width:521px){.prj-tabela thead th{white-space:normal;vertical-align:bottom;min-width:76px;max-width:150px}}
 
 /* ---- o IRS · Anexo F ---- */
-/* a faixa das regras do ano, em cobalto suave */
-.fis-regras{display:flex;flex-direction:column;gap:8px;background:var(--accent-soft);border-color:var(--accent-soft);color:var(--accent-text)}
-.fis-regras-cab{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
-.fis-regras .badge{background:var(--card);color:var(--accent-text)}
-.fis-regras .badge.amber{background:var(--warn-soft);color:var(--warn)}
-.fis-regras .ana-tit{color:var(--ink)}
-.fis-entrega{flex:1 1 260px;font-size:14.5px;font-weight:500}
-.fis-guia-btn{margin-left:auto}
-.fis-regras-txt{margin:0;font-size:14px}
-.fis-novas .lbl{color:var(--accent-text)}
-.fis-novas ul{margin:4px 0 0;padding-left:18px;font-size:13.5px}
-.fis-novas li+li{margin-top:2px}
+/* o ano dos rendimentos na barra: o rótulo e o seletor (sel()) juntos, o
+   seletor à largura do ano e não da barra */
+.fis-ano{display:inline-flex;align-items:center;gap:8px;min-width:0;font-size:inherit;font-weight:inherit}
+.fis-ano .sel{width:auto}
+.fis-ano .selbtn{width:auto;min-width:104px;min-height:40px;font-weight:600}
+.fis-ano .selpop{right:auto;min-width:100%}
 /* o imposto estimado em destaque, no azul-noite da barra lateral */
 .fis-kpis>.kpi:last-child{background:var(--side);border-color:var(--side-line)}
 .fis-kpis>.kpi:last-child .label,.fis-kpis>.kpi:last-child .foot,.fis-kpis>.kpi:last-child .expl{color:var(--side-text)}
 .fis-kpis>.kpi:last-child .value{color:var(--side-ink)}
 .fis-kpis>.kpi:last-child .expl{border-top-color:var(--side-line)}
 .fis-kpis>.kpi:last-child::after{background:var(--side-on);color:var(--side-ink)}
-/* as obrigações e o englobamento, a situação e os prazos, dois a dois */
+/* as obrigações à esquerda, a situação e os prazos empilhados à direita: com
+   três cartões em duas colunas, o terceiro ficava sozinho numa fila, com um
+   buraco ao lado; numa coluna só, um por baixo do outro */
 .fis-grelha{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:14px;align-items:start}
+.fis-grelha>.fis-tratar{grid-row:span 2}
 .fis-tratar{gap:10px}
 .fis-ob{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 0;border-top:1px solid var(--line)}
 .fis-ob .fis-num{flex:0 0 26px;width:26px;justify-content:center;padding:0}
 .fis-ob p{flex:1 1 200px;min-width:0;font-size:14.5px}
 .fis-ob .btn{flex:0 0 auto;margin-left:auto}
-.fis-outros{gap:6px}
-.fis-eur{display:flex;align-items:center;gap:8px;max-width:260px;min-height:46px;padding:0 14px;border:1px solid var(--line2);border-radius:12px;background:var(--field)}
-.fis-eur input{min-height:0;padding:0;border:0;border-radius:0;background:transparent}
-.fis-eur input:focus-visible{outline:0}
-.fis-eur:has(input:focus-visible){border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.fis-eur>span{color:var(--muted);font-weight:500}
-.fis-veredito{display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;background:var(--chip);font-size:14.5px}
-.fis-veredito.bom{background:var(--in-soft);color:var(--in)}
-.fis-veredito svg{flex:0 0 auto}
 /* a situação fiscal em linhas (M-SituacaoFiscal): interruptores e o A/B */
 .fis-sit{gap:0;padding:0;overflow:hidden}
 .fis-sit .ana-cab{padding:16px 16px 10px}
@@ -3648,8 +3632,32 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .fis-pz .badge{flex:0 0 auto}
 @media(max-width:520px){.fis-pz.tap{margin:0 -14px;padding:10px 14px}}
 .fis-resumo .fis-ct{min-width:200px}
+/* os campos de cada quadro, um cartão por contrato: campo à esquerda, valor
+   à direita, pela ordem do impresso — sem tabela, que rolava de lado no
+   telemóvel. Lado a lado onde cabem; o total do quadro no fim, em cinzento */
+.fis-cts{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(330px,100%),1fr));gap:12px;align-items:start}
+.fis-ctc{display:flex;flex-direction:column;gap:6px;min-width:0;padding:12px 14px;border:1px solid var(--line2);border-radius:12px;background:var(--card)}
+.fis-ctc.tap{cursor:pointer;transition:background-color var(--rapido) var(--curva)}
+@media(hover:hover) and (pointer:fine){.fis-ctc.tap:hover{background:var(--tint)}}
+.fis-ctc.tap:active{background:var(--press)}
+.fis-ctc-cab{display:flex;align-items:flex-start;gap:10px}
+.fis-ctc-cab>svg{flex:0 0 auto;margin-top:2px;color:var(--muted)}
+.fis-ctc-nome{flex:1;min-width:0}
+.fis-ctc-nome b{display:block;font-weight:600;font-size:15px;overflow-wrap:anywhere}
+.fis-ctc-nome .small{display:block}
+.fis-ctc-falta{margin:0;font-size:13.5px;color:var(--danger)}
+.fis-ctc-grupo{margin:8px 0 0}
+.fis-campos{margin:0}
+.fis-campo{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.fis-campo dt{flex:1 1 auto;min-width:0;color:var(--muted)}
+.fis-campo dt .small{display:block;color:var(--ink);overflow-wrap:anywhere}
+.fis-campo dd{flex:0 1 auto;min-width:0;margin:0;text-align:right;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.fis-campo dd .badge{margin-left:4px;vertical-align:1px}
+.fis-campo dd>.badge:first-child{margin-left:0}
+.fis-ctc-total{background:var(--chip);border-color:var(--chip)}
+.fis-ctc-total .fis-campo{border-top-color:var(--line2)}
 @media(pointer:coarse){
-  .ana-ambito .chip,.fis-ab>button,.ana .btn.sm{min-height:44px}
+  .ana-ambito .chip,.fis-ab>button,.ana .btn.sm,.fis-ano .selbtn{min-height:44px}
   /* um botão só de ícone pequeno (o ⓘ das contas entre proprietários) fica 44×44 */
   .ana .btn.sm.so-icone{width:44px}
 }
@@ -3666,8 +3674,7 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
      e do subtítulo, em vez de cair numa fila só dele por baixo */
   .ana-cab:has(>.ana-extra){display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px}
   .ana-cab>.ana-extra{grid-column:2;grid-row:1/3;margin-left:0}
-  /* no guia, o título da dobra inteiro vale mais do que a contagem dos passos */
-  #fold_fiscoGuia .fsum{display:none}
+  .fis-ctc{padding:11px 12px}
 }
 /* ===== fim: 1.3.7 ===== */
 /* ===== ajustes-v40c: 1.5 — Projeções e Avaliação: chips e a roda dentada ===== */

@@ -3373,7 +3373,7 @@ sem ler nada.
 O «Sair» do back office apagava a sessão, mas o recarregar que se lhe segue
 voltava a entrar pela sessão de teste. Perguntado, o Martinho escolheu «Sair
 fica fora até novo /test»: no dev, o sair deixa uma marca num cookie
-(worker/src/teste.js:cookieSaiuDaEquipa, HttpOnly, um mês), com ela a sessão
+(o gi_equipa_saiu, HttpOnly, um mês; saiu no mesmo dia, mais abaixo), com ela a sessão
 de teste não abre o back office, e tiram-na uma ligação nova do /test e o
 /entrar do Discord — as duas maneiras de dizer «quero entrar». Fora do dev
 não há marca.
@@ -3393,3 +3393,32 @@ parte 4, o texto que ele próprio verificou (ticket 8615e719, KAN-72). Ficaram
 os factos, os números, os artigos, as fontes, os ids e o número de linhas de
 cada lista; mudaram as frases. O H1 e o título ficaram, porque a montra e o
 rasto os importam e o SEO depende deles.
+
+A marca de quem saiu do back office (o cookie gi_equipa_saiu) saiu no mesmo
+dia em que entrou. O Martinho carregou em «Sair», teve de voltar ao /entrar
+do Discord, e escreveu que entre o /test e o back office não deve haver
+barreira (ticket ab76041d, bloqueia, KAN-75). Sem a marca, recarregar depois
+do «Sair» voltava a entrar logo, e o «Sair» não fazia nada; por isso, no dev
+e com uma sessão de teste que abre a app, o «Sair» leva à app, e voltar ao
+back office é entrar outra vez. A quem ainda tem a marca no browser manda-se
+apagá-la (worker/src/equipa.js:apagarMarcaVelha), até ao fim do mês dela.
+
+A Declaração ficou mais curta a pedido do Martinho (tickets de QA ee55d6fe,
+75c3536b, 33db56fc, fb6fab4b e 0bab07a5, KAN-73). O ano passou de uma pílula
+por ano a um seletor, porque a fila crescia com os anos. Saíram a faixa azul
+das regras do ano e a dobra «Como preencher, passo a passo»: ele escolheu ter
+um guia só, o público (/guias/declarar-rendas), e o botão «Guia de
+preenchimento» leva lá; o prazo, o que mudou e os passos passaram para o guia,
+escritos de fontes oficiais (KAN-74), e o aviso de um ano sem versão própria
+foi para «A tratar antes de entregar». Saiu também a simulação do
+englobamento («não faz sentido»): pedia os outros rendimentos do agregado e
+dava um veredito que não se percebia; o guia explica a escolha. Os quadros
+4.1 e 4.2 eram tabelas largas que rolavam de lado no telemóvel; passaram a um
+cartão por contrato, campo → valor pela ordem do impresso, e a um PDF com os
+mesmos campos (fisco-pdf.js:fiscoPdf), que ele pediu. O PDF usa o escritor do
+contrato e por isso só aparece com os Contratos ligados.
+
+Ao passar para o guia, uma das novidades da versão de 2025 não se confirmou:
+o limite abaixo do qual o senhorio pode dispensar a retenção já era 15 000 €
+(o art. 53.º do CIVA, na redação de 2022), e não «subiu». Saiu do irs-2025.js
+e o guia di-lo como o que não mudou.

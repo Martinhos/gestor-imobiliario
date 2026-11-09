@@ -14,9 +14,13 @@
    1 a 3 escreveram-se a 2026-11-09 só a partir de fontes oficiais abertas
    (o Código do IRS e o EBF na AT, as instruções do Anexo F, a Portaria
    104/2026/1, o folheto das senhas, o Diário da República), cada frase com a
-   sua fonte em FONTES; o Martinho verifica-as antes de promover. Escrito por
-   tu, como o resto da casa. Nenhuma regra fiscal se acrescenta aqui sem
-   passar por ele.
+   sua fonte em FONTES; o Martinho verifica-as antes de promover. A
+   2026-11-09 (tickets de QA 75c3536b e 33db56fc) a parte 3 recebeu o que a
+   Declaração da app dizia e o guia não dizia — os quadros 8, 9 e 10, o
+   resultado negativo, os quatro anos dos documentos, o que mudou em 2025 —,
+   também só de fontes oficiais abertas nesse dia; e o botão da parte 2 passou
+   a levar à entrega do IRS (ticket 720b5908). Escrito por tu, como o resto da
+   casa. Nenhuma regra fiscal se acrescenta aqui sem passar por ele.
 
    A página é da família dos documentos legais (legal-vista.js): o cabeçalho
    de vidro, a leitura num cartão a 820 px, as duas letras auto-alojadas. Não
@@ -39,7 +43,7 @@ const SITIO = 'https://rendorium.com';
 export const CAMINHO_GUIA = '/guias/declarar-rendas';
 // a última revisão do texto com o Martinho: a data do Article e do mapa do sítio
 // (a ficha da página escreve-a por extenso, «Verificado a»: as duas mudam juntas)
-export const GUIA_REVISTO = '2026-11-08';
+export const GUIA_REVISTO = '2026-11-09';
 
 /* O que os motores de busca e as redes mostram (≤ 60 e ≤ 160 caracteres),
    com os termos de quem pesquisa: IRS, rendas, declarar, Anexo F, deduzir.
@@ -73,9 +77,10 @@ const SEGUIR = 'M9 6l6 6-6 6';
    As das partes 1 a 3 abriram-se a 2026-11-09: as páginas do Código do IRS
    e do EBF na AT pelo texto em vigor; os PDF da AT (as instruções do Anexo
    F, «modelo em vigor a partir de janeiro de 2025»; a Portaria 104/2026/1,
-   arts. 1.º e 2.º; o folheto das senhas) lidos por inteiro; o Portal das
-   Finanças pela página de entrada; as do Diário da República (a app deles
-   só mostra o texto com JavaScript) no headless, com o diploma e o artigo
+   arts. 1.º e 2.º; o folheto das senhas) lidos por inteiro; a entrega do
+   IRS no Portal das Finanças pelo endereço, que leva à autenticação; as do
+   Diário da República (a app deles só mostra o texto com JavaScript) no
+   headless, com o diploma e o artigo
    citados à vista (.unlazy/qa-ronda8/guia-fontes-dr.mjs). O que se cita de
    cada uma:
    - cirs8: n.º 1, as rendas são rendimentos da categoria F, salvo a opção
@@ -99,15 +104,46 @@ const SEGUIR = 'M9 6l6 6-6 6';
    - portaria104: art. 2.º n.º 1, a Modelo 3 e os anexos entregam-se por
      transmissão eletrónica de dados; art. 1.º n.º 3 a), o Anexo F e as
      instruções da Portaria 72-B/2025/1 mantêm-se em vigor;
-   - portal: o endereço do Portal das Finanças (o da Portaria 104/2026/1,
-     art. 3.º);
+   - entrega: a entrega do IRS no Portal das Finanças (ticket 720b5908; a
+     2026-11-09 respondia 302 para a autenticação do Modelo 3, acesso.gov.pt
+     com partID=M3SV) — antes o botão levava à página inicial do Portal;
    - senhas: os meios de entrar no Portal (NIF e senha, ou Autenticação.gov
      com o Cartão de Cidadão ou a Chave Móvel Digital) e o registo;
    - anexoF: quem apresenta o anexo, uma linha por prédio e por fração, o
-     número do contrato, a identificação matricial, o titular, as rendas e
-     a natureza (06 e 07), as retenções, o inquilino, os gastos, as obras
-     dos 24 meses, os quadros 4.1, 4.2, 4.2A e 6G, e a comunicação da
-     Portaria 110/2019 até 15 de fevereiro.
+     número do contrato, a identificação matricial, o titular (B só na
+     tributação conjunta), as rendas e a natureza (06 e 07), as retenções,
+     o inquilino, os gastos, as obras dos 24 meses, os quadros 4.1, 4.2,
+     4.2A e 6G, os quadros 8A e 8B (rendas de anos anteriores, incluídas
+     nos 4.1 e 4.2), 9 (o AIMI, os prédios e os campos 9101 e 9102) e 10
+     (os contratos com redução que cessaram, com a data e o motivo), e a
+     comunicação da Portaria 110/2019 até 15 de fevereiro.
+   As que entraram a 2026-11-09 com a parte 3 (tickets 75c3536b e 33db56fc),
+   abertas nesse dia, as páginas da AT pelo texto em vigor e os PDF lidos:
+   - cirs74: n.º 1, as rendas de anos anteriores englobadas dividem-se pelos
+     anos a que respeitam; n.º 3, em alternativa, declarações de
+     substituição até ao quinto ano anterior ao do pagamento;
+   - cirs78: n.º 1 l), o AIMI deduz-se à coleta, nos termos do 135.º-I CIMI;
+   - cimi135i: n.º 1, o AIMI é dedutível à coleta do IRS de quem tem rendas
+     dos prédios sobre que incidiu, até a um limite (alíneas a) e b));
+   - cirs55: n.º 1 b), o resultado negativo da categoria F reporta-se aos
+     seis anos seguintes; n.º 8, perde-se se os prédios não derem rendas em
+     36 meses dos cinco anos seguintes;
+   - cirs128: n.os 1 a 3, 15 dias (25 com dificuldade) para apresentar os
+     documentos que a AT pedir, durante os quatro anos seguintes;
+   - cirs101b: n.º 1 a), a dispensa de retenção abaixo do limite do 53.º do
+     CIVA; n.º 1 d), sem retenção abaixo de 25 € por retenção, na redação
+     do DL 49/2025, em vigor desde 1 de julho de 2025 (a redação até junho
+     de 2025 só dispensava a categoria E, abaixo de 5 €); n.os 2 e 3, a
+     menção no recibo e quando não se pode usar;
+   - civa53: n.º 1, o limite de 15 000 € (já era 15 000 € na redação da
+     Lei 24-D/2022: em 2025 não subiu);
+   - cirs115: n.º 5 b), a declaração anual das rendas até ao fim de
+     fevereiro, na redação do DL 49/2025, desde 1 de julho de 2025 (a
+     redação até junho de 2025 dizia janeiro);
+   - cis60: n.º 1, o senhorio comunica o contrato à AT; n.º 4, se não o
+     fizer, o inquilino pode fazê-lo;
+   - portaria106: arts. 2.º e 3.º, a comunicação do inquilino, facultativa,
+     com efeitos desde 1 de agosto de 2025.
    As da parte 4, do texto do Martinho, verificadas a 2026-11-08. */
 const FONTES = [
   { id: 'cirs8', nome: 'AT, Código do IRS, artigo 8.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs8.aspx' },
@@ -119,9 +155,19 @@ const FONTES = [
   { id: 'dl97', nome: 'Diário da República, Decreto-Lei n.º 97/2026, de 20 de maio', url: 'https://diariodarepublica.pt/dr/detalhe/decreto-lei/97-2026-1124493227' },
   { id: 'dl139', nome: 'Diário da República, Decreto-Lei n.º 139/2025, de 29 de dezembro', url: 'https://diariodarepublica.pt/dr/detalhe/decreto-lei/139-2025-992879809' },
   { id: 'portaria104', nome: 'AT, Portaria n.º 104/2026/1, de 5 de março: os modelos da declaração Modelo 3', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/legislacao/diplomas_legislativos/Documents/portaria-104-2026-1.pdf' },
-  { id: 'portal', nome: 'Portal das Finanças', url: 'https://www.portaldasfinancas.gov.pt/' },
+  { id: 'entrega', nome: 'Portal das Finanças, entrega da declaração de IRS', url: 'https://irs.portaldasfinancas.gov.pt/app/entrega' },
   { id: 'senhas', nome: 'AT, folheto «Acesso ao Portal das Finanças: autenticação e senhas»', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_contribuinte/Folhetos_informativos/Documents/senhas.pdf' },
   { id: 'anexoF', nome: 'AT, Anexo F da declaração Modelo 3 e instruções de preenchimento, modelo em vigor desde janeiro de 2025', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_contribuinte/modelos_formularios/irs/Documents/Mod_3_anexo_F.pdf' },
+  { id: 'cirs74', nome: 'AT, Código do IRS, artigo 74.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs74.aspx' },
+  { id: 'cirs78', nome: 'AT, Código do IRS, artigo 78.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs78.aspx' },
+  { id: 'cimi135i', nome: 'AT, Código do IMI, artigo 135.º-I', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cimi/Pages/cimi135i.aspx' },
+  { id: 'cirs55', nome: 'AT, Código do IRS, artigo 55.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs55.aspx' },
+  { id: 'cirs128', nome: 'AT, Código do IRS, artigo 128.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs128.aspx' },
+  { id: 'cirs101b', nome: 'AT, Código do IRS, artigo 101.º-B, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs101b.aspx' },
+  { id: 'civa53', nome: 'AT, Código do IVA, artigo 53.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/civa_rep/Pages/artigo-53-o-do-civa.aspx' },
+  { id: 'cirs115', nome: 'AT, Código do IRS, artigo 115.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs115.aspx' },
+  { id: 'cis60', nome: 'AT, Código do Imposto do Selo, artigo 60.º', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/selo/Pages/selo60.aspx' },
+  { id: 'portaria106', nome: 'AT, Portaria n.º 106/2025/1, de 13 de março: a comunicação do contrato pelo inquilino', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/legislacao/diplomas_legislativos/Documents/Portaria_106_2025_1.pdf' },
   { id: 'cirs41', nome: 'AT, Código do IRS, artigo 41.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs41.aspx' },
   { nome: 'AT, página de apoio sobre rendimentos prediais', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_ao_contribuinte/Cidadaos/Rendimentos/Prediais/Paginas/default.aspx' },
   { nome: 'AT, Informação Vinculativa, processo 1115/2017: certificado energético, seguro, IMI, condomínio e reparações', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/rendimento/cirs/Documents/PIV_11676_Cat_F_Despesas_elegiveis_certificado_energetico_pintura_proporcionalidade_mensal_IMI.pdf' },
@@ -341,7 +387,7 @@ const GUIA = [
   { id: 'onde-declarar', titulo: 'Onde declaras', blocos: [
     { p: 'É tudo pela Internet, no Portal das Finanças: a declaração Modelo 3 e os anexos, como o Anexo F, só se ' +
       'entregam por transmissão eletrónica de dados (Portaria n.º 104/2026/1, artigos 2.º e 3.º).' },
-    { ir: 'Ir ao Portal das Finanças', fonte: 'portal' },
+    { ir: 'Entregar o IRS no Portal das Finanças', fonte: 'entrega' },
     { p: 'Para entrar, usas o teu NIF e a senha de acesso, ou a Autenticação.gov, com a Chave Móvel Digital ou o ' +
       'Cartão de Cidadão. Se ainda não tens senha, registas-te no Portal e pedes uma (folheto da AT sobre o acesso ' +
       'ao Portal).' },
@@ -365,7 +411,8 @@ const GUIA = [
           'das Finanças, se for anterior a 1 de abril de 2015), e a data de início.',
         'A identificação matricial: o código da freguesia, de seis dígitos, que está nos documentos de cobrança do ' +
           'IMI, o tipo de prédio (U, urbano, ou R, rústico), o artigo e a fração.',
-        'O titular das rendas: A ou B, como no rosto da declaração, ou o código do dependente (D1, D2…).',
+        'O titular das rendas: A ou B, como no rosto da declaração, ou o código do dependente (D1, D2…). O B só ' +
+          'se usa quando és casado ou unido de facto e optam pela tributação conjunta.',
         'As rendas pelo valor ilíquido, pagas ou colocadas à tua disposição no ano, e a natureza: 07 no arrendamento ' +
           'habitacional, 06 no não habitacional.',
         'As retenções na fonte de IRS feitas sobre essas rendas.',
@@ -386,6 +433,44 @@ const GUIA = [
         'Quadro 6G: a opção pelo englobamento (campo 06).',
       ] },
       { p: 'Se sair um modelo novo para o ano das tuas rendas, confirma os quadros nas instruções dele.' },
+    ] },
+    { grupo: 'Os outros quadros', blocos: [
+      { p: 'Conforme o teu caso, há mais três quadros a preencher (instruções do Anexo F):' },
+      { info: [
+        'Quadro 8: as rendas de anos anteriores que recebeste no ano, e que já estão no valor da linha. Se quiseres ' +
+          'usar o artigo 74.º, indicas de que ano é cada uma: no 8A, se englobares, e o valor reparte-se pelos anos a que respeita (artigo 74.º, n.º 1); ou ' +
+          'no 8B, se em vez disso entregares declarações de substituição desses anos, até ao quinto ano anterior ao do ' +
+          'pagamento (artigo 74.º, n.º 3).',
+        'Quadro 9: o Adicional ao IMI (AIMI) dos prédios que te deram rendas. Não entra nos gastos da linha, mas abate-se ' +
+          'ao imposto, até a um limite: indicas cada prédio, com o valor patrimonial tributário, e os totais da ' +
+          'liquidação do AIMI (artigo 78.º, n.º 1, alínea l), do Código do IRS; artigo 135.º-I do Código do IMI).',
+        'Quadro 10: os contratos para habitação permanente que tiveram redução de taxa e acabaram, com a data e o motivo ' +
+          'do fim.',
+      ] },
+    ] },
+    { grupo: 'Se os gastos passarem as rendas', blocos: [
+      { p: 'O resultado negativo das rendas de um ano não se perde: abate ao resultado positivo das rendas dos seis anos ' +
+        'seguintes (artigo 55.º, n.º 1, alínea b)). Perdes esse direito se os prédios desses gastos não derem rendas ' +
+        'durante pelo menos 36 meses, seguidos ou não, nos cinco anos seguintes (artigo 55.º, n.º 8).' },
+    ] },
+    { grupo: 'Depois de entregares', blocos: [
+      { p: 'A AT pode pedir-te os documentos do que declaraste durante os quatro anos seguintes ao ano a que respeitam. ' +
+        'Tens 15 dias para os apresentar, ou 25 se explicares que te é difícil obtê-los (artigo 128.º).' },
+    ] },
+    { grupo: 'O que mudou em 2025', blocos: [
+      { info: [
+        'Desde 1 de julho de 2025, não há retenção na fonte sobre as rendas quando o valor de cada retenção seria ' +
+          'inferior a 25 € (artigo 101.º-B, n.º 1, alínea d), na redação do Decreto-Lei n.º 49/2025).',
+        'Desde 1 de julho de 2025, se não passas recibo de cada renda, entregas a declaração anual das rendas até ao fim ' +
+          'de fevereiro do ano seguinte, e já não até ao fim de janeiro (artigo 115.º, n.º 5, alínea b), na mesma ' +
+          'redação).',
+        'Desde 1 de agosto de 2025, se não comunicares o contrato à AT no prazo, o inquilino pode comunicá-lo ele. A obrigação ' +
+          'continua a ser tua (artigo 60.º, n.os 1 e 4, do Código do Imposto do Selo; Portaria n.º 106/2025/1).',
+      ] },
+      { p: 'O que não mudou: podes dispensar a retenção se previres receber menos de 15 000 € de rendas no ano, ' +
+        'o limite do artigo 53.º do Código do IVA. Para isso, escreves no recibo «Sem retenção, nos termos do n.º 1 do ' +
+        'artigo 101.º-B do Código do IRS.» Não o podes fazer se, no ano anterior, recebeste esse valor ou mais (artigo ' +
+        '101.º-B, n.os 1 a 3).' },
     ] },
     { fonte: 'anexoF', texto: 'Fonte principal: instruções de preenchimento do Anexo F, AT.' },
   ] },
@@ -637,7 +722,7 @@ ${cabecaRaiz}
   <dl class="ficha">
     <div><dt>Para quem</dt><dd>Para ti, se és residente em Portugal e declaras as rendas como rendimentos prediais, da
     categoria F, sem teres escolhido as regras da categoria B.</dd></div>
-    <div><dt>Verificado a</dt><dd>8 de novembro de 2026</dd></div>
+    <div><dt>Verificado a</dt><dd>9 de novembro de 2026</dd></div>
   </dl>
 
   <p class="intro">Começas por ver se tens de declarar, depois onde e como, e no fim o que podes deduzir. Tudo o que

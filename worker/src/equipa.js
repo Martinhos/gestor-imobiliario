@@ -302,26 +302,26 @@ async function papeisNosServidores(env, discordId) {
      sempre da própria pessoa, e o cookie só ficava no browser dela, mas
      nenhuma página de fora tem de poder abrir sessões de equipa em nome de
      ninguém. A pílula (mesma origem) e o endereço escrito à mão passam;
-   · sem a marca de quem saiu (teste.js:saiuDaEquipa): «Sair» fica fora até
-     um /test novo ou um /entrar, que a tiram (decisão do Martinho,
-     2026-11-09);
    · com a sessão de uma conta de teste com dono, e um papel de equipa
      confirmado pelo Discord neste pedido;
    · com o rasto escrito: sem a linha da auditoria, a sessão apaga-se.
+   Ter saído antes não trava nada: entre a app de teste e o back office não
+   há barreira (ticket de QA ab76041d, que revê a marca de 2026-11-09 —
+   MARCA_VELHA); o «Sair» leva à app, e voltar ao /equipa entra logo.
    Qualquer falha (a base, o KV, o Discord) fica na página de entrada de
    sempre, nunca num 500.
    Recebe: env — o ambiente do worker; request — o pedido (o cookie da sessão
    de teste e o Sec-Fetch-Site); url — o URL dele.
-   Devolve: promessa da Response 303 com o Set-Cookie da equipa, ou de null —
-   e aí quem chama mostra a página de entrada. */
+   Devolve: promessa da Response 303 com o Set-Cookie da equipa (e o que
+   apaga a MARCA_VELHA, se o browser ainda a traz), ou de null — e aí quem
+   chama mostra a página de entrada. */
 export async function entrarPelaSessaoDeTeste(env, request, url) {
   if (env.ENV_NAME !== 'dev') return null;
   if (request.method !== 'GET' || PAGINAS_DO_TESTE.indexOf(url.pathname) < 0) return null;
   const site = request.headers.get('Sec-Fetch-Site');
   if (site && site !== 'same-origin' && site !== 'none') return null;
   try {
-    const { discordDaSessaoDeTeste, saiuDaEquipa } = await import('./teste.js');
-    if (saiuDaEquipa(request)) return null;
+    const { discordDaSessaoDeTeste } = await import('./teste.js');
     const dono = await discordDaSessaoDeTeste(env, request);
     if (!dono) return null;
     const achados = await papeisNosServidores(env, dono.id);
@@ -335,14 +335,32 @@ export async function entrarPelaSessaoDeTeste(env, request, url) {
       await env.SESSIONS.delete('equipa:' + sessao);
       return null;
     }
-    return new Response(null, {
-      status: 303,
-      headers: { Location: url.pathname, 'Set-Cookie': cookieDaEquipa(sessao), 'Cache-Control': 'no-store' },
-    });
+    const cabecalhos = new Headers({ Location: url.pathname, 'Set-Cookie': cookieDaEquipa(sessao), 'Cache-Control': 'no-store' });
+    apagarMarcaVelha(request, cabecalhos);
+    return new Response(null, { status: 303, headers: cabecalhos });
   } catch (e) {
     console.error('equipa pela sessão de teste', e && e.message);
     return null;
   }
+}
+
+/* O cookie que o «Sair» do back office do dev punha entre o 1fd0b23 e o
+   ticket de QA ab76041d, para a sessão de teste não voltar a entrar: o
+   Martinho quis depois que entre a app de teste e o back office não haja
+   barreira, e a marca deixou de se pôr e de se ler. Durava um mês (Max-Age
+   de 30 dias); quem ainda a tem no browser leva-a em cada pedido, por isso
+   o sair e a entrada pela sessão de teste mandam-na apagar. Pode sair do
+   código quando esse mês passar (2026-12-09). */
+const MARCA_VELHA = 'gi_equipa_saiu';
+
+/* Acrescenta a linha que apaga a MARCA_VELHA, só quando o pedido a traz: a
+   quem não a tem não se mexe em cookies que não são deste pedido.
+   Recebe: request — o pedido (o cabeçalho Cookie); cabecalhos — os Headers
+   da resposta, onde se acrescenta o Set-Cookie.
+   Devolve: nada. */
+function apagarMarcaVelha(request, cabecalhos) {
+  if (!new RegExp('(?:^|;\\s*)' + MARCA_VELHA + '=').test(request.headers.get('Cookie') || '')) return;
+  cabecalhos.append('Set-Cookie', MARCA_VELHA + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
 }
 
 /* As rotas de entrar e sair da ferramenta de equipa. Devolve a Response, ou
@@ -401,11 +419,6 @@ export async function rotasEquipa(c) {
       // o endereço tinha um bilhete: não o deixar seguir para lado nenhum
       'Referrer-Policy': 'no-referrer',
     });
-    // no dev, entrar pelo Discord também tira a marca de quem tinha saído (teste.js:cookieSaiuDaEquipa)
-    if (env.ENV_NAME === 'dev') {
-      const { saiuDaEquipa, cookieSaiuDaEquipa } = await import('./teste.js');
-      if (saiuDaEquipa(request)) cabecalhos.append('Set-Cookie', cookieSaiuDaEquipa(true));
-    }
     // 303 e não 302: depois de um POST, o que se segue é um GET
     return new Response(null, { status: 303, headers: cabecalhos });
   }
@@ -423,12 +436,20 @@ export async function rotasEquipa(c) {
       'Content-Type': 'application/json; charset=utf-8',
       'Set-Cookie': cookieDaEquipa('', true),
     });
-    // no dev, sair fica fora até um /test novo: sem a marca, o recarregar voltava a entrar pela sessão de teste
+    const corpo = { ok: true };
+    /* No dev, com uma sessão de teste por baixo, o recarregar que se segue
+       ao sair voltava a entrar por ela (entrarPelaSessaoDeTeste): o sair
+       leva então à app, e o guião vai para o depois em vez de recarregar. É
+       a mesma pergunta que o index.js faz para oferecer «Voltar à app» na
+       pílula: a porta do dev deixa abrir o / a este pedido? Sem ela (quem
+       entrou pelo /entrar, sem sessão de teste) a app dava 404, e
+       recarrega-se para a página de entrada, como em produção. */
     if (env.ENV_NAME === 'dev') {
-      const { cookieSaiuDaEquipa } = await import('./teste.js');
-      cabecalhos.append('Set-Cookie', cookieSaiuDaEquipa());
+      apagarMarcaVelha(request, cabecalhos);
+      const { portaDoDev } = await import('./teste.js');
+      if ((await portaDoDev(env, request, new URL('/', url))) === null) corpo.depois = '/';
     }
-    return new Response(JSON.stringify({ ok: true }), { headers: cabecalhos });
+    return new Response(JSON.stringify(corpo), { headers: cabecalhos });
   }
 
   return null;

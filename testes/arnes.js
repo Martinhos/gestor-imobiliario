@@ -22,7 +22,7 @@ export const MODULOS = [
   'painel-geral', 'lista-imoveis', 'lista-contratos', 'lista-pessoas', 'lista-colaboradores', 'lista-movimentos', 'projecoes',
   'imovel', 'fine', 'pessoas', 'contrato', 'tarefas',
   'planeados', 'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'visitas', 'calendario', 'movimento', 'creditos', 'splitwise', 'contrato-pdf',
-  'avaliacao', 'fisco', 'definicoes', 'copias',
+  'avaliacao', 'fisco', 'fisco-pdf', 'definicoes', 'copias',
 ];
 
 /* O catálogo dos serviços, lido do próprio ficheiro do cliente

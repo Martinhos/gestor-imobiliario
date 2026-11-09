@@ -1433,11 +1433,10 @@ A/B do titular), pelo data-click, que não muda ao redesenhar. No change de
 um campo o foco ainda vai a caminho do seguinte, por isso o redesenho espera
 que ele assente (um setTimeout); num clique é logo (avaliacao.js:avaRepintar,
 projecoes.js:prjRepintar, fisco.js:fisRepintar; o fisco.js:fiscoGravarIrs
-recebe o adiar, que o fisco.js:fiscoSetOutros passa). Por isso cada campo
+recebe o adiar de quem grava num change). Por isso cada campo
 que grava ao sair tem id (#avaYield, #prjHorizonte, #prjAumento e
-#prjInflacao, na janela das opções, vistas.js:anaOpcoes; #fiscoOutros, na
-página). São três cópias, como os cartões: cada serviço
-carrega sozinho.
+#prjInflacao, na janela das opções, vistas.js:anaOpcoes). São três cópias,
+como os cartões: cada serviço carrega sozinho.
 
 Um cartão da Análise tem o título na letra dos títulos, a 18px (16 no
 telemóvel), com o subtítulo ao lado (estilos.css:.ana-cartao;
@@ -1450,8 +1449,7 @@ uma ficha tem hover e premido diferentes. Numa tabela com a primeira coluna
 presa, a linha dos totais escreve o «Total» só na primeira célula, sem
 colspan — a célula presa com várias colunas passava por cima dos valores ao
 rolar —, e essa célula é cinzenta como o resto da linha
-(estilos.css:.ana-fixa-1, o tr.ana-total td; fisco.js:fiscoQuadroCard,
-avaliacao.js:repCard). No
+(o tr.ana-total td; avaliacao.js:repCard). No
 telemóvel, o botão do canto do cabeçalho de um cartão fica à direita do
 título e do subtítulo, numa grelha, em vez de cair numa fila só dele
 (estilos.css:.ana-cab:has(>.ana-extra)).
@@ -1949,8 +1947,8 @@ As da Visão geral, da Análise e das Definições (cloud/apresentacao-analise.j
 fazem as contas com as regras da app: o ano soma os meses do exemplo
 (apresentacao-analise.js:aprAAno), a Avaliação reparte-o pelos imóveis
 (apresentacao-analise.js:aprAPorImovel), as Projeções levam-no para a frente
-com a taxa de cada ano (irs.js:irsRate), e o IRS estima o englobamento pelos
-escalões do ano (fisco.js:fiscoColeta). A da Visão geral mostra a cara que a
+com a taxa de cada ano (irs.js:irsRate), e o IRS estima o imposto à taxa de
+cada contrato (apresentacao-analise.js:aprAFisco). A da Visão geral mostra a cara que a
 conta tem, pela ordem do painel-geral.js:vDashboard
 (apresentacao-analise.js:aprACaraDoPainel): a jornada, o vazio sem imóveis, o
 vazio com eles, os números, e o «O que podes fazer» de quem só colabora sem
@@ -2913,24 +2911,32 @@ imposto à cabeça é a estimativa sem englobamento; a página chama a cada uma
 estimativa, porque é. Quem declara é a pessoa, no Portal das Finanças; a app
 poupa-lhe a soma e a procura, não a assinatura.
 
-A página é a prancheta D-Declaracao: o ano dos rendimentos em chips
-(fisco.js:fiscoEscolherAno); a faixa das regras do ano, com o selo do modelo
-e a porta «Guia de preenchimento», que abre a dobra do guia e lhe põe o foco
-(fisco.js:fiscoAnoCard, fisco.js:fiscoVerGuia); os cinco números do ano, com
-as retenções na fonte à cabeça e o imposto estimado no cartão azul-noite
-(fisco.js:fiscoKpis); a grelha «A tratar antes de entregar», «Englobar ou
-não?», «A tua situação fiscal» e «Prazos da AT»; o resumo dos quadros 4.1 e
-4.2 numa tabela só (fisco.js:fisResumoQuadros); e os campos de cada quadro,
-linha a linha (fisco.js:fiscoQuadroCard). «Fora da declaração» diz-se também
-quando não há nada fora (fisco.js:fisNadaForaCard). Na barra, o rótulo
-«Titular» e o chip dele vivem numa caixa só e quebram de linha juntos
-(estilos.css:.fis-titular, fisco.js:fisBarra). O NIF formatado nunca parte
-entre linhas (fisco.js:fiscoLinhaHtml, com o .u-ws-nowrap; o fmtNIF continua
-com espaços normais). «Partilhar resumo» diz num aviso a cópia que o browser
-recusa («Não foi possível copiar o resumo.», fisco.js:fiscoPartilhar), em
-vez de ficar um erro por apanhar. No telemóvel, a dobra do guia esconde a
-contagem dos passos, porque o título inteiro vale mais
-(estilos.css:#fold_fiscoGuia, o .fsum).
+A página é a prancheta D-Declaracao, mais curta: na barra, o ano dos
+rendimentos num seletor (fisco.js:onFiscoAnoBarra; uma pílula por ano
+ficava comprida demais), o titular e as ações — «Partilhar resumo»,
+«Exportar CSV», «Exportar PDF» (fisco-pdf.js:fiscoPdf, só com os Contratos
+ligados, onde vive o escritor do PDF) e «Guia de preenchimento», que abre o
+guia público /guias/declarar-rendas numa página nova. A app não tem guia
+próprio nem faixa das regras do ano: o prazo, o que mudou e os passos vivem
+no guia. Um ano sem versão própria das regras, ou com uma provisória, di-lo
+em «A tratar antes de entregar» (fisco.js:fiscoAvisos). Depois, os cinco
+números do ano, com as retenções na fonte à cabeça e o imposto estimado no
+cartão azul-noite (fisco.js:fiscoKpis); a grelha «A tratar antes de
+entregar», «A tua situação fiscal» e «Prazos da AT»; o resumo dos quadros
+4.1 e 4.2 numa tabela só (fisco.js:fisResumoQuadros); e os campos de cada
+quadro num cartão por contrato, campo → valor pela ordem do impresso, sem
+rolar de lado (fisco.js:fiscoQuadroCard, fisco.js:fiscoContratoHtml,
+fisco.js:fiscoCamposDe), com um cartão do total no fim. O PDF leva os mesmos
+campos e os mesmos números. Não há simulação do englobamento: comparar com
+os escalões pedia os outros rendimentos do agregado e não se lia; o guia
+explica a escolha, e o imposto à cabeça diz «sem englobamento». «Fora da
+declaração» diz-se também quando não há nada fora
+(fisco.js:fisNadaForaCard). Na barra, o rótulo «Titular» e o chip dele
+vivem numa caixa só e quebram de linha juntos (estilos.css:.fis-titular,
+fisco.js:fisBarra). O NIF formatado nunca parte entre linhas (o
+.u-ws-nowrap; o fmtNIF continua com espaços normais). «Partilhar resumo»
+diz num aviso a cópia que o browser recusa («Não foi possível copiar o
+resumo.», fisco.js:fiscoPartilhar), em vez de ficar um erro por apanhar.
 
 «A tratar antes de entregar» (fisco.js:fiscoObrigacoesCard) é numerado, e
 cada aviso leva o selo do seu nível — vermelho o que falta à AT, âmbar o que
@@ -2992,7 +2998,7 @@ e cada dado tem a fonte no cabeçalho do ficheiro.
 O nome é o ano dos RENDIMENTOS, não o da entrega: o irs-2026.js é a
 declaração que se entrega em 2027. É assim que o Modelo 3 identifica a
 declaração, é o ano que a página escolhe e é o ano a que a lei do Orçamento
-se aplica; a página diz sempre os dois (fisco.js:fiscoAnoCard).
+se aplica; o PDF diz sempre os dois (fisco-pdf.js:fiscoPdfDocumento).
 
 Quem lê é o motor (irs.js:irsAno, irs.js:irsTaxa, irs.js:irsReducao). A taxa
 de um contrato num ano sai da versão desse ano, e fica a mais baixa entre a
@@ -3011,8 +3017,9 @@ quando as regras forem conhecidas: o scripts/nova-versao-irs.js copia a
 por uma frase verdadeira e regista o ficheiro no index.html, no sw.js, no
 arnês e no MAPA; depois alguém confirma com o Orçamento, a portaria do Modelo
 3 e o ofício-circulado da AT, e muda o que mudou. Os passos do guia não
-escrevem anos — dizem {ano} e {ate}, que o fisco.js:fiscoGuiaCard troca —
-para a cópia não arrastar anos velhos. O testes/irs-anos.test.js confere cada
+escrevem anos — dizem {ano} e {ate} — para a cópia não arrastar anos
+velhos; a página já não os mostra (vivem no guia público), mas ficam na
+versão como dados. O testes/irs-anos.test.js confere cada
 versão, o registo dela e o próprio guião, numa cópia da árvore.
 
 ## O que o contrato diz ao IRS para lá das datas
@@ -3056,8 +3063,7 @@ toca-se inteira (60px), e não só no botão de 28px: <label class="fis-linha
 fis-linha-toque">, com hover e premido próprios e o peso normal, que o label
 da casa é a 600 (estilos.css:.fis-linha-toque). Dentro do <label> o texto vai
 em <span>, nunca em <p>. Gravar não tira o foco (ver «Padrões de página»).
-Os outros rendimentos coletáveis do agregado, por ano, vivem no cartão do
-englobamento, e as Definições têm uma linha que leva à página (ver «As Definições»). Vai com as definições para o
+As Definições têm uma linha que leva à página (ver «As Definições»). Vai com as definições para o
 servidor, e uma base antiga ganha-o completo (dados.js:normIrsDefs) — sempre
 um objeto novo, nunca o do blank, que a nuvem copia por referência.
 
@@ -3079,12 +3085,6 @@ um objeto novo, nunca o do blank, que a nuvem copia por referência.
   n.º 24, com as duas rendas; e a resposta do 4.2C só quando todos os
   contratos celebrados desde 2024 estão confirmados dentro do limite
   (fisco.js:fiscoReducoesHtml).
-- Englobamento (6G). Os escalões de cada ano vivem na versão
-  (`englobamento`, com a fonte ao lado). A simulação compara o imposto à taxa
-  especial com o que as rendas acrescentam aos outros rendimentos pelos
-  escalões, com o quociente conjugal em conjunta (fisco.js:fiscoColeta,
-  fisco.js:fiscoEnglobamento). É uma estimativa e di-lo: sem deduções à
-  coleta, sem mínimo de existência.
 - Modelo 44. Com a dispensa dos recibos ligada, as rendas sem recibo deixam
   de ser falta e «A tratar antes de entregar» ganha a linha do Modelo 44,
   com o prazo (fim de fevereiro desde as rendas de 2025;
@@ -6314,9 +6314,11 @@ de quem pediu a ligação do /test, com os cargos que o Discord lhe dá nesse
 momento, e fica na auditoria como entrada; sem cargo, com o Discord em baixo
 ou vinda de outro site fica a página de entrada, e a API do back office pede
 sempre o cookie da equipa (worker/src/equipa.js:entrarPelaSessaoDeTeste).
-«Sair» fica fora até um /test novo: o sair deixa uma marca
-(worker/src/teste.js:cookieSaiuDaEquipa), com ela a sessão de teste não abre
-o back office, e tiram-na uma ligação nova do /test e o /entrar.
+Entre a app de teste e o back office não há barreira: no dev, o «Sair» fecha
+a sessão de equipa e, quando a sessão de teste abre a app, leva a ela (o
+/api/equipa/sair responde depois:'/' e o worker/src/equipa-guiao.js:sair
+segue-o); voltar ao back office abre logo outra sessão de equipa pela de
+teste.
 
 O menu é o menu de ações da casa (data-menu="acoes"). Abri-lo guarda o ecrã
 de agora (cloud/qa.js:qaMenuAbriu): o contexto do ticket é o de quando se

@@ -54,7 +54,7 @@ async function pedirAoWorker(env, caminho, o) {
 
 // Recebe: r — uma Response. Devolve: as linhas Set-Cookie dela, uma por cookie.
 const cookiesDe = (r) => r.headers.getSetCookie();
-// Recebe: r — uma Response. Devolve: as linhas Set-Cookie da marca de quem saiu do back office.
+// Recebe: r — uma Response. Devolve: as linhas Set-Cookie da marca velha (equipa.js:MARCA_VELHA) que o sair do back office punha.
 const marcasDe = (r) => cookiesDe(r).filter((c) => c.startsWith('gi_equipa_saiu='));
 const MARCA = 'gi_equipa_saiu=1';
 
@@ -353,78 +353,119 @@ describe('o que a sessão de teste não abre', () => {
   });
 });
 
-/* «Sair fica fora até novo /test» (decisão do Martinho, 2026-11-09): o sair
-   do back office do dev deixa uma marca, e enquanto ela lá estiver a sessão
-   de teste não volta a abrir o back office; tiram-na uma ligação nova do
-   /test e o /entrar do Discord. Fora do dev não há marca nenhuma. */
-describe('sair do back office do dev fica fora até um /test novo', () => {
+/* Entre a app de teste e o back office não há barreira (ticket de QA
+   ab76041d, que revê a decisão de 2026-11-09 «Sair fica fora até novo
+   /test»): sair do back office do dev leva à app, e voltar ao /equipa com a
+   sessão de teste entra logo outra vez. A marca gi_equipa_saiu que travava a
+   volta já não existe; a quem ainda a traz no browser manda-se apagar. Fora
+   do dev nada muda. */
+describe('sair do back office do dev leva à app, e voltar entra logo', () => {
   /* Entra pela sessão de teste e sai pelo botão «Sair» (o POST do guião).
-     Recebe: env; cookie — o da sessão de teste.
+     Recebe: env; cookie — o da sessão de teste; extra (opcional) — mais
+     cookies que o browser traz.
      Devolve: a promessa da resposta do sair. */
-  async function entrarESair(env, cookie) {
+  async function entrarESair(env, cookie, extra) {
     const r = await pedirAoWorker(env, '/equipa', { headers: Object.assign({ Cookie: cookie }, DA_PILULA) });
     assert.equal(r.status, 303, 'entrou pela sessão de teste');
     const equipa = /gi_equipa=[a-f0-9]{64}/.exec(r.headers.get('Set-Cookie'))[0];
-    return pedirAoWorker(env, '/api/equipa/sair', { method: 'POST', headers: { Cookie: cookie + '; ' + equipa } });
+    return pedirAoWorker(env, '/api/equipa/sair', { method: 'POST', headers: { Cookie: cookie + '; ' + equipa + (extra ? '; ' + extra : '') } });
   }
 
-  test('sair → recarregar fica na página de entrada, sem perguntar ao Discord', async () => {
+  // Recebe: r — uma Response. Devolve: as linhas que mandam apagar a marca velha, em «nome= Max-Age=N».
+  const apagadas = (r) => marcasDe(r).map((c) => c.split(';')[0] + ' ' + /Max-Age=\d+/.exec(c)[0]);
+
+  test('sair e voltar ao /equipa com a sessão de teste abre outra sessão de equipa', async () => {
     const env = dev();
     const cookie = await entrarPeloTeste(env);
     discord({ cargos: { [SERVIDOR]: ['cargo-suporte'] } });
     const s = await entrarESair(env, cookie);
     assert.equal(s.status, 200);
     assert.ok(cookiesDe(s).some((c) => /^gi_equipa=; .*Max-Age=0$/.test(c)), 'o cookie da equipa sai, como sempre');
-    const [marca] = marcasDe(s);
-    assert.match(marca || '', /^gi_equipa_saiu=1; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=\d+$/, 'e fica a marca: ' + marca);
+    assert.deepEqual(marcasDe(s), [], 'e não fica marca nenhuma');
+    assert.deepEqual(await s.json(), { ok: true, depois: '/' }, 'a app abre a este pedido: o sair diz para ir para lá');
     assert.deepEqual(sessoesDeEquipa(env), [], 'a sessão saiu do KV');
 
-    const vistos = discord({ cargos: { [SERVIDOR]: ['cargo-suporte'] } });
-    for (const caminho of ['/equipa', '/equipa/', '/equipa/docs']) {
-      const r = await pedirAoWorker(env, caminho, { headers: Object.assign({ Cookie: cookie + '; ' + MARCA }, DA_PILULA) });
-      assert.equal(r.status, 401, caminho + ': fica fora');
-      assert.match(await r.text(), /Entra-se a partir do Discord/);
-      assert.equal(r.headers.get('Set-Cookie'), null);
+    for (const caminho of ['/equipa', '/equipa/docs']) {
+      const r = await pedirAoWorker(env, caminho, { headers: Object.assign({ Cookie: cookie }, DA_PILULA) });
+      assert.equal(r.status, 303, caminho + ': entra logo');
+      assert.match(r.headers.get('Set-Cookie') || '', /^gi_equipa=[a-f0-9]{64}; /, caminho + ': com o cookie da equipa');
     }
-    assert.deepEqual(vistos, [], 'nem pergunta ao Discord');
-    assert.deepEqual(sessoesDeEquipa(env), []);
-    assert.equal((await entradas(env)).length, 1, 'só a primeira entrada');
+    assert.equal((await entradas(env)).length, 3, 'cada entrada fica na auditoria');
   });
 
-  test('uma ligação nova do /test tira a marca, e a entrada pela sessão de teste volta', async () => {
+  test('a marca velha de quem saiu já não trava, e manda-se apagar', async () => {
     const env = dev();
-    const antiga = await entrarPeloTeste(env);
+    const cookie = await entrarPeloTeste(env);
     discord({ cargos: { [SERVIDOR]: ['cargo-suporte'] } });
-    await entrarESair(env, antiga);
-
-    const { cookie, resposta } = await abrirLigacao(env, DONO, antiga + '; ' + MARCA);
-    assert.equal(resposta.status, 302);
-    assert.deepEqual(marcasDe(resposta).map((c) => c.split(';')[0] + ' ' + /Max-Age=\d+/.exec(c)[0]), ['gi_equipa_saiu= Max-Age=0'], 'a ligação apaga a marca');
-    assert.ok(cookiesDe(resposta).some((c) => c.startsWith('gi_session=')), 'e dá a sessão, como sempre');
-    const r = await pedirAoWorker(env, '/equipa', { headers: Object.assign({ Cookie: cookie }, DA_PILULA) });
-    assert.equal(r.status, 303, 'sem a marca, entra outra vez');
-
-    // sem marca, a ligação não mexe em cookies que não são dela
-    const limpa = await abrirLigacao(env, DONO, cookie);
-    assert.deepEqual(marcasDe(limpa.resposta), []);
+    // a entrada pela sessão de teste com a marca: entra, e a marca sai
+    const r = await pedirAoWorker(env, '/equipa', { headers: Object.assign({ Cookie: cookie + '; ' + MARCA }, DA_PILULA) });
+    assert.equal(r.status, 303, 'entra mesmo com a marca');
+    assert.ok(cookiesDe(r).some((c) => /^gi_equipa=[a-f0-9]{64};/.test(c)), 'com o cookie da equipa');
+    assert.deepEqual(apagadas(r), ['gi_equipa_saiu= Max-Age=0'], 'e a marca manda-se apagar');
+    // o sair com a marca: apaga-a também
+    const s = await entrarESair(env, cookie, MARCA);
+    assert.deepEqual(apagadas(s), ['gi_equipa_saiu= Max-Age=0'], 'o sair apaga a marca');
+    // sem marca, nenhum dos dois mexe em cookies que não são deles
+    const limpa = await pedirAoWorker(env, '/equipa', { headers: Object.assign({ Cookie: cookie }, DA_PILULA) });
+    assert.deepEqual(cookiesDe(limpa).map((c) => c.split('=')[0]), ['gi_equipa'], 'a entrada: um cookie só');
+    assert.deepEqual(cookiesDe(await entrarESair(env, cookie)).map((c) => c.split('=')[0]), ['gi_equipa'], 'o sair: um cookie só');
   });
 
-  test('o /entrar do Discord tira a marca', async () => {
+  test('sem sessão de teste, com a porta do dev fechada, o sair não diz para onde ir: recarrega-se', async () => {
     const env = dev();
+    const b = await criarBilhete(env, { discordId: DONO, nome: 'Martinho', papel: 'suporte', papeis: ['suporte'], guildId: SERVIDOR });
+    const f = new FormData();
+    f.set('t', b.token);
+    const e = await pedirAoWorker(env, '/equipa/entrar', { method: 'POST', body: f });
+    const equipa = /gi_equipa=[a-f0-9]{64}/.exec(e.headers.get('Set-Cookie'))[0];
+    const s = await pedirAoWorker(env, '/api/equipa/sair', { method: 'POST', headers: { Cookie: equipa } });
+    assert.equal(s.status, 200);
+    assert.deepEqual(await s.json(), { ok: true }, 'a app daria 404: sem depois');
+    // uma conta normal do dev também não passa a porta
+    const normal = await conta(env, 'Ana');
+    const s2 = await pedirAoWorker(env, '/api/equipa/sair', { method: 'POST', headers: { Cookie: 'gi_session=' + normal.token } });
+    assert.deepEqual(await s2.json(), { ok: true }, 'conta normal: sem depois');
+  });
+
+  test('o /test e o /entrar já não mexem na marca', async () => {
+    const env = dev();
+    const { resposta } = await abrirLigacao(env, DONO, MARCA);
+    assert.equal(resposta.status, 302);
+    assert.deepEqual(marcasDe(resposta), [], 'a ligação do /test');
     const b = await criarBilhete(env, { discordId: DONO, nome: 'Martinho', papel: 'suporte', papeis: ['suporte'], guildId: SERVIDOR });
     const f = new FormData();
     f.set('t', b.token);
     const r = await pedirAoWorker(env, '/equipa/entrar', { method: 'POST', body: f, headers: { Cookie: MARCA } });
     assert.equal(r.status, 303);
-    assert.equal(r.headers.get('Location'), '/equipa');
-    assert.ok(cookiesDe(r).some((c) => /^gi_equipa=[a-f0-9]{64};/.test(c)), 'entra, como sempre');
-    assert.deepEqual(marcasDe(r).map((c) => c.split(';')[0] + ' ' + /Max-Age=\d+/.exec(c)[0]), ['gi_equipa_saiu= Max-Age=0'], 'e apaga a marca');
+    assert.deepEqual(cookiesDe(r).map((c) => c.split('=')[0]), ['gi_equipa'], 'o /entrar: um cookie só');
+  });
 
-    // sem marca, o /entrar fica como era: um cookie só
-    const b2 = await criarBilhete(env, { discordId: DONO, nome: 'Martinho', papel: 'suporte', papeis: ['suporte'], guildId: SERVIDOR });
-    const f2 = new FormData();
-    f2.set('t', b2.token);
-    assert.equal(cookiesDe(await pedirAoWorker(env, '/equipa/entrar', { method: 'POST', body: f2 })).length, 1);
+  /* O «Sair» do guião, a correr fora do browser: o pedir e o sair tirados
+     do GUIAO, com um fetch e um location fingidos.
+     Recebe: corpo — o JSON que o /api/equipa/sair responde.
+     Devolve: a promessa de {pedidos, foi} — o que se pediu e o que o location fez. */
+  async function sairNoGuiao(corpo) {
+    const { GUIAO } = await import('../worker/src/equipa-guiao.js');
+    const fn = (nome) => {
+      const i = GUIAO.indexOf('function ' + nome + '(');
+      assert.ok(i > -1, 'o guião tem ' + nome);
+      return GUIAO.slice(i, GUIAO.indexOf('\n}\n', i) + 3);
+    };
+    const pedidos = [], foi = [];
+    const fetch = async (rota, o) => { pedidos.push([o && o.method, rota]); return new Response(JSON.stringify(corpo), { status: 200 }); };
+    const location = { reload: () => foi.push('reload'), assign: (u) => foi.push('assign ' + u), replace: (u) => foi.push('replace ' + u) };
+    const sair = new Function('fetch', 'location', fn('pedir') + fn('sair') + 'return sair;')(fetch, location);
+    sair();
+    await new Promise((ok) => setTimeout(ok, 10));
+    return { pedidos, foi };
+  }
+
+  test('o «Sair» do guião vai para o depois que o servidor diz, ou recarrega', async () => {
+    const com = await sairNoGuiao({ ok: true, depois: '/' });
+    assert.deepEqual(com.pedidos, [['POST', '/api/equipa/sair']]);
+    assert.deepEqual(com.foi, ['assign /'], 'com depois, vai para a app');
+    assert.deepEqual((await sairNoGuiao({ ok: true })).foi, ['reload'], 'sem depois, recarrega (produção, ou a app fechada)');
+    assert.deepEqual((await sairNoGuiao({ ok: true, depois: '//mau.example' })).foi, ['reload'], 'só o / conta: nenhum redirecionamento livre');
   });
 
   test('em produção e no percurso não há marca: o sair, o /entrar e o /t/entrar ficam como eram', async () => {
@@ -434,6 +475,7 @@ describe('sair do back office do dev fica fora até um /test novo', () => {
       const s = await pedirAoWorker(env, '/api/equipa/sair', { method: 'POST', headers: { Cookie: MARCA } });
       assert.equal(s.status, 200, onde);
       assert.deepEqual(cookiesDe(s).map((c) => c.split('=')[0]), ['gi_equipa'], onde + ': o sair só apaga o cookie da equipa');
+      assert.deepEqual(await s.json(), { ok: true }, onde + ': sem depois, recarrega como sempre');
 
       const b = await criarBilhete(env, { discordId: DONO, nome: 'Martinho', papel: 'suporte', papeis: ['suporte'], guildId: SERVIDOR });
       const f = new FormData();

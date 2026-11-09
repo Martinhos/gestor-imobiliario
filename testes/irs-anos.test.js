@@ -289,47 +289,46 @@ describe('a página Declaração', () => {
     app.fiscoAno = String(ano);
   };
 
-  test('2025: a versão oficial, a entrega em 2026, o que mudou, o 4.2 com o 4.2A e o guia', () => {
+  test('2025: a versão oficial, o 4.2 com o 4.2A em cada contrato, e o guia é o público', () => {
     comRendas(2025);
     const html = app.vFisco();
-    assert.match(html, /IRS 2025/);
-    assert.match(html, /Rendimentos de 2025 · entrega de 1 de abril a 30 de junho de 2026/);
-    assert.match(html, /Modelo oficial/);
-    assert.match(html, /O que mudou em 2025/);
+    assert.match(html, /<span id="lab_fiscoAnoSel">2025<\/span>/, 'o ano dos rendimentos no seletor da barra');
+    assert.doesNotMatch(html, /IRS 2025<\/h2>|Modelo oficial|O que mudou em 2025|Como preencher, passo a passo/,
+      'sem a faixa das regras do ano nem a dobra do guia: isso vive no guia público');
+    assert.doesNotMatch(html, /Ainda não há versão das regras/, 'um ano com versão oficial não tem aviso das regras');
+    assert.match(html, /<a class="btn" href="\/guias\/declarar-rendas" target="_blank" rel="noopener"[^>]*>Guia de preenchimento<\/a>/);
     assert.match(html, /Anexo F · quadro 4\.2/);
     assert.match(html, /Quadro 4\.2A · datas de cada contrato/);
+    assert.match(html, /<p class="lbl fis-ctc-grupo">Quadro 4\.2A<\/p>/, 'e o 4.2A no cartão do contrato');
     assert.doesNotMatch(html, /Anexo F · quadro 4\.1/, 'sem contratos sem redução, o 4.1 não se escreve');
-    assert.match(html, /Como preencher, passo a passo/);
-    assert.match(html, /Simular e entregar/);
     assert.match(html, /taxa 15 % · pela duração/);
   });
 
-  test('2026: provisória, com os 10 % nas novidades e na linha', () => {
+  test('2026: provisória, dita num aviso cinzento, e os 10 % na linha', () => {
     comRendas(2026);
     const html = app.vFisco();
-    assert.match(html, /Versão provisória/);
-    assert.match(html, /Taxa de 10 % nas rendas de habitação até 2\s300 €/);
+    assert.doesNotMatch(html, /Versão provisória|O que mudou em/);
+    assert.match(html, /<span class="badge grey fis-num">\d+<\/span><p>Ainda não há Anexo F aprovado para os rendimentos de 2026/);
     assert.match(html, /taxa 10 % · renda moderada/);
-    assert.match(html, /entrega de 1 de abril a 30 de junho de 2027/);
   });
 
-  test('um ano sem versão diz que usa a mais recente', () => {
+  test('um ano sem versão diz que usa a mais recente, em «A tratar antes de entregar»', () => {
     comRendas(2027);
     const html = app.vFisco();
-    assert.match(html, /Ainda não há versão das regras de 2027\./);
-    assert.match(html, /Usam-se as de 2026/);
-    assert.match(html, /entrega de 1 de abril a 30 de junho de 2028/);
+    assert.match(html, /<span class="badge amber fis-num">1<\/span><p>Ainda não há versão das regras de 2027\. Usam-se as de 2026, a mais recente, com as datas passadas para 2027 — as taxas e os quadros podem ter mudado\.<\/p>/);
+    const av = app.resumoFiscal(2027, '').avisos[0];
+    assert.equal(av.nivel, 'aviso');
+    assert.equal(av.abrir, '', 'não há ficha onde se trate');
     assert.doesNotMatch(html, /O que mudou em/, 'as novidades de outro ano não são deste');
-    assert.match(html, /Regras de 2026/);
     assert.doesNotMatch(html, /rendimentos de 2026 —/, 'nem o texto do modelo de outro ano');
   });
 
-  test('sem rendas no ano, a versão do ano continua à vista', () => {
+  test('sem rendas no ano, o seletor fica no ano escolhido', () => {
     comRendas(2025);
     app.fiscoAno = '2026';
     const html = app.vFisco();
     assert.match(html, /Sem rendas em 2026/);
-    assert.match(html, /IRS 2026/);
+    assert.match(html, /<span id="lab_fiscoAnoSel">2026<\/span>/);
   });
 
   test('a ficha do contrato diz porque é que a taxa é a que é', () => {

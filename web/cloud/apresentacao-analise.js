@@ -165,21 +165,14 @@ function aprAFiscoAno() { return Number(today().slice(0, 4)); }
    gastos que a regra das categorias deduz (o condomínio, a manutenção, a
    primeira prestação do IMI e o seguro, que cai em «Outros gastos»), o
    líquido e o imposto estimado à taxa desse ano (aprATaxa — as rendas são
-   todas de habitação e abaixo do limite das moderadas). E o englobamento com
-   21 400 € de outros rendimentos, pelos escalões da versão do ano
-   (fisco.js:fiscoColeta), quando a versão os tem.
+   todas de habitação e abaixo do limite das moderadas) — sem englobamento,
+   como a página.
    Recebe: ano — o ano dos rendimentos.
-   Devolve: {rendas, gastos, liquido, imposto, taxa, outros, englobando} —
-   englobando é null sem escalões. */
+   Devolve: {rendas, gastos, liquido, imposto, taxa}. */
 function aprAFisco(ano) {
   var a = aprAAno(), gastos = aprACent(1350 + 1980 + 469.2 + 401), liquido = aprACent(a.receita - gastos);
-  var taxa = aprATaxa(APR_EXEMPLO.contrato('c4'), ano), imposto = aprACent(liquido * taxa / 100), outros = 21400, englobando = null;
-  try {
-    var eng = typeof irsAno === 'function' ? irsAno(ano).englobamento : null, temEscaloes = !!(eng && (eng.escaloes || []).length);
-    // a coleta é da Declaração (fisco.js): a guarda vai na linha da chamada
-    if (temEscaloes && typeof fiscoColeta === 'function') englobando = aprACent(Math.max(0, fiscoColeta(outros + liquido, eng, false) - fiscoColeta(outros, eng, false)));
-  } catch (e) { englobando = null; }
-  return { rendas: a.receita, gastos: gastos, liquido: liquido, imposto: imposto, taxa: taxa, outros: outros, englobando: englobando };
+  var taxa = aprATaxa(APR_EXEMPLO.contrato('c4'), ano), imposto = aprACent(liquido * taxa / 100);
+  return { rendas: a.receita, gastos: gastos, liquido: liquido, imposto: imposto, taxa: taxa };
 }
 
 /* -------------------------------------------------------- as peças */
@@ -902,27 +895,9 @@ registarApresentacao('projections', {
    Devolve: true/false. */
 function aprAFiscoAqui() { return typeof servicoLigado === 'function' && servicoLigado('fisco'); }
 
-/* A faixa das regras do ano (fisco.js:fiscoAnoCard): o selo do modelo e o
-   ano dos rendimentos com o prazo da entrega, lidos da versão do ano
-   (irs.js:irsAno), e o «Guia de preenchimento».
-   Recebe: ano — o ano dos rendimentos.
-   Devolve: o HTML. */
-function aprAFiscoFaixa(ano) {
-  var selo = '', entrega = 'Rendimentos de ' + ano;
-  try {
-    var v = typeof irsAno === 'function' ? irsAno(ano) : null;
-    if (v) {
-      selo = !v.exato ? aprSelo('Regras de ' + v.ano, 'amber') : v.modelo && v.modelo.oficial ? aprSelo('Modelo oficial') : aprSelo('Versão provisória', 'amber');
-      // os rendimentos já estão no título («IRS 2026»): a linha diz só a entrega
-      if (v.entrega && typeof irsDiaMes === 'function') entrega = 'Entrega de ' + irsDiaMes(v.entrega.de) + ' a ' + irsDiaMes(v.entrega.ate) + ' de ' + String(v.entrega.ate).slice(0, 4);
-    }
-  } catch (e) { selo = ''; }
-  return '<span class="apr-a-faixa">' + selo + '<b>IRS ' + ano + '</b><span class="apr-m-sub">' + esc(entrega) + '</span></span>';
-}
-
-/* A imagem do resumo: o ecrã do IRS · Anexo F com o ano em chips e o
-   titular, a faixa das regras do ano e o começo do resumo dos quadros 4.1 e
-   4.2, uma linha por contrato com as rendas e o imposto estimado
+/* A imagem do resumo: o ecrã do IRS · Anexo F com o ano dos rendimentos no
+   seletor e o titular (fisco.js:fisBarra), e o começo do resumo dos quadros
+   4.1 e 4.2, uma linha por contrato com as rendas e o imposto estimado
    (fisco.js:fisResumoQuadros).
    Devolve: o HTML da imagem. */
 function aprAFiscoResumo() {
@@ -933,8 +908,7 @@ function aprAFiscoResumo() {
     return [aprSelo(q), esc(c.inquilino), esc(aprDinheiro(r)), '<b>' + esc(aprDinheiro(f.imposto * r / f.rendas)) + '</b>'];
   };
   return aprCena(aprAEcra('IRS · Anexo F', aprADireita('funil'),
-    '<span class="apr-a-anos">' + aprChips([String(ano - 1), String(ano)], [1]) + '<span class="apr-m-chip apr-a-chip">Todos · por inteiro' + ic('chevD', 10) + '</span></span>' +
-    aprAFiscoFaixa(ano) +
+    '<span class="apr-a-anos">' + aprASeletor(String(ano)) + '<span class="apr-m-chip apr-a-chip">Todos · por inteiro' + ic('chevD', 10) + '</span></span>' +
     aprACartao('Quadros 4.1 e 4.2', 'um contrato por linha', aprATabela(['Quadro', 'Contrato', 'Rendas', 'Imposto'],
       [linha('4.2', 'c4'), linha('4.1', 'c5'), linha('4.1', 'c1')], { cols: 'q4' }), { classe: 'apr-a-cartao-quadros' })),
     { tom: 't0', arranjo: 'tela' });
@@ -963,44 +937,33 @@ function aprAFiscoTratar() {
   ]), { tom: 't1', arranjo: 'coluna' });
 }
 
-/* A imagem da situação: «A tua situação fiscal» com os dois interruptores
-   atrás (fisco.js:fiscoSituacaoCard) e, à frente, «Englobar ou não?» com os
-   outros rendimentos do exemplo e as duas contas (fisco.js:fiscoEnglobamentoCard).
-   Sem escalões na versão do ano, a da frente fica de fora.
+/* A imagem da situação: «A tua situação fiscal» (fisco.js:fiscoSituacaoCard)
+   com os dois interruptores — a tributação conjunta e a dispensa dos recibos
+   eletrónicos, que traz o Modelo 44.
    Devolve: o HTML da imagem. */
 function aprAFiscoSituacao() {
-  var ano = aprAFiscoAno(), f = aprAFisco(ano);
   var linha = function (t, s, on) {
     return '<span class="apr-a-sit"><span><b>' + esc(t) + '</b>' + (s ? '<span class="apr-m-sub">' + esc(s) + '</span>' : '') + '</span>' + aprAInterruptor(on) + '</span>';
   };
-  var atras = aprACartao('A tua situação fiscal', 'grava ao mexer',
-    linha('Tributação conjunta', 'Casados ou unidos de facto', false) + linha('Dispensa dos recibos eletrónicos', 'Com ela, o Modelo 44', false));
-  if (f.englobando == null) return aprCena(aprColuna([atras]), { tom: 't2', arranjo: 'coluna' });
-  var dif = aprACent(f.imposto - f.englobando);
-  var veredito = !dif ? 'Dá o mesmo englobar ou não.' : dif > 0 ? 'Englobar compensa: menos ' + aprDinheiro(dif) + ' de imposto.' : 'Não englobar compensa: menos ' + aprDinheiro(-dif) + ' de imposto.';
-  return aprCena(aprPar(atras,
-    aprACartao('Englobar ou não?', 'quadro 6G', aprCampo('Outros rendimentos do agregado', money(f.outros)) +
-      '<span class="apr-a-ce"><span>Sem englobar</span><b>' + esc(aprDinheiro(f.imposto)) + '</b></span>' +
-      '<span class="apr-a-ce"><span>Englobando</span><b>' + esc(aprDinheiro(f.englobando)) + '</b></span>' +
-      '<span class="apr-a-veredito">' + ic('check', 11) + esc(veredito) + '</span>', { flutua: true })
-  ), { tom: 't2', arranjo: 'par' });
+  return aprCena(aprColuna([aprACartao('A tua situação fiscal', 'grava ao mexer',
+    linha('Tributação conjunta', 'Casados ou unidos de facto', false) + linha('Dispensa dos recibos eletrónicos', 'Com ela, o Modelo 44', false), { flutua: true })]),
+  { tom: 't2', arranjo: 'coluna' });
 }
 
 /* A imagem do titular e do guia: o painel do funil com o titular e o ano
    (fisco.js:vFisco) atrás e, à frente, a barra com o chip do titular
-   escolhido, na quota-parte, e a dobra «Como preencher, passo a passo» com
-   os passos do guia da versão do ano (irs.js:irsAno).
+   escolhido, na quota-parte, e o botão «Guia de preenchimento», que abre o
+   guia público de como declarar as rendas (fisco.js:fisBarra).
    Devolve: o HTML da imagem. */
 function aprAFiscoTitular() {
-  var h = APR_EXEMPLO.proprietarios[0], ano = aprAFiscoAno(), n = 8;
-  try { n = typeof irsAno === 'function' ? (irsAno(ano).passos || []).length || n : n; } catch (e) { n = 8; }
+  var h = APR_EXEMPLO.proprietarios[0], ano = aprAFiscoAno();
   return aprCena(aprPar(
     aprCartao(aprASeletor(h.nome, true) + aprASeletor(String(ano)) +
       '<span class="apr-m-sub">O Anexo F é por titular: com um escolhido, rendas e gastos entram na quota-parte dele.</span>' +
       '<span class="apr-a-pe">' + aprBotao('Limpar', { pequeno: true, icone: 'x' }) + aprBotao('Fechar', { primario: true, pequeno: true, icone: 'check' }) + '</span>',
     { classe: 'apr-a-painel-filtro' }),
     aprCartao('<span class="apr-a-titular"><span class="apr-m-rot apr-m-maiusc">Titular</span><span class="apr-m-chip on apr-a-chip">' + esc(h.nome + ' · quota-parte') + ic('x', 10) + '</span></span>' +
-      '<span class="apr-a-dobra">' + ic('info', 12) + '<b>Como preencher, passo a passo</b><span class="apr-m-sub">' + n + ' passos</span>' + ic('chevD', 11) + '</span>',
+      aprBotao('Guia de preenchimento', { pequeno: true }),
     { flutua: true, classe: 'apr-a-cartao-titular' })
   ), { tom: 't3', arranjo: 'par' });
 }
@@ -1016,10 +979,10 @@ registarApresentacao('fisco', {
       texto: '<b>A tratar antes de entregar</b> numera o que falta nos teus dados, como um NIF ou um artigo matricial, com o botão que abre o sítio onde se trata. A app não inventa códigos nem números.',
       maquete: aprAFiscoTratar, quando: aprAFiscoAqui },
     { titulo: 'O que só tu sabes',
-      texto: 'Em <b>A tua situação fiscal</b> dizes se há tributação conjunta e se tens dispensa dos recibos eletrónicos. <b>Englobar ou não?</b> estima o imposto com e sem englobamento.',
+      texto: 'Em <b>A tua situação fiscal</b> dizes se há tributação conjunta e se tens dispensa dos recibos eletrónicos. Com a dispensa, a página lembra-te o Modelo 44 e o prazo dele.',
       maquete: aprAFiscoSituacao, quando: aprAFiscoAqui },
-    { titulo: 'Por titular, com o guia do ano',
-      texto: 'O Anexo F é por titular: escolhe-o no chip <b>Titular</b>, e as rendas e os gastos entram na quota-parte dele. No fim, <b>Como preencher, passo a passo</b> diz o que vai a cada quadro.',
+    { titulo: 'Por titular, com o guia ao lado',
+      texto: 'O Anexo F é por titular: escolhe-o no chip <b>Titular</b>, e as rendas e os gastos entram na quota-parte dele. <b>Guia de preenchimento</b> abre o guia de como declarar as rendas, com o que vai a cada quadro.',
       maquete: aprAFiscoTitular, quando: aprAFiscoAqui },
   ],
 });

@@ -112,7 +112,7 @@ describe('o guia «Declarar as rendas»', () => {
       'e-balcão',
       'No Anexo F da declaração Modelo 3',
       'o mais seguro é não a deduzir até teres uma resposta escrita da AT',
-      '8 de novembro de 2026',
+      '9 de novembro de 2026',
       'sem teres escolhido as regras da categoria B',
     ]) assert.ok(t.includes(frase), 'falta: ' + frase);
   });
@@ -164,7 +164,9 @@ describe('o guia «Declarar as rendas»', () => {
     assert.doesNotMatch(p1, /\d %|\d €/, 'nenhum espaço normal antes de % ou €');
     for (const frase of ['só se entregam por transmissão eletrónica de dados', 'o teu NIF e a senha de acesso',
       'Chave Móvel Digital', 'registas-te no Portal']) assert.ok(t2.includes(frase), '2, falta: ' + frase);
-    assert.match(p2, /<p class="ir"><a class="btn" href="https:\/\/www\.portaldasfinancas\.gov\.pt\/" rel="noopener"><span>Ir ao Portal das Finanças<\/span><svg class="i seguir"/);
+    // ticket 720b5908: o botão leva à entrega do IRS (a autenticação do Modelo 3), e não à página inicial do Portal
+    assert.match(p2, /<p class="ir"><a class="btn" href="https:\/\/irs\.portaldasfinancas\.gov\.pt\/app\/entrega" rel="noopener"><span>Entregar o IRS no Portal das Finanças<\/span><svg class="i seguir"/);
+    assert.doesNotMatch(html, /href="https:\/\/www\.portaldasfinancas\.gov\.pt\/"/, 'nenhuma ligação à página inicial do Portal');
     for (const frase of ['Cada prédio vai numa linha própria', 'código da freguesia, de seis dígitos', 'pelo valor ilíquido',
       '07 no arrendamento habitacional, 06 no não habitacional', 'retenções na fonte', 'O NIF português do inquilino',
       'nos 24 meses antes do arrendamento', 'Quadro 4.1', 'Quadro 4.2', 'quadro 4.2A', 'Quadro 6G']) {
@@ -185,14 +187,60 @@ describe('o guia «Declarar as rendas»', () => {
     for (const m of corpo.matchAll(/href="(https?:[^"]+)"/g)) assert.ok(daLista.has(m[1]), 'fora da lista de fontes: ' + m[1]);
   });
 
+  /* Tickets de QA 75c3536b e 33db56fc (2026-11-09): a Declaração da app
+     deixou de ter o cartão do ano e a dobra «Como preencher, passo a passo»,
+     e o que eles diziam e o guia não dizia passou para a parte 3 — os
+     quadros 8, 9 e 10, o resultado negativo, os quatro anos dos documentos,
+     o que mudou em 2025 —, cada facto com o artigo à vista e a fonte oficial
+     na lista. O guia é informação: não fala da app. O «sobe para 15 000 €»
+     da app não se confirmou (o limite já era esse desde a Lei 24-D/2022):
+     aqui é o que não mudou. */
+  test('a parte 3 traz o que a Declaração da app dizia, cada facto com a fonte oficial', () => {
+    const p3 = /<section class="bloco" id="como-preencher"[\s\S]*?\n {2}<\/section>/.exec(html)[0];
+    const t3 = texto(p3);
+    const grupos = [...p3.matchAll(/<div class="grupo">\s*<h3>([^<]+)<\/h3>/g)].map((m) => m[1]);
+    assert.deepEqual(grupos, ['Linha a linha', 'O quadro de cada contrato', 'Os outros quadros', 'Se os gastos passarem as rendas',
+      'Depois de entregares', 'O que mudou em 2025'], 'os grupos da parte 3, pela ordem');
+    for (const frase of [
+      'O B só se usa quando és casado ou unido de facto e optam pela tributação conjunta',
+      'Quadro 8: as rendas de anos anteriores', 'no 8A, se englobares', '(artigo 74.º, n.º 1)',
+      'até ao quinto ano anterior ao do pagamento (artigo 74.º, n.º 3)',
+      'Quadro 9: o Adicional ao IMI (AIMI)', 'Não entra nos gastos da linha, mas abate-se ao imposto',
+      'artigo 135.º-I do Código do IMI', 'Quadro 10: os contratos para habitação permanente que tiveram redução de taxa',
+      'abate ao resultado positivo das rendas dos seis anos seguintes (artigo 55.º, n.º 1, alínea b))',
+      'pelo menos 36 meses', 'durante os quatro anos seguintes', '(artigo 128.º)',
+      'Desde 1 de julho de 2025, não há retenção na fonte', '(artigo 101.º-B, n.º 1, alínea d), na redação do Decreto-Lei n.º 49/2025)',
+      'até ao fim de fevereiro do ano seguinte, e já não até ao fim de janeiro',
+      'Desde 1 de agosto de 2025', 'o inquilino pode comunicá-lo ele', 'A obrigação continua a ser tua',
+      'Portaria n.º 106/2025/1', 'O que não mudou', 'o limite do artigo 53.º do Código do IVA',
+      '«Sem retenção, nos termos do n.º 1 do artigo 101.º-B do Código do IRS.»',
+    ]) assert.ok(t3.includes(frase), '3, falta: ' + frase);
+    // o dinheiro como na casa, com o espaço fino que não parte a linha
+    for (const v of ['25 €', '15 000 €']) assert.ok(p3.includes(v), 'com o espaço fino: ' + v);
+    assert.doesNotMatch(p3, /\d €|\d %/, 'nenhum espaço normal antes de € ou %');
+    // o que a app dizia sem fonte oficial confirmada não entra
+    assert.doesNotMatch(t3, /IRS Automático|sobe para|simula/i);
+    // as fontes novas, cada uma na lista com o endereço da AT
+    const lista = /<ul class="fontes">([\s\S]*?)<\/ul>/.exec(html)[1];
+    for (const u of ['cirs_rep/Pages/irs74.aspx', 'cirs_rep/Pages/irs78.aspx', 'cimi/Pages/cimi135i.aspx', 'cirs_rep/Pages/irs55.aspx',
+      'cirs_rep/Pages/irs128.aspx', 'cirs_rep/Pages/irs101b.aspx', 'civa_rep/Pages/artigo-53-o-do-civa.aspx',
+      'cirs_rep/Pages/irs115.aspx', 'selo/Pages/selo60.aspx', 'Documents/Portaria_106_2025_1.pdf']) {
+      assert.match(lista, new RegExp('href="https://info\\.portaldasfinancas\\.gov\\.pt/pt/informacao_fiscal/[^"]*' +
+        u.replace(/[.]/g, '\\.') + '"'), 'a fonte ' + u);
+    }
+    // as partes 1 a 3 são informação: não falam da app nem prometem fazer o IRS por ti
+    const corpo = texto(html.slice(html.indexOf('<section class="bloco" id="tens-de-declarar"'), html.indexOf('<section class="parte" id="deducoes"')));
+    assert.doesNotMatch(corpo, /Rendorium|\bapp\b|por ti\b/i);
+  });
+
   test('as fontes apontam só para domínios oficiais', () => {
     const fontes = /<ul class="fontes">([\s\S]*?)<\/ul>/.exec(html)[1];
     const urls = [...fontes.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
-    assert.equal((fontes.match(/<li>/g) || []).length, 12 + 9, 'as doze das partes 1 a 3 e as nove das deduções');
-    assert.equal(urls.length, 21, 'todas com o endereço confirmado');
+    assert.equal((fontes.match(/<li>/g) || []).length, 22 + 9, 'as vinte e duas das partes 1 a 3 e as nove das deduções');
+    assert.equal(urls.length, 31, 'todas com o endereço confirmado');
     assert.equal(new Set(urls).size, urls.length, 'nenhuma repetida');
     for (const u of urls) {
-      assert.match(u, /^https:\/\/(?:info\.portaldasfinancas\.gov\.pt|www\.portaldasfinancas\.gov\.pt|diariodarepublica\.pt)\//, u);
+      assert.match(u, /^https:\/\/(?:info\.portaldasfinancas\.gov\.pt|irs\.portaldasfinancas\.gov\.pt|diariodarepublica\.pt)\//, u);
     }
   });
 
@@ -288,7 +336,7 @@ describe('o guia «Declarar as rendas»', () => {
     assert.equal(a.inLanguage, 'pt-PT');
     assert.equal(a.url, url);
     assert.equal(a.mainEntityOfPage, url);
-    assert.equal(a.dateModified, '2026-11-08', 'a data fixa da revisão');
+    assert.equal(a.dateModified, '2026-11-09', 'a data fixa da revisão');
     assert.deepEqual([a.publisher['@type'], a.publisher.name], ['Organization', 'Rendorium']);
     assert.match(a.publisher.logo.url, /^https:\/\/rendorium\.com\/icon-512\.png$/);
     assert.doesNotMatch(previa, /ld\+json/, 'a pré-visualização não se apresenta como a original');

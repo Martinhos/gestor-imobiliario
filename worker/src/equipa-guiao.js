@@ -191,10 +191,17 @@ function enviar(rota, corpo) {
     body: JSON.stringify(corpo || {}),
   });
 }
-// termina a sessão de equipa no servidor e recarrega — cai no ecrã de entrada
-// Devolve: nada — recarrega a página.
+/* Termina a sessão de equipa no servidor. No dev, com uma sessão de teste
+   por baixo, o servidor diz depois:'/' — recarregar voltava a entrar por ela
+   (equipa.js:entrarPelaSessaoDeTeste), e sair é ir para a app; só o «/»
+   conta, nunca um endereço livre. Sem ele (produção, ou a app fechada a
+   quem entrou pelo /entrar) recarrega e cai no ecrã de entrada.
+   Devolve: nada — muda de página. */
 function sair() {
-  pedir('/api/equipa/sair', { method: 'POST' }).then(function () { location.reload(); });
+  pedir('/api/equipa/sair', { method: 'POST' }).then(function (j) {
+    if (j && j.depois === '/') location.assign('/');
+    else location.reload();
+  });
 }
 
 /* O aviso de baixo (o toast da app): diz o resultado de uma ação ou o erro
@@ -1811,9 +1818,9 @@ var ACOES_RASTO = {
   kpiModal: 'Ver a evolução', kpiPorque: 'Como se calcula', repFoco: 'Abrir a avaliação do imóvel', donutDrill: 'Abrir ou voltar no gráfico',
   anaChipFocar: 'Escolher o imóvel', repAnaLimpar: 'Voltar a todos os imóveis', projAnaLimpar: 'Voltar a todos os imóveis',
   dashPersonalizarPainel: 'Personalizar painel', 'CW.backToDash': 'Visão geral', 'CW.resetDashOrder': 'Repor ordem',
-  'CW.exitEdit': 'Concluir', fiscoEscolherAno: 'Escolher o ano', limparAmbito: 'Limpar o titular',
+  'CW.exitEdit': 'Concluir', limparAmbito: 'Limpar o titular',
   hdrFiltToggle: 'Todos · por inteiro', fiscoPartilhar: 'Partilhar resumo', fiscoCsv: 'Exportar CSV',
-  fiscoVerGuia: 'Guia de preenchimento', fiscoSetIrs: 'Escolher a coluna do IRS', fiscoSetTitular: 'Escolher o titular',
+  fiscoPdf: 'Exportar PDF', fiscoSetIrs: 'Escolher a coluna do IRS', fiscoSetTitular: 'Escolher o titular',
   // listas, filtros e seleção
   lpMenu: 'Opções', lfClear: 'Limpar', lfToggle: 'Filtros', lfApply: 'Fechar', lfLimparCampo: 'Limpar o campo',
   lqLimpar: 'Limpar a pesquisa', limparFiltroAtual: 'Limpar filtros',

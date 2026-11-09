@@ -42,7 +42,7 @@ const SERVICOS=[
   {id:'credits',nome:'Créditos',ficheiros:['app/creditos.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:['properties'],usa:['transactions','recurring']},
   {id:'projections',nome:'Projeções',ficheiros:['app/projecoes.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['contracts','properties','transactions']},
   {id:'reports',nome:'Avaliação',ficheiros:['app/avaliacao.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['properties','contracts','transactions','owners']},
-  {id:'fisco',nome:'Declaração',ficheiros:['app/fisco.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['contracts','transactions','tenants','properties'],soDev:true},
+  {id:'fisco',nome:'Declaração',ficheiros:['app/fisco.js','app/fisco-pdf.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['contracts','transactions','tenants','properties'],soDev:true},
 ];
 /* onde o aparelho guarda os serviços desligados nesta conta, para o
    arranque os saber antes de o servidor responder */

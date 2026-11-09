@@ -274,17 +274,19 @@ describe('os números do exemplo', () => {
     }
   });
 
-  test('o resumo do IRS: o líquido são as rendas menos os gastos, o imposto à taxa do ano, e o englobamento pelos escalões da app', () => {
+  test('o resumo do IRS: o líquido são as rendas menos os gastos e o imposto à taxa do ano, sem englobamento, como a página', () => {
     montar();
     const ano = app.aprAFiscoAno(), f = app.aprAFisco(ano);
     assert.equal(f.rendas, app.aprAAno().receita);
     assert.equal(Math.round((f.rendas - f.gastos) * 100) / 100, f.liquido);
     assert.equal(f.taxa, app.irsRate({ rent: 950, start: '2025-03-01', end: '', active: true }, ano));
     assert.equal(f.imposto, Math.round(f.liquido * f.taxa) / 100);
-    const eng = app.irsAno(ano).englobamento;
-    if (eng && eng.escaloes && eng.escaloes.length) {
-      const esperado = Math.round((app.fiscoColeta(f.outros + f.liquido, eng, false) - app.fiscoColeta(f.outros, eng, false)) * 100) / 100;
-      assert.equal(f.englobando, esperado);
-    } else assert.equal(f.englobando, null);
+    assert.equal('englobando' in f, false, 'a página deixou de simular o englobamento, e a apresentação também');
+    /* a apresentação mostra o que a página tem: o ano num seletor, o guia na
+       barra, e nada da faixa azul, da dobra do guia nem do englobamento */
+    const imgs = app.APRESENTACOES.fisco.imagens.map((x) => x.maquete() + ' ' + x.texto).join(' ');
+    assert.doesNotMatch(imgs, /apr-a-faixa|apr-a-dobra|Como preencher, passo a passo|Englobar|englob/);
+    assert.match(imgs, /apr-a-anos"><span class="apr-m-caixa apr-a-sel">/);
+    assert.match(imgs, /Guia de preenchimento/);
   });
 });

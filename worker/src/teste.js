@@ -222,33 +222,6 @@ export async function discordDoAutor(env, me) {
   return { id, nome };
 }
 
-/* A marca de quem saiu do back office do dev: «Sair» lá fica fora até um
-   /test novo (decisão do Martinho, 2026-11-09). Sem ela, o recarregar que
-   se segue ao Sair voltava a entrar pela sessão de teste
-   (equipa.js:entrarPelaSessaoDeTeste). Põe-na o sair do back office
-   (equipa.js:rotasEquipa) e tiram-na uma ligação nova do /test (rotaTeste)
-   e o /entrar do Discord; tudo só com o ENV_NAME 'dev'. Vive aqui, e não no
-   equipa.js, porque o equipa.js importa este ficheiro e não o contrário.
-   Dura o mesmo que a sessão de uma conta: depois disso já é preciso um
-   /test novo de qualquer maneira. */
-const COOKIE_SAIU = 'gi_equipa_saiu';
-const SAIU_TTL = 30 * 86400;
-
-/* A linha Set-Cookie da marca de quem saiu do back office do dev.
-   Recebe: apagar (opcional) — true para a variante que a apaga (Max-Age=0).
-   Devolve: a linha Set-Cookie completa (texto), HttpOnly, Secure e SameSite=Lax. */
-export function cookieSaiuDaEquipa(apagar) {
-  return COOKIE_SAIU + '=' + (apagar ? '' : '1') + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + (apagar ? 0 : SAIU_TTL);
-}
-
-/* O pedido traz a marca de quem saiu do back office do dev?
-   Recebe: request — o pedido HTTP (pode faltar).
-   Devolve: true/false. */
-export function saiuDaEquipa(request) {
-  const c = request && request.headers ? request.headers.get('Cookie') || '' : '';
-  return new RegExp('(?:^|;\\s*)' + COOKIE_SAIU + '=1(?:;|$)').test(c);
-}
-
 /* A pessoa do Discord por trás da sessão de teste deste pedido: a conta da
    sessão (auth.js:getSessionUser), que tem de ser de teste (eContaDeTeste),
    e quem pediu a ligação do /test que a criou (discordDoAutor,
@@ -495,15 +468,15 @@ export async function rotaTeste(c) {
         (dados === '1' ? ' · com dados de exemplo' : ''));
 
   const comExemplo = !retomada && dados === '1';
-  const cabecalhos = new Headers({
-    Location: '/?entrar=' + token + (comExemplo ? '&exemplo=1' : ''),
-    'Set-Cookie': sessionCookie(token),
-    'Cache-Control': 'no-store',
-    'Referrer-Policy': 'no-referrer',
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: '/?entrar=' + token + (comExemplo ? '&exemplo=1' : ''),
+      'Set-Cookie': sessionCookie(token),
+      'Cache-Control': 'no-store',
+      'Referrer-Policy': 'no-referrer',
+    },
   });
-  // um /test novo devolve a entrada no back office a quem tinha saído dele (cookieSaiuDaEquipa)
-  if (env.ENV_NAME === 'dev' && saiuDaEquipa(c.request)) cabecalhos.append('Set-Cookie', cookieSaiuDaEquipa(true));
-  return new Response(null, { status: 302, headers: cabecalhos });
 }
 
 /* Depois de se apagar uma conta de teste, a sessão seguinte: a irmã mais
