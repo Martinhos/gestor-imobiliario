@@ -6,8 +6,15 @@
 // pedidos de ajuda: não são suporte, não vão ao Discord. Todas as contas do
 // dev veem e mexem em todos os tickets (a decisão do Martinho, 2026-10-28) —
 // o user_id é só quem o escreveu. A captura de ecrã vive no R2 em qa/<id>.
+// Cada ticket tem o seu cartão no kanban da equipa (rotas/kanban.js), que
+// nasce e se move com ele.
 import { json, err, body, badId, now, CSP_ANEXO } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
+import { lerAte, tipoDaImagem } from '../lib/imagens.js';
+
+// as duas vivem em lib/imagens.js (o kanban também as usa); ficam exportadas daqui para quem já as lia cá
+export { lerAte, tipoDaImagem };
+import { cartaoDoTicketQa } from '../lib/kanban.js';
 
 // As gravidades que um ticket pode ter; qualquer outra coisa fica sem nenhuma.
 const GRAVIDADES = ['bloqueia', 'incomoda', 'detalhe'];
@@ -112,7 +119,8 @@ async function autorDaConta(env, me) {
    aparada e tem de ter de 1 a 4000 caracteres; uma gravidade fora das três
    fica nula; o contexto, se for um objeto, guarda-se em JSON cortado aos
    16 KB (contextoParaGuardar). Trava aos 30 por hora por pessoa e leva de
-   passagem os removidos há mais de 24 h.
+   passagem os removidos há mais de 24 h. O ticket ganha o seu cartão no
+   kanban da equipa (kanbanDoTicket); remover, repor e reabrir levam-no atrás.
    Recebe: env — o ambiente do worker (D1 em env.DB, R2 em env.FILES);
    request — o pedido, com o corpo {body, severity?, context}; autor — quem
    o escreve ({id, discordId, discordNome}: autorDaConta, ou o do back office
@@ -137,7 +145,30 @@ async function criarTicket(env, request, autor) {
     `INSERT INTO qa_tickets (id, user_id, discord_id, discord_nome, body, severity, context, status, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'aberto', ?, ?)`
   ).bind(id, autor.id, autor.discordId || null, autor.discordNome || null, texto, gravidade, contexto, t, t).run();
+  // o cartão dele no kanban da equipa, em A fazer
+  await kanbanDoTicket(env, {
+    tipo: 'qa', id, estado: 'aberto', agora: t,
+    novo: { uuid: crypto.randomUUID(), ...cartaoDoTicketQa({ id, body: texto, severity: gravidade }) },
+  });
   return json({ ok: true, id }, 201);
+}
+
+/* Leva um acontecimento de um ticket de QA ao kanban da equipa: o cartão
+   nasce com o ticket e move-se quando ele muda de estado (a regra em
+   lib/kanban.js, corrida por rotas/kanban.js:sincronizarKanban). Só fora de
+   produção, e nunca muda a resposta do ticket: uma falha fica no
+   console.error e o ticket segue como se o kanban não existisse.
+   Recebe: env — o ambiente do worker; ev — o acontecimento ({tipo: 'qa', id,
+   estado, agora, novo?}).
+   Devolve: promessa de nada (nunca lança). */
+async function kanbanDoTicket(env, ev) {
+  if (!env.ENV_NAME) return;
+  try {
+    const { sincronizarKanban } = await import('./kanban.js');
+    await sincronizarKanban(env, ev);
+  } catch (e) {
+    console.error('kanban: o cartão do ticket de QA ' + ev.id + ' não acompanhou', e);
+  }
 }
 
 /* O contexto de um ticket pronto a gravar: o objeto em JSON até 16 KB.
@@ -333,6 +364,8 @@ async function removerTicket(env, id) {
     'UPDATE qa_tickets SET removed_at = ?, updated_at = ? WHERE id = ? AND removed_at IS NULL'
   ).bind(t, t, id).run();
   if (!r.meta.changes) return naoExiste();
+  // o cartão fica onde está: o histórico dele diz que o ticket saiu
+  await kanbanDoTicket(env, { tipo: 'qa', id, estado: 'removido', agora: t });
   return json({ ok: true });
 }
 
@@ -344,11 +377,14 @@ async function removerTicket(env, id) {
    Devolve: promessa da Response {ok}, ou 404 se não existe. */
 async function reporTicket(env, id) {
   const t = now();
+  // se estava mesmo removido: só então o cartão ganha a linha «reposto»
+  const antes = await env.DB.prepare('SELECT removed_at FROM qa_tickets WHERE id = ?').bind(id).first();
   const r = await env.DB.prepare(
     `UPDATE qa_tickets SET removed_at = NULL, updated_at = ?
       WHERE id = ? AND (removed_at IS NULL OR removed_at >= ?)`
   ).bind(t, id, t - GUARDA_REMOVIDO).run();
   if (!r.meta.changes) return naoExiste();
+  if (antes && antes.removed_at != null) await kanbanDoTicket(env, { tipo: 'qa', id, estado: 'reposto', agora: t });
   return json({ ok: true });
 }
 
@@ -359,11 +395,14 @@ async function reporTicket(env, id) {
    Recebe: env — o ambiente do worker (D1 em env.DB); id — o id do ticket.
    Devolve: promessa da Response {ok}, ou 404 se não existe ou foi removido. */
 async function reabrirTicket(env, id) {
+  const t = now();
   const r = await env.DB.prepare(
     `UPDATE qa_tickets SET status = 'aberto', resolved_at = NULL, updated_at = ?
       WHERE id = ? AND removed_at IS NULL`
-  ).bind(now(), id).run();
+  ).bind(t, id).run();
   if (!r.meta.changes) return naoExiste();
+  // o cartão volta a A fazer (também de Concluído)
+  await kanbanDoTicket(env, { tipo: 'qa', id, estado: 'aberto', agora: t });
   return json({ ok: true });
 }
 
@@ -395,33 +434,6 @@ async function gravarImagem(env, request, id) {
   return json({ ok: true });
 }
 
-/* Lê o corpo de um pedido até um teto, aos bocados, e desiste logo que o
-   passa — um corpo sem Content-Length (ou com um que mente) não chega a
-   encher a memória do worker.
-   Recebe: request — o pedido; teto — o máximo de bytes.
-   Devolve: promessa dos bytes (Uint8Array, vazio sem corpo), ou null quando
-   passam do teto. */
-async function lerAte(request, teto) {
-  if (!request.body) return new Uint8Array(0);
-  const leitor = request.body.getReader();
-  const partes = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await leitor.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > teto) {
-      try { await leitor.cancel(); } catch (e) { /* já fechado */ }
-      return null;
-    }
-    partes.push(value);
-  }
-  const out = new Uint8Array(total);
-  let i = 0;
-  for (const p of partes) { out.set(p, i); i += p.byteLength; }
-  return out;
-}
-
 /* GET /api/qa/:id/imagem: os bytes da captura, com o tipo lido dos próprios
    bytes, sem cache (private, no-store) e na caixa de areia dos anexos
    (CSP_ANEXO, nosniff).
@@ -446,18 +458,4 @@ async function servirImagem(env, id) {
       'X-Content-Type-Options': 'nosniff',
     },
   });
-}
-
-/* O tipo de uma imagem pelos primeiros bytes (a assinatura), sem confiar no
-   que o pedido diz: PNG (89 50 4E 47 0D 0A 1A 0A), JPEG (FF D8 FF) ou WebP
-   (RIFF….WEBP).
-   Recebe: b — os bytes (Uint8Array).
-   Devolve: 'image/png', 'image/jpeg' ou 'image/webp', ou null se não for
-   nenhuma delas. */
-export function tipoDaImagem(b) {
-  const tem = (bs, de) => bs.every((x, i) => b[(de || 0) + i] === x);
-  if (b.length >= 8 && tem([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'image/png';
-  if (b.length >= 3 && tem([0xff, 0xd8, 0xff])) return 'image/jpeg';
-  if (b.length >= 12 && tem([0x52, 0x49, 0x46, 0x46]) && tem([0x57, 0x45, 0x42, 0x50], 8)) return 'image/webp';
-  return null;
 }

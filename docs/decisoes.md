@@ -92,6 +92,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-08 · O IRS na montra como guia, e a pílula do QA nas páginas públicas
 - 2026-11-08 · O «O que podes fazer» fecha-se, e a gaveta da montra fechada não ocupa espaço
 - 2026-11-09 · O back office do dev abre com a sessão de teste
+- 2026-11-09 · O back office com a navegação da app, e o kanban da equipa no lugar do Jira
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -2514,7 +2515,7 @@ ticket; a limpeza corre de passagem nas rotas e apaga primeiro a captura,
 para nunca ficar um objeto órfão no R2. Reabrir guarda a resolução, para quem
 pega outra vez no ticket ver o que já se tentou. O tipo da captura lê-se dos
 bytes, e não só do Content-Type, porque a imagem é escrita por uma conta e
-aberta por todas na mesma origem (worker/src/rotas/qa.js:tipoDaImagem).
+aberta por todas na mesma origem (worker/src/lib/imagens.js:tipoDaImagem).
 
 O user_id não tem chave estrangeira para users. Com ela, o DELETE FROM users da
 limpeza do dev falhava, ou os tickets tinham de sair primeiro, e o Martinho
@@ -3444,3 +3445,46 @@ um cartão por quadro: o resumo misto saiu, e cada quadro abre com onde se
 preenche e os contratos dele (fisco.js:fiscoQuadroResumoHtml), em linhas e não
 numa tabela, para não voltar a rolar de lado no telemóvel. O PDF já ia por
 quadro e não mudou.
+
+## 2026-11-09 · O back office com a navegação da app, e o kanban da equipa no lugar do Jira
+
+O Martinho pediu o back office «numa gaveta e barra de navegação como na app»,
+com as secções que se recolhem e o que vai na barra à escolha de quem o fizesse.
+A barra lateral ganhou as secções da app: o Kanban ao cimo, «Atendimento»
+(Pedidos e Pessoas) e «Plataforma» (Erros, Operação e Rasto), que se recolhem,
+e o fundo com a Documentação e quem está. Os pedidos e as pessoas são de quem
+atende; os erros, a operação e o rasto, de quem constrói e opera — é a mesma
+divisão dos papéis (worker/src/lib/papeis.js:CATS_DO_PAPEL), e por isso a
+maior parte das pessoas da equipa vê uma secção só. No telemóvel saiu a fila
+de separadores que rolava de lado: a gaveta tem tudo, e a barra de baixo os
+quatro destinos de todos os dias. No dev são o Kanban, os Pedidos, os Erros e
+as Pessoas, com o + a criar um cartão; na produção, onde o kanban não existe,
+a Operação toma o lugar dele e não há +.
+
+No mesmo pedido: «um kanban com as mesmas funcionalidades do Jira. A partir
+de agora fica tudo neste kanban.» O board KAN do Jira (2026-11-08) já era o
+sítio de todas as tarefas, mas vivia fora do projeto: o Claude só lá chegava
+pelo conector, e o Martinho raramente lá ia. O kanban vive no back office,
+com as chaves do Jira (KAN-N) para as citações nos commits, no diário e na
+memória continuarem a valer. Tem as colunas do board (A fazer, Auto Tests,
+Human Tests, Concluído e Para depois), os tipos, os épicos e as subtarefas,
+as etiquetas, a prioridade, o responsável, os comentários, o histórico, os
+filtros e, a pedido dele, colunas editáveis (só o master), anexos de imagem
+e ligações entre cartões. Backlog e sprints ficaram de fora: nunca os usou.
+
+As escolhas dele: o kanban vive só no dev. Primeiro escolheu começar no dev e
+passar para a produção no «promove»; ao perguntar-se como um ticket de QA,
+que vive na base do dev, criaria o cartão no kanban da produção, decidiu
+«afinal mantém só em DEV». As rotas respondem 404 sem ENV_NAME, como as do
+QA, e a limpeza do dev não leva as tabelas do kanban. E «cartão automático»:
+cada ticket de QA novo e cada pedido aceite criam o seu cartão, e o cartão
+move-se quando o ticket muda de estado (em resolução para Auto Tests,
+resolvido para Human Tests, reaberto para A fazer). Os estados mudam em três
+sítios — as rotas do worker, o scripts/qa.mjs, que escreve por SQL direto, e o
+scripts/kanban.mjs, que lê os pedidos da produção —, e por isso a regra e o SQL
+vivem num módulo só (worker/src/lib/kanban.js:passosDaSincronizacao), que o
+worker liga com bind e os scripts escrevem em texto
+(worker/src/lib/kanban.js:sqlEmTexto). Um cartão só se move sozinho quando o
+estado da origem muda, e mover um cartão à mão nunca mexe no ticket: era a
+maneira de a sincronização nunca brigar com quem arruma o quadro. Um cartão
+que ele já passou a Concluído só sai de lá sozinho se o ticket reabrir.

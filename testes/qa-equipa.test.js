@@ -130,8 +130,8 @@ describe('a página do back office', () => {
   test('no dev leva os dados da pílula, o guião e o CSS dela; em produção, nada', async () => {
     const dev = await paginaEquipa(DEV, { qa: 'dev' }).text();
     assert.match(dev, /<link rel="stylesheet" href="\/equipa\/qa\.css">/);
-    assert.match(dev, /<script src="\/equipa\/guiao\.js"><\/script>\s*<script type="application\/json" id="dados-qa">[^<]+<\/script>\s*<script src="\/equipa\/qa\.js"><\/script>/,
-      'depois do guião');
+    assert.match(dev, /<script src="\/equipa\/guiao\.js"><\/script>\s*(?:<script src="\/equipa\/kanban\.js"><\/script>\s*)?<script type="application\/json" id="dados-qa">[^<]+<\/script>\s*<script src="\/equipa\/qa\.js"><\/script>/,
+      'depois do guião (e do kanban, que no dev vem logo a seguir a ele)');
     const dados = JSON.parse(/id="dados-qa">([^<]+)</.exec(dev)[1]);
     assert.deepEqual(dados, { ambiente: 'dev', id: 'equipa:d1', nome: 'Dina' });
     for (const prod of [await paginaEquipa(DEV).text(), await paginaEquipa(DEV, { qa: '' }).text()]) {

@@ -100,10 +100,18 @@ describe('o back office na linguagem nova', () => {
 
   test('a página traz a barra lateral com a marca e o selo «Equipa», a Documentação, o Sair, a janela e o aviso', async () => {
     const html = await new Response(paginaEquipa(EUS[0]).body).text();
-    assert.match(html, /<nav class="eq-lado" aria-label="Equipa">/);
+    // a barra lateral é a gaveta abaixo dos 900px: o <aside> com a navegação (#nav) dentro
+    assert.match(html, /<aside class="eq-lado" id="gaveta" aria-label="Menu da equipa">/);
+    assert.match(html, /<nav class="eq-nav" id="nav" aria-label="Equipa"><\/nav>/);
     assert.match(html, /<span class="mark" aria-hidden="true"><\/span><span class="eq-nome">Rendorium<\/span><span class="eq-selo">Equipa<\/span>/);
-    assert.match(html, /<a class="nv" href="\/equipa\/docs">/);
+    // o ☰ do cabeçalho do telemóvel abre a gaveta, o fecho e o véu fecham-na
+    assert.match(html, /<button type="button" class="eq-burger" id="burger" aria-label="Abrir o menu" aria-expanded="false" aria-controls="gaveta" data-acao="abrirGaveta">/);
+    assert.match(html, /<button type="button" class="eq-fecha" aria-label="Fechar o menu" data-acao="fecharGaveta">/);
+    assert.match(html, /<div class="eq-veu" aria-hidden="true" data-acao="fecharGaveta"><\/div>/);
+    // o fundo pegado: a Documentação e quem está, com o Sair
+    assert.match(html, /<div class="eq-fundo">\s*<a class="nv" href="\/equipa\/docs">/);
     assert.match(html, /<button type="button" class="eq-sair" data-acao="sair">Sair<\/button>/);
+    assert.match(html, /<nav class="eq-barra" id="tabbar" aria-label="Atalhos da equipa"><\/nav>/, 'e a barra de baixo do telemóvel');
     assert.match(html, /<dialog class="janela" id="dialogo" aria-labelledby="janelaTit">/);
     assert.match(html, /id="aviso" role="status" aria-live="polite"/);
   });

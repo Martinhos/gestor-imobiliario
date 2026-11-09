@@ -142,7 +142,7 @@ describe('a CSP da app', () => {
 
 /* Os ficheiros que o varrimento confere: o web/ inteiro (os .js e o
    index.html) e as páginas que o worker escreve. */
-const PAGINAS_DO_WORKER = ['landing.js', 'legal-vista.js', 'guia-vista.js','docs-vista.js', 'equipa-vista.js', 'equipa-guiao.js', 'teste.js']
+const PAGINAS_DO_WORKER = ['landing.js', 'legal-vista.js', 'guia-vista.js','docs-vista.js', 'equipa-vista.js', 'equipa-guiao.js', 'equipa-kanban.js', 'teste.js']
   .map((f) => 'worker/src/' + f);
 // Recebe: d — uma pasta a partir da raiz. Devolve: os .js dela, com o caminho.
 const js = (d) => readdirSync(path.join(RAIZ, d)).filter((f) => f.endsWith('.js')).map((f) => d + '/' + f);

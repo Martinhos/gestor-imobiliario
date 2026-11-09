@@ -654,6 +654,10 @@ html.qa-trava body{position:fixed;left:0;right:0;width:100%}
   max-width:90vw;width:max-content;padding:10px 16px;border-radius:14px;background:var(--toast);color:var(--toast-ink);font-size:14.5px;font-weight:500;
   box-shadow:0 10px 30px rgba(16,24,40,.22);opacity:0;pointer-events:none;transition:opacity var(--medio) var(--curva-sai),transform var(--medio) var(--curva-sai)}
 .qa-aviso.on{opacity:1;transform:translateX(-50%);pointer-events:auto;transition:opacity var(--medio) var(--curva),transform var(--medio) var(--curva)}
+/* no telemóvel do back office o aviso fica acima da barra de baixo (a altura
+   dela, --eq-barra do CSS_EQUIPA, já leva a área segura; 0px acima dos
+   900px); nas páginas públicas não há barra nem a variável, e fica o de cima */
+.qa-aviso{bottom:max(calc(22px + var(--inset-bottom)),calc(var(--eq-barra,0px) + 12px))}
 .qa-aviso-btn{min-height:44px;padding:0 6px;border:0;background:transparent;color:inherit;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
 @media(prefers-reduced-motion:reduce){.qa-camada .bg,.qa-camada .sheet,.qa-pilula .menupop.on{animation:none}.qa-aviso{transition:none}}
 `;

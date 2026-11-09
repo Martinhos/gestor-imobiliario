@@ -447,3 +447,14 @@ o campo fica onde está e o resto troca-se à volta dele
 (vistas.js:trocarAVoltaDaBarra). Num browser sem cabeça vê-se escrevendo por
 composição pelo CDP (Input.imeSetComposition), devagar: o valor acaba com a
 palavra repetida («rrerenrend…»).
+
+## O wrangler d1 execute mexe no texto do SQL
+O `wrangler d1 execute` (com `--command` e com `--file`) passa o SQL por um
+corte próprio antes de o mandar: tira o primeiro `BEGIN TRANSACTION;` e o
+primeiro `COMMIT;` que encontrar, mesmo dentro de plicas, e recusa um segundo
+`BEGIN TRANSACTION`. Um texto livre que leve essas palavras — uma nota, a
+descrição de um cartão, um comentário — fica cortado ou parte a instrução. O
+scripts/kanban.mjs e os passos do cartão no scripts/qa.mjs partem a frase em
+`'BEGIN TRANS' || 'ACTION'` (o valor guardado é o mesmo). O UPDATE da nota no
+`qa.mjs resolver` e o scripts/ticket.mjs ainda não o fazem: uma nota com essas
+palavras não se escreve inteira.

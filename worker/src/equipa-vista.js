@@ -35,13 +35,17 @@ const CATS = {
 
 // O livro da Documentação, desenhado como os ícones da app: traço de 1.8, pontas redondas.
 const ICONE_DOCS = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 8h8M8 12h6"/></svg>';
+// O ☰ do cabeçalho do telemóvel, que abre a gaveta, e o × que a fecha.
+const ICONE_MENU = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
+const ICONE_FECHAR = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 
 /* Embrulha o corpo no documento HTML completo: <head>, tema claro e escuro,
    e os estilos da ferramenta inteira. Todas as páginas da equipa — a própria
    ferramenta, o ecrã de entrada — passam por aqui.
    Recebe: corpo — o HTML do miolo da página (string, vai dentro de <body>);
    titulo — o título da janela (string, aparece como "titulo · Rendorium Equipa");
-   comQa (opcional) — true para juntar o CSS da pílula do QA (o back office do dev).
+   comQa (opcional) — true no back office do dev: junta o CSS do kanban (logo a
+   seguir ao estilos.css) e o da pílula do QA.
    Devolve: string com o documento HTML completo, pronta a ir numa Response. */
 function pagina(corpo, titulo, comQa) {
   return `<!doctype html>
@@ -52,7 +56,7 @@ function pagina(corpo, titulo, comQa) {
 <meta name="theme-color" content="#161A23">
 <meta name="robots" content="noindex,nofollow">
 <title>${titulo} · Rendorium Equipa</title>
-<link rel="stylesheet" href="/equipa/estilos.css">${comQa ? '\n<link rel="stylesheet" href="/equipa/qa.css">' : ''}
+<link rel="stylesheet" href="/equipa/estilos.css">${comQa ? '\n<link rel="stylesheet" href="/equipa/kanban.css">\n<link rel="stylesheet" href="/equipa/qa.css">' : ''}
 </head><body>${corpo}</body></html>`;
 }
 
@@ -91,6 +95,8 @@ export const CSS_EQUIPA = `/* As letras da app, servidas de /fonts/ (a CSP só d
   --eq:#161A23;--eq-texto:#C3C8D3;--eq-fraco:#8A92A3;--eq-branco:#FFFFFF;--eq-hover:rgba(255,255,255,.06);
   --eq-on:rgba(255,255,255,.1);--eq-caixa:rgba(255,255,255,.05);--eq-linha:#2A303D;--eq-selo:#2A303D;--eq-marca:#5B6478;
   --cnt:#FFB27A;--cnt-ink:#3A1A05;--cnt-erro:#FF8A80;--cnt-erro-ink:#3A0D0A;
+  /* o vidro da barra de baixo (o --blur da app) e a altura dela: 0px acima dos 900px, onde não há barra */
+  --eq-vidro:rgba(242,243,246,.94);--eq-barra:0px;
   --letra:'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;
   --letra-titulo:'Bricolage Grotesque','Geist',system-ui,sans-serif;
   --letra-mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
@@ -101,7 +107,7 @@ export const CSS_EQUIPA = `/* As letras da app, servidas de /fonts/ (a CSP só d
   --accent:#7C9BFF;--accent-ink:#0B111E;--accent-soft:#1E2A4D;--accent-text:#B5C6FF;--accent-press:#9DB3FF;
   --in:#4CC79A;--in-soft:#123327;--warn:#F2C25A;--warn-soft:#352A12;
   --danger:#FF8A80;--danger-soft:#3D1A1A;--danger-ink:#1A0605;--danger-press:#FFB1AA;
-  --toast:#E9EDF5;--toast-ink:#121826;--shadow:0 24px 60px rgba(0,0,0,.6);--veu:rgba(2,5,12,.66)}}
+  --toast:#E9EDF5;--toast-ink:#121826;--shadow:0 24px 60px rgba(0,0,0,.6);--veu:rgba(2,5,12,.66);--eq-vidro:rgba(11,17,30,.92)}}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--letra);font-size:15px;line-height:1.45;
@@ -110,7 +116,7 @@ h1,h2,h3{font-family:var(--letra-titulo);font-weight:650;letter-spacing:-.015em;
 p{margin:0}
 button,input,textarea{font:inherit;color:inherit}
 a{color:var(--accent)}
-a:hover{color:var(--accent-text)}
+@media(hover:hover) and (pointer:fine){a:hover{color:var(--accent-text)}}
 code{font-family:var(--letra-mono);font-size:.88em}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .n{font-variant-numeric:tabular-nums}
@@ -135,48 +141,133 @@ code{font-family:var(--letra-mono);font-size:.88em}
   background:var(--eq-selo);color:var(--eq-texto);white-space:nowrap}
 
 /* ---- a moldura: barra lateral grafite e o miolo; a coluna da barra fica
-   grafite até ao fundo, mesmo quando a página é mais alta do que a barra colada ---- */
+   grafite até ao fundo, mesmo quando a página é mais alta do que a barra colada.
+   A navegação é a da app (web/app/navegacao.js, web/estilos.css): ao cimo o
+   Kanban (só no dev), os grupos «Atendimento» e «Plataforma» que se
+   recolhem, e o fundo pegado com a Documentação e quem está. Abaixo dos 900px
+   a barra vira gaveta de 328px com véu, aberta pelo ☰ do cabeçalho, e a
+   barra de baixo leva os destinos de todos os dias (equipa-guiao.js:pintarBarra). ---- */
 .eq-app{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100vh;min-height:100dvh;
   background:linear-gradient(to right,var(--eq) 248px,transparent 248px)}
-.eq-lado{position:sticky;top:0;height:100vh;height:100dvh;overflow-y:auto;background:var(--eq);color:var(--eq-texto);
-  padding:20px 14px;display:flex;flex-direction:column;gap:4px}
+.eq-topo,.eq-veu,.eq-barra,.eq-fecha{display:none}
+.eq-lado{grid-column:1;grid-row:1;position:sticky;top:0;height:100vh;height:100dvh;overflow-y:auto;overscroll-behavior:contain;
+  background:var(--eq);color:var(--eq-texto);padding:20px 14px 0;display:flex;flex-direction:column}
+.eq-lado>*{flex-shrink:0}
 .eq-marca{display:flex;align-items:center;gap:10px;padding:0 8px 18px;min-width:0}
-.eq-itens{display:flex;flex-direction:column;gap:2px}
-.eq-nav{display:contents}
-.eq-sep{height:1px;background:var(--eq-linha);margin:8px 8px}
+.eq-nav{display:flex;flex-direction:column;gap:2px;padding-bottom:12px}
 .nv{display:flex;align-items:center;gap:12px;width:100%;min-height:40px;padding:0 12px;border:0;border-radius:10px;
   background:transparent;color:var(--eq-texto);text-decoration:none;font-size:14.5px;font-weight:500;text-align:left;cursor:pointer;
   transition:background-color var(--rapido) var(--curva),color var(--rapido) var(--curva)}
-.nv:hover{background:var(--eq-hover);color:var(--eq-branco)}
-.nv[aria-current="page"]{background:var(--eq-on);color:var(--eq-branco)}
+@media(hover:hover) and (pointer:fine){.nv:hover{background:var(--eq-hover);color:var(--eq-branco)}}
+/* o aceso também na letra (branca e mais forte): o escurecimento forçado do
+   Samsung mexe nos fundos e deixa a frente */
+.nv[aria-current="page"]{background:var(--eq-on);color:var(--eq-branco);font-weight:600}
 .nv:focus-visible{outline-color:var(--eq-branco);outline-offset:-2px}
 .nb{margin-left:auto;min-width:22px;height:20px;padding:0 6px;border-radius:999px;background:var(--cnt);color:var(--cnt-ink);
-  font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+  font-size:12px;font-weight:700;letter-spacing:0;text-transform:none;display:inline-flex;align-items:center;justify-content:center}
 .nb.erro{background:var(--cnt-erro);color:var(--cnt-erro-ink)}
-.eq-quem{margin-top:auto;padding:12px;border-radius:12px;background:var(--eq-caixa);display:flex;align-items:center;gap:10px}
+/* os grupos que se recolhem (equipa-guiao.js:navHtml, alternarSeccao): o
+   título é um botão com aria-expanded; a altura anima de 1fr a 0fr com os
+   dois valores escritos, e o overflow que isso pede vive nos itens.
+   Recolhido, o visibility tira os itens do Tab e do leitor de ecrã, só no
+   fim da transição; o crachá do título (a soma dos itens) só aparece então */
+.eq-sec{display:grid;min-width:0}
+.eq-sec-tit{display:flex;align-items:center;gap:8px;width:100%;min-height:32px;margin:14px 0 2px;padding:6px 12px;border:0;border-radius:9px;
+  background:transparent;color:var(--eq-fraco);cursor:pointer;text-align:left;font-size:11.5px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;white-space:nowrap;transition:background-color var(--rapido) var(--curva),color var(--rapido) var(--curva)}
+.eq-sec-txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.eq-sec-tit .nb{display:none;margin-left:0}
+.eq-sec.fechada>.eq-sec-tit .nb{display:inline-flex}
+.eq-sec-seta{transition:transform var(--medio) var(--curva)}
+.eq-sec.fechada>.eq-sec-tit .eq-sec-seta{transform:rotate(-90deg)}
+@media(hover:hover) and (pointer:fine){.eq-sec-tit:hover{background:var(--eq-hover);color:var(--eq-branco)}}
+.eq-sec-tit:active{background:var(--eq-on);color:var(--eq-branco)}
+.eq-sec-tit:focus-visible{outline-color:var(--eq-branco);outline-offset:-2px}
+.eq-sec-corpo{display:grid;grid-template-rows:1fr;transition:grid-template-rows var(--medio) var(--curva)}
+.eq-sec.fechada>.eq-sec-corpo{grid-template-rows:0fr}
+.eq-sec-itens{display:flex;flex-direction:column;gap:2px;min-height:0;overflow:hidden;margin:0 -10px;padding:0 10px;visibility:visible;transition:visibility 0s}
+.eq-sec.fechada .eq-sec-itens{visibility:hidden;transition:visibility 0s linear var(--medio)}
+/* o fundo pegado: a Documentação e quem está, sempre à vista com a divisória
+   por cima; os grupos rolam por baixo dele. Vai rente ao fundo e de lado a
+   lado (as margens de -14px), com a área segura lá dentro */
+.eq-fundo{margin:auto -14px 0;position:sticky;bottom:0;z-index:1;padding:8px 14px calc(16px + env(safe-area-inset-bottom));
+  border-top:1px solid var(--eq-linha);background:var(--eq);display:flex;flex-direction:column;gap:8px}
+.eq-quem{padding:12px;border-radius:12px;background:var(--eq-caixa);display:flex;align-items:center;gap:10px}
 .eq-quem-txt{flex:1;min-width:0}
 .eq-quem-nome{color:var(--eq-branco);font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .eq-quem-papel{color:var(--eq-texto);font-size:12.5px}
 .eq-sair{flex:none;min-height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--eq-linha);background:transparent;
   color:var(--eq-branco);font-size:14px;font-weight:600;cursor:pointer}
-.eq-sair:hover{background:var(--eq-hover)}
+@media(hover:hover) and (pointer:fine){.eq-sair:hover{background:var(--eq-hover)}}
 .eq-sair:focus-visible{outline-color:var(--eq-branco)}
-.eq-main{min-width:0;padding:24px clamp(16px,3vw,36px) 48px}
+.eq-main{grid-column:2;grid-row:1;min-width:0;padding:24px clamp(16px,3vw,36px) 48px}
 .eq-miolo{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
-/* no telemóvel a barra passa a faixa no topo: a marca e o Sair numa linha,
-   os separadores numa fila que corre para o lado */
+/* o ☰ e o fecho da gaveta: quadrados de 44px na barra grafite */
+.eq-burger,.eq-fecha{align-items:center;justify-content:center;flex:none;width:44px;height:44px;padding:0;border:0;border-radius:12px;
+  background:transparent;color:var(--eq-branco);cursor:pointer;transition:background-color var(--rapido) var(--curva)}
+.eq-burger:active,.eq-fecha:active{background:var(--eq-on)}
+.eq-burger:focus-visible,.eq-fecha:focus-visible{outline-color:var(--eq-branco);outline-offset:-2px}
+@media(hover:hover) and (pointer:fine){.eq-burger:hover,.eq-fecha:hover{background:var(--eq-hover)}}
+/* A barra de baixo (o .tabbar da app): 76px — 9 em cima, destinos de 52, 14
+   em baixo e o contorno — mais a área segura, vidro por cima do que rola. O
+   destino aceso só muda de cor, a da frente, que o escuro forçado não apaga.
+   A meio, no dev, o + «Novo cartão»: um botão sólido de 52px, não um quinto
+   destino. A grelha lê quantos destinos há (d1…d4) e se há + (mais) para o
+   manter ao centro, como a da app. */
+.eq-barra{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--eq-vidro);
+  -webkit-backdrop-filter:blur(12px) saturate(140%);backdrop-filter:blur(12px) saturate(140%);border-top:1px solid var(--line);
+  grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;
+  padding:9px calc(8px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left))}
+.eq-barra.mais{grid-auto-flow:row;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto minmax(0,1fr) minmax(0,1fr)}
+.eq-barra.mais.d3{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto minmax(0,2fr)}
+.eq-barra.mais.d3 .eq-dest:last-child{width:50%;justify-self:center}
+.eq-barra.mais.d2,.eq-barra.mais.d1{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
+.eq-dest{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0;min-height:52px;padding:4px 2px;
+  border:0;border-radius:12px;background:transparent;color:var(--faint);font-size:11.5px;font-weight:600;line-height:1.2;position:relative;cursor:pointer;
+  transition:color var(--rapido) var(--curva)}
+.eq-dest .i{width:22px;height:22px}
+.eq-dest-txt{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eq-dest[aria-current="page"],.eq-dest:active{color:var(--accent)}
+@media(hover:hover) and (pointer:fine){.eq-dest:hover{color:var(--accent)}}
+.eq-dest:focus-visible{outline-offset:-2px}
+.eq-dest .nb{position:absolute;top:1px;left:calc(50% + 7px);margin:0;min-width:16px;height:16px;padding:0 4px;font-size:10px}
+.eq-mais{width:52px;height:52px;margin:0 6px;padding:0;border:0;border-radius:16px;align-self:center;justify-self:center;
+  background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 12px color-mix(in srgb,var(--accent) 28%,transparent);cursor:pointer;
+  transition:transform var(--rapido) var(--curva),box-shadow var(--rapido) var(--curva)}
+.eq-mais .i{width:24px;height:24px;stroke-width:2}
+.eq-mais:active{transform:scale(.94);box-shadow:0 1px 4px color-mix(in srgb,var(--accent) 20%,transparent)}
+.eq-mais:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:340px){.eq-mais{width:48px;height:48px;margin:0 2px}}
+/* Abaixo dos 900px: o cabeçalho grafite com o ☰ e a marca, pegado ao cimo; a
+   barra lateral vira gaveta de 328px que entra da esquerda por cima de um véu
+   (a mesma duração e curva nos dois, e o visibility a tirá-la do Tab quando
+   fechada, só no fim da saída); a página de trás fica presa; a barra de
+   baixo aparece e esconde-se com a gaveta aberta, e o miolo, o aviso e a
+   pílula do QA ficam acima dela (--eq-barra). */
 @media(max-width:899px){
+  :root{--eq-barra:calc(76px + env(safe-area-inset-bottom))}
+  html.eq-trava{overflow:hidden}
   .eq-app{display:block;background:none}
-  .eq-lado{position:relative;height:auto;overflow:visible;flex-direction:row;flex-wrap:wrap;align-items:center;gap:0 8px;
-    padding:calc(10px + env(safe-area-inset-top)) 16px 0}
-  .eq-marca{flex:1 1 auto;padding:0}
-  .eq-quem{order:2;margin:0;padding:0;background:none}
-  .eq-quem-txt{display:none}
-  .eq-itens{order:3;flex:1 0 100%;flex-direction:row;overflow-x:auto;gap:4px;margin:0 -16px;padding:10px 16px;scrollbar-width:none}
-  .eq-itens::-webkit-scrollbar{display:none}
-  .eq-sep{display:none}
-  .nv{width:auto;flex:none;gap:8px}
-  .eq-main{padding:18px 16px 40px}
+  .eq-topo{display:flex;align-items:center;gap:6px;position:sticky;top:0;z-index:30;min-height:56px;
+    padding:calc(6px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 6px calc(6px + env(safe-area-inset-left));background:var(--eq)}
+  .eq-burger,.eq-fecha{display:inline-flex}
+  .eq-topo-marca{display:flex;align-items:center;gap:10px;min-width:0}
+  .eq-veu{display:block;position:fixed;inset:0;z-index:61;background:var(--veu);opacity:0;visibility:hidden;
+    transition:opacity var(--medio) var(--curva),visibility 0s linear var(--medio)}
+  body.eq-gaveta .eq-veu{opacity:1;visibility:visible;transition:opacity var(--medio) var(--curva),visibility 0s}
+  .eq-lado{position:fixed;left:0;top:0;bottom:0;z-index:62;width:min(328px,88vw);height:auto;
+    padding:calc(10px + env(safe-area-inset-top)) 14px 0 calc(14px + env(safe-area-inset-left));
+    transform:translateX(-100%);visibility:hidden;
+    transition:transform var(--medio) var(--curva),box-shadow var(--medio) var(--curva),visibility 0s linear var(--medio)}
+  body.eq-gaveta .eq-lado{transform:none;visibility:visible;box-shadow:var(--shadow);
+    transition:transform var(--medio) var(--curva),box-shadow var(--medio) var(--curva),visibility 0s}
+  .eq-marca{padding:0 0 10px 8px}
+  .eq-fecha{margin-left:auto}
+  .eq-barra{display:grid}
+  .eq-barra.d0:not(.mais){display:none}
+  body.eq-gaveta .eq-barra{display:none}
+  .eq-main{padding:18px 16px calc(40px + var(--eq-barra))}
   .eq-miolo{gap:14px}
 }
 
@@ -207,21 +298,21 @@ code{font-family:var(--letra-mono);font-size:.88em}
   border:1px solid var(--line2);background:var(--card);color:var(--ink);font-weight:600;font-size:15px;line-height:1.2;
   text-decoration:none;white-space:nowrap;cursor:pointer;
   transition:background-color var(--rapido) var(--curva),border-color var(--rapido) var(--curva)}
-.btn:hover{background:var(--tint);color:var(--ink)}
+@media(hover:hover) and (pointer:fine){.btn:hover{background:var(--tint);color:var(--ink)}}
 .btn:active{background:var(--press)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
-.btn.primary:hover{background:var(--accent-press);border-color:var(--accent-press);color:var(--accent-ink)}
+@media(hover:hover) and (pointer:fine){.btn.primary:hover{background:var(--accent-press);border-color:var(--accent-press);color:var(--accent-ink)}}
 .btn.danger{background:var(--danger);border-color:var(--danger);color:var(--danger-ink)}
-.btn.danger:hover{background:var(--danger-press);border-color:var(--danger-press);color:var(--danger-ink)}
+@media(hover:hover) and (pointer:fine){.btn.danger:hover{background:var(--danger-press);border-color:var(--danger-press);color:var(--danger-ink)}}
 .btn.ghost{background:transparent;border-color:transparent}
-.btn.ghost:hover{background:var(--chip)}
+@media(hover:hover) and (pointer:fine){.btn.ghost:hover{background:var(--chip)}}
 .btn.sm{min-height:36px;padding:0 12px;font-size:14px;border-radius:10px}
 .btn.so-icone{width:44px;padding:0}
 .btn.lista{justify-content:flex-start;width:100%;white-space:normal;text-align:left;padding:10px 16px;line-height:1.3}
 .btn.texto-aviso{color:var(--warn)}
 .btn.texto-perigo{color:var(--danger)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
-.btn:disabled:hover{background:var(--card)}
+@media(hover:hover) and (pointer:fine){.btn:disabled:hover{background:var(--card)}}
 .largo{width:100%}
 
 /* ---- chips: filtros e modos; ligado é cobalto suave ---- */
@@ -229,7 +320,7 @@ code{font-family:var(--letra-mono);font-size:.88em}
 .chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line2);
   background:var(--card);color:var(--ink);font-size:14px;font-weight:500;white-space:nowrap;cursor:pointer;
   transition:background-color var(--rapido) var(--curva)}
-.chip:hover{background:var(--tint)}
+@media(hover:hover) and (pointer:fine){.chip:hover{background:var(--tint)}}
 .chip.on,.chip:has(input:checked){background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text)}
 .chip:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
 .chip .n{opacity:.8}
@@ -270,7 +361,7 @@ textarea.campo{min-height:110px;padding:12px 14px;resize:vertical;line-height:1.
 .linha{display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:12px 18px;border:0;border-top:1px solid var(--line);
   background:transparent;color:inherit;font-size:14px;text-align:left}
 .linha.tocavel{cursor:pointer;transition:background-color var(--rapido) var(--curva)}
-.linha.tocavel:hover{background:var(--tint)}
+@media(hover:hover) and (pointer:fine){.linha.tocavel:hover{background:var(--tint)}}
 .linha.tocavel:focus-visible{outline-offset:-2px}
 .linha-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .avatar{width:56px;height:56px;border-radius:50%;background:var(--accent-soft);color:var(--accent-text);display:flex;align-items:center;
@@ -297,7 +388,7 @@ textarea.campo{min-height:110px;padding:12px 14px;resize:vertical;line-height:1.
 .acao{background:var(--chip);border-radius:6px;padding:2px 6px;font-size:12.5px;white-space:nowrap}
 .ligacao{border:0;background:transparent;padding:0;color:var(--accent);font:inherit;cursor:pointer;text-decoration:underline;
   text-underline-offset:2px;overflow-wrap:anywhere;text-align:left}
-.ligacao:hover{color:var(--accent-text)}
+@media(hover:hover) and (pointer:fine){.ligacao:hover{color:var(--accent-text)}}
 /* no telemóvel as tabelas compridas empilham: cada linha um bloco, cada célula com o rótulo da coluna */
 @media(max-width:640px){
   .tb.empilha thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
@@ -323,6 +414,8 @@ textarea.campo{min-height:110px;padding:12px 14px;resize:vertical;line-height:1.
 .eq-toast-x{flex:none;width:36px;height:36px;border:0;border-radius:10px;background:transparent;color:inherit;cursor:pointer;
   display:inline-flex;align-items:center;justify-content:center}
 .eq-toast-x:focus-visible{outline-color:currentColor}
+/* no telemóvel o aviso fica acima da barra de baixo (a altura dela, --eq-barra, já leva a área segura) */
+@media(max-width:899px){.eq-toast{bottom:calc(var(--eq-barra) + 12px)}}
 
 /* ---- a janela de confirmação (as ações com motivo) ---- */
 dialog.janela{border:0;padding:0;background:transparent;color:var(--ink);width:480px;max-width:calc(100vw - 32px);
@@ -352,7 +445,7 @@ dialog.janela::backdrop{background:var(--veu)}
 .pd-vazio{padding:0 14px 14px}
 .rq{display:flex;flex-direction:column;gap:4px;width:100%;padding:12px 14px;border:0;border-top:1px solid var(--line);background:transparent;
   color:inherit;text-align:left;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
-.rq:hover{background:var(--tint)}
+@media(hover:hover) and (pointer:fine){.rq:hover{background:var(--tint)}}
 .rq[aria-current="true"]{background:var(--accent-soft)}
 .rq:focus-visible{outline-offset:-2px}
 .rq-topo{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -374,7 +467,7 @@ dialog.janela::backdrop{background:var(--veu)}
 .pd-nome{font-weight:600}
 .pd-lbl-sep{padding-top:10px}
 .lado-linha{display:block;width:100%;border:0;background:transparent;padding:6px 0;color:var(--ink);text-align:left;font-size:13.5px;cursor:pointer}
-.lado-linha:hover .lado-tit{text-decoration:underline}
+@media(hover:hover) and (pointer:fine){.lado-linha:hover .lado-tit{text-decoration:underline}}
 .pd-contexto{display:flex;gap:8px;flex-wrap:wrap;align-items:baseline;overflow-wrap:anywhere}
 .pd-cat{display:flex;flex-direction:column;gap:8px}
 /* a decisão sobre um pedido de uma pessoa (aceitar ou recusar), e a resposta proposta */
@@ -410,7 +503,7 @@ dialog.janela::backdrop{background:var(--veu)}
   background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px}
 .menu-op{display:block;width:100%;min-height:40px;padding:8px 12px;border:0;border-radius:8px;background:transparent;color:var(--ink);
   text-align:left;font-size:14px;cursor:pointer}
-.menu-op:hover{background:var(--tint)}
+@media(hover:hover) and (pointer:fine){.menu-op:hover{background:var(--tint)}}
 /* abaixo dos 1200px não cabem os dois: a lista ou o pedido, com o Voltar */
 @media(max-width:1199px){
   .pd{flex-direction:column;align-items:stretch}
@@ -519,7 +612,7 @@ dialog.janela::backdrop{background:var(--veu)}
 .st-conta>summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;min-height:48px;padding:13px 18px;cursor:pointer;list-style:none}
 .st-conta>summary::-webkit-details-marker{display:none}
 .st-conta>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-@media(hover:hover){.st-conta>summary:hover{background:var(--tint)}}
+@media(hover:hover) and (pointer:fine){.st-conta>summary:hover{background:var(--tint)}}
 .st-seta{display:inline-flex;align-self:center;color:var(--muted);transform:rotate(-90deg)}
 .st-conta[open]>summary .st-seta{transform:none}
 .st-corpo{padding:0 0 8px}
@@ -600,7 +693,7 @@ abbr[title]{text-decoration:none}
 }
 
 /* o dedo precisa de 44px; e quem pediu menos movimento não vê a roda a correr */
-@media(pointer:coarse){.btn.sm,.chip,.nv,.eq-sair,.menu-op,.ligacao{min-height:44px}.eq-toast-x{width:44px;height:44px}.lado-linha{padding:10px 0}}
+@media(pointer:coarse){.btn.sm,.chip,.nv,.eq-sair,.eq-sec-tit,.menu-op,.ligacao{min-height:44px}.eq-toast-x{width:44px;height:44px}.lado-linha{padding:10px 0}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:0s!important}.roda{animation-duration:2.4s}}
 `;
 
@@ -636,7 +729,9 @@ function htmlDoQa(eu, ambiente, app) {
 // ou nada quando não há sessão válida; opcoes (opcional) — {qa: o
 // env.ENV_NAME do dev, '' em produção; app: true quando a sessão passa a
 // porta do dev e o menu da pílula pode levar à app e à montra}: com ele a
-// página leva a pílula do QA (equipa-qa.js), o seu CSS e os dados dela.
+// página leva a pílula do QA (equipa-qa.js), o seu CSS e os dados dela, e o
+// kanban da equipa (o /equipa/kanban.css, o /equipa/kanban.js depois do
+// guião e kanban: true nos dados); sem ele, nada disso e kanban: false.
 // Devolve: Response HTML — a ferramenta inteira com sessão; sem ela, o ecrã
 // que manda ir ao /entrar do Discord (401).
 export function paginaEquipa(eu, opcoes) {
@@ -662,30 +757,42 @@ export function paginaEquipa(eu, opcoes) {
     cats,
     master: papeis.indexOf('master') > -1,
   };
+  // o kanban da equipa só existe fora de produção (o ENV_NAME do dev em opcoes.qa)
+  const kanban = !!(opcoes && opcoes.qa);
 
-  // a barra lateral: a marca, os separadores (o guião pinta-os no #nav, só os
-  // que os papéis abrem), a Documentação e quem está dentro, com o Sair
+  /* A moldura (a navegação da app, web/app/navegacao.js): o cabeçalho do
+     telemóvel com o ☰ e a marca; o véu; a barra lateral — a gaveta abaixo dos
+     900px — com a marca e o fecho, os destinos (o guião pinta-os no #nav, só
+     os que os papéis abrem, em grupos que se recolhem) e o fundo pegado com
+     a Documentação e quem está dentro, com o Sair; o miolo; e a barra de
+     baixo do telemóvel (#tabbar, o mesmo id da app: a pílula do QA
+     afasta-se dela sozinha, web/cloud/qa.js:qaLimites). */
   const corpo = `<div class="eq-app">
-  <nav class="eq-lado" aria-label="Equipa">
-    <div class="eq-marca">${marcaDaEquipa()}</div>
-    <div class="eq-itens">
-      <div class="eq-nav" id="nav"></div>
-      <div class="eq-sep" aria-hidden="true"></div>
+  <header class="eq-topo" id="topo">
+    <button type="button" class="eq-burger" id="burger" aria-label="Abrir o menu" aria-expanded="false" aria-controls="gaveta" data-acao="abrirGaveta">${ICONE_MENU}</button>
+    <div class="eq-topo-marca">${marcaDaEquipa()}</div>
+  </header>
+  <div class="eq-veu" aria-hidden="true" data-acao="fecharGaveta"></div>
+  <aside class="eq-lado" id="gaveta" aria-label="Menu da equipa">
+    <div class="eq-marca">${marcaDaEquipa()}<button type="button" class="eq-fecha" aria-label="Fechar o menu" data-acao="fecharGaveta">${ICONE_FECHAR}</button></div>
+    <nav class="eq-nav" id="nav" aria-label="Equipa"></nav>
+    <div class="eq-fundo">
       <a class="nv" href="/equipa/docs">${ICONE_DOCS}<span>Documentação</span></a>
+      <div class="eq-quem">
+        <div class="eq-quem-txt"><p class="eq-quem-nome">${escapar(eu.nome)}</p><p class="eq-quem-papel">${escapar(papeis.join(' · ') || 'sem papel')}</p></div>
+        <button type="button" class="eq-sair" data-acao="sair">Sair</button>
+      </div>
     </div>
-    <div class="eq-quem">
-      <div class="eq-quem-txt"><p class="eq-quem-nome">${escapar(eu.nome)}</p><p class="eq-quem-papel">${escapar(papeis.join(' · ') || 'sem papel')}</p></div>
-      <button type="button" class="eq-sair" data-acao="sair">Sair</button>
-    </div>
-  </nav>
-  <main class="eq-main"><div class="eq-miolo" id="conteudo"><div class="espera" role="status"><span class="roda" aria-hidden="true"></span><span><b>À espera do servidor.</b></span></div></div></main>
+  </aside>
+  <main class="eq-main" id="principal"><div class="eq-miolo" id="conteudo"><div class="espera" role="status"><span class="roda" aria-hidden="true"></span><span><b>À espera do servidor.</b></span></div></div></main>
   </div>
+  <nav class="eq-barra" id="tabbar" aria-label="Atalhos da equipa"></nav>
   <div class="eq-toast" id="aviso" role="status" aria-live="polite"></div>
   <dialog class="janela" id="dialogo" aria-labelledby="janelaTit"></dialog>
-<script type="application/json" id="dados-equipa">${paraScript({ eu: dados, ESTADOS, CATS })}</script>
-<script src="/equipa/guiao.js"></script>${htmlDoQa(eu, opcoes && opcoes.qa, opcoes && opcoes.app)}`;
+<script type="application/json" id="dados-equipa">${paraScript({ eu: dados, ESTADOS, CATS, kanban })}</script>
+<script src="/equipa/guiao.js"></script>${kanban ? '\n<script src="/equipa/kanban.js"></script>' : ''}${htmlDoQa(eu, opcoes && opcoes.qa, opcoes && opcoes.app)}`;
 
-  return new Response(pagina(corpo, 'Equipa', !!(opcoes && opcoes.qa)), {
+  return new Response(pagina(corpo, 'Equipa', kanban), {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': CSP_ESTRITA },
   });
 }

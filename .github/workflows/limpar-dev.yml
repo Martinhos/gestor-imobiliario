@@ -7,7 +7,11 @@
 # da equipa e não de uma conta: as reply_templates (as respostas-tipo) e as
 # team_links (as ligações de entrada no /equipa, que expiram sozinhas). E os
 # qa_tickets: os tickets de QA por resolver não se perdem numa limpeza (a
-# decisão do Martinho, 2026-10-28); o autor fica «Conta apagada».
+# decisão do Martinho, 2026-10-28); o autor fica «Conta apagada». E o kanban
+# da equipa, que só vive no dev e é onde estão as tarefas todas (a decisão do
+# Martinho, 2026-11-09): kanban_colunas, kanban_contador, kanban_cartoes,
+# kanban_etiquetas, kanban_comentarios, kanban_historico, kanban_ligacoes e
+# kanban_anexos não são de nenhuma conta, e uma limpeza não apaga o trabalho.
 #
 # A lista das tabelas é conferida contra as migrações por um teste
 # (testes/correcao-entrega.test.js): uma tabela nova que não esteja nem na

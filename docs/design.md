@@ -77,6 +77,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Fora da app: a montra, os emails e o back office
 - A app em serviços
 - Os tickets de QA
+- O kanban da equipa
 - O rasto das pessoas
 - A CSP sem «unsafe-inline»
 - Os eventos declaram-se, e uma ação é uma gramática
@@ -6039,8 +6040,33 @@ recebe.
 O back office (worker/src/equipa-vista.js, worker/src/equipa-guiao.js) tem a
 barra lateral GRAFITE e a marca em ardósia, de propósito diferente do
 azul-noite da app, para nunca se confundir uma com a outra; o resto é a
-linguagem da app (cobalto, cartões, selos, chips, interruptores). Nada de
-alert(), prompt(), confirm() nem <select>: o que pede valores ou um motivo
+linguagem da app (cobalto, cartões, selos, chips, interruptores). A navegação
+é a da app (ver «Navegação»): a barra lateral arruma as secções em grupos
+(equipa-guiao.js:GRUPOS_NAV) — ao cimo, sem título, o Kanban, só fora de
+produção; «Atendimento», com os Pedidos e as Pessoas; e «Plataforma», com os
+Erros, a Operação e o Rasto — e no fundo, pegados e sempre à vista, a
+Documentação e o cartão de quem está, com o Sair. É a divisão dos papéis: quem
+atende vê o primeiro grupo, quem constrói e opera o segundo, e um grupo sem
+nenhuma secção que o papel abra desaparece com o título
+(equipa-guiao.js:navHtml). Os dois grupos com título recolhem-se como os da
+app (equipa-guiao.js:alternarSeccao): o título é um botão com aria-expanded,
+a altura anima por grid-template-rows, recolhido mostra a soma dos crachás
+dos itens, o estado fica no aparelho (eq_nav_fechadas), e chegar a uma secção
+abre o grupo dela. Abaixo dos 900px, o cabeçalho tem o ☰ e a marca, a barra
+lateral é uma gaveta com véu (equipa-guiao.js:abrirGaveta,
+equipa-guiao.js:fecharGaveta) — o foco entra nela, o fundo fica inerte, e
+fecha com o Escape, com o véu ou ao escolher um destino — e há uma barra de
+baixo de 76 px com quatro destinos (equipa-guiao.js:destinosDaBarra,
+equipa-guiao.js:ORDEM_BARRA): no dev o Kanban, os Pedidos, os Erros e as
+Pessoas, com o + a meio a criar um cartão; na produção, sem kanban, os
+Pedidos, os Erros, as Pessoas e a Operação, sem +. Um destino que o papel não
+abre dá o lugar ao seguinte. A altura dela é a variável --eq-barra, de que o
+conteúdo, o aviso de baixo e a pílula do QA se afastam. O endereço diz onde
+se está — a secção e, quando há, o pedido, a pessoa ou o cartão abertos
+(/equipa#pedidos/<id>, /equipa#kanban/KAN-77) —, por isso recarregar volta lá
+e uma ligação abre o sítio (equipa-guiao.js:marcarEndereco,
+equipa-guiao.js:seguirEndereco). Nada de alert(), prompt(), confirm() nem
+<select>: o que pede valores ou um motivo
 abre a janela de confirmação, o resultado diz-se no aviso de baixo, e
 desligar um serviço pergunta numa faixa âmbar do próprio cartão, com os
 dependentes que caem junto (equipa-guiao.js:mostrarAvisoDesligar).
@@ -6398,7 +6424,7 @@ para o ticket sobreviver à conta e à limpeza do dev (os qa_tickets ficam em
 contexto até 16 KB, cortado pelo rasto mais antigo
 (worker/src/rotas/qa.js:contextoParaGuardar); a captura até 3 MB, no R2 em
 qa/<id>, e só PNG, JPEG ou WebP pelos próprios bytes
-(worker/src/rotas/qa.js:tipoDaImagem), servida com a CSP dos anexos. Trava aos
+(worker/src/lib/imagens.js:tipoDaImagem), servida com a CSP dos anexos. Trava aos
 30 tickets por hora por pessoa. Remover é brando
 (worker/src/rotas/qa.js:removerTicket), para o Anular; passadas 24 h a linha
 apaga-se de vez com a captura, de passagem nas rotas
@@ -6452,6 +6478,90 @@ scripts/ticket.mjs:publicadoProd, o commit dentro da etiqueta publicado, que o
 deploy de produção move depois de a produção responder): um erro fechado antes
 disso reabria-se sozinho na ocorrência seguinte. Uma base sem a 0024 (a
 produção até ao «promove») lista na mesma, e lá nenhum pedido se implementa.
+
+## O kanban da equipa
+
+As tarefas da equipa vivem num kanban no back office, e só no dev
+(dev.rendorium.com/equipa › Kanban): todas, as que vêm da conversa, as dos
+tickets de QA e as dos pedidos aceites. Substituiu o board KAN do Jira e
+guardou as chaves dele (KAN-N): o contador começa na última do Jira
+(migrations/0028_kanban.sql), e os cartões novos continuam a numeração. Em
+produção não existe: as rotas respondem 404 sem ENV_NAME, como as do QA
+(worker/src/rotas/kanban.js:rotasKanban), a página não carrega o guião nem o
+CSS dele, e a barra lateral e a de baixo não têm a secção. A limpeza do dev
+não lhe toca.
+
+As colunas são as do board — A fazer, Auto Tests, Human Tests, Concluído e
+Para depois — e o master acrescenta, muda de nome, reordena e remove as que
+estão vazias (worker/src/equipa-kanban.js:kbColunas). As quatro primeiras
+são fixas: a sincronização usa-as, e mudam de nome mas não saem; o
+Concluído é a coluna de fim (o progresso dos épicos, a data de feito). Um
+cartão tem a chave, o tipo (Épico, História, Tarefa, Subtarefa ou Erro), o
+título, a descrição, a prioridade (de Mais alta a Mais baixa), as etiquetas,
+o responsável (uma pessoa da equipa, ou o Claude), o relator, o pai (o
+épico, ou a tarefa de uma subtarefa), o prazo, e por baixo as subtarefas, as
+ligações (bloqueia, é bloqueado por, relaciona-se com), os anexos de imagem
+(no R2), os comentários (cada um muda e remove só os seus) e o histórico de
+cada mudança. Qualquer papel da equipa vê e mexe; remover um cartão é do
+master, e brando, com Anular no aviso.
+
+O quadro lê-se num número fixo de consultas, seja qual for o número de
+cartões (worker/src/rotas/kanban.js:lerQuadro), e os filtros — tipo,
+etiqueta, responsável («Os meus»), prioridade e épico — aplicam-se no
+browser sobre o quadro inteiro (worker/src/equipa-kanban.js:kbPassa), para
+um arrasto com filtros ligados mandar ao servidor a posição certa entre os
+cartões escondidos; a pesquisa vai ao servidor, porque procura também na
+descrição. Os filtros ficam na sessão. No computador as colunas estão lado a
+lado e a rolagem de lado é do quadro, nunca da página; no telemóvel vê-se
+uma coluna de cada vez, com um segmentado das colunas e as contagens por
+cima, e passa-se à vizinha a deslizar. O escolhido mostra-se no contorno e na
+letra, e não só no fundo, por causa do escuro forçado.
+
+Arrasta-se com o rato e com o dedo (worker/src/equipa-kanban.js:kbPousar). No
+dedo, pela pega, e não com um toque longo, que disputava a rolagem; tocar na
+pega sem arrastar abre o «Mover para…», que é também o caminho do teclado e
+do leitor de ecrã (worker/src/equipa-kanban.js:kbMoverPara). Largar move o
+cartão logo; se o servidor recusar, volta ao sítio e o aviso diz porquê
+(worker/src/equipa-kanban.js:kbMover). O servidor põe-no a meio dos vizinhos
+e renumera a coluna de uma vez quando o intervalo fica pequeno
+(worker/src/rotas/kanban.js:moverCartao). Mover para outra coluna deixa a
+linha no histórico; reordenar na mesma não.
+
+Tocar num cartão é lê-lo: um painel ao lado no computador, a folha inteira no
+telemóvel, acima da barra de baixo, e o endereço passa a #kanban/KAN-N, que
+abre o cartão de fresco (worker/src/equipa-kanban.js:verKanban). Editar é um
+botão à parte. O formulário pede o Tipo e o Título, com o asterisco; o resto
+diz «Opcional» ou dá um exemplo, e o erro aparece ao lado do campo.
+
+Os tickets criam o seu cartão sozinhos, e movem-no quando mudam de estado
+(worker/src/lib/kanban.js:passosDaSincronizacao, a regra única que as rotas,
+o scripts/qa.mjs e o scripts/kanban.mjs correm). Um ticket de QA novo é um
+Erro em A fazer, com o texto, a gravidade como prioridade e a etiqueta qa; em
+resolução vai para Auto Tests, resolvido para Human Tests (com a nota como
+comentário) e reaberto volta a A fazer. Um pedido de uma pessoa aceite no
+back office é uma História em A fazer, com as alterações da aceitação; em
+resolução vai para Auto Tests, e com a resposta proposta ou concluído para
+Human Tests. Os erros e os tickets de segurança não criam cartão. Um cartão só
+se move sozinho quando o estado da origem muda, e mover um cartão à mão nunca
+mexe no ticket; um cartão em Concluído só sai de lá sozinho se o ticket
+reabrir. Os pedidos da produção vivem noutra base: o scripts/kanban.mjs
+sincronizar lê-os, só com SELECT, e leva-os ao kanban do dev; no cartão, a
+origem diz «Pedido da produção» e liga ao back office da produção. Os ganchos
+correm também na produção, onde não há kanban, e aí não fazem nada; uma falha
+deles nunca faz falhar a ação do ticket.
+
+A descrição de um cartão de um pedido é o texto que a pessoa escreveu, e só a
+vê quem vê os pedidos (worker/src/rotas/kanban.js:vePedidos — hoje, o suporte e
+o master): aos outros, o cartão diz que o texto só se mostra a quem vê os
+pedidos, a pesquisa não o procura, o histórico não o mostra e a descrição não
+se muda. O título — o assunto — e os comentários são de todos.
+
+O detalhe de um pedido com cartão leva a ele, «Cartão KAN-N»
+(worker/src/equipa-guiao.js:detalhePedido). O Claude lê e escreve o kanban com
+o scripts/kanban.mjs — listar, ver, criar, editar, mover, comentar, ligar,
+importar-jira e sincronizar —, no dev e na base isolada do 8788, e nunca
+escreve na produção; cada escrita deixa a linha no histórico do cartão e no
+rasto da equipa.
 
 ## O rasto das pessoas
 Com o sim de quem usa, a app e a montra guardam onde se toca, e nunca o quê,

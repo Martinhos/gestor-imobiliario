@@ -25,6 +25,14 @@
 // reabre-se primeiro). resolver marca resolvido, com a nota (e o commit) como
 // resolução; reabrir devolve-o aos novos e guarda a resolução, como a rota da app.
 // Remover não existe aqui de propósito: é do Martinho, na app.
+// O cartão do ticket no kanban da equipa acompanha-o (worker/src/lib/kanban.js,
+// a regra das rotas): comecar leva-o a Auto Tests, resolver a Human Tests com a
+// nota (e o commit) como comentário, reabrir de volta a A fazer. O ticket é
+// que manda: o UPDATE dele corre primeiro e sozinho, como sempre, e o cartão
+// só depois de o ticket ter mudado, numa chamada à parte; se essa falhar (a
+// base ainda sem as tabelas do kanban), o comando diz numa linha que o cartão
+// não se acertou e porquê, e acaba bem na mesma. Um ticket sem cartão (dos
+// antigos) não mexe em nada.
 //
 // Sem --local, a base é a do dev na Cloudflare (gestor-imobiliario-dev, e o
 // bucket gestor-imobiliario-dev). O wrangler.toml do repositório tem
@@ -43,9 +51,18 @@
 
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { passosDaSincronizacao, sqlEmTexto } from '../worker/src/lib/kanban.js';
+
+// O worker/src não tem um package.json com "type": "module", e o Node avisa no
+// stderr, a cada corrida, que leu a lib/kanban.js como ES module: cala-se esse
+// aviso (o código MODULE_TYPELESS_PACKAGE_JSON), e só esse.
+const avisosDoNode = process.listeners('warning');
+process.removeAllListeners('warning');
+process.on('warning', (w) => { if (!(w && w.code === 'MODULE_TYPELESS_PACKAGE_JSON')) avisosDoNode.forEach((f) => f(w)); });
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WRANGLER = path.join(RAIZ, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
@@ -60,6 +77,8 @@ export const ALVOS = {
 };
 const GRAVIDADES = ['bloqueia', 'incomoda', 'detalhe'];
 const TETO_NOTA = 4000;
+// quem assina o que o script faz ao cartão do ticket no kanban
+const CLAUDE = { id: 'claude', nome: 'Claude' };
 
 export const USO = [
   'Uso:',
@@ -287,6 +306,39 @@ export function sqlComecar(id, agora) {
 export function sqlReabrir(id, agora) {
   return "UPDATE qa_tickets SET status = 'aberto', resolved_at = NULL, updated_at = " + cita(agora)
     + ' WHERE id = ' + cita(id) + ' AND removed_at IS NULL';
+}
+
+/* ------------------------- o cartão do kanban --------------------------- */
+
+/* O SQL do cartão do kanban que acompanha uma mudança de estado do ticket
+   (worker/src/lib/kanban.js:passosDaSincronizacao, assinado pelo Claude), em
+   texto. Só pega no cartão que tem este ticket por origem: um ticket sem
+   cartão não muda nada.
+   Recebe: ev — {id: o do ticket, estado: 'em_resolucao' | 'resolvido' |
+   'aberto', agora: ms, comentario?: {uuid, texto}}.
+   Devolve: o texto, as instruções separadas por «;» e uma quebra de linha (um
+   «BEGIN TRANSACTION» dentro da nota parte-se em dois pedaços colados com ||:
+   o wrangler tira-o do texto, mesmo entre plicas). */
+export function sqlDoCartao(ev) {
+  return passosDaSincronizacao(Object.assign({ tipo: 'qa', autor: CLAUDE }, ev)).map(sqlEmTexto).join(';\n')
+    .replace(/BEGIN TRANSACTION/g, "BEGIN TRANS' || 'ACTION");
+}
+
+/* Acerta o cartão do ticket, numa chamada à parte, depois de o ticket já ter
+   mudado: uma falha do kanban nunca faz falhar o comando (o ticket é que
+   manda), diz-se numa linha.
+   Recebe: correr — a função que corre o SQL no alvo (lança se falhar); ev —
+   como em sqlDoCartao.
+   Devolve: '' se correu bem, ou a linha a juntar à saída com o porquê. */
+export function acertarCartao(correr, ev) {
+  try {
+    correr(sqlDoCartao(ev));
+    return '';
+  } catch (e) {
+    const msg = String((e && e.message) || e);
+    const porque = /no such table:?\s*kanban_/i.test(msg) ? 'esta base ainda não tem as tabelas do kanban (a migração 0028)' : msg.split('\n')[0];
+    return 'O cartão do kanban não se acertou: ' + porque + '. O ticket ficou como devia.';
+  }
 }
 
 /* ------------------------- o texto do listar ---------------------------- */
@@ -701,10 +753,12 @@ function cmdComecar(o) {
   const onde = a.local ? ' na base isolada' : ' no dev';
   return antes.map((l) => {
     if (l.status === 'em_resolucao') return 'O ticket ' + l.id + ' já estava em resolução.';
-    executar(a, sqlComecar(l.id, Date.now()));
+    const agora = Date.now();
+    executar(a, sqlComecar(l.id, agora));
     const depois = umTicket(a, l.id);
     if (depois.status !== 'em_resolucao') throw new ErroQa('O ticket ' + l.id + ' não ficou em resolução (está ' + estadoLegivel(depois.status) + ').');
-    return 'Ticket ' + l.id + ' em resolução' + onde + '.';
+    const cartao = acertarCartao((sql) => executar(a, sql), { id: l.id, estado: 'em_resolucao', agora });
+    return 'Ticket ' + l.id + ' em resolução' + onde + '.' + (cartao ? '\n' + cartao : '');
   }).join('\n');
 }
 
@@ -715,10 +769,14 @@ function cmdResolver(o) {
   const a = alvoDe(o.local);
   umTicket(a, o.id);
   const resolucao = notaDaResolucao(o.nota, o.commit);
-  executar(a, sqlResolver(o.id, resolucao, Date.now()));
+  const agora = Date.now();
+  executar(a, sqlResolver(o.id, resolucao, agora));
   const depois = umTicket(a, o.id);
   if (depois.status !== 'resolvido') throw new ErroQa('O ticket ' + o.id + ' não ficou resolvido (está ' + estadoLegivel(depois.status) + ').');
-  return 'Ticket ' + o.id + ' resolvido' + (a.local ? ' na base isolada' : ' no dev') + ' a ' + quando(depois.resolved_at) + '. Resolução:\n' + indenta(depois.resolution, '  ');
+  const cartao = acertarCartao((sql) => executar(a, sql),
+    { id: o.id, estado: 'resolvido', agora, comentario: { uuid: randomUUID(), texto: resolucao.replace(/\u0000/g, '') } });
+  return 'Ticket ' + o.id + ' resolvido' + (a.local ? ' na base isolada' : ' no dev') + ' a ' + quando(depois.resolved_at) + '. Resolução:\n' + indenta(depois.resolution, '  ')
+    + (cartao ? '\n' + cartao : '');
 }
 
 /* reabrir: devolve o ticket aos novos, com a resolução guardada.
@@ -728,10 +786,13 @@ function cmdReabrir(o) {
   const a = alvoDe(o.local);
   const antes = umTicket(a, o.id);
   if (antes.status === 'aberto') return 'O ticket ' + o.id + ' já está nos novos.';
-  executar(a, sqlReabrir(o.id, Date.now()));
+  const agora = Date.now();
+  executar(a, sqlReabrir(o.id, agora));
   const depois = umTicket(a, o.id);
   if (depois.status !== 'aberto') throw new ErroQa('O ticket ' + o.id + ' não voltou aos novos (está ' + estadoLegivel(depois.status) + ').');
-  return 'Ticket ' + o.id + (antes.status === 'resolvido' ? ' reaberto' : ' de volta aos novos') + (a.local ? ' na base isolada' : ' no dev') + '.' + (depois.resolution ? ' A resolução anterior fica à vista.' : '');
+  const cartao = acertarCartao((sql) => executar(a, sql), { id: o.id, estado: 'aberto', agora });
+  return 'Ticket ' + o.id + (antes.status === 'resolvido' ? ' reaberto' : ' de volta aos novos') + (a.local ? ' na base isolada' : ' no dev') + '.' + (depois.resolution ? ' A resolução anterior fica à vista.' : '')
+    + (cartao ? '\n' + cartao : '');
 }
 
 /* Corre a linha de comandos e devolve o código de saída; os erros conhecidos

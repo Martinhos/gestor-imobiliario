@@ -182,9 +182,9 @@ describe('as páginas do worker, com a CSP sem unsafe-inline', () => {
   test('o back office leva os dados da sessão num script que não corre, e o guião à parte', async () => {
     const html = await (await pedirAoWorker(await comSessaoDeEquipa(), '/equipa', { equipa: true })).text();
     const scripts = etiquetas(html).filter((t) => /^<script\b/.test(t));
-    // no dev (o ambiente dos testes tem ENV_NAME) junta-se a pílula do QA, também com os dados num script que não corre
+    // no dev (o ambiente dos testes tem ENV_NAME) juntam-se o kanban, a seguir ao guião, e a pílula do QA, também com os dados num script que não corre
     assert.deepEqual(scripts, ['<script type="application/json" id="dados-equipa">', '<script src="/equipa/guiao.js">',
-      '<script type="application/json" id="dados-qa">', '<script src="/equipa/qa.js">']);
+      '<script src="/equipa/kanban.js">', '<script type="application/json" id="dados-qa">', '<script src="/equipa/qa.js">']);
     assert.match(html, /data-acao="sair"/, 'o Sair vai pela delegação');
     const prod = await (await pedirAoWorker(await comSessaoDeEquipa(ambiente({ ENV_NAME: undefined })), '/equipa', { equipa: true })).text();
     assert.deepEqual(etiquetas(prod).filter((t) => /^<script\b/.test(t)), ['<script type="application/json" id="dados-equipa">', '<script src="/equipa/guiao.js">'],
@@ -220,7 +220,7 @@ describe('as páginas do worker, com a CSP sem unsafe-inline', () => {
 });
 
 describe('os ficheiros que substituem o que estava em linha', () => {
-  const EQUIPA = ['/equipa/guiao.js', '/equipa/docs.css', '/equipa/docs.js'];
+  const EQUIPA = ['/equipa/guiao.js', '/equipa/kanban.js', '/equipa/docs.css', '/equipa/docs.js'];
 
   test('saem com o tipo certo, e o JavaScript compila', async () => {
     for (const c of CAMINHOS_DOS_RECURSOS) {
