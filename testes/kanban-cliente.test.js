@@ -10,11 +10,11 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
 
 import { recursoDePagina, CAMINHOS_DOS_RECURSOS } from '../worker/src/paginas-recursos.js';
 import { GUIAO_KANBAN, CSS_KANBAN } from '../worker/src/equipa-kanban.js';
 import { GUIAO } from '../worker/src/equipa-guiao.js';
+import { caixa } from './lib/kanban-caixa.js';
 
 const ler = (rel) => readFileSync(new URL('../' + rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 // o código sem os comentários (que podem contar como era, ou citar o que não se faz)
@@ -52,31 +52,6 @@ function deTopo(src) {
 // o guião do kanban como o browser o recebe: pelo /equipa/kanban.js, com sessão de equipa
 const servido = async () => (await recursoDePagina('/equipa/kanban.js', 'GET', async () => true)).text();
 
-/* Corre o guião do kanban numa caixa com o mínimo do browser e os globais
-   do guião principal de que precisa, para lhe chamar as funções puras.
-   Devolve: o contexto (as funções e as var de topo ficam nele). */
-function caixa() {
-  const ctx = {
-    ICONES: {}, ACOES: {}, eu: { nome: 'Eu', discordId: 'eu1', master: false, cats: ['user'] },
-    document: { addEventListener() {}, getElementById() { return null; } },
-    window: { addEventListener() {} },
-    sessionStorage: { getItem() { return null; }, setItem() {} },
-    esc: (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])),
-    maiuscula: (t) => { t = String(t || ''); return t.charAt(0).toUpperCase() + t.slice(1); },
-    // as peças do guião principal que o HTML do cartão usa, na forma que ele as escreve
-    badge: (tom, html) => '<span class="badge' + (tom ? ' ' + tom : '') + '">' + html + '</span>',
-    ic: (nome) => '<svg class="i" data-ic="' + nome + '"></svg>',
-    ligarA: (tipo, nome, args) => ' data-' + tipo + '="' + nome + '"' + (args || []).map((v, i) => ' data-arg' + (i ? i + 1 : '') + '="' + v + '"').join(''),
-    comAcao: (nome, args) => ' data-acao="' + nome + '"' + (args || []).map((v, i) => ' data-arg' + (i ? i + 1 : '') + '="' + v + '"').join(''),
-    data: (t) => (t ? 'dia ' + t : '—'),
-    iniciais: (t) => String(t || '?').slice(0, 2).toUpperCase(),
-    curto: (id) => String(id || '').replace(/-/g, '').slice(0, 8).toUpperCase(),
-  };
-  vm.createContext(ctx);
-  vm.runInContext(GUIAO_KANBAN, ctx);
-  return ctx;
-}
-
 describe('o guião do kanban servido', () => {
   test('faz parse, e o /equipa/kanban.js serve-o sem mexer numa letra', async () => {
     const texto = await servido();
@@ -86,15 +61,20 @@ describe('o guião do kanban servido', () => {
     assert.doesNotThrow(() => new Function(GUIAO + '\n' + texto), 'os dois guiões juntos fazem parse');
   });
 
-  test('é o texto do ficheiro tal e qual: sem crases nem interpolações lá dentro, nada escrito a dobrar', () => {
-    const fonte = ler('worker/src/equipa-kanban.js');
-    const inicio = fonte.indexOf('String.raw`');
-    assert.ok(inicio > -1, 'o guião é um String.raw');
-    const fim = fonte.indexOf('`;\n', inicio);
-    const texto = fonte.slice(inicio + 'String.raw`'.length, fim);
-    assert.equal(GUIAO_KANBAN, texto, 'o que está escrito no ficheiro é o que sai');
-    assert.doesNotMatch(texto, /\$\{|`/, 'sem interpolações nem crases');
-    assert.doesNotMatch(texto, /\\\\[n']/, 'e nada dobrado');
+  test('é o texto dos quatro ficheiros tal e qual, por ordem: sem crases nem interpolações lá dentro, nada escrito a dobrar', () => {
+    // o guião vive em pedaços (o do quadro, os filtros, o arrasto e a janela), cada um um String.raw
+    const pedacos = ['equipa-kanban.js', 'equipa-kanban-filtros.js', 'equipa-kanban-arrasto.js', 'equipa-kanban-janela.js'].map((f) => {
+      const fonte = ler('worker/src/' + f);
+      const inicio = fonte.indexOf('String.raw`');
+      assert.ok(inicio > -1, f + ': o guião é um String.raw');
+      assert.equal(fonte.indexOf('String.raw`', inicio + 1), -1, f + ': um pedaço só por ficheiro');
+      const fim = fonte.indexOf('`;\n', inicio);
+      const texto = fonte.slice(inicio + 'String.raw`'.length, fim);
+      assert.doesNotMatch(texto, /\$\{|`/, f + ': sem interpolações nem crases');
+      assert.doesNotMatch(texto, /\\\\[n']/, f + ': e nada dobrado');
+      return texto;
+    });
+    assert.equal(GUIAO_KANBAN, pedacos.join(''), 'o que está escrito nos ficheiros é o que sai, pela ordem do GUIAO_KANBAN');
   });
 
   test('nada de alert(), prompt(), confirm() nem <select>', () => {

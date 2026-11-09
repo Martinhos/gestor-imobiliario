@@ -6493,7 +6493,7 @@ não lhe toca.
 
 As colunas são as do board — A fazer, Auto Tests, Human Tests, Concluído e
 Para depois — e o master acrescenta, muda de nome, reordena e remove as que
-estão vazias (worker/src/equipa-kanban.js:kbColunas). As quatro primeiras
+estão vazias (worker/src/equipa-kanban-janela.js:kbColunas). As quatro primeiras
 são fixas: a sincronização usa-as, e mudam de nome mas não saem; o
 Concluído é a coluna de fim (o progresso dos épicos, a data de feito). Um
 cartão tem a chave, o tipo (Épico, História, Tarefa, Subtarefa ou Erro), o
@@ -6508,7 +6508,7 @@ master, e brando, com Anular no aviso.
 O quadro lê-se num número fixo de consultas, seja qual for o número de
 cartões (worker/src/rotas/kanban.js:lerQuadro), e os filtros — tipo,
 etiqueta, responsável («Os meus»), prioridade e épico — aplicam-se no
-browser sobre o quadro inteiro (worker/src/equipa-kanban.js:kbPassa), para
+browser sobre o quadro inteiro (worker/src/equipa-kanban-filtros.js:kbPassa), para
 um arrasto com filtros ligados mandar ao servidor a posição certa entre os
 cartões escondidos; a pesquisa vai ao servidor, porque procura também na
 descrição. Os filtros ficam na sessão. No computador as colunas estão lado a
@@ -6517,12 +6517,12 @@ uma coluna de cada vez, com um segmentado das colunas e as contagens por
 cima, e passa-se à vizinha a deslizar. O escolhido mostra-se no contorno e na
 letra, e não só no fundo, por causa do escuro forçado.
 
-Arrasta-se com o rato e com o dedo (worker/src/equipa-kanban.js:kbPousar). No
+Arrasta-se com o rato e com o dedo (worker/src/equipa-kanban-arrasto.js:kbPousar). No
 dedo, pela pega, e não com um toque longo, que disputava a rolagem; tocar na
 pega sem arrastar abre o «Mover para…», que é também o caminho do teclado e
 do leitor de ecrã (worker/src/equipa-kanban.js:kbMoverPara). Largar move o
 cartão logo; se o servidor recusar, volta ao sítio e o aviso diz porquê
-(worker/src/equipa-kanban.js:kbMover). O servidor põe-no a meio dos vizinhos
+(worker/src/equipa-kanban-arrasto.js:kbMover). O servidor põe-no a meio dos vizinhos
 e renumera a coluna de uma vez quando o intervalo fica pequeno
 (worker/src/rotas/kanban.js:moverCartao). Mover para outra coluna deixa a
 linha no histórico; reordenar na mesma não.

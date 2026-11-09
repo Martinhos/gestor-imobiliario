@@ -1,3 +1,7 @@
+import { GUIAO_KB_FILTROS, CSS_KB_FILTROS } from './equipa-kanban-filtros.js';
+import { GUIAO_KB_ARRASTO, CSS_KB_ARRASTO } from './equipa-kanban-arrasto.js';
+import { GUIAO_KB_JANELA, CSS_KB_JANELA } from './equipa-kanban-janela.js';
+
 /* O kanban da equipa no back office (/equipa#kanban): o quadro, o arrastar,
    o cartão aberto, os filtros e as colunas.
    ---------------------------------------------------------------------
@@ -23,9 +27,18 @@
    confirm nem do seletor nativo: o que pede valores abre a janela
    (dialog#dialogo), e as escolhas são chips ou listas de botões.
 
-   As rotas que isto chama são as /api/equipa/kanban (rotas/kanban.js). */
+   As rotas que isto chama são as /api/equipa/kanban (rotas/kanban.js).
 
-export const GUIAO_KANBAN = String.raw`/* ------------------------------ o estado ------------------------------ */
+   O guião vive em quatro ficheiros, cada um com o seu pedaço e os estilos
+   dele: este (o estado, o quadro, o segmentado do telemóvel, o cartão aberto
+   e o que se faz no cartão), equipa-kanban-filtros.js (os filtros, a
+   ordenação, o cabeçalho e o formulário do cartão), equipa-kanban-arrasto.js
+   (o arrasto e o mover) e equipa-kanban-janela.js (a janela e as colunas).
+   O GUIAO_KANBAN e o CSS_KANBAN juntam-nos por esta ordem; como é um só
+   script clássico, as funções de um pedaço veem as dos outros. */
+
+// o pedaço daqui do guião
+const GUIAO_KB_QUADRO = String.raw`/* ------------------------------ o estado ------------------------------ */
 
 // o quadro que veio do servidor: {colunas, cartoes, etiquetas, pessoas, eu}; null antes da primeira leitura
 var kbEstado = null;
@@ -177,59 +190,6 @@ function kbDaColuna(id) {
   return ((kbEstado && kbEstado.cartoes) || []).filter(function (c) { return c.coluna_id === id; });
 }
 
-/* ------------------------------- filtros -------------------------------- */
-
-// Os filtros vazios.
-// Devolve: {q, tipo, etiqueta, responsavel, prioridade, pai}, tudo ''.
-function kbSemFiltros() { return { q: '', tipo: '', etiqueta: '', responsavel: '', prioridade: '', pai: '' }; }
-// Os filtros guardados na sessão do browser (um browser que não deixa guardar dá os vazios).
-// Devolve: os filtros.
-function kbLerFiltros() {
-  var f = kbSemFiltros();
-  try {
-    var g = JSON.parse(sessionStorage.getItem('kb_filtros') || '{}');
-    Object.keys(f).forEach(function (k) { if (g && typeof g[k] === 'string') f[k] = g[k].slice(0, 200); });
-  } catch (e) { /* sem armazenamento: começa sem filtros */ }
-  return f;
-}
-// Guarda os filtros na sessão do browser (calado quando não deixa).
-// Devolve: nada.
-function kbGuardarFiltros() {
-  try { sessionStorage.setItem('kb_filtros', JSON.stringify(kbFiltros)); } catch (e) { /* fica só em memória */ }
-}
-// Quantos filtros estão ligados (a pesquisa conta como um).
-// Recebe: f — os filtros.
-// Devolve: o número.
-function kbQuantosFiltros(f) {
-  return Object.keys(kbSemFiltros()).filter(function (k) { return !!f[k]; }).length;
-}
-/* Um cartão passa os filtros? A pesquisa vai ao servidor (procura também na
-   descrição) e chega aqui como o conjunto das chaves que achou; o resto
-   filtra-se aqui, para o quadro ter sempre as colunas inteiras e o arrasto
-   saber o lugar certo entre os cartões escondidos.
-   Recebe: c — o cartão; f — os filtros; q — a pesquisa (null ou {chaves});
-   euId — o id de quem está (para o «Os meus»).
-   Devolve: true quando passa. */
-function kbPassa(c, f, q, euId) {
-  if (f.q && q && !q.chaves[c.chave]) return false;
-  if (f.tipo && c.tipo !== f.tipo) return false;
-  if (f.etiqueta && (c.etiquetas || []).indexOf(f.etiqueta) < 0) return false;
-  if (f.responsavel) {
-    var quem = f.responsavel === 'eu' ? euId : f.responsavel;
-    if (!c.responsavel || c.responsavel.id !== quem) return false;
-  }
-  if (f.prioridade && String(c.prioridade) !== String(f.prioridade)) return false;
-  if (f.pai && !(c.pai && c.pai.chave === f.pai)) return false;
-  return true;
-}
-// Os cartões de uma coluna que os filtros deixam ver.
-// Recebe: id — o id da coluna.
-// Devolve: a lista.
-function kbVisiveis(id) {
-  var euId = kbEu().id;
-  return kbDaColuna(id).filter(function (c) { return kbPassa(c, kbFiltros, kbQ, euId); });
-}
-
 /* ---------------------------- o quadro (pintar) -------------------------- */
 
 /* Abre o Kanban — o ponto de encaixe que o guião chama ao chegar à secção
@@ -302,26 +262,6 @@ function kbRecarregar() {
   });
 }
 
-/* Pinta a secção inteira: o cabeçalho (com «Colunas» só para o master e o
-   «Novo cartão»), a barra dos filtros, o segmentado das colunas (no
-   telemóvel) e o quadro com o sítio do cartão aberto.
-   Devolve: nada — redesenha o #conteudo. */
-function kbPintar() {
-  var botoes = (kbEu().master ? '<button type="button" class="btn"' + comAcao('kbColunas') + '>' + ic('kbColunas') + 'Colunas</button>' : '') +
-    '<button type="button" class="btn primary"' + comAcao('kbNovo', ['']) + '>' + ic('mais') + 'Novo cartão</button>';
-  el('conteudo').innerHTML = '<div class="kb-cab">' + cabecalho('Kanban', KB_SUB, botoes) + '</div>' +
-    '<div class="kb-filtros" id="kbFiltros">' + kbFiltrosHtml() + '</div>' +
-    '<div class="kb-seg" id="kbSeg" role="group" aria-label="Colunas"></div>' +
-    '<div class="kb-vista" id="kbVista"><div class="kb-quadro" id="kbQuadro"></div>' +
-    '<div class="kb-painel-sitio" id="kbPainel"></div></div>';
-  var q = el('kbQuadro');
-  if (q && q.addEventListener) {
-    q.addEventListener('scroll', kbAoRolar, { passive: true });
-    q.addEventListener('touchstart', kbLargarAlvo, { passive: true });
-  }
-  kbColunaVista = 0;
-  kbPintarQuadro(); kbPintarChips();
-}
 /* Pinta as colunas e o segmentado, guardando o que se perdia ao trocar o
    HTML: a rolagem de lado do quadro, a de cada coluna e o foco. A meio de um
    arrasto não mexe (pinta quando ele acaba).
@@ -423,113 +363,6 @@ function kbCartaoHtml(c) {
     (pe ? '<div class="kb-c-pe">' + pe + '</div>' : '') + '</article>';
 }
 
-/* --------------------------- filtros (pintar) --------------------------- */
-
-/* A barra dos filtros: a pesquisa, o «Filtros» que abre os chips no
-   telemóvel, os chips e o resumo do que se vê.
-   Devolve: o HTML. */
-function kbFiltrosHtml() {
-  return '<label class="procura kb-procura">' + ic('procurar') + '<input id="kbQ" type="search" placeholder="Pesquisar…" autocomplete="off" ' +
-    'aria-label="Pesquisar por chave, título ou descrição" value="' + esc(kbFiltros.q) + '"' + ligarA('enter', 'kbPesquisar') + '></label>' +
-    '<button type="button" class="chip kb-filtros-botao" id="kbFiltrosBotao" aria-controls="kbChips"' + comAcao('kbFiltrosAlternar') + '></button>' +
-    '<div class="chips kb-chips" id="kbChips"></div><p class="sub n kb-resumo" id="kbResumo" role="status"></p>';
-}
-/* Pinta os chips, o botão «Filtros» e o resumo — sem tocar no campo da
-   pesquisa, que pode estar a ser escrito.
-   Devolve: nada. */
-function kbPintarChips() {
-  var f = kbFiltros, n = kbQuantosFiltros(f), chips = el('kbChips'), botao = el('kbFiltrosBotao'), resumo = el('kbResumo');
-  if (!chips || !kbEstado) return;
-  var escolha = function (campo, rotulo, valor) {
-    return '<button type="button" class="chip' + (valor ? ' on' : '') + '" aria-haspopup="dialog"' + comAcao('kbEscolher', [campo]) + '>' +
-      rotulo + (valor ? ': <b>' + esc(valor) + '</b>' : '') + ic('baixo', 'i-sm') + '</button>';
-  };
-  var quem = f.responsavel && f.responsavel !== 'eu' ? kbNomePessoa(f.responsavel) : '';
-  chips.className = 'chips kb-chips' + (kbFiltrosAbertos ? '' : ' kb-fechado');
-  chips.innerHTML = chip('Os meus', f.responsavel === 'eu', comAcao('kbOsMeus')) +
-    escolha('tipo', 'Tipo', f.tipo ? KB_NOMES_TIPOS[f.tipo] || f.tipo : '') +
-    escolha('etiqueta', 'Etiqueta', f.etiqueta) +
-    escolha('responsavel', 'Responsável', quem) +
-    escolha('prioridade', 'Prioridade', f.prioridade ? KB_PRIORIDADES[f.prioridade] || f.prioridade : '') +
-    escolha('pai', 'Épico', f.pai) +
-    (n ? '<button type="button" class="btn sm ghost kb-limpar"' + comAcao('kbLimparFiltros') + '>' + ic('fechar', 'i-sm') + 'Limpar filtros</button>' : '');
-  if (botao) {
-    botao.setAttribute('aria-expanded', kbFiltrosAbertos ? 'true' : 'false');
-    botao.className = 'chip kb-filtros-botao' + (n ? ' on' : '');
-    botao.innerHTML = ic('kbFiltro', 'i-sm') + 'Filtros' + (n ? ' <span class="n">' + n + '</span><span class="so-leitor"> ligados</span>' : '');
-  }
-  if (resumo) {
-    var total = kbEstado.cartoes.length, vis = 0;
-    kbEstado.colunas.forEach(function (c) { vis += kbVisiveis(c.id).length; });
-    resumo.textContent = n ? (vis ? vis + ' de ' + kbConta(total, 'cartão', 'cartões') + ' com estes filtros.' : 'Nada com estes filtros.') : kbConta(total, 'cartão', 'cartões') + '.';
-  }
-}
-/* Muda um filtro e repinta (o quadro já tem tudo: não vai ao servidor).
-   Recebe: campo — tipo, etiqueta, responsavel, prioridade ou pai; valor — '' tira o filtro.
-   Devolve: nada. */
-function kbFiltrar(campo, valor) {
-  if (!Object.prototype.hasOwnProperty.call(KB_FILTROS, campo)) return;
-  kbFiltros[campo] = String(valor || '');
-  kbGuardarFiltros();
-  var d = el('dialogo');
-  if (d && d.open && kbJanelaAberta) d.close();
-  kbPintarQuadro(); kbPintarChips();
-}
-/* Procura no servidor (chave, título ou descrição) e mostra só o que achou.
-   Recebe: texto — o que procurar ('' tira a pesquisa).
-   Devolve: nada. */
-function kbPesquisar(texto) {
-  texto = String(texto || '').trim().slice(0, 200);
-  clearTimeout(kbQTempo);
-  if (texto === kbFiltros.q && (!texto || kbQ)) return;
-  kbFiltros.q = texto; kbGuardarFiltros();
-  var vez = ++kbVezQ;
-  if (!texto) { kbQ = null; kbPintarQuadro(); kbPintarChips(); return; }
-  var r = el('kbResumo');
-  if (r) r.textContent = 'À procura…';
-  pedir('/api/equipa/kanban?q=' + encodeURIComponent(texto)).then(function (j) {
-    if (vez !== kbVezQ || kbFiltros.q !== texto) return;
-    kbQ = kbChavesDe(j, texto);
-    kbPintarQuadro(); kbPintarChips();
-  }).catch(function (e) {
-    if (vez === kbVezQ) { avisar(e.message || 'Não deu para pesquisar.', 'erro'); kbPintarChips(); }
-  });
-}
-/* Tira todos os filtros e a pesquisa.
-   Devolve: nada. */
-function kbLimparFiltros() {
-  kbFiltros = kbSemFiltros(); kbQ = null; kbVezQ++;
-  kbGuardarFiltros();
-  var i = el('kbQ');
-  if (i) i.value = '';
-  kbPintarQuadro(); kbPintarChips();
-}
-/* A janela de escolha de um filtro: «Todos» e as opções, cada uma um botão;
-   a escolhida marcada com o visto e o aria-pressed.
-   Recebe: campo — tipo, etiqueta, responsavel, prioridade ou pai.
-   Devolve: nada — abre a janela. */
-function kbEscolher(campo) {
-  if (!kbEstado || !Object.prototype.hasOwnProperty.call(KB_FILTROS, campo)) return;
-  var ops = [];
-  if (campo === 'tipo') ops = KB_TIPOS.map(function (t) { return [t, KB_NOMES_TIPOS[t]]; });
-  else if (campo === 'etiqueta') ops = kbEstado.etiquetas.map(function (t) { return [t, t]; });
-  else if (campo === 'responsavel') ops = [['eu', 'Os meus']].concat(kbEstado.pessoas.map(function (p) { return [p.id, p.nome]; }));
-  else if (campo === 'prioridade') ops = [1, 2, 3, 4, 5].map(function (p) { return [String(p), KB_PRIORIDADES[p]]; });
-  else if (campo === 'pai') {
-    ops = kbEstado.cartoes.filter(function (c) { return c.tipo === 'epico'; }).map(function (c) { return [c.chave, c.chave + ' · ' + c.titulo]; });
-  }
-  var atual = kbFiltros[campo];
-  var opcao = function (valor, rotulo) {
-    var on = String(valor) === String(atual);
-    return '<button type="button" class="btn lista kb-opcao" aria-pressed="' + (on ? 'true' : 'false') + '"' + comAcao('kbFiltrar', [campo, valor]) + '>' +
-      '<span class="flex1">' + esc(rotulo) + '</span>' + (on ? ic('kbVisto', 'i-sm') : '') + '</button>';
-  };
-  var vazio = { etiqueta: 'Ainda não há etiquetas nos cartões.', pai: 'Ainda não há épicos no quadro.', responsavel: 'Ainda não há ninguém para escolher.' };
-  kbJanela('Filtrar por ' + KB_FILTROS[campo], '<div class="kb-opcoes">' + opcao('', campo === 'prioridade' || campo === 'etiqueta' ? 'Todas' : 'Todos') +
-    (ops.length ? ops.map(function (o) { return opcao(o[0], o[1]); }).join('') : '<p class="sub">' + (vazio[campo] || 'Nada para escolher.') + '</p>') + '</div>',
-    { foco: '.kb-opcao[aria-pressed="true"]' });
-}
-
 /* -------------------------- o telemóvel: as colunas ------------------------ */
 
 /* O segmentado do telemóvel: uma pílula por coluna, com a contagem; a
@@ -612,331 +445,6 @@ function kbMedirTopo() {
   v.style.setProperty('--kb-topo', Math.max(0, Math.round(topo)) + 'px');
 }
 
-/* ------------------------------- arrastar -------------------------------- */
-/* Com o rato arrasta-se o cartão inteiro; com o dedo, pela pega (só ela tem
-   touch-action:none, e arrastar no resto do cartão continua a rolar). A
-   partir de 6px o cartão levanta-se: sai do fluxo (fixo, à mesma largura)
-   e segue o ponteiro por transform; no lugar de destino aparece o lugar
-   tracejado da altura dele, e a coluna de destino acende. Perto das bordas
-   o quadro rola de lado e a coluna rola na vertical. Largar move logo
-   (otimista) e assenta o cartão do sítio onde se largou até ao novo; se o
-   servidor recusar, volta. Esc e o pointercancel desfazem. No telemóvel
-   arrasta-se só dentro da coluna à vista; mudar de coluna é pelo «Mover
-   para…». */
-
-/* Pousou o rato num cartão (ou o dedo na pega): fica à escuta do resto do
-   gesto. O rato só prende o ponteiro quando o arrasto começa, para um
-   clique simples continuar a abrir o cartão.
-   Recebe: e — o PointerEvent do pointerdown.
-   Devolve: nada. */
-function kbPousar(e) {
-  if (kbArr || (e.button != null && e.button > 0) || e.isPrimary === false) return;
-  var t = e.target;
-  if (!t || !t.closest) return;
-  var pega = t.closest('.kb-pega'), no = t.closest('.kb-cartao');
-  if (!no || !no.closest('#kbQuadro')) return;
-  if (!pega && (e.pointerType !== 'mouse' || t.closest('.kb-mais'))) return;
-  if (pega) e.preventDefault();
-  kbArr = { no: no, chave: no.getAttribute('data-chave'), id: e.pointerId, pega: pega, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY,
-    ativo: false, cancelado: false, lugar: null, chaveAlvo: '', colAlvo: null, raf: 0, vx: 0, vy: 0, lista: null };
-  if (pega) { try { pega.setPointerCapture(e.pointerId); } catch (x) { /* sem captura, segue pelo documento */ } }
-  document.addEventListener('pointermove', kbArrMove);
-  document.addEventListener('pointerup', kbArrLargar);
-  document.addEventListener('pointercancel', kbArrCancelar);
-  window.addEventListener('keydown', kbArrTecla, true);
-}
-/* O ponteiro andou: passado o limiar, levanta o cartão; depois leva-o com ele.
-   Recebe: e — o PointerEvent do pointermove.
-   Devolve: nada. */
-function kbArrMove(e) {
-  var a = kbArr;
-  if (!a || a.cancelado || e.pointerId !== a.id) return;
-  if (!a.no.isConnected) { kbArrCancelar(); return; }
-  a.x = e.clientX; a.y = e.clientY;
-  if (!a.ativo) {
-    if (Math.abs(a.x - a.x0) < 6 && Math.abs(a.y - a.y0) < 6) return;
-    kbArrComecar();
-  }
-  if (e.preventDefault) e.preventDefault();
-  kbArrPintar();
-  kbArrRolagem();
-}
-/* Levanta o cartão: deixa o lugar tracejado no sítio dele e passa-o a fixo,
-   à mesma largura e no mesmo sítio, para o transform o levar.
-   Devolve: nada. */
-function kbArrComecar() {
-  var a = kbArr, r = a.no.getBoundingClientRect();
-  a.ativo = true;
-  a.colOrigem = a.no.closest('.kb-col');
-  a.lugar = document.createElement('div');
-  a.lugar.className = 'kb-lugar';
-  a.lugar.setAttribute('aria-hidden', 'true');
-  a.lugar.style.height = Math.round(r.height) + 'px';
-  a.no.parentNode.insertBefore(a.lugar, a.no);
-  a.no.style.width = r.width + 'px';
-  a.no.style.left = r.left + 'px';
-  a.no.style.top = r.top + 'px';
-  a.no.classList.add('kb-no-ar');
-  var q = el('kbQuadro');
-  if (q) q.classList.add('kb-a-arrastar');
-  try { a.no.setPointerCapture(a.id); } catch (x) { /* segue pelo documento */ }
-}
-/* Leva o cartão com o ponteiro e mostra onde vai cair.
-   Devolve: nada. */
-function kbArrPintar() {
-  var a = kbArr;
-  if (!a || !a.ativo) return;
-  a.no.style.transform = 'translate(' + Math.round(a.x - a.x0) + 'px,' + Math.round(a.y - a.y0) + 'px)';
-  var alvo = kbArrAlvo(a.x, a.y);
-  if (!alvo) return;
-  var chave = alvo.lista.getAttribute('data-coluna') + '|' + (alvo.antes ? alvo.antes.getAttribute('data-chave') : '');
-  if (chave === a.chaveAlvo) return;
-  a.chaveAlvo = chave; a.lista = alvo.lista;
-  if (alvo.antes) alvo.lista.insertBefore(a.lugar, alvo.antes); else alvo.lista.appendChild(a.lugar);
-  var col = alvo.lista.closest('.kb-col');
-  if (a.colAlvo !== col) {
-    if (a.colAlvo) a.colAlvo.classList.remove('kb-alvo');
-    a.colAlvo = col;
-    if (col && col !== a.colOrigem) col.classList.add('kb-alvo');
-  }
-}
-/* Onde vai cair o cartão com o ponteiro em (x, y): a coluna debaixo dele (a
-   mais perto, dentro do que o quadro mostra; no telemóvel, sempre a da
-   origem) e, nela, antes de que cartão — pelo meio de cada um.
-   Recebe: x, y — o ponteiro (clientX, clientY).
-   Devolve: {lista, antes} — antes é o cartão que fica a seguir (null no fim) —, ou null. */
-function kbArrAlvo(x, y) {
-  var a = kbArr, q = el('kbQuadro');
-  if (!q) return null;
-  var col = null;
-  if (kbTelemovel()) col = a.colOrigem;
-  else {
-    var rq = q.getBoundingClientRect(), xx = Math.max(rq.left + 1, Math.min(rq.right - 1, x)), dist = Infinity;
-    [].slice.call(q.querySelectorAll('.kb-col')).forEach(function (c) {
-      var r = c.getBoundingClientRect();
-      if (r.right < rq.left || r.left > rq.right) return;
-      var d = xx < r.left ? r.left - xx : xx > r.right ? xx - r.right : 0;
-      if (d < dist) { dist = d; col = c; }
-    });
-  }
-  var lista = col && col.querySelector('.kb-col-lista');
-  if (!lista) return null;
-  var antes = null, cs = lista.querySelectorAll('.kb-cartao');
-  for (var i = 0; i < cs.length; i++) {
-    if (cs[i] === a.no) continue;
-    var r2 = cs[i].getBoundingClientRect();
-    if (y < r2.top + r2.height / 2) { antes = cs[i]; break; }
-  }
-  return { lista: lista, antes: antes };
-}
-/* Perto das bordas, o quadro rola de lado (no computador) e a coluna rola
-   na vertical, mais depressa quanto mais perto.
-   Devolve: nada — arranca ou pára o passo da auto-rolagem. */
-function kbArrRolagem() {
-  var a = kbArr, q = el('kbQuadro');
-  if (!a || !a.ativo || !q) return;
-  var zona = 56, v = function (p, lo, hi) {
-    if (p < lo + zona) return -Math.ceil(16 * Math.min(1, (lo + zona - p) / zona));
-    if (p > hi - zona) return Math.ceil(16 * Math.min(1, (p - (hi - zona)) / zona));
-    return 0;
-  };
-  var rq = q.getBoundingClientRect();
-  a.vx = kbTelemovel() ? 0 : v(a.x, rq.left, rq.right);
-  var l = a.lista;
-  if (l) { var rl = l.getBoundingClientRect(); a.vy = v(a.y, Math.max(rl.top, 0), Math.min(rl.bottom, window.innerHeight)); } else a.vy = 0;
-  if ((a.vx || a.vy) && !a.raf) a.raf = requestAnimationFrame(kbArrPasso);
-}
-/* Um passo da auto-rolagem: rola e volta a procurar o destino debaixo do ponteiro.
-   Devolve: nada. */
-function kbArrPasso() {
-  var a = kbArr, q = el('kbQuadro');
-  if (!a) return;
-  a.raf = 0;
-  if (!a.ativo || !q) return;
-  var mexeu = false;
-  if (a.vx) { var x = q.scrollLeft; q.scrollLeft += a.vx; mexeu = q.scrollLeft !== x; }
-  if (a.vy && a.lista) { var y = a.lista.scrollTop; a.lista.scrollTop += a.vy; mexeu = mexeu || a.lista.scrollTop !== y; }
-  if (!mexeu) return;
-  a.chaveAlvo = '';
-  kbArrPintar();
-  kbArrRolagem();
-}
-/* Tira os ouvintes, o lugar tracejado e a marca da coluna, e devolve o
-   cartão ao fluxo (no sítio de onde saiu).
-   Recebe: a — o estado do arrasto.
-   Devolve: nada. */
-function kbArrDesfazer(a) {
-  if (a.raf) { cancelAnimationFrame(a.raf); a.raf = 0; }
-  document.removeEventListener('pointermove', kbArrMove);
-  document.removeEventListener('pointerup', kbArrLargar);
-  document.removeEventListener('pointercancel', kbArrCancelar);
-  window.removeEventListener('keydown', kbArrTecla, true);
-  if (a.lugar && a.lugar.parentNode) a.lugar.parentNode.removeChild(a.lugar);
-  if (a.colAlvo) a.colAlvo.classList.remove('kb-alvo');
-  a.no.classList.remove('kb-no-ar');
-  a.no.style.width = ''; a.no.style.left = ''; a.no.style.top = ''; a.no.style.transform = '';
-  var q = el('kbQuadro');
-  if (q) q.classList.remove('kb-a-arrastar');
-  kbArr = null;
-  if (a.ativo) kbArrAcabou = Date.now();
-}
-/* Largou: sem ter arrastado, era um clique (segue o seu caminho); arrastado,
-   o cartão vai para o lugar tracejado. No mesmo lugar, só assenta de volta.
-   Recebe: e — o PointerEvent do pointerup.
-   Devolve: nada. */
-function kbArrLargar(e) {
-  var a = kbArr;
-  if (!a || (e && e.pointerId !== a.id)) return;
-  if (!a.ativo || a.cancelado) { kbArrDesfazer(a); return; }
-  var lista = a.lugar.parentNode, coluna = lista && lista.getAttribute('data-coluna');
-  var depois = kbIrmaoCartao(a.lugar, 'nextElementSibling', a.no), antes = kbIrmaoCartao(a.lugar, 'previousElementSibling', a.no);
-  var rect = a.no.getBoundingClientRect();
-  kbArrDesfazer(a);
-  var c = kbCartao(a.chave);
-  if (!c || !coluna) { kbPintarDepoisDoArrasto(); return; }
-  var ordem = kbDaColuna(coluna).filter(function (x) { return x.chave !== a.chave; }).map(function (x) { return x.chave; });
-  var indice = kbIndiceEntre(ordem, depois, antes);
-  var agora = kbDaColuna(c.coluna_id).map(function (x) { return x.chave; }).indexOf(a.chave);
-  if (coluna === c.coluna_id && indice === agora) { kbPintarDepoisDoArrasto(); kbAssentarChave(a.chave, rect); return; }
-  kbPintarDepois = false;
-  kbMover(a.chave, coluna, indice, rect);
-}
-// O repintar que ficou à espera do fim do arrasto (uma leitura que chegou a meio).
-// Devolve: nada.
-function kbPintarDepoisDoArrasto() {
-  if (!kbPintarDepois) return;
-  kbPintarDepois = false;
-  kbPintarQuadro(); kbPintarChips();
-}
-/* O cartão vizinho do lugar tracejado (saltando o que está a ser arrastado).
-   Recebe: no — o lugar; lado — 'nextElementSibling' ou 'previousElementSibling'; salta — o cartão no ar.
-   Devolve: a chave do vizinho, ou ''. */
-function kbIrmaoCartao(no, lado, salta) {
-  for (var n = no[lado]; n; n = n[lado]) {
-    if (n !== salta && n.classList && n.classList.contains('kb-cartao')) return n.getAttribute('data-chave') || '';
-  }
-  return '';
-}
-/* O indice que o servidor quer (a posição entre os cartões da coluna, sem
-   o que se move), a partir dos vizinhos à vista do lugar onde se largou —
-   com filtros, entre os vizinhos podem estar cartões escondidos, e é a
-   ordem inteira que conta.
-   Recebe: ordem — as chaves da coluna de destino, sem a do cartão; depois —
-   a chave do cartão à vista a seguir ('' sem nenhum); antes — a do anterior.
-   Devolve: o índice (0 = topo). */
-function kbIndiceEntre(ordem, depois, antes) {
-  var i = depois ? ordem.indexOf(depois) : -1;
-  if (i > -1) return i;
-  var j = antes ? ordem.indexOf(antes) : -1;
-  if (j > -1) return j + 1;
-  return depois ? 0 : ordem.length;
-}
-/* A ordem do quadro com um cartão movido: tira-o, muda-lhe a coluna e
-   mete-o no indice da coluna de destino (maior do que o total, no fim).
-   Recebe: cartoes — a lista do quadro; chave; coluna — o id de destino; indice.
-   Devolve: a lista nova (a antiga fica como estava). */
-function kbMoverLocal(cartoes, chave, coluna, indice) {
-  var c = null, resto = [];
-  cartoes.forEach(function (x) { if (x.chave === chave) c = x; else resto.push(x); });
-  if (!c) return cartoes.slice();
-  var novo = Object.assign({}, c, { coluna_id: coluna });
-  var n = 0, pos = -1, ultimo = -1;
-  for (var i = 0; i < resto.length; i++) {
-    if (resto[i].coluna_id !== coluna) continue;
-    if (n === indice) { pos = i; break; }
-    n++; ultimo = i;
-  }
-  if (pos < 0) pos = ultimo > -1 ? ultimo + 1 : resto.length;
-  resto.splice(pos, 0, novo);
-  return resto;
-}
-/* Esc a meio de um arrasto desfaz-o (e não fecha nada por trás).
-   Recebe: e — o KeyboardEvent.
-   Devolve: nada. */
-function kbArrTecla(e) {
-  var a = kbArr;
-  if (!a || e.key !== 'Escape') return;
-  e.preventDefault(); e.stopPropagation();
-  kbArrCancelar();
-}
-/* O browser tomou o gesto (pointercancel), ou o Esc: o cartão volta ao sítio, a assentar.
-   Devolve: nada. */
-function kbArrCancelar() {
-  var a = kbArr;
-  if (!a) return;
-  var rect = a.ativo ? a.no.getBoundingClientRect() : null, chave = a.chave;
-  kbArrDesfazer(a);
-  kbPintarDepoisDoArrasto();
-  if (rect) kbAssentarChave(chave, rect);
-}
-
-/* Assenta um cartão no sítio novo a partir de onde estava (FLIP): parte do
-   retângulo antigo e desliza até ao novo com a --curva-entra. Com menos
-   movimento, aparece logo no sítio.
-   Recebe: no — o cartão (já no sítio novo); r0 — o retângulo de onde vem.
-   Devolve: nada. */
-function kbAssentar(no, r0) {
-  if (!no || !r0 || kbReduzido() || !no.getBoundingClientRect) return;
-  var r = no.getBoundingClientRect();
-  if (!r.width) return;
-  var dx = Math.round(r0.left - r.left), dy = Math.round(r0.top - r.top);
-  if (!dx && !dy) return;
-  no.classList.remove('kb-assenta');
-  no.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
-  no.getBoundingClientRect();
-  no.classList.add('kb-assenta');
-  no.style.transform = '';
-  setTimeout(function () { no.classList.remove('kb-assenta'); }, 400);
-}
-// Assenta o cartão desta chave, procurado no quadro.
-// Recebe: chave; r0 — o retângulo de onde vem.
-// Devolve: nada.
-function kbAssentarChave(chave, r0) {
-  var q = el('kbQuadro');
-  kbAssentar(q && q.querySelector('.kb-cartao[data-chave="' + String(chave).replace(/[^\w-]/g, '') + '"]'), r0);
-}
-
-/* Move um cartão: logo no ecrã (otimista), depois no servidor; se ele
-   recusar, o cartão volta para onde estava e o aviso diz porquê.
-   Recebe: chave; coluna — o id de destino; indice — a posição nela (0 =
-   topo, sem contar o próprio); r0 (opcional) — o retângulo de onde parte, para assentar.
-   Devolve: nada. */
-function kbMover(chave, coluna, indice, r0) {
-  var c = kbCartao(chave);
-  if (!c || !kbEstado) return;
-  var origem = c.coluna_id, antes = kbEstado.cartoes;
-  if (!r0) {
-    var q = el('kbQuadro'), no = q && q.querySelector('.kb-cartao[data-chave="' + chave + '"]');
-    r0 = no ? no.getBoundingClientRect() : null;
-  }
-  kbEstado.cartoes = kbMoverLocal(antes, chave, coluna, indice);
-  kbPintarQuadro(); kbPintarChips();
-  kbAssentarChave(chave, r0);
-  kbEmVoo++;
-  enviar(kbRota(chave, '/mover'), { coluna_id: coluna, indice: indice }).then(function () {
-    kbEmVoo--;
-    if (coluna !== origem) avisar(chave + ' passou para «' + kbNomeColuna(coluna) + '».');
-    if (kbEmVoo === 0) kbRecarregar();
-    if (kbAberto === chave) kbAbrir(chave, false);
-  }, function (e) {
-    kbEmVoo--;
-    var q2 = el('kbQuadro'), no2 = q2 && q2.querySelector('.kb-cartao[data-chave="' + chave + '"]');
-    var r1 = no2 ? no2.getBoundingClientRect() : null;
-    if (kbEstado) kbEstado.cartoes = kbMoverLocal(kbEstado.cartoes, chave, origem, kbPosicaoEm(antes, chave, origem));
-    kbPintarQuadro(); kbPintarChips();
-    kbAssentarChave(chave, r1);
-    avisar((e && e.message) || 'Não deu para mover o cartão.', 'erro');
-    if (kbEmVoo === 0) kbRecarregar();
-  });
-}
-// A posição de um cartão na sua coluna (sem contar com ele), numa lista do quadro.
-// Recebe: cartoes — a lista; chave; coluna — o id da coluna.
-// Devolve: o índice (0 = topo).
-function kbPosicaoEm(cartoes, chave, coluna) {
-  var i = cartoes.filter(function (x) { return x.coluna_id === coluna; }).map(function (x) { return x.chave; }).indexOf(chave);
-  return i < 0 ? 0 : i;
-}
-
 /* «Mover para…»: o caminho do teclado e do leitor de ecrã (e do telemóvel,
    para mudar de coluna). Outra coluna põe o cartão no topo dela; na mesma,
    sobe, desce, vai ao topo ou ao fim.
@@ -957,252 +465,6 @@ function kbMoverPara(chave) {
   kbJanela('Mover ' + chave, '<p class="sub">Está em <b>' + esc(kbNomeColuna(c.coluna_id)) + '</b>, ' + (i + 1) + '.º de ' + n + '.</p>' +
     (outras ? '<p class="lbl">Para a coluna</p><div class="kb-opcoes">' + outras + '</div>' : '') +
     (aqui ? '<p class="lbl">Nesta coluna</p><div class="kb-opcoes">' + aqui + '</div>' : ''), { foco: '.kb-opcao' });
-}
-
-/* -------------------------------- a janela ------------------------------- */
-
-/* Uma janela do kanban no dialog#dialogo (a mesma do guião, com as mesmas
-   regras): o título, o corpo e, com aoConfirmar, Cancelar e o botão da
-   ação — que espera enquanto o servidor responde e, se ele recusar, deixa a
-   janela aberta com o porquê; sem aoConfirmar é uma lista de escolhas, só
-   com Fechar. Ao fechar, esvazia-se.
-   Recebe: titulo — o título (texto); corpo — o HTML (seguro); opcoes
-   (opcional) — {aoConfirmar: função que lê os campos e devolve false (fica,
-   com os erros marcados) ou uma promessa; botao; perigo; texto (HTML
-   seguro); foco: o seletor do que recebe o foco}.
-   Devolve: nada — abre a janela. */
-function kbJanela(titulo, corpo, opcoes) {
-  var o = opcoes || {}, d = el('dialogo');
-  if (!d) return;
-  if (typeof formAberto !== 'undefined') formAberto = null;
-  kbJanelaAberta = { aoConfirmar: o.aoConfirmar || null, botao: o.botao || 'Guardar', ocupado: false };
-  d.innerHTML = '<div class="janela-corpo kb-janela"><h2 id="janelaTit">' + esc(titulo) + '</h2>' +
-    (o.texto ? '<p class="janela-txt">' + o.texto + '</p>' : '') + corpo +
-    '<p class="erro-txt" id="kbJanelaErro" role="alert"></p><div class="janela-botoes">' +
-    (o.aoConfirmar
-      ? '<button type="button" class="btn"' + comAcao('fecharDialogo') + '>Cancelar</button>' +
-        '<button type="button" id="kbJanelaOk" class="btn ' + (o.perigo ? 'danger' : 'primary') + '"' + comAcao('kbConfirmar') + '>' + esc(kbJanelaAberta.botao) + '</button>'
-      : '<button type="button" class="btn"' + comAcao('fecharDialogo') + '>Fechar</button>') + '</div></div>';
-  d.returnValue = '';
-  d.onclose = function () {
-    if (d.open) return;
-    kbJanelaAberta = null;
-    d.innerHTML = '';
-  };
-  if (!d.open) d.showModal();
-  var f = (o.foco && d.querySelector(o.foco)) || d.querySelector('input:not([type=radio]),textarea,input:checked') || d.querySelector('.kb-opcao');
-  if (f && f.focus) f.focus();
-}
-/* Confirma a janela aberta: o aoConfirmar lê e confere os campos (false
-   deixa-a aberta com os erros); com uma promessa, o botão espera e fecha no
-   fim, ou mostra o erro do servidor ao lado do campo de que fala.
-   Devolve: nada. */
-function kbConfirmar() {
-  var j = kbJanelaAberta;
-  if (!j || j.ocupado || !j.aoConfirmar) return;
-  var e0 = el('kbJanelaErro');
-  if (e0) e0.textContent = '';
-  var r = j.aoConfirmar();
-  if (r === false) return;
-  j.ocupado = true;
-  kbJanelaOcupada(true);
-  Promise.resolve(r).then(function () {
-    if (kbJanelaAberta === j) el('dialogo').close();
-  }, function (e) {
-    if (kbJanelaAberta !== j) return;
-    j.ocupado = false;
-    kbJanelaOcupada(false);
-    var msg = (e && e.message) || 'Não deu.', campo = e && e.campo;
-    if (campo && el(campo + 'Erro')) marcarErro(campo, msg);
-    else if (el('kbJanelaErro')) el('kbJanelaErro').textContent = msg;
-  });
-}
-// O botão da janela enquanto o servidor responde: parado e a dizer que espera.
-// Recebe: sim — true enquanto espera.
-// Devolve: nada.
-function kbJanelaOcupada(sim) {
-  var b = el('kbJanelaOk');
-  if (!b || !kbJanelaAberta) return;
-  b.disabled = sim;
-  b.textContent = sim ? 'À espera do servidor…' : kbJanelaAberta.botao;
-}
-// Fecha a janela, se uma ação dentro dela levar a outro sítio.
-// Devolve: nada.
-function kbFecharJanela() {
-  var d = el('dialogo');
-  if (d && d.open) d.close();
-}
-
-/* ------------------------- criar e editar um cartão ------------------------ */
-
-/* Um grupo de escolhas (o tipo, a coluna, a prioridade, o responsável):
-   rádios dentro de chips, num fieldset com a legenda — nunca o seletor nativo.
-   Recebe: id — o id do grupo (o erro vai em id + 'Erro'); rotulo; obrigatorio;
-   opcoes — [[valor, rotulo HTML seguro]…]; valor — o escolhido.
-   Devolve: o HTML. */
-function kbGrupoHtml(id, rotulo, obrigatorio, opcoes, valor) {
-  return '<fieldset class="kb-grupo campo-bloco" id="' + id + '" aria-describedby="' + id + 'Erro"><legend class="rot">' + rotulo +
-    (obrigatorio ? ' <span class="req">*</span>' : '') + '</legend><div class="chips">' +
-    opcoes.map(function (o) {
-      return '<label class="chip"><input type="radio" class="so-leitor" name="' + id + '" value="' + esc(o[0]) + '"' +
-        (String(o[0]) === String(valor) ? ' checked' : '') + '>' + o[1] + '</label>';
-    }).join('') + '</div><p class="erro-txt" id="' + id + 'Erro"></p></fieldset>';
-}
-/* Um campo de texto da janela: o rótulo (com o * vermelho quando é
-   obrigatório), a ajuda, o campo e o sítio do erro ao lado dele.
-   Recebe: id; rotulo; obrigatorio; tipo — 'text', 'date' ou 'area'; valor;
-   ph — o placeholder («Opcional» ou «Ex: …»; '' nas datas); max; ajuda (opcional).
-   Devolve: o HTML. */
-function kbCampoHtml(id, rotulo, obrigatorio, tipo, valor, ph, max, ajuda) {
-  var comum = ' id="' + id + '" class="campo" aria-describedby="' + id + 'Erro' + (ajuda ? ' ' + id + 'Ajuda' : '') + '"' +
-    (max ? ' maxlength="' + max + '"' : '') + (ph ? ' placeholder="' + esc(ph) + '"' : '') + (obrigatorio ? ' aria-required="true"' : '');
-  var entrada = tipo === 'area'
-    ? '<textarea' + comum + '>' + esc(valor) + '</textarea>'
-    : '<input' + comum + ' type="' + tipo + '" autocomplete="off" value="' + esc(valor) + '"' + ligarA('enter', 'kbConfirmar') + '>';
-  return '<div class="campo-bloco"><label class="rot" for="' + id + '">' + rotulo + (obrigatorio ? ' <span class="req">*</span>' : '') + '</label>' +
-    (ajuda ? '<p class="sub" id="' + id + 'Ajuda">' + ajuda + '</p>' : '') + entrada + '<p class="erro-txt" id="' + id + 'Erro"></p></div>';
-}
-// O valor do rádio escolhido de um grupo.
-// Recebe: nome — o name dos rádios.
-// Devolve: o valor, ou ''.
-function kbEscolhido(nome) {
-  var r = document.querySelector('input[name="' + nome + '"]:checked');
-  return r ? r.value : '';
-}
-/* As etiquetas escritas num campo, como o servidor as quer: separadas por
-   vírgulas, em minúsculas, os espaços de dentro a hífen, sem repetidas.
-   Recebe: texto — o que se escreveu.
-   Devolve: {lista, erro} — erro '' quando estão boas. */
-function kbEtiquetasDe(texto) {
-  var lista = [];
-  String(texto || '').split(',').forEach(function (t) {
-    t = t.trim().toLowerCase().replace(/\s+/g, '-');
-    if (t && lista.indexOf(t) < 0) lista.push(t);
-  });
-  var longa = lista.filter(function (t) { return t.length > 40; })[0];
-  if (longa) return { lista: lista, erro: 'Cada etiqueta tem até 40 caracteres («' + longa.slice(0, 20) + '…» tem ' + longa.length + ').' };
-  if (lista.length > 20) return { lista: lista, erro: 'Até 20 etiquetas por cartão (tens ' + lista.length + ').' };
-  return { lista: lista, erro: '' };
-}
-/* O campo de que fala uma recusa do servidor, para o erro ir para o lado
-   dele (o servidor responde só com a frase).
-   Recebe: msg — a frase do erro.
-   Devolve: o id do campo do formulário, ou ''. */
-function kbCampoDoErro(msg) {
-  var m = String(msg || '');
-  if (/t[íi]tulo/i.test(m)) return 'kbF-titulo';
-  if (/\btipo\b/i.test(m)) return 'kbF-tipo';
-  if (/\bpai\b|épico|epico|antepassado|subtarefa/i.test(m)) return 'kbF-pai';
-  if (/etiqueta/i.test(m)) return 'kbF-etiquetas';
-  if (/prazo|data/i.test(m)) return 'kbF-prazo';
-  if (/prioridade/i.test(m)) return 'kbF-prioridade';
-  if (/respons|pessoa/i.test(m)) return 'kbF-responsavel';
-  if (/coluna/i.test(m)) return 'kbF-coluna';
-  if (/descri/i.test(m)) return 'kbF-descricao';
-  return '';
-}
-/* O formulário de criar e de editar um cartão: Tipo* e Título*, e o resto
-   opcional (descrição, coluna — só ao criar —, prioridade, etiquetas,
-   responsável, pai e prazo). Os erros vão para o lado do campo.
-   Recebe: modo — 'criar' ou 'editar'; c — o cartão a editar (com a
-   descrição; null ao criar); pre (opcional) — ao criar, {coluna_id, pai, tipo}.
-   Devolve: nada — abre a janela. */
-function kbFormCartao(modo, c, pre) {
-  if (!kbEstado) return;
-  var p = pre || {}, ed = modo === 'editar' && c;
-  var v = ed ? {
-    tipo: c.tipo, titulo: c.titulo, descricao: c.descricao || '', prioridade: String(c.prioridade || 3), etiquetas: (c.etiquetas || []).join(', '),
-    responsavel: c.responsavel ? c.responsavel.id : '', pai: c.pai ? c.pai.chave : '', prazo: c.prazo || '', coluna: c.coluna_id,
-  } : {
-    tipo: KB_NOMES_TIPOS[p.tipo] ? p.tipo : 'tarefa', titulo: '', descricao: '', prioridade: '3', etiquetas: '', responsavel: '',
-    pai: p.pai || '', prazo: '', coluna: kbColuna(p.coluna_id) ? p.coluna_id : (kbColuna('a-fazer') ? 'a-fazer' : (kbEstado.colunas[0] || {}).id),
-  };
-  var tipos = KB_TIPOS.map(function (t) { return [t, ic('kb' + maiuscula(t), 'i-sm kb-t-' + t) + KB_NOMES_TIPOS[t]]; });
-  var prios = [1, 2, 3, 4, 5].map(function (n) { return [String(n), ic('kbP' + n, 'i-sm kb-p' + n) + KB_PRIORIDADES[n]]; });
-  var pessoas = [['', 'Ninguém']].concat(kbEstado.pessoas.map(function (x) { return [x.id, esc(x.nome)]; }));
-  var corpo = kbGrupoHtml('kbF-tipo', 'Tipo', true, tipos, v.tipo) +
-    kbCampoHtml('kbF-titulo', 'Título', true, 'text', v.titulo, 'Ex: Corrigir o aviso da renda em atraso', 200) +
-    (ed && c.descricaoOculta ? '' : kbCampoHtml('kbF-descricao', 'Descrição', false, 'area', v.descricao, 'Opcional', 20000)) +
-    (ed ? '' : kbGrupoHtml('kbF-coluna', 'Coluna', false, kbEstado.colunas.map(function (x) { return [x.id, esc(x.nome)]; }), v.coluna)) +
-    kbGrupoHtml('kbF-prioridade', 'Prioridade', false, prios, v.prioridade) +
-    kbCampoHtml('kbF-etiquetas', 'Etiquetas', false, 'text', v.etiquetas, 'Ex: qa, design', 900, 'Separadas por vírgulas.') +
-    kbGrupoHtml('kbF-responsavel', 'Responsável', false, pessoas, v.responsavel) +
-    kbCampoHtml('kbF-pai', 'Pai', false, 'text', v.pai, 'Ex: KAN-12', 20, 'O épico de uma história ou tarefa, ou a tarefa de uma subtarefa.') +
-    kbCampoHtml('kbF-prazo', 'Prazo', false, 'date', v.prazo, '', 0);
-  kbJanela(ed ? 'Editar ' + c.chave : 'Novo cartão', corpo, {
-    botao: ed ? 'Guardar' : 'Adicionar',
-    foco: '#kbF-titulo',
-    aoConfirmar: function () { return kbGuardarCartao(ed ? c : null, v); },
-  });
-}
-/* Lê e confere o formulário do cartão e manda-o ao servidor: ao criar, tudo;
-   ao editar, só o que mudou.
-   Recebe: c — o cartão a editar (null ao criar); v — os valores com que a janela abriu.
-   Devolve: false com erros marcados, ou a promessa do pedido (rejeita com o campo em e.campo). */
-function kbGuardarCartao(c, v) {
-  var tipo = kbEscolhido('kbF-tipo'), titulo = valorDe('kbF-titulo'), descricao = el('kbF-descricao') ? String(el('kbF-descricao').value || '').trim() : '';
-  var prioridade = kbEscolhido('kbF-prioridade') || '3', responsavel = kbEscolhido('kbF-responsavel');
-  var et = kbEtiquetasDe(valorDe('kbF-etiquetas')), paiTxt = valorDe('kbF-pai'), pai = paiTxt ? kbChave(paiTxt) : '', prazo = valorDe('kbF-prazo');
-  var erros = {
-    'kbF-tipo': tipo ? '' : 'Escolhe o tipo.',
-    'kbF-titulo': titulo ? '' : 'Escreve um título.',
-    'kbF-etiquetas': et.erro,
-    'kbF-pai': paiTxt && !pai ? 'Escreve a chave do pai, como KAN-12.'
-      : pai && tipo === 'epico' ? 'Um épico não tem pai: deixa o campo vazio.'
-      : !pai && tipo === 'subtarefa' ? 'Uma subtarefa precisa de um pai: escreve a chave da tarefa.'
-      : pai && c && pai === c.chave ? 'Um cartão não pode ser pai de si mesmo.' : '',
-    'kbF-prazo': prazo && !/^\d{4}-\d{2}-\d{2}$/.test(prazo) ? 'Escolhe um dia, ou deixa vazio.' : '',
-  };
-  var bom = true;
-  Object.keys(erros).forEach(function (k) { marcarErro(k, erros[k]); if (erros[k]) bom = false; });
-  if (!bom) {
-    var primeiro = document.querySelector('#dialogo [aria-invalid="true"]');
-    if (primeiro) { var foco = primeiro.querySelector ? primeiro.querySelector('input') || primeiro : primeiro; if (foco.focus) foco.focus(); }
-    return false;
-  }
-  var corpo = {};
-  if (!c) {
-    corpo = { tipo: tipo, titulo: titulo, descricao: descricao, coluna_id: kbEscolhido('kbF-coluna') || v.coluna, prioridade: Number(prioridade), etiquetas: et.lista };
-    if (responsavel) corpo.responsavel_id = responsavel;
-    if (pai) corpo.pai = pai;
-    if (prazo) corpo.prazo = prazo;
-  } else {
-    if (tipo !== v.tipo) corpo.tipo = tipo;
-    if (titulo !== v.titulo) corpo.titulo = titulo;
-    if (el('kbF-descricao') && descricao !== String(v.descricao || '').trim()) corpo.descricao = descricao;
-    if (prioridade !== v.prioridade) corpo.prioridade = Number(prioridade);
-    if (et.lista.join(',') !== kbEtiquetasDe(v.etiquetas).lista.join(',')) corpo.etiquetas = et.lista;
-    if (responsavel !== v.responsavel) corpo.responsavel_id = responsavel || null;
-    if (pai !== v.pai) corpo.pai = pai || null;
-    if (prazo !== v.prazo) corpo.prazo = prazo || null;
-    if (!Object.keys(corpo).length) { kbFecharJanela(); avisar('Nada mudou.'); return false; }
-  }
-  var pedido = c
-    ? pedir(kbRota(c.chave), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) })
-    : enviar('/api/equipa/kanban/cartoes', corpo);
-  return pedido.then(function (j) {
-    var nova = j && j.cartao ? j.cartao.chave : '';
-    avisar(c ? 'Cartão ' + c.chave + ' guardado.' : 'Cartão ' + (nova || 'novo') + ' adicionado' +
-      (j && j.cartao && kbTelemovel() ? ' em «' + kbNomeColuna(j.cartao.coluna_id) + '».' : '.'));
-    kbRecarregar();
-    if (kbAberto && (c || corpo.pai === kbAberto)) kbAbrir(kbAberto, false);
-  }, function (e) {
-    var x = new Error((e && e.message) || 'Não deu para guardar.');
-    x.campo = kbCampoDoErro(x.message);
-    throw x;
-  });
-}
-/* O «Novo cartão» e o «Adicionar cartão» de uma coluna.
-   Recebe: coluna — o id da coluna onde fica ('' para A fazer).
-   Devolve: nada — abre o formulário. */
-function kbNovo(coluna) { kbFormCartao('criar', null, { coluna_id: coluna || '' }); }
-/* O ponto de encaixe do + da barra de baixo e do «Novo cartão» de fora: vai
-   ao Kanban se não estiver lá e abre o formulário de criar.
-   Devolve: nada. */
-function novoCartao() {
-  if (el('kbQuadro') && kbEstado) { kbNovo(''); return; }
-  kbAoCarregar = function () { kbNovo(''); };
-  if (!el('kbEspera')) ir('kanban', '');
 }
 
 /* ------------------------------ o cartão aberto ---------------------------- */
@@ -1654,148 +916,19 @@ function kbAnexoRemover(id) {
   });
 }
 
-/* -------------------------------- colunas -------------------------------- */
-
-/* «Colunas» (só o master): a lista das colunas com subir, descer, renomear,
-   marcar de fim e remover, e o «Adicionar coluna». As fixas (as que a
-   sincronização usa) renomeiam-se mas não se removem; uma com cartões
-   também não — o servidor diz porquê, aqui na janela.
-   Devolve: nada — abre a janela. */
-function kbColunas() {
-  if (!kbEstado || !kbEu().master) return;
-  var cs = kbEstado.colunas, n = cs.length;
-  var linhas = cs.map(function (c, i) {
-    var total = kbDaColuna(c.id).length;
-    return '<li class="kb-colm"><div class="kb-colm-txt"><span class="kb-colm-nome">' + esc(c.nome) + '</span>' +
-      (c.fim ? badge('ok', 'De fim') : '') + (c.fixa ? badge('', 'Fixa') : '') + '<span class="sub n">' + kbConta(total, 'cartão', 'cartões') + '</span></div>' +
-      '<div class="kb-colm-acoes">' +
-      '<button type="button" class="btn sm ghost so-icone" aria-label="Subir ' + esc(c.nome) + '"' + (i === 0 ? ' disabled' : '') + comAcao('kbColunaOrdem', [c.id, -1]) + '>' + ic('voltar', 'i-sm kb-i-cima') + '</button>' +
-      '<button type="button" class="btn sm ghost so-icone" aria-label="Descer ' + esc(c.nome) + '"' + (i === n - 1 ? ' disabled' : '') + comAcao('kbColunaOrdem', [c.id, 1]) + '>' + ic('voltar', 'i-sm kb-i-baixo') + '</button>' +
-      '<button type="button" class="btn sm"' + comAcao('kbColunaRenomear', [c.id]) + '>Renomear</button>' +
-      '<button type="button" class="btn sm"' + comAcao('kbColunaFim', [c.id]) + '>' + (c.fim ? 'Tirar de fim' : 'Marcar de fim') + '</button>' +
-      (c.fixa ? '' : '<button type="button" class="btn sm ghost texto-perigo"' + comAcao('kbColunaRemover', [c.id]) + '>Remover</button>') + '</div></li>';
-  }).join('');
-  kbJanela('Colunas', '<p class="sub">As fixas são as que a sincronização usa: renomeiam-se, mas não se removem. O que chega a uma coluna de fim conta como feito.</p>' +
-    '<ul class="kb-colms">' + linhas + '</ul><div><button type="button" class="btn sm"' + comAcao('kbColunaNova') + '>' + ic('mais', 'i-sm') + 'Adicionar coluna</button></div>');
-}
-/* Depois de mudar as colunas: relê o quadro, volta à lista das colunas e diz
-   o que se fez. Quem fechou a janela entretanto não a vê abrir-se sozinha —
-   só o renomear e o adicionar, que a fecharam ao confirmar, voltam à lista.
-   Recebe: msg — a frase do aviso; reabrir (opcional) — true para voltar à lista mesmo com a janela fechada.
-   Devolve: Promise. */
-function kbDepoisDasColunas(msg, reabrir) {
-  return kbRecarregar().then(function () {
-    var d = el('dialogo');
-    if (reabrir ? !(d && d.open) : (d && d.open && el('janelaTit') && el('janelaTit').textContent === 'Colunas')) kbColunas();
-    avisar(msg);
-  });
-}
-/* Um erro do servidor dito na janela das colunas (fica aberta).
-   Recebe: e — o Error.
-   Devolve: nada. */
-function kbErroNasColunas(e) {
-  var s = el('kbJanelaErro');
-  if (s) s.textContent = (e && e.message) || 'Não deu.';
-  else avisar((e && e.message) || 'Não deu.', 'erro');
-}
-/* Sobe ou desce uma coluna um lugar.
-   Recebe: id; dir — -1 sobe, 1 desce.
-   Devolve: nada. */
-function kbColunaOrdem(id, dir) {
-  var ids = kbEstado.colunas.map(function (c) { return c.id; }), i = ids.indexOf(id), j = i + Number(dir);
-  if (i < 0 || j < 0 || j >= ids.length) return;
-  ids[i] = ids[j]; ids[j] = id;
-  enviar('/api/equipa/kanban/colunas/ordem', { ids: ids }).then(function () { return kbDepoisDasColunas('Ordem das colunas guardada.'); }).catch(kbErroNasColunas);
-}
-/* Marca ou tira uma coluna de fim.
-   Recebe: id.
-   Devolve: nada. */
-function kbColunaFim(id) {
-  var c = kbColuna(id);
-  if (!c) return;
-  pedir('/api/equipa/kanban/colunas/' + encodeURIComponent(id), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fim: !c.fim }) })
-    .then(function () { return kbDepoisDasColunas(c.fim ? '«' + c.nome + '» deixou de ser de fim.' : '«' + c.nome + '» passou a ser de fim.'); }).catch(kbErroNasColunas);
-}
-/* Remove uma coluna (o servidor recusa as fixas e as que têm cartões, e diz porquê).
-   Recebe: id.
-   Devolve: nada. */
-function kbColunaRemover(id) {
-  var c = kbColuna(id);
-  pedir('/api/equipa/kanban/colunas/' + encodeURIComponent(id), { method: 'DELETE' })
-    .then(function () { return kbDepoisDasColunas('Coluna «' + (c ? c.nome : id) + '» removida.'); }).catch(kbErroNasColunas);
-}
-/* Renomeia uma coluna.
-   Recebe: id.
-   Devolve: nada — abre a janela. */
-function kbColunaRenomear(id) {
-  var c = kbColuna(id);
-  if (!c) return;
-  kbJanela('Renomear «' + c.nome + '»', kbCampoHtml('kbF-coluna-nome', 'Nome', true, 'text', c.nome, 'Ex: Em revisão', 60), {
-    foco: '#kbF-coluna-nome',
-    aoConfirmar: function () {
-      var nome = valorDe('kbF-coluna-nome');
-      marcarErro('kbF-coluna-nome', nome ? '' : 'Escreve um nome.');
-      if (!nome) return false;
-      return pedir('/api/equipa/kanban/colunas/' + encodeURIComponent(id), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: nome }) })
-        .then(function () { setTimeout(function () { kbDepoisDasColunas('Coluna renomeada.', true); }, 0); });
-    },
-  });
-}
-/* Adiciona uma coluna (vai para o fim do quadro).
-   Devolve: nada — abre a janela. */
-function kbColunaNova() {
-  kbJanela('Adicionar coluna', kbCampoHtml('kbF-coluna-nome', 'Nome', true, 'text', '', 'Ex: Em revisão', 60) +
-    '<label class="kb-marcar"><input type="checkbox" id="kbF-coluna-fim"> Conta como feito (coluna de fim)</label>', {
-    botao: 'Adicionar', foco: '#kbF-coluna-nome',
-    aoConfirmar: function () {
-      var nome = valorDe('kbF-coluna-nome'), fim = !!(el('kbF-coluna-fim') && el('kbF-coluna-fim').checked);
-      marcarErro('kbF-coluna-nome', nome ? '' : 'Escreve um nome.');
-      if (!nome) return false;
-      return enviar('/api/equipa/kanban/colunas', { nome: nome, fim: fim })
-        .then(function () { setTimeout(function () { kbDepoisDasColunas('Coluna «' + nome + '» adicionada.', true); }, 0); });
-    },
-  });
-}
-
-/* ------------------------------- as ações ------------------------------- */
-
-/* Uma ação que pode vir de dentro da janela (o ⋯ de um cartão): fecha-a
-   antes de seguir, a menos que a própria ação reabra a janela.
-   Recebe: alvo — o elemento clicado.
-   Devolve: nada. */
-function kbSairDaJanela(alvo) {
-  if (alvo && alvo.closest && alvo.closest('#dialogo')) kbFecharJanela();
-}
-// O clique que vem logo depois de um arrasto não abre nada.
-// Devolve: true quando é esse clique.
-function kbDepoisDeArrastar() { return Date.now() - kbArrAcabou < 400; }
+/* -------------------- as ações do quadro e do cartão -------------------- */
 
 ACOES.kbAbrir = function (d, alvo) { if (kbDepoisDeArrastar()) return; kbSairDaJanela(alvo); kbAbrir(d.arg, true); };
 ACOES.kbFechar = function () { kbFechar(); };
 ACOES.kbTentar = function (d) { verKanban(d.arg || ''); };
 ACOES.kbMenuCartao = function (d) { if (!kbDepoisDeArrastar()) kbMenuCartao(d.arg); };
 ACOES.kbMoverPara = function (d) { if (!kbDepoisDeArrastar()) kbMoverPara(d.arg); };
-ACOES.kbMover = function (d) { kbFecharJanela(); kbMover(d.arg, d.arg2, Number(d.arg3) || 0); };
 ACOES.kbEditar = function (d, alvo) { kbSairDaJanela(alvo); kbEditar(d.arg); };
 ACOES.kbCopiar = function (d, alvo) { kbSairDaJanela(alvo); kbCopiar(d.arg); };
 ACOES.kbRemover = function (d, alvo) { kbSairDaJanela(alvo); kbRemover(d.arg); };
 ACOES.kbRepor = function (d) { kbRepor(d.arg); };
-ACOES.kbNovo = function (d) { kbNovo(d.arg); };
 ACOES.kbNovoSub = function (d) { kbNovoSub(d.arg); };
-ACOES.kbConfirmar = function () { kbConfirmar(); };
-ACOES.kbEscolher = function (d) { kbEscolher(d.arg); };
-ACOES.kbFiltrar = function (d) { kbFiltrar(d.arg, d.arg2); };
-ACOES.kbOsMeus = function () { kbFiltrar('responsavel', kbFiltros.responsavel === 'eu' ? '' : 'eu'); };
-ACOES.kbLimparFiltros = function () { kbLimparFiltros(); };
-ACOES.kbPesquisar = function (d, alvo) { kbPesquisar(alvo && alvo.value); };
-ACOES.kbFiltrosAlternar = function () { kbFiltrosAbertos = !kbFiltrosAbertos; kbPintarChips(); kbMedirTopo(); };
 ACOES.kbVerColuna = function (d) { kbVerColuna(d.arg); };
-ACOES.kbColunas = function () { kbColunas(); };
-ACOES.kbColunaNova = function () { kbColunaNova(); };
-ACOES.kbColunaRenomear = function (d) { kbColunaRenomear(d.arg); };
-ACOES.kbColunaOrdem = function (d) { kbColunaOrdem(d.arg, d.arg2); };
-ACOES.kbColunaFim = function (d) { kbColunaFim(d.arg); };
-ACOES.kbColunaRemover = function (d) { kbColunaRemover(d.arg); };
 ACOES.kbComentar = function (d) { kbComentar(d.arg); };
 ACOES.kbComentarioEditar = function (d) { kbComentarioEditar(d.arg); };
 ACOES.kbComentarioRemover = function (d) { kbComentarioRemover(d.arg); };
@@ -1805,16 +938,9 @@ ACOES.kbAnexar = function (d, alvo) { kbAnexar(d.arg, alvo); };
 ACOES.kbAnexoRemover = function (d) { kbAnexoRemover(d.arg); };
 ACOES.kbAbrirPedido = function (d) { kbAbrirPedido(d.arg); };
 
-/* Os ouvintes do kanban, ao lado dos três do guião: o pousar do arrasto, a
-   pesquisa enquanto se escreve, o Esc que fecha o cartão e o redimensionar
-   que volta a medir o quadro. Cada um sai logo quando o kanban não está no ecrã. */
-document.addEventListener('pointerdown', kbPousar);
-document.addEventListener('input', function (e) {
-  var t = e.target;
-  if (!t || t.id !== 'kbQ') return;
-  clearTimeout(kbQTempo);
-  kbQTempo = setTimeout(function () { kbPesquisar(t.value); }, 300);
-});
+/* Os ouvintes do quadro, ao lado dos três do guião: o Esc que fecha o cartão
+   e o redimensionar que volta a medir o quadro. Cada um sai logo quando o
+   kanban não está no ecrã. Os do arrasto e da pesquisa vivem nos módulos deles. */
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape' || !kbAberto || kbArr || !el('kbPainel')) return;
   var d = el('dialogo'), a = document.activeElement;
@@ -1826,6 +952,9 @@ document.addEventListener('keydown', function (e) {
 window.addEventListener('resize', function () { if (el('kbVista')) kbMedirTopo(); });
 `;
 
+// o guião inteiro, como o /equipa/kanban.js o serve: os quatro pedaços por ordem
+export const GUIAO_KANBAN = GUIAO_KB_QUADRO + GUIAO_KB_FILTROS + GUIAO_KB_ARRASTO + GUIAO_KB_JANELA;
+
 /* Os estilos do kanban, servidos em /equipa/kanban.css (público, como o
    estilos.css: são só regras). Vivem por cima do CSS_EQUIPA e usam os
    tokens dele (--card, --line, --accent, --rapido, --curva…) sem redeclarar
@@ -1835,16 +964,7 @@ window.addEventListener('resize', function () { if (el('kbVista')) kbMedirTopo()
    no segmentado, o cartão no ar) dizem-se também na cor da frente — contorno
    e letra —, porque o Samsung escurece os fundos à força. Os :hover vivem
    atrás de (hover:hover) and (pointer:fine). */
-export const CSS_KANBAN = `/* ---- a barra dos filtros ---- */
-.kb-filtros{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center}
-.kb-procura{flex:1 1 260px;max-width:420px}
-.kb-filtros-botao{display:none}
-.kb-chips{flex:1 1 420px}
-.kb-chips .chip b{font-weight:650}
-.kb-chips .chip .i{margin-right:-4px}
-.kb-resumo{flex:1 0 100%}
-
-/* ---- o segmentado das colunas (só no telemóvel) ---- */
+const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ---- */
 .kb-seg{display:none}
 
 /* ---- o quadro: as colunas lado a lado, a rolagem de lado é dele ---- */
@@ -1920,13 +1040,6 @@ export const CSS_KANBAN = `/* ---- a barra dos filtros ---- */
 .kb-avatar{margin-left:auto;width:26px;height:26px;border-radius:50%;background:var(--accent-soft);color:var(--accent-text);border:1px solid var(--accent);
   display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex:none}
 
-/* ---- o arrasto: o cartão no ar, o lugar tracejado e o assentar ---- */
-.kb-a-arrastar,.kb-a-arrastar .kb-cartao{cursor:grabbing}
-.kb-cartao.kb-no-ar{position:fixed;z-index:70;margin:0;pointer-events:none;border-color:var(--accent);
-  box-shadow:0 0 0 1px var(--accent),var(--shadow);will-change:transform}
-.kb-lugar{flex:none;border:2px dashed var(--accent);border-radius:12px;background:var(--accent-soft)}
-.kb-cartao.kb-assenta{transition:transform var(--medio) var(--curva-entra)}
-
 /* ---- o cartão aberto: ao lado no computador, a folha inteira no telemóvel ---- */
 .kb-painel-sitio:empty{display:none}
 .kb-painel-sitio{flex:0 0 420px;min-width:0;position:sticky;top:16px}
@@ -1987,26 +1100,6 @@ export const CSS_KANBAN = `/* ---- a barra dos filtros ---- */
 .kb-hist-lista{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
 .kb-hist-lista li{display:flex;flex-direction:column;gap:2px;padding-left:12px;border-left:2px solid var(--line2);font-size:14px}
 
-/* ---- a janela (formulários, escolhas, colunas) ---- */
-.kb-janela{max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:auto;overscroll-behavior:contain}
-.kb-janela .lbl{margin-top:4px}
-.kb-grupo{border:0;margin:0;padding:0;min-width:0}
-.kb-grupo legend{padding:0;margin-bottom:6px}
-.kb-grupo .chip .i{width:16px;height:16px}
-.kb-opcoes{display:flex;flex-direction:column;gap:6px}
-.kb-opcao[aria-pressed="true"]{border-color:var(--accent);color:var(--accent-text);background:var(--accent-soft)}
-.kb-opcao .i{color:var(--accent)}
-.kb-colms{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px}
-.kb-colm{display:flex;flex-direction:column;gap:8px;padding:10px 12px}
-.kb-colm+.kb-colm{border-top:1px solid var(--line)}
-.kb-colm-txt{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
-.kb-colm-nome{font-weight:650}
-.kb-colm-acoes{display:flex;flex-wrap:wrap;gap:6px}
-.kb-i-cima{transform:rotate(90deg)}
-.kb-i-baixo{transform:rotate(-90deg)}
-.kb-marcar{display:flex;align-items:center;gap:10px;min-height:44px;font-size:14px;cursor:pointer}
-.kb-marcar input{width:20px;height:20px;accent-color:var(--accent)}
-
 /* ---- o Anular no aviso de baixo ---- */
 .kb-anular{flex:none;min-height:36px;padding:0 12px;border:1px solid currentColor;border-radius:10px;background:transparent;color:inherit;
   font-weight:650;font-size:14px;cursor:pointer}
@@ -2020,7 +1113,6 @@ export const CSS_KANBAN = `/* ---- a barra dos filtros ---- */
   .kb-linha:hover{background:var(--tint)}
   .kb-anular:hover{background:color-mix(in srgb,currentColor 12%,transparent)}
   .kb-hist>summary:hover .lbl{color:var(--ink)}
-  .kb-a-arrastar .kb-cartao:hover{border-color:var(--line)}
   .kb-pega{display:none}
 }
 
@@ -2032,13 +1124,6 @@ export const CSS_KANBAN = `/* ---- a barra dos filtros ---- */
 
 /* ---- o telemóvel: uma coluna de cada vez, o segmentado e a folha inteira ---- */
 @media(max-width:899px){
-  .kb-procura{flex:1 1 160px;max-width:none}
-  .kb-cab .cab .sub{display:none}
-  .kb-cab .cab-acoes .btn.primary{display:none}
-  .kb-filtros-botao{display:inline-flex}
-  .kb-chips{flex:1 0 100%}
-  .kb-chips.kb-fechado{display:none}
-  .kb-resumo{display:none}
   .kb-seg{display:flex;gap:6px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;margin:0 -16px;padding:2px 16px}
   .kb-seg::-webkit-scrollbar{display:none}
   .kb-seg-op{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line2);
@@ -2075,6 +1160,8 @@ export const CSS_KANBAN = `/* ---- a barra dos filtros ---- */
 @media(prefers-reduced-motion:reduce){
   .kb-painel.kb-entra{animation-name:kbAparece}
   .kb-painel.kb-sai{animation-name:kbSome}
-  .kb-cartao.kb-assenta{transition:none}
 }
 `;
+
+// o CSS inteiro, como o /equipa/kanban.css o serve: o do quadro primeiro, e os pedaços por cima
+export const CSS_KANBAN = CSS_KB_QUADRO + CSS_KB_FILTROS + CSS_KB_ARRASTO + CSS_KB_JANELA;
