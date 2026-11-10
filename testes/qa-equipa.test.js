@@ -73,7 +73,7 @@ describe('as rotas do QA no back office', () => {
     assert.equal(l.discord_nome, 'Dina');
     assert.equal(l.body, 'O filtro dos pedidos não guarda.');
     assert.equal(l.severity, 'incomoda');
-    assert.equal(l.status, 'aberto');
+    assert.equal(l.status, 'a-fazer');
     const t = (await listar(env, DEV))[0];
     assert.deepEqual(t.autor, { id: 'equipa:d1', nome: '', email: '', discord: { id: 'd1', nome: 'Dina' } });
     assert.equal(t.context.ecra.pagina, 'Back office › Pedidos');
@@ -97,9 +97,9 @@ describe('as rotas do QA no back office', () => {
     assert.equal((await chamar(env, SUPORTE, 'DELETE', '/api/equipa/qa/' + id)).status, 200);
     assert.equal((await listar(env, DEV)).length, 0);
     assert.equal((await chamar(env, DEV, 'POST', '/api/equipa/qa/' + id + '/repor')).status, 200);
-    await env.DB.prepare("UPDATE qa_tickets SET status = 'resolvido', resolution = 'feito', resolved_at = 1 WHERE id = ?").bind(id).run();
+    await env.DB.prepare("UPDATE qa_tickets SET status = 'human-tests', resolution = 'feito', resolved_at = 1 WHERE id = ?").bind(id).run();
     assert.equal((await chamar(env, DEV, 'POST', '/api/equipa/qa/' + id + '/reabrir')).status, 200);
-    assert.equal((await listar(env, DEV))[0].status, 'aberto');
+    assert.equal((await listar(env, DEV))[0].status, 'a-fazer');
     const png = Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', 'base64'));
     const { rotasEquipaApi } = await import('../worker/src/equipa-api.js');
     const caminho = '/api/equipa/qa/' + id + '/imagem';

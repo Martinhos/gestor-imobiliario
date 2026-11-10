@@ -867,7 +867,7 @@ function lugarNaColuna(lista, i) {
    dos vizinhos; com o intervalo pequeno de mais, a coluna inteira renumera-se
    de 1024 em 1024 numa instrução (a ordem nova por json_each). Mudar de
    coluna deixa a linha «coluna» no histórico e acerta o concluido_at pela
-   coluna de fim; reordenar não deixa linha. Nunca mexe no ticket de origem.
+   coluna de fim; reordenar não deixa linha. O ticket de QA de origem vai com o cartão (o gatilho kanban_qa_coluna da migração 0029); um pedido nunca muda.
    Recebe: env; request — o corpo; eu — a sessão; chave — a do cartão.
    Devolve: promessa da Response {cartao}, 404 ou a recusa. */
 async function moverCartao(env, request, eu, chave) {

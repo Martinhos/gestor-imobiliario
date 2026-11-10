@@ -72,7 +72,8 @@ var KB_NOMES_TIPOS = { epico: 'Épico', historia: 'História', tarefa: 'Tarefa',
 var KB_PRIORIDADES = { 1: 'Mais alta', 2: 'Alta', 3: 'Média', 4: 'Baixa', 5: 'Mais baixa' };
 var KB_LIGACOES = { bloqueia: 'Bloqueia', bloqueado: 'É bloqueado por', relaciona: 'Relaciona-se com' };
 var KB_FILTROS = { tipo: 'tipo', etiqueta: 'etiqueta', responsavel: 'responsável', prioridade: 'prioridade', pai: 'épico' };
-// os estados de um ticket de QA e de um pedido, como a origem os diz (lib/kanban.js)
+// os estados de um pedido e as marcas de um ticket de QA, como a origem os diz (lib/kanban.js); o estado de
+// um ticket de QA é a coluna do próprio cartão (kbNomeColuna). Os três antigos do QA ficam para o histórico de antes.
 var KB_ESTADOS_ORIGEM = { aberto: 'Aberto', em_resolucao: 'Em resolução', resolvido: 'Resolvido', removido: 'Removido', reposto: 'Reposto',
   aceite: 'Aceite', resolucao: 'Em resolução', proposta: 'Resposta proposta', concluido: 'Concluído' };
 var KB_SUB ='As tarefas da equipa: o que há para fazer, o que se testa e o que ficou feito.';
@@ -170,6 +171,9 @@ function kbColuna(id) {
 // Recebe: id — o id da coluna.
 // Devolve: o texto (por escapar).
 function kbNomeColuna(id) { var c = kbColuna(id); return c ? c.nome : String(id || ''); }
+// O nome de um estado de origem no histórico: um estado de pedido (ou marca do QA), uma coluna, ou — sem nada.
+// Recebe: e — o estado guardado (ou null). Devolve: o texto (por escapar).
+function kbNomeOrigem(e) { return !e ? '—' : KB_ESTADOS_ORIGEM[e] || kbNomeColuna(e); }
 // O nome de uma pessoa pelo id (o próprio texto, se não a conhecer).
 // Recebe: id — o id do Discord, 'claude' ou 'automatico'.
 // Devolve: o texto (por escapar).
@@ -620,7 +624,8 @@ function kbOrigemHtml(o) {
   }
   return '<div class="kb-p-sec kb-origem"><h3 class="lbl">Origem</h3><p class="kb-origem-tit">' +
     badge('ac', qa ? 'Ticket de QA' : daProducao ? 'Pedido da produção #' + esc(curto(o.id)) : 'Pedido de ajuda') +
-    (o.estado ? ' ' + badge('', esc(KB_ESTADOS_ORIGEM[o.estado] || o.estado)) : '') + '</p>' +
+    // num ticket de QA o estado é a coluna onde o cartão já está: não se repete
+    (o.estado && !qa ? ' ' + badge('', esc(KB_ESTADOS_ORIGEM[o.estado] || o.estado)) : '') + '</p>' +
     (o.resumo ? '<p class="kb-texto' + (qa ? ' kb-texto-qa' : '') + '">' + esc(o.resumo) + '</p>' : '') + abrir + '</div>';
 }
 /* As subtarefas (ou, num épico, os cartões dele), com o progresso e o «Adicionar».
@@ -723,7 +728,7 @@ function kbFrase(h) {
     case 'prazo': return d ? 'Mudou o prazo para ' + esc(kbDia(d)) : 'Removeu o prazo';
     case 'ligacao': return (d ? 'Adicionou a ligação: ' : 'Removeu a ligação: ') + esc(kbLigacaoEmTexto(d || a));
     case 'anexo': return d ? 'Adicionou o anexo ' + q(d) : 'Removeu o anexo ' + q(a);
-    case 'origem': return 'A origem passou de ' + esc(a || '—') + ' a ' + esc(d || '—');
+    case 'origem': return 'A origem passou de ' + esc(kbNomeOrigem(a)) + ' a ' + esc(kbNomeOrigem(d));
     case 'removido': return 'Removeu o cartão';
     case 'reposto': return 'Repôs o cartão';
     default: return 'Mudou ' + esc(h.campo || 'o cartão') + (d ? ' para ' + q(d) : '');

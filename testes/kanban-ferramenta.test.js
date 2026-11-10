@@ -20,7 +20,7 @@ import {
   lerArgumentos, confereAlvo, confereLeitura, soLeitura, alvoDe, ALVOS, PRODUCAO, principal, ErroKanban, textoDoFicheiro,
   msDoJira, dataValida, confereEtiquetas, erroDoWrangler, mensagemPorMigrar, planoDoJira, USO,
 } from '../scripts/kanban.mjs';
-import { sqlDoCartao, acertarCartao, sqlComecar, sqlResolver, sqlReabrir, sqlUm, notaDaResolucao } from '../scripts/qa.mjs';
+import { sqlDoCartao, acertarCartao, sqlNaColuna, sqlUm, notaDaResolucao } from '../scripts/qa.mjs';
 
 const SCRIPT = fileURLToPath(new URL('../scripts/kanban.mjs', import.meta.url));
 const HOSTIL = "Não abre; DROP TABLE kanban_cartoes; --\nsegunda linha com 'plicas', \"aspas\", /* e */ \\ barra, um ? solto;\nBEGIN TRANSACTION; e COMMIT; no meio\u0000";
@@ -317,14 +317,14 @@ describe('o SQL de cada comando, contra o esquema verdadeiro', () => {
 
   test('mover: para o topo da coluna, com a linha «coluna» e o concluido_at; na mesma coluna, sem linha; nunca mexe no ticket', () => {
     const dev = novaBase();
-    poeCartao(dev, 1, 'human-tests', { origem_tipo: 'qa', origem_id: 'q1', origem_estado: 'resolvido' });
+    poeCartao(dev, 1, 'human-tests', { origem_tipo: 'qa', origem_id: 'q1', origem_estado: 'human-tests' });
     poeCartao(dev, 2, 'concluido');
     poeCartao(dev, 3, 'a-fazer');
     let r = corre(['mover', 'KAN-1', 'Concluído'], { dev });
     assert.equal(r.codigo, 0, r.err);
     assert.match(r.out, /KAN-1: «Human Tests» → «Concluído» \(no topo\)/);
     let k = cartaoN(dev, 1);
-    assert.deepEqual([k.coluna_id, k.origem_estado], ['concluido', 'resolvido']);
+    assert.deepEqual([k.coluna_id, k.origem_estado], ['concluido', 'concluido']);
     assert.ok(k.concluido_at > 0);
     assert.deepEqual(ordemDe(dev, 'concluido'), [1, 2]);
     assert.deepEqual(historicoDe(dev, 1), [{ campo: 'coluna', antes: 'human-tests', depois: 'concluido', autor_id: 'claude' }]);
@@ -419,7 +419,7 @@ describe('o SQL de cada comando, contra o esquema verdadeiro', () => {
     corre(['mover', 'KAN-7', 'auto-tests'], { dev });
     const r = corre(['ver', 'kan-7'], { dev });
     assert.equal(r.codigo, 0, r.err);
-    for (const re of [/^KAN-7 · Tarefa · Média · «Auto Tests» \(no dev/, /\nOrigem: ticket de QA q1 \(último estado visto: aberto\):\n {2}O botão não responde/,
+    for (const re of [/^KAN-7 · Tarefa · Média · «Auto Tests» \(no dev/, /\nOrigem: ticket de QA q1 \(último estado visto: auto-tests\):\n {2}O botão não responde/,
       /\nDescrição:\n {2}Linha 1\n {2}Linha 2/, /\nSubtarefas \(1 de 1 feitas\):\n {2}KAN-8 · Subtarefa/, /\nComentários \(1\):\n {2}Claude · .+\n {4}Visto\./,
       /\nHistórico:\n {2}.+ · Claude · coluna: «A fazer» → «Auto Tests»/]) assert.match(r.out, re);
     const j = JSON.parse(corre(['ver', 'KAN-7', '--json'], { dev }).out);
@@ -644,73 +644,81 @@ describe('o qa.mjs move o cartão do ticket, depois do ticket e sem nunca o faze
   // Recebe: comCartao — se o ticket já tem o cartão. Devolve: a base com o ticket de QA (e o cartão, criado pela regra).
   function comTicket(comCartao) {
     const db = novaBase();
-    db.exec("INSERT INTO qa_tickets (id, user_id, body, severity, status, created_at, updated_at) VALUES ('" + ID + "', 'U1', 'O Guardar não responde', 'bloqueia', 'aberto', 1, 1)");
+    db.exec("INSERT INTO qa_tickets (id, user_id, body, severity, status, created_at, updated_at) VALUES ('" + ID + "', 'U1', 'O Guardar não responde', 'bloqueia', 'a-fazer', 1, 1)");
     if (comCartao) {
-      const ev = { tipo: 'qa', id: ID, estado: 'aberto', agora: 2, novo: { uuid: 'cartao-qa', ...cartaoDoTicketQa({ id: ID, body: 'O Guardar não responde', severity: 'bloqueia' }) } };
+      const ev = { tipo: 'qa', id: ID, estado: 'a-fazer', agora: 2, novo: { uuid: 'cartao-qa', ...cartaoDoTicketQa({ id: ID, body: 'O Guardar não responde', severity: 'bloqueia' }) } };
       correrEm(db)(passosDaSincronizacao(ev).map(sqlEmTexto).join(';\n'));
     }
     return db;
   }
+  const novoCartao = () => ({ uuid: 'cartao-novo', ...cartaoDoTicketQa({ id: ID, body: 'O Guardar não responde', severity: 'bloqueia' }) });
 
   test('comecar, resolver (com a nota e o commit como comentário) e reabrir levam o cartão, assinado pelo Claude', () => {
     const db = comTicket(true);
     const correr = correrEm(db);
-    correr(sqlComecar(ID, 10));
-    assert.equal(acertarCartao(correr, { id: ID, estado: 'em_resolucao', agora: 10 }), '');
-    assert.equal(db.prepare(sqlUm(ID)).get().status, 'em_resolucao');
+    correr(sqlNaColuna(ID, 'auto-tests', 10));
+    assert.equal(acertarCartao(correr, { id: ID, estado: 'auto-tests', agora: 10, novo: novoCartao() }), '');
+    assert.equal(db.prepare(sqlUm(ID)).get().status, 'auto-tests');
     assert.equal(db.prepare("SELECT coluna_id FROM kanban_cartoes WHERE id = 'cartao-qa'").get().coluna_id, 'auto-tests');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kanban_cartoes').get().n, 1, 'o cartão que já existe não se duplica');
     const nota = notaDaResolucao("Corrigido o encaixe; BEGIN TRANSACTION e 'plicas'", 'abc1234');
-    correr(sqlResolver(ID, nota, 20));
-    assert.equal(acertarCartao(correr, { id: ID, estado: 'resolvido', agora: 20, comentario: { uuid: 'com-1', texto: nota } }), '');
-    assert.doesNotMatch(sqlDoCartao({ id: ID, estado: 'resolvido', agora: 20, comentario: { uuid: 'c', texto: nota } }), /BEGIN TRANSACTION/);
+    correr(sqlNaColuna(ID, 'human-tests', 20, nota));
+    assert.equal(acertarCartao(correr, { id: ID, estado: 'human-tests', agora: 20, novo: novoCartao(), comentario: { uuid: 'com-1', texto: nota } }), '');
+    assert.doesNotMatch(sqlDoCartao({ id: ID, estado: 'human-tests', agora: 20, comentario: { uuid: 'c', texto: nota } }), /BEGIN TRANSACTION/);
+    assert.doesNotMatch(sqlNaColuna(ID, 'human-tests', 20, nota), /BEGIN TRANSACTION/);
     const k = db.prepare("SELECT coluna_id, origem_estado FROM kanban_cartoes WHERE id = 'cartao-qa'").get();
-    assert.deepEqual({ ...k }, { coluna_id: 'human-tests', origem_estado: 'resolvido' });
+    assert.deepEqual({ ...k }, { coluna_id: 'human-tests', origem_estado: 'human-tests' });
+    assert.equal(db.prepare(sqlUm(ID)).get().resolution, nota);
     assert.deepEqual({ ...db.prepare('SELECT autor_id, autor_nome, texto FROM kanban_comentarios').get() }, { autor_id: 'claude', autor_nome: 'Claude', texto: nota });
-    correr(sqlReabrir(ID, 30));
-    assert.equal(acertarCartao(correr, { id: ID, estado: 'aberto', agora: 30 }), '');
+    correr(sqlNaColuna(ID, 'a-fazer', 30));
+    assert.equal(acertarCartao(correr, { id: ID, estado: 'a-fazer', agora: 30, novo: novoCartao() }), '');
     assert.equal(db.prepare("SELECT coluna_id FROM kanban_cartoes WHERE id = 'cartao-qa'").get().coluna_id, 'a-fazer');
+    assert.equal(db.prepare(sqlUm(ID)).get().resolution, nota, 'a resolução fica');
     assert.deepEqual(db.prepare("SELECT antes, depois, autor_id FROM kanban_historico WHERE campo = 'coluna' ORDER BY id").all().map((h) => ({ ...h })), [
       { antes: 'a-fazer', depois: 'auto-tests', autor_id: 'claude' }, { antes: 'auto-tests', depois: 'human-tests', autor_id: 'claude' },
       { antes: 'human-tests', depois: 'a-fazer', autor_id: 'claude' },
     ]);
   });
 
-  test('um ticket sem cartão (dos antigos) não cria nem mexe em nada', () => {
+  test('um ticket antigo, sem cartão, ganha-o ao mudar de coluna (e o mover leva-o a Para depois)', () => {
     const db = comTicket(false);
     const correr = correrEm(db);
-    correr(sqlComecar(ID, 10));
-    assert.equal(acertarCartao(correr, { id: ID, estado: 'em_resolucao', agora: 10 }), '');
-    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kanban_cartoes').get().n, 0);
-    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kanban_historico').get().n, 0);
+    correr(sqlNaColuna(ID, 'auto-tests', 10));
+    assert.equal(acertarCartao(correr, { id: ID, estado: 'auto-tests', agora: 10, novo: novoCartao() }), '');
+    assert.deepEqual({ ...db.prepare("SELECT coluna_id, origem_tipo, origem_id FROM kanban_cartoes").get() }, { coluna_id: 'auto-tests', origem_tipo: 'qa', origem_id: ID });
+    correr(sqlNaColuna(ID, 'para-depois', 20));
+    assert.equal(acertarCartao(correr, { id: ID, estado: 'para-depois', agora: 20, novo: novoCartao() }), '');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kanban_cartoes').get().n, 1);
+    assert.equal(db.prepare('SELECT coluna_id FROM kanban_cartoes').get().coluna_id, 'para-depois');
+    assert.equal(db.prepare(sqlUm(ID)).get().status, 'para-depois');
   });
 
-  test('numa base sem as tabelas do kanban, o SQL do ticket corre na mesma e o cartão só deixa uma linha a dizer porquê', () => {
-    const db = semKanban(comTicket(false));
+  test('se o kanban falha, o ticket já mudou e o cartão só deixa uma linha a dizer porquê', () => {
+    const db = comTicket(false);
     const correr = correrEm(db);
-    for (const [sql, ev, status] of [
-      [sqlComecar(ID, 10), { id: ID, estado: 'em_resolucao', agora: 10 }, 'em_resolucao'],
-      [sqlResolver(ID, 'Feito.', 20), { id: ID, estado: 'resolvido', agora: 20, comentario: { uuid: 'c1', texto: 'Feito.' } }, 'resolvido'],
-      [sqlReabrir(ID, 30), { id: ID, estado: 'aberto', agora: 30 }, 'aberto'],
-    ]) {
-      correr(sql);
-      const linha = acertarCartao(correr, ev);
-      assert.equal(linha, 'O cartão do kanban não se acertou: esta base ainda não tem as tabelas do kanban (a migração 0028). O ticket ficou como devia.');
-      assert.equal(db.prepare(sqlUm(ID)).get().status, status, 'o ticket mudou na mesma');
-    }
-    assert.match(acertarCartao(() => { throw new Error('rede em baixo\nmais'); }, { id: ID, estado: 'aberto', agora: 1 }), /não se acertou: rede em baixo\. O ticket/);
+    correr(sqlNaColuna(ID, 'auto-tests', 10));
+    assert.equal(db.prepare(sqlUm(ID)).get().status, 'auto-tests', 'o ticket mudou antes de se tocar no cartão');
+    const semTabelas = () => { throw new Error('D1_ERROR: no such table: kanban_cartoes: SQLITE_ERROR'); };
+    assert.equal(acertarCartao(semTabelas, { id: ID, estado: 'auto-tests', agora: 10, novo: novoCartao() }),
+      'O cartão do kanban não se acertou: esta base ainda não tem as tabelas do kanban (a migração 0028). O ticket ficou como devia.');
+    const nenhumaTabela = semKanban(comTicket(false));
+    assert.match(acertarCartao(correrEm(nenhumaTabela), { id: ID, estado: 'auto-tests', agora: 10, novo: novoCartao() }), /não se acertou: esta base ainda não tem as tabelas do kanban/);
+    assert.match(acertarCartao(() => { throw new Error('rede em baixo\nmais'); }, { id: ID, estado: 'a-fazer', agora: 1 }), /não se acertou: rede em baixo\. O ticket/);
   });
 
-  test('nos três comandos, o cartão vem depois de o ticket ter mudado, numa chamada à parte, e a linha vai para a saída', () => {
+  test('nos quatro comandos, o ticket muda primeiro e sozinho, e o cartão vem depois, numa chamada à parte, com a linha na saída', () => {
     const src = readFileSync(new URL('../scripts/qa.mjs', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-    for (const [cmd, update, estado] of [['cmdComecar', 'sqlComecar(l.id, agora)', "'em_resolucao'"], ['cmdResolver', 'sqlResolver(o.id, resolucao, agora)', "'resolvido'"],
-      ['cmdReabrir', 'sqlReabrir(o.id, agora)', "'aberto'"]]) {
-      const corpo = src.slice(src.indexOf('function ' + cmd + '('), src.indexOf('\n}\n', src.indexOf('function ' + cmd + '(')));
-      const iUpdate = corpo.indexOf('executar(a, ' + update + ')');
-      const iConfere = corpo.indexOf('umTicket(a,', iUpdate);
-      const iCartao = corpo.indexOf('acertarCartao((sql) => executar(a, sql),');
-      assert.ok(iUpdate > 0 && iConfere > iUpdate && iCartao > iConfere, cmd + ': o UPDATE sozinho, a confirmação, e só depois o cartão');
-      assert.ok(corpo.slice(iCartao).includes('estado: ' + estado), cmd + ' leva o cartão para o estado ' + estado);
-      assert.match(corpo, /\(cartao \? '\\n' \+ cartao : ''\)/, cmd + ' junta a linha do cartão à saída');
+    const corpoDe = (nome) => src.slice(src.indexOf('function ' + nome + '('), src.indexOf('\n}\n', src.indexOf('function ' + nome + '(')));
+    const lc = corpoDe('levarParaColuna');
+    const iUpdate = lc.indexOf('executar(a, sqlNaColuna(l.id, coluna, agora, opcoes.resolucao))');
+    const iConfere = lc.indexOf('umTicket(a, l.id)');
+    const iCartao = lc.indexOf('acertarCartao((sql) => executar(a, sql),');
+    assert.ok(iUpdate > 0 && iConfere > iUpdate && iCartao > iConfere, 'o UPDATE sozinho, a confirmação, e só depois o cartão');
+    assert.match(lc, /novo: cartaoNovo\(l\)/, 'com um cartão novo para os tickets antigos');
+    for (const [cmd, coluna] of [['cmdComecar', 'QA_EM_CURSO'], ['cmdResolver', 'QA_RESOLVIDO'], ['cmdReabrir', 'QA_NOVO'], ['cmdMover', 'c.id']]) {
+      const corpo = corpoDe(cmd);
+      assert.match(corpo, new RegExp('levarParaColuna\\(a, \\w+, ' + coluna.replace('.', '\\.')), cmd + ' leva o ticket para ' + coluna);
+      assert.match(corpo, /\(aviso \? '\\n' \+ aviso : ''\)/, cmd + ' junta a linha do cartão à saída');
     }
     assert.match(src, /comentario: \{ uuid: randomUUID\(\), texto: resolucao/);
   });

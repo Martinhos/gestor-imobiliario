@@ -437,20 +437,22 @@ describe('mover um cartão', () => {
     assert.equal((await mover(c2, 'auto-tests')).cartao.coluna_id, 'auto-tests', 'sem índice vai para o topo');
   });
 
-  test('mudar de coluna deixa a linha e acerta o concluido_at; nunca mexe no ticket de origem', async () => {
+  test('mudar de coluna deixa a linha e acerta o concluido_at; o ticket de QA vai com o cartão', async () => {
     const env = ambiente();
     const { id } = await ir(env, DEV, 'POST', '/api/equipa/qa', { body: 'O botão não responde', severity: 'incomoda' });
-    const ticket = uma(env, 'SELECT status, updated_at FROM qa_tickets WHERE id = ?', id);
     const k = cartaoDaOrigem(env, 'qa', id);
     let r = await ir(env, SUPORTE, 'POST', K + '/cartoes/KAN-' + k.numero + '/mover', { coluna_id: 'concluido', indice: 0 });
     assert.equal(r.cartao.coluna_id, 'concluido');
     assert.equal(typeof r.cartao.concluido_at, 'number');
     assert.deepEqual(todas(env, "SELECT antes, depois, autor_id FROM kanban_historico WHERE campo = 'coluna'"),
       [{ antes: 'a-fazer', depois: 'concluido', autor_id: 's1' }]);
-    assert.deepEqual(uma(env, 'SELECT status, updated_at FROM qa_tickets WHERE id = ?', id), ticket, 'o ticket não mexeu');
-    assert.equal(cartaoDaOrigem(env, 'qa', id).origem_estado, 'aberto');
-    r = await ir(env, SUPORTE, 'POST', K + '/cartoes/KAN-' + k.numero + '/mover', { coluna_id: 'human-tests', indice: 0 });
+    const ticket = uma(env, 'SELECT status, resolved_at, updated_at FROM qa_tickets WHERE id = ?', id);
+    assert.equal(ticket.status, 'concluido', 'o ticket foi com o cartão');
+    assert.equal(ticket.resolved_at, r.cartao.updated_at);
+    assert.equal(cartaoDaOrigem(env, 'qa', id).origem_estado, 'concluido');
+    r = await ir(env, SUPORTE, 'POST', K + '/cartoes/KAN-' + k.numero + '/mover', { coluna_id: 'para-depois', indice: 0 });
     assert.equal(r.cartao.concluido_at, null);
+    assert.deepEqual(uma(env, 'SELECT status, resolved_at FROM qa_tickets WHERE id = ?', id), { status: 'para-depois', resolved_at: null });
     assert.deepEqual((await rastoKanban(env)).filter((x) => x.startsWith('kanban.mover')), ['kanban.mover KAN-' + k.numero, 'kanban.mover KAN-' + k.numero]);
   });
 
@@ -861,8 +863,8 @@ describe('os tickets de QA levam o seu cartão', () => {
     assert.equal(daEquipa.status, 201);
     const q = await quadro(env, DEV);
     assert.deepEqual(q.cartoes.map((c) => [c.titulo, c.tipo, c.coluna_id, c.prioridade, c.etiquetas, c.origem]), [
-      ['O filtro não guarda', 'erro', 'a-fazer', 4, ['qa'], { tipo: 'qa', id: daEquipa.id, estado: 'aberto', existe: true }],
-      ['O Guardar não responde', 'erro', 'a-fazer', 1, ['qa'], { tipo: 'qa', id: daApp.id, estado: 'aberto', existe: true }],
+      ['O filtro não guarda', 'erro', 'a-fazer', 4, ['qa'], { tipo: 'qa', id: daEquipa.id, estado: 'a-fazer', existe: true }],
+      ['O Guardar não responde', 'erro', 'a-fazer', 1, ['qa'], { tipo: 'qa', id: daApp.id, estado: 'a-fazer', existe: true }],
     ]);
     assert.equal(cartaoDaOrigem(env, 'qa', daApp.id).relator_id, 'automatico');
     const r = await ir(env, DEV, 'GET', K + '/cartoes/' + q.cartoes[1].chave);
@@ -874,12 +876,12 @@ describe('os tickets de QA levam o seu cartão', () => {
     const env = ambiente();
     const { id } = await ir(env, DEV, 'POST', '/api/equipa/qa', { body: 'Algo partido' });
     // o scripts/qa.mjs resolve por SQL e leva o cartão pela mesma regra
-    await env.DB.prepare("UPDATE qa_tickets SET status = 'resolvido', resolved_at = 1 WHERE id = ?").bind(id).run();
-    assert.equal(await sincronizarKanban(env, { tipo: 'qa', id, estado: 'resolvido', agora: Date.now() }), true);
+    await env.DB.prepare("UPDATE qa_tickets SET status = 'human-tests', resolved_at = 1 WHERE id = ?").bind(id).run();
+    assert.equal(await sincronizarKanban(env, { tipo: 'qa', id, estado: 'human-tests', agora: Date.now() }), true);
     assert.equal(cartaoDaOrigem(env, 'qa', id).coluna_id, 'human-tests');
     assert.equal((await ir(env, DEV, 'POST', '/api/equipa/qa/' + id + '/reabrir')).status, 200);
     const k = cartaoDaOrigem(env, 'qa', id);
-    assert.deepEqual([k.coluna_id, k.origem_estado], ['a-fazer', 'aberto']);
+    assert.deepEqual([k.coluna_id, k.origem_estado], ['a-fazer', 'a-fazer']);
     assert.equal((await ir(env, DEV, 'POST', '/api/equipa/qa/' + id + '/repor')).status, 200);
     assert.equal(uma(env, "SELECT COUNT(*) AS n FROM kanban_historico WHERE campo = 'origem'").n, 0, 'não estava removido');
     assert.equal((await ir(env, DEV, 'DELETE', '/api/equipa/qa/' + id)).status, 200);

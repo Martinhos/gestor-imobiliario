@@ -308,9 +308,9 @@ describe('o cartão aberto', () => {
     assert.match(prod, /Pedido da produção #ABCD1234EF99|Pedido da produção #ABCD1234/);
     assert.match(prod, /<a class="btn sm" href="https:\/\/rendorium\.com\/equipa#pedidos\/abcd1234-ef99" target="_blank" rel="noopener">Abrir no back office da produção<\/a>/);
     assert.doesNotMatch(prod, /kbAbrirPedido/);
-    const qa = ctx.kbOrigemHtml({ tipo: 'qa', id: 'q1', estado: 'em_resolucao', resumo: 'O botão não responde' });
+    const qa = ctx.kbOrigemHtml({ tipo: 'qa', id: 'q1', estado: 'auto-tests', resumo: 'O botão não responde' });
     assert.match(qa, /Ticket de QA/);
-    assert.match(qa, /Em resolução/, 'o estado por extenso');
+    assert.doesNotMatch(qa, /auto-tests|Auto Tests/, 'o estado de um ticket de QA é a coluna do cartão: não se repete');
     assert.doesNotMatch(qa, /kbAbrirPedido|rendorium\.com/);
   });
 });

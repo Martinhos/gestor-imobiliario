@@ -94,6 +94,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-09 · O back office do dev abre com a sessão de teste
 - 2026-11-09 · O back office com a navegação da app, e o kanban da equipa no lugar do Jira
 - 2026-11-09 · O kanban à maneira da app: folhas, seletores, a prioridade em palavras e a ordem por coluna
+- 2026-11-10 · Os tickets de QA nas colunas do kanban, nos dois sentidos
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3516,3 +3517,26 @@ arrastar. O retângulo azul do toque já tinha sido resolvido na app; o back off
 agora (worker/src/equipa-guiao.js:largarFocoDoToque). Para quatro agentes trabalharem ao mesmo tempo, o
 guião do kanban, que tinha 2080 linhas num só texto, ficou em quatro pedaços — o quadro, os filtros, o
 arrasto e a janela —, juntos num só script como antes.
+
+## 2026-11-10 · Os tickets de QA nas colunas do kanban, nos dois sentidos
+
+O Martinho pediu os tickets de QA «sincronizados com o Kanban. As mesmas colunas». Até aqui um ticket
+tinha três estados (novo, em resolução, resolvido) e o cartão só o seguia: arrumar o quadro à mão nunca
+mexia no ticket, e um ticket posto de lado no kanban continuava «em resolução» na pílula e no
+scripts/qa.mjs. Agora o ticket está sempre na coluna do seu cartão: o status de qa_tickets guarda o id da
+coluna (migrations/0029_qa_no_kanban.sql), a pílula mostra uma secção por coluna do quadro, pela ordem
+dele, e o «Para depois» passa a querer dizer o mesmo nos dois sítios — fora da fila de trabalho.
+
+Os dois sentidos têm donos diferentes. Do kanban para o ticket é um gatilho na base (kanban_qa_coluna):
+o cartão muda-se em três sítios — o arrasto e o Mover para do back office, o scripts/kanban.mjs, que
+escreve por SQL, e a própria sincronização —, e só um gatilho os apanha a todos sem nenhum se esquecer.
+Do ticket para o kanban fica a regra partilhada (worker/src/lib/kanban.js:passosDaSincronizacao), que
+agora leva o cartão para a coluna do ticket venha de onde vier, também de Concluído: quem age sobre o
+ticket (comecar, resolver, reabrir, mover) quer que o cartão o acompanhe. O ticket muda primeiro e
+sozinho (worker/src/lib/kanban.js:ticketQaNaColuna), como antes, para uma falha do kanban nunca o
+prender. Os pedidos de ajuda ficam com a regra antiga: o pedido vive na produção e o kanban no dev, e
+um gatilho não atravessa bases.
+
+Os tickets de antes do kanban não têm cartão; ficam na coluna que o estado antigo diz (resolvido conta
+como Concluído, porque foram testados antes de o kanban existir) e ganham cartão quando mudarem de
+coluna. O resolved_at acompanha a coluna: posto em Human Tests e nas de fim, tirado nas outras.

@@ -1,6 +1,8 @@
 // A regra única do kanban (worker/src/lib/kanban.js): o cartão que um ticket
 // de QA ou um pedido aceite cria, e como se move quando a origem muda de
-// estado. Corre o SQL verdadeiro contra o esquema verdadeiro (a 0028), pelos
+// estado (um ticket de QA vai sempre para a coluna que tomou, e o cartão
+// movido à mão leva o ticket; um pedido só se move quando o estado muda).
+// Corre o SQL verdadeiro contra o esquema verdadeiro (a 0028 e a 0029), pelos
 // dois caminhos: ligado com bind (o worker) e escrito em texto (os scripts).
 
 import { test, describe } from 'node:test';
@@ -39,8 +41,9 @@ describe('as peças da regra', () => {
   });
 
   test('a coluna de cada estado, e as fixas', () => {
-    assert.deepEqual(['aberto', 'em_resolucao', 'resolvido', 'removido'].map((e) => colunaDaOrigem('qa', e)),
-      ['a-fazer', 'auto-tests', 'human-tests', null]);
+    // num ticket de QA o estado é a própria coluna; as marcas e o que não tem forma de id não movem
+    assert.deepEqual(['a-fazer', 'para-depois', '0b9f3c1e-1111-4222-8333-444444444444', 'removido', 'reposto', '', 'a b', null].map((e) => colunaDaOrigem('qa', e)),
+      ['a-fazer', 'para-depois', '0b9f3c1e-1111-4222-8333-444444444444', null, null, null, null, null]);
     assert.deepEqual(['aceite', 'resolucao', 'proposta', 'concluido'].map((e) => colunaDaOrigem('pedido', e)),
       ['a-fazer', 'auto-tests', 'human-tests', 'human-tests']);
     assert.equal(colunaDaOrigem('erro', 'aberto'), null);
@@ -87,7 +90,7 @@ for (const via of ['bind', 'texto']) {
     test('um ticket de QA cria o cartão no topo de A fazer, com o número a seguir ao do Jira, e repetir não cria outro', async () => {
       const db = baseDeTeste();
       db._db.exec("INSERT INTO kanban_cartoes (id, numero, titulo, coluna_id, posicao, relator_id, created_at, updated_at) VALUES ('j76', 76, 'Do Jira', 'a-fazer', 10, 'claude', 1, 1)");
-      const ev = { tipo: 'qa', id: QA.id, estado: 'aberto', agora: 1000, novo: { uuid: uuid(), ...cartaoDoTicketQa(QA) } };
+      const ev = { tipo: 'qa', id: QA.id, estado: 'a-fazer', agora: 1000, novo: { uuid: uuid(), ...cartaoDoTicketQa(QA) } };
       await correr(db, ev, via);
       const k = cartaoDe(db, 'qa', QA.id);
       assert.equal(k.numero, 79, 'o contador começa no KAN-78 do Jira: o número a seguir');
@@ -95,7 +98,7 @@ for (const via of ['bind', 'texto']) {
       assert.ok(k.posicao < 10, 'no topo da coluna');
       assert.equal(k.tipo, 'erro');
       assert.equal(k.prioridade, 1);
-      assert.equal(k.origem_estado, 'aberto');
+      assert.equal(k.origem_estado, 'a-fazer');
       assert.equal(k.relator_id, 'automatico');
       assert.deepEqual(db._db.prepare('SELECT etiqueta FROM kanban_etiquetas WHERE cartao_id = ?').all(k.id).map((r) => r.etiqueta), ['qa']);
       assert.deepEqual(db._db.prepare('SELECT campo, depois FROM kanban_historico WHERE cartao_id = ?').all(k.id).map((r) => ({ ...r })), [{ campo: 'criado', depois: 'a-fazer' }]);
@@ -106,59 +109,73 @@ for (const via of ['bind', 'texto']) {
       assert.equal(db._db.prepare('SELECT COUNT(*) AS n FROM kanban_historico').get().n, 1);
     });
 
-    test('em resolução, resolvido e reaberto movem o cartão; o resolvido deixa a nota como comentário', async () => {
+    test('o ticket leva o cartão para a coluna dele: Auto Tests, Human Tests com a nota como comentário, de volta a A fazer', async () => {
       const db = baseDeTeste();
-      await correr(db, { tipo: 'qa', id: QA.id, estado: 'aberto', agora: 1, novo: { uuid: uuid(), ...cartaoDoTicketQa(QA) } }, via);
-      await correr(db, { tipo: 'qa', id: QA.id, estado: 'em_resolucao', agora: 2, autor: { id: 'claude', nome: 'Claude' } }, via);
+      await correr(db, { tipo: 'qa', id: QA.id, estado: 'a-fazer', agora: 1, novo: { uuid: uuid(), ...cartaoDoTicketQa(QA) } }, via);
+      await correr(db, { tipo: 'qa', id: QA.id, estado: 'auto-tests', agora: 2, autor: { id: 'claude', nome: 'Claude' } }, via);
       assert.equal(cartaoDe(db, 'qa', QA.id).coluna_id, 'auto-tests');
-      await correr(db, { tipo: 'qa', id: QA.id, estado: 'resolvido', agora: 3, comentario: { uuid: uuid(), texto: 'Corrigido em abc1234.' } }, via);
+      const nota = { uuid: uuid(), texto: 'Corrigido em abc1234.' };
+      await correr(db, { tipo: 'qa', id: QA.id, estado: 'human-tests', agora: 3, comentario: nota }, via);
       const k = cartaoDe(db, 'qa', QA.id);
       assert.equal(k.coluna_id, 'human-tests');
-      assert.equal(k.origem_estado, 'resolvido');
+      assert.equal(k.origem_estado, 'human-tests');
       assert.deepEqual(db._db.prepare('SELECT texto FROM kanban_comentarios WHERE cartao_id = ?').all(k.id).map((r) => r.texto), ['Corrigido em abc1234.']);
-      // repetir o resolvido não move nem comenta outra vez
-      await correr(db, { tipo: 'qa', id: QA.id, estado: 'resolvido', agora: 4, comentario: { uuid: uuid(), texto: 'Outra vez.' } }, via);
+      // repetir o mesmo acontecimento (o mesmo uuid do comentário) não move nem comenta outra vez
+      await correr(db, { tipo: 'qa', id: QA.id, estado: 'human-tests', agora: 4, comentario: nota }, via);
       assert.equal(db._db.prepare('SELECT COUNT(*) AS n FROM kanban_comentarios').get().n, 1);
+      // uma nota nova num ticket que já lá está fica como comentário (resolvido outra vez)
+      await correr(db, { tipo: 'qa', id: QA.id, estado: 'human-tests', agora: 5, comentario: { uuid: uuid(), texto: 'Afinado em def5678.' } }, via);
+      assert.equal(db._db.prepare('SELECT COUNT(*) AS n FROM kanban_comentarios').get().n, 2);
       const hist = db._db.prepare("SELECT antes, depois, autor_id FROM kanban_historico WHERE campo = 'coluna' ORDER BY id").all().map((r) => ({ ...r }));
       assert.deepEqual(hist, [
         { antes: 'a-fazer', depois: 'auto-tests', autor_id: 'claude' },
         { antes: 'auto-tests', depois: 'human-tests', autor_id: 'automatico' },
       ]);
-      await correr(db, { tipo: 'qa', id: QA.id, estado: 'aberto', agora: 5 }, via);
+      await correr(db, { tipo: 'qa', id: QA.id, estado: 'a-fazer', agora: 6 }, via);
       assert.equal(cartaoDe(db, 'qa', QA.id).coluna_id, 'a-fazer', 'reaberto volta a A fazer');
     });
 
-    test('um cartão movido à mão para Concluído não sai de lá sozinho, a não ser que o ticket reabra', async () => {
+    test('o ticket tira o cartão de qualquer coluna, também de Concluído e de Para depois', async () => {
       const db = baseDeTeste();
-      await correr(db, { tipo: 'qa', id: QA.id, estado: 'aberto', agora: 1, novo: { uuid: uuid(), ...cartaoDoTicketQa(QA) } }, via);
-      db._db.exec("UPDATE kanban_cartoes SET coluna_id = 'concluido'");
-      await correr(db, { tipo: 'qa', id: QA.id, estado: 'resolvido', agora: 2 }, via);
+      await correr(db, { tipo: 'qa', id: QA.id, estado: 'a-fazer', agora: 1, novo: { uuid: uuid(), ...cartaoDoTicketQa(QA) } }, via);
+      db._db.exec("UPDATE kanban_cartoes SET coluna_id = 'concluido', concluido_at = 1");
+      await correr(db, { tipo: 'qa', id: QA.id, estado: 'auto-tests', agora: 2 }, via);
       let k = cartaoDe(db, 'qa', QA.id);
-      assert.equal(k.coluna_id, 'concluido', 'fica em Concluído');
-      assert.equal(k.origem_estado, 'resolvido', 'mas o estado visto acerta-se');
-      await correr(db, { tipo: 'qa', id: QA.id, estado: 'aberto', agora: 3 }, via);
-      k = cartaoDe(db, 'qa', QA.id);
-      assert.equal(k.coluna_id, 'a-fazer', 'reaberto sai de Concluído');
+      assert.equal(k.coluna_id, 'auto-tests', 'sai de Concluído');
       assert.equal(k.concluido_at, null);
+      db._db.exec("UPDATE kanban_cartoes SET coluna_id = 'para-depois'");
+      await correr(db, { tipo: 'qa', id: QA.id, estado: 'concluido', agora: 3 }, via);
+      k = cartaoDe(db, 'qa', QA.id);
+      assert.equal(k.coluna_id, 'concluido');
+      assert.equal(k.concluido_at, 3);
     });
 
-    test('mover à mão para Para depois não é desfeito enquanto a origem não muda', async () => {
+    test('o cartão movido à mão leva o ticket (o gatilho), e o ticket que já lá está não mexe no cartão', async () => {
       const db = baseDeTeste();
-      await correr(db, { tipo: 'qa', id: QA.id, estado: 'aberto', agora: 1, novo: { uuid: uuid(), ...cartaoDoTicketQa(QA) } }, via);
-      db._db.exec("UPDATE kanban_cartoes SET coluna_id = 'para-depois'");
-      await correr(db, { tipo: 'qa', id: QA.id, estado: 'aberto', agora: 2, novo: { uuid: uuid(), ...cartaoDoTicketQa(QA) } }, via);
-      assert.equal(cartaoDe(db, 'qa', QA.id).coluna_id, 'para-depois');
+      db._db.exec("INSERT INTO qa_tickets (id, user_id, body, status, created_at, updated_at) VALUES ('" + QA.id + "', 'u1', 'x', 'a-fazer', 1, 1)");
+      await correr(db, { tipo: 'qa', id: QA.id, estado: 'a-fazer', agora: 1, novo: { uuid: uuid(), ...cartaoDoTicketQa(QA) } }, via);
+      db._db.exec("UPDATE kanban_cartoes SET coluna_id = 'para-depois', updated_at = 5");
+      const q = db._db.prepare('SELECT status, resolved_at, updated_at FROM qa_tickets').get();
+      assert.deepEqual({ ...q }, { status: 'para-depois', resolved_at: null, updated_at: 5 });
+      assert.equal(cartaoDe(db, 'qa', QA.id).origem_estado, 'para-depois');
+      db._db.exec("UPDATE kanban_cartoes SET coluna_id = 'human-tests', updated_at = 6");
+      assert.equal(db._db.prepare('SELECT resolved_at FROM qa_tickets').get().resolved_at, 6);
+      // um cartão de pedido não toca em nenhum ticket de QA
+      db._db.exec("INSERT INTO kanban_cartoes (id, numero, titulo, coluna_id, posicao, relator_id, origem_tipo, origem_id, created_at, updated_at) VALUES ('p1', 200, 'P', 'a-fazer', 1, 'x', 'pedido', '" + QA.id + "', 7, 7)");
+      db._db.exec("UPDATE kanban_cartoes SET coluna_id = 'concluido' WHERE id = 'p1'");
+      assert.equal(db._db.prepare('SELECT status FROM qa_tickets').get().status, 'human-tests');
     });
 
     test('removido e reposto só deixam uma linha no histórico', async () => {
       const db = baseDeTeste();
-      await correr(db, { tipo: 'qa', id: QA.id, estado: 'aberto', agora: 1, novo: { uuid: uuid(), ...cartaoDoTicketQa(QA) } }, via);
+      await correr(db, { tipo: 'qa', id: QA.id, estado: 'a-fazer', agora: 1, novo: { uuid: uuid(), ...cartaoDoTicketQa(QA) } }, via);
       await correr(db, { tipo: 'qa', id: QA.id, estado: 'removido', agora: 2 }, via);
       await correr(db, { tipo: 'qa', id: QA.id, estado: 'reposto', agora: 3 }, via);
       const k = cartaoDe(db, 'qa', QA.id);
       assert.equal(k.coluna_id, 'a-fazer');
-      assert.equal(k.origem_estado, 'aberto');
-      assert.deepEqual(db._db.prepare("SELECT depois FROM kanban_historico WHERE campo = 'origem' ORDER BY id").all().map((r) => r.depois), ['removido', 'reposto']);
+      assert.equal(k.origem_estado, 'a-fazer');
+      assert.deepEqual(db._db.prepare("SELECT antes, depois FROM kanban_historico WHERE campo = 'origem' ORDER BY id").all().map((r) => ({ ...r })),
+        [{ antes: 'a-fazer', depois: 'removido' }, { antes: 'a-fazer', depois: 'reposto' }]);
     });
 
     test('um pedido aceite cria uma História; concluído vai para Human Tests sem puxar para trás um Concluído', async () => {
@@ -189,10 +206,15 @@ for (const via of ['bind', 'texto']) {
 
     test('um estado sem cartão novo não cria nada, e um tipo desconhecido não dá passos', async () => {
       const db = baseDeTeste();
-      await correr(db, { tipo: 'qa', id: QA.id, estado: 'em_resolucao', agora: 1 }, via);
+      await correr(db, { tipo: 'qa', id: QA.id, estado: 'auto-tests', agora: 1 }, via);
       assert.equal(db._db.prepare('SELECT COUNT(*) AS n FROM kanban_cartoes').get().n, 0);
+      // uma coluna que não existe não cria nem move nada (nem sobe o contador)
+      await correr(db, { tipo: 'qa', id: QA.id, estado: 'inventada', agora: 2, novo: { uuid: uuid(), ...cartaoDoTicketQa(QA) } }, via);
+      assert.equal(db._db.prepare('SELECT COUNT(*) AS n FROM kanban_cartoes').get().n, 0);
+      assert.equal(db._db.prepare('SELECT ultimo FROM kanban_contador').get().ultimo, 78);
       assert.deepEqual(passosDaSincronizacao({ tipo: 'erro', id: 'x', estado: 'aberto' }), []);
-      assert.deepEqual(passosDaSincronizacao({ tipo: 'qa', id: 'x', estado: 'inventado' }), []);
+      assert.deepEqual(passosDaSincronizacao({ tipo: 'qa', id: 'x', estado: "a'; DROP" }), []);
+      assert.deepEqual(passosDaSincronizacao({ tipo: 'pedido', id: 'x', estado: 'a-fazer' }), [], 'um pedido só conhece os estados dele');
     });
   });
 }

@@ -6294,10 +6294,13 @@ ordem de carregamento.
 
 Fora de produção há uma pílula «QA» que quem testa arrasta para onde estorvar
 menos e que abre «Novo ticket» e «Ver tickets». Os tickets ficam na D1 do
-ambiente e quem programa lê-os e fecha-os com scripts/qa.mjs. Um ticket tem
-três estados: novo (o status 'aberto', como nasce e como volta ao reabrir),
-em resolução ('em_resolucao', que só o scripts/qa.mjs comecar marca, logo que
-quem programa pega nele) e resolvido. Em produção nada
+ambiente e quem programa lê-os e fecha-os com scripts/qa.mjs. Cada ticket tem o
+seu cartão no kanban da equipa e está sempre na coluna dele: o status é o id
+da coluna (A fazer, como nasce e como volta ao reabrir; Auto Tests, quando
+quem programa pega nele; Human Tests, resolvido e à espera de quem testa;
+Concluído; Para depois; e as que o master criar). Mover o cartão no kanban
+move o ticket (o gatilho kanban_qa_coluna da migração 0029), e mover o
+ticket move o cartão (worker/src/lib/kanban.js:passosDaSincronizacao). Em produção nada
 disto existe: nem a pílula (cloud/qa.js:qaDeveExistir pede um CW.ambiente que
 não seja 'producao', e sessão) nem as rotas (worker/src/rotas/qa.js:rotasQa
 responde 404 sem env.ENV_NAME, antes de ler o corpo).
@@ -6379,15 +6382,17 @@ escolhida ou colada com Ctrl+V e encolhida no cliente
 (cloud/qa.js:qaEncolherImagem). Enviar é o POST e depois o PUT da captura; se
 só a captura falha, a janela fica aberta e o botão passa a «Enviar a imagem»,
 sem repetir o ticket (cloud/qa.js:qaEnviar). A lista (cloud/qa.js:qaVerTickets)
-tem os «Novos», em grupos por gravidade (bloqueia, incomoda, detalhe, sem
-gravidade) e em cada grupo do mais recente para o mais antigo
-(cloud/qa.js:qaSeccoes, qaHtmlGrupos; a API e o scripts/qa.mjs dão a mesma
-ordem), depois os «Em resolução», pela mesma ordem mas numa lista só, e no fim
-os «Resolvidos»; as duas últimas só aparecem quando há. Tocar abre o ticket
-para ler, com o selo do estado (cloud/qa.js:qaSeloEstado: «Novo», «Em
-resolução» em --loan, «Resolvido» em --in), a captura, o contexto e a
-resolução (ou a «Resolução anterior» de um reaberto). Os novos, os em
-resolução, os resolvidos e cada grupo de gravidade dos novos abrem e
+tem uma secção por coluna do kanban, pela ordem do quadro (as colunas vêm
+com a lista; cloud/qa.js:qaColunasDe): «A fazer» sempre, em grupos por
+gravidade (bloqueia, incomoda, detalhe, sem gravidade) e em cada grupo do
+mais recente para o mais antigo (cloud/qa.js:qaSeccoes, qaHtmlGrupos; a API e
+o scripts/qa.mjs dão a mesma ordem), e as outras só quando têm tickets — as
+por resolver pela mesma ordem numa lista só, as resolvidas (Human Tests e as
+de fim) do resolvido há menos tempo para trás. Tocar abre o ticket para ler,
+com o selo da coluna (cloud/qa.js:qaSeloEstado: Auto Tests em --loan, Human
+Tests e as de fim em --in, as outras neutras), a chave do cartão (KAN-N), a
+captura, o contexto e a resolução (ou a «Resolução anterior» de um reaberto).
+As secções e cada grupo de gravidade de A fazer abrem e
 fecham como as secções da gaveta (cloud/qa.js:qaHtmlDobra, cloud/qa.js:qaDobrar):
 o título é um botão da largura toda, de 44px, com o nome, quantos tem e a
 seta, aria-expanded e aria-controls; tocar troca a classe .fechada no nó vivo,
@@ -6395,13 +6400,15 @@ sem repintar, e a altura anda por grid-template-rows de 1fr a 0fr
 (estilos.css:.qa-dobra-corpo), com o visibility a tirar as linhas do Tab só
 no fim do fecho. O estado é do aparelho (cloud/qa.js:QA_LS_DOBRAS), só com as
 secções que se tocaram; sem nada guardado, ou estragado, os abertos e os
-grupos abrem e os resolvidos nascem recolhidos (cloud/qa.js:QA_DOBRAS_FECHADAS,
+grupos abrem e as colunas de fim e o Para depois nascem recolhidos (cloud/qa.js:QA_DOBRAS_FECHADAS,
 cloud/qa.js:qaDobraAberta). Com o armazenamento vedado, o toque vale nesta
 sessão (cloud/qa.js:qaDobrasAqui). A lista que o servidor repinta
 (cloud/qa.js:qaPintarLista) nasce já no estado guardado, sem transição.
 «Remover» não pergunta: o aviso traz o Anular (cloud/qa.js:qaRemover).
-«Reabrir» devolve um resolvido aos novos (cloud/qa.js:qaReabrir); um novo ou
-em resolução tem «Fechar», porque passar a em resolução é só do script.
+«Mover» passa o ticket (e o cartão) a outra coluna, logo no ecrã e
+reposto se o servidor recusar (cloud/qa.js:qaMover, cloud/qa.js:qaPassarDeColuna).
+«Reabrir» devolve um resolvido (Human Tests ou uma coluna de fim) a A fazer
+(cloud/qa.js:qaReabrir); os outros têm «Fechar».
 
 Quem escreveu um ticket numa conta de teste é a conta do Discord que pediu a
 ligação do /test, e não a conta de teste: a ligação leva o nome do Discord

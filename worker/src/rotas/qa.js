@@ -6,15 +6,17 @@
 // pedidos de ajuda: não são suporte, não vão ao Discord. Todas as contas do
 // dev veem e mexem em todos os tickets (a decisão do Martinho, 2026-10-28) —
 // o user_id é só quem o escreveu. A captura de ecrã vive no R2 em qa/<id>.
-// Cada ticket tem o seu cartão no kanban da equipa (rotas/kanban.js), que
-// nasce e se move com ele.
+// Cada ticket tem o seu cartão no kanban da equipa (rotas/kanban.js) e está
+// sempre na coluna dele: status é o id da coluna (a-fazer, auto-tests,
+// human-tests, concluido, para-depois…). Mover o ticket aqui move o cartão;
+// mover o cartão no kanban move o ticket (o gatilho da migração 0029).
 import { json, err, body, badId, now, CSP_ANEXO } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
 import { lerAte, tipoDaImagem } from '../lib/imagens.js';
 
 // as duas vivem em lib/imagens.js (o kanban também as usa); ficam exportadas daqui para quem já as lia cá
 export { lerAte, tipoDaImagem };
-import { cartaoDoTicketQa } from '../lib/kanban.js';
+import { cartaoDoTicketQa, ticketQaNaColuna, eIdDeColuna, QA_NOVO } from '../lib/kanban.js';
 
 // As gravidades que um ticket pode ter; qualquer outra coisa fica sem nenhuma.
 const GRAVIDADES = ['bloqueia', 'incomoda', 'detalhe'];
@@ -48,7 +50,8 @@ function naoExiste() {
    env.ENV_NAME respondem 404 antes de lerem o corpo, como se não existissem.
    POST /api/qa cria; GET /api/qa lista; DELETE /api/qa/:id remove (brando,
    para o Anular); POST …/repor desfaz a remoção; POST …/reabrir volta a pôr
-   um resolvido nos novos; PUT e GET …/imagem gravam e servem a captura.
+   o ticket em A fazer; POST …/mover {coluna} passa-o a outra coluna do
+   kanban; PUT e GET …/imagem gravam e servem a captura.
    O back office do dev chega aqui pelo rotasQaDaEquipa, com a sessão de
    equipa no lugar da conta.
    Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
@@ -72,7 +75,11 @@ export async function rotasQa(c) {
 
   if (seg.length === 3 && method === 'DELETE') return removerTicket(env, id);
   if (seg[3] === 'repor' && method === 'POST') return reporTicket(env, id);
-  if (seg[3] === 'reabrir' && method === 'POST') return reabrirTicket(env, id);
+  if (seg[3] === 'reabrir' && method === 'POST') return moverTicket(env, id, QA_NOVO);
+  if (seg[3] === 'mover' && method === 'POST') {
+    const b = await body(request);
+    return moverTicket(env, id, b && b.coluna);
+  }
   if (seg[3] === 'imagem' && method === 'PUT') return gravarImagem(env, request, id);
   if (seg[3] === 'imagem' && method === 'GET') return servirImagem(env, id);
   return err(404, 'Rota desconhecida.');
@@ -143,18 +150,18 @@ async function criarTicket(env, request, autor) {
   const id = crypto.randomUUID(), t = now();
   await env.DB.prepare(
     `INSERT INTO qa_tickets (id, user_id, discord_id, discord_nome, body, severity, context, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'aberto', ?, ?)`
-  ).bind(id, autor.id, autor.discordId || null, autor.discordNome || null, texto, gravidade, contexto, t, t).run();
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(id, autor.id, autor.discordId || null, autor.discordNome || null, texto, gravidade, contexto, QA_NOVO, t, t).run();
   // o cartão dele no kanban da equipa, em A fazer
   await kanbanDoTicket(env, {
-    tipo: 'qa', id, estado: 'aberto', agora: t,
+    tipo: 'qa', id, estado: QA_NOVO, agora: t,
     novo: { uuid: crypto.randomUUID(), ...cartaoDoTicketQa({ id, body: texto, severity: gravidade }) },
   });
   return json({ ok: true, id }, 201);
 }
 
 /* Leva um acontecimento de um ticket de QA ao kanban da equipa: o cartão
-   nasce com o ticket e move-se quando ele muda de estado (a regra em
+   nasce com o ticket e vai para a coluna que o ticket tomou (a regra em
    lib/kanban.js, corrida por rotas/kanban.js:sincronizarKanban). Só fora de
    produção, e nunca muda a resposta do ticket: uma falha fica no
    console.error e o ticket segue como se o kanban não existisse.
@@ -240,36 +247,48 @@ function bytes(s) {
   return new TextEncoder().encode(s).length;
 }
 
-/* GET /api/qa: os tickets de toda a gente, sem os removidos — os novos
-   (status 'aberto') primeiro, depois os em resolução ('em_resolucao', que só
-   o scripts/qa.mjs comecar marca), cada parte agrupada por gravidade
-   (bloqueia, incomoda, detalhe, sem gravidade) e em cada grupo os mais
-   recentes à frente, e no fim os resolvidos (os resolvidos há menos tempo à
-   frente), até 200. Cada um com o contexto
-   já como objeto, imagem como sim/não e o autor (id, nome e email). Leva de
-   passagem os removidos há mais de 24 h, e põe o nome do Discord nos que
-   ficaram só com o id (nomesEmFalta).
+/* GET /api/qa: as colunas do kanban, pela ordem do quadro, e os tickets de
+   toda a gente sem os removidos, até 200 — os das colunas que não são de fim
+   primeiro, pela ordem das colunas; em cada coluna, os por resolver
+   agrupados por gravidade (bloqueia, incomoda, detalhe, sem gravidade) com
+   os mais recentes à frente, e os resolvidos (Human Tests, Concluído) com os
+   resolvidos há menos tempo à frente; no fim os das colunas de fim. Cada um
+   com o contexto já como objeto, imagem como sim/não, o autor (id, nome e
+   email) e a chave do cartão (KAN-N, null sem cartão). Leva de passagem os
+   removidos há mais de 24 h, e põe o nome do Discord nos que ficaram só com
+   o id (nomesEmFalta).
    Recebe: env — o ambiente do worker (D1 em env.DB, R2 em env.FILES).
-   Devolve: promessa da Response {tickets: [...]}. */
+   Devolve: promessa da Response {colunas: [{id, nome, fim}], tickets: [...]}. */
 async function listarTickets(env) {
   await limparRemovidos(env);
   const rows = (
     await env.DB.prepare(
       `SELECT q.id, q.body, q.severity, q.context, q.image_key, q.status, q.resolution,
-              q.resolved_at, q.created_at, q.updated_at, q.user_id, q.discord_id, q.discord_nome, u.name, u.email
+              q.resolved_at, q.created_at, q.updated_at, q.user_id, q.discord_id, q.discord_nome, u.name, u.email,
+              (SELECT k.numero FROM kanban_cartoes k WHERE k.origem_tipo = 'qa' AND k.origem_id = q.id AND k.removed_at IS NULL
+                ORDER BY k.numero LIMIT 1) AS cartao
          FROM qa_tickets q LEFT JOIN users u ON u.id = q.user_id
+         LEFT JOIN kanban_colunas c ON c.id = q.status
         WHERE q.removed_at IS NULL
-        ORDER BY CASE q.status WHEN 'aberto' THEN 0 WHEN 'em_resolucao' THEN 1 ELSE 2 END,
-                 CASE WHEN q.status = 'resolvido' THEN 0
+        ORDER BY COALESCE(c.fim, 0), COALESCE(c.ordem, 999), q.status,
+                 CASE WHEN q.resolved_at IS NOT NULL THEN 0
                       WHEN q.severity = 'bloqueia' THEN 0 WHEN q.severity = 'incomoda' THEN 1
                       WHEN q.severity = 'detalhe' THEN 2 ELSE 3 END,
-                 CASE WHEN q.status = 'resolvido' THEN COALESCE(q.resolved_at, q.updated_at) ELSE q.created_at END DESC,
+                 CASE WHEN q.resolved_at IS NOT NULL THEN q.resolved_at ELSE q.created_at END DESC,
                  q.created_at DESC
         LIMIT ?`
     ).bind(TETO_LISTA).all()
   ).results;
   await nomesEmFalta(env, rows);
-  return json({ tickets: rows.map(ticketParaFora) });
+  return json({ colunas: await colunasDoKanban(env), tickets: rows.map(ticketParaFora) });
+}
+
+/* As colunas do kanban pela ordem do quadro, como a pílula as mostra.
+   Recebe: env — o ambiente do worker (D1 em env.DB).
+   Devolve: promessa da lista [{id, nome, fim (bool)}]. */
+async function colunasDoKanban(env) {
+  const r = (await env.DB.prepare('SELECT id, nome, fim FROM kanban_colunas ORDER BY ordem, nome').all()).results || [];
+  return r.map((c) => ({ id: c.id, nome: c.nome, fim: !!c.fim }));
 }
 
 // quantos devs sem nome se perguntam ao bot num pedido só
@@ -301,7 +320,8 @@ async function nomesEmFalta(env, rows) {
    app e o scripts/qa.mjs leem.
    Recebe: r — a linha do SELECT de listarTickets.
    Devolve: o ticket {id, body, severity, context (objeto ou null), imagem
-   (bool), status, resolution, resolved_at, created_at, updated_at, autor}.
+   (bool), status (o id da coluna), cartao ('KAN-N' ou null), resolution,
+   resolved_at, created_at, updated_at, autor}.
    O autor leva discord: {id, nome} quando o ticket veio de uma conta de
    teste (a conta do Discord que pediu o /test), e null nas outras. */
 function ticketParaFora(r) {
@@ -314,6 +334,7 @@ function ticketParaFora(r) {
     context: contexto,
     imagem: !!r.image_key,
     status: r.status,
+    cartao: r.cartao != null ? 'KAN-' + r.cartao : null,
     resolution: r.resolution || null,
     resolved_at: r.resolved_at || null,
     created_at: r.created_at,
@@ -388,21 +409,27 @@ async function reporTicket(env, id) {
   return json({ ok: true });
 }
 
-/* POST /api/qa/:id/reabrir: um resolvido volta aos novos (status 'aberto';
-   passa a em resolução quando alguém pegar outra vez nele). A resolution
-   fica — o próximo a pegar no ticket vê o que já se tentou (a app mostra-a
-   como «Resolução anterior»); só o resolved_at sai.
-   Recebe: env — o ambiente do worker (D1 em env.DB); id — o id do ticket.
-   Devolve: promessa da Response {ok}, ou 404 se não existe ou foi removido. */
-async function reabrirTicket(env, id) {
+/* POST /api/qa/:id/mover {coluna} e POST /api/qa/:id/reabrir (a A fazer):
+   o ticket passa a outra coluna do kanban, e o cartão vai com ele (criado
+   nessa coluna, se o ticket ainda não tinha). A resolution fica — quem pegar
+   outra vez no ticket vê o que já se tentou (a app mostra-a como «Resolução
+   anterior»); o resolved_at acompanha a coluna (lib/kanban.js:ticketQaNaColuna).
+   Recebe: env — o ambiente do worker (D1 em env.DB); id — o id do ticket;
+   coluna — o id da coluna (do corpo, por validar).
+   Devolve: promessa da Response {ok}, 400 com uma coluna que o kanban não
+   tem, ou 404 se o ticket não existe ou foi removido. */
+async function moverTicket(env, id, coluna) {
+  const col = eIdDeColuna(coluna) ? await env.DB.prepare('SELECT id FROM kanban_colunas WHERE id = ?').bind(coluna).first() : null;
+  if (!col) return err(400, 'Essa coluna não existe no kanban.');
   const t = now();
-  const r = await env.DB.prepare(
-    `UPDATE qa_tickets SET status = 'aberto', resolved_at = NULL, updated_at = ?
-      WHERE id = ? AND removed_at IS NULL`
-  ).bind(t, id).run();
+  const p = ticketQaNaColuna(id, col.id, t);
+  const r = await env.DB.prepare(p.sql).bind(...p.params).run();
   if (!r.meta.changes) return naoExiste();
-  // o cartão volta a A fazer (também de Concluído)
-  await kanbanDoTicket(env, { tipo: 'qa', id, estado: 'aberto', agora: t });
+  const q = await env.DB.prepare('SELECT body, severity FROM qa_tickets WHERE id = ?').bind(id).first();
+  await kanbanDoTicket(env, {
+    tipo: 'qa', id, estado: col.id, agora: t,
+    novo: { uuid: crypto.randomUUID(), ...cartaoDoTicketQa({ id, body: q.body, severity: q.severity }) },
+  });
   return json({ ok: true });
 }
 

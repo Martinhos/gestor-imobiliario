@@ -9,30 +9,42 @@
 //   node scripts/qa.mjs comecar <id> [<id>…] [--local]
 //   node scripts/qa.mjs resolver <id> --nota "o que se fez" [--commit <sha>] [--local]
 //   node scripts/qa.mjs reabrir <id> [--local]
+//   node scripts/qa.mjs mover <id> <coluna> [--local]
 //
-// Um ticket tem três estados: novo (status 'aberto', como nasce e como volta
-// ao reabrir), em resolução ('em_resolucao', marcado com comecar logo que se
-// pega nele) e resolvido. A app mostra-os nesta ordem, e o listar também.
+// Um ticket está sempre na coluna do seu cartão no kanban da equipa (pedido do
+// Martinho, 2026-11-10: «as mesmas colunas»): qa_tickets.status guarda o id da
+// coluna (a-fazer, auto-tests, human-tests, concluido, para-depois, ou uma
+// coluna nova do master, com id uuid). Mover o cartão no kanban move o ticket
+// (um gatilho na base, migrations/0029_qa_no_kanban.sql); mudar o ticket aqui
+// move o cartão. Nasce em A fazer; os tickets de antes da 0029 traziam
+// 'aberto', 'em_resolucao' e 'resolvido', que a migração passou às colunas.
 //
-// listar mostra os por resolver — os novos e os em resolução (com --todos,
-// também os resolvidos) —, cada um com
-// tudo o que é preciso para o resolver sem abrir a app: a descrição inteira,
-// a gravidade, quem e quando, o contexto do ecrã e se tem imagem. --json dá o
-// mesmo na forma do GET /api/qa, para máquinas.
+// listar mostra a fila de trabalho: os tickets em A fazer e em Auto Tests, em
+// secções por coluna (os de Para depois, de Human Tests e de Concluído NÃO
+// aparecem: é esse o sentido de «para depois»). Com --todos, todas as colunas,
+// pela ordem do quadro (kanban_colunas), cada uma com o nome. Cada ticket sai
+// com tudo o que é preciso para o resolver sem abrir a app: a chave do cartão
+// (KAN-N), a descrição inteira, a gravidade, quem e quando, o contexto do ecrã
+// e se tem imagem. Um ticket com um status que não se conhece não se perde:
+// aparece (com --todos) com o próprio status. --json dá o mesmo na forma do
+// GET /api/qa ({colunas, tickets} com status e cartao), para máquinas.
 // imagem descarrega a captura para os.tmpdir()/rendorium-qa (ou --para) e
 // diz o caminho, com a extensão do tipo verdadeiro (png, jpg ou webp).
-// comecar passa os tickets dados a em resolução (recusa um resolvido: esse
-// reabre-se primeiro). resolver marca resolvido, com a nota (e o commit) como
-// resolução; reabrir devolve-o aos novos e guarda a resolução, como a rota da app.
+// comecar leva os tickets dados a Auto Tests (recusa os que estão em Human
+// Tests ou numa coluna de fim: esses reabrem-se primeiro). resolver leva-o a
+// Human Tests, com a nota (e o commit) como resolução e como comentário do
+// cartão; só depois de o CI estar verde. reabrir devolve-o a A fazer e guarda a
+// resolução, como a rota da app. mover leva-o a qualquer coluna que exista em
+// kanban_colunas, dada pelo id ou pelo nome (sem caixa nem acentos: «para
+// depois», «Para depois», «para-depois»); o que fica para depois passa-se com
+// `mover <id> para-depois`.
 // Remover não existe aqui de propósito: é do Martinho, na app.
-// O cartão do ticket no kanban da equipa acompanha-o (worker/src/lib/kanban.js,
-// a regra das rotas): comecar leva-o a Auto Tests, resolver a Human Tests com a
-// nota (e o commit) como comentário, reabrir de volta a A fazer. O ticket é
-// que manda: o UPDATE dele corre primeiro e sozinho, como sempre, e o cartão
-// só depois de o ticket ter mudado, numa chamada à parte; se essa falhar (a
-// base ainda sem as tabelas do kanban), o comando diz numa linha que o cartão
-// não se acertou e porquê, e acaba bem na mesma. Um ticket sem cartão (dos
-// antigos) não mexe em nada.
+// O ticket é que manda: o UPDATE dele (worker/src/lib/kanban.js:
+// ticketQaNaColuna) corre primeiro e sozinho, e o cartão só depois, numa
+// chamada à parte (passosDaSincronizacao, com um cartão novo para os tickets
+// antigos que ainda não têm); se essa falhar (a base ainda sem as tabelas do
+// kanban), o comando diz numa linha que o cartão não se acertou e porquê, e
+// acaba bem na mesma.
 //
 // Sem --local, a base é a do dev na Cloudflare (gestor-imobiliario-dev, e o
 // bucket gestor-imobiliario-dev). O wrangler.toml do repositório tem
@@ -55,7 +67,7 @@ import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { passosDaSincronizacao, sqlEmTexto } from '../worker/src/lib/kanban.js';
+import { passosDaSincronizacao, sqlEmTexto, ticketQaNaColuna, cartaoDoTicketQa, QA_NOVO, QA_EM_CURSO, QA_RESOLVIDO } from '../worker/src/lib/kanban.js';
 
 // O worker/src não tem um package.json com "type": "module", e o Node avisa no
 // stderr, a cada corrida, que leu a lib/kanban.js como ES module: cala-se esse
@@ -69,7 +81,7 @@ const WRANGLER = path.join(RAIZ, 'node_modules', 'wrangler', 'bin', 'wrangler.js
 const PERSIST = path.join(RAIZ, '.wrangler', 'state-revisao');
 const PASTA_TEMP = path.join(os.tmpdir(), 'rendorium-qa');
 
-export const COMANDOS = ['listar', 'imagem', 'comecar', 'resolver', 'reabrir'];
+export const COMANDOS = ['listar', 'imagem', 'comecar', 'resolver', 'reabrir', 'mover'];
 // os dois sítios onde o script pode ir, e só estes: o dev na Cloudflare e a base isolada
 export const ALVOS = {
   remoto: { local: false, base: 'gestor-imobiliario-dev', bucket: 'gestor-imobiliario-dev' },
@@ -87,6 +99,7 @@ export const USO = [
   '  node scripts/qa.mjs comecar <id> [<id>…] [--local]',
   '  node scripts/qa.mjs resolver <id> --nota "o que se fez" [--commit <sha>] [--local]',
   '  node scripts/qa.mjs reabrir <id> [--local]',
+  '  node scripts/qa.mjs mover <id> <coluna> [--local]',
   '',
   'Sem --local é a base do dev na Cloudflare; com --local, a base isolada do 8788 (.wrangler/state-revisao).',
 ].join('\n');
@@ -111,14 +124,16 @@ const OPCOES = {
   comecar: { sinais: ['--local'], valores: [] },
   resolver: { sinais: ['--local'], valores: ['--nota', '--commit'] },
   reabrir: { sinais: ['--local'], valores: [] },
+  mover: { sinais: ['--local'], valores: [] },
 };
 
 /* Lê a linha de comandos: o comando, o id (nos que o pedem) e as opções,
    aceitando «--nota texto» e «--nota=texto». Recusa o que não conhece em vez
    de o ignorar: uma opção mal escrita (--loca) ia ao dev em vez da base local.
    Recebe: argv — os argumentos depois do script (array de texto).
-   Devolve: { comando, id, ids, local, todos, json, para, nota, commit } —
-   ids só no comecar, que aceita vários (id é o primeiro); lança
+   Devolve: { comando, id, ids, coluna, local, todos, json, para, nota, commit } —
+   ids só no comecar, que aceita vários (id é o primeiro); coluna só no mover
+   (o id ou o nome, por conferir com as colunas da base); lança
    ErroQa (código 2) com a razão e o uso. */
 export function lerArgumentos(argv) {
   const lista = Array.isArray(argv) ? argv.slice() : [];
@@ -127,7 +142,7 @@ export function lerArgumentos(argv) {
   if (!comando) falha('Falta o comando.');
   if (!COMANDOS.includes(comando)) falha('Não conheço o comando «' + comando + '».');
   const { sinais, valores } = OPCOES[comando];
-  const r = { comando, id: null, ids: null, local: false, todos: false, json: false, para: null, nota: null, commit: null };
+  const r = { comando, id: null, ids: null, coluna: null, local: false, todos: false, json: false, para: null, nota: null, commit: null };
   const soltos = [];
   for (let i = 0; i < lista.length; i++) {
     const a = String(lista[i]);
@@ -154,6 +169,11 @@ export function lerArgumentos(argv) {
   }
   if (comando === 'comecar') {
     r.ids = [r.id].concat(soltos.splice(0).map(confereId)).filter((id, i, todos) => todos.indexOf(id) === i);
+  }
+  if (comando === 'mover') {
+    // o nome de uma coluna pode vir em várias palavras soltas («para depois»)
+    r.coluna = soltos.splice(0).join(' ').trim();
+    if (!r.coluna) falha('Falta a coluna para onde mover (o id ou o nome, como «para-depois»).');
   }
   if (soltos.length) falha('Não sei o que fazer com «' + soltos.join(' ') + '».');
   if (comando === 'resolver') {
@@ -243,31 +263,61 @@ export function cita(v) {
   return "'" + String(v).replace(/\u0000/g, '').replace(/'/g, "''") + "'";
 }
 
+// As colunas de trabalho, as que o listar mostra por omissão: a fila. Os status
+// antigos (de antes da migração 0029) contam como as colunas que a migração
+// lhes dá.
+const FILA = [QA_NOVO, QA_EM_CURSO];
+const ANTIGOS = { aberto: QA_NOVO, em_resolucao: QA_EM_CURSO, resolvido: 'concluido' };
+// os nomes das colunas fixas, para quando a base não as diz
+const NOMES_FIXOS = { 'a-fazer': 'A fazer', 'auto-tests': 'Auto Tests', 'human-tests': 'Human Tests', concluido: 'Concluído', 'para-depois': 'Para depois' };
+// as colunas de uma base sem kanban_colunas (a ordem do quadro de origem)
+const COLUNAS_DE_OMISSAO = [
+  { id: 'a-fazer', nome: 'A fazer', ordem: 1, fim: false }, { id: 'auto-tests', nome: 'Auto Tests', ordem: 2, fim: false },
+  { id: 'human-tests', nome: 'Human Tests', ordem: 3, fim: false }, { id: 'concluido', nome: 'Concluído', ordem: 4, fim: true },
+  { id: 'para-depois', nome: 'Para depois', ordem: 5, fim: false },
+];
+
 /* O SELECT do listar: os tickets não removidos, com o nome e o email de quem
-   os escreveu, na ordem do GET /api/qa (os novos e depois os em resolução,
-   cada parte agrupada por gravidade — bloqueia, incomoda, detalhe, sem
-   gravidade — e em cada grupo do mais recente para o mais antigo, e no fim
-   os resolvidos pela data da resolução), teto de 200.
-   Recebe: todos — true para juntar os resolvidos.
+   os escreveu e a chave do cartão (o número do KAN-N, ou NULL sem cartão),
+   na ordem do GET /api/qa dentro de cada coluna (por gravidade — bloqueia,
+   incomoda, detalhe, sem gravidade — e do mais recente para o mais antigo; os
+   que têm resolved_at, pela data dele), teto de 200. A ordem das colunas é de
+   quem escreve o texto (textoDaLista, com as colunas do quadro).
+   Recebe: todos — true para todas as colunas; false para só a fila (A fazer e
+   Auto Tests, e os status antigos que a migração 0029 ainda não passou).
    Devolve: o SQL (texto, uma linha). */
 export function sqlListar(todos) {
+  const fila = FILA.concat(Object.keys(ANTIGOS).filter((k) => FILA.includes(ANTIGOS[k]))).map((c) => cita(c)).join(', ');
   return 'SELECT q.id, q.user_id, q.discord_id, q.discord_nome, q.body, q.severity, q.context, q.image_key, q.status, q.resolution,'
-    + ' q.resolved_at, q.created_at, q.updated_at, u.name AS autor_nome, u.email AS autor_email'
+    + ' q.resolved_at, q.created_at, q.updated_at, u.name AS autor_nome, u.email AS autor_email,'
+    + " (SELECT k.numero FROM kanban_cartoes k WHERE k.origem_tipo = 'qa' AND k.origem_id = q.id AND k.removed_at IS NULL ORDER BY k.numero LIMIT 1) AS cartao"
     + ' FROM qa_tickets q LEFT JOIN users u ON u.id = q.user_id'
-    + ' WHERE q.removed_at IS NULL' + (todos ? '' : " AND q.status <> 'resolvido'")
-    + " ORDER BY CASE q.status WHEN 'aberto' THEN 0 WHEN 'em_resolucao' THEN 1 ELSE 2 END,"
-    + " CASE WHEN q.status = 'resolvido' THEN 0 WHEN q.severity = 'bloqueia' THEN 0 WHEN q.severity = 'incomoda' THEN 1"
+    + ' WHERE q.removed_at IS NULL' + (todos ? '' : ' AND q.status IN (' + fila + ')')
+    + " ORDER BY CASE WHEN q.resolved_at IS NOT NULL THEN 0 WHEN q.severity = 'bloqueia' THEN 0 WHEN q.severity = 'incomoda' THEN 1"
     + " WHEN q.severity = 'detalhe' THEN 2 ELSE 3 END,"
-    + " CASE q.status WHEN 'resolvido' THEN COALESCE(q.resolved_at, q.updated_at) ELSE q.created_at END DESC,"
+    + ' CASE WHEN q.resolved_at IS NOT NULL THEN q.resolved_at ELSE q.created_at END DESC,'
     + ' q.created_at DESC LIMIT 200';
 }
 
-/* O SELECT de um ticket só, para saber se existe e em que estado está antes
+/* O SELECT das colunas do kanban, pela ordem do quadro.
+   Devolve: o SQL (texto). */
+export function sqlColunas() {
+  return 'SELECT id, nome, ordem, fim FROM kanban_colunas ORDER BY ordem, nome';
+}
+
+/* Uma linha de kanban_colunas na forma do GET /api/qa.
+   Recebe: l — {id, nome, ordem, fim}.
+   Devolve: {id, nome, ordem, fim (booleano)}. */
+export function colunaDaLinha(l) {
+  return { id: String(l.id), nome: String(l.nome), ordem: Number(l.ordem) || 0, fim: !!l.fim };
+}
+
+/* O SELECT de um ticket só, para saber se existe e em que coluna está antes
    de lhe mexer (inclui os removidos, para o dizer em vez de «não existe»).
    Recebe: id — o id já conferido.
    Devolve: o SQL (texto). */
 export function sqlUm(id) {
-  return 'SELECT id, status, resolution, resolved_at, image_key, removed_at FROM qa_tickets WHERE id = ' + cita(id);
+  return 'SELECT id, body, severity, status, resolution, resolved_at, image_key, removed_at FROM qa_tickets WHERE id = ' + cita(id);
 }
 
 /* A resolução que fica no ticket: a nota e, havendo, o commit numa linha
@@ -279,33 +329,48 @@ export function notaDaResolucao(nota, commit) {
   return commit ? n + '\n\nCommit: ' + commit : n;
 }
 
-/* O UPDATE do resolver: status resolvido, a resolução, resolved_at e
-   updated_at. Só em tickets não removidos.
-   Recebe: id — o id conferido; resolucao — o texto (notaDaResolucao);
-   agora — o instante em ms (Date.now()).
-   Devolve: o SQL (texto). */
-export function sqlResolver(id, resolucao, agora) {
-  return "UPDATE qa_tickets SET status = 'resolvido', resolution = " + cita(resolucao)
-    + ', resolved_at = ' + cita(agora) + ', updated_at = ' + cita(agora)
-    + ' WHERE id = ' + cita(id) + ' AND removed_at IS NULL';
+/* O UPDATE que leva um ticket a uma coluna (worker/src/lib/kanban.js:
+   ticketQaNaColuna, a regra das rotas): o status passa a ser a coluna, o
+   resolved_at acompanha e o updated_at. Com resolucao, o resolver também a
+   grava; sem ela (comecar, reabrir, mover) a resolução fica como estava.
+   Só em tickets não removidos.
+   Recebe: id — o id conferido; coluna — o id de uma coluna do kanban;
+   agora — o instante em ms; resolucao (opcional) — o texto da resolução.
+   Devolve: o SQL (texto), com os valores escritos lá dentro. */
+export function sqlNaColuna(id, coluna, agora, resolucao) {
+  const extra = resolucao == null ? undefined : { sql: ', resolution = ?', params: [String(resolucao).replace(/\u0000/g, '')] };
+  return protegeTransacao(sqlEmTexto(ticketQaNaColuna(id, coluna, agora, extra)));
 }
 
-/* O UPDATE do comecar: um ticket novo passa a em resolução. Só os novos
-   (status 'aberto') e não removidos: um resolvido não volta por aqui.
-   Recebe: id — o id conferido; agora — o instante em ms.
-   Devolve: o SQL (texto). */
-export function sqlComecar(id, agora) {
-  return "UPDATE qa_tickets SET status = 'em_resolucao', updated_at = " + cita(agora)
-    + ' WHERE id = ' + cita(id) + " AND status = 'aberto' AND removed_at IS NULL";
+/* O wrangler tira «BEGIN TRANSACTION» de dentro do texto, mesmo entre plicas:
+   parte-se em dois pedaços colados com || (vale numa nota como no cartão).
+   Recebe: sql — o texto SQL.
+   Devolve: o texto sem essa sequência. */
+function protegeTransacao(sql) {
+  return sql.replace(/BEGIN TRANSACTION/g, "BEGIN TRANS' || 'ACTION");
 }
 
-/* O UPDATE do reabrir: volta a novo (status 'aberto') e larga o resolved_at; a resolução
-   fica (o próximo a pegar no ticket vê o que já se tentou — o contrato da rota).
-   Recebe: id — o id conferido; agora — o instante em ms.
-   Devolve: o SQL (texto). */
-export function sqlReabrir(id, agora) {
-  return "UPDATE qa_tickets SET status = 'aberto', resolved_at = NULL, updated_at = " + cita(agora)
-    + ' WHERE id = ' + cita(id) + ' AND removed_at IS NULL';
+/* O texto sem acentos, em minúsculas e com hífenes no lugar do que não é
+   letra nem algarismo: «Para depois», «para depois» e «para-depois» ficam
+   iguais.
+   Recebe: t — o texto.
+   Devolve: a forma normalizada. */
+function normaliza(t) {
+  return String(t == null ? '' : t).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/* A coluna do kanban que um texto diz, pelo id ou pelo nome (sem caixa nem
+   acentos). Um erro claro, com as colunas que existem, quando não há.
+   Recebe: texto — o que se escreveu; colunas — as colunas da base (colunaDaLinha).
+   Devolve: a coluna ({id, nome, ordem, fim}); lança ErroQa (código 2) se não existir. */
+export function resolverColuna(texto, colunas) {
+  const chave = normaliza(texto);
+  const c = chave && colunas.find((x) => normaliza(x.id) === chave) || chave && colunas.find((x) => normaliza(x.nome) === chave);
+  if (!c) {
+    throw new ErroQa('Não há nenhuma coluna «' + texto + '» no kanban. Existem: '
+      + colunas.map((x) => x.nome + ' (' + x.id + ')').join(', ') + '.', 2);
+  }
+  return c;
 }
 
 /* ------------------------- o cartão do kanban --------------------------- */
@@ -314,14 +379,14 @@ export function sqlReabrir(id, agora) {
    (worker/src/lib/kanban.js:passosDaSincronizacao, assinado pelo Claude), em
    texto. Só pega no cartão que tem este ticket por origem: um ticket sem
    cartão não muda nada.
-   Recebe: ev — {id: o do ticket, estado: 'em_resolucao' | 'resolvido' |
-   'aberto', agora: ms, comentario?: {uuid, texto}}.
+   Recebe: ev — {id: o do ticket, estado: o id da coluna para onde o ticket
+   foi, agora: ms, novo?: o cartão a criar se o ticket ainda não tem
+   (cartaoDoTicketQa com um uuid), comentario?: {uuid, texto}}.
    Devolve: o texto, as instruções separadas por «;» e uma quebra de linha (um
    «BEGIN TRANSACTION» dentro da nota parte-se em dois pedaços colados com ||:
    o wrangler tira-o do texto, mesmo entre plicas). */
 export function sqlDoCartao(ev) {
-  return passosDaSincronizacao(Object.assign({ tipo: 'qa', autor: CLAUDE }, ev)).map(sqlEmTexto).join(';\n')
-    .replace(/BEGIN TRANSACTION/g, "BEGIN TRANS' || 'ACTION");
+  return protegeTransacao(passosDaSincronizacao(Object.assign({ tipo: 'qa', autor: CLAUDE }, ev)).map(sqlEmTexto).join(';\n'));
 }
 
 /* Acerta o cartão do ticket, numa chamada à parte, depois de o ticket já ter
@@ -353,13 +418,6 @@ const DATA = new Intl.DateTimeFormat('pt-PT', {
 export function quando(ms) {
   const n = Number(ms);
   return ms == null || !Number.isFinite(n) ? '' : DATA.format(new Date(n));
-}
-
-/* «1 aberto», «3 abertos»: o plural certo.
-   Recebe: n — a contagem; um — a forma singular; varios — a forma plural.
-   Devolve: o texto com o número. */
-function conta(n, um, varios) {
-  return n + ' ' + (n === 1 ? um : varios);
 }
 
 /* Uma linha de uma linha só: um valor qualquer como texto curto (objetos em
@@ -435,8 +493,9 @@ export function contextoLegivel(ctx) {
 /* Uma linha da base na forma do GET /api/qa: context como objeto (ou o texto,
    se não se ler), imagem como booleano e o autor junto.
    Recebe: l — a linha do SELECT de sqlListar.
-   Devolve: o ticket ({ id, body, severity, context, imagem, status,
-   resolution, resolved_at, created_at, updated_at, autor }). */
+   Devolve: o ticket ({ id, body, severity, context, imagem, status (o id da
+   coluna), cartao ('KAN-N' ou null), resolution, resolved_at, created_at,
+   updated_at, autor }). */
 export function ticketDaLinha(l) {
   let context = null;
   if (l.context != null && l.context !== '') {
@@ -444,7 +503,7 @@ export function ticketDaLinha(l) {
   }
   return {
     id: l.id, body: l.body, severity: GRAVIDADES.includes(l.severity) ? l.severity : null,
-    context, imagem: !!l.image_key, status: l.status, resolution: l.resolution == null ? null : l.resolution,
+    context, imagem: !!l.image_key, status: l.status, cartao: l.cartao != null ? 'KAN-' + l.cartao : null, resolution: l.resolution == null ? null : l.resolution,
     resolved_at: l.resolved_at == null ? null : l.resolved_at, created_at: l.created_at, updated_at: l.updated_at,
     autor: {
       id: l.user_id == null ? null : l.user_id, nome: l.autor_nome || '', email: l.autor_email || '',
@@ -460,22 +519,36 @@ function indenta(t, margem) {
   return String(t).replace(/\r\n/g, '\n').split('\n').map((l) => margem + l).join('\n');
 }
 
-/* O estado de um ticket como se diz: novo, em resolução ou resolvido.
-   Recebe: status — o da base ('aberto', 'em_resolucao', 'resolvido').
-   Devolve: o texto (um estado que não conhece sai tal e qual). */
-export function estadoLegivel(status) {
-  return { aberto: 'novo', em_resolucao: 'em resolução', resolvido: 'resolvido' }[status] || String(status);
+/* O id da coluna a que um status da base pertence: os status antigos (de
+   antes da migração 0029) contam como a coluna que a migração lhes dá.
+   Recebe: status — o status do ticket.
+   Devolve: o id da coluna (um status que não conhece fica como está). */
+export function colunaDoStatus(status) {
+  return ANTIGOS[status] || String(status);
+}
+
+/* A coluna de um ticket como se diz: o nome no kanban (ou o da coluna fixa).
+   Recebe: status — o da base (o id da coluna); colunas (opcional) — as
+   colunas do kanban ({id, nome}).
+   Devolve: o nome. Um status antigo ('aberto', 'em_resolucao', 'resolvido')
+   diz-se como antes (novo, em resolução, resolvido); um que não conhece sai
+   tal e qual. */
+export function estadoLegivel(status, colunas) {
+  const c = (colunas || []).find((x) => x.id === status);
+  if (c) return c.nome;
+  return { aberto: 'novo', em_resolucao: 'em resolução', resolvido: 'resolvido' }[status] || NOMES_FIXOS[status] || String(status);
 }
 
 /* Um ticket por extenso, como o listar o escreve: tudo o que é preciso para
    o resolver sem abrir a app.
    Recebe: t — o ticket (ticketDaLinha); local — true se veio da base isolada
-   (para o comando da imagem sair certo).
+   (para o comando da imagem sair certo); colunas (opcional) — as colunas do
+   kanban, para o nome da coluna.
    Devolve: o texto (várias linhas). */
-export function textoDoTicket(t, local) {
+export function textoDoTicket(t, local, colunas) {
   const linhas = [];
   const grav = t.severity ? t.severity.toUpperCase() : 'sem gravidade';
-  linhas.push('== ' + t.id + ' · ' + grav + ' · ' + estadoLegivel(t.status));
+  linhas.push('== ' + t.id + ' · ' + grav + ' · ' + estadoLegivel(t.status, colunas) + (t.cartao ? ' · ' + t.cartao : ''));
   // numa conta de teste, o autor é a conta do Discord que pediu o /test; no
   // back office (user_id 'equipa:…', rotas/qa.js:autorDaEquipa), a pessoa da equipa
   const d = t.autor && t.autor.discord;
@@ -492,7 +565,7 @@ export function textoDoTicket(t, local) {
   const ctx = contextoLegivel(t.context);
   linhas.push('Contexto:' + (ctx.length ? '' : ' nenhum'));
   ctx.forEach((l) => linhas.push('  ' + l));
-  if (t.status === 'resolvido') {
+  if (t.status === 'resolvido' || t.resolved_at != null) {
     linhas.push('Resolvido a ' + (quando(t.resolved_at) || '?') + ':');
     linhas.push(indenta(t.resolution || '(sem nota)', '  '));
   } else if (t.resolution) {
@@ -502,45 +575,52 @@ export function textoDoTicket(t, local) {
   return linhas.join('\n');
 }
 
-/* O texto inteiro do listar: o cabeçalho com a base e as contagens, os
-   novos e os em resolução, cada parte em grupos por gravidade, e (com
-   --todos) os resolvidos, por extenso.
+/* O texto inteiro do listar: o cabeçalho com a base e as contagens, e uma
+   secção por coluna do kanban, pela ordem do quadro (a fila — A fazer e Auto
+   Tests — ou, com --todos, todas as que têm tickets, e os com um status que
+   não se conhece no fim). Nas colunas de trabalho, os tickets vão em grupos
+   por gravidade; nas de Human Tests e de fim, na ordem da base.
    Recebe: tickets — os tickets (ticketDaLinha), na ordem da base;
-   opcoes — { local, todos }.
+   opcoes — { local, todos, colunas } (colunas: as do kanban, {id, nome, fim};
+   sem elas, as cinco colunas de origem).
    Devolve: o texto. */
 export function textoDaLista(tickets, opcoes = {}) {
   const onde = opcoes.local ? 'na base isolada (--local)' : 'no dev (gestor-imobiliario-dev)';
-  const resolvidos = tickets.filter((t) => t.status === 'resolvido');
-  const emResolucao = tickets.filter((t) => t.status === 'em_resolucao');
-  // um estado que não se conhece fica com os novos: por resolver, e à vista
-  const novos = tickets.filter((t) => t.status !== 'resolvido' && t.status !== 'em_resolucao');
-  const partes = [];
+  const colunas = opcoes.colunas && opcoes.colunas.length ? opcoes.colunas : COLUNAS_DE_OMISSAO;
   if (!tickets.length) {
-    return 'Não há tickets de QA ' + (opcoes.todos ? '' : 'por resolver ') + onde + '.';
+    return 'Não há tickets de QA ' + (opcoes.todos ? '' : 'por resolver (em A fazer nem em Auto Tests) ') + onde + '.';
   }
-  partes.push('Tickets de QA ' + onde + ': ' + conta(novos.length, 'novo', 'novos')
-    + ', ' + emResolucao.length + ' em resolução'
-    + (opcoes.todos ? ', ' + conta(resolvidos.length, 'resolvido', 'resolvidos') : '') + '.'
-    + (tickets.length >= 200 ? ' (Só os primeiros 200.)' : ''));
-  [['Novos', novos], ['Em resolução', emResolucao]].forEach(([titulo, ts]) => {
-    if (!ts.length) return;
-    partes.push('\n#### ' + titulo + ' (' + ts.length + ')');
+  const idsConhecidos = colunas.map((c) => c.id);
+  const secoes = colunas.map((c) => ({ id: c.id, nome: c.nome, fim: !!c.fim, ts: tickets.filter((t) => colunaDoStatus(t.status) === c.id) }));
+  // um status que não é coluna nenhuma não se perde: uma secção com o próprio status
+  const estranhos = tickets.filter((t) => !idsConhecidos.includes(colunaDoStatus(t.status)));
+  [...new Set(estranhos.map((t) => colunaDoStatus(t.status)))].forEach((id) => {
+    secoes.push({ id, nome: 'Estado «' + id + '»', fim: false, ts: estranhos.filter((t) => colunaDoStatus(t.status) === id) });
+  });
+  const mostrar = secoes.filter((s) => s.ts.length || (!opcoes.todos && FILA.includes(s.id)));
+  const partes = [];
+  partes.push('Tickets de QA ' + onde + ': ' + mostrar.map((s) => s.nome + ' ' + s.ts.length).join(', ') + '.'
+    + (tickets.length >= 200 ? ' (Só os primeiros 200.)' : '')
+    + (opcoes.todos ? '' : ' Só a fila de trabalho; `--todos` mostra as outras colunas (Para depois, Human Tests, Concluído…).'));
+  mostrar.forEach((s) => {
+    if (!s.ts.length) return;
+    partes.push('\n#### ' + s.nome + ' (' + s.ts.length + ')');
+    if (s.fim || s.id === QA_RESOLVIDO) {
+      s.ts.forEach((t) => partes.push('\n' + textoDoTicket(t, opcoes.local, colunas)));
+      return;
+    }
     // em grupos por gravidade, pela ordem em que a base os deu (sqlListar)
     let grupo;
-    ts.forEach((t) => {
+    s.ts.forEach((t) => {
       const g = t.severity || null;
       if (g !== grupo) {
         grupo = g;
-        const n = ts.filter((x) => (x.severity || null) === g).length;
+        const n = s.ts.filter((x) => (x.severity || null) === g).length;
         partes.push('\n##### ' + (g ? g.charAt(0).toUpperCase() + g.slice(1) : 'Sem gravidade') + ' (' + n + ')');
       }
-      partes.push('\n' + textoDoTicket(t, opcoes.local));
+      partes.push('\n' + textoDoTicket(t, opcoes.local, colunas));
     });
   });
-  if (opcoes.todos && resolvidos.length) {
-    partes.push('\n#### Resolvidos (' + resolvidos.length + ')');
-    resolvidos.forEach((t) => partes.push('\n' + textoDoTicket(t, opcoes.local)));
-  }
   return partes.join('\n');
 }
 
@@ -706,7 +786,49 @@ function cmdListar(o) {
     return o.json ? JSON.stringify({ tickets: [], porMigrar: true, aviso: e.message }, null, 2) : 'Tabela por migrar. ' + e.message;
   }
   const tickets = linhas.map(ticketDaLinha);
-  return o.json ? JSON.stringify({ tickets }, null, 2) : textoDaLista(tickets, o);
+  const colunas = colunasDoAlvo(a);
+  return o.json ? JSON.stringify({ colunas: colunas.map(({ id, nome, fim }) => ({ id, nome, fim })), tickets }, null, 2)
+    : textoDaLista(tickets, Object.assign({}, o, { colunas }));
+}
+
+/* As colunas do kanban da base, pela ordem do quadro. Uma base sem as tabelas
+   do kanban (a migração 0028) não é um erro: ficam as cinco de origem.
+   Recebe: a — o alvo.
+   Devolve: a lista de {id, nome, ordem, fim}. */
+function colunasDoAlvo(a) {
+  try {
+    const r = executar(a, sqlColunas()).results.map(colunaDaLinha);
+    return r.length ? r : COLUNAS_DE_OMISSAO.slice();
+  } catch (e) {
+    if (e && e.tipo === 'sem-sessao') throw e;
+    return COLUNAS_DE_OMISSAO.slice();
+  }
+}
+
+/* O cartão que um ticket cria se ainda não tem (os de antes do kanban): um
+   Erro com o texto do ticket, como o das rotas.
+   Recebe: l — a linha do ticket (id, body, severity).
+   Devolve: {uuid, tipo, titulo, descricao, prioridade, etiquetas}. */
+function cartaoNovo(l) {
+  return Object.assign({ uuid: randomUUID() }, cartaoDoTicketQa({ id: l.id, body: l.body, severity: l.severity }));
+}
+
+/* Leva um ticket a uma coluna: o UPDATE do ticket corre primeiro e sozinho, e
+   confirma-se que ficou; o cartão só depois, numa chamada à parte (com um
+   cartão novo para o ticket que ainda não tem). Uma falha do cartão fica numa
+   linha e o ticket manda.
+   Recebe: a — o alvo; l — a linha do ticket antes (umTicket); coluna — o id da
+   coluna; opcoes (opcional) — { resolucao: texto a gravar no ticket,
+   comentario: {uuid, texto} para o cartão }.
+   Devolve: { depois: a linha do ticket, aviso: a linha do cartão ('' se correu bem) }. */
+function levarParaColuna(a, l, coluna, opcoes = {}) {
+  const agora = Date.now();
+  executar(a, sqlNaColuna(l.id, coluna, agora, opcoes.resolucao));
+  const depois = umTicket(a, l.id);
+  if (depois.status !== coluna) throw new ErroQa('O ticket ' + l.id + ' não ficou em ' + coluna + ' (está ' + estadoLegivel(depois.status) + ').');
+  const ev = { id: l.id, estado: coluna, agora, novo: cartaoNovo(l) };
+  if (opcoes.comentario) ev.comentario = opcoes.comentario;
+  return { depois, aviso: acertarCartao((sql) => executar(a, sql), ev) };
 }
 
 /* imagem: descarrega a captura do R2 e dá-lhe a extensão do tipo verdadeiro.
@@ -739,60 +861,83 @@ function cmdImagem(o) {
     + (tipo ? '' : ' Os primeiros bytes não são de png, jpg nem webp.');
 }
 
-/* comecar: passa a em resolução os tickets dados, logo que se pega neles —
-   o Martinho vê-os na app em «Em resolução». Confere todos antes de mexer
-   em algum: um resolvido (reabre-se primeiro) ou um removido param tudo. Um
-   que já estava em resolução fica como está, e diz-se.
+/* Se um ticket já não se pega com o comecar: está em Human Tests ou numa
+   coluna de fim (Concluído, ou uma que o master marcou como fim), ou tem o
+   status antigo 'resolvido'. Esses reabrem-se primeiro.
+   Recebe: l — a linha do ticket (status); colunas — as do kanban ({id, fim}).
+   Devolve: booleano. */
+export function ticketFechado(l, colunas) {
+  const c = colunaDoStatus(l.status);
+  return c === QA_RESOLVIDO || (colunas || []).some((x) => x.id === c && x.fim);
+}
+
+/* comecar: leva a Auto Tests os tickets dados, logo que se pega neles — o
+   Martinho vê-os na app e no kanban nessa coluna. Confere todos antes de
+   mexer em algum: um que está em Human Tests ou numa coluna de fim (reabre-se
+   primeiro) ou um removido param tudo. Um que já estava em Auto Tests fica
+   como está, e diz-se.
    Recebe: o — as opções lidas (o.ids, um ou mais).
    Devolve: o texto com o que ficou em cada um. */
 function cmdComecar(o) {
   const a = alvoDe(o.local);
+  const colunas = colunasDoAlvo(a);
+  const nome = (id) => estadoLegivel(id, colunas);
   const antes = o.ids.map((id) => umTicket(a, id));
-  const resolvido = antes.find((l) => l.status === 'resolvido');
-  if (resolvido) throw new ErroQa('O ticket ' + resolvido.id + ' está resolvido: reabre-o primeiro (node scripts/qa.mjs reabrir ' + resolvido.id + (a.local ? ' --local' : '') + '). Não mexi em nenhum.');
+  const fechado = antes.find((l) => ticketFechado(l, colunas));
+  if (fechado) {
+    throw new ErroQa('O ticket ' + fechado.id + ' está em ' + nome(colunaDoStatus(fechado.status)) + ': reabre-o primeiro (node scripts/qa.mjs reabrir ' + fechado.id + (a.local ? ' --local' : '') + '). Não mexi em nenhum.');
+  }
   const onde = a.local ? ' na base isolada' : ' no dev';
   return antes.map((l) => {
-    if (l.status === 'em_resolucao') return 'O ticket ' + l.id + ' já estava em resolução.';
-    const agora = Date.now();
-    executar(a, sqlComecar(l.id, agora));
-    const depois = umTicket(a, l.id);
-    if (depois.status !== 'em_resolucao') throw new ErroQa('O ticket ' + l.id + ' não ficou em resolução (está ' + estadoLegivel(depois.status) + ').');
-    const cartao = acertarCartao((sql) => executar(a, sql), { id: l.id, estado: 'em_resolucao', agora });
-    return 'Ticket ' + l.id + ' em resolução' + onde + '.' + (cartao ? '\n' + cartao : '');
+    if (l.status === QA_EM_CURSO) return 'O ticket ' + l.id + ' já estava em ' + nome(QA_EM_CURSO) + '.';
+    const { aviso } = levarParaColuna(a, l, QA_EM_CURSO);
+    return 'Ticket ' + l.id + ' em ' + nome(QA_EM_CURSO) + onde + '.' + (aviso ? '\n' + aviso : '');
   }).join('\n');
 }
 
-/* resolver: marca resolvido com a nota (e o commit) e confirma o que ficou.
+/* resolver: leva o ticket a Human Tests com a nota (e o commit) como
+   resolução, e a nota como comentário no cartão; confirma o que ficou. Só
+   depois de o CI estar verde (a regra da skill qa).
    Recebe: o — as opções lidas.
    Devolve: o texto com o novo estado. */
 function cmdResolver(o) {
   const a = alvoDe(o.local);
-  umTicket(a, o.id);
+  const l = umTicket(a, o.id);
   const resolucao = notaDaResolucao(o.nota, o.commit);
-  const agora = Date.now();
-  executar(a, sqlResolver(o.id, resolucao, agora));
-  const depois = umTicket(a, o.id);
-  if (depois.status !== 'resolvido') throw new ErroQa('O ticket ' + o.id + ' não ficou resolvido (está ' + estadoLegivel(depois.status) + ').');
-  const cartao = acertarCartao((sql) => executar(a, sql),
-    { id: o.id, estado: 'resolvido', agora, comentario: { uuid: randomUUID(), texto: resolucao.replace(/\u0000/g, '') } });
-  return 'Ticket ' + o.id + ' resolvido' + (a.local ? ' na base isolada' : ' no dev') + ' a ' + quando(depois.resolved_at) + '. Resolução:\n' + indenta(depois.resolution, '  ')
-    + (cartao ? '\n' + cartao : '');
+  const { depois, aviso } = levarParaColuna(a, l, QA_RESOLVIDO,
+    { resolucao, comentario: { uuid: randomUUID(), texto: resolucao.replace(/\u0000/g, '') } });
+  const nome = estadoLegivel(QA_RESOLVIDO, colunasDoAlvo(a));
+  return 'Ticket ' + o.id + ' em ' + nome + (a.local ? ' na base isolada' : ' no dev') + ' a ' + quando(depois.resolved_at) + '. Resolução:\n' + indenta(depois.resolution, '  ')
+    + (aviso ? '\n' + aviso : '');
 }
 
-/* reabrir: devolve o ticket aos novos, com a resolução guardada.
+/* reabrir: devolve o ticket a A fazer, com a resolução guardada.
    Recebe: o — as opções lidas.
    Devolve: o texto com o novo estado. */
 function cmdReabrir(o) {
   const a = alvoDe(o.local);
   const antes = umTicket(a, o.id);
-  if (antes.status === 'aberto') return 'O ticket ' + o.id + ' já está nos novos.';
-  const agora = Date.now();
-  executar(a, sqlReabrir(o.id, agora));
-  const depois = umTicket(a, o.id);
-  if (depois.status !== 'aberto') throw new ErroQa('O ticket ' + o.id + ' não voltou aos novos (está ' + estadoLegivel(depois.status) + ').');
-  const cartao = acertarCartao((sql) => executar(a, sql), { id: o.id, estado: 'aberto', agora });
-  return 'Ticket ' + o.id + (antes.status === 'resolvido' ? ' reaberto' : ' de volta aos novos') + (a.local ? ' na base isolada' : ' no dev') + '.' + (depois.resolution ? ' A resolução anterior fica à vista.' : '')
-    + (cartao ? '\n' + cartao : '');
+  const nome = estadoLegivel(QA_NOVO, colunasDoAlvo(a));
+  if (antes.status === QA_NOVO) return 'O ticket ' + o.id + ' já está em ' + nome + '.';
+  const { depois, aviso } = levarParaColuna(a, antes, QA_NOVO);
+  const fechado = antes.resolved_at != null;
+  return 'Ticket ' + o.id + (fechado ? ' reaberto' : ' de volta') + ' a ' + nome + (a.local ? ' na base isolada' : ' no dev') + '.'
+    + (depois.resolution ? ' A resolução anterior fica à vista.' : '') + (aviso ? '\n' + aviso : '');
+}
+
+/* mover: leva o ticket a qualquer coluna do kanban, dada pelo id ou pelo
+   nome (resolverColuna). A resolução fica como estava. Repete-se à vontade:
+   se o ticket já está na coluna, o cartão acerta-se na mesma (e ganha-se,
+   nos tickets antigos que não o têm).
+   Recebe: o — as opções lidas (o.coluna).
+   Devolve: o texto com a coluna onde ficou. */
+function cmdMover(o) {
+  const a = alvoDe(o.local);
+  const colunas = colunasDoAlvo(a);
+  const c = resolverColuna(o.coluna, colunas);
+  const antes = umTicket(a, o.id);
+  const { aviso } = levarParaColuna(a, antes, c.id);
+  return 'Ticket ' + o.id + ' em ' + c.nome + (a.local ? ' na base isolada' : ' no dev') + '.' + (aviso ? '\n' + aviso : '');
 }
 
 /* Corre a linha de comandos e devolve o código de saída; os erros conhecidos
@@ -802,7 +947,7 @@ function cmdReabrir(o) {
 export function principal(argv) {
   try {
     const o = lerArgumentos(argv);
-    const fazer = { listar: cmdListar, imagem: cmdImagem, comecar: cmdComecar, resolver: cmdResolver, reabrir: cmdReabrir }[o.comando];
+    const fazer = { listar: cmdListar, imagem: cmdImagem, comecar: cmdComecar, resolver: cmdResolver, reabrir: cmdReabrir, mover: cmdMover }[o.comando];
     process.stdout.write(fazer(o) + '\n');
     return 0;
   } catch (e) {

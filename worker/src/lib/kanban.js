@@ -10,10 +10,17 @@
    ({sql, params}); o worker liga-as com bind e corre-as num batch, e os
    scripts escrevem-nas em texto com sqlEmTexto.
 
-   A regra: um cartão só se move sozinho quando o estado da origem MUDA
-   (origem_estado guarda o último que se viu), e mover um cartão à mão nunca
-   mexe no ticket. Um cartão numa coluna de fim (Concluído) só sai de lá
-   sozinho para «A fazer», quando o ticket reabre.
+   Duas regras, uma por origem:
+   - Um ticket de QA está sempre na coluna do seu cartão (pedido do Martinho,
+     2026-11-10: «as mesmas colunas»): qa_tickets.status guarda o id da
+     coluna. Quando o ticket muda de coluna (comecar, resolver, reabrir,
+     mover), o cartão vai para essa coluna, venha de onde vier; quando o
+     cartão se move à mão, o gatilho kanban_qa_coluna
+     (migrations/0029_qa_no_kanban.sql) leva o ticket com ele.
+   - Um pedido: o cartão só se move sozinho quando o estado do pedido MUDA
+     (origem_estado guarda o último que se viu), e mover o cartão à mão nunca
+     mexe no pedido. Um cartão numa coluna de fim (Concluído) só sai de lá
+     sozinho para «A fazer».
 
    Nada aqui importa nada: é usado pelo worker e pelo Node dos scripts. */
 
@@ -34,11 +41,49 @@ export const COLUNAS_FIXAS = ['a-fazer', 'auto-tests', 'human-tests', 'concluido
 // Quem assina o que a sincronização faz sozinha, no histórico e nos comentários.
 export const AUTOMATICO = { id: 'automatico', nome: 'Sincronização' };
 
-// Os estados de origem que a regra conhece, por tipo de origem.
-const ESTADOS = {
-  qa: ['aberto', 'em_resolucao', 'resolvido', 'removido', 'reposto'],
-  pedido: ['aceite', 'resolucao', 'proposta', 'concluido'],
-};
+// Os estados de um pedido que a regra conhece. Os de um ticket de QA são as
+// colunas (qualquer id de kanban_colunas), mais as duas marcas de QA_MARCAS.
+const ESTADOS_DO_PEDIDO = ['aceite', 'resolucao', 'proposta', 'concluido'];
+
+// O que acontece a um ticket de QA sem o mudar de coluna: só deixa uma linha no histórico do cartão.
+export const QA_MARCAS = ['removido', 'reposto'];
+
+// A forma de um id de coluna: os slugs das fixas ('a-fazer') e os uuid das que o master cria.
+const ID_DE_COLUNA = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
+
+// A coluna onde um ticket de QA fica quando alguém pega nele (qa.mjs comecar).
+export const QA_EM_CURSO = 'auto-tests';
+// A coluna onde fica quando se resolve: quem testa confirma e passa-o a Concluído.
+export const QA_RESOLVIDO = 'human-tests';
+// A coluna onde nasce e para onde volta ao reabrir.
+export const QA_NOVO = 'a-fazer';
+
+/* Se um texto tem a forma de um id de coluna (não diz se a coluna existe:
+   isso vê-se na base).
+   Recebe: v — o valor.
+   Devolve: booleano. */
+export function eIdDeColuna(v) {
+  return typeof v === 'string' && ID_DE_COLUNA.test(v);
+}
+
+/* A instrução que põe um ticket de QA numa coluna, do lado do ticket: o
+   status passa a ser a coluna e o resolved_at acompanha (posto ao chegar a
+   Human Tests ou a uma coluna de fim, mantido se já estava; tirado nas
+   outras). Corre ANTES dos passos do cartão (passosDaSincronizacao), e é por
+   isso que o ticket muda mesmo quando o kanban falha. Só toca num ticket que
+   não esteja removido.
+   Recebe: id — o do ticket; coluna — o id da coluna; agora — ms; extra
+   (opcional) — {sql: ', resolution = ?', params: [...]} a juntar ao SET.
+   Devolve: {sql, params}. */
+export function ticketQaNaColuna(id, coluna, agora, extra) {
+  const e = extra || { sql: '', params: [] };
+  return {
+    sql: 'UPDATE qa_tickets SET status = ?,' +
+      ' resolved_at = CASE WHEN ? = \'human-tests\' OR ? IN (SELECT id FROM kanban_colunas WHERE fim = 1) THEN COALESCE(resolved_at, ?) ELSE NULL END,' +
+      ' updated_at = ?' + e.sql + ' WHERE id = ? AND removed_at IS NULL',
+    params: [coluna, coluna, coluna, agora, agora, ...e.params, id],
+  };
+}
 
 /* A chave de um cartão a partir do número.
    Recebe: numero — o N (inteiro positivo).
@@ -57,12 +102,13 @@ export function numeroDaChave(chave) {
 }
 
 /* A coluna para onde vai o cartão de uma origem que chegou a um estado.
-   Recebe: tipo — 'qa' ou 'pedido'; estado — o estado da origem (ESTADOS).
+   Recebe: tipo — 'qa' ou 'pedido'; estado — num ticket de QA, a coluna (ou
+   uma de QA_MARCAS); num pedido, um de ESTADOS_DO_PEDIDO.
    Devolve: o id da coluna, ou null quando o estado não move o cartão
    (removido e reposto só deixam uma linha no histórico). */
 export function colunaDaOrigem(tipo, estado) {
   if (tipo === 'qa') {
-    return { aberto: 'a-fazer', em_resolucao: 'auto-tests', resolvido: 'human-tests' }[estado] || null;
+    return QA_MARCAS.indexOf(estado) < 0 && eIdDeColuna(estado) ? estado : null;
   }
   if (tipo === 'pedido') {
     return { aceite: 'a-fazer', resolucao: 'auto-tests', proposta: 'human-tests', concluido: 'human-tests' }[estado] || null;
@@ -139,14 +185,22 @@ export function cartaoDoPedido(t) {
 /* As instruções SQL de um acontecimento numa origem (um ticket de QA ou um
    pedido). Correm todas, pela ordem, numa transação (o batch da D1, ou um
    ficheiro de SQL no wrangler d1 execute), e são idempotentes: repetir o
-   mesmo acontecimento não muda nada.
-   - Com ev.novo (e um estado que tem coluna): cria o cartão se a origem
-     ainda não tem nenhum — sobe o contador, insere-o no topo da coluna, com
-     as etiquetas e a linha «criado» do histórico.
-   - Depois, se o estado mudou desde o último visto: a linha do histórico
-     (coluna, ou origem para removido/reposto), o comentário (ev.comentario),
-     a mudança de coluna (para o topo da coluna nova; nunca para fora de uma
-     coluna de fim, a não ser para a-fazer) e, por fim, o origem_estado novo.
+   mesmo acontecimento não muda nada (um comentário repetido só entra uma vez
+   com o mesmo uuid).
+   Num ticket de QA (ev.estado = a coluna para onde foi):
+   - com ev.novo: cria o cartão nessa coluna se o ticket ainda não tem
+     nenhum (nem removido) e a coluna existe — sobe o contador, insere-o no
+     topo, com as etiquetas e a linha «criado» do histórico;
+   - a linha «coluna» do histórico, o comentário (ev.comentario) e a
+     mudança para o topo da coluna, sempre que o cartão não esteja já lá —
+     de qualquer coluna, também de uma de fim; e o origem_estado novo.
+   - removido e reposto (QA_MARCAS) só deixam a linha «origem» no histórico.
+   Num pedido (ev.estado um de ESTADOS_DO_PEDIDO):
+   - com ev.novo (e um estado que tem coluna): cria o cartão como acima;
+   - depois, se o estado mudou desde o último visto: a linha do histórico,
+     o comentário, a mudança de coluna (para o topo da coluna nova; nunca
+     para fora de uma coluna de fim, a não ser para a-fazer) e, por fim, o
+     origem_estado novo.
    Recebe: ev — {tipo: 'qa' | 'pedido', id: o id da origem, estado (ver
    colunaDaOrigem), agora: ms, autor?: {id, nome} (AUTOMATICO por omissão),
    novo?: {uuid, tipo, titulo, descricao, prioridade, etiquetas} (um uuid
@@ -156,79 +210,130 @@ export function cartaoDoPedido(t) {
    regra não conhece). */
 export function passosDaSincronizacao(ev) {
   const tipo = ev && ev.tipo, estado = ev && ev.estado;
-  if (!ESTADOS[tipo] || ESTADOS[tipo].indexOf(estado) < 0 || !ev.id) return [];
+  if (!ev || !ev.id) return [];
+  if (tipo === 'qa') {
+    if (QA_MARCAS.indexOf(estado) < 0 && !eIdDeColuna(estado)) return [];
+  } else if (tipo !== 'pedido' || ESTADOS_DO_PEDIDO.indexOf(estado) < 0) {
+    return [];
+  }
   const agora = Number(ev.agora) || 0;
   const autor = ev.autor && ev.autor.id ? ev.autor : AUTOMATICO;
   const origem = String(ev.id);
   const coluna = colunaDaOrigem(tipo, estado);
+  if (tipo === 'qa') return passosDoQa(ev, origem, estado, coluna, agora, autor);
+
   const passos = [];
   // a condição de «o estado mudou», que todos os passos de baixo repetem
   const mudou = 'origem_tipo = ? AND origem_id = ? AND removed_at IS NULL AND (origem_estado IS NULL OR origem_estado <> ?)';
 
   if (ev.novo && coluna) {
-    const n = ev.novo;
     /* um pedido que já chega concluído (o primeiro sincronizar encontra os
        antigos) nasce em Concluído: não há nada para testar */
-    const colunaNova = tipo === 'pedido' && estado === 'concluido' ? 'concluido' : coluna;
-    const naoTem = 'NOT EXISTS (SELECT 1 FROM kanban_cartoes WHERE origem_tipo = ? AND origem_id = ?)';
-    passos.push({
-      sql: 'UPDATE kanban_contador SET ultimo = MAX(ultimo, (SELECT COALESCE(MAX(numero), 0) FROM kanban_cartoes)) + 1 WHERE id = 1 AND ' + naoTem,
-      params: [tipo, origem],
-    });
-    passos.push({
-      sql: 'INSERT INTO kanban_cartoes (id, numero, tipo, titulo, descricao, coluna_id, posicao, prioridade, relator_id, relator_nome,' +
-        ' origem_tipo, origem_id, origem_estado, created_at, updated_at, concluido_at)' +
-        ' SELECT ?, (SELECT ultimo FROM kanban_contador WHERE id = 1), ?, ?, ?, ?,' +
-        ' (SELECT COALESCE(MIN(posicao), 1024) - 1024 FROM kanban_cartoes WHERE coluna_id = ? AND removed_at IS NULL),' +
-        ' ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? IN (SELECT id FROM kanban_colunas WHERE fim = 1) THEN ? ELSE NULL END WHERE ' + naoTem,
-      params: [n.uuid, TIPOS.indexOf(n.tipo) > -1 ? n.tipo : 'tarefa', String(n.titulo || 'Sem título'), String(n.descricao || ''),
-        colunaNova, colunaNova, PRIORIDADES.indexOf(n.prioridade) > -1 ? n.prioridade : 3, autor.id, autor.nome || '',
-        tipo, origem, estado, agora, agora, colunaNova, agora, tipo, origem],
-    });
-    (n.etiquetas || []).forEach((e) => {
-      passos.push({ sql: 'INSERT OR IGNORE INTO kanban_etiquetas (cartao_id, etiqueta) SELECT id, ? FROM kanban_cartoes WHERE id = ?', params: [e, n.uuid] });
-    });
-    passos.push({
-      sql: "INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) SELECT id, ?, ?, ?, 'criado', NULL, coluna_id FROM kanban_cartoes WHERE id = ?",
-      params: [agora, autor.id, autor.nome || '', n.uuid],
-    });
+    passos.push(...passosDeCriar(tipo, origem, estado, estado === 'concluido' ? 'concluido' : coluna, ev.novo, autor, agora));
   }
 
-  // o histórico, antes de mexer: a coluna de onde sai, ou só a origem
-  if (coluna) {
-    passos.push({
-      sql: "INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) SELECT id, ?, ?, ?, 'coluna', coluna_id, ? FROM kanban_cartoes" +
-        ' WHERE ' + mudou + ' AND coluna_id <> ? AND (? = \'a-fazer\' OR coluna_id NOT IN (SELECT id FROM kanban_colunas WHERE fim = 1))',
-      params: [agora, autor.id, autor.nome || '', coluna, tipo, origem, estado, coluna, coluna],
-    });
-  } else {
-    passos.push({
-      sql: "INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) SELECT id, ?, ?, ?, 'origem', origem_estado, ? FROM kanban_cartoes WHERE " + mudou,
-      params: [agora, autor.id, autor.nome || '', estado, tipo, origem, estado],
-    });
-  }
+  // o histórico, antes de mexer: a coluna de onde sai
+  passos.push({
+    sql: "INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) SELECT id, ?, ?, ?, 'coluna', coluna_id, ? FROM kanban_cartoes" +
+      ' WHERE ' + mudou + ' AND coluna_id <> ? AND (? = \'a-fazer\' OR coluna_id NOT IN (SELECT id FROM kanban_colunas WHERE fim = 1))',
+    params: [agora, autor.id, autor.nome || '', coluna, tipo, origem, estado, coluna, coluna],
+  });
   if (ev.comentario && ev.comentario.uuid && String(ev.comentario.texto || '').trim()) {
     passos.push({
       sql: 'INSERT INTO kanban_comentarios (id, cartao_id, autor_id, autor_nome, texto, created_at, updated_at) SELECT ?, id, ?, ?, ?, ?, ? FROM kanban_cartoes WHERE ' + mudou,
       params: [ev.comentario.uuid, autor.id, autor.nome || '', String(ev.comentario.texto).trim(), agora, agora, tipo, origem, estado],
     });
   }
-  if (coluna) {
-    passos.push({
-      sql: 'UPDATE kanban_cartoes SET coluna_id = ?,' +
-        ' posicao = (SELECT COALESCE(MIN(k.posicao), 1024) - 1024 FROM kanban_cartoes k WHERE k.coluna_id = ? AND k.removed_at IS NULL),' +
-        ' concluido_at = CASE WHEN ? IN (SELECT id FROM kanban_colunas WHERE fim = 1) THEN ? ELSE NULL END, updated_at = ?' +
-        ' WHERE ' + mudou + ' AND coluna_id <> ? AND (? = \'a-fazer\' OR coluna_id NOT IN (SELECT id FROM kanban_colunas WHERE fim = 1))',
-      params: [coluna, coluna, coluna, agora, agora, tipo, origem, estado, coluna, coluna],
-    });
-  }
+  passos.push({
+    sql: 'UPDATE kanban_cartoes SET coluna_id = ?,' +
+      ' posicao = (SELECT COALESCE(MIN(k.posicao), 1024) - 1024 FROM kanban_cartoes k WHERE k.coluna_id = ? AND k.removed_at IS NULL),' +
+      ' concluido_at = CASE WHEN ? IN (SELECT id FROM kanban_colunas WHERE fim = 1) THEN ? ELSE NULL END, updated_at = ?' +
+      ' WHERE ' + mudou + ' AND coluna_id <> ? AND (? = \'a-fazer\' OR coluna_id NOT IN (SELECT id FROM kanban_colunas WHERE fim = 1))',
+    params: [coluna, coluna, coluna, agora, agora, tipo, origem, estado, coluna, coluna],
+  });
   // por fim, o estado visto (só depois: é ele que os passos de cima comparam)
-  if (estado !== 'removido' && estado !== 'reposto') {
+  passos.push({
+    sql: 'UPDATE kanban_cartoes SET origem_estado = ?, updated_at = ? WHERE ' + mudou,
+    params: [estado, agora, tipo, origem, estado],
+  });
+  return passos;
+}
+
+/* Os passos de um ticket de QA (ver passosDaSincronizacao): o cartão vai
+   para a coluna do ticket, esteja onde estiver.
+   Recebe: ev — o acontecimento; origem — o id do ticket; estado — a coluna
+   ou uma marca; coluna — a coluna (null numa marca); agora; autor.
+   Devolve: a lista de {sql, params}. */
+function passosDoQa(ev, origem, estado, coluna, agora, autor) {
+  const passos = [];
+  const vivo = "origem_tipo = 'qa' AND origem_id = ? AND removed_at IS NULL";
+  if (!coluna) {
+    // removido / reposto: só a linha «origem», com a coluna onde o ticket estava
     passos.push({
-      sql: 'UPDATE kanban_cartoes SET origem_estado = ?, updated_at = ? WHERE ' + mudou,
-      params: [estado, agora, tipo, origem, estado],
+      sql: "INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) SELECT id, ?, ?, ?, 'origem', origem_estado, ? FROM kanban_cartoes WHERE " + vivo,
+      params: [agora, autor.id, autor.nome || '', estado, origem],
+    });
+    return passos;
+  }
+  if (ev.novo) passos.push(...passosDeCriar('qa', origem, coluna, coluna, ev.novo, autor, agora));
+  // a coluna tem de existir: um id que não está em kanban_colunas não move nada
+  const existe = ' AND EXISTS (SELECT 1 FROM kanban_colunas WHERE id = ?)';
+  passos.push({
+    sql: "INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) SELECT id, ?, ?, ?, 'coluna', coluna_id, ? FROM kanban_cartoes" +
+      ' WHERE ' + vivo + ' AND coluna_id <> ?' + existe,
+    params: [agora, autor.id, autor.nome || '', coluna, origem, coluna, coluna],
+  });
+  if (ev.comentario && ev.comentario.uuid && String(ev.comentario.texto || '').trim()) {
+    passos.push({
+      sql: 'INSERT OR IGNORE INTO kanban_comentarios (id, cartao_id, autor_id, autor_nome, texto, created_at, updated_at) SELECT ?, id, ?, ?, ?, ?, ? FROM kanban_cartoes WHERE ' + vivo,
+      params: [ev.comentario.uuid, autor.id, autor.nome || '', String(ev.comentario.texto).trim(), agora, agora, origem],
     });
   }
+  passos.push({
+    sql: 'UPDATE kanban_cartoes SET coluna_id = ?,' +
+      ' posicao = (SELECT COALESCE(MIN(k.posicao), 1024) - 1024 FROM kanban_cartoes k WHERE k.coluna_id = ? AND k.removed_at IS NULL),' +
+      ' concluido_at = CASE WHEN ? IN (SELECT id FROM kanban_colunas WHERE fim = 1) THEN ? ELSE NULL END, updated_at = ?' +
+      ' WHERE ' + vivo + ' AND coluna_id <> ?' + existe,
+    params: [coluna, coluna, coluna, agora, agora, origem, coluna, coluna],
+  });
+  passos.push({
+    sql: 'UPDATE kanban_cartoes SET origem_estado = ? WHERE ' + vivo + ' AND origem_estado IS NOT ?' + existe,
+    params: [coluna, origem, coluna, coluna],
+  });
+  return passos;
+}
+
+/* Os passos que criam o cartão de uma origem que ainda não tem nenhum (nem
+   removido): sobe o contador, insere-o no topo da coluna, as etiquetas e a
+   linha «criado» do histórico. Nada acontece se a coluna não existir.
+   Recebe: tipo; origem — o id; estado — o origem_estado a guardar; coluna —
+   onde nasce; n — {uuid, tipo, titulo, descricao, prioridade, etiquetas};
+   autor; agora.
+   Devolve: a lista de {sql, params}. */
+function passosDeCriar(tipo, origem, estado, coluna, n, autor, agora) {
+  const passos = [];
+  const naoTem = 'NOT EXISTS (SELECT 1 FROM kanban_cartoes WHERE origem_tipo = ? AND origem_id = ?) AND EXISTS (SELECT 1 FROM kanban_colunas WHERE id = ?)';
+  passos.push({
+    sql: 'UPDATE kanban_contador SET ultimo = MAX(ultimo, (SELECT COALESCE(MAX(numero), 0) FROM kanban_cartoes)) + 1 WHERE id = 1 AND ' + naoTem,
+    params: [tipo, origem, coluna],
+  });
+  passos.push({
+    sql: 'INSERT INTO kanban_cartoes (id, numero, tipo, titulo, descricao, coluna_id, posicao, prioridade, relator_id, relator_nome,' +
+      ' origem_tipo, origem_id, origem_estado, created_at, updated_at, concluido_at)' +
+      ' SELECT ?, (SELECT ultimo FROM kanban_contador WHERE id = 1), ?, ?, ?, ?,' +
+      ' (SELECT COALESCE(MIN(posicao), 1024) - 1024 FROM kanban_cartoes WHERE coluna_id = ? AND removed_at IS NULL),' +
+      ' ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? IN (SELECT id FROM kanban_colunas WHERE fim = 1) THEN ? ELSE NULL END WHERE ' + naoTem,
+    params: [n.uuid, TIPOS.indexOf(n.tipo) > -1 ? n.tipo : 'tarefa', String(n.titulo || 'Sem título'), String(n.descricao || ''),
+      coluna, coluna, PRIORIDADES.indexOf(n.prioridade) > -1 ? n.prioridade : 3, autor.id, autor.nome || '',
+      tipo, origem, estado, agora, agora, coluna, agora, tipo, origem, coluna],
+  });
+  (n.etiquetas || []).forEach((e) => {
+    passos.push({ sql: 'INSERT OR IGNORE INTO kanban_etiquetas (cartao_id, etiqueta) SELECT id, ? FROM kanban_cartoes WHERE id = ?', params: [e, n.uuid] });
+  });
+  passos.push({
+    sql: "INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) SELECT id, ?, ?, ?, 'criado', NULL, coluna_id FROM kanban_cartoes WHERE id = ?",
+    params: [agora, autor.id, autor.nome || '', n.uuid],
+  });
   return passos;
 }
 

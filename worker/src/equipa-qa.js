@@ -262,10 +262,13 @@ function falhaCampo(id, msg) {
 
 /* -------------------------------------------------------------- o menu */
 
-/* Fecha os menus abertos da pílula.
+// os menus do QA: o da pílula e os das janelas (o «Mover para…» de um ticket)
+var QA_MENUS_ABERTOS = '.qa-pilula .menupop.on, .qa-camada .menupop.on';
+
+/* Fecha os menus abertos do QA (o da pílula e os das janelas).
    Devolve: nada. */
 function closePops() {
-  [].slice.call(document.querySelectorAll('.qa-pilula .menupop.on')).forEach(function (p) {
+  [].slice.call(document.querySelectorAll(QA_MENUS_ABERTOS)).forEach(function (p) {
     p.classList.remove('on');
     var b = p.parentNode && p.parentNode.querySelector('[aria-expanded]');
     if (b) b.setAttribute('aria-expanded', 'false');
@@ -489,7 +492,7 @@ function qaDespachar(ev, tipo) {
 
 document.addEventListener('click', function (e) {
   // um clique fora dos menus fecha-os
-  if (!(e.target && e.target.closest && e.target.closest('.qa-pilula .menuwrap'))) closePops();
+  if (!(e.target && e.target.closest && e.target.closest('.qa-pilula .menuwrap, .qa-camada .menuwrap'))) closePops();
   qaDespachar(e, 'click');
 });
 document.addEventListener('input', function (e) { qaDespachar(e, 'input'); });
@@ -497,7 +500,7 @@ document.addEventListener('change', function (e) { qaDespachar(e, 'change'); });
 // o Escape fecha primeiro o menu, depois a janela de cima
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape') return;
-  if (document.querySelector('.qa-pilula .menupop.on')) { closePops(); e.preventDefault(); return; }
+  if (document.querySelector(QA_MENUS_ABERTOS)) { closePops(); e.preventDefault(); return; }
   if (modalStack.length) { closeModal('escape'); e.preventDefault(); }
 });
 `;
@@ -568,15 +571,19 @@ export const CSS_QA_EQUIPA = String.raw`/* Os tokens da app que o back office n�
 @keyframes qaVeuEntra{from{opacity:0}}
 @keyframes qaFolhaEntra{from{opacity:0;transform:translate(-50%,-50%) translateY(14px) scale(.98)}}
 @keyframes qaFolhaSobe{from{transform:translateY(100%)}}
-/* O menu da pílula (o .menupop da app) */
-.qa-pilula .menuwrap{position:relative}
-.qa-pilula .menupop{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:30;background:var(--card);
-  border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;min-width:200px}
-.qa-pilula .menupop.on{display:block;animation:popEntra var(--medio) var(--curva);transform-origin:top right}
-.qa-pilula .menupop button{width:100%;display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;border:0;background:transparent;
+/* O menu da pílula e o das janelas («Mover para…» de um ticket): o .menupop da app */
+.qa-pilula .menuwrap,.qa-camada .menuwrap{position:relative}
+.qa-pilula .menupop,.qa-camada .menupop{display:none;position:absolute;right:0;top:calc(100% + 6px);z-index:30;background:var(--card);
+  border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;min-width:200px;
+  width:max-content;max-width:min(320px,calc(100vw - 32px))}
+.qa-pilula .menupop.on,.qa-camada .menupop.on{display:block;animation:popEntra var(--medio) var(--curva);transform-origin:top right}
+/* no rodapé de uma janela o menu abre para cima: para baixo, a folha (overflow:hidden) cortava-o */
+.qa-camada .foot .menupop{top:auto;bottom:calc(100% + 6px)}
+.qa-camada .foot .menupop.on{transform-origin:bottom right}
+.qa-pilula .menupop button,.qa-camada .menupop button{width:100%;display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;border:0;background:transparent;
   border-radius:10px;cursor:pointer;text-align:left;font:inherit;font-size:15px;color:var(--ink)}
-@media(hover:hover) and (pointer:fine){.qa-pilula .menupop button:hover{background:var(--chip)}}
-.qa-pilula .menupop button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@media(hover:hover) and (pointer:fine){.qa-pilula .menupop button:hover,.qa-camada .menupop button:hover{background:var(--chip)}}
+.qa-pilula .menupop button:focus-visible,.qa-camada .menupop button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .qa-pilula svg,.qa-camada svg{flex:0 0 auto}
 /* As janelas (o .modal e a .sheet da app): ao centro no computador, folha de baixo no telemóvel */
 html.qa-trava{overflow:hidden}
@@ -659,7 +666,7 @@ html.qa-trava body{position:fixed;left:0;right:0;width:100%}
    900px); nas páginas públicas não há barra nem a variável, e fica o de cima */
 .qa-aviso{bottom:max(calc(22px + var(--inset-bottom)),calc(var(--eq-barra,0px) + 12px))}
 .qa-aviso-btn{min-height:44px;padding:0 6px;border:0;background:transparent;color:inherit;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
-@media(prefers-reduced-motion:reduce){.qa-camada .bg,.qa-camada .sheet,.qa-pilula .menupop.on{animation:none}.qa-aviso{transition:none}}
+@media(prefers-reduced-motion:reduce){.qa-camada .bg,.qa-camada .sheet,.qa-pilula .menupop.on,.qa-camada .menupop.on{animation:none}.qa-aviso{transition:none}}
 `;
 
 /* O que as páginas públicas (a montra e o guia) pedem a mais, depois do
