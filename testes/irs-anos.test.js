@@ -292,11 +292,11 @@ describe('a página Declaração', () => {
   test('2025: a versão oficial, o 4.2 com o 4.2A em cada contrato, e o guia é o público', () => {
     comRendas(2025);
     const html = app.vFisco();
-    assert.match(html, /<span id="lab_fiscoAnoSel">2025<\/span>/, 'o ano dos rendimentos no seletor da barra');
+    assert.match(html, /<span id="lab_fiscoSel">2025<\/span>/, 'o ano dos rendimentos no seletor do painel do funil');
     assert.doesNotMatch(html, /IRS 2025<\/h2>|Modelo oficial|O que mudou em 2025|Como preencher, passo a passo/,
       'sem a faixa das regras do ano nem a dobra do guia: isso vive no guia público');
     assert.doesNotMatch(html, /Ainda não há versão das regras/, 'um ano com versão oficial não tem aviso das regras');
-    assert.match(html, /<a class="btn" href="\/guias\/declarar-rendas" target="_blank" rel="noopener"[^>]*>Guia de preenchimento<\/a>/);
+    assert.match(html, /<a class="btn sm fis-guia" href="\/guias\/declarar-rendas" target="_blank" rel="noopener"[^>]*aria-label="Guia de preenchimento do Anexo F"[^>]*>.*?<span>Guia<\/span><\/a>/);
     assert.match(html, /Quadro 4\.2 · com redução pela duração/);
     assert.match(html, /Quadro 4\.2A · datas de cada contrato/);
     assert.match(html, /<p class="lbl fis-ctc-grupo">Quadro 4\.2A<\/p>/, 'e o 4.2A no cartão do contrato');
@@ -328,7 +328,7 @@ describe('a página Declaração', () => {
     app.fiscoAno = '2026';
     const html = app.vFisco();
     assert.match(html, /Sem rendas em 2026/);
-    assert.match(html, /<span id="lab_fiscoAnoSel">2026<\/span>/);
+    assert.match(html, /<span id="lab_fiscoSel">2026<\/span>/, 'no seletor do painel do funil');
   });
 
   test('a ficha do contrato diz porque é que a taxa é a que é', () => {

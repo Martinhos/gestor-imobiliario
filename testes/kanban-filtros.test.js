@@ -246,6 +246,58 @@ describe('a ordem de cada coluna', () => {
     ctx.kbOrdens = {};
   });
 
+  test('a janela de ordenar: o menu «Critério» e o «Sentido»; mudar grava kb_ordem e a janela fica aberta', () => {
+    const c = caixa();
+    c.kbEstado = ESTADO();
+    c.kbFiltros = c.kbSemFiltros();
+    const guardado = {}, janelas = [], campo = { innerHTML: '', hidden: true };
+    let fechou = 0, pintou = 0;
+    c.localStorage = { getItem: (k) => guardado[k] || null, setItem: (k, v) => { guardado[k] = v; } };
+    c.el = (id) => (id === 'kbOrdSentidoCampo' ? campo : null);
+    c.kbJanela = (titulo, corpo, o) => janelas.push({ titulo, corpo, o });
+    c.kbFecharJanela = () => { fechou++; };
+    c.kbPintarQuadro = () => { pintou++; };
+    c.kbOrdens = {};
+    c.kbOrdenar('a');
+    const j = janelas[0];
+    assert.equal(j.titulo, 'Ordenar «A fazer»');
+    assert.match(j.corpo, /A ordem fica neste aparelho/, 'a frase de explicação fica');
+    assert.match(j.corpo, /<span class="rot" id="kbOrdCrit-rot">Critério<\/span><div class="kb-sel" id="kbOrdCrit-sel">/);
+    assert.match(j.corpo, /<span class="rot" id="kbOrdSentido-rot">Sentido<\/span>/);
+    assert.match(j.corpo, /id="kbOrdSentidoCampo" hidden>/, 'na ordem do quadro, o sentido não se mostra');
+    assert.deepEqual([...c.kbSels.kbOrdCrit.opcoes.map((o) => o[1])],
+      ['A ordem do quadro (a de arrastar)', 'Prioridade', 'Título', 'Criação', 'Última alteração', 'Prazo']);
+    assert.match(j.corpo, /id="kbOrdCrit-txt">A ordem do quadro \(a de arrastar\)</);
+    assert.equal(j.o.foco, '#kbOrdCrit');
+    assert.doesNotMatch(j.corpo, /kb-opcao|<select/i, 'já não é a grelha de botões');
+    // o critério aplica logo, com o sentido que estava
+    c.kbSels.kbOrdCrit.aoMudar('prioridade');
+    assert.equal(guardado.kb_ordem, '{"a":"prioridade:asc"}');
+    assert.equal(campo.hidden, false, 'com um critério, o sentido mostra-se');
+    assert.match(campo.innerHTML, /A mais alta primeiro[\s\S]*A mais baixa primeiro/, 'os rótulos do critério');
+    // o sentido
+    c.kbSels.kbOrdSentido.aoMudar('desc');
+    assert.equal(guardado.kb_ordem, '{"a":"prioridade:desc"}');
+    // trocar de critério mantém o sentido
+    c.kbSels.kbOrdCrit.aoMudar('prazo');
+    assert.equal(guardado.kb_ordem, '{"a":"prazo:desc"}');
+    assert.match(campo.innerHTML, /O mais próximo primeiro[\s\S]*O mais distante primeiro/);
+    assert.match(campo.innerHTML, /id="kbOrdSentido-txt">O mais distante primeiro</);
+    // voltar à ordem do quadro apaga a entrada
+    c.kbSels.kbOrdCrit.aoMudar('');
+    assert.equal(guardado.kb_ordem, '{}');
+    assert.equal(campo.hidden, true);
+    assert.equal(fechou, 0, 'a janela fica aberta para ajustar');
+    assert.equal(pintou, 4, 'repinta o quadro por trás a cada mudança');
+    // aberta com uma ordem, diz-a e mostra o sentido
+    c.kbOrdens = { a: 'titulo:desc' };
+    c.kbOrdenar('a');
+    assert.match(janelas[1].corpo, /id="kbOrdCrit-txt">Título</);
+    assert.match(janelas[1].corpo, /<div class="kb-sel kb-sel-on" id="kbOrdCrit-sel">/, 'ordenada, o critério na cor da frente');
+    assert.match(janelas[1].corpo, /id="kbOrdSentidoCampo">/);
+    assert.match(janelas[1].corpo, /id="kbOrdSentido-txt">De Z a A</);
+  });
+
   test('guardada por coluna no aparelho (localStorage), calada quando não deixa, e só as que existem', () => {
     const c = caixa();
     const guardado = {};
@@ -268,6 +320,8 @@ describe('o CSS dos filtros', () => {
     assert.match(css, /\.kb-sel-on \.kb-sel-botao\{border-color:var\(--accent\);background:var\(--accent-soft\);color:var\(--accent-text\)/);
     assert.match(css, /\.kb-sel-op\[aria-selected="true"\]\{color:var\(--accent-text\);border-color:var\(--accent\)/);
     assert.match(css, /\.kb-ord\.kb-ord-on\{color:var\(--accent-text\);border-color:var\(--accent\)/);
+    assert.match(css, /\.kb-ord-sentido\[hidden\]\{display:none\}/, 'o sentido escondido na ordem do quadro, apesar do flex do campo');
+    assert.doesNotMatch(css, /\.kb-ord-par/, 'a grelha de botões saiu');
     assert.match(css, /\.kb-sel-op\{[^}]*min-height:44px/);
     assert.match(css, /\.kb-fpainel\.kb-entra\{animation:kbFpEntra var\(--medio\) var\(--curva-entra\)\}/);
     assert.match(css, /\.kb-sel-lista\{[^}]*overscroll-behavior:contain[^}]*animation:kbSelEntra var\(--rapido\) var\(--curva\)/);

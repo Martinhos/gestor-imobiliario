@@ -1397,17 +1397,15 @@ vistas.js:pintarRoda; o «alternar» do registo da análise —
 projecoes.js:prjOpcoes, avaliacao.js:avaOpcoes). O nome é «Opções da
 projeção» / «Opções da avaliação» (aria-label e title); diz que abre um
 diálogo (aria-haspopup="dialog"), não diz aberto nem fechado, nunca acende e
-não leva o ponto dos filtros — o chip já está à vista. A Visão geral e o IRS
-· Anexo F continuam com o funil e o painel (vistas.js:anaPanelPadrao,
-fisco.js:fisBarra). O da Visão geral tem o imóvel e, quando os há, os
-filtros comuns; o do IRS tem o titular (vistas.js:anaSelDono), sem filtros
-comuns, que não guardam titular. O IRS abre com a sua barra
-(estilos.css:.ana-barra): os anos e o titular em chips e as ações da página
-à direita; o chip do titular com ▾ abre o painel (vistas.js:hdrFiltToggle) e
-com × larga-o (navegacao.js:limparAmbito). Um chip com nome tem o texto num
-<span>, que leva as reticências, e nunca passa da largura da barra
-(estilos.css:.ana-ambito, o .chip>span): com um nome comprido, a página
-rolava de lado no telemóvel.
+não leva o ponto dos filtros — o chip já está à vista. A Visão geral e o IRS · Anexo F continuam com o funil e o painel
+(vistas.js:anaPanelPadrao, fisco.js:vFisco). O da Visão geral tem o imóvel e,
+quando os há, os filtros comuns; o do IRS tem o titular (vistas.js:anaSelDono)
+e o ano dos rendimentos, sem filtros comuns, que não guardam titular. É só lá
+que se escolhem: a barra do IRS (estilos.css:.ana-barra) tem só as ações da
+página e não os repete — eram os mesmos filtros duas vezes. Por isso o ponto
+do funil conta o titular e também o ano, quando foi escolhido e não é o
+automático (fisco.js:fiscoAnaN, fisco.js:fiscoAnoAuto): sem o ano à vista na
+barra, o ponto diz que a página está noutro.
 
 A janela das opções (vistas.js:anaOpcoes) tem as linhas das Definições ›
 Valores por omissão (estilos.css:.def-vr; vistas.js:anaLinhaOpcao) — são os
@@ -2912,12 +2910,18 @@ imposto à cabeça é a estimativa sem englobamento; a página chama a cada uma
 estimativa, porque é. Quem declara é a pessoa, no Portal das Finanças; a app
 poupa-lhe a soma e a procura, não a assinatura.
 
-A página é a prancheta D-Declaracao, mais curta: na barra, o ano dos
-rendimentos num seletor (fisco.js:onFiscoAnoBarra; uma pílula por ano
-ficava comprida demais), o titular e as ações — «Partilhar resumo»,
-«Exportar CSV», «Exportar PDF» (fisco-pdf.js:fiscoPdf, só com os Contratos
-ligados, onde vive o escritor do PDF) e «Guia de preenchimento», que abre o
-guia público /guias/declarar-rendas numa página nova. A app não tem guia
+A página é a prancheta D-Declaracao, mais curta: a barra só tem as ações,
+juntas à direita e numa linha também no telemóvel (fisco.js:fisBarra,
+estilos.css:.fis-acoes); o ano e o titular escolhem-se no funil. As ações são
+dois .btn.sm (36px no rato, 44 no dedo): «Guia», com o livro (icones.js:ic, o
+`livro`), que abre o guia público /guias/declarar-rendas numa página nova e
+diz no aria-label e no title «Guia de preenchimento do Anexo F»; e o botão de
+partilha, só de ícone, no feitio do da Avaliação (avaliacao.js:avaPartilha),
+que abre a janela de escolha da casa (componentes.js:pickModal,
+fisco.js:fiscoPartilha) com «Exportar CSV» e «Exportar PDF»
+(fisco-pdf.js:fiscoPdf, só com os Contratos ligados, onde vive o escritor do
+PDF), cada uma com o ícone e uma linha do que leva. Não há partilha do resumo
+em texto: o CSV e o PDF já levam os números. A app não tem guia
 próprio nem faixa das regras do ano: o prazo, o que mudou e os passos vivem
 no guia. Um ano sem versão própria das regras, ou com uma provisória, di-lo
 em «A tratar antes de entregar» (fisco.js:fiscoAvisos). Depois, os cinco
@@ -2938,12 +2942,8 @@ campos e os mesmos números. Não há simulação do englobamento: comparar com
 os escalões pedia os outros rendimentos do agregado e não se lia; o guia
 explica a escolha, e o imposto à cabeça diz «sem englobamento». «Fora da
 declaração» diz-se também quando não há nada fora
-(fisco.js:fisNadaForaCard). Na barra, o rótulo «Titular» e o chip dele
-vivem numa caixa só e quebram de linha juntos (estilos.css:.fis-titular,
-fisco.js:fisBarra). O NIF formatado nunca parte entre linhas (o
-.u-ws-nowrap; o fmtNIF continua com espaços normais). «Partilhar resumo»
-diz num aviso a cópia que o browser recusa («Não foi possível copiar o
-resumo.», fisco.js:fiscoPartilhar), em vez de ficar um erro por apanhar.
+(fisco.js:fisNadaForaCard). O NIF formatado nunca parte entre linhas (o
+.u-ws-nowrap; o fmtNIF continua com espaços normais).
 
 «A tratar antes de entregar» (fisco.js:fiscoObrigacoesCard) é numerado, e
 cada aviso leva o selo do seu nível — vermelho o que falta à AT, âmbar o que
@@ -6407,8 +6407,16 @@ sessão (cloud/qa.js:qaDobrasAqui). A lista que o servidor repinta
 «Remover» não pergunta: o aviso traz o Anular (cloud/qa.js:qaRemover).
 «Mover» passa o ticket (e o cartão) a outra coluna, logo no ecrã e
 reposto se o servidor recusar (cloud/qa.js:qaMover, cloud/qa.js:qaPassarDeColuna).
-«Reabrir» devolve um resolvido (Human Tests ou uma coluna de fim) a A fazer
-(cloud/qa.js:qaReabrir); os outros têm «Fechar».
+Em Human Tests, quem testa decide numa linha só das decisões, por baixo do
+«Remover» e do «Mover» (cloud/qa.js:qaHtmlDecisoes; a 384px as cinco não
+cabem numa linha, estilos.css:.qa-decisoes): «Recusar» devolve o ticket a A
+fazer pelo reabrir, e a resolução fica como «Resolução anterior»
+(cloud/qa.js:qaRecusar); «Adiar» passa-o a Para depois, e só aparece quando o
+kanban tem essa coluna (cloud/qa.js:qaAdiar); «Aceitar», o primário, passa-o
+a Concluído (cloud/qa.js:qaAceitar). Todas mudam o ticket logo no ecrã e
+repõem-no se o servidor recusar, como o «Mover». «Reabrir» devolve um ticket
+de uma coluna de fim a A fazer (cloud/qa.js:qaReabrir); os outros têm
+«Fechar».
 
 Quem escreveu um ticket numa conta de teste é a conta do Discord que pediu a
 ligação do /test, e não a conta de teste: a ligação leva o nome do Discord
@@ -6537,7 +6545,10 @@ de botões, nunca o seletor nativo (worker/src/equipa-kanban-filtros.js:kbSelHtm
 coluna ordena-se à parte, pelo botão do cabeçalho
 (worker/src/equipa-kanban-filtros.js:kbOrdenar): a ordem do quadro (a de
 omissão, a que o arrasto muda), Prioridade, Título, Criação, Última alteração
-ou Prazo, cada uma nos dois sentidos, guardada no aparelho; o cabeçalho diz
+ou Prazo, guardada no aparelho; a janela tem dois seletores, o «Critério» e
+o «Sentido» (com os dois rótulos do critério, e escondido na ordem do
+quadro), que aplicam logo e deixam a janela aberta, e trocar de critério
+mantém o sentido; o cabeçalho diz
 quando a coluna está ordenada, e numa coluna ordenada arrastar muda o cartão
 de coluna mas não de lugar dentro dela
 (worker/src/equipa-kanban-filtros.js:kbOrdemManual). No computador as colunas estão lado a

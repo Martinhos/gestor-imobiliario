@@ -27,6 +27,23 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 63,
+    data: '2026-11-10',
+    titulo: 'A barra do IRS mais simples',
+    seccoes: [
+      {
+        titulo: 'IRS · Anexo F',
+        afeta: ['movimentos'],
+        soDev: true,
+        itens: [
+          'O ano e o titular escolhem-se só no funil do cabeçalho, já não também na barra. O ponto do funil acende quando estás noutro ano que não o habitual.',
+          'O CSV e o PDF estão no botão de partilha, numa janela com as duas opções. O «Partilhar resumo» em texto saiu.',
+          'O guia de preenchimento abre no botão «Guia», com um livro, mais pequeno.',
+        ],
+      },
+    ],
+  },
+  {
     v: 62,
     data: '2026-11-09',
     titulo: 'O contrato em PDF com a cara da app',

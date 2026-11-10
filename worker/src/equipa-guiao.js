@@ -2085,7 +2085,7 @@ var ACOES_RASTO = {
   anaChipFocar: 'Escolher o imóvel', repAnaLimpar: 'Voltar a todos os imóveis', projAnaLimpar: 'Voltar a todos os imóveis',
   dashPersonalizarPainel: 'Personalizar painel', 'CW.backToDash': 'Visão geral', 'CW.resetDashOrder': 'Repor ordem',
   'CW.exitEdit': 'Concluir', limparAmbito: 'Limpar o titular',
-  hdrFiltToggle: 'Todos · por inteiro', fiscoPartilhar: 'Partilhar resumo', fiscoCsv: 'Exportar CSV',
+  hdrFiltToggle: 'Filtros', fiscoPartilha: 'Partilhar', fiscoCsv: 'Exportar CSV',
   fiscoPdf: 'Exportar PDF', fiscoSetIrs: 'Escolher a coluna do IRS', fiscoSetTitular: 'Escolher o titular',
   // listas, filtros e seleção
   lpMenu: 'Opções', lfClear: 'Limpar', lfToggle: 'Filtros', lfApply: 'Fechar', lfLimparCampo: 'Limpar o campo',
@@ -2125,7 +2125,7 @@ var ACOES_RASTO = {
   rstResponder: 'Aceitar ou Recusar o rasto', qaEnviar: 'Enviar ticket', qaGravidade: 'Escolher a gravidade',
   qaRemoverImagem: 'Remover a imagem', qaNovoTicket: 'Novo ticket', qaCarregarDeNovo: 'Tentar de novo',
   qaDobrar: 'Abrir ou fechar um ticket', qaAbrirTicket: 'Abrir o ticket', qaRemover: 'Remover', qaReabrir: 'Reabrir',
-  qaImagemDeNovo: 'Tentar de novo',
+  qaImagemDeNovo: 'Tentar de novo', qaAceitar: 'Aceitar', qaRecusar: 'Recusar', qaAdiar: 'Adiar',
   // conta, entrada, termos e documentos
   'CW.showAuth': 'Iniciar sessão', 'CW.submitAuth': 'Entrar ou criar conta', 'CW.modoDaEntrada': 'Entrar ou criar conta',
   'CW.verPalavraPasse': 'Mostrar a palavra-passe', 'CW.esqueci': 'Esqueci-me da palavra-passe', fecharRepor: 'Cancelar',

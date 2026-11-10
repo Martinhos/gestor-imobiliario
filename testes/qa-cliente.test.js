@@ -561,13 +561,28 @@ describe('a lista', () => {
     assert.doesNotMatch(app.qaHtmlTicket(T('K2')), /qa-cartao/, 'sem cartão, nada');
   });
 
-  test('«Reabrir» só em Human Tests e nas colunas de fim; nas outras, «Fechar»', () => {
+  test('«Reabrir» só nas colunas de fim; em Human Tests, as três decisões; nas outras, «Fechar»', () => {
     app.qaLista.colunas = app.qaColunasDe(COLUNAS.concat([{ id: 'f1n4l', nome: 'Arquivado', fim: true }]));
-    for (const st of ['human-tests', 'concluido', 'f1n4l']) {
+    for (const st of ['concluido', 'f1n4l']) {
       const r = app.qaRodapeTicket(T('Q1', { status: st }));
       assert.match(r, /data-click="qaReabrir\('Q1'\)">Reabrir</, st + ' reabre-se');
       assert.doesNotMatch(r, />Fechar</, st);
+      assert.doesNotMatch(r, /qa-decisoes|Aceitar|Recusar|Adiar/, st + ' sem as decisões');
     }
+    const ht = app.qaRodapeTicket(T('Q1', { status: 'human-tests' }));
+    assert.doesNotMatch(ht, /Reabrir|>Fechar</, 'em Human Tests decide-se');
+    assert.match(ht, /qaRemover\('Q1'\)/, 'o «Remover» fica');
+    assert.match(ht, /data-menu="acoes"[\s\S]*Mover<\/button>/, 'e o «Mover» também');
+    assert.match(ht, /<div class="qa-decisoes"><button type="button" class="btn" data-toca="dados" data-click="qaRecusar\('Q1'\)">Recusar<\/button>/);
+    assert.match(ht, /data-click="qaAdiar\('Q1'\)">Adiar<\/button>/);
+    assert.match(ht, /<button type="button" class="btn primary" data-toca="dados" data-click="qaAceitar\('Q1'\)">Aceitar<\/button><\/div>$/, '«Aceitar», o primário, no fim');
+    assert.ok(ht.indexOf('qaRemover') < ht.indexOf('qa-mover') && ht.indexOf('qa-mover') < ht.indexOf('qa-decisoes'), 'as decisões depois do «Remover» e do «Mover»');
+    // sem a coluna Para depois (o master apagou-a), não há «Adiar»
+    app.qaLista.colunas = app.qaColunasDe(COLUNAS.filter((c) => c.id !== 'para-depois'));
+    const semDepois = app.qaRodapeTicket(T('Q1', { status: 'human-tests' }));
+    assert.doesNotMatch(semDepois, /Adiar/);
+    assert.match(semDepois, /Recusar[\s\S]*Aceitar/);
+    app.qaLista.colunas = app.qaColunasDe(COLUNAS.concat([{ id: 'f1n4l', nome: 'Arquivado', fim: true }]));
     for (const st of ['a-fazer', 'auto-tests', 'para-depois', 'esquisito']) {
       const r = app.qaRodapeTicket(T('Q1', { status: st }));
       assert.doesNotMatch(r, /Reabrir/, st + ' não se reabre');
@@ -608,7 +623,7 @@ describe('a lista', () => {
     assert.ok(pedidos.some((p) => p[0] === 'GET' && p[1] === '/api/qa'), 'e a lista pede-se outra vez');
     assert.equal(app.qaLista.tickets[0].status, 'human-tests');
     assert.equal(app.qaLista.tickets[0].resolved_at, 777, 'o do servidor');
-    assert.match(app.qaRodapeTicket(app.qaLista.tickets[0]), /Reabrir/, 'em Human Tests já se reabre');
+    assert.match(app.qaRodapeTicket(app.qaLista.tickets[0]), /qaAceitar\('A1'\)/, 'em Human Tests já se decide');
     // de uma resolvida para outra que não o é, o resolved_at sai logo
     noPedido.length = 0;
     assert.equal(await app.qaMover('A1', 'auto-tests'), true);
@@ -706,7 +721,7 @@ describe('a lista', () => {
     await app.qaCarregar();
     const r1 = app.qaLista.tickets[0];
     assert.match(app.qaHtmlTicket(r1), /<b>Resolução<\/b><p>Corrigido em abc123<\/p>/);
-    assert.match(app.qaRodapeTicket(r1), /qaReabrir\('R1'\)">Reabrir</);
+    assert.match(app.qaRodapeTicket(r1), /qaRecusar\('R1'\)">Recusar</, 'em Human Tests reabre-se pelo «Recusar»');
     assert.equal(app.qaAbertos, 0);
     assert.equal(await app.qaReabrir('R1'), true);
     assert.equal(noPedido, 'a-fazer', 'já estava em A fazer quando o pedido saiu');
@@ -736,6 +751,50 @@ describe('a lista', () => {
     assert.equal(t.status, 'human-tests');
     assert.equal(t.resolved_at, 5);
     assert.equal(app.qaAbertos, 0);
+    igual(avisos, ['Sem ligação ao servidor.']);
+  });
+
+  test('Human Tests: «Aceitar» vai a Concluído, «Recusar» reabre (a A fazer), «Adiar» vai a Para depois', async () => {
+    let servidor = 'human-tests';
+    const pedidos = apiFalsa({
+      'GET /api/qa': () => ({ colunas: COLUNAS, tickets: [T('H1', { status: servidor, resolution: 'Feito em abc', resolved_at: 5 })] }),
+      'POST /api/qa/:id/mover': (d) => { servidor = d.coluna; return { ok: true }; },
+      'POST /api/qa/:id/reabrir': () => { servidor = 'a-fazer'; return { ok: true }; },
+    });
+    const avisos = [];
+    app.toast = (m) => avisos.push(m);
+    const casos = [
+      ['qaAceitar', ['POST', '/api/qa/H1/mover', { coluna: 'concluido' }], 'concluido', 'Ticket aceite.'],
+      ['qaRecusar', ['POST', '/api/qa/H1/reabrir'], 'a-fazer', 'Ticket recusado.'],
+      ['qaAdiar', ['POST', '/api/qa/H1/mover', { coluna: 'para-depois' }], 'para-depois', 'Ticket adiado.'],
+    ];
+    for (const [fn, pedido, coluna, aviso] of casos) {
+      servidor = 'human-tests';
+      await app.qaCarregar();
+      pedidos.length = 0; avisos.length = 0;
+      const ida = app[fn]('H1');
+      assert.equal(app.qaLista.tickets[0].status, coluna, fn + ': otimista, já está lá antes da resposta');
+      assert.equal(await ida, true, fn);
+      const post = pedidos.find((p) => p[0] === 'POST');
+      igual(post.slice(0, pedido.length), pedido, fn + ': a rota certa');
+      if (pedido.length === 2) assert.equal(post[2], undefined, fn + ': sem corpo');
+      igual(avisos, [aviso]);
+      await app.qaLista.aPedir;
+      assert.equal(app.qaLista.tickets[0].status, coluna, fn + ': e o servidor concorda');
+    }
+  });
+
+  test('uma decisão que falha: o ticket volta a Human Tests e o aviso diz porquê', async () => {
+    apiFalsa({
+      'GET /api/qa': { colunas: COLUNAS, tickets: [T('H1', { status: 'human-tests', resolved_at: 5 })] },
+      'POST /api/qa/:id/mover': new Error('Sem ligação ao servidor.'),
+    });
+    const avisos = [];
+    app.toast = (m) => avisos.push(m);
+    await app.qaCarregar();
+    assert.equal(await app.qaAceitar('H1'), false);
+    assert.equal(app.qaLista.tickets[0].status, 'human-tests');
+    assert.equal(app.qaLista.tickets[0].resolved_at, 5);
     igual(avisos, ['Sem ligação ao servidor.']);
   });
 });

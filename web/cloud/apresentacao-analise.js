@@ -895,11 +895,21 @@ registarApresentacao('projections', {
    Devolve: true/false. */
 function aprAFiscoAqui() { return typeof servicoLigado === 'function' && servicoLigado('fisco'); }
 
-/* A imagem do resumo: o ecrã do IRS · Anexo F com o ano dos rendimentos no
-   seletor e o titular (fisco.js:fisBarra), e o começo do cartão do quadro
-   4.1 — onde se preenche e um contrato por linha, com as rendas e o imposto
-   estimado (fisco.js:fiscoQuadroResumoHtml). Um cartão por quadro, como a
-   página: o 4.2 tem o seu.
+/* A barra do IRS · Anexo F em miniatura (fisco.js:fisBarra): só as ações,
+   juntas à direita — o «Guia», com o livro, e o botão de partilha, só de
+   ícone. O ano e o titular não estão nela: escolhem-se no funil.
+   Recebe: alvo — o «Guia» em destaque.
+   Devolve: o HTML. */
+function aprAFiscoBarra(alvo) {
+  return '<span class="apr-a-fis-acoes">' + aprBotao('Guia', { pequeno: true, icone: 'livro', alvo: alvo }) +
+    '<span class="apr-a-icobotao">' + ic('partilhar', 12) + '</span></span>';
+}
+
+/* A imagem do resumo: o ecrã do IRS · Anexo F com a barra das ações
+   (aprAFiscoBarra), e o começo do cartão do quadro 4.1 — onde se preenche e
+   um contrato por linha, com as rendas e o imposto estimado
+   (fisco.js:fiscoQuadroResumoHtml). Um cartão por quadro, como a página: o
+   4.2 tem o seu.
    Devolve: o HTML da imagem. */
 function aprAFiscoResumo() {
   var ex = APR_EXEMPLO, ano = aprAFiscoAno(), f = aprAFisco(ano), n = ex.receitaMes.length;
@@ -909,7 +919,7 @@ function aprAFiscoResumo() {
     return [esc(c.inquilino), esc(aprDinheiro(r)), '<b>' + esc(aprDinheiro(f.imposto * r / f.rendas)) + '</b>'];
   };
   return aprCena(aprAEcra('IRS · Anexo F', aprADireita('funil'),
-    '<span class="apr-a-anos">' + aprASeletor(String(ano)) + '<span class="apr-m-chip apr-a-chip">Todos · por inteiro' + ic('chevD', 10) + '</span></span>' +
+    aprAFiscoBarra(false) +
     aprACartao('Quadro 4.1 · sem redução', 'preenche no quadro 4.1', aprATabela(['Contrato', 'Rendas', 'Imposto'],
       [linha('c5'), linha('c1')], { cols: 'c3' }), { classe: 'apr-a-cartao-quadros' })),
     { tom: 't0', arranjo: 'tela' });
@@ -951,10 +961,11 @@ function aprAFiscoSituacao() {
   { tom: 't2', arranjo: 'coluna' });
 }
 
-/* A imagem do titular e do guia: o painel do funil com o titular e o ano
-   (fisco.js:vFisco) atrás e, à frente, a barra com o chip do titular
-   escolhido, na quota-parte, e o botão «Guia de preenchimento», que abre o
-   guia público de como declarar as rendas (fisco.js:fisBarra).
+/* A imagem do titular e do guia: o painel do funil com o titular escolhido
+   e o ano (fisco.js:vFisco) atrás — é só lá que se escolhem — e, à frente, a
+   barra das ações (aprAFiscoBarra) com o «Guia» em destaque, que abre o guia
+   público de como declarar as rendas, e o botão de partilha, com o CSV e o
+   PDF (fisco.js:fisBarra).
    Devolve: o HTML da imagem. */
 function aprAFiscoTitular() {
   var h = APR_EXEMPLO.proprietarios[0], ano = aprAFiscoAno();
@@ -963,9 +974,7 @@ function aprAFiscoTitular() {
       '<span class="apr-m-sub">O Anexo F é por titular: com um escolhido, rendas e gastos entram na quota-parte dele.</span>' +
       '<span class="apr-a-pe">' + aprBotao('Limpar', { pequeno: true, icone: 'x' }) + aprBotao('Fechar', { primario: true, pequeno: true, icone: 'check' }) + '</span>',
     { classe: 'apr-a-painel-filtro' }),
-    aprCartao('<span class="apr-a-titular"><span class="apr-m-rot apr-m-maiusc">Titular</span><span class="apr-m-chip on apr-a-chip">' + esc(h.nome + ' · quota-parte') + ic('x', 10) + '</span></span>' +
-      aprBotao('Guia de preenchimento', { pequeno: true }),
-    { flutua: true, classe: 'apr-a-cartao-titular' })
+    aprCartao(aprAFiscoBarra(true), { flutua: true, classe: 'apr-a-cartao-titular' })
   ), { tom: 't3', arranjo: 'par' });
 }
 
@@ -983,7 +992,7 @@ registarApresentacao('fisco', {
       texto: 'Em <b>A tua situação fiscal</b> dizes se há tributação conjunta e se tens dispensa dos recibos eletrónicos. Com a dispensa, a página lembra-te o Modelo 44 e o prazo dele.',
       maquete: aprAFiscoSituacao, quando: aprAFiscoAqui },
     { titulo: 'Por titular, com o guia ao lado',
-      texto: 'O Anexo F é por titular: escolhe-o no chip <b>Titular</b>, e as rendas e os gastos entram na quota-parte dele. <b>Guia de preenchimento</b> abre o guia de como declarar as rendas, com o que vai a cada quadro.',
+      texto: 'O Anexo F é por titular: escolhe-o no <b>funil</b> do cabeçalho, com o ano, e as rendas e os gastos entram na quota-parte dele. <b>Guia</b> abre o guia de como declarar as rendas; a partilha exporta o CSV ou o PDF.',
       maquete: aprAFiscoTitular, quando: aprAFiscoAqui },
   ],
 });

@@ -76,6 +76,9 @@ var QA_GRAVIDADES = [
 var QA_COL_NOVO = 'a-fazer';
 var QA_COL_EM_CURSO = 'auto-tests';
 var QA_COL_RESOLVIDO = 'human-tests';
+// para onde vão as decisões de quem testa um ticket em Human Tests: «Aceitar» e «Adiar» (qaRodapeTicket)
+var QA_COL_CONCLUIDO = 'concluido';
+var QA_COL_DEPOIS = 'para-depois';
 // as colunas quando o servidor não as manda (um servidor de antes da 0029), pela ordem do quadro
 var QA_COLUNAS_OMISSAO = [
   { id: 'a-fazer', nome: 'A fazer', fim: false },
@@ -1514,17 +1517,37 @@ function qaSeloEstado(status) {
 
 /* O rodapé da janela de um ticket: «Remover» sempre (com Anular, por isso
    sem pergunta), «Mover» (as outras colunas do kanban, num menu de
-   ações: qaHtmlMover), e «Reabrir» (volta a A fazer) num resolvido — em
-   Human Tests ou numa coluna de fim — ou «Fechar» nos outros.
+   ações: qaHtmlMover) e, a acabar:
+   - em Human Tests, as três decisões de quem testa (qaHtmlDecisoes), numa
+     linha só delas por baixo do «Remover» e do «Mover»;
+   - numa coluna de fim, «Reabrir» (volta a A fazer);
+   - nas outras, «Fechar».
    Recebe: t — o ticket.
    Devolve: o HTML (texto). */
 function qaRodapeTicket(t) {
   var id = jsq(t.id);
+  var fim;
+  if (t.status === QA_COL_RESOLVIDO) fim = qaHtmlDecisoes(t);
+  else if (qaColunaResolvida(t.status)) fim = '<button type="button" class="btn primary" data-toca="dados" data-click="qaReabrir(\'' + id + '\')">Reabrir</button>';
+  else fim = '<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>';
   return '<button type="button" class="btn qa-remover" data-toca="dados" data-risco="destroi" data-click="qaRemover(\'' + id + '\')">' + ic('trash', 16) + ' Remover</button>' +
-    qaHtmlMover(t) +
-    (qaColunaResolvida(t.status)
-      ? '<button type="button" class="btn primary" data-toca="dados" data-click="qaReabrir(\'' + id + '\')">Reabrir</button>'
-      : '<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>');
+    qaHtmlMover(t) + fim;
+}
+
+/* As decisões sobre um ticket em Human Tests, numa linha própria do rodapé
+   (.qa-decisoes): «Recusar» (volta a A fazer, pelo reabrir, que guarda a
+   resolução como anterior: qaRecusar), «Adiar» (para Para depois: qaAdiar;
+   só quando o kanban tem essa coluna, que o master pode apagar) e
+   «Aceitar» (para Concluído: qaAceitar), o primário, no fim.
+   Recebe: t — o ticket.
+   Devolve: o HTML (texto). */
+function qaHtmlDecisoes(t) {
+  var id = jsq(t.id);
+  return '<div class="qa-decisoes">' +
+    '<button type="button" class="btn" data-toca="dados" data-click="qaRecusar(\'' + id + '\')">Recusar</button>' +
+    (qaColuna(QA_COL_DEPOIS) ? '<button type="button" class="btn" data-toca="dados" data-click="qaAdiar(\'' + id + '\')">Adiar</button>' : '') +
+    '<button type="button" class="btn primary" data-toca="dados" data-click="qaAceitar(\'' + id + '\')">Aceitar</button>' +
+    '</div>';
 }
 
 /* «Mover»: o botão e o menu de ações da casa (.menupop, aberto pelo
@@ -1656,6 +1679,31 @@ function qaRepor(id) {
    Devolve: Promise com true se ficou reaberto. */
 function qaReabrir(id) {
   return qaPassarDeColuna(id, QA_COL_NOVO, '/reabrir', undefined, 'Ticket reaberto.', 'Não deu para reabrir o ticket.');
+}
+
+/* «Aceitar» um ticket em Human Tests: passa a Concluído (POST
+   /api/qa/:id/mover). Otimista (qaPassarDeColuna).
+   Recebe: id — o id do ticket.
+   Devolve: Promise com true se ficou aceite. */
+function qaAceitar(id) {
+  return qaPassarDeColuna(id, QA_COL_CONCLUIDO, '/mover', { coluna: QA_COL_CONCLUIDO }, 'Ticket aceite.', 'Não deu para aceitar o ticket.');
+}
+
+/* «Recusar» um ticket em Human Tests: volta a A fazer pelo reabrir (POST
+   /api/qa/:id/reabrir), e a resolução fica como «Resolução anterior», para
+   quem pegar nele de novo ver o que se tentou. Otimista (qaPassarDeColuna).
+   Recebe: id — o id do ticket.
+   Devolve: Promise com true se ficou recusado. */
+function qaRecusar(id) {
+  return qaPassarDeColuna(id, QA_COL_NOVO, '/reabrir', undefined, 'Ticket recusado.', 'Não deu para recusar o ticket.');
+}
+
+/* «Adiar» um ticket em Human Tests: passa a Para depois (POST
+   /api/qa/:id/mover). Otimista (qaPassarDeColuna).
+   Recebe: id — o id do ticket.
+   Devolve: Promise com true se ficou adiado. */
+function qaAdiar(id) {
+  return qaPassarDeColuna(id, QA_COL_DEPOIS, '/mover', { coluna: QA_COL_DEPOIS }, 'Ticket adiado.', 'Não deu para adiar o ticket.');
 }
 
 /* «Mover» uma coluna do kanban (POST /api/qa/:id/mover {coluna}): o

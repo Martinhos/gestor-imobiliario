@@ -1,5 +1,6 @@
-// A página da Declaração depois da ronda 10 de QA: o ano dos rendimentos num
-// seletor (e não uma pílula por ano), sem o cartão azul das regras nem a dobra
+// A página da Declaração depois das rondas 10 e 11 de QA: a barra só com o
+// «Guia» e o botão de partilha (o ano e o titular ficam no painel do funil; o
+// CSV e o PDF numa janela), sem o cartão azul das regras nem a dobra
 // do guia (o guia é o público, /guias/declarar-rendas, e a barra leva lá), sem
 // o englobamento, o aviso do ano sem versão em «A tratar antes de entregar»,
 // os quadros 4.1 e 4.2 em cartões — um por contrato, campo → valor pela ordem
@@ -7,7 +8,10 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { carregarApp, limpar, repor } from './arnes.js';
+
+const css = readFileSync(new URL('../web/estilos.css', import.meta.url), 'utf8');
 
 const app = carregarApp({ hoje: '2026-03-15' });
 // o repor não liga os serviços que um teste desligou
@@ -67,42 +71,79 @@ function valorDe(h, campo) {
   return m ? m[1] : null;
 }
 
+/* abre a janela do botão de partilha com o pickModal apanhado
+   Devolve: {titulo, opcoes, escolher} — o que a janela recebeu. */
+function abrirPartilha() {
+  const antes = app.pickModal, visto = {};
+  app.pickModal = (titulo, opcoes, escolher) => { Object.assign(visto, { titulo, opcoes, escolher }); };
+  try { app.fiscoPartilha(); } finally { app.pickModal = antes; }
+  return visto;
+}
+
 describe('a barra', () => {
-  test('o ano num seletor que muda a página, e o guia é o público, numa página nova', () => {
+  test('só as ações, juntas: o guia (pequeno, com o livro) e o botão de partilha', () => {
     const html = app.vFisco();
-    assert.match(html, /<label class="fis-ano"><span class="lbl">Ano de rendimentos<\/span><div class="sel" id="sel_fiscoAnoSel">/);
-    assert.equal(app.window.__sel.fiscoAnoSel.onchange, 'onFiscoAnoBarra');
-    const anos = app.window.__sel.fiscoAnoSel.options.map((o) => o.v);
-    assert.ok(anos.includes('2025') && anos.every((y) => /^\d{4}$/.test(y)), 'um ano por opção, com o da página');
-    assert.doesNotMatch(html, /class="chip[^"]*" aria-pressed="(true|false)" data-toca="vista" data-click="fiscoEscolherAno/);
-    assert.match(html, /<a class="btn" href="\/guias\/declarar-rendas" target="_blank" rel="noopener" data-toca="nada">Guia de preenchimento<\/a>/);
-    // escolher outro ano no seletor muda a página
-    let pintou = 0;
-    app.render = () => { pintou++; };
-    app.document.getElementById('fiscoAnoSel').value = '2024';
-    app.onFiscoAnoBarra();
-    assert.equal(app.fiscoAno, '2024');
-    assert.equal(pintou, 1);
-    assert.equal(app.fiscoAnoAtual(), 2024);
+    const barra = html.slice(html.indexOf('<div class="ana-barra">'), html.indexOf('<div class="grid fis-kpis">'));
+    assert.equal(barra,
+      '<div class="ana-barra"><div class="ana-acoes fis-acoes">'
+      + '<a class="btn sm fis-guia" href="/guias/declarar-rendas" target="_blank" rel="noopener" data-toca="nada" aria-label="Guia de preenchimento do Anexo F" title="Guia de preenchimento do Anexo F">'
+      + app.ic('livro', 18) + '<span>Guia</span></a>'
+      + '<button type="button" class="btn sm so-icone" data-toca="camada" data-click="fiscoPartilha()" aria-haspopup="dialog" aria-label="Partilhar" title="Partilhar">'
+      + app.ic('partilhar', 18) + '</button></div></div>');
+    assert.doesNotMatch(html, /Guia de preenchimento<\/a>|Exportar CSV|Exportar PDF|Partilhar resumo|fiscoAnoSel/, 'sem os botões soltos nem o ano na barra');
   });
 
-  test('«Exportar PDF» chama o fiscoPdf, e só aparece com o serviço Contratos (o do escritor do PDF) ligado', () => {
-    assert.equal(typeof app.fiscoPdf, 'function', 'o fisco-pdf.js vem com o serviço da Declaração');
+  test('o livro do guia: no traço da casa, sem preenchimento', () => {
+    const s = app.ic('livro');
+    assert.match(s, /fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="[^"]+"\/><path d="[^"]+"\/><\/svg>$/);
+    assert.notEqual(s, app.ic('ajuda'), 'é o livro, e não o ?');
+  });
+
+  test('o ano escolhe-se no painel do funil, e o vazio de um ano aponta para lá', () => {
     let html = app.vFisco();
-    assert.match(html, /<button type="button" class="btn" data-toca="nada" data-click="fiscoPdf\(\)">Exportar PDF<\/button>/);
-    assert.ok(html.indexOf('Exportar CSV') < html.indexOf('Exportar PDF') && html.indexOf('Exportar PDF') < html.indexOf('Guia de preenchimento'),
-      'ao lado do CSV, antes do guia');
-    app.definirServicosDesligados(['contracts']);
+    assert.equal(app.window.__sel.fiscoSel.onchange, 'onFiscoAno');
+    const anos = app.window.__sel.fiscoSel.options.map((o) => o.v);
+    assert.ok(anos.includes('2025') && anos.every((y) => /^\d{4}$/.test(y)), 'um ano por opção, com o da página');
+    app.fiscoAno = '2027';
     html = app.vFisco();
-    assert.doesNotMatch(html, /Exportar PDF|fiscoPdf/);
-    assert.match(html, /Exportar CSV/, 'o CSV fica');
+    assert.match(html, /Sem rendas em 2027/);
+    assert.match(html, /Escolher outro ano/);
+    assert.match(html, /hdrFiltToggle\(\)/, 'que abre o painel do funil');
+    assert.doesNotMatch(html, /ana-barra|fiscoPartilha|Guia/, 'sem rendas, sem a barra das ações');
   });
 
-  test('sem rendas no ano, a barra fica sem as ações', () => {
-    app.fiscoAno = '2027';
-    const html = app.vFisco();
-    assert.match(html, /Sem rendas em 2027/);
-    assert.doesNotMatch(html, /Guia de preenchimento|Exportar/);
+  test('a partilha abre a janela com o CSV e o PDF, cada um com o ícone e o que leva', () => {
+    const j = abrirPartilha();
+    assert.equal(j.titulo, 'Partilhar');
+    assert.deepEqual(JSON.parse(JSON.stringify(j.opcoes.map((o) => [o.v, o.label, o.icon]))), [['csv', 'Exportar CSV', 'down'], ['pdf', 'Exportar PDF', 'contract']]);
+    assert.ok(j.opcoes.every((o) => o.sub && o.sub.length < 60), 'uma linha curta a dizer o que leva');
+    // escolher fecha a janela e exporta
+    const feito = [], antes = { closeModal: app.closeModal, fiscoCsv: app.fiscoCsv, fiscoPdf: app.fiscoPdf };
+    app.closeModal = () => feito.push('fechar');
+    app.fiscoCsv = () => feito.push('csv');
+    app.fiscoPdf = () => feito.push('pdf');
+    try {
+      j.escolher(j.opcoes[0]);
+      j.escolher(j.opcoes[1]);
+    } finally { Object.assign(app, antes); }
+    assert.deepEqual(feito, ['fechar', 'csv', 'fechar', 'pdf']);
+  });
+
+  test('os estilos: as ações juntas à direita, numa linha, e nada do ano nem do titular na barra', () => {
+    assert.match(css, /\n\.fis-acoes\{margin-left:auto;flex-wrap:nowrap;gap:8px\}/);
+    assert.match(css, /\n\.apr-a-fis-acoes\{display:flex;align-items:center;justify-content:flex-end;gap:6px\}/);
+    assert.doesNotMatch(css, /\.fis-ano|\.fis-titular|\.fis-lbl|\.ana-ambito/, 'o CSS sem uso saiu');
+    assert.doesNotMatch(css, /\.ana-acoes\{width:100%/, 'as ações já não ocupam uma linha inteira no telemóvel');
+    // no dedo, os dois botões pequenos sobem aos 44px (o .ana .btn.sm e o quadrado do ícone)
+    assert.match(css, /@media\(pointer:coarse\)\{\n {2}\.fis-ab>button,\.ana \.btn\.sm\{min-height:44px\}\n[^}]*\.ana \.btn\.sm\.so-icone\{width:44px\}/);
+  });
+
+  test('sem o serviço Contratos (o do escritor do PDF), a janela só tem o CSV', () => {
+    assert.equal(typeof app.fiscoPdf, 'function', 'o fisco-pdf.js vem com o serviço da Declaração');
+    app.definirServicosDesligados(['contracts']);
+    const j = abrirPartilha();
+    assert.deepEqual(JSON.parse(JSON.stringify(j.opcoes.map((o) => o.v))), ['csv']);
+    assert.doesNotMatch(app.vFisco(), /fiscoPdf/);
   });
 });
 

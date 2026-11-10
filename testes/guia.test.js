@@ -126,6 +126,7 @@ describe('o guia «Declarar as rendas»', () => {
       assert.match(l, /class="i nao"/);
       assert.match(l, /<span class="so-leitor">Não podes deduzir: <\/span>/);
     }
+    assert.match(CSS_GUIA, /\.ir a\.btn\{[^}]*max-width:100%;white-space:normal/, 'o botão do Portal das Finanças quebra o rótulo em vez de sair do ecrã (KAN-99)');
     assert.match(CSS_GUIA, /\.i\.sim\{color:var\(--in\)\}/);
     assert.match(CSS_GUIA, /\.i\.nao\{color:var\(--danger\)\}/);
   });

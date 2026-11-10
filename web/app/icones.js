@@ -84,6 +84,9 @@ function ic(n,s){s=s||20;const I={
      pontos ligados, o sinal de partilha do Android — a seta a sair da caixa
      lia-se como «carregar», ao lado do «down» das descargas */
   partilhar:'<circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 13.3 7.4 4.4M15.7 6.3l-7.4 4.4"/>',
+  /* o guia de preenchimento da Declaração (fisco.js:fisBarra): um livro
+     aberto, as duas páginas a dobrar para a lombada */
+  livro:'<path d="M2 4.5h6a4 4 0 0 1 4 4V20a3 3 0 0 0-3-3H2z"/><path d="M22 4.5h-6a4 4 0 0 0-4 4V20a3 3 0 0 1 3-3h7z"/>',
   x:'<path d="M6 6l12 12M18 6 6 18"/>',
   pen:'<path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/>',
   info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',

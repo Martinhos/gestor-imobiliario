@@ -243,11 +243,10 @@ describe('a vista, o texto e o CSV', () => {
     assert.ok(html.includes('class="label">Retenções na fonte</div><div class="value ">' + app.euro(500)), 'as retenções que já iam no quadro, à cabeça');
     assert.match(html, /id="fiscoSel"/);
     assert.match(html, /id="ownerSel"/);
-    assert.match(html, /fiscoPartilhar\(\)">Partilhar resumo</, 'as ações da página dizem o que fazem');
-    assert.match(html, /fiscoCsv\(\)">Exportar CSV</);
-    assert.match(html, /<label class="fis-ano"><span class="lbl">Ano de rendimentos<\/span><div class="sel" id="sel_fiscoAnoSel">/, 'o ano dos rendimentos num seletor, com o rótulo a dar-lhe o nome');
-    assert.match(html, /<span id="lab_fiscoAnoSel">2024<\/span>/, 'com o da página escolhido');
-    assert.doesNotMatch(html, /fiscoEscolherAno/, 'sem uma pílula por ano');
+    assert.match(html, /<span id="lab_fiscoSel">2024<\/span>/, 'o ano da página no seletor do painel');
+    assert.doesNotMatch(html, /fiscoAnoSel|fis-ano"|fiscoEscolherAno/, 'sem o ano na barra, nem uma pílula por ano');
+    assert.doesNotMatch(html, /Partilhar resumo|fiscoPartilhar\(/, 'sem a partilha do resumo em texto');
+    assert.match(html, /data-click="fiscoPartilha\(\)" aria-haspopup="dialog" aria-label="Partilhar"/, 'o CSV e o PDF atrás do botão de partilha');
     assert.match(html, /<div class="fis-cts">/, 'os campos de cada quadro em cartões');
     /* um cartão por quadro, que abre com onde se preenche e o resumo dos contratos dele */
     assert.doesNotMatch(html, /Quadros 4\.1 e 4\.2|<th>Quadro<\/th>/, 'sem o resumo misto dos dois quadros');
@@ -351,35 +350,47 @@ describe('a vista, o texto e o CSV', () => {
     const mes = Number(app.today().slice(5, 7)), Y = app.YEAR;
     const tem = (y) => app.db.transactions.some((t) => app.ehRenda(t) && String(t.date).startsWith(String(y)));
     assert.equal(app.fiscoAnoAtual(), mes <= 6 && tem(Y - 1) ? Y - 1 : Y);
+    assert.equal(app.fiscoAnoAuto(), app.fiscoAnoAtual());
     app.fiscoAno = '2019';
     assert.equal(app.fiscoAnoAtual(), 2019);
+    assert.equal(app.fiscoAnoAuto(), mes <= 6 && tem(Y - 1) ? Y - 1 : Y, 'o automático não muda com o escolhido');
+  });
+
+  test('o ponto do funil: o titular, e o ano quando foi escolhido e não é o automático', () => {
+    app.ownerFilter = '';
+    app.fiscoAno = '';
+    assert.equal(app.fiscoAnaN(), 0, 'nada escolhido');
+    app.fiscoAno = String(app.fiscoAnoAuto());
+    assert.equal(app.fiscoAnaN(), 0, 'o ano automático escolhido à mão não acende');
+    app.fiscoAno = String(app.fiscoAnoAuto() - 3);
+    assert.equal(app.fiscoAnaN(), 1, 'outro ano acende o ponto: já não está à vista na barra');
+    app.ownerFilter = 'ana';
+    assert.equal(app.fiscoAnaN(), 2, 'com o titular, dois');
+    app.fiscoAnaLimpar();
+    assert.equal(app.fiscoAno, '');
+    assert.equal(app.fiscoAnaN(), 1, 'limpar tira o ano; o titular limpa-o a base');
+    app.ownerFilter = '';
   });
 });
 
 describe('a barra, a partilha e os cartões dos quadros', () => {
-  test('o rótulo «Titular» e o chip vão juntos, e o texto do chip vai num span (as reticências de um nome comprido)', () => {
-    let html = app.vFisco();
-    assert.ok(html.includes('<span class="fis-titular"><span class="lbl fis-lbl">Titular</span><button type="button" class="chip" data-toca="vista" data-click="hdrFiltToggle()"><span>Todos · por inteiro</span>'),
-      'sem titular, o rótulo e o chip numa caixa só');
-    app.ownerFilter = 'ana';
-    html = app.vFisco();
-    assert.match(html, /<span class="fis-titular"><span class="lbl fis-lbl">Titular<\/span><button type="button" class="chip on"[^>]*><span>Ana · quota-parte<\/span>/);
+  test('a barra não repete o titular nem o ano: estão no painel do funil', () => {
+    for (const dono of ['', 'ana']) {
+      app.ownerFilter = dono;
+      const html = app.vFisco();
+      const barra = html.slice(html.indexOf('<div class="ana-barra">'), html.indexOf('<div class="grid fis-kpis">'));
+      assert.ok(barra.length > 0, 'há barra');
+      assert.doesNotMatch(barra, /fis-titular|Titular|quota-parte|Todos · por inteiro|class="chip|fiscoAnoSel|sel_/, 'só as ações');
+      assert.match(html, /id="ownerSel"/, 'o titular escolhe-se no painel');
+      assert.match(html, /id="fiscoSel"/, 'e o ano também');
+    }
+    app.ownerFilter = '';
+    assert.equal(typeof app.onFiscoAnoBarra, 'undefined', 'o seletor da barra saiu');
   });
 
-  test('uma cópia recusada diz-se num aviso, sem ficar um erro por apanhar', async () => {
-    const avisos = [];
-    app.toast = (m) => avisos.push(m);
-    const nav = app.navigator;
-    nav.clipboard = { writeText: () => Promise.reject(new Error('Write permission denied.')) };
-    try {
-      await app.fiscoPartilhar();
-      assert.deepEqual(avisos, ['Não foi possível copiar o resumo.']);
-      nav.clipboard = { writeText: () => Promise.resolve() };
-      await app.fiscoPartilhar();
-      assert.deepEqual(avisos, ['Não foi possível copiar o resumo.', 'Resumo copiado.']);
-    } finally {
-      delete nav.clipboard;
-    }
+  test('sem o «Partilhar resumo»: a partilha em texto saiu', () => {
+    assert.equal(typeof app.fiscoPartilhar, 'undefined');
+    assert.doesNotMatch(app.vFisco(), /Partilhar resumo/);
   });
 
   test('no quadro, cada contrato é um cartão sem tabela, o total vem no fim e o NIF não parte entre linhas', () => {

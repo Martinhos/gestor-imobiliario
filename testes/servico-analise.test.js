@@ -241,7 +241,7 @@ describe('desligado: com os serviços que usam desligados, cada vista rende sem 
     assert.match(html, /O serviço Contratos está desligado nesta conta\./);
     assert.match(html, /O serviço Movimentos está desligado nesta conta\./);
     assert.match(html, SUPORTE);
-    assert.match(html, /go\('settings'\)|hdrFiltToggle\(\)|fiscoCsv\(\)/, 'o que é da base fica');
+    assert.match(html, /go\('settings'\)|hdrFiltToggle\(\)|fiscoPartilha\(\)/, 'o que é da base fica');
     const r = app.resumoFiscal(ANO, '');
     for (const a of r.avisos) if (!/Definições/.test(a.texto)) assert.equal(a.abrir, '', a.texto + ' fica sem toque');
     // o vazio sem imóveis

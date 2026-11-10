@@ -3468,17 +3468,8 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .ana{display:flex;flex-direction:column;gap:14px;min-width:0}
 .ana>*{min-width:0}
 .ana>.cols{margin-top:0}
-/* a barra do âmbito: chips, os campos da página e as ações */
+/* a barra do topo de uma análise (a da Declaração: só as ações, à direita) */
 .ana-barra{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px}
-.ana-ambito{flex:1 1 auto;min-width:0}
-.ana-ambito .chip{min-height:40px;max-width:100%;min-width:0}
-/* um nome comprido (de imóvel ou de proprietário) leva reticências no texto
-   do chip, que nunca passa da largura da barra: era a página a rolar de lado
-   no telemóvel, com o chip cortado a meio da palavra e sem o × */
-.ana-ambito .chip>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ana-ambito .lbl+.chip{margin-left:-2px}
-/* o rótulo «Titular» e o chip dele numa caixa só: quebram de linha juntos */
-.fis-titular{display:inline-flex;align-items:center;gap:8px;min-width:0;max-width:100%;margin-left:8px}
 .ana-acoes{display:flex;flex-wrap:wrap;gap:10px}
 /* o cartão da Análise: cabeçalho com o título e o subtítulo, e o resto em coluna */
 .ana-cartao{display:flex;flex-direction:column;gap:12px}
@@ -3582,12 +3573,17 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 @media(min-width:521px){.prj-tabela thead th{white-space:normal;vertical-align:bottom;min-width:76px;max-width:150px}}
 
 /* ---- o IRS · Anexo F ---- */
-/* o ano dos rendimentos na barra: o rótulo e o seletor (sel()) juntos, o
-   seletor à largura do ano e não da barra */
-.fis-ano{display:inline-flex;align-items:center;gap:8px;min-width:0;font-size:inherit;font-weight:inherit}
-.fis-ano .sel{width:auto}
-.fis-ano .selbtn{width:auto;min-width:104px;min-height:40px;font-weight:600}
-.fis-ano .selpop{right:auto;min-width:100%}
+/* a barra (fisco.js:fisBarra): só as ações, o guia e o partilhar, juntas à
+   direita e numa linha também no telemóvel — o ano e o titular vivem no
+   painel do funil. Os dois são .btn.sm (36px no rato, 44 no dedo, a regra
+   do pointer:coarse abaixo); o «Guia» tem o livro e a palavra, e o
+   partilhar só o ícone, quadrado */
+.fis-acoes{margin-left:auto;flex-wrap:nowrap;gap:8px}
+.fis-guia{gap:6px}
+.fis-guia>svg,.fis-acoes>.so-icone>svg{flex:none}
+/* a mesma barra em miniatura, na apresentação da 1.ª visita
+   (apresentacao-analise.js:aprAFiscoBarra): as ações juntas à direita */
+.apr-a-fis-acoes{display:flex;align-items:center;justify-content:flex-end;gap:6px}
 /* o imposto estimado em destaque, no azul-noite da barra lateral */
 .fis-kpis>.kpi:last-child{background:var(--side);border-color:var(--side-line)}
 .fis-kpis>.kpi:last-child .label,.fis-kpis>.kpi:last-child .foot,.fis-kpis>.kpi:last-child .expl{color:var(--side-text)}
@@ -3676,19 +3672,13 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .fis-ctc-total{background:var(--chip);border-color:var(--chip)}
 .fis-ctc-total .fis-campo{border-top-color:var(--line2)}
 @media(pointer:coarse){
-  .ana-ambito .chip,.fis-ab>button,.ana .btn.sm,.fis-ano .selbtn{min-height:44px}
+  .fis-ab>button,.ana .btn.sm{min-height:44px}
   /* um botão só de ícone pequeno (o ⓘ das contas entre proprietários) fica 44×44 */
   .ana .btn.sm.so-icone{width:44px}
 }
 @media(max-width:520px){
   .ana-barra{gap:8px}
-  /* no telemóvel as ações da página (o «Partilhar resumo» da Declaração)
-     ficam numa linha delas, lado a lado, a dividir a largura */
-  .ana-acoes{width:100%;gap:8px}
-  .ana-acoes>.btn{flex:1 1 auto;padding:0 10px;font-size:14px}
   .fis-ob .btn{margin-left:38px}
-  /* o rótulo do titular desce com o chip para a fila seguinte: sem recuo */
-  .fis-titular{margin-left:0}
   /* o botão do canto do cabeçalho (o ⓘ das contas) fica à direita do título
      e do subtítulo, em vez de cair numa fila só dele por baixo */
   .ana-cab:has(>.ana-extra){display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px}
@@ -3718,8 +3708,8 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 /* As ações da Avaliação são um botão só, de ícone (avaliacao.js:avaPartilha:
    o .btn.so-icone, 44×44), que abre o menu de ações da casa (.menupop). No
    telemóvel fica na linha do chip, à direita, em vez de descer para uma linha
-   dele (a regra do .ana-acoes de largura inteira, na secção 1.3.7, é a da
-   Declaração). O menu tem a largura das opções, sem partir «Exportar
+   dele (com largura automática: a regra antiga do .ana-acoes de largura
+   inteira era a da Declaração, que saiu). O menu tem a largura das opções, sem partir «Exportar
    movimentos (CSV)» em duas linhas, e nunca passa da largura do ecrã. */
 @media(max-width:520px){.ana-topo>.ana-acoes{width:auto}}
 .ava-partilha .menupop{width:max-content;max-width:calc(100vw - 32px)}
@@ -5587,12 +5577,10 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 .apr-a-cartao-prj .apr-a-legenda{flex-direction:row;flex-wrap:wrap;gap:2px 8px}
 .apr-a-cartao-prj .apr-a-cima,.apr-a-cartao-prj .apr-a-baixo{height:28px}
 .apr-a-cartao-foco{gap:6px;padding:8px}
-/* o IRS · Anexo F em miniatura (fisco.js): o ano em chips com o titular, a
-   faixa das regras do ano, os pontos de «A tratar antes de entregar», os
-   interruptores da situação fiscal (a bola do lado ligado diz o estado pela
-   forma) e o veredito do englobamento */
-.apr-a-anos{display:flex;align-items:center;justify-content:space-between;gap:6px}
-.apr-a-anos>.apr-m-chips{flex-wrap:nowrap}
+/* o IRS · Anexo F em miniatura (fisco.js): a faixa das regras do ano, os
+   pontos de «A tratar antes de entregar», os interruptores da situação
+   fiscal (a bola do lado ligado diz o estado pela forma) e o veredito do
+   englobamento */
 .apr-a-faixa{display:flex;flex-wrap:wrap;align-items:center;gap:3px 6px;padding:7px 9px;border-radius:10px;background:var(--accent-soft)}
 .apr-a-faixa>b{font-family:var(--letra-titulo);font-size:12px;color:var(--ink)}
 .apr-a-faixa>.apr-m-sub{flex:1 1 100%;color:var(--accent-text)}
@@ -5610,7 +5598,6 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 .apr-a-int.on::after{left:13px}
 .apr-a-veredito{display:flex;align-items:center;gap:5px;padding:5px 7px;border-radius:7px;background:var(--in-soft);color:var(--in);font-size:9.5px;font-weight:600}
 .apr-a-veredito>svg{flex:none}
-.apr-a-titular{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
 .apr-a-cartao-titular{gap:9px;padding:9px 10px}
 .apr-a-cartao-quadros{gap:2px;padding:6px 9px 4px}
 .apr-a-dobra{display:flex;align-items:center;gap:6px;font-size:10.5px}
@@ -5766,6 +5753,12 @@ p.qa-quem{margin:0}
 .qa-ver-cab .qa-cartao{margin-left:auto}
 .qa-janela .foot .qa-mover{flex:1;display:flex}
 .qa-janela .foot .qa-mover>.btn{flex:1;white-space:nowrap}
+/* Em Human Tests, as três decisões (cloud/qa.js:qaHtmlDecisoes) numa linha
+   só delas, por baixo do «Remover» e do «Mover»: as cinco não cabem numa
+   linha a 384px. Os outros rodapés não mudam (o :has só os apanha a eles) */
+.qa-janela .foot:has(>.qa-decisoes){flex-wrap:wrap}
+.qa-janela .foot>.qa-decisoes{flex:1 1 100%;display:flex;gap:10px;min-width:0}
+.qa-janela .foot>.qa-decisoes>.btn{min-width:0;white-space:nowrap}
 .qa-ver-txt{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.5}
 .qa-ver-img{position:relative;min-height:120px;border:1px solid var(--line);border-radius:12px;background:var(--chip);overflow:hidden}
 .qa-ver-img img{display:block;width:100%;height:auto;max-height:70vh;max-height:70dvh;object-fit:contain}

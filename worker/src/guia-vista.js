@@ -924,8 +924,10 @@ h3,h4{font-size:20px;line-height:1.25}
 .bloco > h3{font-size:24px;line-height:1.15;display:flex;align-items:baseline;gap:12px}
 
 /* o botão para o sítio oficial (o Portal das Finanças), o secundário da
-   casa, com o chevron */
-.ir a.btn{gap:8px;padding-right:12px}
+   casa, com o chevron. O rótulo é comprido: num telemóvel estreito quebra
+   em duas linhas dentro do botão, em vez de o alargar para fora do ecrã
+   (o nowrap dos botões da página), e continua com 44 px de altura */
+.ir a.btn{gap:8px;padding-right:12px;max-width:100%;white-space:normal;text-align:left;padding-top:8px;padding-bottom:8px}
 .ir .i{width:20px;height:20px}
 
 /* as listas: o visto do que podes deduzir, a cruz do que não podes, o visto

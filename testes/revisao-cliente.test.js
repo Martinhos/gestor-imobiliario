@@ -266,7 +266,7 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     app.anaClear();
     assert.equal(app.repProp, ''); assert.equal(app.hdrFiltN(), 0);
     app.tab = 'fisco'; app.ownerFilter = 'o1'; app.fiscoAno = '2020';
-    assert.equal(app.hdrFiltN(), 1, 'na Declaração o titular conta, e o ano não é filtro');
+    assert.equal(app.hdrFiltN(), 2, 'na Declaração o titular conta, e o ano escolhido fora do automático também (já não está à vista na barra)');
     app.anaClear();
     assert.equal(app.fiscoAno, ''); assert.equal(app.ownerFilter, '');
     app.tab = 'properties';

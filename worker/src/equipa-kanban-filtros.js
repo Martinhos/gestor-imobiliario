@@ -170,34 +170,61 @@ function kbColunaCabAcoes(c) {
     comAcao('kbOrdenar', [c.id]) + '>' + ic('kbOrdenar', 'i-sm') +
     (o ? '<span class="kb-ord-txt" aria-hidden="true">' + esc(KB_ORDENS[o.chave][0]) + '</span>' : '') + '</button>';
 }
-/* A escolha da ordem de uma coluna, numa janela do kanban: a do quadro e,
-   para cada ordem, os dois sentidos lado a lado; a escolhida marcada com o
-   visto e o aria-pressed. Escolher aplica e fecha.
+// o sentido escolhido na janela de ordenar: fica ao trocar de critério e ao passar pela ordem do quadro
+var kbOrdSentido = 'asc';
+
+/* A escolha da ordem de uma coluna, numa janela do kanban: dois seletores
+   (kbSelHtml), o «Critério» — a ordem do quadro ou uma das KB_ORDENS — e o
+   «Sentido», com os dois rótulos do critério (escondido na ordem do quadro).
+   Mudar qualquer um aplica logo e a janela fica aberta.
    Recebe: id — o id da coluna.
    Devolve: nada — abre a janela. */
 function kbOrdenar(id) {
   var c = kbColuna(id);
   if (!c) return;
   var o = kbOrdemDe(id);
-  var botao = function (valor, rotulo) {
-    var aceso = valor ? !!o && valor === o.chave + ':' + o.dir : !o;
-    return '<button type="button" class="btn lista kb-opcao" aria-pressed="' + (aceso ? 'true' : 'false') + '"' + comAcao('kbOrdenarEm', [id, valor]) + '>' +
-      '<span class="flex1">' + rotulo + '</span>' + (aceso ? ic('kbVisto', 'i-sm') : '') + '</button>';
-  };
+  if (o) kbOrdSentido = o.dir;
+  var criterios = [['', 'A ordem do quadro (a de arrastar)']].concat(Object.keys(KB_ORDENS).map(function (k) { return [k, KB_ORDENS[k][0]]; }));
   var corpo = '<p class="sub">A ordem fica neste aparelho. Com outra que não a do quadro, arrastar continua a mudar o cartão de coluna, mas não o muda de lugar dentro desta.</p>' +
-    '<div class="kb-opcoes">' + botao('', 'A ordem do quadro (a de arrastar)') + '</div>' +
-    Object.keys(KB_ORDENS).map(function (k) {
-      return '<p class="lbl">' + KB_ORDENS[k][0] + '</p><div class="kb-ord-par">' + botao(k + ':asc', KB_ORDENS[k][1]) + botao(k + ':desc', KB_ORDENS[k][2]) + '</div>';
-    }).join('');
-  kbJanela('Ordenar «' + c.nome + '»', corpo, { foco: '.kb-opcao[aria-pressed="true"]' });
+    '<div class="kb-ord-campos"><div class="kb-fp-campo"><span class="rot" id="kbOrdCrit-rot">Critério</span>' +
+    kbSelHtml('kbOrdCrit', { opcoes: criterios, valor: o ? o.chave : '', rotuloId: 'kbOrdCrit-rot', filtro: true, aoMudar: function (v) {
+      kbOrdenarEm(id, v ? v + ':' + kbOrdSentido : '');
+      kbOrdSentidoPintar(id);
+    } }) + '</div>' +
+    '<div class="kb-fp-campo kb-ord-sentido" id="kbOrdSentidoCampo"' + (o ? '' : ' hidden') + '>' + kbOrdSentidoHtml(id) + '</div></div>';
+  kbJanela('Ordenar «' + c.nome + '»', corpo, { foco: '#kbOrdCrit' });
 }
-/* Escolhe a ordem de uma coluna, guarda-a no aparelho e repinta o quadro.
+/* O campo «Sentido» da janela de ordenar: o nome e o seletor com os dois
+   rótulos do critério da coluna (os da primeira ordem, na do quadro, que o
+   esconde). Mudar aplica logo, com o mesmo critério.
+   Recebe: id — o id da coluna.
+   Devolve: o HTML. */
+function kbOrdSentidoHtml(id) {
+  var o = kbOrdemDe(id), k = o ? o.chave : Object.keys(KB_ORDENS)[0];
+  return '<span class="rot" id="kbOrdSentido-rot">Sentido</span>' +
+    kbSelHtml('kbOrdSentido', { opcoes: [['asc', KB_ORDENS[k][1]], ['desc', KB_ORDENS[k][2]]], valor: kbOrdSentido, rotuloId: 'kbOrdSentido-rot', aoMudar: function (v) {
+      kbOrdSentido = v === 'desc' ? 'desc' : 'asc';
+      var agora = kbOrdemDe(id);
+      if (agora) kbOrdenarEm(id, agora.chave + ':' + kbOrdSentido);
+    } });
+}
+/* Volta a pintar o «Sentido» na janela aberta depois de mudar o critério:
+   os rótulos do critério novo, ou escondido na ordem do quadro.
+   Recebe: id — o id da coluna.
+   Devolve: nada. */
+function kbOrdSentidoPintar(id) {
+  var campo = el('kbOrdSentidoCampo');
+  if (!campo) return;
+  campo.innerHTML = kbOrdSentidoHtml(id);
+  campo.hidden = !kbOrdemDe(id);
+}
+/* Escolhe a ordem de uma coluna, guarda-a no aparelho e repinta o quadro por
+   trás da janela, que fica aberta.
    Recebe: id — o id da coluna; valor — 'chave:dir', ou '' para a do quadro.
    Devolve: nada. */
 function kbOrdenarEm(id, valor) {
   if (kbOrdemValida(valor)) kbOrdens[id] = valor; else delete kbOrdens[id];
   kbGuardarOrdens();
-  kbFecharJanela();
   kbPintarQuadro();
 }
 
@@ -866,7 +893,6 @@ ACOES.kbSelNova = function (d) { kbSelNova(d.arg); };
 ACOES.kbSelNovaOk = function (d) { kbSelNovaOk(d.arg); };
 ACOES.kbSelNovaCancelar = function (d) { kbSelNovaCancelar(d.arg); };
 ACOES.kbOrdenar = function (d) { if (!kbDepoisDeArrastar()) kbOrdenar(d.arg); };
-ACOES.kbOrdenarEm = function (d) { kbOrdenarEm(d.arg, d.arg2); };
 
 ICONES.kbOrdenar = '<path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/>';
 
@@ -996,8 +1022,8 @@ export const CSS_KB_FILTROS = `/* ---- a barra dos filtros, como a da app: a pes
 .kb-ord:active{background:var(--press)}
 .kb-ord:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .kb-ord-txt{white-space:nowrap}
-.kb-ord-par{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-.kb-ord-par .kb-opcao{min-height:44px}
+.kb-ord-campos{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.kb-ord-sentido[hidden]{display:none}
 
 @media(hover:hover) and (pointer:fine){
   .kb-sel-botao:hover{border-color:var(--faint)}

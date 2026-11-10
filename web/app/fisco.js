@@ -43,12 +43,14 @@ let fiscoAno='';
    no período arrendado (CIRS art. 41.º n.º 5) */
 const FISCO_SEM_PERIODO={imi:1,selo:1};
 
-/* O ano que a página mostra: o escolhido; senão, até junho e havendo rendas no
-   ano anterior, o ano anterior — é o que se está a declarar. Depois de junho
-   o ano corrente, que é o que se vai acompanhando.
+/* O ano que a página mostra: o escolhido; senão o automático (fiscoAnoAuto).
    Devolve: o ano (número). */
-function fiscoAnoAtual(){
-  if(fiscoAno)return Number(fiscoAno);
+function fiscoAnoAtual(){return fiscoAno?Number(fiscoAno):fiscoAnoAuto()}
+/* O ano automático, sem nenhum escolhido: até junho e havendo rendas no ano
+   anterior, o ano anterior — é o que se está a declarar. Depois de junho o
+   ano corrente, que é o que se vai acompanhando.
+   Devolve: o ano (número). */
+function fiscoAnoAuto(){
   const ant=String(YEAR-1);
   if(new Date().getMonth()+1<=6&&(db.transactions||[]).some(t=>ehRenda(t)&&String(t.date||'').startsWith(ant)))return YEAR-1;
   return YEAR;
@@ -502,9 +504,9 @@ function fiscoAvisos(ano,L,F,S,semRegra,obrasSoltas,foraDoPeriodo){
 }
 
 /* A vista do separador IRS · Anexo F, como a prancheta D-Declaracao: o
-   painel com o titular e o ano; a barra com o ano dos rendimentos num
-   seletor, o titular e as ações da página (partilhar o resumo, exportar o
-   CSV e o PDF, e o guia de preenchimento, que é o público); os cinco números
+   painel com o titular e o ano (o funil do cabeçalho — é o único sítio onde
+   se escolhem); a barra só com as ações da página (o guia de preenchimento,
+   que é o público, e o botão de partilha com o CSV e o PDF); os cinco números
    do ano; a grelha com «A tratar antes de entregar» (que diz também quando o
    ano não tem versão própria das regras), «A tua situação fiscal» e os
    prazos da AT; um cartão por quadro, o 4.1 e o 4.2, cada um com onde se
@@ -528,7 +530,7 @@ function vFisco(){
     ${servicoLigado('properties')?saida('Adicionar imóvel',"go('properties')",'ecra'):vazioServicoDesligado('properties')}</div>`);
   if(!r.linhas.length&&!r.fora.length&&!r.semContrato.length){
     const outros=anos.filter(y=>y!==ano&&(db.transactions||[]).some(t=>ehRenda(t)&&String(t.date||'').startsWith(String(y))));
-    return panel+`<div class="ana fis">`+fisBarra(ano,anos,titular,false)+`<div class="empty"><b>Sem rendas em ${ano}</b>${outros.length?'Há rendas em '+esc(outros.join(', '))+'. ':''}Uma renda entra aqui quando o movimento é da categoria Rendas e está ligado ao contrato.
+    return panel+`<div class="ana fis"><div class="empty"><b>Sem rendas em ${ano}</b>${outros.length?'Há rendas em '+esc(outros.join(', '))+'. ':''}Uma renda entra aqui quando o movimento é da categoria Rendas e está ligado ao contrato.
       ${saida('Escolher outro ano','hdrFiltToggle()','vista')}</div></div>`;
   }
   /* Os cartões dos quadros empilham-se numa grelha de uma coluna com o mesmo
@@ -537,7 +539,7 @@ function vFisco(){
      resumo, mais larga do que o ecrã, alargava a página em vez de rolar
      dentro do .tablewrap. */
   const Q=r.versao.quadros;
-  return panel+`<div class="ana fis">`+fisBarra(ano,anos,titular,true)+fiscoKpis(r)
+  return panel+`<div class="ana fis">`+fisBarra()+fiscoKpis(r)
     +`<div class="fis-grelha">`+fiscoObrigacoesCard(r)+fiscoSituacaoCard(r)+fisPrazosCard()+`</div>`
     +`<div class="fiscoPilha u-d-grid u-gtc-minmax-0-1fr u-g-14px">`
     +fiscoQuadroCard(r,Q.semReducao)+fiscoQuadroCard(r,Q.comReducao)+fiscoIsentosCard(r)+fiscoObrasCard(r)
@@ -552,41 +554,32 @@ function vFisco(){
 function fisCartao(titulo,sub,corpo,cls,extra){
   return `<section class="card ana-cartao${cls?' '+cls:''}"><div class="ana-cab"><h2 class="ana-tit">${titulo}</h2>${sub?`<span class="small">${sub}</span>`:''}${extra?`<span class="ana-extra">${extra}</span>`:''}</div>${corpo}</section>`;
 }
-/* A barra do topo do IRS (a prancheta): o ano dos rendimentos num seletor
-   (um ano por cada um com movimentos, e o da página — o sel() da casa, como o
-   do painel, e não uma pílula por ano, que com vários anos enchia a barra), o
-   titular — com alguém escolhido o nome e o × que o deixa, sem ninguém «por
-   inteiro» e o ▾ que abre o painel — e as ações da página: partilhar o
-   resumo (ou copiá-lo, onde não há partilha), exportar o CSV, exportar o PDF
-   (fisco-pdf.js:fiscoPdf, que vem com este serviço; o escritor do PDF é o
-   do serviço Contratos, e por isso o botão só se escreve com ele ligado —
-   o servicoLigado, o idioma de guarda da casa) e o guia de preenchimento, que é o público
-   (/guias/declarar-rendas), numa página nova. O rótulo «Ano de rendimentos»
-   embrulha o seletor e dá-lhe o nome; o rótulo «Titular» e o chip dele vão
-   juntos numa caixa (estilos.css:.fis-titular): soltos, o rótulo ficava no
-   fim da fila e o chip descia sozinho para a seguinte, no telemóvel. O texto
-   do chip vai num <span>, que leva as reticências de um nome comprido.
-   Recebe: ano — o ano da página; anos — os anos a oferecer; titular — o id do
-   proprietário escolhido, ou ''; acoes — escrever os botões das ações.
+/* A barra do topo do IRS: só as ações da página, juntas à direita, numa
+   linha também no telemóvel. O ano e o titular escolhem-se no painel do funil
+   (vFisco) e não aqui — na barra eram os mesmos filtros outra vez; o ponto do
+   funil acende com um deles fora do automático (fiscoAnaN). As ações: o guia
+   de preenchimento, que é o público (/guias/declarar-rendas), numa página
+   nova — um botão pequeno com o livro e «Guia», com o nome inteiro no
+   aria-label e no title —, e o botão de partilha, só de ícone (o feitio do
+   avaliacao.js:avaPartilha), que abre a janela com o CSV e o PDF
+   (fiscoPartilha). Os dois são .btn.sm: 36px no rato, 44 no dedo
+   (estilos.css:.fis-acoes).
    Devolve: o HTML da barra (string). */
-function fisBarra(ano,anos,titular,acoes){
-  const anoSel=`<label class="fis-ano"><span class="lbl">Ano de rendimentos</span>${sel('fiscoAnoSel',String(ano),anos.map(y=>({v:String(y),label:String(y)})),'onFiscoAnoBarra','vista')}</label>`;
-  const tit=!db.owners.length?'':titular
-    ?`<button type="button" class="chip on" data-toca="vista" data-click="limparAmbito()" aria-label="Titular: ${esc(ownerFilterName())}, na quota-parte (limpar)"><span>${esc(ownerFilterName())} · quota-parte</span>${ic('x',14)}</button>`
-    :`<button type="button" class="chip" data-toca="vista" data-click="hdrFiltToggle()"><span>Todos · por inteiro</span>${ic('chevD',16)}</button>`;
-  const pdf=servicoLigado('contracts')?`<button type="button" class="btn" data-toca="nada" data-click="fiscoPdf()">Exportar PDF</button>`:'';
-  return `<div class="ana-barra"><div class="chips-fila ana-ambito">${anoSel}${tit?`<span class="fis-titular"><span class="lbl fis-lbl">Titular</span>${tit}</span>`:''}</div>
-    ${acoes?`<div class="ana-acoes"><button type="button" class="btn" data-toca="nada" data-click="fiscoPartilhar()">Partilhar resumo</button>
-    <button type="button" class="btn" data-toca="nada" data-click="fiscoCsv()">Exportar CSV</button>${pdf}
-    <a class="btn" href="/guias/declarar-rendas" target="_blank" rel="noopener" data-toca="nada">Guia de preenchimento</a></div>`:''}</div>`;
+function fisBarra(){
+  const guia='Guia de preenchimento do Anexo F';
+  return `<div class="ana-barra"><div class="ana-acoes fis-acoes"><a class="btn sm fis-guia" href="/guias/declarar-rendas" target="_blank" rel="noopener" data-toca="nada" aria-label="${guia}" title="${guia}">${ic('livro',18)}<span>Guia</span></a>`
+    +`<button type="button" class="btn sm so-icone" data-toca="camada" data-click="fiscoPartilha()" aria-haspopup="dialog" aria-label="Partilhar" title="Partilhar">${ic('partilhar',18)}</button></div></div>`;
 }
-/* O ano escolhido no seletor da barra (fisBarra): guarda-o e volta a
-   desenhar, com o foco de volta ao seletor novo quando a escolha foi pelo
-   teclado (vistas.js:lfReporFoco) — o render refaz a barra inteira.
-   Devolve: nada — guarda o ano e redesenha a vista. */
-function onFiscoAnoBarra(){
-  const antes=document.activeElement;
-  fiscoAno=val('fiscoAnoSel')||'';render();lfReporFoco(antes);
+/* A janela do botão de partilha da barra (fisBarra): a escolha da casa
+   (componentes.js:pickModal), com o ícone e uma linha a dizer o que leva cada
+   uma — «Exportar CSV» e, só com o serviço Contratos ligado (é lá que vive o
+   escritor do PDF; o servicoLigado, o idioma de guarda da casa), «Exportar
+   PDF» (fisco-pdf.js:fiscoPdf). Escolher fecha a janela e exporta.
+   Devolve: nada — abre a janela. */
+function fiscoPartilha(){
+  const ops=[{v:'csv',label:'Exportar CSV',sub:'Uma linha por contrato, para abrir no Excel',icon:'down'}];
+  if(servicoLigado('contracts'))ops.push({v:'pdf',label:'Exportar PDF',sub:'Os quadros campo a campo, para guardar ou imprimir',icon:'contract'});
+  pickModal('Partilhar',ops,o=>{closeModal();if(o.v==='pdf')fiscoPdf();else fiscoCsv()});
 }
 /* Os cinco números do ano à cabeça (a prancheta), em cartões com explicação
    ao toque: rendas ilíquidas, retenções na fonte, gastos dedutíveis (com as
@@ -1029,7 +1022,8 @@ function fisNadaForaCard(r){
   if(r.fora.length||r.semContrato.length)return '';
   return fisCartao('Fora da declaração','',`<p class="hint">Nenhum contrato marcado «não declarado» e nenhuma renda sem contrato em ${r.ano}.</p>`,'fis-nada-fora');
 }
-/* O resumo em texto simples, para partilhar ou copiar: totais (com os isentos
+/* O resumo em texto simples (era o do «Partilhar resumo», que saiu da barra;
+   fica como o retrato legível do resumo, que os testes leem): totais (com os isentos
    do 6D e o AIMI do quadro 9, quando os há; o imposto sem englobamento), uma
    entrada por contrato com o quadro, o titular, a identificação, os valores,
    a comunicação de fevereiro e o 4.2B no 4.2, e as faltas, e depois o
@@ -1055,18 +1049,6 @@ ${r.linhas.map(l=>`  [${l.quadro}] ${l.atNumero?'n.º '+l.atNumero:'sem n.º na 
 ${r.fora.length?'\nFORA DA DECLARAÇÃO\n'+r.fora.map(f=>`  ${f.nome}${f.imovel?' — '+f.imovel:''}: ${euro2(f.rendas)}`).join('\n')+'\n':''}${r.semContrato.length?'\nRENDAS SEM CONTRATO\n'+r.semContrato.map(s=>`  ${s.imovel}: ${euro2(s.rendas)} (${fiscoN(s.n,'movimento','movimentos')})`).join('\n')+'\n':''}${r.avisos.length?'\nA TRATAR\n'+r.avisos.map(a=>'  · '+a.texto).join('\n')+'\n':''}
 Resumo feito pela app com o que tem registado. Os gastos de um imóvel com mais do que um contrato repartem-se pelas rendas; o rateio por VPT ou área fica para quem preenche. O imposto é uma estimativa.
 `;
-}
-/* Partilha o resumo do Anexo F: folha de partilha do Android, Web Share API,
-   ou cópia para a área de transferência — a mesma ordem da Avaliação. Uma
-   cópia recusada (sem permissão, documento sem foco) diz-se num aviso, em vez
-   de o botão parecer não fazer nada e ficar um erro por apanhar.
-   Devolve: nada de útil — só o efeito de partilhar (ou copiar) o texto. */
-function fiscoPartilhar(){
-  const txt=fiscoTexto(),titulo='Anexo F · '+fiscoAnoAtual();
-  if(window.Android&&window.Android.shareText)return window.Android.shareText(titulo,txt);
-  if(navigator.share)return navigator.share({title:titulo,text:txt}).catch(()=>{});
-  if(navigator.clipboard)return navigator.clipboard.writeText(txt).then(()=>toast('Resumo copiado.'),()=>toast('Não foi possível copiar o resumo.'));
-  toast('Não foi possível partilhar.');
 }
 /* Exporta os quadros do ano para CSV (ponto e vírgula, campos entre aspas,
    para abrir no Excel): um cabeçalho, uma linha por contrato, e as dos
@@ -1099,10 +1081,11 @@ function fiscoCsv(){
    Devolve: nada — guarda o ano e redesenha a vista. */
 function onFiscoAno(){fiscoAno=val('fiscoSel')||'';render()}
 /* ---- registo do serviço (servicos.js) ---- */
-// nº de filtros ativos no painel de análise do IRS · Anexo F: só o proprietário
-// (o ano é o assunto da página, não um filtro)
-// Devolve: número de filtros ativos (0 ou 1).
-function fiscoAnaN(){return ownerFilter?1:0}
+// nº de filtros ativos no painel de análise do IRS · Anexo F: o proprietário e
+// o ano, quando foi escolhido e não é o automático (fiscoAnoAuto) — o ano já
+// não está à vista na barra, e o ponto do funil diz que a página está noutro
+// Devolve: número de filtros ativos (0 a 2).
+function fiscoAnaN(){return (ownerFilter?1:0)+(fiscoAno&&Number(fiscoAno)!==fiscoAnoAuto()?1:0)}
 // limpa o ano em foco do IRS · Anexo F (o proprietário limpa-o a base, anaClear)
 // Devolve: nada — limpa o filtro; quem chama repinta.
 function fiscoAnaLimpar(){fiscoAno=''}
