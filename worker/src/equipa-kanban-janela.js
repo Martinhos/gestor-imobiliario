@@ -14,29 +14,35 @@ export const GUIAO_KB_JANELA = String.raw`/* -------------------------------- a 
    botões. Com aoConfirmar, Cancelar e o botão da ação — que espera enquanto
    o servidor responde e, se ele recusar, deixa a janela aberta com o
    porquê; sem aoConfirmar é uma lista de escolhas, com Fechar (ou Voltar).
-   Abaixo dos 520px, o corte da app, é a folha de baixo com a barra, que se
-   fecha a arrastar (kbFolhaPousar); acima, fica centrada. O dialog leva a
-   classe kb-dlg enquanto é do kanban (o CSS daqui; o dialog.janela do back
-   office não muda), e ao fechar esvazia-se, larga-a e devolve o foco a quem
-   a abriu. Aberta a meio da saída de outra, a saída pára e o conteúdo troca
-   no sítio (é o caminho do ⋯ para o Editar ou o Mover para).
+   Abaixo dos 520px, o corte da app, é a folha de baixo com a barra, que
+   cresce a puxar para cima e se fecha a arrastar para baixo (kbFolhaPousar);
+   acima, fica centrada. O dialog leva a classe kb-dlg enquanto é do kanban
+   (o CSS daqui; o dialog.janela do back office não muda), e ao fechar
+   esvazia-se, larga-a e devolve o foco a quem a abriu. Aberta a meio da
+   saída de outra, a saída pára e o conteúdo troca no sítio (é o caminho do ⋯
+   para o Editar ou o Mover para). O conteúdo que troca volta ao tamanho
+   natural da folha (kbFolhaNatural); só a mesma janela desenhada de novo
+   (opcoes.mesma) fica do tamanho que tinha.
    Recebe: titulo — o título (texto); corpo — o HTML (seguro); opcoes
    (opcional) — {aoConfirmar: função que lê os campos e devolve false (fica,
    com os erros marcados) ou uma promessa; botao; perigo; texto (HTML
    seguro); foco: o seletor do que recebe o foco; voltar: [ação, args…] do
    botão do pé, que passa a dizer «Voltar» em vez de «Fechar»; extra:
-   {texto, acao, icone} — um segundo botão no pé de uma lista, a ação dela}.
+   {texto, acao, icone} — um segundo botão no pé de uma lista, a ação dela;
+   mesma: true quando é a janela aberta desenhada de novo, com o mesmo conteúdo}.
    Devolve: nada — abre a janela. */
 function kbJanela(titulo, corpo, opcoes) {
   var o = opcoes || {}, d = el('dialogo');
   if (!d) return;
   if (typeof formAberto !== 'undefined') formAberto = null;
-  var antes = kbJanelaAberta;
+  var antes = kbJanelaAberta, gesto = kbFolha;
   var origem = antes && d.open ? antes.origem : (typeof document !== 'undefined' && document.activeElement) || null;
+  var mesma = !!(o.mesma && antes && !antes.saindo && d.open);
   if (kbColmArr) kbColmDesfazer();
   kbFolhaLargar();
   // fechada há instantes, o close (que chega depois, numa tarefa) ainda não limpou: limpa-se aqui
   if (!d.open) kbJanelaLimpar(d);
+  else if (!mesma) kbFolhaNatural(d);
   kbJanelaAberta = { aoConfirmar: o.aoConfirmar || null, botao: o.botao || 'Guardar', ocupado: false, saindo: false, vista: '', origem: origem };
   if (antes && antes.saindo && d.open) {
     // a saída da anterior pára onde está: a janela fica, com o conteúdo novo
@@ -59,6 +65,9 @@ function kbJanela(titulo, corpo, opcoes) {
     kbJanelaSai();
   };
   d.classList.add('kb-dlg');
+  // a mesma janela desenhada de novo a meio de um arrasto da folha (ou de um regresso que o dedo
+  // apanhou): o conteúdo debaixo do dedo trocou, e ela assenta no tamanho de onde partiu
+  if (mesma && gesto && (gesto.ativo || gesto.retoma) && gesto.d === d) { gesto.medida = false; kbFolhaVolta(gesto, gesto.alta0); }
   if (!d.open) d.showModal();
   // a página por baixo não rola enquanto a janela está aberta (solta-a o kbJanelaFechou)
   travarPagina(true);
@@ -104,9 +113,9 @@ function kbJanelaFechou(d) {
     try { o.focus({ preventScroll: true }); } catch (x) { /* fica onde está */ }
   }
 }
-/* Larga do dialog o que é do kanban: as classes (a do kanban e as do
-   movimento), o transform e o véu do arrasto, o ouvinte do toque, os
-   temporizadores e os arrastos a meio.
+/* Larga do dialog o que é do kanban: as classes (a do kanban, a da folha
+   alta e as do movimento), o transform, a altura e o véu do arrasto, o
+   ouvinte do toque, os temporizadores e os arrastos a meio.
    Recebe: d — o dialog#dialogo.
    Devolve: nada. */
 function kbJanelaLimpar(d) {
@@ -114,8 +123,8 @@ function kbJanelaLimpar(d) {
   clearTimeout(kbFolhaVoltaT);
   if (kbColmArr) kbColmDesfazer();
   kbFolhaLargar();
-  ['kb-dlg', 'kb-sai', 'kb-trocou', 'kb-arrastou', 'kb-arrastar', 'kb-arrastada', 'kb-volta', 'kb-pronto'].forEach(function (c) { d.classList.remove(c); });
-  if (d.style) { d.style.transform = ''; d.style.removeProperty('--kb-veu'); }
+  ['kb-dlg', 'kb-sai', 'kb-trocou', 'kb-arrastou', 'kb-arrastar', 'kb-arrastada', 'kb-volta', 'kb-pronto', 'kb-alta'].forEach(function (c) { d.classList.remove(c); });
+  if (d.style) { d.style.transform = ''; d.style.height = ''; d.style.removeProperty('--kb-veu'); }
   if (typeof d.removeEventListener === 'function') d.removeEventListener('touchmove', kbFolhaToque, { passive: false });
 }
 /* A duração de um token de movimento do back office (--rapido, --medio), em ms.
@@ -202,6 +211,8 @@ function kbFecharJanela() {
 var KB_FOLHA_NAO_ARRANCA = 'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[data-gesto]';
 // a resistência para cima (px: a folha nunca sobe mais de metade), o sacudir (px/ms) e o teto do limiar de fechar (px)
 var KB_FOLHA_RESISTE = 48, KB_FOLHA_SACODIR = 0.4, KB_FOLHA_LIMIAR = 160;
+// o que a folha natural tem de poder crescer até ao teto para ter dois tamanhos (px: com menos, já o enche e só resiste)
+var KB_FOLHA_GANHO = 24;
 // o arrasto da folha em curso (kbFolhaPousar), até quando se engole o clique que vem a seguir, e o fim do regresso ao sítio
 var kbFolha = null, kbFolhaEngole = 0, kbFolhaVoltaT = 0;
 // o temporizador da saída da janela (kbJanelaSai)
@@ -246,6 +257,73 @@ function kbFolhaElastico(dy) {
   var a = Math.abs(dy), l = KB_FOLHA_RESISTE;
   return (dy < 0 ? -1 : dy > 0 ? 1 : 0) * (1 - 1 / (a * 0.55 / l + 1)) * l * 0.5;
 }
+/* Onde fica a folha com o dedo num sítio: a posição conta-se do topo da
+   folha alta (0 é alta, ganho é a natural). Entre as duas, a folha cresce ou
+   encolhe colada ao dedo pela altura, sem sair do fundo; acima da alta,
+   resiste (kbFolhaElastico); abaixo da natural, desce, que é o fechar. Sem
+   ganho (a natural já enche o teto) é o gesto de sempre: resiste ou desce.
+   Recebe: q — px do dedo a contar do topo da alta (negativo acima dela);
+   ganho — px que a natural cresce até ao teto (0 sem dois tamanhos).
+   Devolve: {cresce: px acima da natural (0 a ganho), desl: px do transform
+   (negativo resiste para cima, positivo desce)}. */
+function kbFolhaPosicao(q, ganho) {
+  var g = ganho > 0 ? ganho : 0;
+  if (q < 0) return { cresce: g, desl: kbFolhaElastico(q) };
+  if (q <= g) return { cresce: g - q, desl: 0 };
+  return { cresce: 0, desl: q - g };
+}
+/* Largar deixa a folha alta ou natural? Um sacudir recente (o de fechar,
+   KB_FOLHA_SACODIR) decide pelo sentido: para cima alta, para baixo
+   natural — um só passo por gesto, que fechar uma alta pede outro. Sem ele,
+   decide a distância a partir do tamanho de onde se partiu: um terço do
+   ganho (no máximo KB_FOLHA_LIMIAR) troca-o. Quem passou da natural para
+   baixo e não fechou fica natural; sem ganho, é sempre a natural.
+   Recebe: f — o arrasto ({alta0, ganho, cresce, dy: px abaixo da natural, vy, ta});
+   agora — a hora do evento (kbHora).
+   Devolve: true (alta) ou false (natural). */
+function kbFolhaAltaAoLargar(f, agora) {
+  if (!(f.ganho > 0) || f.dy > 0) return false;
+  var vy = agora - f.ta > 100 ? 0 : f.vy, lim = Math.min(f.ganho / 3, KB_FOLHA_LIMIAR);
+  if (vy < -KB_FOLHA_SACODIR) return true;
+  if (vy > KB_FOLHA_SACODIR) return false;
+  return f.alta0 ? f.ganho - f.cresce < lim : f.cresce >= lim;
+}
+/* Mede os dois tamanhos da folha uma vez por gesto: a natural (a altura do
+   conteúdo, até ao teto) e a alta (o teto, 93dvh), tirando e pondo a classe
+   e a altura do arrasto, que ficam como estavam. Lê o estilo no fim, para
+   ele ser o de partida da transição que vier a seguir (kbFolhaVolta).
+   Recebe: f — o arrasto (f.d, o dialog).
+   Devolve: nada — põe em f a nat, o teto e o ganho (0 quando a natural já
+   enche o teto, ou quase: menos de KB_FOLHA_GANHO). */
+function kbFolhaMede(f) {
+  if (f.medida) return;
+  var d = f.d, h = d.style.height, alta = d.classList.contains('kb-alta');
+  d.style.height = '';
+  d.classList.remove('kb-alta');
+  f.nat = d.getBoundingClientRect().height || 1;
+  d.classList.add('kb-alta');
+  f.teto = Math.max(f.nat, d.getBoundingClientRect().height || 0);
+  d.classList.toggle('kb-alta', alta);
+  d.style.height = h;
+  d.getBoundingClientRect();
+  f.ganho = f.teto - f.nat >= KB_FOLHA_GANHO ? f.teto - f.nat : 0;
+  f.medida = true;
+}
+/* A folha mudou de tamanho: a lista de um seletor aberta lá dentro volta a
+   medir-se, para usar o espaço novo (equipa-kanban-filtros.js:kbSelAjustar).
+   Devolve: nada. */
+function kbFolhaAssentou() {
+  if (typeof kbSelAberto === 'string' && kbSelAberto && typeof kbSelAjustar === 'function') kbSelAjustar(kbSelAberto);
+}
+/* A folha volta já ao tamanho natural, sem animar, e larga o que um arrasto
+   ou um regresso a meio lhe deixaram (a janela trocou de conteúdo).
+   Recebe: d — o dialog#dialogo.
+   Devolve: nada. */
+function kbFolhaNatural(d) {
+  clearTimeout(kbFolhaVoltaT);
+  ['kb-alta', 'kb-volta', 'kb-arrastar', 'kb-pronto'].forEach(function (c) { d.classList.remove(c); });
+  if (d.style) { d.style.transform = ''; d.style.height = ''; d.style.removeProperty('--kb-veu'); }
+}
 /* O véu por trás da folha aclara à medida que ela desce: inteiro no sítio,
    nada com a folha uma altura dela abaixo.
    Recebe: desl — px que a folha desceu; h — a altura dela.
@@ -282,8 +360,8 @@ function kbFolhaDeslocada(d) {
 }
 /* O dedo pousou: se foi na janela do kanban, com a barra, por onde ela se
    agarra (kbFolhaZona), fica-se à escuta do arrasto. Pegar na folha a meio
-   do regresso apanha-a onde ela está, sem salto. Só o dedo e a caneta: o
-   rato numa janela estreita não arrasta folhas.
+   do regresso apanha-a onde ela está — na altura e na deslocação —, sem
+   salto. Só o dedo e a caneta: o rato numa janela estreita não arrasta folhas.
    Recebe: e — o PointerEvent do pointerdown (ouvido no documento).
    Devolve: nada — liga os ouvintes do documento. */
 function kbFolhaPousar(e) {
@@ -293,14 +371,18 @@ function kbFolhaPousar(e) {
   if (!e.target || !d.contains(e.target)) return;
   var zona = kbFolhaZona(e.target, d);
   if (!zona) return;
+  // o tamanho de onde parte (alta0) e os dois tamanhos, que o kbFolhaMede lê ao arrancar (ganho -1: por medir)
   var f = { id: e.pointerId, d: d, j: j, zona: zona, x0: e.clientX, y0: e.clientY, base: 0, dy: 0, desl: 0, vy: 0,
-    ya: e.clientY, ta: kbHora(e), ativo: false, mexe: !kbReduzido(), h: 1 };
+    ya: e.clientY, ta: kbHora(e), ativo: false, mexe: !kbReduzido(), h: 1,
+    alta0: d.classList.contains('kb-alta'), hBase: 0, retoma: false, medida: false, nat: 0, teto: 0, ganho: -1, cresce: 0, q0: 0 };
   if (d.classList.contains('kb-volta')) {
-    // a meio do regresso: fica onde a transição a tinha
+    // a meio do regresso: fica onde a transição a tinha (a altura, se era ela que mudava, e o transform)
     clearTimeout(kbFolhaVoltaT);
+    f.retoma = true;
     f.base = kbFolhaDeslocada(d);
-    d.classList.remove('kb-volta');
     f.h = d.getBoundingClientRect().height || 1;
+    if (d.style.height) { f.hBase = f.h; d.style.height = f.h + 'px'; }
+    d.classList.remove('kb-volta');
     f.desl = f.dy = f.base;
     if (f.base) { d.style.transform = 'translateY(' + f.base + 'px)'; d.style.setProperty('--kb-veu', String(kbFolhaVeu(f.desl, f.h))); }
   }
@@ -311,10 +393,12 @@ function kbFolhaPousar(e) {
 }
 /* O dedo andou: passados os 10px de decidir, na vertical, a folha segue-o (a
    folga não conta: arranca colada ao dedo); para o lado, ou a subir pelo
-   corpo, o gesto não é dela (é o scroll). Sem movimento pedido, não segue:
+   corpo, o gesto não é dela (é o scroll). Com dois tamanhos (kbFolhaMede),
+   entre a natural e a alta a folha cresce ou encolhe pela altura, e só
+   abaixo da natural desce (kbFolhaPosicao). Sem movimento pedido, não segue:
    só diz, desvanecendo (kb-pronto), quando largar já fecha.
    Recebe: e — o PointerEvent do pointermove.
-   Devolve: nada — mexe no transform do dialog e no --kb-veu do véu. */
+   Devolve: nada — mexe na altura e no transform do dialog e no --kb-veu do véu. */
 function kbFolhaMove(e) {
   var f = kbFolha;
   if (!f || e.pointerId !== f.id) return;
@@ -327,9 +411,13 @@ function kbFolhaMove(e) {
     f.ativo = true;
     f.y0 += dy < 0 ? -10 : 10;
     dy = e.clientY - f.y0;
-    f.h = f.d.getBoundingClientRect().height || 1;
     // apanhada a meio da entrada: parte de onde a animação a tinha
     if (!f.base && f.mexe) f.base = kbFolhaDeslocada(f.d);
+    kbFolhaMede(f);
+    f.h = f.nat;
+    // de onde parte, contado do topo da alta: a altura de agora (a meio de um regresso, a que ele tinha) e a deslocação
+    var h0 = f.hBase || (f.alta0 ? f.teto : f.nat);
+    f.q0 = Math.max(0, Math.min(f.ganho, f.teto - h0)) + f.base;
     f.d.classList.add('kb-arrastou');
     f.d.classList.add('kb-arrastar');
     try { f.d.setPointerCapture(f.id); } catch (x) { /* segue pelo documento */ }
@@ -338,9 +426,12 @@ function kbFolhaMove(e) {
   // a velocidade dos últimos instantes, alisada: é ela que diz se o gesto foi um sacudir
   if (dt > 0) f.vy = 0.6 * ((e.clientY - f.ya) / dt) + 0.4 * f.vy;
   f.ya = e.clientY; f.ta = agora;
-  f.dy = f.base + dy;
-  f.desl = f.dy >= 0 ? f.dy : kbFolhaElastico(f.dy);
+  var q = f.q0 + dy, p = kbFolhaPosicao(q, f.ganho);
+  f.dy = q - f.ganho;
+  f.cresce = p.cresce;
+  f.desl = p.desl;
   if (f.mexe) {
+    if (f.ganho) f.d.style.height = (f.nat + p.cresce) + 'px';
     f.d.style.transform = 'translateY(' + f.desl + 'px)';
     f.d.style.setProperty('--kb-veu', String(kbFolhaVeu(f.desl, f.h)));
   }
@@ -373,17 +464,19 @@ function kbFolhaLargar() {
   document.removeEventListener('pointercancel', kbFolhaFim);
 }
 /* O gesto deixou de ser da folha (foi para o lado, subiu pelo corpo, ou a
-   janela mudou): larga-o e, se ela tinha saído do sítio, devolve-a.
+   janela mudou): larga-o e, se ela tinha saído do sítio, devolve-a ao
+   tamanho de onde partiu.
    Recebe: f — o arrasto.
    Devolve: nada. */
 function kbFolhaDesiste(f) {
   kbFolhaLargar();
-  if (f.d.open && kbJanelaAberta === f.j && (f.ativo || f.base)) kbFolhaVolta(f);
+  if (f.d.open && kbJanelaAberta === f.j && (f.ativo || f.retoma)) kbFolhaVolta(f, f.alta0);
 }
 /* O dedo saiu: fecha a janela se o gesto chegou para isso
-   (kbFolhaFechaAoLargar), ou devolve a folha ao sítio. Um pointercancel
-   nunca fecha. Depois de um arrasto, o clique que o browser dispara
-   engole-se (não carrega no que estiver por baixo do dedo).
+   (kbFolhaFechaAoLargar), ou assenta a folha alta ou natural
+   (kbFolhaAltaAoLargar). Um pointercancel nunca fecha nem muda o tamanho:
+   volta ao de onde partiu. Depois de um arrasto, o clique que o browser
+   dispara engole-se (não carrega no que estiver por baixo do dedo).
    Recebe: e — o PointerEvent do pointerup ou do pointercancel.
    Devolve: nada. */
 function kbFolhaFim(e) {
@@ -391,30 +484,45 @@ function kbFolhaFim(e) {
   if (!f || (e && e.pointerId !== f.id)) return;
   kbFolhaLargar();
   if (kbJanelaAberta !== f.j || !f.d.open) return;
-  if (!f.ativo) { if (f.base) kbFolhaVolta(f); return; }
+  if (!f.ativo) { if (f.retoma) kbFolhaVolta(f, f.alta0); return; }
   kbFolhaEngole = Date.now() + 350;
-  if (e && e.type !== 'pointercancel' && kbFolhaFechaAoLargar(f, kbHora(e))) {
+  var largou = !!e && e.type !== 'pointercancel', agora = kbHora(e);
+  if (largou && kbFolhaFechaAoLargar(f, agora)) {
     f.d.classList.remove('kb-pronto');
     kbJanelaSai(f.mexe);
     return;
   }
-  kbFolhaVolta(f);
+  kbFolhaVolta(f, largou ? kbFolhaAltaAoLargar(f, agora) : f.alta0);
 }
-/* A folha volta ao sítio de onde o dedo a deixou, numa transição (--medio,
-   --curva-entra), e o véu escurece com ela. Sem movimento, ou sem
-   deslocação, só assenta.
-   Recebe: f — o arrasto.
+/* A folha assenta: volta ao fundo de onde o dedo a deixou e cresce ou
+   encolhe até ao tamanho pedido, numa transição da altura e do transform
+   (--medio, --curva-entra, como a entrada), com o véu a escurecer. Alta, a
+   classe kb-alta (93dvh) fica com ela; natural, a altura volta a ser a do
+   conteúdo. No fim, a lista aberta de um seletor mede-se de novo
+   (kbFolhaAssentou). Sem movimento, ou sem nada a andar, salta já para lá.
+   Recebe: f — o arrasto; alta — true para ficar alta, false para a natural.
    Devolve: nada. */
-function kbFolhaVolta(f) {
-  var d = f.d;
+function kbFolhaVolta(f, alta) {
+  var d = f.d, comAltura = !!d.style.height, mudou = comAltura || !!alta !== !!f.alta0;
   d.classList.remove('kb-arrastar');
   d.classList.remove('kb-pronto');
   clearTimeout(kbFolhaVoltaT);
-  if (f.mexe && f.desl) d.classList.add('kb-volta');
+  // a altura do arrasto só fica (para a transição) com movimento; mede-se antes da kb-volta, que a anima
+  var mexe = f.mexe && (!!f.desl || comAltura);
+  if (mexe && comAltura) kbFolhaMede(f);
+  // alta só com ganho (por medir, -1, fica a pedida)
+  var fica = !!alta && f.ganho !== 0;
+  if (mexe) d.classList.add('kb-volta');
+  d.classList.toggle('kb-alta', fica);
+  d.style.height = mexe && comAltura ? (fica ? f.teto : f.nat) + 'px' : '';
   d.style.transform = '';
   d.style.removeProperty('--kb-veu');
-  if (!d.classList.contains('kb-volta')) return;
-  kbFolhaVoltaT = setTimeout(function () { d.classList.remove('kb-volta'); }, kbTokenMs('--medio', 200) + 40);
+  if (!mexe) { if (mudou) kbFolhaAssentou(); return; }
+  kbFolhaVoltaT = setTimeout(function () {
+    d.classList.remove('kb-volta');
+    d.style.height = '';
+    if (mudou) kbFolhaAssentou();
+  }, kbTokenMs('--medio', 200) + 40);
 }
 
 /* -------------------------------- colunas -------------------------------- */
@@ -424,13 +532,15 @@ function kbFolhaVolta(f) {
    e, no pé, Fechar e «Adicionar coluna». A ordem muda-se a arrastar pela
    pega (kbColmPousar) e, no ⋯, com Subir e Descer, o caminho do teclado e
    do leitor de ecrã. Desenhada de novo (depois de uma ação), guarda a
-   rolagem do corpo e devolve o foco ao ⋯ da coluna de que se falava.
+   rolagem do corpo e o tamanho da folha, e devolve o foco ao ⋯ da coluna de
+   que se falava.
    Recebe: foco (opcional) — o id da coluna cujo ⋯ recebe o foco.
    Devolve: nada — abre a janela. */
 function kbColunas(foco) {
   if (!kbEstado || !kbEu().master) return;
   var j0 = kbJanelaAberta, d = el('dialogo'), rol = 0;
-  if (j0 && j0.vista === 'colunas' && d && d.open) { var c0 = d.querySelector('.kb-j-corpo'); rol = c0 ? c0.scrollTop : 0; }
+  var mesma = !!(j0 && j0.vista === 'colunas' && !j0.saindo && d && d.open);
+  if (mesma) { var c0 = d.querySelector('.kb-j-corpo'); rol = c0 ? c0.scrollTop : 0; }
   var linhas = kbEstado.colunas.map(function (c) {
     return '<li class="kb-colm" data-coluna="' + esc(c.id) + '">' +
       '<span class="kb-colm-pega" data-gesto aria-hidden="true">' + ic('kbPega') + '</span>' +
@@ -441,7 +551,7 @@ function kbColunas(foco) {
   }).join('');
   kbJanela('Colunas', '<p class="sub">Arrasta pela pega para mudar a ordem. As fixas são as que a sincronização usa: renomeiam-se, mas não se removem. O que chega a uma coluna de fim conta como feito.</p>' +
     '<div class="kb-colms-caixa"><ul class="kb-colms" aria-label="As colunas, pela ordem do quadro">' + linhas + '</ul></div>',
-    { extra: { texto: 'Adicionar coluna', acao: 'kbColunaNova', icone: 'mais' } });
+    { extra: { texto: 'Adicionar coluna', acao: 'kbColunaNova', icone: 'mais' }, mesma: mesma });
   kbJanelaAberta.vista = 'colunas';
   var corpo = d && d.querySelector('.kb-j-corpo');
   if (rol && corpo) corpo.scrollTop = rol;
@@ -877,10 +987,15 @@ dialog.janela.kb-dlg::backdrop{opacity:var(--kb-veu,1)}
    encostada em baixo a toda a largura, até 93dvh (o dvh conta com as
    barras do browser à vista), a barra no cabeçalho — que é a pega: o gesto
    vertical ali é da folha (touch-action:none), como no pé, onde nada rola
-   — e o pé acima da área segura. */
+   — e o pé acima da área segura. Tem dois tamanhos: a natural, a altura do
+   conteúdo, e a alta (kb-alta, a que se chega a puxar a barra para cima),
+   os 93dvh inteiros; mais alta do que o conteúdo, quem cresce é o corpo, e
+   o pé fica em baixo. */
 @media(max-width:520px){
   dialog.janela.kb-dlg{top:auto;bottom:0;left:0;right:0;margin:0;width:100%;max-width:none;max-height:93vh;max-height:93dvh;
     border-width:1px 0 0;border-radius:20px 20px 0 0}
+  dialog.janela.kb-dlg.kb-alta{height:93vh;height:93dvh}
+  .kb-janela.janela-corpo,.kb-j-corpo{flex-grow:1}
   .kb-j-cab{padding:8px 16px 12px;touch-action:none}
   .kb-j-cab::before{content:"";display:block;width:36px;height:4px;margin:0 auto 10px;border-radius:2px;background:var(--line2)}
   .kb-j-corpo{padding:14px 16px 18px}
@@ -893,8 +1008,10 @@ dialog.janela.kb-dlg::backdrop{opacity:var(--kb-veu,1)}
    para baixo — a saída continua de onde o dedo a deixou, porque só declara
    o fim. Tudo em --medio, na --curva (ease-out: nada arranca devagar), e a
    entrada na --curva-entra, a de quem atravessa distância. O regresso ao
-   sítio é uma transição (pode ser apanhada a meio pelo dedo); a folha que
-   já se pegou, ou cujo conteúdo trocou, não volta a entrar. */
+   sítio é uma transição (pode ser apanhada a meio pelo dedo), do transform
+   e da altura — crescer ou encolher a folha muda o espaço do corpo, que um
+   transform só esticava —, e assenta na alta ou na natural; a folha que já
+   se pegou, ou cujo conteúdo trocou, não volta a entrar. */
 @keyframes kbJanelaEntra{from{opacity:0;transform:translateY(8px) scale(.98)}}
 @keyframes kbJanelaSai{to{opacity:0;transform:translateY(8px) scale(.98)}}
 @keyframes kbFolhaSobe{from{transform:translateY(100%)}}
@@ -903,7 +1020,7 @@ dialog.janela.kb-dlg::backdrop{opacity:var(--kb-veu,1)}
 @keyframes kbVeuSai{to{opacity:0}}
 dialog.janela.kb-dlg[open]:not(.kb-trocou):not(.kb-arrastou):not(.kb-sai){animation:kbJanelaEntra var(--medio) var(--curva-entra)}
 dialog.janela.kb-dlg[open]:not(.kb-trocou):not(.kb-arrastou):not(.kb-sai)::backdrop{animation:kbVeuEntra var(--medio) var(--curva-entra)}
-dialog.janela.kb-dlg.kb-volta{transition:transform var(--medio) var(--curva-entra)}
+dialog.janela.kb-dlg.kb-volta{transition:transform var(--medio) var(--curva-entra),height var(--medio) var(--curva-entra)}
 dialog.janela.kb-dlg.kb-volta::backdrop{transition:opacity var(--medio) var(--curva-entra)}
 dialog.janela.kb-dlg.kb-sai{pointer-events:none;animation:kbJanelaSai var(--medio) var(--curva) both}
 dialog.janela.kb-dlg.kb-sai::backdrop{animation:kbVeuSai var(--medio) var(--curva) both}
@@ -912,7 +1029,9 @@ dialog.janela.kb-dlg.kb-sai::backdrop{animation:kbVeuSai var(--medio) var(--curv
   dialog.janela.kb-dlg.kb-sai{animation-name:kbFolhaDesce}
 }
 /* Com menos movimento: só desvanece (entra e sai), a folha não segue o dedo
-   — desvanece um pouco quando largar já a fecha —, e as colunas não deslizam. */
+   — desvanece um pouco quando largar já a fecha, e ao largar salta para a
+   alta ou para a natural (o kbFolhaVolta não lhe põe a kb-volta) —, e as
+   colunas não deslizam. */
 @media(prefers-reduced-motion:reduce){
   dialog.janela.kb-dlg[open]:not(.kb-trocou):not(.kb-arrastou):not(.kb-sai){animation-name:kbVeuEntra}
   dialog.janela.kb-dlg.kb-sai{animation-name:kbVeuSai}

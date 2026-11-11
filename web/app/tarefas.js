@@ -26,6 +26,15 @@
    diferente do que se abriu pergunta «Sair sem guardar?», pelo mecanismo dos
    modais (tfMarcarEstado).
 
+   O rascunho com alterações também fica no aparelho, a cada mudança
+   (tfRascAcompanhar), por conta e por registo: fechar a app, recarregar ou a
+   página morrer não o perde. Sai no Guardar, no «Sair sem guardar» que a
+   pessoa escolhe, no «Descartar», ou ao fim de 30 dias. Abrir de novo a
+   janela desse registo abre com ele, fundido a três com o que o registo tem
+   agora (tfFundir), com a linha que diz que ainda não foi para o servidor e o
+   selo «Por enviar» nas tarefas novas ou mudadas; a ficha mostra-as também
+   (tfComRascunho). Nunca grava sozinho: só o Guardar envia.
+
    Na lista, cada secção recolhe-se pelo cabeçalho (tfDobrar), e o que fica
    recolhido é do aparelho, como a gaveta. Quem pode alterar arrasta as
    tarefas pela pega (tfArrastar): por cima do nome de uma secção, a secção
@@ -87,6 +96,22 @@ let tfArr=null;
 /* quando acabou o último arrasto a sério (Date.now()): o clique que o browser
    dispara a seguir ao pointerup engole-se, senão largar abria o «Mover tarefa» */
 let tfArrFim=0;
+/* Os rascunhos com alterações por guardar ficam no aparelho, por conta
+   (acessos.js:meuId) e por registo: 'gi_tf_rascunhos:<conta>' →
+   {'imovel:P1': {b, r, t}}, com b as tarefas do registo de onde o rascunho
+   partiu (a base da fusão, tfFundir), r o rascunho e t a hora da última
+   mudança (ms). Sem sessão não se guarda nada; com o armazenamento fechado,
+   a janela trabalha como antes, só em memória. */
+const LS_TF_RASCUNHOS='gi_tf_rascunhos:';
+/* os dias que um rascunho fica no aparelho sem se mexer, como o do kanban */
+const TF_RASCUNHO_DIAS=30;
+/* a hora do rascunho guardado com que a janela aberta abriu (ms), para a
+   linha do cimo (tfLinhaRascunhoHtml); 0 sem nenhum, ou depois de o descartar */
+let tfRascT=0;
+/* o aparelho mudou para o registo da janela aberta (guardou-se ou tirou-se o
+   rascunho): ao fechar, a ficha por baixo repinta-se, para não ficar a dizer
+   o que já não é verdade */
+let tfRascMexeu=false;
 
 /* O registo de que a lista é.
    Recebe: tipo — 'imovel' ou 'contrato'; id — o id do registo.
@@ -126,64 +151,116 @@ function tfResumo(t){
    Devolve: a linha para o componentes.js:ficha ({tipo:'bloco',…}), ou null. */
 function tfLinhaDaFicha(tipo,id){
   const r=tfRegisto(tipo,id);if(!r)return null;
-  const t=tarefasDe(r),ok=tfPodeAlterar(tipo,id);
+  const v=tfComRascunho(tipo,id),t=v.t,ok=tfPodeAlterar(tipo,id);
   if(!t.itens.length&&!ok)return null;
   const rotulo=t.itens.length?'Ver tarefas':'Adicionar tarefas';
-  return {tipo:'bloco',rotulo:'Tarefas',valor:esc(tfResumo(t))
+  const env=t.itens.filter(x=>v.por.indexOf(x.id)>-1).slice(0,3)
+    .map(x=>`<div class="tf-env-linha"><span class="tf-fl-nome">${esc(x.nome||'Sem nome')}</span>${tfSeloHtml()}</div>`).join('');
+  return {tipo:'bloco',rotulo:'Tarefas',valor:tfResumoHtml(v)+(env?`<div class="tf-env">${env}</div>`:'')
     +`<div class="toolbar u-m-9px-0-0"><button type="button" class="btn sm" data-toca="camada" data-click="tfAbrir('${jsq(tipo)}','${jsq(id)}')">${ic('check',14)} ${rotulo}</button></div>`};
 }
+/* O resumo das tarefas com o que está por enviar no fim: «· 1 por enviar»
+   (as tarefas novas ou mudadas do rascunho deste aparelho), ou «·
+   alterações por enviar» quando só se removeu ou mudou a ordem — na cor da
+   frente, como o «Alterações por guardar» da janela.
+   Recebe: v — o de tfComRascunho ({t, por, mudou}).
+   Devolve: o HTML do resumo. */
+function tfResumoHtml(v){
+  const r=esc(tfResumo(v.t));
+  if(!v.mudou)return r;
+  const n=v.por.length;
+  return r.replace(/\.$/,'')+` · <b class="tf-por-guardar">${n?n+' por enviar':'alterações por enviar'}</b>`;
+}
+/* O selo de uma tarefa que ainda não foi para o servidor: a nuvem a subir e
+   «Por enviar», na cor da frente — letra e contorno, que o escuro forçado do
+   Samsung não apaga como apaga um fundo (estilos.css:.tf-selo).
+   Devolve: o HTML do selo. */
+function tfSeloHtml(){return `<span class="tf-selo">${ic('nuvemSobe',14)}Por enviar</span>`}
 /* O cartão das tarefas na ficha do imóvel (a prancheta M-Imovel): o resumo
    no cabeçalho, as primeiras por cumprir (até quatro) e as cumpridas mais
    recentes que caibam até às quatro, e o «Adicionar tarefa» e o «Ver
    todas». A ficha lê-se e não tem campos: cada tarefa é uma linha com a
    caixa desenhada, e tocar abre a lista (tfAbrir), onde se marca. Quem não
-   pode alterar e não tem tarefas não o vê.
+   pode alterar e não tem tarefas não o vê. Com um rascunho deste aparelho
+   por enviar (tfComRascunho), mostra as tarefas dele: as novas ou mudadas
+   vêm primeiro, com o selo «Por enviar» no lugar da secção, e o resumo diz
+   quantas estão por enviar — quem volta à ficha vê-as logo, e tocar abre a
+   janela com o rascunho.
    Recebe: tipo — 'imovel' ou 'contrato'; id — o id do registo.
    Devolve: o HTML do cartão, ou '' sem nada a mostrar. */
 function tfCartaoDaFicha(tipo,id){
   const r=tfRegisto(tipo,id);if(!r)return '';
-  const t=tarefasDe(r),ok=tfPodeAlterar(tipo,id);
+  const v=tfComRascunho(tipo,id),t=v.t,ok=tfPodeAlterar(tipo,id);
   if(!t.itens.length&&!ok)return '';
   const abrir=`tfAbrir('${jsq(tipo)}','${jsq(id)}')`;
+  const env=t.itens.filter(x=>v.por.indexOf(x.id)>-1);
   const por=t.itens.filter(x=>!x.feita),feitas=t.itens.filter(x=>x.feita).sort((a,b)=>String(b.feitaEm||'').localeCompare(String(a.feitaEm||'')));
-  const vistas=por.slice(0,4).concat(feitas.slice(0,Math.max(0,4-Math.min(4,por.length))));
+  const vistas=env.concat(por.slice(0,4),feitas.slice(0,Math.max(0,4-Math.min(4,por.length))))
+    .filter((x,i,l)=>l.indexOf(x)===i).slice(0,4);
   const sec=x=>{const s=t.seccoes.find(y=>y.id===x.seccao);return s?s.nome:''};
   const linhas=vistas.map(x=>`<div class="imv-linha tap tf-fl${x.feita?' tf-feita':''}" data-toca="camada" data-click="${abrir}">
       <span class="tf-caixa" aria-hidden="true">${x.feita?ic('check',14):''}</span>
       <span class="tf-fl-nome"><span class="imv-so-leitor">${x.feita?'Cumprida: ':'Por cumprir: '}</span>${esc(x.nome||'Sem nome')}</span>
-      ${x.feita&&x.feitaEm?`<span class="small num">${dPT(x.feitaEm).slice(0,5)}</span>`:sec(x)?`<span class="badge grey">${esc(sec(x))}</span>`:''}</div>`).join('');
+      ${env.indexOf(x)>-1?tfSeloHtml():x.feita&&x.feitaEm?`<span class="small num">${dPT(x.feitaEm).slice(0,5)}</span>`:sec(x)?`<span class="badge grey">${esc(sec(x))}</span>`:''}</div>`).join('');
   const mais=t.itens.length>vistas.length;
-  return `<div class="card imv-sec tf-cartao"><div class="imv-sec-cab"><h3>Tarefas</h3><span class="small num">${esc(tfResumo(t))}</span></div>
+  return `<div class="card imv-sec tf-cartao"><div class="imv-sec-cab"><h3>Tarefas</h3><span class="small num">${tfResumoHtml(v)}</span></div>
     ${linhas}
     <div class="tf-fl-pe">${ok?`<button type="button" class="btn ghost tf-fl-mais" data-toca="camada" data-click="${abrir};tfNovaTarefa('')">${ic('plus',18)} Adicionar tarefa</button>`:''}
       ${t.itens.length?`<button type="button" class="btn ghost tf-fl-ver" data-toca="camada" data-click="${abrir}">${mais?'Ver todas':'Ver tarefas'}</button>`:''}</div></div>`;
 }
 /* Abre a janela da lista de tarefas de um imóvel ou de um contrato, com a
-   pesquisa e os filtros limpos e um rascunho novo, copiado do registo. Ao
-   fechar, por qualquer caminho, o rascunho deita-se fora (tfEsquecer).
+   pesquisa e os filtros limpos e um rascunho novo, copiado do registo — ou,
+   com um rascunho deste aparelho por enviar, com ele fundido com o que o
+   registo tem agora (tfComRascunho), já com alterações por guardar. O que
+   fica no aparelho passa a partir do registo de agora; um rascunho que,
+   fundido, já é igual ao registo não conta e sai. Ao fechar, por qualquer
+   caminho, o rascunho da memória deita-se fora (tfEsquecer).
    Recebe: tipo — 'imovel' ou 'contrato'; id — o id do registo.
    Devolve: nada — abre a janela. */
 function tfAbrir(tipo,id){
   const r=tfRegisto(tipo,id);if(!r)return;
   tfAlvo={tipo:tipo==='contrato'?'contrato':'imovel',id:id};
   tfFiltro={q:'',seccao:'',estado:''};
-  tfRascunho=tarefasDe(r);
-  tfOriginal=JSON.stringify(tfRascunho);
+  const reg=tarefasDe(r),v=tfComRascunho(tfAlvo.tipo,id);
+  tfRascunho=v.mudou?v.t:tarefasDe(r);
+  tfOriginal=JSON.stringify(reg);
+  tfRascT=0;tfRascMexeu=false;
+  if(v.mudou){tfRascGuardar(tfAlvo,reg,v.t,v.g.t);tfRascT=v.g.t}
+  else if(v.g)tfRascApagar(tfAlvo);
   const sessao=++tfSessao;
   const L=openModal(tfTitulo(),tfCorpo(),tfRodape(),tfMenu());
   tfCamada=L||null;
-  if(L)L.aoFechar=()=>tfEsquecer(sessao);
+  if(L)L.aoFechar=origem=>tfEsquecer(sessao,origem);
+  if(v.mudou)tfMarcarEstado();
 }
 /* A janela fechou (Guardar, Cancelar, X, «Sair sem guardar»…): o rascunho
-   dela deita-se fora, e o «Anular» de uma remoção feita nela sai do ecrã —
-   já não há rascunho onde repor.
-   Recebe: sessao — o número da janela que fechou (tfSessao).
+   dela sai da memória, e o «Anular» de uma remoção feita nela sai do ecrã —
+   já não há rascunho onde repor. No aparelho, o rascunho só sai quando a
+   pessoa escolheu «Sair sem guardar» (tfSaiuSemGuardar): fechar por mudar de
+   separador, ou a página morrer, deixa-o lá para a próxima vez. Se o
+   aparelho mudou, a ficha por baixo repinta-se (componentes.js:refrescarFichas).
+   Recebe: sessao — o número da janela que fechou (tfSessao); origem
+   (opcional) — por onde se fechou, como o closeModal a dá ('' sem ela).
    Devolve: nada. */
-function tfEsquecer(sessao){
+function tfEsquecer(sessao,origem){
   if(sessao!==tfSessao)return;
-  tfRascunho=null;tfOriginal='';tfCamada=null;
+  if(tfAlvo&&tfSaiuSemGuardar(origem))tfRascApagar(tfAlvo);
+  const mexeu=tfRascMexeu;
+  tfRascunho=null;tfOriginal='';tfCamada=null;tfRascT=0;tfRascMexeu=false;
   const t=document.getElementById('toast');
   if(t&&t._op&&t._op.tfSessao===sessao&&t.classList)t.classList.remove('on');
+  if(mexeu&&typeof refrescarFichas==='function')try{refrescarFichas()}catch(e){}
+}
+/* A janela fechou porque a pessoa escolheu deitar as alterações fora? É a
+   resposta «Sair sem guardar» à pergunta (componentes.js:_sairSemGuardar,
+   que fecha com o _forcaFecho ligado). Sob automação a pergunta não se faz
+   (navigator.webdriver, componentes.js:closeModal) e um caminho de abandono
+   — o X, o fundo, o Esc, o voltar, o Cancelar — vale como a resposta.
+   Recebe: origem — por onde se fechou ('' sem ela: Guardar, mudar de separador…).
+   Devolve: true se o rascunho do aparelho deve sair. */
+function tfSaiuSemGuardar(origem){
+  if(typeof _forcaFecho!=='undefined'&&_forcaFecho)return true;
+  return !!origem&&typeof navigator!=='undefined'&&!!navigator.webdriver;
 }
 /* As tarefas que a janela mostra: as do rascunho, e sem janela as do registo.
    Devolve: {seccoes, itens}. */
@@ -223,14 +300,16 @@ function tfFechar(){
    janela e diz «Tarefas guardadas.». Sem nada mudado só fecha, sem gravar
    nem dizer nada. Com a permissão perdida a meio, recusa com a frase e a
    janela fica (o Cancelar deita o rascunho fora); com o registo apagado,
-   avisa e fecha.
+   avisa e fecha. Gravado (ou sem nada por gravar, ou sem registo), o
+   rascunho sai do aparelho; recusado, fica lá.
    Devolve: true se fechou; false se foi recusado. */
 function tfGuardar(){
   if(!tfAlvo||!tfRascunho)return false;
   const alvo=tfAlvo,novas=normTarefas(tfRascunho),mudou=tfMudou();
-  if(!tfRegisto(alvo.tipo,alvo.id)){toast(tfRecusa(alvo.tipo,alvo.id));closeModal();return false}
-  if(!mudou){closeModal();return true}
+  if(!tfRegisto(alvo.tipo,alvo.id)){toast(tfRecusa(alvo.tipo,alvo.id));tfRascApagar(alvo);closeModal();return false}
+  if(!mudou){tfRascApagar(alvo);closeModal();return true}
   if(!tfGravar(alvo,novas))return false;
+  tfRascApagar(alvo);
   closeModal();
   toast('Tarefas guardadas.');
   return true;
@@ -261,8 +340,9 @@ function tfOpcoesDeSeccao(t){
   if(t.seccoes.length&&t.itens.some(x=>!x.seccao))o.push({v:'__sem__',label:'Sem secção'});
   return o;
 }
-/* O corpo da janela: o «Adicionar tarefa» (só para quem pode), a pesquisa,
-   os dois filtros e a lista (tfLista), que se repinta sozinha a cada letra
+/* O corpo da janela: o «Adicionar tarefa» (só para quem pode), a linha do
+   rascunho do aparelho (tfLinhaRascunhoHtml, no cimo, logo à vista), a
+   pesquisa, os dois filtros e a lista (tfLista), que se repinta sozinha a cada letra
    para o campo da pesquisa não perder o foco. O «Adicionar tarefa» fica
    preso ao topo enquanto a lista rola (estilos.css:.tf-barra): quem
    adiciona quinze tarefas seguidas não sobe a lista quinze vezes.
@@ -275,7 +355,7 @@ function tfCorpo(){
       <button type="button" class="qclear${tfFiltro.q?'':' u-d-none'}" data-toca="vista" data-click="tfLimparPesquisa()" aria-label="Limpar a pesquisa">${ic('x',14)}</button></div>
     <div class="row"><label>Secção${sel('tf_fsec',tfFiltro.seccao,tfOpcoesDeSeccao(t),'tfFiltrar','vista')}</label>
       <label>Estado${sel('tf_fest',tfFiltro.estado,[{v:'',label:'Todas'},{v:'por',label:'Por cumprir'},{v:'feitas',label:'Cumpridas'}],'tfFiltrar','vista')}</label></div>`:'';
-  return `${barra}<div class="form">${filtros}<div id="tf_lista">${tfLista()}</div></div>`;
+  return `${barra}<div id="tf_rasc">${tfLinhaRascunhoHtml()}</div><div class="form">${filtros}<div id="tf_lista">${tfLista()}</div></div>`;
 }
 /* Esta tarefa passa a pesquisa e os filtros? A pesquisa procura no nome da
    tarefa, nas notas dela e no nome da secção dela, sem distinguir acentos nem
@@ -294,20 +374,22 @@ function tfPassa(x,sec){
 /* A lista, secção a secção, com o que passa a pesquisa e os filtros. As
    tarefas sem secção vêm primeiro; uma secção vazia só aparece sem filtros
    (é onde se lhe adiciona a primeira tarefa). Com o rascunho diferente do
-   que se abriu, o resumo diz «Alterações por guardar» (tfPorGuardarHtml).
+   que se abriu, o resumo diz «Alterações por guardar» (tfPorGuardarHtml) e
+   as tarefas novas ou mudadas levam o selo «Por enviar».
    Devolve: o HTML da lista (com o resumo por cima). */
 function tfLista(){
   const r=tfAlvo&&tfRegisto(tfAlvo.tipo,tfAlvo.id);if(!r)return '';
   const t=tfTarefas(),ok=tfPodeAlterar(tfAlvo.tipo,tfAlvo.id);
   if(!t.itens.length&&!t.seccoes.length)return `<div class="hint">${ok?'Ainda não há tarefas. Adiciona a primeira; ao adicioná-la, escolhes a secção ou crias uma nova.':'Ainda não há tarefas.'}${tfPorGuardarHtml()}</div>`;
   const filtrado=!!(tfFiltro.q.trim()||tfFiltro.seccao||tfFiltro.estado);
+  const por=tfMudou()?tfPorEnviar(t,JSON.parse(tfOriginal)):[];
   const grupos=[{s:null,itens:t.itens.filter(x=>!x.seccao)}].concat(t.seccoes.map(s=>({s:s,itens:t.itens.filter(x=>x.seccao===s.id)})));
   let mostradas=0;
   const html=grupos.map(g=>{
     const vis=g.itens.filter(x=>tfPassa(x,g.s));mostradas+=vis.length;
     if(!g.s&&!vis.length)return ok&&t.seccoes.length?tfSoltasAlvoHtml():'';
     if(g.s&&!vis.length&&filtrado)return '';
-    return tfSeccaoHtml(g.s,g.itens,vis,ok,!!t.seccoes.length);
+    return tfSeccaoHtml(g.s,g.itens,vis,ok,!!t.seccoes.length,por);
   }).join('');
   const resumo=`<div class="hint">${esc(tfResumo(t))}${tfPorGuardarHtml()}</div>`;
   if(!mostradas&&filtrado)return resumo+`<div class="hint">Nenhuma tarefa corresponde à pesquisa e aos filtros.</div>`;
@@ -315,10 +397,35 @@ function tfLista(){
 }
 /* O aviso de que o rascunho ainda não foi guardado, no fim do resumo: a cor
    da frente (o --accent-text) distingue-o também com o Samsung a escurecer a
-   página à força.
+   página à força. Com a linha do rascunho do aparelho por cima
+   (tfLinhaRascunhoHtml), que já o diz, não se repete.
    Devolve: o HTML do aviso, ou '' sem nada por guardar. */
 function tfPorGuardarHtml(){
-  return tfMudou()?' · <b class="tf-por-guardar">Alterações por guardar</b>':'';
+  return tfMudou()&&!tfRascT?' · <b class="tf-por-guardar">Alterações por guardar</b>':'';
+}
+/* A linha do cimo da janela aberta com um rascunho deste aparelho: diz de
+   quando é e que ainda não foi para o servidor, com «Descartar»
+   (tfDescartar). Como a do cartão do kanban
+   (worker/src/equipa-kanban-filtros.js:kbRascunhoLinha), contorno e letra na
+   cor da frente. Sem alterações (desfeitas uma a uma, ou descartadas) sai.
+   Recebe: agora (opcional) — ms, para a hora.
+   Devolve: o HTML da linha, ou ''. */
+function tfLinhaRascunhoHtml(agora){
+  if(!tfRascT||!tfMudou())return '';
+  return `<div class="tf-rascunho"><p class="tf-rascunho-txt">Alterações guardadas neste aparelho ${esc(tfQuando(tfRascT,agora))}: ainda não foram para o servidor.</p>`
+    +`<button type="button" class="btn ghost" id="tf_descartar" data-toca="rascunho" data-click="tfDescartar()">Descartar</button></div>`;
+}
+/* Quando foi o rascunho, para a linha: hoje, ontem, ou o dia e o mês (a
+   mesma forma do kanban, worker/src/equipa-kanban-filtros.js:kbRascunhoQuando).
+   Recebe: t — a hora dele (ms); agora (opcional) — ms.
+   Devolve: 'hoje às 09:05', 'ontem às 09:05' ou 'a 3/11 às 09:05'. */
+function tfQuando(t,agora){
+  const d=new Date(t),h=new Date(agora||Date.now()),vespera=new Date(h.getFullYear(),h.getMonth(),h.getDate()-1);
+  const dois=n=>(n<10?'0':'')+n,dia=x=>x.getFullYear()+'-'+x.getMonth()+'-'+x.getDate();
+  const hora=dois(d.getHours())+':'+dois(d.getMinutes());
+  if(dia(d)===dia(h))return 'hoje às '+hora;
+  if(dia(d)===dia(vespera))return 'ontem às '+hora;
+  return 'a '+d.getDate()+'/'+(d.getMonth()+1)+' às '+hora;
 }
 /* Uma secção da lista: o cabeçalho e as tarefas visíveis. O cabeçalho é um
    botão que recolhe e abre a secção (tfDobrar) — a seta, o nome e quantas
@@ -327,9 +434,10 @@ function tfPorGuardarHtml(){
    pesquisa e o arrasto contam com elas.
    Recebe: s — a secção (null para as tarefas sem secção); todas — as tarefas
    dela; vis — as que passam os filtros; ok — se quem vê pode alterar;
-   comSeccoes — se a lista tem secções (sem nenhuma, as soltas não levam cabeçalho).
+   comSeccoes — se a lista tem secções (sem nenhuma, as soltas não levam
+   cabeçalho); por (opcional) — os ids das tarefas por enviar (tfPorEnviar).
    Devolve: o HTML da secção. */
-function tfSeccaoHtml(s,todas,vis,ok,comSeccoes){
+function tfSeccaoHtml(s,todas,vis,ok,comSeccoes,por){
   const sid=s?s.id:'',feitas=todas.filter(x=>x.feita).length;
   const m=s&&ok?menu('tfs_'+s.id,[
     {label:'Adicionar tarefa',icon:'plus',toca:'camada',act:`tfNovaTarefa('${jsq(s.id)}')`},
@@ -340,7 +448,7 @@ function tfSeccaoHtml(s,todas,vis,ok,comSeccoes){
   // sem ⋯ (as soltas, a quem pode), um espaço do mesmo tamanho alinha a conta com as das secções
   const fim=m||(ok?'<span class="tf-sem-menu" aria-hidden="true"></span>':'');
   const cab=comCab?`<div class="tf-cab" data-sec="${esc(sid)}"><button type="button" class="tf-dobra" aria-expanded="${!fechada}" aria-controls="${idItens}" data-toca="nada" data-click="tfDobrar('${jsq(sid)}')"><span class="tf-chev" aria-hidden="true">${ic('chevD',16)}</span><b>${esc(s?(s.nome||'Sem nome'):'Sem secção')}</b><span class="tf-conta">${conta}</span></button>${fim}</div>`:'';
-  const itens=vis.map(x=>tfItemHtml(x,ok)).join('')
+  const itens=vis.map(x=>tfItemHtml(x,ok,!!por&&por.indexOf(x.id)>-1)).join('')
     ||(s?`<div class="hint">Sem tarefas nesta secção.</div>`:'');
   return `<div class="tf-seccao${fechada?' tf-recolhida':''}" data-sec="${esc(sid)}">${cab}<div class="tf-itens" id="${idItens}">${itens}</div></div>`;
 }
@@ -358,24 +466,31 @@ function tfSoltasAlvoHtml(){
    secundária, cortadas a duas linhas (estilos.css:.tf-notas); a linha toda
    abre-as no formulário. A pega arrasta ao dedo e ao rato (tfArrastar) e,
    tocada sem arrastar ou ao teclado, abre o «Mover tarefa» (tfPegaClique).
-   Recebe: x — a tarefa; ok — se quem vê pode alterar.
+   Uma tarefa nova ou mudada e por guardar leva o selo «Por enviar» logo por
+   baixo do nome (tfSeloHtml).
+   Recebe: x — a tarefa; ok — se quem vê pode alterar; porEnviar (opcional)
+   — true se ainda não foi para o servidor.
    Devolve: o HTML da linha. */
-function tfItemHtml(x,ok){
+function tfItemHtml(x,ok,porEnviar){
   const nome=esc(x.nome||'Sem nome'),notas=String(x.notas||'').trim();
   const quando=x.feita&&x.feitaEm?`<small class="tf-quando">cumprida a ${dPT(x.feitaEm)}</small>`:'';
   const nt=notas?`<small class="tf-notas">${esc(notas)}</small>`:'';
+  const selo=porEnviar?tfSeloHtml():'';
   const pega=ok?`<button type="button" class="tf-pega" aria-label="Mover: ${nome}" data-toca="camada" data-pointerdown="tfArrastar(event,this)" data-click="tfPegaClique('${jsq(x.id)}')">${ic('grip',16)}</button>`:'';
   return `<div class="tf-item${x.feita?' tf-feita':''}${notas?' tf-com-notas':''}" data-id="${esc(x.id)}">${pega}
     <label class="tf-marca"><input type="checkbox" id="tfc_${esc(x.id)}" ${x.feita?'checked':''} ${ok?'':'disabled'} aria-label="${x.feita?'Cumprida':'Por cumprir'}: ${nome}" data-toca="rascunho" data-change="tfMarcar('${jsq(x.id)}',this.checked)"></label>
-    ${ok?`<button type="button" class="tf-nome" data-toca="camada" data-click="tfEditarTarefa('${jsq(x.id)}')"><span>${nome}</span>${nt}${quando}</button>`
-      :`<span class="tf-nome"><span>${nome}</span>${nt}${quando}</span>`}</div>`;
+    ${ok?`<button type="button" class="tf-nome" data-toca="camada" data-click="tfEditarTarefa('${jsq(x.id)}')"><span>${nome}</span>${selo}${nt}${quando}</button>`
+      :`<span class="tf-nome"><span>${nome}</span>${selo}${nt}${quando}</span>`}</div>`;
 }
-/* Repinta a lista da janela aberta, sem tocar no campo da pesquisa nem nos
-   filtros, e volta a marcar se há alterações por guardar (tfMarcarEstado).
+/* Repinta a lista da janela aberta e a linha do rascunho do aparelho, sem
+   tocar no campo da pesquisa nem nos filtros, e volta a marcar se há
+   alterações por guardar (tfMarcarEstado).
    Devolve: nada. */
 function tfPintar(){
   const el=document.getElementById('tf_lista');
   if(!tfAlvo||!el)return;
+  const ln=document.getElementById('tf_rasc'),lh=tfLinhaRascunhoHtml();
+  if(ln&&ln.innerHTML!==lh)ln.innerHTML=lh;
   el.innerHTML=tfLista();
   if(typeof tornarFocavel==='function')tornarFocavel(el);
   tfMarcarEstado();
@@ -429,7 +544,8 @@ function tfFiltrar(){
 }
 /* O caminho de todas as mudanças da janela: reverifica a permissão (quem a
    perdeu a meio sabe-o já, e não só no Guardar), aplica a mudança ao
-   rascunho, normaliza-o e repinta a janela. Não grava: isso é do tfGuardar.
+   rascunho, normaliza-o, leva-o ao aparelho (tfRascAcompanhar) e repinta a
+   janela. Não grava no registo nem envia: isso é do tfGuardar.
    Recebe: mudar — função que recebe o rascunho ({seccoes, itens}) e o altera;
    tudo (opcional) — true repinta a janela inteira (as secções mudaram).
    Devolve: true se mudou o rascunho; false se foi recusado. */
@@ -438,6 +554,7 @@ function tfMudar(mudar,tudo){
   const recusa=tfRecusa(tfAlvo.tipo,tfAlvo.id);if(recusa){toast(recusa);tfPintar();return false}
   mudar(tfRascunho);
   tfRascunho=normTarefas(tfRascunho);
+  tfRascAcompanhar();
   if(tudo)tfPintarTudo();else tfPintar();
   return true;
 }
@@ -635,6 +752,136 @@ function tfAvisoRemocao(msg,repor){
   toast(msg,{rotulo:'Anular',ms:6000,tfSessao:sessao,fn(){
     if(sessao!==tfSessao||!tfRascunho)return;
     tfMudar(repor,true);
+  }});
+}
+
+/* ---- o rascunho no aparelho ---- */
+
+/* A chave do aparelho com os rascunhos desta conta: o de uma conta nunca
+   aparece a outra que entre no mesmo aparelho.
+   Devolve: 'gi_tf_rascunhos:<id>', ou '' sem sessão (aí não se guarda nada). */
+function tfRascChave(){
+  const id=typeof meuId==='function'?meuId():'';
+  return id?LS_TF_RASCUNHOS+id:'';
+}
+/* Os rascunhos desta conta no aparelho, sem os caducados (mais de 30 dias
+   sem mexer) nem o que não tem a forma de um; os que caem saem do aparelho.
+   Recebe: agora (opcional) — ms.
+   Devolve: {'tipo:id': {b, r, t}} — vazio sem sessão, sem nada guardado ou
+   com o armazenamento fechado. */
+function tfRascTodos(agora){
+  const k=tfRascChave();if(!k)return {};
+  let o=null;
+  try{o=JSON.parse(localStorage.getItem(k)||'{}')}catch(e){return {}}
+  if(!o||typeof o!=='object'||Array.isArray(o))o={};
+  const lim=(agora||Date.now())-TF_RASCUNHO_DIAS*864e5,out={},obj=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
+  let caiu=false;
+  Object.keys(o).forEach(c=>{
+    const x=o[c];
+    if(/^(imovel|contrato):./.test(c)&&obj(x)&&typeof x.t==='number'&&x.t>=lim&&obj(x.b)&&obj(x.r))out[c]=x;else caiu=true;
+  });
+  if(caiu)tfRascEscrever(out);
+  return out;
+}
+/* Grava os rascunhos desta conta no aparelho (sem nenhum, a chave sai);
+   calado quando o aparelho não deixa.
+   Recebe: todos — {'tipo:id': {b, r, t}}.
+   Devolve: true se gravou. */
+function tfRascEscrever(todos){
+  const k=tfRascChave();if(!k)return false;
+  try{
+    if(Object.keys(todos).length)localStorage.setItem(k,JSON.stringify(todos));else localStorage.removeItem(k);
+    return true;
+  }catch(e){return false}
+}
+/* O rascunho guardado neste aparelho para um registo.
+   Recebe: alvo — o {tipo,id} do registo.
+   Devolve: {b, r, t}, ou null sem nenhum. */
+function tfRascDe(alvo){return alvo?tfRascTodos()[alvo.tipo+':'+alvo.id]||null:null}
+/* Guarda no aparelho o rascunho de um registo, com a base de onde partiu e a hora.
+   Recebe: alvo — o {tipo,id}; base — as tarefas do registo de onde partiu;
+   r — o rascunho; t (opcional) — a hora (ms; por omissão, agora).
+   Devolve: a hora gravada, ou 0 se o aparelho não deixou. */
+function tfRascGuardar(alvo,base,r,t){
+  const todos=tfRascTodos(),h=t||Date.now();
+  todos[alvo.tipo+':'+alvo.id]={b:normTarefas(base),r:normTarefas(r),t:h};
+  tfRascMexeu=true;
+  return tfRascEscrever(todos)?h:0;
+}
+/* Tira do aparelho o rascunho de um registo (sem nenhum, não mexe em nada).
+   Recebe: alvo — o {tipo,id}.
+   Devolve: nada. */
+function tfRascApagar(alvo){
+  const todos=tfRascTodos(),c=alvo.tipo+':'+alvo.id;
+  if(!todos[c])return;
+  delete todos[c];
+  tfRascMexeu=true;
+  tfRascEscrever(todos);
+}
+/* A janela mudou o rascunho: com alterações por guardar, leva-o ao aparelho
+   com a hora (e a linha do cimo, se a há, passa a dizer a hora nova); sem
+   elas (desfeitas uma a uma), tira-o.
+   Devolve: nada. */
+function tfRascAcompanhar(){
+  if(!tfAlvo||!tfRascunho)return;
+  if(!tfMudou()){tfRascApagar(tfAlvo);tfRascT=0;return}
+  const t=tfRascGuardar(tfAlvo,JSON.parse(tfOriginal),tfRascunho);
+  if(t&&tfRascT)tfRascT=t;
+}
+/* Um rascunho juntado com o que o registo tem agora: a fusão a três da casa
+   (cloud/nucleo.js:fundirTres), com a base de onde o rascunho partiu. O que
+   outra pessoa ou outro aparelho mudou entretanto fica; o que se mudou aqui
+   também; só sai o que se removeu aqui; a mesma tarefa mudada dos dois lados
+   fica com o que se mudou aqui, campo a campo. Sem a fusão carregada, o
+   rascunho tal e qual.
+   Recebe: base — as tarefas de onde o rascunho partiu; r — o rascunho;
+   agora — as tarefas do registo agora.
+   Devolve: as tarefas fundidas, normalizadas. */
+function tfFundir(base,r,agora){
+  if(typeof fundirTres!=='function')return normTarefas(r);
+  return normTarefas(fundirTres(normTarefas(base),normTarefas(r),normTarefas(agora)));
+}
+/* As tarefas por enviar: as que a base não tem, ou tem diferentes (o nome,
+   a secção, cumprida, as notas). Mudar só a ordem não conta.
+   Recebe: t — as tarefas; base — as de onde partiram.
+   Devolve: a lista dos ids. */
+function tfPorEnviar(t,base){
+  const b=new Map(base.itens.map(x=>[x.id,JSON.stringify(x)]));
+  return t.itens.filter(x=>b.get(x.id)!==JSON.stringify(x)).map(x=>x.id);
+}
+/* O que um registo mostra com o rascunho deste aparelho por cima: o
+   rascunho fundido com o registo (tfFundir), as tarefas por enviar, e se
+   há alterações por enviar. Só para quem pode alterar a lista; um rascunho
+   que, fundido, é igual ao registo não conta (o tfAbrir tira-o).
+   Recebe: tipo — 'imovel' ou 'contrato'; id — o id do registo.
+   Devolve: {t — as tarefas a mostrar, por — os ids das por enviar, mudou —
+   true com alterações por enviar, g — o rascunho guardado ({b, r, t}) ou null}. */
+function tfComRascunho(tipo,id){
+  const reg=tarefasDe(tfRegisto(tipo,id)),nada={t:reg,por:[],mudou:false,g:null};
+  if(!tfRegisto(tipo,id)||!tfPodeAlterar(tipo,id))return nada;
+  const g=tfRascDe({tipo:tipo,id:id});if(!g)return nada;
+  const f=tfFundir(g.b,g.r,reg);
+  if(JSON.stringify(f)===JSON.stringify(reg))return {t:reg,por:[],mudou:false,g:g};
+  return {t:f,por:tfPorEnviar(f,reg),mudou:true,g:g};
+}
+/* O «Descartar» da linha do rascunho: as alterações saem do aparelho e da
+   janela, que fica com o que o registo tem, e o aviso traz o «Anular»
+   durante seis segundos, que as devolve — juntas com o que se fez entretanto
+   (tfFundir) — à janela e ao aparelho. Como o Anular de uma remoção, só vale
+   na janela onde se descartou.
+   Devolve: nada. */
+function tfDescartar(){
+  if(!tfAlvo||!tfRascunho)return;
+  const alvo=tfAlvo,sessao=tfSessao,antes=normTarefas(tfRascunho),quando=tfRascT||Date.now();
+  tfRascApagar(alvo);
+  tfRascunho=JSON.parse(tfOriginal);tfRascT=0;
+  tfPintarTudo();
+  toast('Alterações descartadas.',{rotulo:'Anular',ms:6000,tfSessao:sessao,fn(){
+    if(sessao!==tfSessao||!tfRascunho)return;
+    const base=JSON.parse(tfOriginal);
+    tfRascunho=tfFundir(base,antes,tfRascunho);
+    if(tfMudou()){tfRascGuardar(alvo,base,tfRascunho,quando);tfRascT=quando}
+    tfPintarTudo();
   }});
 }
 

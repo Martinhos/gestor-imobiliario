@@ -761,8 +761,24 @@ por baixo do dedo (componentes.js:campoAVista) — um campo à vista fica onde
 está, e o toque longo para selecionar texto não o vê fugir. Espera-se o
 teclado assentar: o último resize da janela visível, ou 300ms sem resize
 (componentes.js:campoAVistaQuandoAssentar, chamado pelo focusin do
-arranque.js). A folga do teclado (.sheet.kb, 300px no fundo do corpo) só entra
-quando o corpo não tem para onde rolar sem ela, e sai no focusout.
+arranque.js). O corpo rola até onde pode; a folga do teclado (.sheet.kb,
+300px no fundo do corpo) só entra quando, rolado até ao fim, o campo continua
+tapado, e sai no focusout — ela alonga o corpo, e numa folha curta a folha
+crescia para cima e o cabeçalho saía do ecrã.
+
+Com o teclado aberto, a janela fica por cima dele. Quando o browser só
+encolhe a janela visível (o Chrome do Android e o Samsung Internet por
+omissão, o Safari do iPhone), o layout mantém a altura toda e o .modal, preso
+a ele, tinha o fundo debaixo do teclado. O html.kb-aberto, com --vv-topo e
+--vv-alto, põe o .modal no que se vê, e a folha assenta no fundo disso, com a
+mesma proporção (93% no telemóvel, 88% até 880px acima dos 520px)
+(componentes.js:janelaSegueTeclado, a cada resize e scroll da janela visível;
+estilos.css, html.kb-aberto). Só conta como teclado uma diferença de 120px ou
+mais entre o layout e a janela visível, sem zoom de pinça, com pelo menos
+280px à vista (componentes.js:kbJanelaVisivel): as barras do browser, um zoom
+e o telemóvel deitado (onde a folha ficava sem corpo) ficam como sempre, e
+onde o layout encolhe com o teclado (alguns Samsung) a janela já cabe
+sozinha.
 
 A folha segue o dedo e o véu aclara à proporção (componentes.js:folhaVeu);
 para cima resiste (componentes.js:folhaElastico, nunca mais de 24px, com uma
@@ -2715,8 +2731,46 @@ ligado; sem diferenças, o retrato é o de agora — pesquisar, filtrar, ou marc
 e desmarcar a mesma tarefa não pergunta nada (voltar a marcar uma que já
 estava cumprida devolve-lhe o dia de então). O Cancelar com alterações também
 pergunta (tarefas.js:tfFechar). Fechada a janela por qualquer caminho, o
-rascunho vai-se (tarefas.js:tfEsquecer). A leitura de fundo não corre com uma
+rascunho sai da memória (tarefas.js:tfEsquecer), mas não do aparelho. A leitura de fundo não corre com uma
 janela aberta (cloud/nucleo.js:pullNow), por isso o rascunho não é pisado.
+
+O rascunho com alterações fica no aparelho a cada mudança (tarefas.js:tfRascAcompanhar, chamado pelo
+tarefas.js:tfMudar), por conta e por registo: `gi_tf_rascunhos:<conta>` → `{'imovel:P1': {b, r, t}}`,
+com b as tarefas do registo de onde o rascunho partiu, r o rascunho e t a hora da última mudança
+(tarefas.js:LS_TF_RASCUNHOS, tarefas.js:tfRascGuardar). A conta é a da sessão (acessos.js:meuId):
+o rascunho de uma conta nunca aparece a outra que entre no mesmo aparelho, e sem sessão não se guarda
+nada (tarefas.js:tfRascChave). Fechar a app, recarregar, mudar de separador com a janela aberta ou a
+página morrer não o tira. Sai quando o Guardar grava (tarefas.js:tfGuardar), quando a pessoa responde
+«Sair sem guardar» à pergunta (tarefas.js:tfSaiuSemGuardar, pelo componentes.js:_forcaFecho; sob
+automação, onde a pergunta não se faz, um caminho de abandono vale como a resposta), com o «Descartar»,
+quando as alterações se desfazem uma a uma, ou ao fim de 30 dias sem mexer
+(tarefas.js:TF_RASCUNHO_DIAS, tarefas.js:tfRascTodos, que tira os caducados e o que não tem a forma de
+um rascunho). Com o armazenamento fechado, tudo trabalha como antes, só em memória. Nunca grava
+sozinho: só o Guardar envia.
+
+Abrir a janela de um registo com um rascunho guardado abre com ele, fundido a três com o que o registo
+tem agora (tarefas.js:tfComRascunho, tarefas.js:tfFundir, que é o cloud/nucleo.js:fundirTres da casa):
+o que outra pessoa ou outro aparelho mudou entretanto fica, o que se mudou aqui também, e só sai o que
+se removeu aqui. O que fica no aparelho passa a partir do registo de agora. Um rascunho que, fundido,
+já é igual ao registo não conta e sai. A janela abre já com alterações por guardar (o Cancelar e o
+«Sair sem guardar?»), e no cimo, logo a seguir ao «Adicionar tarefa», a linha «Alterações guardadas
+neste aparelho hoje às HH:MM: ainda não foram para o servidor.» (ou «ontem às», ou «a D/M às»;
+tarefas.js:tfLinhaRascunhoHtml, tarefas.js:tfQuando), com «Descartar» (tarefas.js:tfDescartar): as
+alterações saem da janela e do aparelho, a janela fica com o que o registo tem, e o aviso traz o
+«Anular» de seis segundos, que as devolve — juntas com o que se fez entretanto — só na janela onde se
+descartou. Com a linha, o resumo não repete «Alterações por guardar». A linha tem contorno e letra na
+cor da frente (estilos.css:.tf-rascunho), como a do cartão do kanban, e o «Descartar» a altura do dedo.
+
+Na lista, cada tarefa nova ou mudada e por guardar (tarefas.js:tfPorEnviar: a que a base não tem, ou
+tem diferente; mudar só a ordem não conta) leva o selo «Por enviar» por baixo do nome
+(tarefas.js:tfSeloHtml, estilos.css:.tf-selo): a nuvem a subir e a palavra na cor da frente, letra e
+contorno, que o escuro forçado do Samsung não apaga como apaga um fundo; numa cumprida não fica
+riscado. A ficha também as mostra: o cartão do imóvel (tarefas.js:tfCartaoDaFicha) põe as por enviar
+à cabeça, com o selo no lugar da secção, e a linha do contrato (tarefas.js:tfLinhaDaFicha) mostra até
+três por baixo do resumo; o resumo acaba em «· 1 por enviar» (ou «· alterações por enviar» quando só se
+removeu ou mudou a ordem; tarefas.js:tfResumoHtml). Quem volta à ficha vê-as logo, e tocar abre a
+janela com o rascunho. Só quem pode alterar a lista vê o rascunho; fechada a janela com o aparelho
+mudado, a ficha por baixo repinta-se (componentes.js:refrescarFichas).
 
 A pesquisa repinta só a lista, e o campo não perde o foco; o limpar dela é o
 ic('x',14). Uma tarefa cumprida fica riscada no mesmo sítio, sem saltar para
@@ -6646,7 +6700,23 @@ baixo da app: sobem do fundo com a barra no topo e fecham-se a arrastar para
 baixo pelo cabeçalho, ou pelo corpo no topo do scroll, com o véu a aclarar
 (worker/src/equipa-kanban-janela.js:kbFolhaPousar). Nunca arrancam de um
 campo nem do que tem gesto próprio (a pega das colunas, a lista de um
-seletor), que se marca com data-gesto. Com uma janela aberta, a do kanban ou
+seletor), que se marca com data-gesto. A folha tem dois tamanhos: a natural,
+a altura do conteúdo, e a alta, os 93dvh do teto, com o corpo a crescer e o
+pé em baixo. Puxada pela barra para cima, a natural cresce colada ao dedo (a
+altura, não um transform) até ao teto, e acima dele resiste; numa alta, para
+baixo encolhe até à natural, e só daí para baixo desce e fecha
+(worker/src/equipa-kanban-janela.js:kbFolhaPosicao). Largada, fica no outro
+tamanho passado um terço do caminho entre os dois (no máximo 160px), ou com
+um sacudir nesse sentido; um sacudir para baixo numa alta leva-a à natural,
+não a fecha (worker/src/equipa-kanban-janela.js:kbFolhaAltaAoLargar). Assenta
+numa transição da altura em --medio, com a --curva-entra; sem movimento, não
+segue o dedo e salta para o tamanho ao largar; assente, a lista de um seletor
+aberta mede-se outra vez para usar o espaço novo
+(worker/src/equipa-kanban-janela.js:kbFolhaVolta). Uma folha cuja natural já
+enche o teto só resiste. Cada janela abre natural, e a que troca de conteúdo
+(o ⋯ para o Editar) volta à natural
+(worker/src/equipa-kanban-janela.js:kbFolhaNatural); com o rato, ou acima dos
+520px, nada disto existe. Com uma janela aberta, a do kanban ou
 a do guião, a página por baixo não rola, nem ao dedo, nem à roda, nem ao
 teclado, e ao fechar fica onde estava: a janela tranca-a como a app tranca a
 dela, com o html.eq-trava e o body preso no sítio
@@ -6654,16 +6724,39 @@ dela, com o html.eq-trava e o body preso no sítio
 arrasto da folha continuam a ser dela.
 
 O que se escreve num cartão, ao criar ou ao editar, fica no aparelho até o
-servidor o aceitar (worker/src/equipa-kanban-filtros.js:kbRascunhoGuardar):
-um rascunho para o cartão novo e um por cartão editado, por pessoa, só com o
-que difere do que a janela abriu, guardado a cada tecla e a cada escolha.
-Fechar a janela, arrastá-la para baixo ou recarregar a página não o perde;
-abrir de novo o formulário volta com ele, por cima do que o cartão tem, com
-uma linha que diz de quando é e «Descartar rascunho». O Adicionar ou o
-Guardar que o servidor aceitou apaga-o; o que ele recusa deixa-o. Um
-rascunho igual ao que a janela abre não conta, e os que ficam 30 dias sem
-se mexer saem do aparelho. Sem armazenamento, o formulário funciona como se
-não houvesse rascunho.
+servidor o aceitar (worker/src/equipa-kanban-filtros.js:kbRascunhoGuardar),
+por pessoa, guardado a cada tecla e a cada escolha, e o quadro mostra-o.
+Cada «Novo cartão» — o do cimo, o + da barra, o «Adicionar cartão» de uma
+coluna e o «Adicionar subtarefa» — começa vazio, com um rascunho seu
+(worker/src/equipa-kanban-filtros.js:kbRascunhoNovoId), e pode haver vários.
+Fechar o formulário com alguma coisa escrita (mudar só a coluna não conta),
+arrastá-lo para baixo, recarregar a página ou fechar a app deixa o cartão no
+quadro, na coluna dele, no topo da lista — onde o servidor o vai pôr —, com
+o tracejado na cor da frente, o selo «Por enviar» (letra e contorno) e a
+frase «Ainda não foi para o servidor.»
+(worker/src/equipa-kanban.js:kbRascunhoCartaoHtml). Não conta no número da
+coluna, que é o dos cartões do quadro, e os filtros não o escondem: é teu e
+está à espera de ti. Não tem pega nem se arrasta (não existe no servidor):
+muda-se de coluna no formulário; o de uma coluna que já não existe fica em A
+fazer. Tocar nele reabre o formulário com o rascunho, com a linha que diz de
+quando é, o Adicionar e «Descartar rascunho»; o ⋯ dele só descarta. O
+Adicionar que o servidor aceita apaga o rascunho, e o cartão real toma-lhe o
+lugar no topo da coluna (worker/src/equipa-kanban-filtros.js:kbGuardarCartao);
+o que falha — o servidor recusa, ou não há rede, e então a janela diz «Sem
+ligação ao servidor. O cartão fica no quadro, por enviar.» — deixa-o. Um
+cartão do servidor com alterações tuas por guardar tem no quadro o selo
+«Alterações por enviar» (worker/src/equipa-kanban.js:kbCartaoHtml); o
+rascunho guarda só o que difere do cartão, e um cartão que outra pessoa mudou
+entretanto mostra o que ela mudou nos campos em que não se mexeu. Aberto, o
+painel tem a linha «Alterações por enviar» com «Continuar a editar» (o
+Editar, com o rascunho) e «Descartar» (worker/src/equipa-kanban.js:kbPainelRascHtml).
+Descartar, de onde for, tira-o do quadro na hora e o aviso traz o Anular
+(worker/src/equipa-kanban-filtros.js:kbRascunhoDescartarDe). Um rascunho
+igual ao que o formulário abre não conta, os que ficam 30 dias sem se mexer
+saem do aparelho, e o rascunho único de antes (sem id) passa ao formato novo
+na primeira leitura (worker/src/equipa-kanban-filtros.js:kbRascunhosTodos).
+Sem armazenamento, o quadro e o formulário funcionam como se não houvesse
+rascunhos.
 
 Os tickets criam o seu cartão sozinhos, e movem-no quando mudam de estado
 (worker/src/lib/kanban.js:passosDaSincronizacao, a regra única que as rotas,

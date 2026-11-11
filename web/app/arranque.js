@@ -166,6 +166,12 @@ document.addEventListener('focusin',e=>{
   if(!typing(t))return;
   campoAVistaQuandoAssentar(t);
 });
+/* com o teclado aberto, a janela por cima dele: segue a janela visível
+   (componentes.js:janelaSegueTeclado) */
+if(window.visualViewport&&window.visualViewport.addEventListener){
+  window.visualViewport.addEventListener('resize',janelaSegueTeclado);
+  window.visualViewport.addEventListener('scroll',janelaSegueTeclado);
+}
 /* as caixas de texto crescem ao escrever e ao aparecerem já com texto
    (componentes.js:ajustarCaixas; sem nada a fazer onde o CSS já o faz) */
 if(!caixaSozinha&&typeof MutationObserver!=='undefined'){

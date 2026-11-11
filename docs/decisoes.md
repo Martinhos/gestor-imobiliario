@@ -97,6 +97,10 @@ confere que cada uma aponta para código que existe.
 - 2026-11-10 · Os tickets de QA nas colunas do kanban, nos dois sentidos
 - 2026-11-11 · Em Human Tests decide-se em vez de mover, e comentar devolve o ticket a Auto Tests
 - 2026-11-11 · A janela do back office tranca a página, e o rascunho do cartão fica no aparelho
+- 2026-11-11 · A folha do kanban tem dois tamanhos, e não uma altura livre
+- 2026-11-11 · O cartão por enviar fica no quadro, e pode haver vários
+- 2026-11-11 · A janela segue o teclado; a folga só quando rolar não chega (KAN-110)
+- 2026-11-11 · As tarefas por guardar ficam no aparelho até ao Guardar (KAN-105, a app)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3571,3 +3575,86 @@ editado, por pessoa da equipa (worker/src/equipa-kanban-filtros.js:kbRascunhoGua
 difere do que a janela abriu: ao editar, um cartão que outra pessoa mudou entretanto mostra o que ela
 mudou nos campos em que não se mexeu, em vez de o desfazer com o rascunho. Caduca aos 30 dias, para os
 abandonados não se acumularem.
+
+## 2026-11-11 · A folha do kanban tem dois tamanhos, e não uma altura livre
+No KAN-108 o Martinho pediu para «arrastar o topo do modal para cima para aumentar o tamanho»: a janela
+«Ordenar» tem a altura do conteúdo, e a lista do «Critério», que abre dentro do corpo, encolhia para
+caber nele (worker/src/equipa-kanban-filtros.js:kbSelAjustar). Medido a 384×785 com toque: a folha com
+318 px, a lista com 114 px dos 276 que tem, e puxar a barra 300 px para cima só a levantava 18 px, que a
+folha resistia. Abaixo dos 520px a folha passa a ter dois tamanhos, a natural e a alta, os 93dvh que já
+eram o teto (worker/src/equipa-kanban-janela.js:kbFolhaPosicao): puxada pela barra cresce colada ao dedo,
+e largada assenta numa das duas. Dois tamanhos e não uma altura livre onde se larga, como as folhas do
+sistema: assenta sempre num sítio previsível, uma folha a meia altura não serve a ninguém (nem cabe a
+lista, nem se vê o quadro), e uma altura que ficasse onde o dedo a deixou pedia que se lembrasse dela,
+janela a janela. Cada janela abre natural e a alta não passa para a que vem a seguir. O que cresce é a
+altura e não um transform, que só a mudava de sítio: o corpo precisa do espaço a sério para a lista se
+medir nele, e o pé fica em baixo. Um sacudir para baixo numa alta fica na natural e não fecha: um passo
+por gesto, que fechar é sair da janela e está a um gesto de distância
+(worker/src/equipa-kanban-janela.js:kbFolhaAltaAoLargar).
+
+## 2026-11-11 · O cartão por enviar fica no quadro, e pode haver vários
+O Martinho reabriu o KAN-105: «Adicionei uma tarefa, não guardei e fechei a aplicação. Quando voltei, a
+tarefa não estava lá. Deve estar e deve dizer que não foi enviada para o servidor.» Reproduzido no 8788
+a 384×785 com toque: o rascunho estava no aparelho (kb_rascunhos:<id> com o título escrito), mas o quadro
+não o mostrava nem depois de Cancelar nem depois de recarregar — só voltava a quem abrisse de novo o
+«Novo cartão», e quem procura uma tarefa procura-a no quadro. O cartão por enviar passa a estar no quadro
+(worker/src/equipa-kanban.js:kbRascunhoCartaoHtml), na coluna onde vai ficar e no topo, que é onde o
+servidor põe um cartão novo: ao enviar, o cartão real aparece no mesmo sítio e nada salta. Diz-se pelo
+selo «Por enviar» e pela frase «Ainda não foi para o servidor.», na cor da frente, para se ler também no
+escuro forçado do Samsung. Não conta no número da coluna, que continua a ser o dos cartões que a equipa
+vê, e os filtros não o escondem: só existe neste aparelho e é desta pessoa, e um filtro que o escondesse
+voltava a fazê-lo parecer perdido. Pode haver vários: com um só, cada «Novo cartão» abria com o anterior
+por enviar e o quadro só podia mostrar um; com um rascunho por «Novo cartão»
+(worker/src/equipa-kanban-filtros.js:kbRascunhoNovoId), começar outro não esconde o primeiro, e cada um
+reabre-se do quadro com o seu. As edições por guardar ficam no cartão do servidor, com o selo «Alterações
+por enviar» e a linha no painel (Continuar a editar, Descartar), e não noutro cartão ao lado: o cartão é
+um só, o que falta é enviar o que mudou. Um Adicionar que falha deixa o cartão por enviar, e sem rede a
+janela di-lo em português em vez do «Failed to fetch» do browser.
+
+## 2026-11-11 · A janela segue o teclado; a folga só quando rolar não chega (KAN-110)
+
+No telemóvel, a «Nova tarefa» (ticket de QA 9903fee2) abria «muito em cima»
+e as Notas ficavam fora do ecrã. Medido a 384×785 com o teclado simulado
+(visualViewport de 450px, o modo do Chrome por omissão): a folha (483px)
+continuava encostada ao fundo do layout, com o rodapé debaixo do teclado; e
+um toque nas Notas punha a folga .kb, que alongava o corpo de uma folha que
+não rolava — a folha crescia até 93dvh e o topo ia parar 172px acima do ecrã.
+Com o browser a deslocar o que se vê até ao fim, o cabeçalho já saía 33px por
+cima sem tocar em nada. E era o campo do nome que o Martinho via sair (o
+comentário dele: «a janela desliza muito para cima e o nome da tarefa ou o
+texto que estou a editar fica fora do ecrã»): com o foco automático no
+Tarefa, quando a janela visível encolhe antes de o browser a deslocar, o campo
+(429–475) fica atrás do teclado, a folga entra e a folha sobe 247px (topo de
+302 para 55); quando o deslocamento chega a seguir, medido com o campo onde
+ele estava, o que se vê começa em 227–278 e o nome ficou em −96…−50 (ou
+−45…1), por cima do ecrã. Só o cursor da escrita o trazia de volta, ao topo.
+
+Decidiu-se: (1) com o teclado aberto, o .modal ocupa só a janela visível
+(componentes.js:janelaSegueTeclado), para todas as janelas — o movimento
+tinha o mesmo rodapé debaixo do teclado; (2) a regra antiga da folga («só
+quando o corpo não tem para onde rolar sem ela», para centrar o campo) passa
+a «só quando, rolado até ao fim, o campo continua tapado»
+(componentes.js:campoAVista): centrar não vale uma folha a crescer.
+
+Não se usou o interactive-widget=resizes-content da meta viewport: faria o
+layout da app inteira encolher com o teclado (as barras fixas subiam por cima
+dele em todos os ecrãs), e o Safari do iPhone ignora-o.
+
+## 2026-11-11 · As tarefas por guardar ficam no aparelho até ao Guardar (KAN-105, a app)
+O Martinho reabriu o KAN-105: «Adicionei uma tarefa, não guardei e fechei a aplicação. Quando voltei,
+a tarefa não estava lá. Deve estar e deve dizer que não foi enviada para o servidor.» O ticket é sobre
+os dois (decisão dele, 2026-11-11): o kanban do back office e as Tarefas da app. Reproduzido no 8788 a
+384×785 com toque: Tarefas › Adicionar tarefa › Adicionar, sem Guardar, e recarregar — a ficha voltava
+com «Ainda não há tarefas.» e a janela vazia. O rascunho da janela vivia só em memória
+(tarefas.js:tfRascunho) e deitava-se fora ao fechar por qualquer caminho, até a mudar de separador.
+
+O rascunho passa a ficar no aparelho a cada mudança, e não a ir logo para o servidor: a decisão do
+Guardar continua (2026-10-25: cada toque a gravar batia no limite de 60 envios em 15 minutos), e o
+Guardar é que envia, tudo de uma vez. O aparelho é o sítio de guardar o que ainda não se decidiu
+enviar. Volta fundido a três com o registo, como a casa ao ler, porque entre fechar e voltar outra
+pessoa (ou outro aparelho) pode ter mudado a lista: abrir com o rascunho tal e qual e guardar desfazia
+o que ela fez. Diz-se pela linha no cimo da janela e pelo selo «Por enviar», com as mesmas palavras do
+kanban, e a ficha mostra as tarefas por enviar, porque é por lá que se volta. Sai no Guardar, no
+«Sair sem guardar» (é a pessoa a escolher), no Descartar (com Anular) e aos 30 dias, como no kanban;
+sair da app, mudar de separador ou a página morrer não o tira. Por conta, para o de uma pessoa nunca
+aparecer a outra que entre no mesmo aparelho.

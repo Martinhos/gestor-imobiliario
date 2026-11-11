@@ -66,6 +66,8 @@ var kbQTempo = 0, kbRolaTempo = 0;
 var kbAlvoSeg = null;
 // o que fazer quando o quadro acabar de carregar (o novoCartao de fora do Kanban)
 var kbAoCarregar = null;
+// os rascunhos do aparelho enquanto o quadro se pinta (kbRascunhosParaQuadro); null fora disso
+var kbRascQuadro = null;
 
 var KB_TIPOS = ['epico', 'historia', 'tarefa', 'subtarefa', 'erro'];
 var KB_NOMES_TIPOS = { epico: 'Épico', historia: 'História', tarefa: 'Tarefa', subtarefa: 'Subtarefa', erro: 'Erro' };
@@ -107,6 +109,8 @@ ICONES.kbPrazo = '<path d="M5 5h14v15H5zM5 10h14M9 3v4M15 3v4"/>';
 ICONES.kbMover = '<path d="M4 4h6v16H4zM13 12h8M18 9l3 3-3 3"/>';
 ICONES.kbAbrirCartao = '<path d="M4 4h16v16H4zM14 4v16M7 9h4M7 13h4"/>';
 ICONES.kbRemover = '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>';
+// o que ainda está por enviar: uma seta a subir que ainda não saiu do sítio
+ICONES.kbPorEnviar = '<path d="M12 15V4M7 9l5-5 5 5M5 14v6h14v-6"/>';
 
 /* ------------------------------ peças soltas ----------------------------- */
 
@@ -284,8 +288,12 @@ function kbPintarQuadro() {
   if (foco && foco.getAttribute && q.contains(foco) && foco.getAttribute('data-acao')) {
     chaveFoco = '[data-acao="' + foco.getAttribute('data-acao') + '"][data-arg="' + String(foco.getAttribute('data-arg') || '').replace(/["\\]/g, '') + '"]';
   }
-  q.innerHTML = kbEstado.colunas.map(kbColunaHtml).join('') ||
-    vazioHtml('O quadro não tem colunas.', kbEu().master ? 'Adiciona a primeira em «Colunas».' : 'Pede ao master para adicionar as colunas.');
+  // os rascunhos lidos do aparelho uma vez por pintura, para todas as colunas
+  kbRascQuadro = kbRascunhosParaQuadro();
+  try {
+    q.innerHTML = kbEstado.colunas.map(kbColunaHtml).join('') ||
+      vazioHtml('O quadro não tem colunas.', kbEu().master ? 'Adiciona a primeira em «Colunas».' : 'Pede ao master para adicionar as colunas.');
+  } finally { kbRascQuadro = null; }
   q.scrollLeft = x;
   [].slice.call(q.querySelectorAll('.kb-col-lista')).forEach(function (l) {
     var t = tops[l.getAttribute('data-coluna')];
@@ -295,26 +303,31 @@ function kbPintarQuadro() {
   kbPintarSeg();
   kbMedirTopo();
 }
-/* Uma coluna: o nome e a contagem (com filtros, «3 de 10»), os cartões que
-   os filtros deixam ver — ou o vazio honesto — e o «Adicionar cartão».
+/* Uma coluna: o nome e a contagem (com filtros, «3 de 10»), os cartões por
+   enviar desta pessoa (os rascunhos de cartões novos, no topo: é lá que o
+   servidor põe um cartão novo), os cartões que os filtros deixam ver — ou o
+   vazio honesto — e o «Adicionar cartão». Os por enviar não contam no número
+   (ainda não são cartões do quadro) e os filtros não os escondem (são teus e
+   estão à espera de ti).
    Recebe: c — a coluna ({id, nome, fim, total}).
    Devolve: o HTML. */
 function kbColunaHtml(c) {
   var todos = kbDaColuna(c.id), vis = kbVisiveis(c.id), filtrado = kbQuantosFiltros(kbFiltros) > 0;
+  var rasc = ((kbRascQuadro || kbRascunhosParaQuadro()).novos[c.id]) || [];
   var n = filtrado ? vis.length + ' de ' + todos.length : String(todos.length);
   /* sem cartão nenhum, o vazio é o próprio «Adicionar cartão» (e o pé não o
      repete); com cartões que os filtros escondem, diz só que não há nada */
-  var semNenhum = !todos.length;
+  var semNenhum = !todos.length && !rasc.length;
   var mais = function (classe) {
     return '<button type="button" class="' + classe + '"' + comAcao('kbNovo', [c.id]) + '>' +
       ic('mais', 'i-sm') + 'Adicionar cartão<span class="so-leitor"> em ' + esc(c.nome) + '</span></button>';
   };
-  var vazio = vis.length ? '' : semNenhum ? mais('kb-col-vazio kb-col-vazio-mais') : '<p class="kb-col-vazio">Nada com estes filtros.</p>';
+  var vazio = vis.length || rasc.length ? '' : semNenhum ? mais('kb-col-vazio kb-col-vazio-mais') : '<p class="kb-col-vazio">Nada com estes filtros.</p>';
   return '<section class="kb-col' + (c.fim ? ' kb-col-fim' : '') + '" data-coluna="' + esc(c.id) + '" aria-labelledby="kbCol-' + esc(c.id) + '">' +
     '<header class="kb-col-cab"><h2 class="kb-col-nome" id="kbCol-' + esc(c.id) + '">' + esc(c.nome) + '</h2>' +
     '<span class="kb-col-n n"><span class="so-leitor">, </span>' + n + '<span class="so-leitor"> ' + (todos.length === 1 && !filtrado ? 'cartão' : 'cartões') + '</span></span>' +
     (c.fim ? '<span class="kb-col-marca" title="Coluna de fim: o que chega aqui conta como feito">' + ic('kbVisto', 'i-sm') + '<span class="so-leitor">coluna de fim</span></span>' : '') + kbColunaCabAcoes(c) + '</header>' +
-    '<div class="kb-col-lista" data-coluna="' + esc(c.id) + '">' + vis.map(kbCartaoHtml).join('') + vazio + '</div>' +
+    '<div class="kb-col-lista" data-coluna="' + esc(c.id) + '">' + rasc.map(kbRascunhoCartaoHtml).join('') + vis.map(kbCartaoHtml).join('') + vazio + '</div>' +
     (semNenhum ? '' : '<div class="kb-col-pe">' + mais('btn sm ghost kb-col-mais') + '</div>') + '</section>';
 }
 // O ícone do tipo de um cartão, com o nome para o leitor de ecrã.
@@ -342,18 +355,19 @@ function kbPrioridadeHtml(p) {
    cartão inteiro; a pega (arrastar no dedo, ou «Mover para…» com um toque)
    e o ⋯ (as ações) ficam por cima dele, como irmãos — nunca um botão dentro
    de outro. O resto (etiquetas, épico, progresso, contadores, responsável)
-   é para ler.
+   é para ler. Com alterações tuas por enviar (o rascunho do Editar neste
+   aparelho), o pé começa pelo selo «Alterações por enviar».
    Recebe: c — o cartão (CartaoCurto).
    Devolve: o HTML. */
 function kbCartaoHtml(c) {
-  var marcas = '';
+  var marcas = '', rasc = kbRascQuadro || kbRascunhosParaQuadro();
   if (c.pai) {
     marcas += '<span class="kb-pai' + (c.pai.tipo === 'epico' ? ' kb-pai-epico' : '') + '" title="' + esc(c.pai.chave + ' · ' + c.pai.titulo) + '">' +
       (c.pai.tipo === 'epico' ? ic('kbEpico', 'i-sm') : '') + '<span class="so-leitor">' + (c.pai.tipo === 'epico' ? 'Épico: ' : 'Pertence a ') + '</span>' +
       esc(c.pai.tipo === 'epico' ? c.pai.titulo : c.pai.chave) + '</span>';
   }
   marcas += (c.etiquetas || []).map(function (t) { return '<span class="kb-etq">' + esc(t) + '</span>'; }).join('');
-  var pe = '';
+  var pe = rasc.edicoes[c.chave] ? kbRascunhoSeloHtml('Alterações por enviar') : '';
   if (c.bloqueado) pe += '<span class="kb-bloq-selo">' + ic('kbBloqueado', 'i-sm') + 'Bloqueado</span>';
   var st = c.subtarefas || { total: 0, feitas: 0 };
   if (st.total) {
@@ -380,6 +394,34 @@ function kbCartaoHtml(c) {
     '<span class="so-leitor">' + esc(c.chave) + ': </span>' + esc(c.titulo) + '</button></p>' +
     (marcas ? '<div class="kb-c-marcas">' + marcas + '</div>' : '') +
     (pe ? '<div class="kb-c-pe">' + pe + '</div>' : '') + '</article>';
+}
+/* O selo do que está por enviar (o cartão novo e as alterações de um
+   cartão): o ícone e a palavra na cor da frente, letra e contorno, que o
+   escuro forçado do Samsung não apaga como apaga um fundo.
+   Recebe: texto — «Por enviar» ou «Alterações por enviar».
+   Devolve: o HTML. */
+function kbRascunhoSeloHtml(texto) {
+  return '<span class="kb-rasc-selo">' + ic('kbPorEnviar', 'i-sm') + esc(texto) + '</span>';
+}
+/* Um cartão por enviar no quadro: o rascunho de um cartão novo que ainda
+   não foi para o servidor, com o tipo, o selo «Por enviar», a prioridade, o
+   título (ou «Sem título»), as etiquetas e a frase que o diz. O botão do
+   título cobre o cartão e reabre o formulário com o rascunho; o ⋯ só
+   descarta. Sem pega nem arrasto (não existe no servidor: muda-se de coluna
+   no formulário). Tudo o que vem do rascunho é texto da pessoa: escapa-se.
+   Recebe: x — {qual, campos, t} (kbRascunhosParaQuadro).
+   Devolve: o HTML. */
+function kbRascunhoCartaoHtml(x) {
+  var f = x.campos || {}, titulo = typeof f.titulo === 'string' ? f.titulo.trim().slice(0, 200) : '';
+  var tipo = KB_NOMES_TIPOS[f.tipo] ? f.tipo : 'tarefa', nome = titulo || 'Sem título';
+  var etq = Array.isArray(f.etiquetas) ? f.etiquetas.slice(0, 20).map(function (t) { return '<span class="kb-etq">' + esc(String(t).slice(0, 40)) + '</span>'; }).join('') : '';
+  return '<article class="kb-rasc" data-rascunho="' + esc(x.qual) + '">' +
+    '<div class="kb-c-topo">' + kbTipoHtml(tipo) + kbRascunhoSeloHtml('Por enviar') + kbPrioridadeHtml(f.prioridade) +
+    '<button type="button" class="kb-mais" aria-label="Ações do rascunho «' + esc(nome) + '»" aria-haspopup="dialog"' + comAcao('kbRascunhoMenu', [x.qual]) + '>' + ic('kbMais') + '</button></div>' +
+    '<p class="kb-c-tit"><button type="button" class="kb-abrir"' + comAcao('kbRascunhoAbrir', [x.qual]) + '>' +
+    '<span class="so-leitor">Rascunho por enviar: </span>' + (titulo ? esc(titulo) : '<span class="kb-rasc-sem">Sem título</span>') + '</button></p>' +
+    (etq ? '<div class="kb-c-marcas">' + etq + '</div>' : '') +
+    '<p class="kb-rasc-txt">Ainda não foi para o servidor.</p></article>';
 }
 
 /* -------------------------- o telemóvel: as colunas ------------------------ */
@@ -565,8 +607,9 @@ function kbPainelCabHtml(c, chave) {
     '<button type="button" class="btn sm ghost so-icone kb-p-fechar" aria-label="Fechar o cartão"' + comAcao('kbFechar') + '>' + ic('fechar') + '</button></div>';
 }
 /* O cartão aberto inteiro: o título, as duas ações à mão (Mover para… e
-   Copiar a ligação, lado a lado; Editar e Remover vivem no ⋯ do cimo), os
-   campos, a descrição, a origem, as subtarefas, as ligações, os anexos, os
+   Copiar a ligação, lado a lado; Editar e Remover vivem no ⋯ do cimo), a
+   linha das alterações por enviar (kbPainelRascHtml), os campos, a
+   descrição, a origem, as subtarefas, as ligações, os anexos, os
    comentários e o histórico.
    Recebe: d — a resposta do GET do cartão; entra — true para a entrada animada.
    Devolve: o HTML. */
@@ -576,11 +619,36 @@ function kbPainelHtml(d, entra) {
     '<button type="button" class="btn sm"' + comAcao('kbCopiar', [chave]) + '>' + ic('kbCopiar', 'i-sm') + 'Copiar a ligação</button></div>';
   return '<section class="kb-painel card' + (entra ? ' kb-entra' : '') + '" aria-labelledby="kbPainelTit">' + kbPainelCabHtml(c, chave) +
     '<div class="kb-p-corpo"><h2 class="kb-p-tit" id="kbPainelTit" tabindex="-1">' + esc(c.titulo) + '</h2>' + acoes +
+    '<div class="kb-p-rasc" id="kbPRasc">' + kbPainelRascHtml(c) + '</div>' +
     kbCamposHtml(c) +
     (c.descricaoOculta ? '<div class="kb-p-sec"><h3 class="lbl">Descrição</h3><p class="sub kb-oculta">O texto deste pedido só se mostra a quem vê os pedidos.</p></div>'
       : c.descricao ? '<div class="kb-p-sec"><h3 class="lbl">Descrição</h3><p class="kb-texto">' + esc(c.descricao) + '</p></div>' : '') +
     kbOrigemHtml(d.origem) + kbSubtarefasHtml(c, d.subtarefas || []) + kbLigacoesHtml(chave, d.ligacoes || []) +
     kbAnexosHtml(chave, d.anexos || []) + kbComentariosHtml(chave, d.comentarios || []) + kbHistoricoHtml(d.historico || []) + '</div></section>';
+}
+/* A linha das alterações por enviar no cartão aberto: há um rascunho do
+   Editar deste cartão neste aparelho que ainda difere do que o servidor tem.
+   Diz de quando é, com «Continuar a editar» (o Editar, com ele) e
+   «Descartar» (com o Anular no aviso).
+   Recebe: c — o cartão do detalhe (com a descrição); agora (opcional) — ms.
+   Devolve: o HTML ('' sem nada por enviar). */
+function kbPainelRascHtml(c, agora) {
+  if (!c || !c.chave) return '';
+  var r = kbRascunhoLer(c.chave, agora);
+  if (!r) return '';
+  var base = kbBaseCartao(c);
+  if (!Object.keys(kbRascunhoDiff(base, kbRascunhoAplicar(base, r.campos))).length) return '';
+  return '<div class="kb-rascunho"><p class="kb-rascunho-txt"><b>Alterações por enviar</b>, guardadas neste aparelho ' + esc(kbRascunhoQuando(r.t, agora)) +
+    ': ainda não foram para o servidor.</p><div class="kb-rascunho-bt">' +
+    '<button type="button" class="btn sm"' + comAcao('kbRascunhoContinuar', [c.chave]) + '>' + ic('kbEditar', 'i-sm') + 'Continuar a editar</button>' +
+    '<button type="button" class="btn sm ghost"' + comAcao('kbRascunhoDescartarDe', [c.chave]) + '>Descartar</button></div></div>';
+}
+// Volta a pintar a linha das alterações por enviar do cartão aberto (os rascunhos mudaram).
+// Devolve: nada.
+function kbPainelRascPintar() {
+  var s = el('kbPRasc');
+  if (!s || !kbDetalhe || !kbDetalhe.cartao || kbDetalhe.cartao.chave !== kbAberto) return;
+  s.innerHTML = kbPainelRascHtml(kbDetalhe.cartao);
 }
 /* Os campos do cartão aberto, em linhas rótulo/valor; uma linha sem valor não aparece.
    Recebe: c — o cartão.
@@ -819,14 +887,15 @@ function kbRemover(chave) {
   }).catch(function (e) { avisar(e.message || 'Não deu para remover.', 'erro'); });
 }
 /* O aviso de baixo com o Anular (o avisar do guião só tem o fechar).
-   Recebe: texto; chave — o cartão a repor.
+   Recebe: texto; chave — o cartão a repor (ou o rascunho); acao (opcional)
+   — a ação do Anular ('kbRepor', a de omissão, ou 'kbRascunhoRepor').
    Devolve: nada. */
-function kbAvisarComAnular(texto, chave) {
+function kbAvisarComAnular(texto, chave, acao) {
   var a = el('aviso');
   if (!a) { avisar(texto); return; }
   var n = typeof avisoN === 'number' ? ++avisoN : 0;
   a.className = 'eq-toast on';
-  a.innerHTML = '<span class="eq-toast-txt">' + esc(texto) + '</span><button type="button" class="kb-anular"' + comAcao('kbRepor', [chave]) + '>Anular</button>' +
+  a.innerHTML = '<span class="eq-toast-txt">' + esc(texto) + '</span><button type="button" class="kb-anular"' + comAcao(acao || 'kbRepor', [chave]) + '>Anular</button>' +
     '<button type="button" class="eq-toast-x" aria-label="Fechar o aviso"' + comAcao('fecharAviso') + '>' + ic('fechar', 'i-sm') + '</button>';
   setTimeout(function () { if (typeof avisoN !== 'number' || n === avisoN) a.className = 'eq-toast'; }, 10000);
 }

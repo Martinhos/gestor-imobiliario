@@ -2,10 +2,14 @@
 // vive dentro do registo, arruma-se em secções, cada tarefa está cumprida ou
 // por cumprir, e a janela pesquisa pelo nome da tarefa e da secção e filtra
 // pela secção e pelo estado. A janela muda um rascunho, que só o Guardar dela
-// leva ao registo; quem não pode alterar o registo não altera a lista.
+// leva ao registo; quem não pode alterar o registo não altera a lista. O
+// rascunho com alterações fica no aparelho (por conta e por registo) até ao
+// Guardar, e volta fundido com o que o registo tem agora (KAN-105).
 
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
 import { carregarApp, limpar, repor, elementos, igual } from './arnes.js';
 import { janelasFalsas } from './lib/dom.js';
 import { conferir, EX } from './lib/formularios.js';
@@ -13,6 +17,10 @@ import { conferir, EX } from './lib/formularios.js';
 const HOJE = '2026-10-14';
 const app = carregarApp({ hoje: HOJE });
 afterEach(() => repor(app));
+// a fusão a três do cliente (o bloco <fusao> do cloud/nucleo.js), que no
+// browser já está carregada quando a janela das tarefas abre
+const NUCLEO = fs.readFileSync(new URL('../web/cloud/nucleo.js', import.meta.url), 'utf8');
+vm.runInContext(NUCLEO.slice(NUCLEO.indexOf('// <fusao>'), NUCLEO.indexOf('// </fusao>')), app.__ctx);
 
 /* Uma base com um imóvel de arrendamento e um contrato nele; as janelas numa
    pilha observável e os toasts guardados.
@@ -410,5 +418,313 @@ describe('quem pode', () => {
     const html = app.tfLista();
     assert.match(html, /disabled/);
     assert.doesNotMatch(html, /tfEditarTarefa/);
+  });
+});
+
+/* ------------------------------------------------- o rascunho no aparelho */
+
+/* Uma base como a do base(), com a sessão de uma conta (dona de tudo), o
+   aparelho limpo e os save() contados (só o Guardar envia).
+   Recebe: id (opcional) — a conta.
+   Devolve: {abertas, toasts, envios} — envios() diz quantos save() houve. */
+function comConta(id = 'U1') {
+  const r = base();
+  app.localStorage.clear();
+  app.window.CW = { user: { id }, cargos: {}, pessoas: {} };
+  let n = 0;
+  app.save = () => { n++; };
+  return Object.assign(r, { envios: () => n });
+}
+// o que o aparelho guarda para uma conta (null sem nada)
+const noAparelho = (id = 'U1') => JSON.parse(app.localStorage.getItem('gi_tf_rascunhos:' + id) || 'null');
+// a janela das tarefas de cima (a última aberta)
+const janelaDe = (abertas) => abertas.filter((L) => /^Tarefas/.test(L.t)).pop();
+/* Fecha a janela das tarefas como o closeModal: sai da pilha e corre o
+   aoFechar com a origem ('' sem ela). */
+function fechar(abertas, origem = '') {
+  const L = janelaDe(abertas);
+  const i = app.modalStack.indexOf(L);
+  if (i > -1) app.modalStack.splice(i, 1);
+  L.aoFechar(origem);
+}
+/* Recarregar a página (ou ela morrer): sem aoFechar, a memória vai-se e o
+   aparelho fica. */
+function recarregar() {
+  app.modalStack.length = 0;
+  app.tfAlvo = null; app.tfRascunho = null; app.tfOriginal = ''; app.tfCamada = null; app.tfRascT = 0;
+}
+/* Adiciona uma tarefa pelo formulário, sem Guardar.
+   Recebe: nome; sec (opcional) — a secção. */
+function adicionar(nome, sec = '') {
+  app.tfNovaTarefa(sec);
+  const el = elementos(app);
+  el.tf_nome.value = nome; el.tf_sec.value = sec; el.tf_notas.value = '';
+  app.tfGuardarTarefa();
+}
+const LINHA = /<div class="tf-rascunho"><p class="tf-rascunho-txt">Alterações guardadas neste aparelho hoje às \d\d:\d\d: ainda não foram para o servidor\.<\/p><button type="button" class="btn ghost" id="tf_descartar" data-toca="rascunho" data-click="tfDescartar\(\)">Descartar<\/button><\/div>/;
+// os ids das tarefas que a lista da janela marca com o selo
+const comSelo = () => [...app.tfLista().matchAll(/data-id="([^"]+)">(?:(?!<div class="tf-item)[\s\S])*?<span class="tf-selo">/g)].map((m) => m[1]);
+
+describe('o rascunho no aparelho', () => {
+  test('cada mudança leva-o ao aparelho, por conta e por registo, com a base e a hora; desfazer tudo tira-o', () => {
+    const { envios } = comConta();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    assert.equal(noAparelho(), null, 'abrir não guarda nada');
+    app.tfMarcar('K1', true);
+    const g = noAparelho()['imovel:P1'];
+    assert.equal(g.r.itens.find((x) => x.id === 'K1').feita, true, 'o rascunho');
+    assert.equal(g.b.itens.find((x) => x.id === 'K1').feita, false, 'a base de onde partiu');
+    assert.equal(typeof g.t, 'number');
+    igual(Object.keys(noAparelho()), ['imovel:P1'], 'só este registo');
+    adicionar('Trocar a fechadura');
+    assert.equal(noAparelho()['imovel:P1'].r.itens.length, 5, 'a tarefa nova também');
+    igual(comSelo().length, 2, 'na janela, a marcada e a nova levam o «Por enviar»');
+    assert.ok(comSelo().includes('K1'));
+    app.tfMarcar('K1', false);
+    app.tfRemoverTarefa(app.tfRascunho.itens[4].id);
+    assert.equal(app.tfMudou(), false);
+    assert.equal(noAparelho(), null, 'sem alterações, a chave sai do aparelho');
+    assert.equal(envios(), 0, 'nada foi enviado');
+  });
+
+  test('o Guardar grava e tira-o do aparelho; recusado (sem permissão), fica lá', () => {
+    const { envios } = comConta();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    adicionar('Trocar a fechadura');
+    assert.ok(noAparelho());
+    app.tfGuardar();
+    assert.equal(noAparelho(), null);
+    assert.equal(app.db.properties[0].tarefas.itens[4].nome, 'Trocar a fechadura');
+    assert.equal(envios(), 1, 'um envio, o do Guardar');
+    // recusado: a permissão perdeu-se a meio
+    app.tfAbrir('imovel', 'P1');
+    app.tfMarcar('K1', true);
+    app.window.CW.cargos = { P1: { dono: false, nome: 'Ver', perms: ['contract.view'] } };
+    assert.equal(app.tfGuardar(), false);
+    assert.equal(noAparelho()['imovel:P1'].r.itens[0].feita, true, 'o rascunho fica no aparelho');
+  });
+
+  test('«Sair sem guardar» tira-o; fechar por outro caminho (mudar de separador) deixa-o', () => {
+    const { abertas } = comConta();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    app.tfMarcar('K1', true);
+    fechar(abertas, '');
+    assert.equal(app.tfRascunho, null, 'a memória da janela vai-se');
+    assert.ok(noAparelho(), 'o closeAllModals de mudar de separador não o tira');
+    app.tfAbrir('imovel', 'P1');
+    assert.equal(app.tfRascunho.itens[0].feita, true, 'reabrir traz o rascunho');
+    app._forcaFecho = true;   // a resposta «Sair sem guardar» (componentes.js:_sairSemGuardar)
+    fechar(abertas, '');
+    app._forcaFecho = false;
+    assert.equal(noAparelho(), null, 'a pessoa escolheu deitar fora');
+    // sob automação a pergunta não se faz: o X vale como a resposta
+    app.tfAbrir('imovel', 'P1');
+    app.tfMarcar('K2', false);
+    app.navigator.webdriver = true;
+    try { fechar(abertas, 'x'); } finally { delete app.navigator.webdriver; }
+    assert.equal(noAparelho(), null);
+  });
+
+  test('recarregar não o perde: a janela volta com ele, a linha diz de quando é, o selo marca as novas e o rodapé diz Cancelar', () => {
+    const { abertas, envios } = comConta();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    adicionar('Trocar a fechadura', 'S1');
+    const nova = app.tfRascunho.itens.find((x) => x.nome === 'Trocar a fechadura').id;
+    assert.doesNotMatch(app.tfCorpo(), /tf-rascunho/, 'sem recarregar, não há linha: diz «Alterações por guardar»');
+    assert.match(app.tfLista(), /Alterações por guardar/);
+    recarregar();
+    assert.equal(app.db.properties[0].tarefas.itens.length, 4, 'o registo não mudou');
+    app.tfAbrir('imovel', 'P1');
+    const L = janelaDe(abertas);
+    assert.equal(app.tfRascunho.itens.length, 5);
+    assert.equal(app.tfMudou(), true);
+    assert.match(L.b, LINHA, 'a linha no cimo da lista');
+    assert.doesNotMatch(L.b, /Alterações por guardar/, 'a linha já o diz');
+    igual(comSelo(), [nova], 'só a nova leva o selo');
+    assert.match(app.tfLista(), /<span class="tf-selo"><svg[\s\S]*?<\/svg>Por enviar<\/span>/);
+    assert.match(L.f, /id="tf_fechar"[^>]*>Cancelar</, 'com alterações, Cancelar');
+    assert.equal(L.tocado, true, 'fechar pergunta «Sair sem guardar?»');
+    assert.equal(envios(), 0, 'abrir com o rascunho não grava sozinho');
+    // mais uma mudança: a linha repinta-se com a lista, e o aparelho acompanha
+    app.tfMarcar('K1', true);
+    assert.match(elementos(app).tf_rasc.innerHTML, LINHA);
+    assert.equal(noAparelho()['imovel:P1'].r.itens[0].feita, true);
+    app.tfMarcar('K1', false);
+    assert.equal(app.tfMudou(), true, 'a nova continua por guardar');
+    app.tfGuardar();
+    assert.equal(app.db.properties[0].tarefas.itens.find((x) => x.id === nova).seccao, 'S1');
+    assert.equal(envios(), 1);
+  });
+
+  test('a fusão a três: o que o registo mudou entretanto fica, o que se mudou aqui também, e o que se removeu aqui sai', () => {
+    const { abertas } = comConta();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    app.tfMarcar('K1', true);
+    app.tfRemoverTarefa('K4');
+    adicionar('Trocar a fechadura');
+    recarregar();
+    // entretanto, outra pessoa: uma tarefa nova, outro nome na K3, a K2 por cumprir
+    const s = app.db.properties[0].tarefas;
+    s.itens.push({ id: 'K9', nome: 'Do outro aparelho', seccao: 'S2', feita: false, feitaEm: '', notas: '' });
+    s.itens.find((x) => x.id === 'K3').nome = 'Pedir o certificado (já pedido)';
+    Object.assign(s.itens.find((x) => x.id === 'K2'), { feita: false, feitaEm: '' });
+    app.tfAbrir('imovel', 'P1');
+    const t = app.tfRascunho, por = (id) => t.itens.find((x) => x.id === id);
+    assert.equal(por('K9').nome, 'Do outro aparelho', 'a do outro fica');
+    assert.equal(por('K3').nome, 'Pedir o certificado (já pedido)', 'o nome que o outro mudou fica');
+    assert.equal(por('K2').feita, false, 'a K2 como o outro a deixou');
+    assert.equal(por('K1').feita, true, 'a minha marca fica');
+    assert.equal(por('K4'), undefined, 'a que removi sai');
+    assert.ok(t.itens.some((x) => x.nome === 'Trocar a fechadura'), 'a minha nova fica');
+    igual(comSelo().sort(), ['K1', t.itens.find((x) => x.nome === 'Trocar a fechadura').id].sort(), 'o selo só nas minhas');
+    // o aparelho passa a partir do registo de agora
+    assert.equal(noAparelho()['imovel:P1'].b.itens.find((x) => x.id === 'K3').nome, 'Pedir o certificado (já pedido)');
+    // e o Guardar leva a lista fundida
+    app.tfGuardar();
+    igual(app.db.properties[0].tarefas.itens.map((x) => x.id).filter((id) => /^K/.test(id)).sort(), ['K1', 'K2', 'K3', 'K9']);
+    fechar(abertas, '');
+  });
+
+  test('um rascunho que, fundido, já é igual ao registo não conta e sai', () => {
+    comConta();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    app.tfMarcar('K1', true);
+    recarregar();
+    // outro aparelho desta conta guardou o mesmo
+    Object.assign(app.db.properties[0].tarefas.itens[0], { feita: true, feitaEm: HOJE });
+    assert.doesNotMatch(app.propFicha('P1'), /tf-selo|por enviar/, 'a ficha não mostra nada por enviar');
+    app.tfAbrir('imovel', 'P1');
+    assert.equal(app.tfMudou(), false);
+    assert.equal(noAparelho(), null, 'sai do aparelho');
+    assert.doesNotMatch(app.tfCorpo(), /tf-rascunho|tf-selo/);
+  });
+
+  test('caduca aos 30 dias sem mexer; antes disso volta, com o dia e a hora', () => {
+    comConta();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    const reg = app.normTarefas(LISTA()), r = app.normTarefas(LISTA());
+    r.itens.push({ id: 'N1', nome: 'Esquecida', seccao: '', feita: false });
+    const dia = 864e5, agora = app.Date.now();
+    const pousar = (t) => app.localStorage.setItem('gi_tf_rascunhos:U1', JSON.stringify({ 'imovel:P1': { b: reg, r, t }, 'contrato:C1': 'lixo' }));
+    pousar(agora - 31 * dia);
+    app.tfAbrir('imovel', 'P1');
+    assert.equal(app.tfRascunho.itens.length, 4, 'caducado, não volta');
+    assert.equal(noAparelho(), null, 'e sai do aparelho, com o lixo');
+    recarregar();
+    pousar(agora - 29 * dia);
+    app.tfAbrir('imovel', 'P1');
+    assert.equal(app.tfRascunho.itens.length, 5, 'com 29 dias, volta');
+    assert.match(app.tfCorpo(), /Alterações guardadas neste aparelho a \d{1,2}\/\d{1,2} às \d\d:\d\d: ainda não foram para o servidor\./);
+    igual(Object.keys(noAparelho()), ['imovel:P1'], 'o lixo sai');
+    assert.equal(app.tfQuando(agora - dia), 'ontem às ' + /às (\d\d:\d\d)$/.exec(app.tfQuando(agora - dia))[1]);
+  });
+
+  test('sem armazenamento (ou sem sessão), a janela trabalha como antes, só em memória', () => {
+    const { toasts } = comConta();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    const recusa = () => { throw new Error('armazenamento fechado'); };
+    app.localStorage = { getItem: recusa, setItem: recusa, removeItem: recusa, clear: recusa };
+    app.tfAbrir('imovel', 'P1');
+    adicionar('Trocar a fechadura');
+    assert.equal(app.tfRascunho.itens.length, 5);
+    assert.match(app.propFicha('P1'), /Ainda não há tarefas|por cumprir/);
+    assert.equal(app.tfGuardar(), true);
+    assert.equal(app.db.properties[0].tarefas.itens.length, 5, 'o Guardar grava');
+    assert.equal(toasts.pop().m, 'Tarefas guardadas.');
+    repor(app);   // o armazenamento de volta
+    comConta();
+    app.window.CW = { cargos: {}, pessoas: {} };   // sem sessão
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    app.tfMarcar('K1', true);
+    assert.equal(app.localStorage.getItem('gi_tf_rascunhos:'), null);
+    assert.equal(app.tfRascChave(), '');
+  });
+
+  test('o rascunho de uma conta nunca aparece a outra no mesmo aparelho', () => {
+    comConta('U1');
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    adicionar('Só da U1');
+    recarregar();
+    app.window.CW = { user: { id: 'U2' }, cargos: {}, pessoas: {} };
+    assert.doesNotMatch(app.propFicha('P1'), /Só da U1|tf-selo/);
+    app.tfAbrir('imovel', 'P1');
+    assert.equal(app.tfRascunho.itens.length, 4);
+    assert.equal(app.tfMudou(), false);
+    recarregar();
+    app.window.CW = { user: { id: 'U1' }, cargos: {}, pessoas: {} };
+    assert.match(app.propFicha('P1'), /Só da U1/);
+    assert.ok(noAparelho('U1'));
+    assert.equal(noAparelho('U2'), null);
+  });
+
+  test('«Descartar» tira-o da janela e do aparelho, com Anular que o devolve (junto com o que se fez entretanto)', () => {
+    const { abertas, toasts } = comConta();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    adicionar('Trocar a fechadura');
+    recarregar();
+    app.tfAbrir('imovel', 'P1');
+    assert.match(janelaDe(abertas).b, LINHA);
+    app.tfDescartar();
+    assert.equal(app.tfRascunho.itens.length, 4, 'a janela fica com o registo');
+    assert.equal(app.tfMudou(), false);
+    assert.equal(noAparelho(), null);
+    assert.doesNotMatch(app.tfCorpo(), /tf-rascunho|tf-selo/);
+    const aviso = toasts.pop();
+    assert.equal(aviso.m, 'Alterações descartadas.');
+    assert.equal(aviso.op.rotulo, 'Anular');
+    app.tfMarcar('K1', true);   // entretanto
+    aviso.op.fn();
+    assert.ok(app.tfRascunho.itens.some((x) => x.nome === 'Trocar a fechadura'), 'o Anular devolve-a');
+    assert.equal(app.tfRascunho.itens[0].feita, true, 'e o que se fez entretanto fica');
+    assert.match(app.tfCorpo(), LINHA, 'com a linha');
+    assert.ok(noAparelho()['imovel:P1'].r.itens.some((x) => x.nome === 'Trocar a fechadura'), 'e no aparelho');
+    // fechada a janela, o Anular já não repõe nada
+    app.tfDescartar();
+    const outro = toasts.pop();
+    fechar(abertas, '');
+    outro.op.fn();
+    assert.equal(noAparelho(), null);
+  });
+
+  test('a ficha mostra as tarefas por enviar primeiro, com o selo, e o resumo diz quantas; tocar abre a janela com o rascunho', () => {
+    comConta();
+    const t = LISTA();
+    t.itens.push({ id: 'K5', nome: 'Pintar o quarto', seccao: '', feita: false }, { id: 'K6', nome: 'Rever o contador', seccao: '', feita: false });
+    app.db.properties[0].tarefas = app.normTarefas(t);
+    app.db.contracts[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    adicionar('Trocar a fechadura');
+    recarregar();
+    const f = app.propFicha('P1');
+    assert.match(f, /<h3>Tarefas<\/h3><span class="small num">6 por cumprir · 1 cumprida · <b class="tf-por-guardar">1 por enviar<\/b><\/span>/);
+    const nomes = [...f.matchAll(/<span class="tf-fl-nome"><span class="imv-so-leitor">[^<]*<\/span>([^<]*)<\/span>\s*(<span class="tf-selo">)?/g)].map((m) => m[1] + (m[2] ? ' [Por enviar]' : ''));
+    igual(nomes, ['Trocar a fechadura [Por enviar]', 'Pintar a sala', 'Pedir o certificado energético', 'Ligar à Ana'], 'a por enviar à cabeça, mesmo com mais de quatro por cumprir');
+    assert.match(f, /class="imv-linha tap tf-fl" data-toca="camada" data-click="tfAbrir\('imovel','P1'\)">[\s\S]*?Trocar a fechadura/, 'tocar abre a janela');
+    // o contrato: a linha da ficha
+    app.tfAbrir('contrato', 'C1');
+    app.tfMarcar('K3', true);
+    recarregar();
+    const c = app.ctFicha('C1');
+    assert.match(c, /2 por cumprir · 2 cumpridas · <b class="tf-por-guardar">1 por enviar<\/b>/);
+    assert.match(c, /<div class="tf-env"><div class="tf-env-linha"><span class="tf-fl-nome">Pedir o certificado energético<\/span><span class="tf-selo">/);
+    // só se removeu: «alterações por enviar»
+    app.tfAbrir('contrato', 'C1');
+    app.tfDescartar();
+    app.tfRemoverTarefa('K4');
+    recarregar();
+    assert.match(app.ctFicha('C1'), /2 por cumprir · 1 cumprida · <b class="tf-por-guardar">alterações por enviar<\/b>/);
+    assert.doesNotMatch(app.ctFicha('C1'), /tf-env/);
+    // quem não pode alterar não vê o rascunho (nem o pode guardar)
+    app.window.CW.cargos = { P1: { dono: false, nome: 'Ver', perms: ['contract.view', 'house.edit'] } };
+    assert.doesNotMatch(app.ctFicha('C1'), /por enviar/);
   });
 });

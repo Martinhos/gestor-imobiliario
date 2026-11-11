@@ -2126,6 +2126,7 @@ var ACOES_RASTO = {
   // tarefas
   tfAbrir: 'Abrir as tarefas', tfFechar: 'Fechar', tfGuardar: 'Guardar', tfNovaTarefa: 'Adicionar tarefa',
   tfLimparPesquisa: 'Limpar a pesquisa', tfDobrar: 'Abrir ou fechar uma secção', tfPegaClique: 'Arrastar a tarefa',
+  tfDescartar: 'Descartar as tarefas por enviar',
   tfEditarTarefa: 'Editar a tarefa', tfRemoverTarefa: 'Remover a tarefa', tfNovaSeccao: 'Nova secção',
   tfRemoverSeccao: 'Remover a secção', tfMudarNomeSeccao: 'Mudar o nome da secção',
   // notificações

@@ -416,7 +416,8 @@ function chaveDaLigacao(id) {
    falar; cloud/entrada.js:setSyncBadge). A base local e o retrato ficam, de propósito
    (docs/design.md, «A app não afirma nem decide antes de saber»): quem volta a entrar encontra o que
    deixou, e o finishLogin larga-os quando entra outra conta. Com apagarDados
-   (a conta deixou de existir) vão também a base, o dono dela e o retrato.
+   (a conta deixou de existir) vão também a base, o dono dela, o retrato e as
+   tarefas por enviar dela (app/tarefas.js:tfRascChave).
    Recebe: o (opcional) — {avisarServidor: chamar o logout, que apaga o
    cookie; apagarDados: ver acima; mensagem: o que o ecrã de entrada diz}.
    Devolve: nada — limpa a sessão e mostra o ecrã de entrada. */
@@ -427,7 +428,8 @@ function encerrarSessao(o) {
   pushTimer = null;
   // 'gi_est_asked' é o LS_ASKED de painel.js (os planeados por que já se perguntou)
   var chaves = [LS_USER, LS_PAGE, 'gi_est_asked', chaveDaLigacao()];
-  if (o.apagarDados) chaves.push(LS_OWNER, snapKey(), baseKey());
+  // 'gi_tf_rascunhos:<conta>' é o LS_TF_RASCUNHOS de tarefas.js (as tarefas por enviar desta conta)
+  if (o.apagarDados) chaves.push(LS_OWNER, snapKey(), baseKey(), 'gi_tf_rascunhos:' + (CW.user ? CW.user.id : ''));
   chaves.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
   // a página onde se estava vive no sessionStorage (rememberPage)
   try { sessionStorage.removeItem(LS_PAGE); } catch (e) {}

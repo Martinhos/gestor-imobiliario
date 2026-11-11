@@ -226,3 +226,24 @@ describe('o premido, sem o retângulo azul do toque', () => {
     assert.match(fora, /\.kb-linha\{[^}]*transition:background-color var\(--rapido\) var\(--curva\)/, 'com a transição pelos tokens');
   });
 });
+
+describe('o quadro com cartões por enviar (KAN-105)', () => {
+  test('sem rascunhos no aparelho (ou sem aparelho), o quadro pinta como antes: nada por enviar, os números iguais', () => {
+    const { ctx } = quadroDeProva(false);
+    const h = ctx.kbColunaHtml(COLUNAS[0]);
+    assert.doesNotMatch(h, /kb-rasc|por enviar/i);
+    assert.match(h, /<span class="kb-col-n n"><span class="so-leitor">, <\/span>3<span class="so-leitor"> cartões<\/span>/);
+  });
+
+  test('o Anular do aviso: repõe o cartão removido por omissão, e o rascunho descartado quando se pede', () => {
+    const { ctx } = quadroDeProva(true);
+    const aviso = { className: '', innerHTML: '' };
+    ctx.el = (id) => (id === 'aviso' ? aviso : null);
+    ctx.setTimeout = () => 0;
+    ctx.kbAvisarComAnular('Cartão KAN-1 removido.', 'KAN-1');
+    assert.match(aviso.innerHTML, /data-acao="kbRepor" data-arg="KAN-1">Anular<\/button>/);
+    ctx.kbAvisarComAnular('Rascunho descartado.', 'novo-a1', 'kbRascunhoRepor');
+    assert.match(aviso.innerHTML, /Rascunho descartado\.[^]*data-acao="kbRascunhoRepor" data-arg="novo-a1">Anular<\/button>/);
+    assert.equal(aviso.className, 'eq-toast on');
+  });
+});

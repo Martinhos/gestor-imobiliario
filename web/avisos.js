@@ -27,6 +27,27 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 65,
+    data: '2026-11-11',
+    titulo: 'Tarefas por guardar no aparelho',
+    seccoes: [
+      {
+        titulo: 'Tarefas',
+        afeta: ['imoveis', 'contratos'],
+        itens: [
+          'As tarefas que adicionas ou mudas e ainda não guardaste ficam no aparelho: fechar a app não as perde. Voltam com o selo «Por enviar» até tocares em Guardar.',
+        ],
+      },
+      {
+        titulo: 'Janelas no telemóvel',
+        afeta: ['app'],
+        itens: [
+          'Com o teclado aberto, a janela fica por cima dele: o título e o campo onde escreves ficam à vista desde o início, sem a janela fugir para cima.',
+        ],
+      },
+    ],
+  },
+  {
     v: 64,
     data: '2026-11-11',
     titulo: 'Notas nas tarefas',

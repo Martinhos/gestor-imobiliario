@@ -1,8 +1,8 @@
 // A janela do kanban (worker/src/equipa-kanban-janela.js): a moldura da folha
 // da app (cabeçalho, corpo que rola e pé fixo com os botões), a classe que o
 // kbJanela põe no dialog#dialogo e tira ao fechar, o gesto da folha de baixo
-// (por onde se agarra, o data-gesto que a folha respeita, a resistência, o véu
-// e o limiar de fechar) e a ordem das colunas depois de um arrasto. Corre o
+// (por onde se agarra, o data-gesto que a folha respeita, a resistência, o véu,
+// o limiar de fechar e os dois tamanhos, natural e alta, do KAN-108) e a ordem das colunas depois de um arrasto. Corre o
 // guião numa caixa com o mínimo do browser (testes/lib/kanban-caixa.js) e um
 // dialog de mentira; o gesto a sério, no browser, prova-se à parte.
 
@@ -199,6 +199,204 @@ describe('o gesto da folha', () => {
   });
 });
 
+describe('os dois tamanhos da folha (KAN-108)', () => {
+  const ctx = caixa();
+
+  test('a posição: entre a natural e a alta muda a altura; acima resiste; abaixo da natural desce', () => {
+    // ganho de 400: q=0 é a alta, q=400 a natural
+    assert.deepEqual({ ...ctx.kbFolhaPosicao(400, 400) }, { cresce: 0, desl: 0 }, 'natural, parada');
+    assert.deepEqual({ ...ctx.kbFolhaPosicao(100, 400) }, { cresce: 300, desl: 0 }, 'puxada 300px: cresce 300, sem sair do fundo');
+    assert.deepEqual({ ...ctx.kbFolhaPosicao(0, 400) }, { cresce: 400, desl: 0 }, 'no teto');
+    const acima = ctx.kbFolhaPosicao(-200, 400);
+    assert.equal(acima.cresce, 400);
+    assert.equal(acima.desl, ctx.kbFolhaElastico(-200), 'acima do teto, a resistência de sempre');
+    assert.deepEqual({ ...ctx.kbFolhaPosicao(520, 400) }, { cresce: 0, desl: 120 }, 'abaixo da natural, desce (o fechar)');
+    // sem ganho é o gesto de antes: resiste para cima, desce para baixo
+    assert.deepEqual({ ...ctx.kbFolhaPosicao(80, 0) }, { cresce: 0, desl: 80 });
+    assert.equal(ctx.kbFolhaPosicao(-80, 0).desl, ctx.kbFolhaElastico(-80));
+  });
+
+  test('largar: um terço do ganho (no máximo 160px) troca o tamanho; o sacudir decide pelo sentido; um passo por gesto', () => {
+    const f = (o, ha) => ctx.kbFolhaAltaAoLargar(Object.assign({ alta0: false, ganho: 300, cresce: 0, dy: -1, vy: 0, ta: 1000 }, o), 1000 + (ha || 0));
+    // natural, ganho 300: o limiar é 100
+    assert.equal(f({ cresce: 99 }), false);
+    assert.equal(f({ cresce: 100 }), true, 'passado um terço, fica alta');
+    // ganho 600: um terço era 200, o teto é 160
+    assert.equal(f({ ganho: 600, cresce: 159 }), false);
+    assert.equal(f({ ganho: 600, cresce: 160 }), true);
+    // alta: encolher um terço passa à natural
+    assert.equal(f({ alta0: true, cresce: 201 }), true, 'encolhida 99px, volta a alta');
+    assert.equal(f({ alta0: true, cresce: 200 }), false, 'encolhida 100px, fica natural');
+    // o sacudir recente manda, pelo sentido
+    assert.equal(f({ cresce: 20, vy: -0.6 }, 40), true, 'um sacudir para cima, perto, fica alta');
+    assert.equal(f({ cresce: 20, vy: -0.6 }, 150), false, 'uma velocidade de há mais de 100ms já não conta');
+    assert.equal(f({ alta0: true, cresce: 280, vy: 0.6 }, 40), false, 'alta, um sacudir para baixo fica natural (não fecha: um passo por gesto)');
+    assert.equal(f({ alta0: true, cresce: 150, vy: -0.6 }, 40), true, 'a encolher, um sacudir para cima volta a alta');
+    // abaixo da natural (e não fechou), ou sem ganho: natural
+    assert.equal(f({ alta0: true, cresce: 0, dy: 40 }), false);
+    assert.equal(f({ ganho: 0, cresce: 0, vy: -0.9 }, 10), false, 'sem dois tamanhos, nunca fica alta');
+  });
+
+  test('o fechar só conta abaixo da natural: encolher uma alta não fecha, nem com um sacudir', () => {
+    // f.dy é o que a folha desceu abaixo da natural: a encolher é negativo
+    const fecha = (dy, vy) => ctx.kbFolhaFechaAoLargar({ dy, h: 318, vy, ta: 1000 }, 1010);
+    assert.equal(fecha(-150, 0.9), false);
+    assert.equal(fecha(40, 0.9), true, 'passada a natural, o sacudir fecha como sempre');
+    assert.equal(fecha(170, 0), true);
+  });
+});
+
+describe('o gesto da folha que cresce, de ponta a ponta', () => {
+  /* Uma folha de mentira com a altura que o CSS lhe daria: a do estilo, a
+     da kb-alta (o teto) ou a do conteúdo (a natural), nunca acima do teto. */
+  const montar = (nat, teto, reduzido) => {
+    const ctx = caixa();
+    const d = elemento({ tag: 'dialog' });
+    const cab = d.meter(elemento({ cls: ['kb-j-cab'] }));
+    d.meter(elemento({ cls: ['kb-j-corpo'] }));
+    const cls = new Set(['kb-dlg']);
+    Object.assign(d, {
+      open: true, classes: cls,
+      classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c), toggle: (c, s) => ((s === undefined ? !cls.has(c) : s) ? cls.add(c) : cls.delete(c)) },
+      style: { transform: '', height: '', props: {}, setProperty(k, v) { this.props[k] = v; }, removeProperty(k) { delete this.props[k]; } },
+      getBoundingClientRect: () => ({ height: Math.min(teto, d.style.height ? parseFloat(d.style.height) : cls.has('kb-alta') ? teto : nat) }),
+      setPointerCapture() {}, close() { d.open = false; },
+    });
+    ctx.el = (id) => (id === 'dialogo' ? d : null);
+    ctx.matchMedia = (q) => ({ matches: /max-width/.test(q) ? true : !!reduzido });
+    ctx.document.removeEventListener = () => {};
+    ctx.setTimeout = setTimeout;
+    ctx.clearTimeout = clearTimeout;
+    ctx.kbJanelaAberta = { saindo: false, origem: null };
+    // a lista do Critério aberta: o fim do gesto volta a medi-la
+    ctx.kbSelAberto = 'kbOrdCrit';
+    ctx.medidas = [];
+    ctx.kbSelAjustar = (id) => ctx.medidas.push(id);
+    let t = 0;
+    const ev = (type, y, dt) => ({ type, pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, clientX: 100, clientY: y, timeStamp: (t += dt == null ? 16 : dt), target: cab });
+    // um arrasto pelo cabeçalho: pousa em 500, passa os 10px de decidir, anda dy em passos e larga parado (sem sacudir)
+    const arrastar = (dy, fim) => {
+      ctx.kbFolhaPousar(ev('pointerdown', 500, 0));
+      const s = dy < 0 ? -1 : 1;
+      ctx.kbFolhaMove(ev('pointermove', 500 + 10 * s));
+      for (let i = 1; i <= 10; i++) ctx.kbFolhaMove(ev('pointermove', 500 + 10 * s + (dy * i) / 10));
+      const meio = { altura: d.style.height, transform: d.style.transform };
+      ctx.kbFolhaFim(ev(fim || 'pointerup', 500 + 10 * s + dy, 200));
+      return meio;
+    };
+    const assentar = () => new Promise((r) => setTimeout(r, 260));
+    return { ctx, d, arrastar, assentar };
+  };
+
+  test('natural: puxar 300px cresce pela altura e largada fica alta (93dvh), assenta e volta a medir a lista', async () => {
+    const { ctx, d, arrastar, assentar } = montar(318, 730);
+    const meio = arrastar(-300);
+    assert.equal(meio.altura, '618px', 'a meio, a altura segue o dedo (318 + 300)');
+    assert.equal(meio.transform, 'translateY(0px)', 'sem sair do fundo');
+    assert.ok(d.classes.has('kb-alta') && d.classes.has('kb-volta'), 'largada, vai para alta numa transição');
+    assert.equal(d.style.height, '730px', 'a transição leva a altura ao teto');
+    assert.deepEqual(ctx.medidas, [], 'a lista só se mede quando a folha assentar');
+    await assentar();
+    assert.ok(d.classes.has('kb-alta') && !d.classes.has('kb-volta'));
+    assert.equal(d.style.height, '', 'assente, quem a segura é a classe');
+    assert.deepEqual(ctx.medidas, ['kbOrdCrit'], 'e a lista aberta mede-se outra vez');
+  });
+
+  test('natural: um puxão curto para cima volta à natural; o pointercancel também', async () => {
+    const { d, arrastar, assentar } = montar(318, 730);
+    arrastar(-100); // o limiar é 137 (um terço de 412)
+    assert.equal(d.classes.has('kb-alta'), false);
+    assert.equal(d.style.height, '318px');
+    await assentar();
+    arrastar(-300, 'pointercancel');
+    assert.equal(d.classes.has('kb-alta'), false, 'o browser tomou o gesto: fica como estava');
+    await assentar();
+    assert.equal(d.style.height, '');
+  });
+
+  test('alta: para baixo encolhe; pouco volta a alta, um terço fica natural, e mais fecha', async () => {
+    const { ctx, d, arrastar, assentar } = montar(318, 730);
+    arrastar(-300);
+    await assentar();
+    let meio = arrastar(100);
+    assert.equal(meio.altura, '630px', 'a encolher pela altura (730 − 100)');
+    assert.equal(meio.transform, 'translateY(0px)');
+    assert.ok(d.classes.has('kb-alta'), '100px é menos de um terço: volta a alta');
+    await assentar();
+    arrastar(200);
+    assert.equal(d.classes.has('kb-alta'), false, '200px: fica natural');
+    assert.equal(d.style.height, '318px');
+    await assentar();
+    assert.equal(d.style.height, '');
+    // natural de novo: puxar 200px para baixo fecha, como sempre
+    arrastar(200);
+    assert.ok(d.classes.has('kb-sai'), 'passado o limiar de fechar, sai');
+    // e uma alta puxada até ao fundo encolhe à natural e depois desce
+    const o = montar(318, 730);
+    o.arrastar(-300);
+    await o.assentar();
+    meio = o.arrastar(412 + 200);
+    assert.equal(meio.altura, '318px');
+    assert.equal(meio.transform, 'translateY(200px)', 'passada a natural, desce o que falta');
+    assert.ok(o.d.classes.has('kb-sai'), 'largada passado o limiar de fechar (159px, metade da natural), fecha');
+    assert.equal(ctx.kbFolha, null);
+  });
+
+  test('uma folha que já enche o teto não muda de tamanho: só resiste', async () => {
+    const { d, arrastar, assentar } = montar(730, 730);
+    const meio = arrastar(-300);
+    assert.equal(meio.altura, '', 'a altura não se mexe');
+    assert.match(meio.transform, /^translateY\(-\d/, 'resiste para cima');
+    assert.equal(d.classes.has('kb-alta'), false);
+    await assentar();
+    assert.equal(d.style.height, '');
+  });
+
+  test('com menos movimento não segue o dedo e salta para o tamanho ao largar', () => {
+    const { ctx, d, arrastar } = montar(318, 730, true);
+    const meio = arrastar(-300);
+    assert.equal(meio.altura, '');
+    assert.equal(meio.transform, '');
+    assert.ok(d.classes.has('kb-alta') && !d.classes.has('kb-volta'), 'alta já, sem transição');
+    assert.equal(d.style.height, '');
+    assert.deepEqual(ctx.medidas, ['kbOrdCrit'], 'e a lista mede-se logo');
+    arrastar(200);
+    assert.ok(!d.classes.has('kb-alta') && !d.classes.has('kb-volta'), 'natural já');
+  });
+});
+
+describe('o tamanho ao trocar e ao fechar', () => {
+  test('a janela que troca de conteúdo volta à natural; a mesma desenhada de novo fica; fechar limpa tudo', () => {
+    const { ctx, d } = comDialogo();
+    ctx.kbJanela('Ordenar', '');
+    d.classList.add('kb-alta');
+    d.style.height = '700px';
+    d.style.transform = 'translateY(4px)';
+    ctx.kbJanela('Ordenar', '', { mesma: true });
+    assert.ok(d.classes.has('kb-alta'), 'a mesma janela desenhada de novo fica alta');
+    ctx.kbJanela('Editar', '');
+    assert.equal(d.classes.has('kb-alta'), false, 'outra janela no lugar dela: natural');
+    assert.equal(d.style.height, '');
+    assert.equal(d.style.transform, '');
+    d.classList.add('kb-alta');
+    d.style.height = '700px';
+    d.close();
+    assert.equal(d.classes.size, 0, 'fechada, larga a kb-alta com o resto');
+    assert.equal(d.style.height, '');
+  });
+
+  test('as Colunas desenhadas de novo guardam o tamanho; o ⋯ de uma coluna é outra janela', () => {
+    const { ctx: c, d } = comDialogo();
+    c.kbEstado = { colunas: [{ id: 'a-fazer', nome: 'A fazer', fim: false, fixa: true }], cartoes: [], etiquetas: [], pessoas: [], eu: { id: 'eu1', nome: 'Eu', master: true } };
+    c.kbColunas();
+    d.classList.add('kb-alta');
+    c.kbColunas();
+    assert.ok(d.classes.has('kb-alta'), 'a lista das colunas de novo: fica alta');
+    c.kbColunaMenu('a-fazer');
+    assert.equal(d.classes.has('kb-alta'), false, 'o ⋯ troca o conteúdo: natural');
+  });
+});
+
 describe('as colunas a arrastar', () => {
   const ctx = caixa();
   // cinco linhas de 53px coladas
@@ -267,6 +465,13 @@ describe('o CSS da janela', () => {
     assert.match(tel, /\.kb-j-pe\{[^}]*env\(safe-area-inset-bottom\)/);
     assert.match(css, /animation-name:kbFolhaSobe/);
     assert.match(css, /animation-name:kbFolhaDesce/);
+  });
+  test('a folha alta: 93dvh só abaixo dos 520px, o corpo cresce e o assentar anima a altura com o transform', () => {
+    const tel = css.slice(css.indexOf('@media(max-width:520px){'));
+    assert.match(tel, /dialog\.janela\.kb-dlg\.kb-alta\{height:93vh;height:93dvh\}/);
+    assert.match(tel, /\.kb-janela\.janela-corpo,\.kb-j-corpo\{flex-grow:1\}/);
+    assert.doesNotMatch(css.slice(0, css.indexOf('@media(max-width:520px){')), /kb-alta/, 'acima dos 520px nada muda');
+    assert.match(css, /dialog\.janela\.kb-dlg\.kb-volta\{transition:transform var\(--medio\) var\(--curva-entra\),height var\(--medio\) var\(--curva-entra\)\}/);
   });
   test('com menos movimento só desvanece, e as colunas não deslizam', () => {
     const blocos = css.split('@media(prefers-reduced-motion:reduce){').slice(1).join('');
