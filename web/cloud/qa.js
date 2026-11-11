@@ -17,7 +17,11 @@
    colunas pela ordem do quadro, e a lista mostra uma secção por coluna.
    «Por resolver» são os de A fazer e de Auto Tests: é esse o número da
    pílula. Resolvido é estar em Human Tests ou numa coluna de fim: aí o
-   resolved_at está posto, e o ticket reabre-se.
+   resolved_at está posto, e o ticket reabre-se. Em Human Tests quem testa
+   decide (Aceitar, Recusar, Adiar) em vez de mover. Qualquer ticket leva
+   comentários, que são os do cartão dele no kanban; comentar devolve-o a
+   Auto Tests, para quem programa responder (a nota do resolver é a
+   resposta).
 
    O desenho (a opção C que o Martinho escolheu, 2026-10-28): a pega de pontos,
    o ícone, «QA» e o número por resolver, num roxo (--loan) que não se confunde
@@ -1458,8 +1462,10 @@ function qaPintarLista() {
 /* ------------------------------------------------------------- um ticket */
 
 /* Abre um ticket para ler, por cima da lista: o texto inteiro, a captura
-   (carregada com a sessão), a resolução e o contexto; em baixo «Remover»,
-   «Mover» e «Reabrir» (nos resolvidos) ou «Fechar».
+   (carregada com a sessão), a resolução, os comentários (pedidos à parte:
+   qaCarregarComentarios) com o campo para comentar, e o contexto; em baixo
+   «Remover» e, em Human Tests, as decisões; nas outras colunas «Mover» e
+   «Reabrir» (nas de fim) ou «Fechar».
    Recebe: id — o id do ticket.
    Devolve: nada — abre a janela. */
 function qaAbrirTicket(id) {
@@ -1470,29 +1476,210 @@ function qaAbrirTicket(id) {
   qaMarcarJanela(L);
   qaCamadaTicket = L;
   L.qaId = id; L.qaStatus = t.status; L.qaAtualizado = t.updated_at; L.qaUrl = '';
+  L.qaComs = null; L.qaProvisorio = null;
   L.aoFechar = function () {
     if (L.qaUrl) { try { URL.revokeObjectURL(L.qaUrl); } catch (e) {} L.qaUrl = ''; }
     if (qaCamadaTicket === L) qaCamadaTicket = null;
   };
   if (t.imagem) qaCarregarImagem(L, id);
+  qaCarregarComentarios(L);
 }
 
-/* O corpo da janela de um ticket: no cabeçalho, a coluna onde está, a
-   gravidade e, discreta, a chave do cartão no kanban (KAN-N) quando o tem.
+/* O corpo da janela de um ticket: o de cima (qaHtmlTopo), os comentários
+   (qaHtmlComentarios, à espera até chegarem), o campo para comentar
+   (qaHtmlComentar) e o contexto dobrado. O de cima e os comentários
+   repintam-se sozinhos quando o ticket muda (qaRepintarTicket); o campo
+   fica, com o que lá estiver escrito.
    Recebe: t — o ticket.
    Devolve: o HTML (texto). */
 function qaHtmlTicket(t) {
+  return '<div class="form qa-ver">' +
+    '<div class="qa-ver-topo">' + qaHtmlTopo(t) + '</div>' +
+    '<section class="qa-coms" aria-labelledby="qa_coms_tit"><h3 class="qa-coms-tit" id="qa_coms_tit">Comentários</h3>' +
+      '<div class="qa-coms-lista">' + qaHtmlComentarios(null, t) + '</div></section>' +
+    qaHtmlComentar() +
+    fold('qaCtx', 'Contexto', qaHtmlContexto(t.context), { icon: 'info' }) +
+    '</div>';
+}
+
+/* O de cima da janela de um ticket: no cabeçalho, a coluna onde está, a
+   gravidade e, discreta, a chave do cartão no kanban (KAN-N) quando o tem;
+   quem e quando, o texto inteiro, a caixa da captura e a resolução (ou a
+   «Resolução anterior» de um reaberto).
+   Recebe: t — o ticket.
+   Devolve: o HTML (texto). */
+function qaHtmlTopo(t) {
   var resolvido = qaColunaResolvida(t.status);
   var cartao = typeof t.cartao === 'string' && t.cartao ? '<span class="small num qa-cartao" title="O cartão no kanban da equipa">' + esc(t.cartao) + '</span>' : '';
-  return '<div class="form qa-ver">' +
-    '<div class="qa-ver-cab">' + qaSeloEstado(t.status) + qaSelo(t.severity) + cartao + '</div>' +
+  return '<div class="qa-ver-cab">' + qaSeloEstado(t.status) + qaSelo(t.severity) + cartao + '</div>' +
     '<p class="small qa-quem">' + esc(qaAutor(t, true)) + ' · ' + esc(qaQuando(t.created_at)) + '</p>' +
     '<p class="qa-ver-txt">' + esc(t.body) + '</p>' +
     (t.imagem ? '<div class="qa-ver-img a-carregar" aria-busy="true"><span class="qa-so-leitor">A carregar a captura</span></div>' : '') +
     (t.resolution ? '<div class="qa-resolucao' + (resolvido ? '' : ' anterior') + '"><b>' + (resolvido ? 'Resolução' : 'Resolução anterior') + '</b>' +
-      '<p>' + esc(t.resolution) + '</p>' + (resolvido && t.resolved_at ? '<span class="small">' + esc(qaQuando(t.resolved_at)) + '</span>' : '') + '</div>' : '') +
-    fold('qaCtx', 'Contexto', qaHtmlContexto(t.context), { icon: 'info' }) +
+      '<p>' + esc(t.resolution) + '</p>' + (resolvido && t.resolved_at ? '<span class="small">' + esc(qaQuando(t.resolved_at)) + '</span>' : '') + '</div>' : '');
+}
+
+/* --------------------------------------------------------- os comentários */
+
+/* Os comentários de um ticket: os do cartão dele no kanban (a mesma
+   conversa que se vê lá), do mais antigo para o mais recente — à espera
+   enquanto não chegaram, a falha com «Tentar de novo», o vazio, ou a lista
+   (quem, quando e o texto com as mudanças de linha; o que está a ir para o
+   servidor diz «a enviar…»). Por baixo, o que comentar faz: num ticket
+   fora de Auto Tests, passa-o para lá.
+   Recebe: L — a camada do ticket (null antes de abrir: à espera); t — o ticket.
+   Devolve: o HTML (texto). */
+function qaHtmlComentarios(L, t) {
+  var coms = L ? L.qaComs : null, prov = L && L.qaProvisorio ? [L.qaProvisorio] : [];
+  var dica = t && t.status === QA_COL_EM_CURSO
+    ? '<p class="hint qa-coms-dica">Quem programa responde aqui, ao resolver.</p>'
+    : '<p class="hint qa-coms-dica">Comentar passa o ticket a Auto Tests, para quem programa responder.</p>';
+  if (coms === 'falhou') {
+    return '<div class="qa-coms-falhou"><span class="small">Não deu para carregar os comentários.</span>' +
+      '<button type="button" class="btn sm" data-toca="vista" data-click="qaComentariosDeNovo()">Tentar de novo</button></div>' + qaHtmlListaComentarios(prov) + dica;
+  }
+  if (coms === null || coms === undefined) {
+    return '<div class="espera qa-coms-espera"><span class="roda" aria-hidden="true"></span><span>A carregar os comentários…</span></div>' + qaHtmlListaComentarios(prov) + dica;
+  }
+  var todos = coms.concat(prov);
+  if (!todos.length) return '<p class="hint qa-coms-vazio">Ainda não há comentários.</p>' + dica;
+  return qaHtmlListaComentarios(todos) + dica;
+}
+
+/* A lista dos comentários, um por item.
+   Recebe: cs — os comentários ({autor: {nome}, texto, created_at, meu, aEnviar}).
+   Devolve: o HTML (texto, '' sem nenhum). */
+function qaHtmlListaComentarios(cs) {
+  if (!cs.length) return '';
+  return '<ol class="qa-coms-itens">' + cs.map(function (c) {
+    var a = c.autor && typeof c.autor === 'object' ? c.autor : {};
+    var quem = String(a.nome || a.id || 'Alguém') + (c.meu ? ' (eu)' : '');
+    return '<li class="qa-com' + (c.aEnviar ? ' a-enviar' : '') + '">' +
+      '<p class="small qa-quem">' + esc(quem) + ' · ' + esc(c.aEnviar ? 'a enviar…' : qaQuando(c.created_at)) + '</p>' +
+      '<p class="qa-com-txt">' + esc(c.texto) + '</p></li>';
+  }).join('') + '</ol>';
+}
+
+/* O campo para comentar: o comentário (obrigatório; o erro aparece junto
+   dele: qaComentar) e «Comentar». Nasce com a janela e não se repinta.
+   Devolve: o HTML (texto). */
+function qaHtmlComentar() {
+  return '<div class="qa-campo qa-comentar">' +
+    '<label>Comentário <span class="req">*</span>' +
+      '<textarea id="qa_com" maxlength="4000" rows="2" placeholder="Ex: Continua a acontecer no tema escuro."></textarea></label>' +
+    '<button type="button" class="btn" id="qa_com_btn" data-toca="dados" data-click="qaComentar()">Comentar</button>' +
     '</div>';
+}
+
+/* Pede os comentários do ticket aberto (GET /api/qa/:id/comentarios) e
+   pinta-os; falhando, diz que não deu, com «Tentar de novo». Só a janela de
+   um ticket os pede: a lista não os traz.
+   Recebe: L — a camada do ticket.
+   Devolve: Promise com true se chegaram. */
+function qaCarregarComentarios(L) {
+  if (!L || !L.qaId) return Promise.resolve(false);
+  var id = L.qaId;
+  return Promise.resolve().then(function () { return api('GET', '/api/qa/' + encodeURIComponent(id) + '/comentarios'); }).then(function (r) {
+    L.qaComs = (r && Array.isArray(r.comentarios) ? r.comentarios : []).filter(function (c) { return c && typeof c === 'object' && c.id; });
+    qaPintarComentarios(L);
+    return true;
+  }, function () {
+    L.qaComs = 'falhou';
+    qaPintarComentarios(L);
+    return false;
+  });
+}
+
+/* «Tentar de novo» nos comentários do ticket aberto.
+   Devolve: nada. */
+function qaComentariosDeNovo() {
+  var L = qaCamadaTicket;
+  if (!L) return;
+  L.qaComs = null;
+  qaPintarComentarios(L);
+  qaCarregarComentarios(L);
+}
+
+/* Repinta só os comentários da janela de um ticket, se ela ainda estiver
+   aberta (o campo de comentar fica como está).
+   Recebe: L — a camada do ticket.
+   Devolve: nada. */
+function qaPintarComentarios(L) {
+  if (!L || !L.el || typeof L.el.querySelector !== 'function') return;
+  if (typeof modalStack !== 'undefined' && modalStack.indexOf(L) < 0) return;
+  var caixa = L.el.querySelector('.qa-coms-lista');
+  if (!caixa) return;
+  var t = (qaLista.tickets || []).filter(function (x) { return x.id === L.qaId; })[0] || { status: L.qaStatus };
+  caixa.innerHTML = qaSemEtiquetas(qaHtmlComentarios(L, t));
+}
+
+/* O HTML sem etiquetas que correm (a segunda tranca da casa, quando existe).
+   Recebe: h — o HTML.
+   Devolve: o HTML. */
+function qaSemEtiquetas(h) {
+  return typeof semEtiquetasQueCorrem === 'function' ? semEtiquetasQueCorrem(h) : h;
+}
+
+/* O botão «Comentar» ocupado (a enviar) ou livre.
+   Recebe: ocupado — true durante o envio.
+   Devolve: nada. */
+function qaBotaoComentar(ocupado) {
+  var b = document.getElementById('qa_com_btn');
+  if (!b) return;
+  b.disabled = !!ocupado;
+  if (ocupado) b.setAttribute('aria-busy', 'true'); else b.removeAttribute('aria-busy');
+  b.textContent = ocupado ? 'A enviar…' : 'Comentar';
+}
+
+/* «Comentar» no ticket aberto (POST /api/qa/:id/comentarios {texto}). O
+   comentário é obrigatório (o erro junto ao campo, componentes.js:falhaCampo)
+   e até 4000 caracteres. Otimista, como o mover (qaColunaNoEcra): o
+   comentário aparece logo na lista, «a enviar…», o campo esvazia-se e o
+   ticket passa a Auto Tests na lista, no número da pílula e no selo; com a
+   resposta, o comentário fica o do servidor e a lista pede-se outra vez.
+   Falhando, tudo volta a como estava — o ticket à coluna de antes, o texto
+   ao campo — e o erro diz porquê, junto ao campo. Um pedido de cada vez por
+   ticket (qaOcupado).
+   Devolve: Promise com true se o servidor guardou o comentário. */
+function qaComentar() {
+  var L = qaCamadaTicket;
+  if (!L || !L.qaId) return Promise.resolve(false);
+  var id = L.qaId, campo = document.getElementById('qa_com');
+  if (qaOcupado[id]) return Promise.resolve(false);
+  var texto = String(campo ? campo.value : '').replace(/\r\n?/g, '\n').trim();
+  if (!texto) { falhaCampo('qa_com', 'Escreve o comentário.'); return Promise.resolve(false); }
+  if (texto.length > 4000) { falhaCampo('qa_com', 'O comentário passa dos 4000 caracteres. Encurta-o.'); return Promise.resolve(false); }
+  qaOcupado[id] = 1;
+  var eu = window.CW && CW.user ? CW.user : {};
+  var t = (qaLista.tickets || []).filter(function (x) { return x.id === id; })[0];
+  var jaEmCurso = t ? t.status === QA_COL_EM_CURSO : L.qaStatus === QA_COL_EM_CURSO;
+  L.qaProvisorio = { id: 'a-enviar', autor: { id: eu.id || '', nome: eu.name || eu.email || 'Eu' }, texto: texto, created_at: Date.now(), meu: true, aEnviar: true };
+  if (campo) campo.value = '';
+  qaBotaoComentar(true);
+  qaPintarComentarios(L);
+  var repor = qaColunaNoEcra(id, QA_COL_EM_CURSO);
+  return api('POST', '/api/qa/' + encodeURIComponent(id) + '/comentarios', { texto: texto }).then(function (r) {
+    delete qaOcupado[id];
+    L.qaProvisorio = null;
+    if (r && r.comentario && Array.isArray(L.qaComs)) L.qaComs = L.qaComs.concat([r.comentario]);
+    qaBotaoComentar(false);
+    if (Array.isArray(L.qaComs)) qaPintarComentarios(L);
+    else qaCarregarComentarios(L);
+    toast(jaEmCurso ? 'Comentário enviado.' : 'Comentário enviado. O ticket passou a Auto Tests.');
+    qaCarregar();
+    return true;
+  }, function (e) {
+    delete qaOcupado[id];
+    L.qaProvisorio = null;
+    repor();
+    qaBotaoComentar(false);
+    qaPintarComentarios(L);
+    var c = document.getElementById('qa_com');
+    if (c && !String(c.value || '').trim()) c.value = texto;
+    falhaCampo('qa_com', (e && e.message) || 'Não deu para enviar o comentário.');
+    if (e && e.status === 404) qaCarregar();
+    return false;
+  });
 }
 
 /* A cor do selo de uma coluna: Auto Tests no roxo do QA ('loan'), Human
@@ -1516,26 +1703,28 @@ function qaSeloEstado(status) {
 }
 
 /* O rodapé da janela de um ticket: «Remover» sempre (com Anular, por isso
-   sem pergunta), «Mover» (as outras colunas do kanban, num menu de
-   ações: qaHtmlMover) e, a acabar:
-   - em Human Tests, as três decisões de quem testa (qaHtmlDecisoes), numa
-     linha só delas por baixo do «Remover» e do «Mover»;
-   - numa coluna de fim, «Reabrir» (volta a A fazer);
-   - nas outras, «Fechar».
+   sem pergunta) e, a seguir:
+   - em Human Tests, só as três decisões de quem testa (qaHtmlDecisoes), em
+     vez do «Mover» (pedido do Martinho, 2026-11-11: «em vez do mover, não
+     adicionalmente») — o ticket está à espera de um sim ou de um não;
+   - nas outras colunas, «Mover» (as outras colunas do kanban, num menu de
+     ações: qaHtmlMover) e, a acabar, «Reabrir» numa coluna de fim (volta a
+     A fazer) ou «Fechar».
    Recebe: t — o ticket.
    Devolve: o HTML (texto). */
 function qaRodapeTicket(t) {
   var id = jsq(t.id);
-  var fim;
-  if (t.status === QA_COL_RESOLVIDO) fim = qaHtmlDecisoes(t);
-  else if (qaColunaResolvida(t.status)) fim = '<button type="button" class="btn primary" data-toca="dados" data-click="qaReabrir(\'' + id + '\')">Reabrir</button>';
-  else fim = '<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>';
-  return '<button type="button" class="btn qa-remover" data-toca="dados" data-risco="destroi" data-click="qaRemover(\'' + id + '\')">' + ic('trash', 16) + ' Remover</button>' +
-    qaHtmlMover(t) + fim;
+  var remover = '<button type="button" class="btn qa-remover" data-toca="dados" data-risco="destroi" data-click="qaRemover(\'' + id + '\')">' + ic('trash', 16) + '<span class="qa-remover-txt"> Remover</span></button>';
+  if (t.status === QA_COL_RESOLVIDO) return remover + qaHtmlDecisoes(t);
+  var fim = qaColunaResolvida(t.status)
+    ? '<button type="button" class="btn primary" data-toca="dados" data-click="qaReabrir(\'' + id + '\')">Reabrir</button>'
+    : '<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>';
+  return remover + qaHtmlMover(t) + fim;
 }
 
-/* As decisões sobre um ticket em Human Tests, numa linha própria do rodapé
-   (.qa-decisoes): «Recusar» (volta a A fazer, pelo reabrir, que guarda a
+/* As decisões sobre um ticket em Human Tests, juntas no rodapé a seguir ao
+   «Remover» (.qa-decisoes: na mesma linha quando cabem, numa linha só delas
+   quando não): «Recusar» (volta a A fazer, pelo reabrir, que guarda a
    resolução como anterior: qaRecusar), «Adiar» (para Para depois: qaAdiar;
    só quando o kanban tem essa coluna, que o master pode apagar) e
    «Aceitar» (para Concluído: qaAceitar), o primário, no fim.
@@ -1569,14 +1758,27 @@ function qaHtmlMover(t) {
     '</span>';
 }
 
-/* Repinta a janela de um ticket com o que mudou (reaberto, ou resolvido
-   noutro sítio), sem voltar a pedir a captura que já cá está.
+/* Repinta a janela de um ticket com o que mudou (reaberto, comentado, ou
+   resolvido noutro sítio), sem voltar a pedir a captura que já cá está: o
+   de cima, os comentários e o rodapé trocam-se, e o campo de comentar fica
+   onde está — quem estava a escrever não perde o texto nem a composição do
+   teclado (docs/armadilhas.md, «Um campo que sai do documento perde a
+   composição do teclado»). Uma janela sem essas peças repinta-se inteira.
    Recebe: L — a camada; t — o ticket de agora.
    Devolve: nada. */
 function qaRepintarTicket(L, t) {
   if (!L || !L.el) return;
   L.qaStatus = t.status; L.qaAtualizado = t.updated_at;
-  fillModal(L.el, 'Ticket de QA', qaHtmlTicket(t), qaRodapeTicket(t));
+  var q = typeof L.el.querySelector === 'function' ? function (s) { return L.el.querySelector(s); } : function () { return null; };
+  var topo = q('.qa-ver-topo'), lista = q('.qa-coms-lista'), pe = q('.foot');
+  if (topo && lista && pe) {
+    topo.innerHTML = qaSemEtiquetas(qaHtmlTopo(t));
+    lista.innerHTML = qaSemEtiquetas(qaHtmlComentarios(L, t));
+    pe.innerHTML = qaSemEtiquetas(qaRodapeTicket(t));
+  } else {
+    fillModal(L.el, 'Ticket de QA', qaHtmlTicket(t), qaRodapeTicket(t));
+    qaPintarComentarios(L);
+  }
   if (L.qaUrl) qaMostrarImagem(L, L.qaUrl);
   else if (t.imagem) qaCarregarImagem(L, t.id);
 }
@@ -1730,20 +1932,7 @@ function qaMover(id, coluna) {
 function qaPassarDeColuna(id, coluna, fim, corpo, frase, falha) {
   if (qaOcupado[id]) return Promise.resolve(false);
   qaOcupado[id] = 1;
-  var t = (qaLista.tickets || []).filter(function (x) { return x.id === id; })[0];
-  var antes = t ? { status: t.status, resolved_at: t.resolved_at, updated_at: t.updated_at } : null;
-  var repintar = function () {
-    if (!qaLista.tickets) return;
-    qaAbertos = qaSeccoes(qaLista.tickets).abertos.length;
-    qaPintarNumero();
-    qaPintarLista();
-  };
-  if (t) {
-    t.status = coluna;
-    t.resolved_at = qaColunaResolvida(coluna) ? (t.resolved_at || Date.now()) : null;
-    t.updated_at = Date.now();
-    repintar();
-  }
+  var repor = qaColunaNoEcra(id, coluna);
   var caminho = '/api/qa/' + encodeURIComponent(id) + fim;
   var pedido = corpo === undefined ? api('POST', caminho) : api('POST', caminho, corpo);
   return pedido.then(function () {
@@ -1753,14 +1942,37 @@ function qaPassarDeColuna(id, coluna, fim, corpo, frase, falha) {
     return true;
   }, function (e) {
     delete qaOcupado[id];
-    if (t && antes) {
-      t.status = antes.status; t.resolved_at = antes.resolved_at; t.updated_at = antes.updated_at;
-      repintar();
-    }
+    repor();
     toast((e && e.message) || falha);
     if (e && e.status === 404) qaCarregar();
     return false;
   });
+}
+
+/* Passa já, no ecrã, um ticket para outra coluna — a lista, o número da
+   pílula e o ticket aberto —, com o resolved_at como o servidor o põe
+   (posto ao chegar a uma coluna resolvida, null nas outras), antes de o
+   servidor responder (qaPassarDeColuna, qaComentar).
+   Recebe: id — o id do ticket; coluna — o id da coluna.
+   Devolve: a função que o põe como estava (nada faz sem o ticket na lista). */
+function qaColunaNoEcra(id, coluna) {
+  var t = (qaLista.tickets || []).filter(function (x) { return x.id === id; })[0];
+  var repintar = function () {
+    if (!qaLista.tickets) return;
+    qaAbertos = qaSeccoes(qaLista.tickets).abertos.length;
+    qaPintarNumero();
+    qaPintarLista();
+  };
+  if (!t) return function () {};
+  var antes = { status: t.status, resolved_at: t.resolved_at, updated_at: t.updated_at };
+  t.status = coluna;
+  t.resolved_at = qaColunaResolvida(coluna) ? (t.resolved_at || Date.now()) : null;
+  t.updated_at = Date.now();
+  repintar();
+  return function () {
+    t.status = antes.status; t.resolved_at = antes.resolved_at; t.updated_at = antes.updated_at;
+    repintar();
+  };
 }
 
 /* ---------------------------------------------------------- os embrulhos */

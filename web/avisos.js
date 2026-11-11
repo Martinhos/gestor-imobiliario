@@ -27,6 +27,20 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 64,
+    data: '2026-11-11',
+    titulo: 'Notas nas tarefas',
+    seccoes: [
+      {
+        titulo: 'Tarefas',
+        afeta: ['imoveis', 'contratos'],
+        itens: [
+          'Cada tarefa de um imóvel ou de um contrato pode ter notas: escreve-as no formulário da tarefa. Na lista aparecem por baixo do nome, e a pesquisa também procura nelas.',
+        ],
+      },
+    ],
+  },
+  {
     v: 63,
     data: '2026-11-10',
     titulo: 'A barra do IRS mais simples',

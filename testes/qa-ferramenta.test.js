@@ -4,20 +4,21 @@
 // (corrido contra o esquema verdadeiro, em SQLite), escreve o listar com tudo
 // o que é preciso para resolver um ticket sem abrir a app (a fila de A fazer e
 // Auto Tests, ou todas as colunas do kanban), leva os tickets às colunas
-// (comecar, resolver, reabrir, mover) com o cartão a seguir, e monta a nota do
-// resolver com e sem commit.
+// (comecar, resolver, reabrir, mover) com o cartão a seguir, monta a nota do
+// resolver com e sem commit, e diz os comentários por responder de cada ticket
+// (os de pessoas depois da última resposta do Claude, KAN-107).
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { baseDeTeste } from './lib/bd.js';
-import { passosDaSincronizacao, sqlEmTexto, cartaoDoTicketQa } from '../worker/src/lib/kanban.js';
+import { passosDaSincronizacao, passosDoComentarioQa, sqlEmTexto, cartaoDoTicketQa } from '../worker/src/lib/kanban.js';
 import {
   lerArgumentos, confereAlvo, alvoDe, ALVOS, configDoDev, cita, sqlListar, sqlUm, sqlNaColuna, sqlColunas, colunaDaLinha, sqlDoCartao,
   resolverColuna, ticketFechado, colunaDoStatus, estadoLegivel,
   notaDaResolucao, contextoLegivel, ticketDaLinha, textoDoTicket, textoDaLista, tipoDaImagem, erroDoWrangler,
-  lerJsonDoWrangler, mensagemPorMigrar, ErroQa, COMANDOS, USO,
+  lerJsonDoWrangler, mensagemPorMigrar, ErroQa, COMANDOS, USO, sqlComentarios, porResponder, juntarComentarios, comentariosPorExtenso,
 } from '../scripts/qa.mjs';
 
 const SCRIPT = fileURLToPath(new URL('../scripts/qa.mjs', import.meta.url));
@@ -265,6 +266,66 @@ describe('o SQL, corrido contra o esquema verdadeiro', () => {
     const l = um(db, 't-antigo');
     assert.equal(l.status, 'human-tests');
     assert.equal(l.resolved_at, 1200);
+  });
+
+  test('os comentários por responder no listar: os de pessoas depois da nota do resolver, no texto e no --json (KAN-107)', () => {
+    const db = base();
+    // quem testa comenta (a regra das rotas, em texto): o ticket e o cartão vão a Auto Tests
+    const comenta = (uuid, texto, agora, autor) => db.exec(passosDoComentarioQa({
+      ticket: { id: 't-novo', body: 'novo', severity: 'bloqueia' }, autor: autor || { id: '4242', nome: 'Martinho' }, texto, uuid, cartaoUuid: 'c-' + uuid, agora,
+    }).map(sqlEmTexto).join(';\n'));
+    comenta('m1', 'Antes da resolução', 1000);
+    assert.equal(um(db, 't-novo').status, 'auto-tests');
+    // o resolver: a nota é o comentário do Claude, e o ticket vai a Human Tests
+    db.exec(sqlNaColuna('t-novo', 'human-tests', 2000, 'Corrigido.'));
+    db.exec(sqlDoCartao({ id: 't-novo', estado: 'human-tests', agora: 2000, comentario: { uuid: 'r1', texto: 'Corrigido.' } }));
+    comenta('m2', 'Ainda falha\nno escuro', 3000);
+    comenta('m3', 'E no claro', 3100, { id: 'd1', nome: 'Dina' });
+    // nem a sincronização nem um removido contam
+    db.exec("INSERT INTO kanban_comentarios (id, cartao_id, autor_id, autor_nome, texto, created_at, updated_at) SELECT 'a1', id, 'automatico', 'Sincronização', 'auto', 3200, 3200 FROM kanban_cartoes WHERE origem_id = 't-novo'");
+    db.exec("INSERT INTO kanban_comentarios (id, cartao_id, autor_id, autor_nome, texto, created_at, updated_at, removed_at) SELECT 'x1', id, '4242', 'Martinho', 'apagado', 3300, 3300, 3400 FROM kanban_cartoes WHERE origem_id = 't-novo'");
+    assert.equal(um(db, 't-novo').status, 'auto-tests', 'comentar depois da resolução devolve-o a Auto Tests');
+    const linhas = db.prepare(sqlComentarios(false)).all();
+    assert.deepEqual(linhas.map((l) => l.id), ['m1', 'r1', 'm2', 'm3', 'a1']);
+    const tickets = juntarComentarios(db.prepare(sqlListar(false)).all().map(ticketDaLinha), linhas);
+    const t = tickets.find((x) => x.id === 't-novo');
+    assert.deepEqual(t.comentariosPorResponder, [
+      { id: 'm2', autor: { id: '4242', nome: 'Martinho' }, texto: 'Ainda falha\nno escuro', created_at: 3000 },
+      { id: 'm3', autor: { id: 'd1', nome: 'Dina' }, texto: 'E no claro', created_at: 3100 },
+    ]);
+    assert.ok(tickets.filter((x) => x.id !== 't-novo').every((x) => Array.isArray(x.comentariosPorResponder) && !x.comentariosPorResponder.length), 'os outros, vazia');
+    const texto = textoDaLista(tickets, {});
+    assert.match(texto, /^== t-novo · BLOQUEIA · Auto Tests · KAN-\d+ · 2 comentários por responder$/m);
+    assert.match(texto, /^Comentários por responder \(2\) — a nota do resolver é a resposta:\n {2}- Martinho, 01\/01\/1970, 01:00:\n {4}Ainda falha\n {4}no escuro\n {2}- Dina, 01\/01\/1970, 01:00:\n {4}E no claro$/m);
+    assert.doesNotMatch(texto, /Antes da resolução|auto$|apagado/m, 'o respondido, o automático e o removido não aparecem');
+    // o --json leva-os na forma de juntarComentarios (o JSON.stringify do cmdListar)
+    assert.equal(JSON.parse(JSON.stringify({ tickets })).tickets.find((x) => x.id === 't-novo').comentariosPorResponder.length, 2);
+    // um cartão removido leva os comentários com ele; --todos vê os das outras colunas
+    db.exec("UPDATE kanban_cartoes SET removed_at = 5 WHERE origem_id = 't-novo'");
+    assert.deepEqual(db.prepare(sqlComentarios(true)).all(), []);
+  });
+});
+
+describe('os comentários por responder', () => {
+  // Recebe: id, autor_id, created_at. Devolve: um comentário como o SELECT o dá.
+  const c = (id, autor, t) => ({ id, autor_id: autor, autor_nome: autor, texto: id, created_at: t });
+
+  test('porResponder: de pessoas, depois da última resposta do Claude; sem resposta, todos; nunca os automáticos nem os do Claude (KAN-107)', () => {
+    assert.deepEqual(porResponder([c('p1', 'u1', 10), c('p2', 'd1', 20)]).map((x) => x.id), ['p1', 'p2'], 'nunca resolvido: todos');
+    assert.deepEqual(porResponder([c('p1', 'u1', 10), c('r1', 'claude', 15), c('p2', 'd1', 20)]).map((x) => x.id), ['p2']);
+    assert.deepEqual(porResponder([c('p1', 'u1', 10), c('r1', 'claude', 15), c('p2', 'd1', 20), c('r2', 'claude', 25)]).map((x) => x.id), [], 'respondido');
+    assert.deepEqual(porResponder([c('a1', 'automatico', 30), c('r1', 'claude', 5)]).map((x) => x.id), [], 'a sincronização não pergunta');
+    assert.deepEqual(porResponder([c('r1', 'claude', 15), c('p1', 'u1', 15)]).map((x) => x.id), [], 'no mesmo instante da resposta conta como respondido');
+    // também na forma da API (autor: {id}) e sem ordem garantida
+    assert.deepEqual(porResponder([{ id: 'p2', autor: { id: 'u1' }, created_at: 20 }, { id: 'r1', autor: { id: 'claude' }, created_at: 30 }, { id: 'p3', autor: { id: 'u1' }, created_at: 40 }]).map((x) => x.id), ['p3']);
+    assert.deepEqual(porResponder(null), []);
+    assert.deepEqual(porResponder([null, 'x', c('p1', 'u1', 1)]).map((x) => x.id), ['p1']);
+  });
+
+  test('o cabeçalho diz quantos, com o plural certo (KAN-107)', () => {
+    assert.equal(comentariosPorExtenso(0), '');
+    assert.equal(comentariosPorExtenso(1), '1 comentário por responder');
+    assert.equal(comentariosPorExtenso(3), '3 comentários por responder');
   });
 });
 

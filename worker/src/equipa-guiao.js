@@ -1063,10 +1063,38 @@ function formulario(titulo, campos, aoConfirmar, opcoes) {
     if (d.open) return;
     formAberto = null;
     d.innerHTML = '';
+    travarPagina(false);
   };
   if (!d.open) d.showModal();
+  travarPagina(true);
   var primeiro = d.querySelector('input,textarea');
   if (primeiro && primeiro.focus) primeiro.focus();
+}
+
+// o scrollY da página quando a janela a trancou (travarPagina), para ela voltar ao sítio
+var travadaY = 0;
+/* Tranca a página por baixo da janela (o dialog#dialogo, a do guião ou a do
+   kanban), como a app tranca a dela (vistas.js:lockPage): o html.eq-trava
+   não rola, e o body fica preso com o top a -scrollY, para o que se vê não
+   mexer. Sem isto o showModal deixava-a rolar: um dedo no véu (o ::backdrop,
+   fora da caixa que rola da janela) passava o gesto à página (KAN-96). Ao soltar, a
+   página volta ao scrollY onde estava. Só mexe quando o estado muda: trancar
+   duas vezes não guarda o 0 da página já trancada.
+   Recebe: sim — true tranca; false solta.
+   Devolve: nada — mexe na classe do html, no top do body e no scroll. */
+function travarPagina(sim) {
+  try {
+    var h = document.documentElement, b = document.body, ja = h.classList.contains('eq-trava');
+    if (sim && !ja) {
+      travadaY = window.scrollY || 0;
+      h.classList.add('eq-trava');
+      b.style.top = -travadaY + 'px';
+    } else if (!sim && ja) {
+      h.classList.remove('eq-trava');
+      b.style.top = '';
+      window.scrollTo(0, travadaY);
+    }
+  } catch (e) { /* sem o travão, a janela abre na mesma */ }
 }
 
 /* Um campo da janela: o rótulo (com o * vermelho quando é obrigatório), a
@@ -2126,6 +2154,7 @@ var ACOES_RASTO = {
   qaRemoverImagem: 'Remover a imagem', qaNovoTicket: 'Novo ticket', qaCarregarDeNovo: 'Tentar de novo',
   qaDobrar: 'Abrir ou fechar um ticket', qaAbrirTicket: 'Abrir o ticket', qaRemover: 'Remover', qaReabrir: 'Reabrir',
   qaImagemDeNovo: 'Tentar de novo', qaAceitar: 'Aceitar', qaRecusar: 'Recusar', qaAdiar: 'Adiar',
+  qaComentar: 'Comentar', qaComentariosDeNovo: 'Tentar de novo',
   // conta, entrada, termos e documentos
   'CW.showAuth': 'Iniciar sessão', 'CW.submitAuth': 'Entrar ou criar conta', 'CW.modoDaEntrada': 'Entrar ou criar conta',
   'CW.verPalavraPasse': 'Mostrar a palavra-passe', 'CW.esqueci': 'Esqueci-me da palavra-passe', fecharRepor: 'Cancelar',

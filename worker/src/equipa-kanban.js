@@ -13,7 +13,7 @@ import { GUIAO_KB_JANELA, CSS_KB_JANELA } from './equipa-kanban-janela.js';
    É um script clássico que corre DEPOIS do guião e ANTES do
    DOMContentLoaded: usa os globais dele (DADOS, eu, el, esc, ligarA,
    comAcao, ic, ICONES, pedir, enviar, avisar, vazioHtml, esperaHtml, falha,
-   cabecalho, marcarErro, ir, ACOES…) e acrescenta-lhes o que é seu — os
+   cabecalho, marcarErro, ir, travarPagina, ACOES…) e acrescenta-lhes o que é seu — os
    nomes de topo começam por kb ou kanban, menos os dois pontos de encaixe
    que o guião chama: verKanban(resto) e novoCartao(). Só function e var,
    que são os que ficam em window num script clássico.

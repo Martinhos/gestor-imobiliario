@@ -1755,6 +1755,13 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
 #raiz#raiz button.tf-nome{cursor:pointer}
 #raiz#raiz .tf-quando{font-size:11.5px;color:var(--muted);text-decoration:none}
 #raiz#raiz .tf-feita .tf-nome>span{text-decoration:line-through;color:var(--muted)}
+/* As notas de uma tarefa (tarefas.js:tfItemHtml): por baixo do nome, pequenas
+   e na cor secundária, com as mudanças de linha de quem as escreveu, cortadas
+   a duas linhas — o resto lê-se no formulário. Uma linha com notas fica mais
+   alta, e a pega e a caixa sobem para a altura do nome. */
+#raiz#raiz .tf-notas{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;max-width:100%;
+  font-size:12.5px;font-weight:400;line-height:1.35;color:var(--muted);white-space:pre-line;overflow-wrap:anywhere;text-decoration:none}
+#raiz#raiz .tf-item.tf-com-notas{align-items:flex-start}
 /* O cabeçalho de uma secção é um botão da largura toda (tarefas.js:tfDobrar):
    a seta roda para o lado quando a secção está recolhida, e recolhida as
    tarefas somem — continuam no HTML, para a pesquisa e o arrasto. O lugar
@@ -5753,12 +5760,25 @@ p.qa-quem{margin:0}
 .qa-ver-cab .qa-cartao{margin-left:auto}
 .qa-janela .foot .qa-mover{flex:1;display:flex}
 .qa-janela .foot .qa-mover>.btn{flex:1;white-space:nowrap}
-/* Em Human Tests, as três decisões (cloud/qa.js:qaHtmlDecisoes) numa linha
-   só delas, por baixo do «Remover» e do «Mover»: as cinco não cabem numa
-   linha a 384px. Os outros rodapés não mudam (o :has só os apanha a eles) */
+/* Em Human Tests, o «Remover» e as três decisões (cloud/qa.js:qaHtmlDecisoes)
+   no lugar do «Mover»: numa linha só quando cabem; quando não cabem, as
+   decisões passam juntas para a linha delas, da largura toda, e o «Remover»
+   fica na de cima. Nenhum botão encolhe abaixo do texto. Os outros rodapés
+   não mudam (o :has só os apanha a eles) */
 .qa-janela .foot:has(>.qa-decisoes){flex-wrap:wrap}
-.qa-janela .foot>.qa-decisoes{flex:1 1 100%;display:flex;gap:10px;min-width:0}
-.qa-janela .foot>.qa-decisoes>.btn{min-width:0;white-space:nowrap}
+.qa-janela .foot:has(>.qa-decisoes)>.qa-remover{flex:1 0 auto}
+.qa-janela .foot>.qa-decisoes{flex:999 1 auto;display:flex;gap:10px;min-width:0}
+.qa-janela .foot>.qa-decisoes>.btn{flex:1 0 auto;white-space:nowrap}
+/* No telemóvel, menos enchimento de lado e, até 420px, o «Remover» só com o
+   caixote (o nome fica para o leitor de ecrã, e o aviso traz o Anular): a
+   384px os quatro cabem numa linha, com o alvo de 48px. Abaixo dos 341px já
+   não cabem — as decisões descem para a linha delas, e o «Remover» volta a
+   dizer o nome */
+@media(max-width:520px){.qa-janela .foot:has(>.qa-decisoes) .btn{padding:0 10px}}
+@media(min-width:341px) and (max-width:420px){
+  .qa-janela .foot:has(>.qa-decisoes)>.qa-remover{min-width:48px}
+  .qa-janela .foot:has(>.qa-decisoes)>.qa-remover>.qa-remover-txt{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+}
 .qa-ver-txt{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.5}
 .qa-ver-img{position:relative;min-height:120px;border:1px solid var(--line);border-radius:12px;background:var(--chip);overflow:hidden}
 .qa-ver-img img{display:block;width:100%;height:auto;max-height:70vh;max-height:70dvh;object-fit:contain}
@@ -5769,6 +5789,25 @@ p.qa-quem{margin:0}
 .qa-resolucao.anterior>b{color:var(--muted)}
 .qa-resolucao p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .btn.qa-remover{color:var(--danger)}
+/* O de cima da janela de um ticket (cloud/qa.js:qaHtmlTopo) numa caixa só
+   para se repintar sem tocar no campo de comentar: para a grelha do .form é
+   como se a caixa não existisse */
+.qa-ver-topo{display:contents}
+/* Os comentários (cloud/qa.js:qaHtmlComentarios): a conversa do cartão no
+   kanban, do mais antigo para o mais recente, cada um num fundo de chip; o
+   que vai a caminho do servidor esbatido pela opacidade, que o escurecimento
+   forçado do Samsung Internet deixa passar */
+.qa-coms{display:grid;gap:8px;min-width:0}
+.qa-coms-tit{margin:0;font-size:16px}
+.qa-coms-lista{display:grid;gap:8px;min-width:0}
+.qa-coms-itens{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.qa-com{display:grid;gap:4px;min-width:0;padding:10px 12px;border-radius:12px;background:var(--chip)}
+.qa-com.a-enviar{opacity:.6}
+.qa-com-txt{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px;line-height:1.45}
+.qa-coms-falhou{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.qa-coms-lista>.hint{margin:0}
+/* O campo para comentar (cloud/qa.js:qaHtmlComentar): o botão à direita, por baixo */
+.qa-comentar>.btn{justify-self:end}
 /* === fim: tickets de QA === */
 /* === qa-ronda2: visão geral === */
 /* Os meses previstos das entradas e saídas (graficos.js:cBars, previstoDe): a

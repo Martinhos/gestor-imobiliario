@@ -25,9 +25,13 @@
 // pela ordem do quadro (kanban_colunas), cada uma com o nome. Cada ticket sai
 // com tudo o que é preciso para o resolver sem abrir a app: a chave do cartão
 // (KAN-N), a descrição inteira, a gravidade, quem e quando, o contexto do ecrã
-// e se tem imagem. Um ticket com um status que não se conhece não se perde:
-// aparece (com --todos) com o próprio status. --json dá o mesmo na forma do
-// GET /api/qa ({colunas, tickets} com status e cartao), para máquinas.
+// e se tem imagem, e os comentários por responder: os de pessoas no cartão do
+// ticket depois da última resposta do Claude (porResponder) — quem testa
+// comenta na pílula ou no kanban, o ticket volta a Auto Tests, e a nota do
+// resolver, que entra como comentário, é a resposta. Um ticket com um status
+// que não se conhece não se perde: aparece (com --todos) com o próprio
+// status. --json dá o mesmo na forma do GET /api/qa ({colunas, tickets} com
+// status e cartao, e comentariosPorResponder em cada um), para máquinas.
 // imagem descarrega a captura para os.tmpdir()/rendorium-qa (ou --para) e
 // diz o caminho, com a extensão do tipo verdadeiro (png, jpg ou webp).
 // comecar leva os tickets dados a Auto Tests (recusa os que estão em Human
@@ -67,7 +71,7 @@ import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { passosDaSincronizacao, sqlEmTexto, ticketQaNaColuna, cartaoDoTicketQa, QA_NOVO, QA_EM_CURSO, QA_RESOLVIDO } from '../worker/src/lib/kanban.js';
+import { passosDaSincronizacao, sqlEmTexto, ticketQaNaColuna, cartaoDoTicketQa, AUTOMATICO, QA_NOVO, QA_EM_CURSO, QA_RESOLVIDO } from '../worker/src/lib/kanban.js';
 
 // O worker/src não tem um package.json com "type": "module", e o Node avisa no
 // stderr, a cada corrida, que leu a lib/kanban.js como ES module: cala-se esse
@@ -287,16 +291,75 @@ const COLUNAS_DE_OMISSAO = [
    Auto Tests, e os status antigos que a migração 0029 ainda não passou).
    Devolve: o SQL (texto, uma linha). */
 export function sqlListar(todos) {
-  const fila = FILA.concat(Object.keys(ANTIGOS).filter((k) => FILA.includes(ANTIGOS[k]))).map((c) => cita(c)).join(', ');
   return 'SELECT q.id, q.user_id, q.discord_id, q.discord_nome, q.body, q.severity, q.context, q.image_key, q.status, q.resolution,'
     + ' q.resolved_at, q.created_at, q.updated_at, u.name AS autor_nome, u.email AS autor_email,'
     + " (SELECT k.numero FROM kanban_cartoes k WHERE k.origem_tipo = 'qa' AND k.origem_id = q.id AND k.removed_at IS NULL ORDER BY k.numero LIMIT 1) AS cartao"
     + ' FROM qa_tickets q LEFT JOIN users u ON u.id = q.user_id'
-    + ' WHERE q.removed_at IS NULL' + (todos ? '' : ' AND q.status IN (' + fila + ')')
+    + ' WHERE ' + ondeListar(todos)
     + " ORDER BY CASE WHEN q.resolved_at IS NOT NULL THEN 0 WHEN q.severity = 'bloqueia' THEN 0 WHEN q.severity = 'incomoda' THEN 1"
     + " WHEN q.severity = 'detalhe' THEN 2 ELSE 3 END,"
     + ' CASE WHEN q.resolved_at IS NOT NULL THEN q.resolved_at ELSE q.created_at END DESC,'
     + ' q.created_at DESC LIMIT 200';
+}
+
+/* A condição dos tickets que o listar mostra (a mesma no SELECT dos tickets e
+   no dos comentários deles): os não removidos e, sem --todos, só os da fila.
+   Recebe: todos — como em sqlListar.
+   Devolve: o texto da condição, sobre qa_tickets com o nome q. */
+function ondeListar(todos) {
+  const fila = FILA.concat(Object.keys(ANTIGOS).filter((k) => FILA.includes(ANTIGOS[k]))).map((c) => cita(c)).join(', ');
+  return 'q.removed_at IS NULL' + (todos ? '' : ' AND q.status IN (' + fila + ')');
+}
+
+/* O SELECT dos comentários dos tickets que o listar mostra: os do cartão de
+   cada um no kanban (os comentários de um ticket SÃO os do cartão), sem os
+   removidos nem os de um cartão removido, do mais antigo para o mais recente.
+   Quem os filtra para «por responder» é porResponder.
+   Recebe: todos — como em sqlListar.
+   Devolve: o SQL (texto, uma linha). */
+export function sqlComentarios(todos) {
+  return 'SELECT k.origem_id AS ticket, c.id, c.autor_id, c.autor_nome, c.texto, c.created_at'
+    + ' FROM kanban_comentarios c JOIN kanban_cartoes k ON k.id = c.cartao_id'
+    + " WHERE k.origem_tipo = 'qa' AND k.removed_at IS NULL AND c.removed_at IS NULL"
+    + ' AND k.origem_id IN (SELECT q.id FROM qa_tickets q WHERE ' + ondeListar(todos) + ')'
+    + ' ORDER BY c.created_at, c.rowid';
+}
+
+// Quem escreve no cartão sem ser uma pessoa a perguntar: a sincronização e o Claude (o resolver e o kanban.mjs).
+const NAO_SAO_PERGUNTAS = [AUTOMATICO.id, CLAUDE.id];
+
+/* Os comentários de um ticket que estão por responder (pedido do Martinho,
+   2026-11-11: «se tiverem comentários, passam para auto tests e resolves o
+   comentário»): os de pessoas escritos depois da última resposta do Claude
+   — a nota do resolver entra no cartão como comentário dele, por isso é ela
+   a resposta —, ou todos os de pessoas quando o Claude ainda não respondeu
+   (nunca foi resolvido). Os da sincronização (AUTOMATICO) e os do Claude
+   nunca contam.
+   Recebe: comentarios — os do ticket, [{autor_id ou autor: {id}, created_at, …}].
+   Devolve: a lista dos por responder, pela ordem em que estavam (nova). */
+export function porResponder(comentarios) {
+  const lista = Array.isArray(comentarios) ? comentarios.filter((c) => c && typeof c === 'object') : [];
+  const autor = (c) => String(c.autor_id != null ? c.autor_id : (c.autor && c.autor.id) || '');
+  const quando = (c) => Number(c.created_at) || 0;
+  const corte = lista.filter((c) => autor(c) === CLAUDE.id).reduce((m, c) => Math.max(m, quando(c)), -Infinity);
+  return lista.filter((c) => !NAO_SAO_PERGUNTAS.includes(autor(c)) && quando(c) > corte);
+}
+
+/* Junta a cada ticket os seus comentários por responder (porResponder), na
+   forma que o listar escreve e o --json dá.
+   Recebe: tickets — os de ticketDaLinha; linhas — as do SELECT de
+   sqlComentarios (com ticket, o id do ticket).
+   Devolve: os tickets (os mesmos objetos), cada um com comentariosPorResponder:
+   [{id, autor: {id, nome}, texto, created_at}] (vazia quando não há). */
+export function juntarComentarios(tickets, linhas) {
+  const por = {};
+  (linhas || []).forEach((l) => { (por[l.ticket] = por[l.ticket] || []).push(l); });
+  tickets.forEach((t) => {
+    t.comentariosPorResponder = porResponder(por[t.id]).map((c) => ({
+      id: c.id, autor: { id: String(c.autor_id), nome: c.autor_nome || '' }, texto: c.texto, created_at: c.created_at,
+    }));
+  });
+  return tickets;
 }
 
 /* O SELECT das colunas do kanban, pela ordem do quadro.
@@ -548,7 +611,8 @@ export function estadoLegivel(status, colunas) {
 export function textoDoTicket(t, local, colunas) {
   const linhas = [];
   const grav = t.severity ? t.severity.toUpperCase() : 'sem gravidade';
-  linhas.push('== ' + t.id + ' · ' + grav + ' · ' + estadoLegivel(t.status, colunas) + (t.cartao ? ' · ' + t.cartao : ''));
+  const porExtenso = comentariosPorExtenso(Array.isArray(t.comentariosPorResponder) ? t.comentariosPorResponder.length : 0);
+  linhas.push('== ' + t.id + ' · ' + grav + ' · ' + estadoLegivel(t.status, colunas) + (t.cartao ? ' · ' + t.cartao : '') + (porExtenso ? ' · ' + porExtenso : ''));
   // numa conta de teste, o autor é a conta do Discord que pediu o /test; no
   // back office (user_id 'equipa:…', rotas/qa.js:autorDaEquipa), a pessoa da equipa
   const d = t.autor && t.autor.discord;
@@ -572,7 +636,23 @@ export function textoDoTicket(t, local, colunas) {
     linhas.push('Resolução anterior (foi reaberto — o que já se tentou):');
     linhas.push(indenta(t.resolution, '  '));
   }
+  const coms = Array.isArray(t.comentariosPorResponder) ? t.comentariosPorResponder : [];
+  if (coms.length) {
+    linhas.push('Comentários por responder (' + coms.length + ') — a nota do resolver é a resposta:');
+    coms.forEach((c) => {
+      linhas.push('  - ' + ((c.autor && c.autor.nome) || (c.autor && c.autor.id) || 'alguém') + ', ' + (quando(c.created_at) || '?') + ':');
+      linhas.push(indenta(c.texto == null ? '' : c.texto, '    '));
+    });
+  }
   return linhas.join('\n');
+}
+
+/* Quantos comentários por responder, por extenso, para o cabeçalho de um ticket.
+   Recebe: n — o número.
+   Devolve: '' com 0; senão «1 comentário por responder» ou «N comentários por responder». */
+export function comentariosPorExtenso(n) {
+  if (!n) return '';
+  return n + (n === 1 ? ' comentário por responder' : ' comentários por responder');
 }
 
 /* O texto inteiro do listar: o cabeçalho com a base e as contagens, e uma
@@ -785,10 +865,24 @@ function cmdListar(o) {
     if (e.tipo !== 'por-migrar') throw e;
     return o.json ? JSON.stringify({ tickets: [], porMigrar: true, aviso: e.message }, null, 2) : 'Tabela por migrar. ' + e.message;
   }
-  const tickets = linhas.map(ticketDaLinha);
+  const tickets = juntarComentarios(linhas.map(ticketDaLinha), comentariosDoAlvo(a, o.todos));
   const colunas = colunasDoAlvo(a);
   return o.json ? JSON.stringify({ colunas: colunas.map(({ id, nome, fim }) => ({ id, nome, fim })), tickets }, null, 2)
     : textoDaLista(tickets, Object.assign({}, o, { colunas }));
+}
+
+/* Os comentários dos tickets do listar (sqlComentarios). Uma base sem as
+   tabelas do kanban (a migração 0028) não é um erro: nenhum comentário. Outra
+   falha para o listar: um comentário por responder não se perde calado.
+   Recebe: a — o alvo; todos — como no listar.
+   Devolve: as linhas ({ticket, id, autor_id, autor_nome, texto, created_at}). */
+function comentariosDoAlvo(a, todos) {
+  try {
+    return executar(a, sqlComentarios(todos)).results;
+  } catch (e) {
+    if (/no such table:?\s*kanban_/i.test(String(e && e.message))) return [];
+    throw e;
+  }
 }
 
 /* As colunas do kanban da base, pela ordem do quadro. Uma base sem as tabelas

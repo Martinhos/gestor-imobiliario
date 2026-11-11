@@ -772,29 +772,37 @@ function kbEtiquetasCampoHtml(escolhidas) {
     kbSelHtml('kbF-etiquetas', {
       multi: true, opcoes: todas.map(function (t) { return [t, t]; }), valor: escolhidas || [], vazio: 'Escolher etiquetas', um: 'etiqueta', varios: 'etiquetas',
       nada: 'Ainda não há etiquetas: adiciona a primeira.', nova: 'Nova etiqueta', rotuloId: 'kbF-etiquetasRot', descrito: 'kbF-etiquetasErro',
-      aoMudar: function () { marcarErro('kbF-etiquetas', ''); },
+      aoMudar: function () { marcarErro('kbF-etiquetas', ''); kbRascunhoDoForm(); },
     }) + '<p class="erro-txt" id="kbF-etiquetasErro"></p></div>';
 }
 /* O formulário de criar e de editar um cartão: Tipo* e Título*, e o resto
    opcional (descrição, coluna — só ao criar —, prioridade, etiquetas,
-   responsável, pai e prazo). Os erros vão para o lado do campo.
+   responsável, pai e prazo). Os erros vão para o lado do campo. O que se
+   escreve e ainda não foi ao servidor fica no aparelho (o rascunho, um para
+   o cartão novo e um por cartão editado: kbRascunhoGuardar); abrir com um
+   guardado volta com ele por cima do que o cartão tem, e com a linha que o
+   diz e «Descartar rascunho».
    Recebe: modo — 'criar' ou 'editar'; c — o cartão a editar (com a
    descrição; null ao criar); pre (opcional) — ao criar, {coluna_id, pai, tipo}.
    Devolve: nada — abre a janela. */
 function kbFormCartao(modo, c, pre) {
   if (!kbEstado) return;
   var p = pre || {}, ed = modo === 'editar' && c;
-  var v = ed ? {
+  var base = ed ? {
     tipo: c.tipo, titulo: c.titulo, descricao: c.descricao || '', prioridade: String(c.prioridade || 3), etiquetas: (c.etiquetas || []).slice(),
     responsavel: c.responsavel ? c.responsavel.id : '', pai: c.pai ? c.pai.chave : '', prazo: c.prazo || '', coluna: c.coluna_id,
   } : {
     tipo: KB_NOMES_TIPOS[p.tipo] ? p.tipo : 'tarefa', titulo: '', descricao: '', prioridade: '3', etiquetas: [], responsavel: '',
     pai: p.pai || '', prazo: '', coluna: kbColuna(p.coluna_id) ? p.coluna_id : (kbColuna('a-fazer') ? 'a-fazer' : (kbEstado.colunas[0] || {}).id),
   };
+  var qual = ed ? c.chave : 'novo', r = kbRascunhoLer(qual), mudou = r ? kbRascunhoDiff(base, kbRascunhoAplicar(base, r.campos)) : {};
+  // um rascunho que já não difere do que abre (vazio, ou o cartão mudou para o mesmo) não conta, e sai
+  if (r && !Object.keys(mudou).length) { kbRascunhoApagar(qual); r = null; }
+  var v = r ? kbRascunhoAplicar(base, mudou) : base;
   var tipos = KB_TIPOS.map(function (t) { return [t, ic('kb' + maiuscula(t), 'i-sm kb-t-' + t) + KB_NOMES_TIPOS[t]]; });
   var prios = [1, 2, 3, 4, 5].map(function (n) { return [String(n), ic('kbP' + n, 'i-sm kb-p' + n) + KB_PRIORIDADES[n]]; });
   var pessoas = [['', 'Ninguém']].concat(kbEstado.pessoas.map(function (x) { return [x.id, esc(x.nome)]; }));
-  var corpo = kbGrupoHtml('kbF-tipo', 'Tipo', true, tipos, v.tipo) +
+  var corpo = (r ? kbRascunhoLinha(r) : '') + kbGrupoHtml('kbF-tipo', 'Tipo', true, tipos, v.tipo) +
     kbCampoHtml('kbF-titulo', 'Título', true, 'text', v.titulo, 'Ex: Corrigir o aviso da renda em atraso', 200) +
     (ed && c.descricaoOculta ? '' : kbCampoHtml('kbF-descricao', 'Descrição', false, 'area', v.descricao, 'Opcional', 20000)) +
     (ed ? '' : kbGrupoHtml('kbF-coluna', 'Coluna', false, kbEstado.colunas.map(function (x) { return [x.id, esc(x.nome)]; }), v.coluna)) +
@@ -806,14 +814,19 @@ function kbFormCartao(modo, c, pre) {
   kbJanela(ed ? 'Editar ' + c.chave : 'Novo cartão', corpo, {
     botao: ed ? 'Guardar' : 'Adicionar',
     foco: '#kbF-titulo',
-    aoConfirmar: function () { return kbGuardarCartao(ed ? c : null, v); },
+    aoConfirmar: function () { return kbGuardarCartao(ed ? c : null, base, qual); },
   });
+  // o que a janela precisa para guardar o rascunho enquanto se escreve, e para o descartar
+  if (kbJanelaAberta) kbJanelaAberta.rascunho = { qual: qual, base: base, modo: modo, c: c, pre: pre };
 }
 /* Lê e confere o formulário do cartão e manda-o ao servidor: ao criar, tudo;
-   ao editar, só o que mudou.
-   Recebe: c — o cartão a editar (null ao criar); v — os valores com que a janela abriu.
+   ao editar, só o que mudou. O que o servidor aceitou apaga o rascunho do
+   aparelho; o que ele recusa deixa-o.
+   Recebe: c — o cartão a editar (null ao criar); v — os valores com que a
+   janela abriu, sem o rascunho (o cartão como o servidor o tem); qual
+   (opcional) — o rascunho do formulário ('novo' ou a chave).
    Devolve: false com erros marcados, ou a promessa do pedido (rejeita com o campo em e.campo). */
-function kbGuardarCartao(c, v) {
+function kbGuardarCartao(c, v, qual) {
   var tipo = kbEscolhido('kbF-tipo'), titulo = valorDe('kbF-titulo'), descricao = el('kbF-descricao') ? String(el('kbF-descricao').value || '').trim() : '';
   var prioridade = kbEscolhido('kbF-prioridade') || '3', responsavel = kbEscolhido('kbF-responsavel');
   var et = kbEtiquetasDe(kbSelValor('kbF-etiquetas')), paiTxt = valorDe('kbF-pai'), pai = paiTxt ? kbChave(paiTxt) : '', prazo = valorDe('kbF-prazo');
@@ -849,12 +862,13 @@ function kbGuardarCartao(c, v) {
     if (responsavel !== v.responsavel) corpo.responsavel_id = responsavel || null;
     if (pai !== v.pai) corpo.pai = pai || null;
     if (prazo !== v.prazo) corpo.prazo = prazo || null;
-    if (!Object.keys(corpo).length) { kbFecharJanela(); avisar('Nada mudou.'); return false; }
+    if (!Object.keys(corpo).length) { if (qual) kbRascunhoFeito(qual); kbFecharJanela(); avisar('Nada mudou.'); return false; }
   }
   var pedido = c
     ? pedir(kbRota(c.chave), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) })
     : enviar('/api/equipa/kanban/cartoes', corpo);
   return pedido.then(function (j) {
+    if (qual) kbRascunhoFeito(qual);
     var nova = j && j.cartao ? j.cartao.chave : '';
     avisar(c ? 'Cartão ' + c.chave + ' guardado.' : 'Cartão ' + (nova || 'novo') + ' adicionado' +
       (j && j.cartao && kbTelemovel() ? ' em «' + kbNomeColuna(j.cartao.coluna_id) + '».' : '.'));
@@ -879,6 +893,195 @@ function novoCartao() {
   if (!el('kbEspera')) ir('kanban', '');
 }
 
+/* ------------------- o rascunho do cartão (no aparelho) ------------------- */
+
+/* O que se escreve num cartão fica no aparelho até o servidor o aceitar
+   (KAN-105): fechar a janela, arrastá-la para baixo ou recarregar a página
+   não o perde. Vive no localStorage, numa chave por pessoa da equipa
+   (kb_rascunhos:<id>), com um rascunho por formulário — 'novo' para o cartão
+   novo e a chave para cada cartão editado —, e cada um guarda só os campos
+   que diferem do que a janela abriu, com a hora: {campos, t}. Caduca ao fim
+   de KB_RASCUNHO_DIAS sem se mexer. Sem armazenamento (recusado, cheio, ou
+   lixo lá dentro), nada se guarda e o formulário funciona como antes. */
+
+// os dias que um rascunho fica no aparelho sem se mexer
+var KB_RASCUNHO_DIAS = 30;
+// os campos do formulário do cartão que o rascunho guarda
+var KB_RASCUNHO_CAMPOS = ['tipo', 'titulo', 'descricao', 'coluna', 'prioridade', 'etiquetas', 'responsavel', 'pai', 'prazo'];
+
+// A chave do aparelho onde vivem os rascunhos desta pessoa.
+// Devolve: 'kb_rascunhos:<id>'.
+function kbRascunhoChave() {
+  var e = kbEu();
+  return 'kb_rascunhos:' + String((e && e.id) || '');
+}
+/* Os rascunhos desta pessoa no aparelho, sem os caducados nem o que não tem
+   a forma de um rascunho.
+   Recebe: agora (opcional) — a hora de agora, em ms (Date.now()).
+   Devolve: {todos: {qual: {campos, t}}, mudou: true quando se deitou algum fora}. */
+function kbRascunhosTodos(agora) {
+  var todos = {}, mudou = false;
+  try {
+    var g = JSON.parse(localStorage.getItem(kbRascunhoChave()) || '{}');
+    if (!g || typeof g !== 'object' || Array.isArray(g)) return { todos: {}, mudou: true };
+    var limite = (agora || Date.now()) - KB_RASCUNHO_DIAS * 864e5;
+    Object.keys(g).forEach(function (k) {
+      var x = g[k];
+      if (x && typeof x === 'object' && x.campos && typeof x.campos === 'object' && !Array.isArray(x.campos) && Number(x.t) > limite) todos[k] = { campos: x.campos, t: Number(x.t) };
+      else mudou = true;
+    });
+  } catch (e) { return { todos: {}, mudou: false }; }
+  return { todos: todos, mudou: mudou };
+}
+// Grava os rascunhos desta pessoa no aparelho (sem nenhum, a chave sai); calado quando não deixa.
+// Recebe: todos — {qual: {campos, t}}.
+// Devolve: nada.
+function kbRascunhosGravar(todos) {
+  try {
+    var k = kbRascunhoChave();
+    if (Object.keys(todos).length) localStorage.setItem(k, JSON.stringify(todos)); else localStorage.removeItem(k);
+  } catch (e) { /* sem armazenamento: o formulário segue como antes */ }
+}
+/* O rascunho de um formulário (os caducados que encontrar saem do aparelho).
+   Recebe: qual — 'novo' ou a chave do cartão; agora (opcional) — ms.
+   Devolve: {campos, t}, ou null sem nenhum. */
+function kbRascunhoLer(qual, agora) {
+  var g = kbRascunhosTodos(agora);
+  if (g.mudou) kbRascunhosGravar(g.todos);
+  return g.todos[qual] || null;
+}
+/* Guarda o rascunho de um formulário com a hora; sem campos (igual ao que
+   abriu), apaga-o.
+   Recebe: qual — 'novo' ou a chave do cartão; campos — o que difere
+   (kbRascunhoDiff); agora (opcional) — ms.
+   Devolve: nada. */
+function kbRascunhoGuardar(qual, campos, agora) {
+  var g = kbRascunhosTodos(agora);
+  if (campos && Object.keys(campos).length) g.todos[qual] = { campos: campos, t: agora || Date.now() };
+  else if (g.todos[qual]) delete g.todos[qual];
+  else if (!g.mudou) return;
+  kbRascunhosGravar(g.todos);
+}
+// Apaga o rascunho de um formulário.
+// Recebe: qual — 'novo' ou a chave do cartão.
+// Devolve: nada.
+function kbRascunhoApagar(qual) { kbRascunhoGuardar(qual, null); }
+/* O servidor aceitou o formulário: o rascunho sai do aparelho, e a janela
+   (a sair) deixa de o guardar.
+   Recebe: qual — 'novo' ou a chave do cartão.
+   Devolve: nada. */
+function kbRascunhoFeito(qual) {
+  kbRascunhoApagar(qual);
+  if (kbJanelaAberta && kbJanelaAberta.rascunho && kbJanelaAberta.rascunho.qual === qual) kbJanelaAberta.rascunho = null;
+}
+/* O que difere do que a janela abriu: os campos de texto contam sem os
+   espaços à volta (guardam-se como estão); o que o formulário não tem
+   (undefined: a coluna ao editar, a descrição escondida) não conta.
+   Recebe: base — os valores com que abriu; valores — os de agora (kbLerFormCartao).
+   Devolve: {campo: valor} — vazio quando é igual. */
+function kbRascunhoDiff(base, valores) {
+  var d = {};
+  KB_RASCUNHO_CAMPOS.forEach(function (k) {
+    var x = valores[k];
+    if (x === undefined || x === null) return;
+    if (k === 'etiquetas') {
+      var a = [].slice.call(x).map(String), b = [].slice.call(base[k] || []).map(String);
+      if (a.join(',') !== b.join(',')) d[k] = a;
+      return;
+    }
+    if (String(x).trim() !== String(base[k] == null ? '' : base[k]).trim()) d[k] = String(x);
+  });
+  return d;
+}
+/* Os valores com que o formulário abre: os da base com os do rascunho por
+   cima, só os campos que conhece e com valores que servem (um tipo, uma
+   prioridade ou uma coluna que já não existem ficam os da base).
+   Recebe: base — os valores do cartão (ou os de omissão); campos — os do rascunho.
+   Devolve: um objeto novo (a base não muda). */
+function kbRascunhoAplicar(base, campos) {
+  var v = {}, c = campos || {};
+  Object.keys(base).forEach(function (k) { v[k] = Array.isArray(base[k]) ? base[k].slice() : base[k]; });
+  KB_RASCUNHO_CAMPOS.forEach(function (k) {
+    if (!Object.prototype.hasOwnProperty.call(c, k)) return;
+    var x = c[k];
+    if (k === 'etiquetas') { if (Array.isArray(x)) v[k] = x.map(function (t) { return String(t); }); return; }
+    if (x == null || typeof x === 'object') return;
+    x = String(x);
+    if (k === 'tipo' && !KB_NOMES_TIPOS[x]) return;
+    if (k === 'prioridade' && !KB_PRIORIDADES[x]) return;
+    if (k === 'coluna' && !kbColuna(x)) return;
+    v[k] = x.slice(0, 20000);
+  });
+  return v;
+}
+/* O que está escrito no formulário do cartão aberto, tal e qual (sem
+   aparar); o que ele não tem fica undefined.
+   Devolve: {tipo, titulo, descricao, coluna, prioridade, etiquetas, responsavel, pai, prazo}. */
+function kbLerFormCartao() {
+  var txt = function (id) { var i = el(id); return i ? String(i.value == null ? '' : i.value) : undefined; };
+  return {
+    tipo: kbEscolhido('kbF-tipo'), titulo: txt('kbF-titulo'), descricao: txt('kbF-descricao'),
+    coluna: el('kbF-coluna') ? kbEscolhido('kbF-coluna') : undefined, prioridade: kbEscolhido('kbF-prioridade') || '3',
+    etiquetas: kbSels['kbF-etiquetas'] ? kbSelValor('kbF-etiquetas') : undefined, responsavel: kbEscolhido('kbF-responsavel'),
+    pai: txt('kbF-pai'), prazo: txt('kbF-prazo'),
+  };
+}
+/* Guarda no aparelho o que o formulário do cartão aberto tem de diferente
+   do que abriu (ou apaga o rascunho, se voltou a ser igual). Fora do
+   formulário de um cartão, não faz nada.
+   Devolve: nada. */
+function kbRascunhoDoForm() {
+  var r = kbJanelaAberta && kbJanelaAberta.rascunho;
+  // sem o título à vista, a janela já não tem o formulário (outra tomou-lhe o lugar): nada a guardar
+  if (!r || !el('kbF-titulo')) return;
+  kbRascunhoGuardar(r.qual, kbRascunhoDiff(r.base, kbLerFormCartao()));
+}
+/* Quando foi o rascunho, para a linha: hoje, ontem, ou o dia e o mês.
+   Recebe: t — a hora dele (ms); agora (opcional) — ms.
+   Devolve: 'hoje às 09:05', 'ontem às 09:05' ou 'a 3/11 às 09:05'. */
+function kbRascunhoQuando(t, agora) {
+  var d = new Date(t), h = new Date(agora || Date.now()), vespera = new Date(h.getFullYear(), h.getMonth(), h.getDate() - 1);
+  var dois = function (n) { return (n < 10 ? '0' : '') + n; };
+  var dia = function (x) { return x.getFullYear() + '-' + x.getMonth() + '-' + x.getDate(); };
+  var hora = dois(d.getHours()) + ':' + dois(d.getMinutes());
+  if (dia(d) === dia(h)) return 'hoje às ' + hora;
+  if (dia(d) === dia(vespera)) return 'ontem às ' + hora;
+  return 'a ' + d.getDate() + '/' + (d.getMonth() + 1) + ' às ' + hora;
+}
+/* A linha do cimo do formulário aberto com um rascunho: diz de quando é e
+   que ainda não foi ao servidor, com «Descartar rascunho».
+   Recebe: r — o rascunho ({campos, t}); agora (opcional) — ms.
+   Devolve: o HTML. */
+function kbRascunhoLinha(r, agora) {
+  return '<div class="kb-rascunho"><p class="kb-rascunho-txt">Rascunho guardado neste aparelho ' + esc(kbRascunhoQuando(r.t, agora)) +
+    ': ainda não foi para o servidor.</p><button type="button" class="btn sm ghost"' + comAcao('kbRascunhoDescartar') + '>Descartar rascunho</button></div>';
+}
+/* «Descartar rascunho»: apaga-o do aparelho e o formulário volta, no mesmo
+   sítio, com o que o cartão tem (ou vazio, o novo).
+   Devolve: nada. */
+function kbRascunhoDescartar() {
+  var r = kbJanelaAberta && kbJanelaAberta.rascunho;
+  if (!r) return;
+  kbRascunhoApagar(r.qual);
+  kbFormCartao(r.modo, r.c, r.pre);
+  avisar('Rascunho descartado.');
+}
+/* Os ouvintes do rascunho: o que se escreve (input) e o que se escolhe
+   (change, os rádios e o sair de um campo) dentro da janela vai para o
+   aparelho logo — sem esperar, para recarregar a página a seguir não o perder.
+   Recebe: doc — o document.
+   Devolve: nada. */
+function kbRascunhoOuvir(doc) {
+  var f = function (e) {
+    var t = e && e.target;
+    if (!kbJanelaAberta || !kbJanelaAberta.rascunho || !t || typeof t.closest !== 'function' || !t.closest('#dialogo')) return;
+    kbRascunhoDoForm();
+  };
+  doc.addEventListener('input', f);
+  doc.addEventListener('change', f);
+}
+kbRascunhoOuvir(document);
+
 /* ----------------- as ações dos filtros e do formulário ----------------- */
 
 ACOES.kbNovo = function (d) { kbNovo(d.arg); };
@@ -893,6 +1096,7 @@ ACOES.kbSelNova = function (d) { kbSelNova(d.arg); };
 ACOES.kbSelNovaOk = function (d) { kbSelNovaOk(d.arg); };
 ACOES.kbSelNovaCancelar = function (d) { kbSelNovaCancelar(d.arg); };
 ACOES.kbOrdenar = function (d) { if (!kbDepoisDeArrastar()) kbOrdenar(d.arg); };
+ACOES.kbRascunhoDescartar = function () { kbRascunhoDescartar(); };
 
 ICONES.kbOrdenar = '<path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4"/>';
 
@@ -1057,6 +1261,14 @@ export const CSS_KB_FILTROS = `/* ---- a barra dos filtros, como a da app: a pes
   .kb-sel-botao .i{transition:none}
 }
 
+/* ---- a linha do rascunho no cimo do formulário do cartão (kbRascunhoLinha) ----
+   Dita no contorno e na letra da cor da frente, e não só no fundo (o escuro
+   forçado do Samsung escurece os fundos); o Descartar ao lado, ou por baixo
+   quando não cabe. */
+.kb-rascunho{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:10px 12px;border:1px solid var(--accent);border-radius:12px;
+  background:var(--accent-soft);color:var(--accent-text);font-size:13px;line-height:1.4}
+.kb-rascunho-txt{flex:1 1 180px;min-width:0}
+.kb-rascunho .btn{flex:none;color:inherit}
 /* ---- o telemóvel: o título e as Colunas na mesma linha; o painel na largura toda ---- */
 @media(max-width:899px){
   .kb-cab .cab{flex-wrap:nowrap;align-items:flex-start}

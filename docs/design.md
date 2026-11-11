@@ -2670,8 +2670,8 @@ estava e que um «Ver» lá dentro tinha desfeito.
 
 ## As tarefas de um imóvel ou de um contrato
 Um imóvel e um contrato têm uma lista de tarefas, organizada em secções,
-onde se pesquisa pelo nome da tarefa, pela secção e pelas cumpridas ou por
-cumprir.
+onde se pesquisa pelo nome da tarefa, pelas notas dela, pela secção e pelas
+cumpridas ou por cumprir.
 
 A lista vive dentro do registo (`tarefas: {seccoes, itens}`,
 dados.js:normTarefas), e não num kind próprio: sobe e desce com o imóvel ou o
@@ -2742,6 +2742,18 @@ tarefas.js:TF_BOTAO_EDITAR) — e não «Guardar», porque ainda não grava nada
 Cancelar o nome devolve o seletor à escolha de antes. Uma tarefa
 nova fica no fim da secção; editar e mudar de secção leva-a para o fim da
 nova. O «Adicionar secção» do ⋯ da janela continua lá.
+
+Cada tarefa pode ter notas: texto livre e opcional, no campo «Notas» do
+formulário, por baixo da secção (um textarea com o placeholder «Opcional»,
+tarefas.js:tfFormTarefa). O Enter no nome continua a aplicar; nas notas muda
+de linha. Ficam no item, aparadas nas pontas, e '' sem nada
+(dados.js:normTarefas), e chegam ao rascunho pelo mesmo caminho do nome
+(tarefas.js:tfGuardarTarefa): mudar só as notas é uma alteração por guardar.
+Na lista vêm por baixo do nome, pequenas e na cor secundária, com as mudanças
+de linha de quem as escreveu, cortadas a duas linhas (tarefas.js:tfItemHtml,
+estilos.css:.tf-notas); o resto lê-se no formulário. A pesquisa também
+procura nelas (tarefas.js:tfPassa). O cartão da ficha do imóvel não as
+mostra: é um resumo.
 
 As secções recolhem-se. O cabeçalho de cada uma é um botão da largura toda
 (tarefas.js:tfSeccaoHtml) — a seta, o nome e «x de n» cumpridas —, com
@@ -6406,17 +6418,38 @@ sessão (cloud/qa.js:qaDobrasAqui). A lista que o servidor repinta
 (cloud/qa.js:qaPintarLista) nasce já no estado guardado, sem transição.
 «Remover» não pergunta: o aviso traz o Anular (cloud/qa.js:qaRemover).
 «Mover» passa o ticket (e o cartão) a outra coluna, logo no ecrã e
-reposto se o servidor recusar (cloud/qa.js:qaMover, cloud/qa.js:qaPassarDeColuna).
-Em Human Tests, quem testa decide numa linha só das decisões, por baixo do
-«Remover» e do «Mover» (cloud/qa.js:qaHtmlDecisoes; a 384px as cinco não
-cabem numa linha, estilos.css:.qa-decisoes): «Recusar» devolve o ticket a A
-fazer pelo reabrir, e a resolução fica como «Resolução anterior»
+reposto se o servidor recusar (cloud/qa.js:qaMover, cloud/qa.js:qaPassarDeColuna,
+cloud/qa.js:qaColunaNoEcra).
+Em Human Tests o ticket está à espera de um sim ou de um não, e as três
+decisões de quem testa vêm em vez do «Mover», a seguir ao «Remover»
+(cloud/qa.js:qaRodapeTicket, cloud/qa.js:qaHtmlDecisoes): «Recusar» devolve o
+ticket a A fazer pelo reabrir, e a resolução fica como «Resolução anterior»
 (cloud/qa.js:qaRecusar); «Adiar» passa-o a Para depois, e só aparece quando o
 kanban tem essa coluna (cloud/qa.js:qaAdiar); «Aceitar», o primário, passa-o
 a Concluído (cloud/qa.js:qaAceitar). Todas mudam o ticket logo no ecrã e
-repõem-no se o servidor recusar, como o «Mover». «Reabrir» devolve um ticket
-de uma coluna de fim a A fazer (cloud/qa.js:qaReabrir); os outros têm
+repõem-no se o servidor recusar, como o «Mover». Os quatro ficam numa linha
+quando cabem; quando não cabem, as decisões descem juntas para a linha delas,
+da largura toda (estilos.css:.qa-decisoes). No telemóvel os botões têm menos
+enchimento de lado e, entre 341px e 420px, o «Remover» é só o caixote, com o
+nome para o leitor de ecrã e um alvo de 48px: a 384px, a largura do Samsung
+do Martinho, cabem os quatro. «Reabrir» devolve um ticket de uma coluna de
+fim a A fazer (cloud/qa.js:qaReabrir); nas outras colunas há «Mover» e
 «Fechar».
+
+Qualquer ticket leva comentários, e são os do cartão dele no kanban
+(kanban_comentarios): a mesma conversa na pílula, no back office e no
+quadro, sem tabela nova. A janela do ticket pede-os à parte, só para ele
+(cloud/qa.js:qaCarregarComentarios; a lista não os traz), e mostra-os do
+mais antigo para o mais recente, com quem, quando e o texto com as mudanças
+de linha (cloud/qa.js:qaHtmlComentarios); por baixo, o campo «Comentário»,
+obrigatório, com o erro junto dele, e «Comentar» (cloud/qa.js:qaHtmlComentar).
+Comentar passa o ticket a Auto Tests, de qualquer coluna: é o sinal de que
+há o que responder. Como o «Mover», é logo no ecrã — o comentário aparece «a
+enviar…», o campo esvazia-se e o ticket muda de coluna — e, se o servidor
+recusar, o ticket volta à coluna de antes, o texto volta ao campo e o erro
+diz porquê junto dele (cloud/qa.js:qaComentar). Quando o ticket muda, a
+janela troca o de cima, os comentários e o rodapé e deixa o campo onde está,
+com o que lá estiver escrito (cloud/qa.js:qaRepintarTicket).
 
 Quem escreveu um ticket numa conta de teste é a conta do Discord que pediu a
 ligação do /test, e não a conta de teste: a ligação leva o nome do Discord
@@ -6450,6 +6483,21 @@ apaga-se de vez com a captura, de passagem nas rotas
 (worker/src/rotas/qa.js:limparRemovidos). Reabrir guarda a resolução. A
 ordem do GET é a dos três estados (worker/src/rotas/qa.js:listarTickets).
 
+Um comentário entra por POST /api/qa/:id/comentarios {texto}, na conta e no
+back office (worker/src/rotas/qa.js:comentarTicket): aparado, de 1 a 4000
+caracteres, travado aos 60 por hora por pessoa. Numa transação só, o ticket
+passa a Auto Tests, o cartão nasce se o ticket ainda não o tinha e vai com
+ele, com a linha «coluna» do histórico assinada por quem comentou, e o
+comentário fica no cartão (worker/src/lib/kanban.js:passosDoComentarioQa).
+Quem assina é a pessoa do Discord quando a há — a da sessão de equipa, ou a
+que pediu o /test numa conta de teste —, com o id do Discord, como o kanban
+assina os comentários de quem lá escreve: a mesma pessoa muda e remove os
+seus no quadro; numa conta normal, a conta
+(worker/src/rotas/qa.js:autorDoComentario). Com o cartão removido do kanban,
+o comentário não teria onde ficar: 409, e o ticket fica onde está. O GET
+/api/qa/:id/comentarios dá os do cartão, sem os removidos, até 500
+(worker/src/rotas/qa.js:lerComentarios).
+
 No back office do dev (/equipa) há a mesma pílula, com as mesmas funções, e é o
 próprio cloud/qa.js que corre lá: o worker serve um /equipa/qa.js que junta,
 numa função só, a camada do worker/src/equipa-qa.js (CAMADA_QA: as janelas,
@@ -6479,7 +6527,13 @@ script só fala com a base e o bucket do dev, ou com a base isolada do 8788
 wrangler sem shell e escapa o SQL, porque as notas trazem texto livre. Só
 escreve com comecar (os novos passam a em resolução; recusa um resolvido),
 resolver (a nota e uma linha «Commit: <sha>») e reabrir. Remover
-não existe no script: é de quem testa, na app.
+não existe no script: é de quem testa, na app. O listar mostra, em cada
+ticket, os comentários por responder — no texto, no cabeçalho dele e por
+extenso; no --json, em comentariosPorResponder: os de pessoas escritos
+depois da última resposta do Claude, ou todos quando ele ainda não
+respondeu, sem os da sincronização (scripts/qa.mjs:porResponder). A nota do
+resolver entra no cartão como comentário do Claude, e é essa a resposta: o
+ticket volta a Human Tests e os comentários deixam de estar por responder.
 
 Os pedidos da Ajuda e os erros apanhados (a tabela tickets, de produção e do
 dev) leem-se e fecham-se com `node scripts/ticket.mjs listar | comecar | nota
@@ -6592,7 +6646,24 @@ baixo da app: sobem do fundo com a barra no topo e fecham-se a arrastar para
 baixo pelo cabeçalho, ou pelo corpo no topo do scroll, com o véu a aclarar
 (worker/src/equipa-kanban-janela.js:kbFolhaPousar). Nunca arrancam de um
 campo nem do que tem gesto próprio (a pega das colunas, a lista de um
-seletor), que se marca com data-gesto.
+seletor), que se marca com data-gesto. Com uma janela aberta, a do kanban ou
+a do guião, a página por baixo não rola, nem ao dedo, nem à roda, nem ao
+teclado, e ao fechar fica onde estava: a janela tranca-a como a app tranca a
+dela, com o html.eq-trava e o body preso no sítio
+(worker/src/equipa-guiao.js:travarPagina). O scroll do corpo da janela e o
+arrasto da folha continuam a ser dela.
+
+O que se escreve num cartão, ao criar ou ao editar, fica no aparelho até o
+servidor o aceitar (worker/src/equipa-kanban-filtros.js:kbRascunhoGuardar):
+um rascunho para o cartão novo e um por cartão editado, por pessoa, só com o
+que difere do que a janela abriu, guardado a cada tecla e a cada escolha.
+Fechar a janela, arrastá-la para baixo ou recarregar a página não o perde;
+abrir de novo o formulário volta com ele, por cima do que o cartão tem, com
+uma linha que diz de quando é e «Descartar rascunho». O Adicionar ou o
+Guardar que o servidor aceitou apaga-o; o que ele recusa deixa-o. Um
+rascunho igual ao que a janela abre não conta, e os que ficam 30 dias sem
+se mexer saem do aparelho. Sem armazenamento, o formulário funciona como se
+não houvesse rascunho.
 
 Os tickets criam o seu cartão sozinhos, e movem-no quando mudam de estado
 (worker/src/lib/kanban.js:passosDaSincronizacao, a regra única que as rotas,
@@ -6605,7 +6676,10 @@ resolução vai para Auto Tests, e com a resposta proposta ou concluído para
 Human Tests. Os erros e os tickets de segurança não criam cartão. Um cartão só
 se move sozinho quando o estado da origem muda, e mover um cartão à mão nunca
 mexe no ticket; um cartão em Concluído só sai de lá sozinho se o ticket
-reabrir. Os pedidos da produção vivem noutra base: o scripts/kanban.mjs
+reabrir. Os cartões dos tickets de QA são a exceção: estão sempre na coluna
+do ticket, nos dois sentidos (a migração 0029), e um comentário num deles,
+no quadro ou na pílula, passa ticket e cartão a Auto Tests, de qualquer
+coluna (worker/src/rotas/kanban.js:comentar). Os pedidos da produção vivem noutra base: o scripts/kanban.mjs
 sincronizar lê-os, só com SELECT, e leva-os ao kanban do dev; no cartão, a
 origem diz «Pedido da produção» e liga ao back office da produção. Os ganchos
 correm também na produção, onde não há kanban, e aí não fazem nada; uma falha

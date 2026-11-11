@@ -55,8 +55,8 @@ describe('os dados', () => {
     });
     igual(t, {
       seccoes: [{ id: 'S1', nome: 'Obras' }],
-      itens: [{ id: 'K1', nome: 'A', seccao: '', feita: false, feitaEm: '' },
-        { id: 'K2', nome: 'B', seccao: 'S1', feita: true, feitaEm: '2026-02-03' }],
+      itens: [{ id: 'K1', nome: 'A', seccao: '', feita: false, feitaEm: '', notas: '' },
+        { id: 'K2', nome: 'B', seccao: 'S1', feita: true, feitaEm: '2026-02-03', notas: '' }],
     });
     igual(app.normTarefas('x'), { seccoes: [], itens: [] });
     igual(app.normTarefas([1, 2]), { seccoes: [], itens: [] });
@@ -281,6 +281,106 @@ describe('o rascunho e o Guardar', () => {
     assert.equal(t().itens[0].seccao, 'S1', 'as tarefas voltam para a secção');
     assert.equal(t().seccoes[0].nome, 'Obras na cozinha', 'e a secção volta ao lugar, com o nome novo');
     assert.deepEqual(app.db.properties[0].tarefas.seccoes.map((s) => s.nome), ['Obras', 'Documentos'], 'nada gravado');
+  });
+});
+
+describe('as notas de uma tarefa', () => {
+  test('o normTarefas guarda as notas, aparadas nas pontas, e só texto; sem elas fica ""', () => {
+    const t = app.normTarefas({ itens: [
+      { id: 'K1', nome: 'A', notas: '  Pedir três orçamentos.\nO do Sr. Rui é o mais barato.  ' },
+      { id: 'K2', nome: 'B' },
+      { id: 'K3', nome: 'C', notas: { lixo: 1 } },
+    ] });
+    igual(t.itens.map((x) => x.notas), ['Pedir três orçamentos.\nO do Sr. Rui é o mais barato.', '', '']);
+    const p = app.normProp({ id: 'P1', name: 'X', tarefas: t });
+    igual(app.normProp(JSON.parse(JSON.stringify(p))).tarefas.itens[0].notas, 'Pedir três orçamentos.\nO do Sr. Rui é o mais barato.', 'ida e volta sem perdas');
+  });
+
+  test('o formulário tem o campo «Notas» (opcional, por baixo da secção) e leva-as ao rascunho, numa nova e numa editada', () => {
+    const { abertas } = base();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    app.tfNovaTarefa('S1');
+    const form = abertas[1];
+    conferir('tarefa', form.b, { obrigatorios: ['tf_nome'], exemplos: { tf_nome: EX + 'Trocar o esquentador' } });
+    assert.match(form.b, /<label>Secção[\s\S]*<\/label>\s*<label>Notas<textarea id="tf_notas" placeholder="Opcional"><\/textarea><\/label>/, 'por baixo da secção, vazio numa nova');
+    assert.doesNotMatch(form.b, /id="tf_notas"[^>]*data-keydown/, 'no textarea o Enter muda de linha');
+    const el = elementos(app);
+    el.tf_nome.value = 'Trocar a torneira';
+    el.tf_sec.value = 'S1';
+    el.tf_notas.value = '  Comprar a do Leroy.\nFechar a água antes.  ';
+    app.tfGuardarTarefa();
+    const nova = app.tfRascunho.itens[4];
+    assert.equal(nova.notas, 'Comprar a do Leroy.\nFechar a água antes.');
+    // editada: o formulário abre com as notas (escapadas) e o Aplicar leva as novas
+    app.tfEditarTarefa(nova.id);
+    assert.match(abertas[abertas.length - 1].b, /<textarea id="tf_notas" placeholder="Opcional">Comprar a do Leroy\.\nFechar a água antes\.<\/textarea>/);
+    el.tf_nome.value = 'Trocar a torneira';
+    el.tf_sec.value = 'S1';
+    el.tf_notas.value = '';
+    app.tfGuardarTarefa();
+    assert.equal(app.tfRascunho.itens.find((x) => x.id === nova.id).notas, '', 'apagar as notas também se aplica');
+    app.tfEditarTarefa('K1');
+    el.tf_nome.value = 'Pintar a sala';
+    el.tf_sec.value = 'S1';
+    el.tf_notas.value = 'Branco <mate> & sem cheiro';
+    app.tfGuardarTarefa();
+    assert.equal(app.tfRascunho.itens.find((x) => x.id === 'K1').notas, 'Branco <mate> & sem cheiro');
+  });
+
+  test('a linha mostra as notas por baixo do nome, escapadas; sem notas não há nada a mais', () => {
+    base();
+    const t = LISTA();
+    t.itens[0].notas = 'Branco <mate> & "sem cheiro"';
+    app.db.properties[0].tarefas = app.normTarefas(t);
+    app.tfAbrir('imovel', 'P1');
+    const html = app.tfLista();
+    assert.match(html, /<div class="tf-item tf-com-notas" data-id="K1">[\s\S]*?<button type="button" class="tf-nome"[^>]*><span>Pintar a sala<\/span><small class="tf-notas">Branco &lt;mate&gt; &amp; &quot;sem cheiro&quot;<\/small><\/button><\/div>/);
+    assert.doesNotMatch(html, /<mate>/, 'nada de HTML vindo das notas');
+    assert.match(html, /<div class="tf-item tf-feita" data-id="K2">/, 'a cumprida sem notas não leva a classe');
+    assert.equal((html.match(/class="tf-notas"/g) || []).length, 1, 'só a tarefa com notas');
+    igual(nomesNaLista(), ['Ligar à Ana', 'Pintar a sala', 'Trocar o esquentador', 'Pedir o certificado energético'], 'o nome continua o mesmo');
+    // quem só lê também as vê (o CW volta a ser o de antes: o arnês não o repõe)
+    const cw = app.window.CW;
+    try {
+      app.db.contracts[0].tarefas = app.normTarefas(t);
+      app.db.contracts[0]._createdBy = 'outro';
+      app.window.CW = { user: { id: 'eu' }, cargos: { P1: { dono: false, nome: 'Gestor', perms: ['contract.view', 'contract.add'] } }, pessoas: {} };
+      app.tfAbrir('contrato', 'C1');
+      assert.match(app.tfLista(), /<span class="tf-nome"><span>Pintar a sala<\/span><small class="tf-notas">Branco &lt;mate&gt;/);
+    } finally {
+      app.window.CW = cw;
+    }
+  });
+
+  test('a pesquisa encontra pelas notas, sem olhar a acentos nem maiúsculas', () => {
+    base();
+    const t = LISTA();
+    t.itens[2].notas = 'Ligar ao técnico da ADENE';
+    app.db.properties[0].tarefas = app.normTarefas(t);
+    app.tfAbrir('imovel', 'P1');
+    app.tfPesquisar('tecnico');
+    igual(nomesNaLista(), ['Pedir o certificado energético']);
+    assert.match(app.tfCorpo(), /aria-label="Pesquisar por tarefa, notas ou secção"/);
+  });
+
+  test('mudar só as notas é uma alteração por guardar, e o Guardar leva-as ao registo', () => {
+    const { toasts } = base();
+    app.db.properties[0].tarefas = app.normTarefas(LISTA());
+    app.tfAbrir('imovel', 'P1');
+    assert.equal(app.tfMudou(), false);
+    app.tfEditarTarefa('K3');
+    const el = elementos(app);
+    el.tf_nome.value = 'Pedir o certificado energético';
+    el.tf_sec.value = 'S2';
+    el.tf_notas.value = 'A ADENE pede a caderneta.';
+    app.tfGuardarTarefa();
+    assert.equal(app.tfMudou(), true, 'só as notas mudaram, e há alterações');
+    assert.match(app.tfLista(), /Alterações por guardar/);
+    assert.equal(app.db.properties[0].tarefas.itens.find((x) => x.id === 'K3').notas, '', 'o registo ainda não mudou');
+    app.tfGuardar();
+    assert.equal(app.db.properties[0].tarefas.itens.find((x) => x.id === 'K3').notas, 'A ADENE pede a caderneta.');
+    assert.equal(toasts.pop().m, 'Tarefas guardadas.');
   });
 });
 

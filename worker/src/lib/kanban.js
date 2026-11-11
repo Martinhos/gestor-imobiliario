@@ -303,6 +303,32 @@ function passosDoQa(ev, origem, estado, coluna, agora, autor) {
   return passos;
 }
 
+/* Os passos de um comentário num ticket de QA (pedido do Martinho,
+   2026-11-11: «se tiverem comentários, passam para auto tests e resolves o
+   comentário»), numa transação só: o ticket passa a Auto Tests
+   (ticketQaNaColuna, de qualquer coluna), o cartão nasce se o ticket ainda
+   não o tinha e vai com ele (passosDaSincronizacao, com a linha «coluna» do
+   histórico assinada por quem comentou), o comentário fica no cartão, e o
+   cartão sobe na «Última alteração». Os comentários do ticket SÃO os do
+   cartão (kanban_comentarios): não há outra tabela. Correm-no a rota da app
+   e do back office (rotas/qa.js:comentarTicket) e o comentar do kanban num
+   cartão de QA (rotas/kanban.js:comentar).
+   Recebe: c — {ticket: {id, body, severity}, autor: {id, nome}, texto (já
+   aparado), uuid (o id do comentário), cartaoUuid (o id do cartão, se for
+   preciso criá-lo), agora (ms)}.
+   Devolve: a lista de {sql, params}. */
+export function passosDoComentarioQa(c) {
+  const t = c.ticket, agora = Number(c.agora) || 0;
+  return [ticketQaNaColuna(t.id, QA_EM_CURSO, agora)].concat(
+    passosDaSincronizacao({
+      tipo: 'qa', id: t.id, estado: QA_EM_CURSO, agora, autor: c.autor,
+      novo: Object.assign({ uuid: c.cartaoUuid }, cartaoDoTicketQa(t)),
+      comentario: { uuid: c.uuid, texto: c.texto },
+    }),
+    [{ sql: "UPDATE kanban_cartoes SET updated_at = ? WHERE origem_tipo = 'qa' AND origem_id = ? AND removed_at IS NULL", params: [agora, String(t.id)] }],
+  );
+}
+
 /* Os passos que criam o cartão de uma origem que ainda não tem nenhum (nem
    removido): sobe o contador, insere-o no topo da coluna, as etiquetas e a
    linha «criado» do histórico. Nada acontece se a coluna não existir.

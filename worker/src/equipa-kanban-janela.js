@@ -60,6 +60,8 @@ function kbJanela(titulo, corpo, opcoes) {
   };
   d.classList.add('kb-dlg');
   if (!d.open) d.showModal();
+  // a página por baixo não rola enquanto a janela está aberta (solta-a o kbJanelaFechou)
+  travarPagina(true);
   if (typeof d.addEventListener === 'function') d.addEventListener('touchmove', kbFolhaToque, { passive: false });
   var f = (o.foco && d.querySelector(o.foco)) || d.querySelector('input:not([type=radio]),textarea,input:checked') || d.querySelector('.kb-opcao');
   if (f && f.focus) f.focus();
@@ -84,8 +86,9 @@ function kbJanelaHtml(titulo, corpo, o) {
     '<div class="kb-j-pe"><p class="erro-txt" id="kbJanelaErro" role="alert"></p><div class="kb-j-botoes">' + botoes + '</div></div></div>';
 }
 /* A janela fechou (por qualquer caminho: o botão, o Esc, o arrastar, ou o
-   close de fora): esvazia-a, larga as classes e os gestos do kanban, e
-   devolve o foco a quem a abriu, se ele ainda existe e o foco ficou perdido.
+   close de fora): esvazia-a, larga as classes e os gestos do kanban, solta
+   a página (que volta onde estava) e devolve o foco a quem a abriu, se ele
+   ainda existe e o foco ficou perdido.
    Recebe: d — o dialog#dialogo.
    Devolve: nada. */
 function kbJanelaFechou(d) {
@@ -95,6 +98,7 @@ function kbJanelaFechou(d) {
   d.onclose = null;
   d.oncancel = null;
   kbJanelaLimpar(d);
+  travarPagina(false);
   var o = j && j.origem, a = typeof document !== 'undefined' ? document.activeElement : null;
   if (o && o.isConnected && typeof o.focus === 'function' && (!a || a === document.body)) {
     try { o.focus({ preventScroll: true }); } catch (x) { /* fica onde está */ }

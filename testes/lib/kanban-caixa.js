@@ -25,6 +25,8 @@ export function caixa() {
     data: (t) => (t ? 'dia ' + t : '—'),
     iniciais: (t) => String(t || '?').slice(0, 2).toUpperCase(),
     curto: (id) => String(id || '').replace(/-/g, '').slice(0, 8).toUpperCase(),
+    // o travão da página por baixo da janela (equipa-guiao.js:travarPagina): o browser tranca; aqui não faz nada
+    travarPagina() {},
   };
   vm.createContext(ctx);
   vm.runInContext(GUIAO_KANBAN, ctx);

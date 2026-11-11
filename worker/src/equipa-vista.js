@@ -428,6 +428,13 @@ textarea.campo{min-height:110px;padding:12px 14px;resize:vertical;line-height:1.
 dialog.janela{border:0;padding:0;background:transparent;color:var(--ink);width:480px;max-width:calc(100vw - 32px);
   max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px)}
 dialog.janela::backdrop{background:var(--veu)}
+/* a página trancada por baixo da janela (equipa-guiao.js:travarPagina), como
+   a da app (estilos.css:html.noscroll): quem tranca é o overflow do html e o
+   position:fixed do body, com o top a -scrollY; o body NÃO leva
+   overflow:hidden, que o recortava a um ecrã ancorado no início e, com a
+   página rolada, não se pintava nada por trás do véu */
+html.eq-trava{overflow:hidden}
+html.eq-trava body{position:fixed;left:0;right:0;width:100%}
 .janela-corpo{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:var(--shadow);
   display:flex;flex-direction:column;gap:14px}
 .janela-corpo h2{font-size:18px}

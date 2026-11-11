@@ -1,7 +1,8 @@
 /* ================= TAREFAS =================
    A lista de tarefas de um imóvel ou de um contrato: o que há para fazer
    nele (trocar o esquentador, entregar as chaves, pedir o certificado
-   energético), arrumado em secções, com cada tarefa cumprida ou por cumprir.
+   energético), arrumado em secções, com cada tarefa cumprida ou por cumprir,
+   e com notas, se as tiver (texto livre, escrito no formulário dela).
 
    Vive DENTRO do registo (p.tarefas, c.tarefas; dados.js:normTarefas), e não
    num kind próprio: sobe e desce com o imóvel ou o contrato, com as mesmas
@@ -270,14 +271,15 @@ function tfCorpo(){
   const t=tfTarefas(),ok=tfPodeAlterar(tfAlvo.tipo,tfAlvo.id);
   const barra=ok?`<div class="tf-barra"><button type="button" class="btn ghost tf-nova" id="tf_nova" data-toca="camada" data-click="tfNovaTarefa('')">${ic('plus',18)} Adicionar tarefa</button></div>`:'';
   const filtros=t.itens.length?`<div class="qwrap"><input id="tf_q" class="txq" type="search" value="${esc(tfFiltro.q)}" placeholder="Pesquisar…" autocomplete="off"
-      aria-label="Pesquisar por tarefa ou secção" data-input="tfPesquisar(this.value)">
+      aria-label="Pesquisar por tarefa, notas ou secção" data-input="tfPesquisar(this.value)">
       <button type="button" class="qclear${tfFiltro.q?'':' u-d-none'}" data-toca="vista" data-click="tfLimparPesquisa()" aria-label="Limpar a pesquisa">${ic('x',14)}</button></div>
     <div class="row"><label>Secção${sel('tf_fsec',tfFiltro.seccao,tfOpcoesDeSeccao(t),'tfFiltrar','vista')}</label>
       <label>Estado${sel('tf_fest',tfFiltro.estado,[{v:'',label:'Todas'},{v:'por',label:'Por cumprir'},{v:'feitas',label:'Cumpridas'}],'tfFiltrar','vista')}</label></div>`:'';
   return `${barra}<div class="form">${filtros}<div id="tf_lista">${tfLista()}</div></div>`;
 }
 /* Esta tarefa passa a pesquisa e os filtros? A pesquisa procura no nome da
-   tarefa e no nome da secção dela, sem distinguir acentos nem maiúsculas.
+   tarefa, nas notas dela e no nome da secção dela, sem distinguir acentos nem
+   maiúsculas.
    Recebe: x — a tarefa; sec — a secção dela (ou null).
    Devolve: true se fica na lista. */
 function tfPassa(x,sec){
@@ -287,7 +289,7 @@ function tfPassa(x,sec){
   if(f.seccao==='__sem__'&&x.seccao)return false;
   if(f.seccao&&f.seccao!=='__sem__'&&x.seccao!==f.seccao)return false;
   const q=deacc(f.q).trim();
-  return !q||deacc(x.nome).indexOf(q)>-1||(!!sec&&deacc(sec.nome).indexOf(q)>-1);
+  return !q||deacc(x.nome).indexOf(q)>-1||deacc(x.notas||'').indexOf(q)>-1||(!!sec&&deacc(sec.nome).indexOf(q)>-1);
 }
 /* A lista, secção a secção, com o que passa a pesquisa e os filtros. As
    tarefas sem secção vêm primeiro; uma secção vazia só aparece sem filtros
@@ -352,18 +354,21 @@ function tfSoltasAlvoHtml(){
 }
 /* Uma tarefa: a pega de arrastar (só a quem pode alterar), a caixa de
    marcar, que muda o rascunho, e o nome, que abre o formulário dela a quem pode
-   alterar. A pega arrasta ao dedo e ao rato (tfArrastar) e, tocada sem
-   arrastar ou ao teclado, abre o «Mover tarefa» (tfPegaClique).
+   alterar. As notas, quando as há, vêm por baixo do nome, pequenas e na cor
+   secundária, cortadas a duas linhas (estilos.css:.tf-notas); a linha toda
+   abre-as no formulário. A pega arrasta ao dedo e ao rato (tfArrastar) e,
+   tocada sem arrastar ou ao teclado, abre o «Mover tarefa» (tfPegaClique).
    Recebe: x — a tarefa; ok — se quem vê pode alterar.
    Devolve: o HTML da linha. */
 function tfItemHtml(x,ok){
-  const nome=esc(x.nome||'Sem nome');
+  const nome=esc(x.nome||'Sem nome'),notas=String(x.notas||'').trim();
   const quando=x.feita&&x.feitaEm?`<small class="tf-quando">cumprida a ${dPT(x.feitaEm)}</small>`:'';
+  const nt=notas?`<small class="tf-notas">${esc(notas)}</small>`:'';
   const pega=ok?`<button type="button" class="tf-pega" aria-label="Mover: ${nome}" data-toca="camada" data-pointerdown="tfArrastar(event,this)" data-click="tfPegaClique('${jsq(x.id)}')">${ic('grip',16)}</button>`:'';
-  return `<div class="tf-item${x.feita?' tf-feita':''}" data-id="${esc(x.id)}">${pega}
+  return `<div class="tf-item${x.feita?' tf-feita':''}${notas?' tf-com-notas':''}" data-id="${esc(x.id)}">${pega}
     <label class="tf-marca"><input type="checkbox" id="tfc_${esc(x.id)}" ${x.feita?'checked':''} ${ok?'':'disabled'} aria-label="${x.feita?'Cumprida':'Por cumprir'}: ${nome}" data-toca="rascunho" data-change="tfMarcar('${jsq(x.id)}',this.checked)"></label>
-    ${ok?`<button type="button" class="tf-nome" data-toca="camada" data-click="tfEditarTarefa('${jsq(x.id)}')"><span>${nome}</span>${quando}</button>`
-      :`<span class="tf-nome"><span>${nome}</span>${quando}</span>`}</div>`;
+    ${ok?`<button type="button" class="tf-nome" data-toca="camada" data-click="tfEditarTarefa('${jsq(x.id)}')"><span>${nome}</span>${nt}${quando}</button>`
+      :`<span class="tf-nome"><span>${nome}</span>${nt}${quando}</span>`}</div>`;
 }
 /* Repinta a lista da janela aberta, sem tocar no campo da pesquisa nem nos
    filtros, e volta a marcar se há alterações por guardar (tfMarcarEstado).
@@ -465,7 +470,8 @@ function tfEditarTarefa(tid){
   const x=tfTarefas().itens.find(i=>i.id===tid);
   if(x)tfFormTarefa(x,x.seccao);
 }
-/* O formulário de uma tarefa: o nome (obrigatório), a secção e, numa que já
+/* O formulário de uma tarefa: o nome (obrigatório), a secção, as notas
+   (texto livre, opcional — o Enter nelas muda de linha) e, numa que já
    existe, se está cumprida. O ⋯ tem o «Remover tarefa». O seletor da secção
    está sempre lá, mesmo sem secções: «Sem secção», as secções, e no fim o
    «+ Criar secção…» (tfSecMudou). O botão de baixo diz o que faz: numa
@@ -485,6 +491,7 @@ function tfFormTarefa(x,sid){
   openModal(x?'Editar tarefa':'Nova tarefa',`<div class="form">
     <label>Tarefa <span class="req">*</span><input id="tf_nome" value="${esc(x?x.nome:'')}" placeholder="Ex: Trocar o esquentador" autocomplete="off" data-keydown="tfTeclaNome(event)"></label>
     <label>Secção${tfSelSeccao(t,tfSecAntes)}</label>
+    <label>Notas<textarea id="tf_notas" placeholder="Opcional">${esc(x?x.notas||'':'')}</textarea></label>
     ${x?`<label class="check"><input type="checkbox" id="tf_feita" ${x.feita?'checked':''}> Cumprida</label>`:''}
   </div>`,`<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button type="button" class="btn primary" data-toca="rascunho" data-click="onSave&&onSave()">${x?TF_BOTAO_EDITAR:TF_BOTAO_NOVA}</button>`,m);
   onSave=tfGuardarTarefa;
@@ -538,7 +545,8 @@ function tfSecMudou(){
    Devolve: nada. */
 function tfTeclaNome(ev){if(ev.key==='Enter'){ev.preventDefault();tfGuardarTarefa()}}
 /* Leva o formulário da tarefa (nova ou editada) ao rascunho e volta à lista,
-   com as secções que o formulário criou, e com a linha da tarefa à vista.
+   com as secções que o formulário criou, as notas (aparadas nas pontas) e a
+   linha da tarefa à vista.
    Uma tarefa nova fica no fim da secção; uma que muda de secção passa para
    o fim da nova. Não grava: isso é do «Guardar» da janela (tfGuardar).
    Devolve: nada. */
@@ -549,12 +557,14 @@ function tfGuardarTarefa(){
   if(sec==='__new__')sec='';
   const novas=tfSecNovas.slice();tfSecNovas=[];
   const feita=document.getElementById('tf_feita')?chk('tf_feita'):null,id=tfEmEdicao,nid=id||uid();
+  const notas=document.getElementById('tf_notas')?val('tf_notas').trim():null;
   closeModal();
   const ok=tfMudar(t=>{
     novas.forEach(s=>{if(!t.seccoes.some(y=>y.id===s.id))t.seccoes.push({id:s.id,nome:s.nome})});
     const x=id?t.itens.find(i=>i.id===id):null;
-    if(!x){t.itens.push({id:nid,nome:nome,seccao:sec,feita:false,feitaEm:''});return}
+    if(!x){t.itens.push({id:nid,nome:nome,seccao:sec,feita:false,feitaEm:'',notas:notas||''});return}
     x.nome=nome;
+    if(notas!==null)x.notas=notas;
     if(feita!==null&&feita!==x.feita){x.feita=feita;x.feitaEm=feita?today():''}
     if(x.seccao!==sec)tfAplicar(t,tfMoverEm(t,x.id,sec,tfUltimaDe(t,sec,x.id)));
   },true);

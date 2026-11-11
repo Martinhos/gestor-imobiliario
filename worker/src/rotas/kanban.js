@@ -32,7 +32,7 @@
 import { json, err, body, badId, now, CSP_ANEXO } from '../lib/http.js';
 import { auditar } from '../lib/auditoria.js';
 import { PAPEIS, comoLista, catsDe } from '../lib/papeis.js';
-import { PREFIXO, TIPOS, PRIORIDADES, AUTOMATICO, chaveDe, numeroDaChave, passosDaSincronizacao } from '../lib/kanban.js';
+import { PREFIXO, TIPOS, PRIORIDADES, AUTOMATICO, QA_EM_CURSO, chaveDe, numeroDaChave, passosDaSincronizacao, passosDoComentarioQa } from '../lib/kanban.js';
 import { tipoDaImagem, lerAte } from '../lib/imagens.js';
 
 // O começo de todos os caminhos daqui.
@@ -966,20 +966,36 @@ function textoDoComentario(v) {
 }
 
 /* POST /api/equipa/kanban/cartoes/:chave/comentarios: um comentário novo da sessão.
+   O cartão de um ticket de QA que ainda existe faz como o comentário na
+   pílula (rotas/qa.js:comentarTicket): o ticket e o cartão passam a Auto
+   Tests, de qualquer coluna, no mesmo lote que o comentário
+   (lib/kanban.js:passosDoComentarioQa) — um comentário é o que há para
+   responder. Os outros cartões ficam onde estão.
    Recebe: env; request — o corpo {texto*}; eu — a sessão; chave — a do cartão.
-   Devolve: promessa da Response {comentario}, 404 ou a recusa. */
+   Devolve: promessa da Response {comentario, coluna_id (a do cartão depois)}, 404 ou a recusa. */
 async function comentar(env, request, eu, chave) {
   const k = await cartaoParaMexer(env, chave);
   if (!k) return naoHaCartao();
   const texto = textoDoComentario((await corpoObjeto(request)).texto);
   if (!(await auditar(env, eu, 'kanban.comentar', chaveDe(k.numero), cortar(texto, 120)))) return semRasto();
   const id = crypto.randomUUID(), agora = now(), autor = quem(eu);
+  const q = k.origem_tipo === 'qa' && k.origem_id
+    ? await env.DB.prepare('SELECT id, body, severity FROM qa_tickets WHERE id = ? AND removed_at IS NULL').bind(k.origem_id).first()
+    : null;
+  if (q) {
+    const passos = passosDoComentarioQa({ ticket: { id: q.id, body: q.body, severity: q.severity }, autor, texto, uuid: id, cartaoUuid: crypto.randomUUID(), agora });
+    await env.DB.batch(passos.map((p) => env.DB.prepare(p.sql).bind(...p.params)));
+    return json({
+      comentario: comentarioParaFora({ id, autor_id: autor.id, autor_nome: autor.nome, texto, created_at: agora, updated_at: agora }, autor.id),
+      coluna_id: QA_EM_CURSO,
+    });
+  }
   await env.DB.batch([
     env.DB.prepare('INSERT INTO kanban_comentarios (id, cartao_id, autor_id, autor_nome, texto, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .bind(id, k.id, autor.id, autor.nome, texto, agora, agora),
     env.DB.prepare('UPDATE kanban_cartoes SET updated_at = ? WHERE id = ?').bind(agora, k.id),
   ]);
-  return json({ comentario: comentarioParaFora({ id, autor_id: autor.id, autor_nome: autor.nome, texto, created_at: agora, updated_at: agora }, autor.id) });
+  return json({ comentario: comentarioParaFora({ id, autor_id: autor.id, autor_nome: autor.nome, texto, created_at: agora, updated_at: agora }, autor.id), coluna_id: k.coluna_id });
 }
 
 /* Um comentário por mexer, com a chave do cartão (que não pode estar removido).

@@ -16,7 +16,7 @@ import { lerAte, tipoDaImagem } from '../lib/imagens.js';
 
 // as duas vivem em lib/imagens.js (o kanban também as usa); ficam exportadas daqui para quem já as lia cá
 export { lerAte, tipoDaImagem };
-import { cartaoDoTicketQa, ticketQaNaColuna, eIdDeColuna, QA_NOVO } from '../lib/kanban.js';
+import { cartaoDoTicketQa, ticketQaNaColuna, eIdDeColuna, passosDoComentarioQa, QA_NOVO, QA_EM_CURSO } from '../lib/kanban.js';
 
 // As gravidades que um ticket pode ter; qualquer outra coisa fica sem nenhuma.
 const GRAVIDADES = ['bloqueia', 'incomoda', 'detalhe'];
@@ -34,6 +34,10 @@ const GUARDA_REMOVIDO = 24 * 3600 * 1000;
 const LOTE_LIMPEZA = 50;
 // Tickets novos por pessoa e por hora.
 const TETO_HORA = 30;
+// Comentários por pessoa e por hora (uma conversa sobre um ticket pede mais do que os tickets novos).
+const TETO_COMENTARIOS_HORA = 60;
+// Os comentários que a leitura de um ticket traz, no máximo (os mais antigos primeiro).
+const TETO_COMENTARIOS = 500;
 
 // Os tipos de imagem aceites, cada um com a assinatura dos primeiros bytes.
 const TIPOS_IMAGEM = ['image/png', 'image/jpeg', 'image/webp'];
@@ -51,7 +55,9 @@ function naoExiste() {
    POST /api/qa cria; GET /api/qa lista; DELETE /api/qa/:id remove (brando,
    para o Anular); POST …/repor desfaz a remoção; POST …/reabrir volta a pôr
    o ticket em A fazer; POST …/mover {coluna} passa-o a outra coluna do
-   kanban; PUT e GET …/imagem gravam e servem a captura.
+   kanban; PUT e GET …/imagem gravam e servem a captura; POST …/comentarios
+   {texto} comenta (e devolve o ticket a Auto Tests) e GET …/comentarios
+   lê os comentários do ticket.
    O back office do dev chega aqui pelo rotasQaDaEquipa, com a sessão de
    equipa no lugar da conta.
    Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
@@ -82,6 +88,10 @@ export async function rotasQa(c) {
   }
   if (seg[3] === 'imagem' && method === 'PUT') return gravarImagem(env, request, id);
   if (seg[3] === 'imagem' && method === 'GET') return servirImagem(env, id);
+  if (seg[3] === 'comentarios' && (method === 'POST' || method === 'GET')) {
+    const quem = autorDoComentario(c.autor || (await autorDaConta(env, me)), me);
+    return method === 'POST' ? comentarTicket(env, request, id, quem) : lerComentarios(env, id, quem);
+  }
   return err(404, 'Rota desconhecida.');
 }
 
@@ -431,6 +441,94 @@ async function moverTicket(env, id, coluna) {
     novo: { uuid: crypto.randomUUID(), ...cartaoDoTicketQa({ id, body: q.body, severity: q.severity }) },
   });
   return json({ ok: true });
+}
+
+/* Quem assina um comentário no cartão de um ticket: a pessoa do Discord
+   quando a há — a da sessão de equipa no back office, ou a que pediu o /test
+   numa conta de teste —, com o id do Discord, como o kanban assina os
+   comentários de quem lá escreve (rotas/kanban.js:quem): a mesma pessoa é a
+   mesma autora na pílula e no kanban, e lá muda e remove os seus. Sem
+   Discord (uma conta normal do dev), a conta, com o nome (ou o email).
+   Recebe: autor — o de autorDaConta ou o do rotasQaDaEquipa ({id,
+   discordId, discordNome}); me — o utilizador da sessão (null no back office).
+   Devolve: {id, nome}. */
+export function autorDoComentario(autor, me) {
+  if (autor && autor.discordId) {
+    const id = String(autor.discordId);
+    return { id, nome: autor.discordNome ? String(autor.discordNome) : 'Discord ' + id };
+  }
+  return { id: String((autor && autor.id) || (me && me.id) || '?'), nome: String((me && (me.name || me.email)) || '') };
+}
+
+/* Um comentário do cartão na forma que a pílula lê.
+   Recebe: c — a linha de kanban_comentarios; eu — o id de quem pede (autorDoComentario).
+   Devolve: {id, autor: {id, nome}, texto, created_at, updated_at, meu}. */
+function comentarioParaFora(c, eu) {
+  return {
+    id: c.id, autor: { id: c.autor_id, nome: c.autor_nome || '' }, texto: c.texto,
+    created_at: c.created_at, updated_at: c.updated_at, meu: c.autor_id === eu,
+  };
+}
+
+/* POST /api/qa/:id/comentarios {texto}: um comentário de quem testa no
+   ticket. Fica no cartão do ticket no kanban (os comentários do ticket são
+   os do cartão; o cartão nasce se o ticket ainda não o tinha) e o ticket, com
+   o cartão, passa a Auto Tests de qualquer coluna, numa transação só
+   (lib/kanban.js:passosDoComentarioQa): é o sinal de que há o que responder,
+   e quem programa responde ao resolver (scripts/qa.mjs resolver, cuja nota
+   entra como comentário). O texto é aparado, com as mudanças de linha, e tem
+   de 1 a 4000 caracteres. Trava aos 60 por hora por pessoa. Com o cartão
+   removido do kanban o comentário não teria onde ficar: 409, e o ticket fica
+   onde está.
+   Recebe: env — o ambiente do worker (D1 em env.DB); request — o pedido, com
+   o corpo {texto}; id — o id do ticket; quem — {id, nome} (autorDoComentario).
+   Devolve: promessa da Response — 201 {ok, coluna (Auto Tests), comentario}, 404 sem o
+   ticket, 429 com o travão, 400 sem texto ou com texto longo de mais, 409
+   com o cartão removido. */
+async function comentarTicket(env, request, id, quem) {
+  const q = await env.DB.prepare(
+    `SELECT q.id, q.body, q.severity,
+            (SELECT COUNT(*) FROM kanban_cartoes k WHERE k.origem_tipo = 'qa' AND k.origem_id = q.id) AS cartoes,
+            (SELECT COUNT(*) FROM kanban_cartoes k WHERE k.origem_tipo = 'qa' AND k.origem_id = q.id AND k.removed_at IS NULL) AS vivos
+       FROM qa_tickets q WHERE q.id = ? AND q.removed_at IS NULL`
+  ).bind(id).first();
+  if (!q) return naoExiste();
+  if (!(await rateLimit(env, 'qa-comentario:' + quem.id, TETO_COMENTARIOS_HORA, 3600))) {
+    return err(429, 'Já comentaste muitas vezes seguidas. Espera um pouco.');
+  }
+  const b = await body(request);
+  const texto = b && typeof b.texto === 'string' ? b.texto.replace(/\r\n?/g, '\n').replace(/\u0000/g, '').trim() : '';
+  if (!texto) return err(400, 'Escreve o comentário.');
+  if (texto.length > MAX_TEXTO) return err(400, 'O comentário passa dos ' + MAX_TEXTO + ' caracteres. Encurta-o.');
+  if (q.cartoes > 0 && !q.vivos) return err(409, 'O cartão deste ticket foi removido do kanban. Repõe-o lá para poderes comentar.');
+  const uuid = crypto.randomUUID(), agora = now();
+  const passos = passosDoComentarioQa({
+    ticket: { id: q.id, body: q.body, severity: q.severity }, autor: quem, texto, uuid, cartaoUuid: crypto.randomUUID(), agora,
+  });
+  await env.DB.batch(passos.map((p) => env.DB.prepare(p.sql).bind(...p.params)));
+  return json({
+    ok: true, coluna: QA_EM_CURSO,
+    comentario: comentarioParaFora({ id: uuid, autor_id: quem.id, autor_nome: quem.nome, texto, created_at: agora, updated_at: agora }, quem.id),
+  }, 201);
+}
+
+/* GET /api/qa/:id/comentarios: os comentários do ticket — os do cartão dele
+   no kanban, sem os removidos, do mais antigo para o mais recente, até 500.
+   Vêm à parte da lista (o GET /api/qa não os traz): só a janela de um ticket
+   os pede. Sem cartão, a lista vazia.
+   Recebe: env — o ambiente do worker (D1 em env.DB); id — o id do ticket;
+   quem — {id, nome} de quem pede (para o meu).
+   Devolve: promessa da Response {comentarios: [...]}, ou 404 sem o ticket. */
+async function lerComentarios(env, id, quem) {
+  const q = await env.DB.prepare('SELECT id FROM qa_tickets WHERE id = ? AND removed_at IS NULL').bind(id).first();
+  if (!q) return naoExiste();
+  const r = (await env.DB.prepare(
+    `SELECT c.id, c.autor_id, c.autor_nome, c.texto, c.created_at, c.updated_at
+       FROM kanban_comentarios c JOIN kanban_cartoes k ON k.id = c.cartao_id
+      WHERE k.origem_tipo = 'qa' AND k.origem_id = ? AND k.removed_at IS NULL AND c.removed_at IS NULL
+      ORDER BY c.created_at, c.rowid LIMIT ?`
+  ).bind(id, TETO_COMENTARIOS).all()).results || [];
+  return json({ comentarios: r.map((c) => comentarioParaFora(c, quem.id)) });
 }
 
 /* PUT /api/qa/:id/imagem: a captura de ecrã de um ticket, com o corpo em

@@ -95,6 +95,8 @@ confere que cada uma aponta para código que existe.
 - 2026-11-09 · O back office com a navegação da app, e o kanban da equipa no lugar do Jira
 - 2026-11-09 · O kanban à maneira da app: folhas, seletores, a prioridade em palavras e a ordem por coluna
 - 2026-11-10 · Os tickets de QA nas colunas do kanban, nos dois sentidos
+- 2026-11-11 · Em Human Tests decide-se em vez de mover, e comentar devolve o ticket a Auto Tests
+- 2026-11-11 · A janela do back office tranca a página, e o rascunho do cartão fica no aparelho
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3540,3 +3542,32 @@ um gatilho não atravessa bases.
 Os tickets de antes do kanban não têm cartão; ficam na coluna que o estado antigo diz (resolvido conta
 como Concluído, porque foram testados antes de o kanban existir) e ganham cartão quando mudarem de
 coluna. O resolved_at acompanha a coluna: posto em Human Tests e nas de fim, tirado nas outras.
+
+## 2026-11-11 · Em Human Tests decide-se em vez de mover, e comentar devolve o ticket a Auto Tests
+O Martinho reabriu o KAN-98 com dois pedidos novos. «O aceitar, recusar ou adiar nos tickets deve ser
+em vez do mover, não adicionalmente» (KAN-106): em Human Tests o rodapé passa a ter só o «Remover» e as
+três decisões (cloud/qa.js:qaRodapeTicket), e a 384px os quatro cabem numa linha, com o «Remover» só
+com o caixote. «Devo poder adicionar comentários aos tickets. Se tiverem comentários, passam para auto
+tests e resolves o comentário» (KAN-107): os comentários de um ticket são os do cartão dele no kanban,
+sem tabela nova; comentar, na pílula ou no quadro, passa ticket e cartão a Auto Tests de qualquer coluna,
+numa transação só (worker/src/lib/kanban.js:passosDoComentarioQa); o scripts/qa.mjs listar mostra os
+comentários por responder, que se deduzem das datas (scripts/qa.mjs:porResponder), e a nota do resolver,
+que entra como comentário do Claude, é a resposta.
+
+## 2026-11-11 · A janela do back office tranca a página, e o rascunho do cartão fica no aparelho
+O Martinho reabriu o KAN-96 (a janela «Ordenar»): «Posso fazer scroll da página por debaixo do modal».
+O showModal torna a página inerte, mas não a impede de rolar: um dedo no véu (o ::backdrop, que não está
+dentro da caixa que rola da janela) passava o gesto direto à página, e o overscroll-behavior do dialog e
+do corpo só trava os gestos que começam neles, e só quando têm por onde rolar — a «Ordenar» não tem.
+Medido no browser sem cabeça a 384×785 com toque: o dedo no véu mexia a página 17 px para cada lado. A
+janela passa a trancar a página como a app tranca a dela (vistas.js:lockPage), com o html.eq-trava e o
+body preso com o top a -scrollY (worker/src/equipa-guiao.js:travarPagina), em todas as janelas do
+dialog#dialogo, as do kanban e as do guião; ao fechar, a página volta ao scrollY onde estava.
+
+No KAN-105 o Martinho esclareceu que «as alterações por enviar ao servidor devem estar no device». O
+cartão novo já só ia ao servidor no Adicionar; o que se perdia era o formulário ao fechar a janela. O
+rascunho vai para o localStorage a cada tecla e a cada escolha, um para o cartão novo e um por cartão
+editado, por pessoa da equipa (worker/src/equipa-kanban-filtros.js:kbRascunhoGuardar), e guarda só o que
+difere do que a janela abriu: ao editar, um cartão que outra pessoa mudou entretanto mostra o que ela
+mudou nos campos em que não se mexeu, em vez de o desfazer com o rascunho. Caduca aos 30 dias, para os
+abandonados não se acumularem.

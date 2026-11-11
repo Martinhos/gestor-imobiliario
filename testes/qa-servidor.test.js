@@ -13,7 +13,8 @@
 // leva o ticket e o cartão, o cartão movido no kanban leva o ticket); a captura (tipo recusado e bytes que não são
 // imagem com 415, grande de mais com 413, ticket inexistente ou removido com
 // 404, a mesma imagem e o tipo de volta, sem cache); e o travão de 30 tickets
-// por hora por pessoa.
+// por hora por pessoa; e os comentários (KAN-107: gravados no cartão com o
+// autor, o ticket a Auto Tests de qualquer coluna, as recusas e o travão).
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -667,5 +668,135 @@ describe('as colunas do kanban', () => {
       if (n !== 'a-fazer') assert.equal((await mover(env, a, ids[n], n)).status, 200);
     }
     assert.deepEqual((await listar(env, a)).map((t) => t.status), ['a-fazer', 'auto-tests', 'human-tests', 'para-depois', 'concluido']);
+  });
+});
+
+/* ------------------------------ os comentários ----------------------------- */
+
+describe('os comentários de um ticket', () => {
+  // Recebe: env; quem; id; texto. Devolve: a promessa de {status, ...}.
+  const comentar = (env, quem, id, texto) => resp(pedir(env, quem, '/api/qa/' + id + '/comentarios', 'POST', { texto }));
+  // Recebe: env; quem; id. Devolve: a promessa de {status, comentarios}.
+  const comentarios = (env, quem, id) => resp(pedir(env, quem, '/api/qa/' + id + '/comentarios'));
+  // Recebe: env; id — o ticket. Devolve: a promessa do cartão vivo dele, ou null.
+  const cartaoDe = async (env, id) => {
+    const r = await env.DB.prepare("SELECT id, numero, coluna_id, origem_estado, updated_at FROM kanban_cartoes WHERE origem_tipo = 'qa' AND origem_id = ? AND removed_at IS NULL").bind(id).first();
+    return r ? { ...r } : null;
+  };
+
+  test('comentar grava no cartão com o autor, com as mudanças de linha, e passa ticket e cartão a Auto Tests de qualquer coluna (KAN-107)', async () => {
+    const env = ambiente();
+    const a = await conta(env, 'Ana');
+    const b = await conta(env, 'Bruno');
+    const id = (await criar(env, a, { body: 'O filtro some' })).id;
+    for (const col of ['human-tests', 'concluido', 'para-depois', 'a-fazer']) {
+      assert.equal((await resp(pedir(env, a, '/api/qa/' + id + '/mover', 'POST', { coluna: col }))).status, 200);
+      await mexer(env, id, { resolution: 'tentei x' });
+      const r = await comentar(env, b, id, '  Continua a falhar\r\nno escuro.  ');
+      assert.equal(r.status, 201, col);
+      assert.equal(r.coluna, 'auto-tests');
+      const q = await daBase(env, id);
+      assert.equal(q.status, 'auto-tests', 'de ' + col + ' para Auto Tests');
+      assert.equal(q.resolved_at, null);
+      assert.equal(q.resolution, 'tentei x', 'a resolução fica (a anterior)');
+      const k = await cartaoDe(env, id);
+      assert.equal(k.coluna_id, 'auto-tests');
+      assert.equal(k.origem_estado, 'auto-tests');
+      const h = await env.DB.prepare("SELECT antes, depois, autor_id, autor_nome FROM kanban_historico WHERE cartao_id = ? AND campo = 'coluna' ORDER BY id DESC LIMIT 1").bind(k.id).first();
+      assert.deepEqual({ ...h }, { antes: col, depois: 'auto-tests', autor_id: b.id, autor_nome: 'Bruno' }, 'a linha do histórico é de quem comentou');
+    }
+    const r = await comentar(env, b, id, 'De novo');
+    assert.equal(r.status, 201, 'já em Auto Tests, comenta na mesma');
+    assert.deepEqual([r.status, r.comentario.texto, r.comentario.autor, r.comentario.meu], [201, 'De novo', { id: b.id, nome: 'Bruno' }, true]);
+    const k = await cartaoDe(env, id);
+    const linhas = (await env.DB.prepare('SELECT autor_id, autor_nome, texto FROM kanban_comentarios WHERE cartao_id = ? ORDER BY created_at, rowid').bind(k.id).all()).results;
+    assert.equal(linhas.length, 5);
+    assert.deepEqual({ ...linhas[0] }, { autor_id: b.id, autor_nome: 'Bruno', texto: 'Continua a falhar\nno escuro.' });
+    assert.equal(k.updated_at, r.comentario.created_at, 'o cartão sobe na última alteração');
+    // a leitura: os do cartão, do mais antigo para o mais recente, com o meu de quem pede
+    const lidos = await comentarios(env, a, id);
+    assert.equal(lidos.status, 200);
+    assert.equal(lidos.comentarios.length, 5);
+    assert.deepEqual(Object.keys(lidos.comentarios[0]).sort(), ['autor', 'created_at', 'id', 'meu', 'texto', 'updated_at']);
+    assert.equal(lidos.comentarios[4].texto, 'De novo');
+    assert.equal(lidos.comentarios[4].meu, false, 'o Bruno escreveu-o, a Ana lê-o');
+    assert.equal((await comentarios(env, b, id)).comentarios[4].meu, true);
+    // a lista não os traz (só a janela de um ticket os pede)
+    assert.equal('comentarios' in (await listar(env, a))[0], false);
+  });
+
+  test('um ticket sem cartão (de antes do kanban) ganha-o em Auto Tests, com o comentário; sem nenhum, a leitura é vazia (KAN-107)', async () => {
+    const env = ambiente();
+    const a = await conta(env, 'Ana');
+    const id = (await criar(env, a, { body: 'antigo', severity: 'bloqueia' })).id;
+    await env.DB.prepare("DELETE FROM kanban_cartoes WHERE origem_tipo = 'qa'").run();
+    await mexer(env, id, { status: 'concluido', resolved_at: 1 });
+    assert.deepEqual((await comentarios(env, a, id)).comentarios, []);
+    assert.equal((await comentar(env, a, id, 'Voltou a acontecer')).status, 201);
+    const k = await cartaoDe(env, id);
+    assert.equal(k.coluna_id, 'auto-tests');
+    assert.equal((await daBase(env, id)).status, 'auto-tests');
+    assert.deepEqual((await comentarios(env, a, id)).comentarios.map((c) => c.texto), ['Voltou a acontecer']);
+    assert.equal((await listar(env, a))[0].cartao, 'KAN-' + k.numero);
+  });
+
+  test('sem ENV_NAME 404 sem ler o corpo; texto vazio ou longo 400; ticket removido ou que não existe 404; cartão removido 409; o travão (KAN-107)', async () => {
+    const prod = ambiente({ ENV_NAME: undefined });
+    const p = await conta(prod, 'Ana');
+    for (const method of ['POST', 'GET']) {
+      const req = new Request('https://app.x.pt/api/qa/x1/comentarios', {
+        method, headers: { Authorization: 'Bearer ' + p.token, 'Content-Type': 'application/json' },
+        body: method === 'POST' ? JSON.stringify({ texto: 'olá' }) : undefined,
+      });
+      const r = await handleApi(req, prod, { waitUntil() {} });
+      assert.equal(r.status, 404, method);
+      assert.equal(req.bodyUsed, false, method + ' leu o corpo');
+    }
+    const env = ambiente();
+    const a = await conta(env, 'Ana');
+    const id = (await criar(env, a, { body: 'um' })).id;
+    for (const texto of ['', '   \n  ', undefined, 42, null]) {
+      const r = await comentar(env, a, id, texto);
+      assert.equal(r.status, 400, JSON.stringify(texto));
+      assert.equal(r.error, 'Escreve o comentário.');
+    }
+    const longo = await comentar(env, a, id, 'x'.repeat(4001));
+    assert.equal(longo.status, 400);
+    assert.match(longo.error, /passa dos 4000 caracteres/);
+    assert.equal((await comentar(env, a, id, '  ' + 'y'.repeat(4000) + '  ')).status, 201, 'os 4000 depois de aparar cabem');
+    assert.equal((await daBase(env, id)).status, 'auto-tests');
+    assert.equal((await comentar(env, a, 'nao-existe', 'x')).status, 404);
+    assert.equal((await comentarios(env, a, 'nao-existe')).status, 404);
+    assert.equal((await comentar(env, a, 'a%27b', 'x')).status, 404, 'um id sem forma de id');
+    // o cartão removido no kanban: o comentário não teria onde ficar, e o ticket fica onde está
+    const id2 = (await criar(env, a, { body: 'dois' })).id;
+    await env.DB.prepare("UPDATE kanban_cartoes SET removed_at = 1 WHERE origem_tipo = 'qa' AND origem_id = ?").bind(id2).run();
+    const sem = await comentar(env, a, id2, 'x');
+    assert.equal(sem.status, 409);
+    assert.match(sem.error, /cartão deste ticket foi removido/);
+    assert.equal((await daBase(env, id2)).status, 'a-fazer');
+    // removido o ticket, 404
+    assert.equal((await resp(pedir(env, a, '/api/qa/' + id, 'DELETE'))).status, 200);
+    assert.equal((await comentar(env, a, id, 'x')).status, 404);
+    assert.equal((await comentarios(env, a, id)).status, 404);
+    // o travão: 60 por hora por pessoa
+    const id3 = (await criar(env, a, { body: 'três' })).id;
+    await env.DB.prepare('INSERT OR REPLACE INTO rate_limits (k, n, expires_at) VALUES (?, 60, ?)').bind('qa-comentario:' + a.id, Date.now() + HORA).run();
+    const travado = await comentar(env, a, id3, 'x');
+    assert.equal(travado.status, 429);
+    assert.equal((await daBase(env, id3)).status, 'a-fazer', 'travado, nada muda');
+    const b = await conta(env, 'Bruno');
+    assert.equal((await comentar(env, b, id3, 'x')).status, 201, 'a outra pessoa continua');
+  });
+
+  test('numa conta de teste o comentário é da pessoa do Discord, como no kanban (KAN-107)', async () => {
+    const env = ambiente();
+    const t1 = await conta(env, 'Conta de teste');
+    await env.DB.prepare('UPDATE users SET test_owner = ? WHERE id = ?').bind('4242', t1.id).run();
+    await env.SESSIONS.put('teste:nome:4242', 'Martinho');
+    const id = (await criar(env, t1, { body: 'um' })).id;
+    const r = await comentar(env, t1, id, 'Ainda falha');
+    assert.deepEqual(r.comentario.autor, { id: '4242', nome: 'Martinho' });
+    assert.equal((await comentarios(env, t1, id)).comentarios[0].meu, true);
   });
 });
