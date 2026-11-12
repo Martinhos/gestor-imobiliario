@@ -164,15 +164,18 @@ describe('as rotas do QA no back office', () => {
     // a app lê os mesmos comentários
     const lidos = (await resp(pedir(env, ana, '/api/qa/' + id + '/comentarios'))).comentarios;
     assert.deepEqual(lidos.map((c) => c.texto), ['Falta o caso concluido', 'Falta o caso human-tests', 'Falta o caso para-depois']);
-    // um cartão que não é de QA comenta e fica onde estava
-    const novo = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes', { tipo: 'tarefa', titulo: 'Outra', coluna_id: 'human-tests' }));
+    // um cartão que não é de QA só sai do sítio em Human Tests, onde comentar é recusar (KAN-116)
+    const novo = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes', { tipo: 'tarefa', titulo: 'Outra', coluna_id: 'a-fazer' }));
     const c2 = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + novo.cartao.chave + '/comentarios', { texto: 'ok' }));
-    assert.equal(c2.coluna_id, 'human-tests');
-    // o ticket removido na app: o cartão comenta-se e fica onde está
-    assert.equal((await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/mover', { coluna_id: 'human-tests', indice: 0 })).status, 200);
+    assert.equal(c2.coluna_id, 'a-fazer');
+    // o ticket removido na app: o cartão segue a regra dos outros — fica onde está, e em Human Tests volta a Auto Tests
+    assert.equal((await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/mover', { coluna_id: 'concluido', indice: 0 })).status, 200);
     assert.equal((await resp(pedir(env, ana, '/api/qa/' + id, 'DELETE'))).status, 200);
     const c3 = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/comentarios', { texto: 'ainda?' }));
-    assert.equal(c3.coluna_id, 'human-tests');
+    assert.equal(c3.coluna_id, 'concluido');
+    assert.equal((await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/mover', { coluna_id: 'human-tests', indice: 0 })).status, 200);
+    const c4 = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/comentarios', { texto: 'e agora?' }));
+    assert.equal(c4.coluna_id, 'auto-tests');
   });
 });
 

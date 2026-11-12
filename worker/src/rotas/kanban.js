@@ -32,7 +32,7 @@
 import { json, err, body, badId, now, CSP_ANEXO } from '../lib/http.js';
 import { auditar } from '../lib/auditoria.js';
 import { PAPEIS, comoLista, catsDe } from '../lib/papeis.js';
-import { PREFIXO, TIPOS, PRIORIDADES, AUTOMATICO, QA_EM_CURSO, chaveDe, numeroDaChave, passosDaSincronizacao, passosDoComentarioQa } from '../lib/kanban.js';
+import { PREFIXO, TIPOS, PRIORIDADES, AUTOMATICO, QA_EM_CURSO, chaveDe, numeroDaChave, passosDaSincronizacao, passosDoComentarioQa, passosDoComentario, colunaDepoisDoComentario } from '../lib/kanban.js';
 import { tipoDaImagem, lerAte } from '../lib/imagens.js';
 
 // O começo de todos os caminhos daqui.
@@ -970,7 +970,10 @@ function textoDoComentario(v) {
    pílula (rotas/qa.js:comentarTicket): o ticket e o cartão passam a Auto
    Tests, de qualquer coluna, no mesmo lote que o comentário
    (lib/kanban.js:passosDoComentarioQa) — um comentário é o que há para
-   responder. Os outros cartões ficam onde estão.
+   responder. Nos outros, o comentário de uma pessoa num cartão em Human
+   Tests devolve-o ao topo de Auto Tests (recusar é comentar o que está mal),
+   menos o de um pedido; noutra coluna fica onde está
+   (lib/kanban.js:passosDoComentario).
    Recebe: env; request — o corpo {texto*}; eu — a sessão; chave — a do cartão.
    Devolve: promessa da Response {comentario, coluna_id (a do cartão depois)}, 404 ou a recusa. */
 async function comentar(env, request, eu, chave) {
@@ -990,12 +993,12 @@ async function comentar(env, request, eu, chave) {
       coluna_id: QA_EM_CURSO,
     });
   }
-  await env.DB.batch([
-    env.DB.prepare('INSERT INTO kanban_comentarios (id, cartao_id, autor_id, autor_nome, texto, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .bind(id, k.id, autor.id, autor.nome, texto, agora, agora),
-    env.DB.prepare('UPDATE kanban_cartoes SET updated_at = ? WHERE id = ?').bind(agora, k.id),
-  ]);
-  return json({ comentario: comentarioParaFora({ id, autor_id: autor.id, autor_nome: autor.nome, texto, created_at: agora, updated_at: agora }, autor.id), coluna_id: k.coluna_id });
+  const passos = passosDoComentario({ cartao: { id: k.id, coluna_id: k.coluna_id, origem_tipo: k.origem_tipo }, autor, texto, uuid: id, agora });
+  await env.DB.batch(passos.map((p) => env.DB.prepare(p.sql).bind(...p.params)));
+  return json({
+    comentario: comentarioParaFora({ id, autor_id: autor.id, autor_nome: autor.nome, texto, created_at: agora, updated_at: agora }, autor.id),
+    coluna_id: colunaDepoisDoComentario(k, autor.id),
+  });
 }
 
 /* Um comentário por mexer, com a chave do cartão (que não pode estar removido).

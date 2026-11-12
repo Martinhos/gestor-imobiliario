@@ -329,6 +329,61 @@ export function passosDoComentarioQa(c) {
   );
 }
 
+// Quem comenta sem ser uma pessoa: o Claude (o scripts/kanban.mjs assina «claude») e a sincronização.
+const NAO_PESSOAS = ['claude', AUTOMATICO.id];
+
+/* Para onde vai um cartão quando alguém comenta nele (pedido do Martinho,
+   2026-11-12, KAN-116): em Human Tests decide-se, e recusar é comentar o que
+   está mal — o comentário de uma pessoa devolve o cartão a Auto Tests, a fila
+   do Claude. Fica onde está um cartão noutra coluna, o de um pedido (a coluna
+   segue o pedido, decide-se nos Pedidos) e o comentário do Claude ou da
+   sincronização (a nota do resolver é escrita com o cartão já em Human Tests).
+   O cartão de um ticket de QA com o ticket vivo não passa por aqui: vai a
+   Auto Tests de qualquer coluna (passosDoComentarioQa).
+   Recebe: k — o cartão ({coluna_id, origem_tipo}); autorId — o id de quem comenta.
+   Devolve: o id da coluna depois do comentário. */
+export function colunaDepoisDoComentario(k, autorId) {
+  const col = k && k.coluna_id;
+  if (col !== QA_RESOLVIDO || k.origem_tipo === 'pedido' || NAO_PESSOAS.indexOf(String(autorId)) > -1) return col;
+  return QA_EM_CURSO;
+}
+
+/* Os passos de um comentário num cartão que não é de um ticket de QA vivo,
+   numa transação só: o comentário fica no cartão e, se ele volta a Auto Tests
+   (colunaDepoisDoComentario), vai para o topo dela como o mover com o índice
+   0 (um passo acima do primeiro, ou 0 na coluna vazia), com o concluido_at
+   limpo (posto, se o master a marcou de fim) e a linha «coluna» no histórico assinada por quem comentou; noutro
+   caso só sobe na «Última alteração». A mudança de coluna só acontece se o
+   cartão ainda estiver em Human Tests quando o lote corre.
+   Recebe: c — {cartao: {id, coluna_id, origem_tipo}, autor: {id, nome},
+   texto (já aparado), uuid (o id do comentário), agora (ms)}.
+   Devolve: a lista de {sql, params}. */
+export function passosDoComentario(c) {
+  const k = c.cartao, autor = c.autor || AUTOMATICO, agora = Number(c.agora) || 0;
+  const passos = [{
+    sql: 'INSERT INTO kanban_comentarios (id, cartao_id, autor_id, autor_nome, texto, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    params: [c.uuid, k.id, autor.id, autor.nome || '', c.texto, agora, agora],
+  }];
+  const para = colunaDepoisDoComentario(k, autor.id);
+  if (para === k.coluna_id) {
+    passos.push({ sql: 'UPDATE kanban_cartoes SET updated_at = ? WHERE id = ?', params: [agora, k.id] });
+    return passos;
+  }
+  const ainda = 'id = ? AND coluna_id = ? AND removed_at IS NULL';
+  passos.push({
+    sql: "INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) SELECT id, ?, ?, ?, 'coluna', coluna_id, ? FROM kanban_cartoes WHERE " + ainda,
+    params: [agora, autor.id, autor.nome || '', para, k.id, k.coluna_id],
+  });
+  passos.push({
+    sql: 'UPDATE kanban_cartoes SET coluna_id = ?,' +
+      ' posicao = (SELECT COALESCE(MIN(x.posicao), 1024) - 1024 FROM kanban_cartoes x WHERE x.coluna_id = ? AND x.removed_at IS NULL),' +
+      ' concluido_at = CASE WHEN ? IN (SELECT id FROM kanban_colunas WHERE fim = 1) THEN ? ELSE NULL END, updated_at = ? WHERE ' + ainda,
+    params: [para, para, para, agora, agora, k.id, k.coluna_id],
+  });
+  passos.push({ sql: 'UPDATE kanban_cartoes SET updated_at = ? WHERE id = ?', params: [agora, k.id] });
+  return passos;
+}
+
 /* Os passos que criam o cartão de uma origem que ainda não tem nenhum (nem
    removido): sobe o contador, insere-o no topo da coluna, as etiquetas e a
    linha «criado» do histórico. Nada acontece se a coluna não existir.

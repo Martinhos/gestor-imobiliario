@@ -6702,6 +6702,25 @@ cartão nenhum, o sítio do vazio é o próprio «Adicionar cartão». O formul�
 pede o Tipo e o Título, com o asterisco; o resto diz «Opcional» ou dá um
 exemplo, e o erro aparece ao lado do campo.
 
+Em Human Tests decide-se: ou se aceita, ou se recusa a explicar o que está
+mal. Um cartão aberto em Human Tests tem no fundo do painel uma barra fixa,
+sempre à vista enquanto o corpo rola, no computador e na folha do telemóvel
+(worker/src/equipa-kanban.js:kbDecidirHtml): a frase «Para recusar, comenta o
+que está mal: o cartão volta a Auto Tests.», o Comentar, que leva à caixa do
+comentário, e o Aceitar, o botão primário, que põe o cartão no topo de
+Concluído pelo caminho do «Mover para…», com o Anular no aviso
+(worker/src/equipa-kanban.js:kbAceitar). A barra é filha do painel que rola,
+por baixo do corpo: no fim do scroll fica depois do histórico, sem o tapar.
+Recusar é comentar: o comentário de uma pessoa num cartão em Human Tests
+leva-o ao topo de Auto Tests, a fila do Claude, no mesmo lote, com a linha
+«coluna» do histórico assinada por quem comentou
+(worker/src/lib/kanban.js:colunaDepoisDoComentario), e o aviso diz que o
+cartão voltou. Noutra coluna o comentário não move nada, e o do Claude
+também não: a nota dele fica com o cartão já em Human Tests. Os cartões dos
+pedidos ficam de fora das duas regras: não têm a barra, e comentar não os
+move, porque a coluna deles segue o pedido, que se decide nos Pedidos. Num
+cartão por decidir, o exemplo da caixa é o de uma recusa.
+
 As janelas do kanban (as escolhas, os formulários, o ⋯, as colunas) têm o
 cabeçalho, o corpo que rola sozinho e o pé com os botões sempre à vista
 (worker/src/equipa-kanban-janela.js:kbJanela). Abaixo dos 520px são a folha de
@@ -6781,7 +6800,8 @@ mexe no ticket; um cartão em Concluído só sai de lá sozinho se o ticket
 reabrir. Os cartões dos tickets de QA são a exceção: estão sempre na coluna
 do ticket, nos dois sentidos (a migração 0029), e um comentário num deles,
 no quadro ou na pílula, passa ticket e cartão a Auto Tests, de qualquer
-coluna (worker/src/rotas/kanban.js:comentar). Os pedidos da produção vivem noutra base: o scripts/kanban.mjs
+coluna (worker/src/rotas/kanban.js:comentar); os outros cartões só voltam a
+Auto Tests a partir de Human Tests (acima). Os pedidos da produção vivem noutra base: o scripts/kanban.mjs
 sincronizar lê-os, só com SELECT, e leva-os ao kanban do dev; no cartão, a
 origem diz «Pedido da produção» e liga ao back office da produção. Os ganchos
 correm também na produção, onde não há kanban, e aí não fazem nada; uma falha

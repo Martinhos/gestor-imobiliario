@@ -72,7 +72,9 @@ var kbRascQuadro = null;
 var KB_TIPOS = ['epico', 'historia', 'tarefa', 'subtarefa', 'erro'];
 var KB_NOMES_TIPOS = { epico: 'Épico', historia: 'História', tarefa: 'Tarefa', subtarefa: 'Subtarefa', erro: 'Erro' };
 var KB_PRIORIDADES = { 1: 'Mais alta', 2: 'Alta', 3: 'Média', 4: 'Baixa', 5: 'Mais baixa' };
-var KB_LIGACOES = { bloqueia: 'Bloqueia', bloqueado: 'É bloqueado por', relaciona: 'Relaciona-se com' };
+// Human Tests decide-se: Aceitar leva a Concluído; comentar (recusar) devolve a Auto Tests. As três são colunas fixas.
+var KB_A_DECIDIR = 'human-tests', KB_ACEITE = 'concluido', KB_RECUSADO = 'auto-tests';
+var KB_LIGACOES ={ bloqueia: 'Bloqueia', bloqueado: 'É bloqueado por', relaciona: 'Relaciona-se com' };
 var KB_FILTROS = { tipo: 'tipo', etiqueta: 'etiqueta', responsavel: 'responsável', prioridade: 'prioridade', pai: 'épico' };
 // os estados de um pedido e as marcas de um ticket de QA, como a origem os diz (lib/kanban.js); o estado de
 // um ticket de QA é a coluna do próprio cartão (kbNomeColuna). Os três antigos do QA ficam para o histórico de antes.
@@ -610,11 +612,12 @@ function kbPainelCabHtml(c, chave) {
    Copiar a ligação, lado a lado; Editar e Remover vivem no ⋯ do cimo), a
    linha das alterações por enviar (kbPainelRascHtml), os campos, a
    descrição, a origem, as subtarefas, as ligações, os anexos, os
-   comentários e o histórico.
+   comentários e o histórico; em Human Tests, por baixo do corpo, a barra
+   do Aceitar (kbDecidirHtml), fixa no fundo do painel que rola.
    Recebe: d — a resposta do GET do cartão; entra — true para a entrada animada.
    Devolve: o HTML. */
 function kbPainelHtml(d, entra) {
-  var c = d.cartao || {}, chave = c.chave;
+  var c = d.cartao || {}, chave = c.chave, decidir = kbDecidirHtml(c, d.origem);
   var acoes = '<div class="kb-p-acoes"><button type="button" class="btn sm"' + comAcao('kbMoverPara', [chave]) + '>' + ic('kbMover', 'i-sm') + 'Mover para…</button>' +
     '<button type="button" class="btn sm"' + comAcao('kbCopiar', [chave]) + '>' + ic('kbCopiar', 'i-sm') + 'Copiar a ligação</button></div>';
   return '<section class="kb-painel card' + (entra ? ' kb-entra' : '') + '" aria-labelledby="kbPainelTit">' + kbPainelCabHtml(c, chave) +
@@ -624,7 +627,25 @@ function kbPainelHtml(d, entra) {
     (c.descricaoOculta ? '<div class="kb-p-sec"><h3 class="lbl">Descrição</h3><p class="sub kb-oculta">O texto deste pedido só se mostra a quem vê os pedidos.</p></div>'
       : c.descricao ? '<div class="kb-p-sec"><h3 class="lbl">Descrição</h3><p class="kb-texto">' + esc(c.descricao) + '</p></div>' : '') +
     kbOrigemHtml(d.origem) + kbSubtarefasHtml(c, d.subtarefas || []) + kbLigacoesHtml(chave, d.ligacoes || []) +
-    kbAnexosHtml(chave, d.anexos || []) + kbComentariosHtml(chave, d.comentarios || []) + kbHistoricoHtml(d.historico || []) + '</div></section>';
+    kbAnexosHtml(chave, d.anexos || []) + kbComentariosHtml(chave, d.comentarios || [], !!decidir) + kbHistoricoHtml(d.historico || []) + '</div>' +
+    decidir + '</section>';
+}
+/* A barra de decidir de um cartão em Human Tests (KAN-117): o Aceitar, que o
+   leva a Concluído, e a frase de como se recusa — comentando o que está mal,
+   o que o devolve a Auto Tests (o servidor move-o: rotas/kanban.js:comentar) —
+   com o Comentar, que leva à caixa. Vive fora do corpo, filha do painel que
+   rola, fixa no fundo (sticky): está sempre à vista e, no fim do scroll, fica
+   por baixo do último conteúdo em vez de o tapar. Um cartão que vem de um
+   pedido não a tem: decide-se nos Pedidos, e a coluna segue o pedido.
+   Recebe: c — o cartão do detalhe; origem — a origem do detalhe (ou null).
+   Devolve: o HTML ('' fora de Human Tests ou num cartão de um pedido). */
+function kbDecidirHtml(c, origem) {
+  var o = origem || (c && c.origem);
+  if (!c || !c.chave || c.coluna_id !== KB_A_DECIDIR || (o && o.tipo === 'pedido')) return '';
+  return '<div class="kb-p-decidir" role="group" aria-label="Decidir ' + esc(c.chave) + '">' +
+    '<p class="sub kb-p-decidir-txt">Para recusar, comenta o que está mal: o cartão volta a ' + esc(kbNomeColuna(KB_RECUSADO)) + '.</p>' +
+    '<div class="kb-p-decidir-bt"><button type="button" class="btn kb-p-comentar"' + comAcao('kbIrComentar') + '>' + ic('kbComentario', 'i-sm') + 'Comentar</button>' +
+    '<button type="button" class="btn primary kb-p-aceitar"' + comAcao('kbAceitar', [c.chave]) + '>' + ic('kbVisto', 'i-sm') + 'Aceitar</button></div></div>';
 }
 /* A linha das alterações por enviar no cartão aberto: há um rascunho do
    Editar deste cartão neste aparelho que ainda difere do que o servidor tem.
@@ -747,10 +768,12 @@ function kbAnexosHtml(chave, as) {
     '<input type="file" accept="image/png,image/jpeg,image/webp" class="so-leitor" id="kbAnexoCampo"' + ligarA('mudar', 'kbAnexar', [chave]) + '></label>' +
     '<p class="sub n" id="kbAnexoEstado" role="status"></p></div>';
 }
-/* Os comentários (os teus com Editar e Remover) e a caixa de comentar.
-   Recebe: chave; cs — os comentários ({id, autor, texto, created_at, updated_at, meu}).
+/* Os comentários (os teus com Editar e Remover) e a caixa de comentar; num
+   cartão por decidir em Human Tests, o exemplo é o de uma recusa.
+   Recebe: chave; cs — os comentários ({id, autor, texto, created_at, updated_at, meu});
+   aDecidir (opcional) — true com a barra do Aceitar.
    Devolve: o HTML. */
-function kbComentariosHtml(chave, cs) {
+function kbComentariosHtml(chave, cs, aDecidir) {
   return '<div class="kb-p-sec"><h3 class="lbl">Comentários' + (cs.length ? ' <span class="n">' + cs.length + '</span>' : '') + '</h3>' +
     cs.map(function (x) {
       return '<div class="ms kb-coment"><p class="ms-quem">' + esc((x.autor && x.autor.nome) || 'Alguém') + ' · ' + data(x.created_at) +
@@ -759,7 +782,8 @@ function kbComentariosHtml(chave, cs) {
           '<button type="button" class="btn sm ghost texto-perigo"' + comAcao('kbComentarioRemover', [x.id]) + '>Remover</button></div>' : '') + '</div>';
     }).join('') +
     '<div class="campo-bloco"><label class="so-leitor" for="kbComentario">Comentário novo</label>' +
-    '<textarea id="kbComentario" class="campo kb-comentar" maxlength="8000" placeholder="Ex: Testado no Samsung, o aviso já aparece." aria-describedby="kbComentarioErro"></textarea>' +
+    '<textarea id="kbComentario" class="campo kb-comentar" maxlength="8000" placeholder="' +
+    (aDecidir ? 'Ex: No Samsung o aviso ainda não aparece.' : 'Ex: Testado no Samsung, o aviso já aparece.') + '" aria-describedby="kbComentarioErro"></textarea>' +
     '<p class="erro-txt" id="kbComentarioErro"></p></div>' +
     '<div><button type="button" class="btn sm primary"' + comAcao('kbComentar', [chave]) + '>Comentar</button></div></div>';
 }
@@ -923,11 +947,48 @@ function kbComentar(chave) {
   var t = el('kbComentario'), texto = t ? String(t.value || '').trim() : '';
   if (!texto) { marcarErro('kbComentario', 'Escreve o comentário.'); if (t && t.focus) t.focus(); return; }
   marcarErro('kbComentario', '');
-  enviar(kbRota(chave, '/comentarios'), { texto: texto }).then(function () {
-    avisar('Comentário adicionado.');
+  var aqui = kbDetalhe && kbDetalhe.cartao && kbDetalhe.cartao.chave === chave ? kbDetalhe.cartao : kbCartao(chave);
+  var antes = aqui ? aqui.coluna_id : '';
+  enviar(kbRota(chave, '/comentarios'), { texto: texto }).then(function (j) {
+    // o servidor diz onde o cartão ficou: um comentário em Human Tests devolve-o (rotas/kanban.js:comentar)
+    var depois = j && j.coluna_id;
+    avisar('Comentário adicionado.' + (depois && antes && depois !== antes
+      ? ' O cartão ' + (antes === KB_A_DECIDIR ? 'voltou a ' : 'passou para ') + kbNomeColuna(depois) + '.' : ''));
     if (kbAberto === chave) kbAbrir(chave, false);
     kbRecarregar();
   }).catch(function (e) { marcarErro('kbComentario', e.message || 'Não deu para comentar.'); });
+}
+/* Aceita um cartão em Human Tests: vai para o topo de Concluído pelo mesmo
+   caminho do «Mover para…» (kbMover: logo no ecrã, e de volta se o servidor
+   recusar), e o aviso traz o Anular. Sem o cartão no quadro (ainda a
+   carregar), vai direto ao servidor.
+   Recebe: chave.
+   Devolve: nada. */
+function kbAceitar(chave) {
+  var feito = function () { kbAvisarComAnular(chave + ' aceite: está em ' + kbNomeColuna(KB_ACEITE) + '.', chave, 'kbAceitarAnular'); };
+  if (kbCartao(chave)) { kbMover(chave, KB_ACEITE, 0, null, feito); return; }
+  enviar(kbRota(chave, '/mover'), { coluna_id: KB_ACEITE, indice: 0 }).then(function () {
+    feito();
+    kbRecarregar();
+    if (kbAberto === chave) kbAbrir(chave, false);
+  }, function (e) { avisar((e && e.message) || 'Não deu para aceitar o cartão.', 'erro'); });
+}
+/* O Anular do Aceitar: o cartão volta ao topo de Human Tests.
+   Recebe: chave.
+   Devolve: nada. */
+function kbAceitarAnular(chave) {
+  var a = el('aviso');
+  if (a) a.className = 'eq-toast';
+  kbMover(chave, KB_A_DECIDIR, 0);
+}
+/* O Comentar da barra de decidir: leva à caixa do comentário (no meio do
+   painel) e põe lá o foco, para escrever o que está mal.
+   Devolve: nada. */
+function kbIrComentar() {
+  var t = el('kbComentario');
+  if (!t) return;
+  if (t.scrollIntoView) t.scrollIntoView({ block: 'center', behavior: kbReduzido() ? 'auto' : 'smooth' });
+  if (t.focus) t.focus({ preventScroll: true });
 }
 // Um comentário do cartão aberto pelo id.
 // Recebe: id.
@@ -1043,6 +1104,9 @@ ACOES.kbRepor = function (d) { kbRepor(d.arg); };
 ACOES.kbNovoSub = function (d) { kbNovoSub(d.arg); };
 ACOES.kbVerColuna = function (d) { kbVerColuna(d.arg); };
 ACOES.kbComentar = function (d) { kbComentar(d.arg); };
+ACOES.kbAceitar = function (d) { kbAceitar(d.arg); };
+ACOES.kbAceitarAnular = function (d) { kbAceitarAnular(d.arg); };
+ACOES.kbIrComentar = function () { kbIrComentar(); };
 ACOES.kbComentarioEditar = function (d) { kbComentarioEditar(d.arg); };
 ACOES.kbComentarioRemover = function (d) { kbComentarioRemover(d.arg); };
 ACOES.kbLigar = function (d) { kbLigar(d.arg); };
@@ -1236,6 +1300,16 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
 .kb-hist[open]>summary .st-seta{transform:none}
 .kb-hist-lista{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
 .kb-hist-lista li{display:flex;flex-direction:column;gap:2px;padding-left:12px;border-left:2px solid var(--line2);font-size:14px}
+/* a barra de decidir de Human Tests: filha do painel que rola, fixa no fundo
+   (sticky), sempre à vista; no fim do scroll fica por baixo do último
+   conteúdo, sem o tapar; com pouco conteúdo desce ao fundo (margin-top:auto).
+   Sem a barra de baixo do back office (acima dos 900px) respeita a zona segura */
+.kb-p-decidir{position:sticky;bottom:0;z-index:3;margin-top:auto;display:flex;flex-direction:column;gap:8px;
+  padding:10px 18px calc(12px + env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line)}
+.kb-p-decidir-txt{margin:0;font-size:13.5px}
+.kb-p-decidir-bt{display:flex;gap:8px}
+.kb-p-decidir-bt .btn{flex:1 1 0;min-width:0;padding:0 12px;white-space:nowrap}
+.kb-p-decidir-bt .kb-p-aceitar{flex-grow:2}
 
 /* ---- o Anular no aviso de baixo ---- */
 .kb-anular{flex:none;min-height:36px;padding:0 12px;border:1px solid currentColor;border-radius:10px;background:transparent;color:inherit;
@@ -1286,6 +1360,8 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
   .kb-painel.kb-sai{animation-name:kbFolhaSai}
   .kb-p-cab{padding:calc(6px + env(safe-area-inset-top)) 6px 6px 16px}
   .kb-p-corpo{padding:14px 16px 24px}
+  /* a folha acaba em cima da barra de baixo, que já guarda a zona segura */
+  .kb-p-decidir{padding:10px 16px 12px}
   .kb-kv dt{flex-basis:96px}
 }
 @keyframes kbFolhaEntra{from{opacity:0;transform:translateY(24px)}}

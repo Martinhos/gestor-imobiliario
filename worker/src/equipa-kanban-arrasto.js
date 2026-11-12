@@ -537,9 +537,11 @@ function kbAssentarChave(chave, r0) {
 /* Move um cartão: logo no ecrã (otimista), depois no servidor; se ele
    recusar, o cartão volta para onde estava e o aviso diz porquê.
    Recebe: chave; coluna — o id de destino; indice — a posição nela (0 =
-   topo, sem contar o próprio); r0 (opcional) — o retângulo de onde parte, para assentar.
+   topo, sem contar o próprio); r0 (opcional) — o retângulo de onde parte, para assentar;
+   aoMover (opcional) — o que avisa quando o servidor aceita, no lugar do aviso
+   de sempre (o Aceitar: equipa-kanban.js:kbAceitar).
    Devolve: nada. */
-function kbMover(chave, coluna, indice, r0) {
+function kbMover(chave, coluna, indice, r0, aoMover) {
   var c = kbCartao(chave);
   if (!c || !kbEstado) return;
   var origem = c.coluna_id, antes = kbEstado.cartoes;
@@ -553,7 +555,8 @@ function kbMover(chave, coluna, indice, r0) {
   kbEmVoo++;
   enviar(kbRota(chave, '/mover'), { coluna_id: coluna, indice: indice }).then(function () {
     kbEmVoo--;
-    if (coluna !== origem) avisar(chave + ' passou para «' + kbNomeColuna(coluna) + '».');
+    if (aoMover) aoMover();
+    else if (coluna !== origem) avisar(chave + ' passou para «' + kbNomeColuna(coluna) + '».');
     if (kbEmVoo === 0) kbRecarregar();
     if (kbAberto === chave) kbAbrir(chave, false);
   }, function (e) {

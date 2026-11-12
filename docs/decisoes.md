@@ -104,6 +104,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-12 · O kanban é uma fonte de trabalho do Claude, como os tickets (KAN-5)
 - 2026-11-12 · Os dados de exemplo têm um dono só: a própria conta (KAN-10, KAN-78)
 - 2026-11-12 · Os tickets de segurança decidem-se com Aceitar e Recusar (KAN-114)
+- 2026-11-12 · Em Human Tests aceita-se num toque, e recusar é explicar (KAN-116, KAN-117)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3706,3 +3707,23 @@ botões, as janelas, a linha da lista, o detalhe, os erros do servidor, o bot, o
 scripts/ticket.mjs). O que cada ação faz não mudou: Aceitar pede a resolução proposta e Recusar a
 justificação. Os ids da auditoria (pedido.decidir, pedido.arquivar) e as notas antigas «Arquivado:»
 ficam como estavam, para o rasto não mudar de nome a meio.
+
+## 2026-11-12 · Em Human Tests aceita-se num toque, e recusar é explicar (KAN-116, KAN-117)
+
+Em Human Tests quem decide é o Martinho, e até aqui o kanban não o ajudava: o cartão aberto tinha
+só o «Mover para…», e um comentário a dizer o que estava mal deixava o cartão onde estava. Só os
+cartões dos tickets de QA voltavam a Auto Tests com um comentário (KAN-107). No KAN-10, a
+2026-11-12, ele comentou às 08:44, escreveu um ticket às 08:45 a pedir que fosse assim
+(«um ticket que eu adicione um comentário em human tests, passa para auto tests») e moveu o cartão
+à mão cinco segundos depois. No mesmo dia pediu a outra metade: «deve ter fixo em baixo a opção de
+aceitar. Se eu quiser recusar, tenho de fazer um comentário a explicar o que está mal».
+
+Ficou assim. Um cartão aberto em Human Tests tem no fundo uma barra fixa com o Aceitar, que o leva a
+Concluído, e a frase que diz como se recusa (equipa-kanban.js:kbDecidirHtml). Não há botão Recusar:
+recusar sem dizer porquê não serve a quem vai corrigir, e o comentário é a explicação. O comentário
+de uma pessoa num cartão em Human Tests devolve-o ao topo de Auto Tests, a fila do Claude
+(lib/kanban.js:colunaDepoisDoComentario). Só a partir de Human Tests, porque é aí que um comentário
+é uma recusa; noutra coluna é conversa. O comentário do Claude não conta: é a nota com que ele
+deixa o cartão em Human Tests. Os cartões dos pedidos ficam de fora: a coluna deles segue o pedido,
+que se decide nos Pedidos. A pílula do QA na app mantém as três decisões dela (Recusar, Adiar e
+Aceitar). Como o resto do back office, a mudança não leva aviso de novidades nem versão nova.

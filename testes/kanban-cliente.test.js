@@ -314,3 +314,79 @@ describe('o cartão aberto', () => {
     assert.doesNotMatch(qa, /kbAbrirPedido|rendorium\.com/);
   });
 });
+
+/* KAN-117 e KAN-116: num cartão em Human Tests decide-se — o Aceitar fixo no
+   fundo do painel leva-o a Concluído; recusar é comentar o que está mal, e o
+   comentário devolve-o a Auto Tests (o servidor move; o aviso diz-o). */
+describe('o Aceitar em Human Tests', () => {
+  const COLUNAS = [{ id: 'a-fazer', nome: 'A fazer', fim: false }, { id: 'auto-tests', nome: 'Auto Tests', fim: false },
+    { id: 'human-tests', nome: 'Human Tests', fim: false }, { id: 'concluido', nome: 'Concluído', fim: true }, { id: 'para-depois', nome: 'Para depois', fim: false }];
+  const novo = () => {
+    const ctx = caixa();
+    ctx.kbEstado = { colunas: COLUNAS, cartoes: [{ chave: 'KAN-80', coluna_id: 'human-tests', tipo: 'tarefa', titulo: 'T', prioridade: 3, etiquetas: [] }],
+      etiquetas: [], pessoas: [], eu: { id: 'eu1', nome: 'Eu', master: false } };
+    return ctx;
+  };
+  const detalhe = (cartao, origem) => ({ cartao: Object.assign({ chave: 'KAN-80', tipo: 'tarefa', titulo: 'O aviso', coluna_id: 'human-tests', prioridade: 3, etiquetas: [] }, cartao),
+    subtarefas: [], comentarios: [], historico: [{ at: 1, autor: { nome: 'Claude' }, campo: 'coluna', antes: 'auto-tests', depois: 'human-tests' }],
+    ligacoes: [], anexos: [], origem: origem || null });
+  const FRASE = /Para recusar, comenta o que está mal: o cartão volta a Auto Tests\./;
+
+  test('a barra do Aceitar e a frase só num cartão em Human Tests que não vem de um pedido', () => {
+    const ctx = novo();
+    const h = ctx.kbPainelHtml(detalhe({}), false);
+    assert.match(h, /<div class="kb-p-decidir"/);
+    assert.match(h, /<button type="button" class="btn primary kb-p-aceitar" data-acao="kbAceitar" data-arg="KAN-80">[^]*Aceitar<\/button>/);
+    assert.match(h, FRASE);
+    assert.match(h, /data-acao="kbIrComentar"[^>]*>[^]*Comentar<\/button>/, 'o Comentar leva à caixa');
+    assert.ok(h.indexOf('kb-p-decidir') > h.indexOf('id="kbComentario"') && h.indexOf('kb-p-decidir') > h.indexOf('kb-hist'),
+      'a barra vem depois do corpo inteiro (fixa no fundo, sem tapar o fim)');
+    assert.match(h, /<\/div><div class="kb-p-decidir"[^]*<\/div><\/section>$/, 'fora do kb-p-corpo, filha do painel que rola');
+    assert.match(h, /placeholder="Ex: No Samsung o aviso ainda não aparece\."/, 'o exemplo de recusa na caixa');
+    // um ticket de QA em Human Tests também se aceita (o ticket vai com o cartão)
+    assert.match(ctx.kbPainelHtml(detalhe({}, { tipo: 'qa', id: 'q1', estado: 'human-tests', resumo: 'x' }), false), /data-acao="kbAceitar"/);
+    // um pedido decide-se nos Pedidos: nem barra nem frase
+    const pedido = ctx.kbPainelHtml(detalhe({}, { tipo: 'pedido', id: 'p1', estado: 'proposta', existe: true }), false);
+    assert.doesNotMatch(pedido, /kb-p-decidir|kbAceitar|Para recusar/);
+    assert.doesNotMatch(ctx.kbPainelHtml(detalhe({ origem: { tipo: 'pedido', id: 'p1' } }), false), /kbAceitar/, 'a origem do cartão do quadro também conta');
+    for (const col of ['a-fazer', 'auto-tests', 'concluido', 'para-depois']) {
+      const fora = ctx.kbPainelHtml(detalhe({ coluna_id: col }), false);
+      assert.doesNotMatch(fora, /kb-p-decidir|kbAceitar|Para recusar/, col);
+      assert.match(fora, /placeholder="Ex: Testado no Samsung, o aviso já aparece\."/, col + ': o exemplo de sempre');
+    }
+  });
+
+  test('o Aceitar leva a Concluído pelo mover, e o aviso do comentário diz quando o cartão voltou', async () => {
+    const ctx = novo();
+    const movidos = [], avisos = [], comAnular = [];
+    ctx.kbMover = (k, col, i, r0, depois) => { movidos.push([k, col, i]); if (depois) depois(); };
+    ctx.kbAvisarComAnular = (texto, chave, acao) => comAnular.push([texto, chave, acao]);
+    ctx.avisar = (m, t) => avisos.push([m, t || '']);
+    ctx.el = () => null;
+    ctx.ACOES.kbAceitar({ arg: 'KAN-80' });
+    assert.deepEqual(movidos, [['KAN-80', 'concluido', 0]], 'para o topo de Concluído, pelo mesmo caminho do Mover para…');
+    assert.deepEqual(comAnular, [['KAN-80 aceite: está em Concluído.', 'KAN-80', 'kbAceitarAnular']]);
+    ctx.ACOES.kbAceitarAnular({ arg: 'KAN-80' });
+    assert.deepEqual(movidos[1], ['KAN-80', 'human-tests', 0], 'o Anular devolve-o a Human Tests');
+
+    // o comentário: o servidor diz a coluna depois; se mudou, o aviso diz para onde voltou
+    const campo = { value: '  No Samsung o aviso ainda não aparece. ', focus() {} };
+    ctx.el = (id) => (id === 'kbComentario' ? campo : null);
+    ctx.marcarErro = () => {};
+    ctx.kbAbrir = () => {};
+    ctx.kbRecarregar = () => {};
+    let enviado = null, coluna = 'auto-tests';
+    ctx.enviar = (rota, corpo) => { enviado = [rota, corpo]; return Promise.resolve({ comentario: {}, coluna_id: coluna }); };
+    ctx.kbAberto = 'KAN-80';
+    ctx.kbDetalhe = detalhe({});
+    ctx.kbComentar('KAN-80');
+    await new Promise((r) => setImmediate(r));
+    assert.deepEqual(JSON.parse(JSON.stringify(enviado)), ['/api/equipa/kanban/cartoes/KAN-80/comentarios', { texto: 'No Samsung o aviso ainda não aparece.' }]);
+    assert.deepEqual(avisos.pop(), ['Comentário adicionado. O cartão voltou a Auto Tests.', '']);
+    coluna = 'a-fazer';
+    ctx.kbDetalhe = detalhe({ coluna_id: 'a-fazer' });
+    ctx.kbComentar('KAN-80');
+    await new Promise((r) => setImmediate(r));
+    assert.deepEqual(avisos.pop(), ['Comentário adicionado.', ''], 'sem mudar de coluna, o aviso de sempre');
+  });
+});
