@@ -6172,11 +6172,12 @@ um por limite e por conta ou IP (lib/limites.js:relatoDoLimite, a tabela
 lib/limites.js:LIMITES), e avisa no Discord; as recusas seguintes na mesma
 janela não escrevem nada. A deduplicação dos avisos e os relatos não contam.
 Um ticket de segurança não se trata sem decisão, nem no back office nem no
-bot do Discord: o cartão «Por decidir» tem
-Arquivar e Decidir. Decidir pede a resolução proposta, obrigatória
-(equipa-guiao.js:decidirSeguranca), que fica com quem e quando e é o que se
-segue; Arquivar pede a justificação (equipa-guiao.js:arquivarSeguranca) e
-conclui-o sem mandar nada a ninguém. Um limite que volta depois de concluído
+bot do Discord: o cartão «Por decidir» tem as mesmas duas ações de um
+pedido, Recusar e Aceitar. Aceitar pede a resolução proposta, obrigatória
+(equipa-guiao.js:aceitarSeguranca), que fica com quem e quando e é o que se
+segue; Recusar pede a justificação (equipa-guiao.js:recusarSeguranca) e
+conclui-o sem mandar nada a ninguém. A linha da lista e o detalhe dizem
+«por decidir», «aceite» ou «recusado». Um limite que volta depois de concluído
 reabre o ticket, por decidir. A skill ticket só pega num ticket de segurança
 com a resolução proposta.
 

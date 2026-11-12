@@ -261,7 +261,7 @@ async function kanbanDoPedido(env, eu, acao, t) {
   try {
     let ev;
     if (acao === 'aceitar') {
-      // só os pedidos das pessoas: um ticket de segurança decidido não é uma tarefa do kanban
+      // só os pedidos das pessoas: um ticket de segurança aceite não é uma tarefa do kanban
       if (t.category !== 'user') return;
       ev = { estado: 'aceite', novo: Object.assign({ uuid: crypto.randomUUID() }, cartaoDoPedido(t)) };
     } else {
@@ -415,10 +415,10 @@ export async function rotasEquipaApi(c) {
       }
       await auditar(env, eu, 'pedido.atribuir', id, tomar ? 'tomou' : 'largou');
     } else if (acao === 'aceitar' && t.category === 'seguranca') {
-      /* Decidir um ticket de segurança (um limite atingido): a resolução
+      /* Aceitar um ticket de segurança (um limite atingido): a resolução
          proposta é obrigatória — bloquear, contactar, subir o limite… — e é
          ela que se segue (o Claude, pelo scripts/ticket.mjs, só pega nos
-         decididos). Grava-se nas colunas da aceitação (accepted_changes é a
+         aceites). Grava-se nas colunas da aceitação (accepted_changes é a
          proposta) e fica numa nota interna. As mesmas guardas do aceitar. */
       if (!texto) return err(400, 'Escreve a resolução proposta: é ela que se segue.');
       const r = await env.DB.prepare(
@@ -426,24 +426,24 @@ export async function rotasEquipaApi(c) {
           WHERE id = ? AND accepted_at IS NULL AND refused_at IS NULL AND status <> 'concluido'`
       ).bind(agora, eu.discordId || '?', eu.nome || '', texto, agora, id).run();
       if (!r.meta || r.meta.changes !== 1) {
-        return err(409, t.accepted_at ? 'Este ticket já foi decidido' + (t.accepted_by_nome ? ' por ' + t.accepted_by_nome : '') + '.'
-          : t.refused_at ? 'Este ticket foi arquivado' + (t.refused_by_nome ? ' por ' + t.refused_by_nome : '') + '.'
-            : 'Um ticket concluído não se decide: reabre-o primeiro.');
+        return err(409, t.accepted_at ? 'Este ticket já foi aceite' + (t.accepted_by_nome ? ' por ' + t.accepted_by_nome : '') + '.'
+          : t.refused_at ? 'Este ticket foi recusado' + (t.refused_by_nome ? ' por ' + t.refused_by_nome : '') + '.'
+            : 'Um ticket concluído não se aceita: reabre-o primeiro.');
       }
       await msg('nota', 'Resolução proposta: ' + texto);
       await auditar(env, eu, 'pedido.decidir', id, cortar(texto, 120));
     } else if (acao === 'recusar' && t.category === 'seguranca') {
-      /* Arquivar um ticket de segurança (um falso alarme): a justificação é
+      /* Recusar um ticket de segurança (um falso alarme): a justificação é
          obrigatória e fica numa nota interna. Conclui-o, e larga a resolução
          proposta, se havia. Não há pessoa a quem responder: nem reply, nem
          email. Se o limite voltar a ser atingido, reabre-se sem decisão
          (lib/limites.js). */
-      if (!texto) return err(400, 'Escreve porque se arquiva: fica no ticket.');
+      if (!texto) return err(400, 'Escreve porque se recusa: fica no ticket.');
       if (t.status === 'concluido') return err(409, 'Este ticket já está concluído.');
       const [, up] = await env.DB.batch([
         env.DB.prepare(
           'INSERT INTO ticket_msgs (id, ticket_id, tipo, texto, autor, nome, papel, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(crypto.randomUUID(), id, 'nota', 'Arquivado: ' + texto, eu.discordId || '?', eu.nome || '', eu.papel || '', agora),
+        ).bind(crypto.randomUUID(), id, 'nota', 'Recusado: ' + texto, eu.discordId || '?', eu.nome || '', eu.papel || '', agora),
         env.DB.prepare(
           `UPDATE tickets SET status = 'concluido', refused_at = ?, refused_by = ?, refused_by_nome = ?,
                   accepted_at = NULL, accepted_by = NULL, accepted_by_nome = NULL, accepted_changes = NULL,
@@ -524,9 +524,9 @@ export async function rotasEquipaApi(c) {
          reabrir larga a recusa, para o pedido se poder decidir de novo. */
       const estado = acao === 'fechar' ? 'concluido' : acao === 'reabrir' ? 'criado' : 'resolucao';
       if (acao === 'responder' && !texto) return err(400, 'Escreve a resposta.');
-      // um ticket de segurança sem decisão só sai pelo Arquivar, que pede a justificação
+      // um ticket de segurança sem decisão só sai pelo Recusar, que pede a justificação
       if (acao === 'fechar' && t.category === 'seguranca' && t.accepted_at == null && t.status !== 'concluido') {
-        return err(400, 'Um ticket de segurança por decidir não se conclui assim: decide-o, ou arquiva-o com a justificação.');
+        return err(400, 'Um ticket de segurança por decidir não se conclui assim: aceita-o, ou recusa-o com a justificação.');
       }
       /* Numa só transação: com dois statements soltos, um erro entre eles
          deixava o fio e a coluna reply a contarem histórias diferentes —

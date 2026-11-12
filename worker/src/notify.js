@@ -175,7 +175,7 @@ export function limiteEmbed(r) {
     color: r.reaberto ? 0xb94a48 : 0xd6a34a,
     fields: [
       { name: 'Quem', value: r.user_id || 'sem conta (pelo IP)', inline: true },
-      { name: 'O que falta', value: 'Decidir no back office (/equipa › Erros), com a resolução proposta', inline: true },
+      { name: 'O que falta', value: 'Aceitar no back office (/equipa › Erros), com a resolução proposta, ou recusar', inline: true },
       { name: 'Detalhe', value: '```' + cut(r.detail || '—', 1000) + '```', inline: false },
     ],
     footer: { text: 'report ' + r.id },

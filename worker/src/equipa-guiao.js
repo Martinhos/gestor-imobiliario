@@ -648,7 +648,7 @@ function linhaPedido(p, ativo) {
     '<span class="sub n">' + quem +
     (p.n > 1 ? ' · ' + esc(p.n) + ' vezes' : '') +
     (p.versao ? ' · versão ' + esc(p.versao) : '') +
-    (p.category === 'seguranca' ? (p.refused_at ? ' · arquivado' : p.status === 'concluido' ? '' : p.accepted_at ? ' · decidido' : ' · por decidir')
+    (p.category === 'seguranca' ? (p.refused_at ? ' · recusado' : p.status === 'concluido' ? '' : p.accepted_at ? ' · aceite' : ' · por decidir')
       : tecnico || p.status === 'concluido' && !p.refused_at ? ''
       : p.refused_at ? ' · recusado' : p.proposta ? ' · resposta por enviar' : p.accepted_at ? ' · aceite' : ' · por decidir') +
     (p.assignee_nome ? ' · tomado por ' + esc(p.assignee_nome) : ' · #' + esc(curto(p.id))) + '</span></button>';
@@ -791,19 +791,20 @@ function detalhePedido(d, tipo, comLista) {
     }
   } else if (p.category === 'seguranca') {
     /* um ticket de segurança (um limite atingido) também espera por uma
-       decisão: nada se faz sem a resolução proposta de alguém da equipa, e é
-       ela que se segue; arquivar conclui-o, com a justificação numa nota */
-    if (p.refused_at) decisao = '<p class="sub n pd-decidido">Arquivado por ' + esc(p.refused_by_nome || p.refused_by || 'alguém da equipa') + ' · ' + data(p.refused_at) + ' (a justificação está na nota interna acima)</p>';
+       decisão, com as mesmas duas ações dos pedidos: aceitar pede a resolução
+       proposta de alguém da equipa, e é ela que se segue; recusar conclui-o,
+       com a justificação numa nota */
+    if (p.refused_at) decisao = '<p class="sub n pd-decidido">Recusado por ' + esc(p.refused_by_nome || p.refused_by || 'alguém da equipa') + ' · ' + data(p.refused_at) + ' (a justificação está na nota interna acima)</p>';
     else if (p.accepted_at) {
       decisao = '<div class="pd-decisao pd-resolucao"><p><span class="pd-decisao-tit">Resolução proposta</span>' +
-        '<span class="sub n">Decidida por ' + esc(p.accepted_by_nome || p.accepted_by || 'alguém da equipa') + ' · ' + data(p.accepted_at) + '. É isto que se segue.</span></p>' +
+        '<span class="sub n">Aceite por ' + esc(p.accepted_by_nome || p.accepted_by || 'alguém da equipa') + ' · ' + data(p.accepted_at) + '. É isto que se segue.</span></p>' +
         '<p class="ms-texto">' + esc(p.accepted_changes || '') + '</p></div>';
     }
     else if (p.status !== 'concluido') {
       decisao = '<div class="pd-decisao"><p><span class="pd-decisao-tit">Por decidir</span>' +
-        '<span class="sub">Nada se faz sem uma resolução proposta: bloquear, contactar, subir o limite… Arquivar conclui-o, com a justificação.</span></p>' +
-        '<div class="pd-decisao-botoes"><button type="button" class="btn"' + comAcao('arquivarSeguranca', [p.id]) + '>Arquivar</button>' +
-        '<button type="button" class="btn primary"' + comAcao('decidirSeguranca', [p.id]) + '>Decidir</button></div></div>';
+        '<span class="sub">Nada se faz sem uma resolução proposta: bloquear, contactar, subir o limite… Recusar conclui-o, com a justificação.</span></p>' +
+        '<div class="pd-decisao-botoes"><button type="button" class="btn"' + comAcao('recusarSeguranca', [p.id]) + '>Recusar</button>' +
+        '<button type="button" class="btn primary"' + comAcao('aceitarSeguranca', [p.id]) + '>Aceitar</button></div></div>';
     }
   }
   /* a resposta proposta pelo Claude depois de implementar: vem já na caixa,
@@ -825,7 +826,7 @@ function detalhePedido(d, tipo, comLista) {
     '<span class="so-nota">só a equipa vê</span></span>' +
     '<button type="button" class="btn so-resposta"' + comAcao('guardarModelo') + '>Guardar como modelo</button>' +
     '<button type="button" class="btn so-resposta"' + comAcao('agir', [p.id, 'responder']) + '>Responder</button>' +
-    // um ticket de segurança por decidir só se conclui pelo Arquivar (com a justificação)
+    // um ticket de segurança por decidir só se conclui pelo Recusar (com a justificação)
     (p.category === 'seguranca' && !p.accepted_at ? ''
       : '<button type="button" class="btn primary so-resposta"' + comAcao('agir', [p.id, 'fechar']) + '>Responder e concluir</button>') +
     '<button type="button" class="btn primary so-nota"' + comAcao('agir', [p.id, 'nota']) + '>Guardar nota interna</button>' +
@@ -916,37 +917,37 @@ function recusarPedido(id) {
       .then(function () { avisar('Pedido recusado e concluído.'); verPedido(id); });
   }, { texto: 'O pedido fica concluído, e não segue para implementar.', botao: 'Recusar', perigo: true });
 }
-/* Decide um ticket de segurança (um limite atingido): a janela pede a
+/* Aceita um ticket de segurança (um limite atingido): a janela pede a
    resolução proposta (obrigatória), o que se vai fazer. O servidor regista
    quem, quando e a proposta, que fica também numa nota interna; é ela que se
    segue.
    Recebe: id — o id do ticket (string).
    Devolve: nada — abre a janela; ao confirmar, executa e reabre o detalhe. */
-function decidirSeguranca(id) {
-  formulario('Decidir o ticket de segurança', [{
+function aceitarSeguranca(id) {
+  formulario('Aceitar o ticket de segurança', [{
     nome: 'proposta', rotulo: 'Resolução proposta', tipo: 'area', max: 2000,
     ajuda: 'O que se faz: bloquear, contactar a pessoa, subir o limite… É isto que se segue. Só a equipa vê.',
     exemplo: 'Ex: Subir o limite das gravações para 120 em 15 min.',
   }], function (v) {
     return enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/aceitar', { texto: v.proposta })
-      .then(function () { avisar('Decidido: segue-se a resolução proposta.'); verPedido(id); });
-  }, { texto: 'O ticket segue para tratar, como escreveres aqui.', botao: 'Decidir' });
+      .then(function () { avisar('Aceite: segue-se a resolução proposta.'); verPedido(id); });
+  }, { texto: 'O ticket segue para tratar, como escreveres aqui.', botao: 'Aceitar' });
 }
-/* Arquiva um ticket de segurança (um falso alarme): a janela pede a
+/* Recusa um ticket de segurança (um falso alarme): a janela pede a
    justificação (obrigatória), que fica numa nota interna, e o ticket fica
    concluído. Não vai nada para ninguém. Se o limite voltar a ser atingido,
    reabre-se por decidir.
    Recebe: id — o id do ticket (string).
    Devolve: nada — abre a janela; ao confirmar, executa e reabre o detalhe. */
-function arquivarSeguranca(id) {
-  formulario('Arquivar o ticket de segurança', [{
-    nome: 'justificacao', rotulo: 'Porque se arquiva', tipo: 'area', max: 2000,
+function recusarSeguranca(id) {
+  formulario('Recusar o ticket de segurança', [{
+    nome: 'justificacao', rotulo: 'Porque se recusa', tipo: 'area', max: 2000,
     ajuda: 'Fica numa nota interna: não vai para ninguém.',
     exemplo: 'Ex: Falso alarme: era um teste da equipa.',
   }], function (v) {
     return enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/recusar', { texto: v.justificacao })
-      .then(function () { avisar('Ticket arquivado e concluído.'); verPedido(id); });
-  }, { texto: 'O ticket fica concluído, sem nada a fazer. Se voltar a acontecer, reabre-se por decidir.', botao: 'Arquivar', perigo: true });
+      .then(function () { avisar('Ticket recusado e concluído.'); verPedido(id); });
+  }, { texto: 'O ticket fica concluído, sem nada a fazer. Se voltar a acontecer, reabre-se por decidir.', botao: 'Recusar', perigo: true });
 }
 // muda a categoria de um erro para a do chip e reabre o detalhe
 // Recebe: id — o id do pedido (string); categoria — a categoria nova (string, uma das TECNICAS).
@@ -2894,8 +2895,8 @@ var ACOES = {
   mudarCategoria: function (d) { mudarCategoria(d.arg, d.arg2); },
   aceitarPedido: function (d) { aceitarPedido(d.arg); },
   recusarPedido: function (d) { recusarPedido(d.arg); },
-  decidirSeguranca: function (d) { decidirSeguranca(d.arg); },
-  arquivarSeguranca: function (d) { arquivarSeguranca(d.arg); },
+  aceitarSeguranca: function (d) { aceitarSeguranca(d.arg); },
+  recusarSeguranca: function (d) { recusarSeguranca(d.arg); },
   usarModelo: function (d) { usarModelo(d.arg); },
   guardarModelo: function () { guardarModelo(); },
   verPessoas: function () { verPessoas(ultimaProcura); },

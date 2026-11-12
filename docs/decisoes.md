@@ -103,6 +103,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-11 · As tarefas por guardar ficam no aparelho até ao Guardar (KAN-105, a app)
 - 2026-11-12 · O kanban é uma fonte de trabalho do Claude, como os tickets (KAN-5)
 - 2026-11-12 · Os dados de exemplo têm um dono só: a própria conta (KAN-10, KAN-78)
+- 2026-11-12 · Os tickets de segurança decidem-se com Aceitar e Recusar (KAN-114)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3694,3 +3695,14 @@ inventados nunca chegam ao perfil de ninguém a sério.
 
 Na mesma volta o exemplo ganhou um contrato de dez anos (o Quarto 4 do T3 Coimbra), para o quadro
 4.2 do Anexo F ter o que mostrar a quem testa.
+
+## 2026-11-12 · Os tickets de segurança decidem-se com Aceitar e Recusar (KAN-114)
+
+O cartão «Por decidir» de um ticket de segurança tinha Arquivar e Decidir, e o de um pedido de uma
+pessoa Recusar e Aceitar, no mesmo ecrã do back office e com a mesma rota por baixo. O Martinho, a
+testar no telemóvel, pediu as mesmas palavras: «a opção para aceitar o ticket não deve ser Decidir,
+mas aceitar. A outra opção deve ser Recusar». Passou a ser assim em tudo o que a equipa lê (os
+botões, as janelas, a linha da lista, o detalhe, os erros do servidor, o bot, o aviso no Discord e o
+scripts/ticket.mjs). O que cada ação faz não mudou: Aceitar pede a resolução proposta e Recusar a
+justificação. Os ids da auditoria (pedido.decidir, pedido.arquivar) e as notas antigas «Arquivado:»
+ficam como estavam, para o rasto não mudar de nome a meio.
