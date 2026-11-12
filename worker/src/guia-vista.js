@@ -4,8 +4,8 @@
    guia acompanha-o do princípio ao fim (ticket a89a5fcb, 2026-11-09): 1. se
    tem de declarar, 2. onde, 3. como preenche o Anexo F, 4. o que pode
    deduzir — e as fontes oficiais no fim. É informação, não uma função da
-   app — a montra continua a não prometer a Declaração, que só existe em dev
-   (web/app/servicos.js, soDev).
+   app — a montra continua a não prometer a Declaração (em produção desde
+   2026-11-12), até o Martinho decidir mostrá-la.
 
    A parte 4 (a regra geral, o que podes, o que não podes, o que pede
    cuidado, os documentos) e os quatro pontos do Anexo F na parte 3 são o

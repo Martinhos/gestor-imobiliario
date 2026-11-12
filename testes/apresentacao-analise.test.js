@@ -89,14 +89,14 @@ describe('o registo', () => {
     }
   });
 
-  test('as análises e as Definições têm quatro imagens para qualquer conta; o IRS só fora de produção', () => {
+  test('as análises e as Definições têm quatro imagens para qualquer conta; o IRS também em produção', () => {
     montar();
     for (const id of ['reports', 'projections', 'fisco', 'settings']) assert.equal(app.aprImagensVisiveis(id).length, 4, id);
     comMovimentos();
     for (const id of ['reports', 'projections', 'fisco', 'settings']) assert.equal(app.aprImagensVisiveis(id).length, 4, id + ' com movimentos');
     montar({ ambiente: 'producao' });
-    assert.equal(app.aprImagensVisiveis('fisco').length, 0, 'em produção o IRS não tem imagens, e não abre');
-    assert.ok(app.aprDaConta().indexOf('fisco') < 0, 'nem aparece na Ajuda');
+    assert.equal(app.aprImagensVisiveis('fisco').length, 4, 'em produção o IRS tem as quatro imagens');
+    assert.ok(app.aprDaConta().indexOf('fisco') > -1, 'e aparece na Ajuda');
     assert.ok(app.aprDaConta().indexOf('reports') > -1 && app.aprDaConta().indexOf('settings') > -1);
   });
 });

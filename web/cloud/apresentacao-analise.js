@@ -889,9 +889,9 @@ registarApresentacao('projections', {
 
 /* ---------------------------------------------------- o IRS · Anexo F */
 
-/* A Declaração existe nesta conta e neste ambiente? Só fora de produção
-   (servicos.js, o soDev do fisco) e com o serviço ligado: em produção a
-   apresentação fica sem imagens, e não abre nem aparece na Ajuda.
+/* A Declaração existe nesta conta? Só com o serviço ligado
+   (servicos.js:servicoLigado): desligada, a apresentação fica sem imagens,
+   e não abre nem aparece na Ajuda.
    Devolve: true/false. */
 function aprAFiscoAqui() { return typeof servicoLigado === 'function' && servicoLigado('fisco'); }
 
