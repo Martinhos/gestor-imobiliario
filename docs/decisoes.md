@@ -106,6 +106,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-12 · Os tickets de segurança decidem-se com Aceitar e Recusar (KAN-114)
 - 2026-11-12 · Em Human Tests aceita-se num toque, e recusar é explicar (KAN-116, KAN-117)
 - 2026-11-12 · A pílula do QA é uma vista dos Erros do kanban (KAN-115)
+- 2026-11-12 · Os anexos do kanban aceitam ficheiros, numa lista fechada pelos bytes (KAN-119)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3760,3 +3761,27 @@ scripts/qa.mjs listar --todos. Um cartão de um pedido que alguém mude para Err
 os pedidos: a descrição é o texto que a pessoa escreveu na Ajuda, e as contas de teste da app nunca
 a viram nem veem. A pílula só existe fora de produção, por isso a mudança não leva aviso de
 novidades nem versão nova, como as outras mudanças só da pílula (KAN-97).
+
+## 2026-11-12 · Os anexos do kanban aceitam ficheiros, numa lista fechada pelos bytes (KAN-119)
+
+O Martinho quis anexar as FINE ao KAN-14 e não conseguiu: «Há uma secção de anexos, mas só aceita
+imagens». O kanban vive no back office, que tem a sessão da equipa, e um anexo é escrito por uma
+pessoa e aberto por outras na mesma origem. Um ficheiro que o browser lesse como página (HTML, SVG,
+XML) corria lá dentro com essa sessão. Por isso não se abriu a porta a qualquer ficheiro.
+
+Ficou uma lista fechada, e cada tipo reconhece-se pelos próprios bytes, nunca pelo Content-Type nem
+pela extensão que o browser manda (worker/src/lib/imagens.js:tipoDoFicheiro). Entram as imagens de
+sempre e o PDF, pela assinatura no primeiro byte. Entram o Word, o Excel e o PowerPoint de agora,
+um ZIP com a peça principal de um deles, e sem macros nem ActiveX: os .doc e .xls antigos e os
+docm e xlsm ficam de fora, porque é neles que vivem as macros. Entram o texto e o CSV, só em
+UTF-8, sem nulos e sem marcação, para um HTML com outro nome não passar por texto. O CSV do Excel
+em Windows-1252 fica de fora por isso, e o Excel grava «CSV UTF-8» quando se pede.
+
+Só as imagens abrem no sítio. O resto desce como ficheiro (attachment), com a extensão do tipo
+verdadeiro no nome: um texto chamado «instalar.bat» desce como «instalar.bat.txt». O PDF desce
+também, e foi o que se perguntou primeiro. O visor de PDF do Chrome cancela um PDF em caixa de
+areia, e todos os anexos saem com a CSP_ANEXO, que traz sandbox. A outra saída era tirar o sandbox
+ao PDF, o que tirava a caixa de areia a um ficheiro escrito por outros nesta origem. O teto subiu
+de 5 para 10 MB, porque uma FINE digitalizada passa dos 5. A tabela já guardava o tipo e o nome,
+por isso não houve migração. Como o resto do back office, a mudança não leva aviso de novidades
+nem versão nova.

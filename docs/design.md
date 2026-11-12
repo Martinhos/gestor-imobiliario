@@ -6698,12 +6698,29 @@ cartão tem a chave, o tipo (Épico, História, Tarefa, Subtarefa ou Erro), o
 título, a descrição, a prioridade (de Mais alta a Mais baixa), as etiquetas,
 o responsável (uma pessoa da equipa, ou o Claude), o relator, o pai (o
 épico, ou a tarefa de uma subtarefa), o prazo, e por baixo as subtarefas, as
-ligações (bloqueia, é bloqueado por, relaciona-se com), os anexos de imagem
-(no R2), os comentários (cada um muda e remove só os seus) e o histórico de
+ligações (bloqueia, é bloqueado por, relaciona-se com), os anexos (no R2),
+os comentários (cada um muda e remove só os seus) e o histórico de
 cada mudança. Qualquer papel da equipa vê e mexe; remover um cartão é do
 master, e brando, com Anular no aviso; o cartão de um ticket de QA leva o
 ticket com ele, e o Anular repõe os dois (ver «Os tickets de QA»). Os
 cartões do tipo Erro são também a lista da pílula do QA.
+
+Os anexos de um cartão são uma lista fechada de tipos, cada um reconhecido
+pelos próprios bytes e nunca pelo Content-Type nem pelo nome
+(worker/src/lib/imagens.js:TIPOS_DOS_ANEXOS,
+worker/src/lib/imagens.js:tipoDoFicheiro): imagens PNG, JPEG e WebP, PDF,
+Word, Excel e PowerPoint (docx, xlsx e pptx, sem macros nem ActiveX) e texto
+ou CSV em UTF-8, sem marcação. HTML, SVG e XML não entram, nem com outro nome
+ou outro tipo. Cada anexo vai até 10 MB. O «Adicionar ficheiro» diz por baixo
+do botão porque é que um ficheiro não entrou: o tipo, com a lista do que se
+aceita, ou o tamanho. As imagens mostram-se em miniatura e abrem no sítio. Os
+outros ficheiros são um bloco com o ícone, o nome, o tipo, o tamanho («1,2
+MB»), quem o adicionou e quando
+(worker/src/equipa-kanban.js:kbFicheiroHtml), e tocar descarrega-os. O
+servidor manda-os como ficheiro (attachment), com a extensão do tipo
+verdadeiro no nome, em nosniff e com a CSP dos anexos, que traz sandbox
+(worker/src/rotas/kanban.js:servirAnexo). O PDF também desce, porque o Chrome
+não abre um PDF em caixa de areia.
 
 O quadro lê-se num número fixo de consultas, seja qual for o número de
 cartões (worker/src/rotas/kanban.js:lerQuadro), e os filtros — tipo,
@@ -7382,7 +7399,11 @@ setas, o Home e o End andam pelas opções, e o Escape com a lista aberta fecha
 só a lista e devolve o foco ao botão (componentes.js:selTecla). Escolher
 redesenha as opções pela mesma função do sel() (componentes.js:selOpcaoDesenho):
 o on, o aria-selected e o visto ficam só na escolhida, nos mesmos botões, e o
-foco fica onde estava (componentes.js:selPick). Escolher uma opção não tem
+foco fica onde estava (componentes.js:selPick). O nome de uma escolha nunca
+se corta: na lista as opções partem em mais linhas (estilos.css:.selopt), e
+num formulário o botão mostra o nome inteiro em até duas linhas
+(estilos.css:.form .selbtn span); os filtros e os chips do topo ficam numa
+linha (testes/sel-nome-inteiro.test.js). Escolher uma opção não tem
 ação por omissão: o selPick trava a propagação e o default. Quase todos os
 sel() vivem dentro de um <label>, e o label passa ao botão do sel() o clique
 que não vem de um botão de dentro; num Chromium de antes de 2026 (o Samsung

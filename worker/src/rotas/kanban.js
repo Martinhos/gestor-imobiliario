@@ -33,7 +33,7 @@ import { json, err, body, badId, now, CSP_ANEXO } from '../lib/http.js';
 import { auditar } from '../lib/auditoria.js';
 import { PAPEIS, comoLista, catsDe } from '../lib/papeis.js';
 import { PREFIXO, TIPOS, PRIORIDADES, AUTOMATICO, QA_EM_CURSO, chaveDe, numeroDaChave, passosDaSincronizacao, passosDoComentarioQa, passosDoComentario, colunaDepoisDoComentario, ticketSaiComOCartao, ticketVoltaComOCartao } from '../lib/kanban.js';
-import { tipoDaImagem, lerAte } from '../lib/imagens.js';
+import { lerAte, tipoDoFicheiro, TIPOS_DOS_ANEXOS, FRASE_DOS_TIPOS, nomePorOmissao, comExtensao, disposicaoDeDescarga } from '../lib/imagens.js';
 
 // O começo de todos os caminhos daqui.
 const BASE = '/api/equipa/kanban';
@@ -47,8 +47,8 @@ const MAX_NOME_COLUNA = 60;
 const MAX_ETIQUETAS = 20;
 // Quantas colunas o quadro pode ter.
 const MAX_COLUNAS = 20;
-// Um anexo de imagem até 5 MB.
-const MAX_ANEXO = 5 * 1024 * 1024;
+// Um anexo até 10 MB (uma FINE digitalizada passa dos 5): o lerAte desiste logo que passa, e um put do R2 leva muito mais.
+const MAX_ANEXO = 10 * 1024 * 1024;
 // O nome de um anexo guarda-se até aqui.
 const MAX_NOME_ANEXO = 120;
 // Quantos valores cada filtro do quadro aceita (tipo=erro,tarefa…).
@@ -1123,34 +1123,50 @@ async function desligar(env, eu, id) {
 
 /* -------------------------------- os anexos -------------------------------- */
 
-/* O nome de um anexo, do cabeçalho X-Nome (codificado com encodeURIComponent):
-   sem caracteres de controlo nem barras, até 120 caracteres.
-   Recebe: v — o valor do cabeçalho (ou null); tipo — o tipo verdadeiro da imagem.
-   Devolve: o nome ('imagem.png' e afins quando não veio nenhum). */
-function nomeDoAnexo(v, tipo) {
+/* O nome que veio no cabeçalho X-Nome (codificado com encodeURIComponent),
+   limpo: sem caracteres de controlo nem barras, até 120 caracteres.
+   Recebe: v — o valor do cabeçalho (ou null).
+   Devolve: o nome ('' quando não veio nenhum). */
+function nomeLimpo(v) {
   let s = String(v || '');
   try { s = decodeURIComponent(s); } catch (e) { /* fica como veio */ }
-  s = s.replace(/[\u0000-\u001f\u007f]/g, '').replace(/[\\/]+/g, '-').trim().slice(0, MAX_NOME_ANEXO);
-  return s || 'imagem.' + ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }[tipo] || 'img');
+  return s.replace(/[\u0000-\u001f\u007f]/g, '').replace(/[\\/]+/g, '-').trim().slice(0, MAX_NOME_ANEXO);
 }
 
-/* PUT /api/equipa/kanban/cartoes/:chave/anexos: uma imagem no cartão, com
-   os bytes no corpo. Só PNG, JPEG ou WebP, pelos próprios bytes
-   (lib/imagens.js:tipoDaImagem), até 5 MB (lido aos bocados por lib/imagens.js:lerAte).
-   Vai para o R2 em kanban/<cartao_id>/<anexo_id> e só depois para a base; se
-   a base falhar, o ficheiro sai do R2.
+/* O nome de um anexo: o do X-Nome limpo (nomeLimpo) e, num ficheiro que não
+   é imagem, com a extensão do tipo verdadeiro (lib/imagens.js:comExtensao);
+   sem nome, o de omissão pela extensão do tipo ('documento.pdf',
+   'imagem.png', 'texto.txt'). As imagens ficam com o nome que trazem.
+   Recebe: v — o valor do cabeçalho (ou null); tipo — o tipo verdadeiro (de lib/imagens.js:tipoDoFicheiro).
+   Devolve: o nome. */
+function nomeDoAnexo(v, tipo) {
+  const s = nomeLimpo(v);
+  if (!s) return nomePorOmissao(tipo);
+  return TIPOS_DOS_ANEXOS[tipo] && TIPOS_DOS_ANEXOS[tipo].imagem ? s : comExtensao(s, tipo, MAX_NOME_ANEXO);
+}
+
+// O 413 de um anexo que passa do teto.
+// Devolve: a Response 413.
+const grandeDeMais = () => err(413, 'O ficheiro é grande de mais (máx. 10 MB).');
+
+/* PUT /api/equipa/kanban/cartoes/:chave/anexos: um ficheiro no cartão, com
+   os bytes no corpo. Só os tipos da lista fechada (lib/imagens.js:TIPOS_DOS_ANEXOS),
+   reconhecidos pelos próprios bytes (lib/imagens.js:tipoDoFicheiro) e não
+   pelo Content-Type nem pelo nome, até 10 MB (lido aos bocados por
+   lib/imagens.js:lerAte). Vai para o R2 em kanban/<cartao_id>/<anexo_id> e
+   só depois para a base; se a base falhar, o ficheiro sai do R2.
    Recebe: env; request — o pedido (os bytes, e o nome em X-Nome); eu — a
    sessão; chave — a do cartão.
    Devolve: promessa da Response 201 {anexo}, ou 404, 413, 415 ou 400 (vazia). */
 async function anexar(env, request, eu, chave) {
   const k = await cartaoParaMexer(env, chave);
   if (!k) return naoHaCartao();
-  if (Number(request.headers.get('Content-Length') || 0) > MAX_ANEXO) return err(413, 'A imagem é grande de mais (máx. 5 MB).');
+  if (Number(request.headers.get('Content-Length') || 0) > MAX_ANEXO) return grandeDeMais();
   const corpo = await lerAte(request, MAX_ANEXO);
-  if (!corpo) return err(413, 'A imagem é grande de mais (máx. 5 MB).');
-  if (!corpo.byteLength) return err(400, 'A imagem chegou vazia.');
-  const tipo = tipoDaImagem(corpo);
-  if (!tipo) return err(415, 'O anexo tem de ser uma imagem PNG, JPEG ou WebP.');
+  if (!corpo) return grandeDeMais();
+  if (!corpo.byteLength) return err(400, 'O ficheiro chegou vazio.');
+  const tipo = tipoDoFicheiro(corpo, nomeLimpo(request.headers.get('X-Nome')));
+  if (!tipo) return err(415, FRASE_DOS_TIPOS);
   const nome = nomeDoAnexo(request.headers.get('X-Nome'), tipo);
   if (!(await auditar(env, eu, 'kanban.anexar', chaveDe(k.numero), nome + ' (' + corpo.byteLength + ' bytes)'))) return semRasto();
   const id = crypto.randomUUID(), agora = now(), autor = quem(eu);
@@ -1174,26 +1190,33 @@ async function anexar(env, request, eu, chave) {
 }
 
 /* GET /api/equipa/kanban/anexos/:id: os bytes de um anexo, com o tipo lido
-   dos próprios bytes, sem cache e na caixa de areia dos anexos (CSP_ANEXO,
-   nosniff), como o servirImagem do QA.
+   outra vez dos próprios bytes (lib/imagens.js:tipoDoFicheiro), sem cache e
+   na caixa de areia dos anexos (CSP_ANEXO, nosniff), como o servirImagem do
+   QA. Só as imagens abrem no sítio. O resto desce como ficheiro (attachment,
+   com o nome e a extensão do tipo: lib/imagens.js:disposicaoDeDescarga) —
+   também o PDF: o visor de PDF do Chrome não abre um documento em caixa de
+   areia (cancela-o com ERR_BLOCKED_BY_CLIENT), e tirar o sandbox a um
+   ficheiro escrito por outros na origem do back office não se faz. O texto
+   vai em UTF-8; um tipo que já não se reconheça, em application/octet-stream.
    Recebe: env; id — o do anexo.
-   Devolve: promessa da Response com a imagem, ou 404. */
+   Devolve: promessa da Response com o ficheiro, ou 404. */
 async function servirAnexo(env, id) {
-  const a = badId(id) ? null : await env.DB.prepare('SELECT chave FROM kanban_anexos WHERE id = ?').bind(id).first();
+  const a = badId(id) ? null : await env.DB.prepare('SELECT chave, nome FROM kanban_anexos WHERE id = ?').bind(id).first();
   if (!a) return err(404, 'Anexo não encontrado.');
   const obj = await env.FILES.get(a.chave);
   if (!obj) return err(404, 'Anexo não encontrado.');
   const corpo = new Uint8Array(await new Response(obj.body).arrayBuffer());
-  return new Response(corpo, {
-    headers: {
-      'Content-Type': tipoDaImagem(corpo) || 'application/octet-stream',
-      'Content-Length': String(corpo.byteLength),
-      'Cache-Control': 'private, no-store',
-      // o index.js deixa passar este valor exato pelo harden (PODE_APERTAR)
-      'Content-Security-Policy': CSP_ANEXO,
-      'X-Content-Type-Options': 'nosniff',
-    },
-  });
+  const tipo = tipoDoFicheiro(corpo, a.nome), t = TIPOS_DOS_ANEXOS[tipo];
+  const headers = {
+    'Content-Type': !t ? 'application/octet-stream' : /^text\//.test(tipo) ? tipo + '; charset=utf-8' : tipo,
+    'Content-Length': String(corpo.byteLength),
+    'Cache-Control': 'private, no-store',
+    // o index.js deixa passar este valor exato pelo harden (PODE_APERTAR)
+    'Content-Security-Policy': CSP_ANEXO,
+    'X-Content-Type-Options': 'nosniff',
+  };
+  if (!t || !t.imagem) headers['Content-Disposition'] = disposicaoDeDescarga(a.nome ? comExtensao(a.nome, tipo, MAX_NOME_ANEXO) : nomePorOmissao(tipo));
+  return new Response(corpo, { headers });
 }
 
 /* DELETE /api/equipa/kanban/anexos/:id: tira o anexo do R2 e depois da base

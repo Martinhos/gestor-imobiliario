@@ -47,9 +47,11 @@
 // cartões. Um cartão com origem trata-se pelo script dela, e a fila diz o
 // comando: o ticket de QA pelo scripts/qa.mjs (a skill qa), o pedido pelo
 // scripts/ticket.mjs (a skill ticket; um pedido que não está na base do dev
-// é da produção, --prod). anexo descarrega as imagens de um cartão do R2
-// (kanban/<cartao>/<anexo>, as rotas) para os.tmpdir()/rendorium-kanban (ou
-// --para), com a extensão do tipo verdadeiro. comecar leva os cartões a Auto
+// é da produção, --prod). anexo descarrega os anexos de um cartão do R2
+// (kanban/<cartao>/<anexo>, as rotas) — imagens, PDF, Word, Excel,
+// PowerPoint, texto e CSV — para os.tmpdir()/rendorium-kanban (ou --para),
+// com a extensão do tipo verdadeiro (worker/src/lib/imagens.js:tipoDoFicheiro,
+// o mesmo das rotas). comecar leva os cartões a Auto
 // Tests, no topo; confere-os todos antes de escrever e recusa sem mexer em
 // nenhum se um não existe, foi removido, está em Human Tests ou numa coluna
 // de fim (reabre-se primeiro) ou tem origem. resolver leva um cartão sem
@@ -102,7 +104,8 @@ import {
 import {
   configDoAlvo, comRepeticao, erroDoWrangler as erroDoWranglerTicket, lerJsonDoWrangler, ErroTicket, publicadoDev,
 } from './ticket.mjs';
-import { porResponder, comentariosPorExtenso, tipoDaImagem } from './qa.mjs';
+import { porResponder, comentariosPorExtenso } from './qa.mjs';
+import { tipoDoFicheiro, TIPOS_DOS_ANEXOS } from '../worker/src/lib/imagens.js';
 
 // O worker/src não tem um package.json com "type": "module", e o Node avisa no
 // stderr, a cada corrida, que leu a lib/kanban.js como ES module: cala-se esse
@@ -2133,10 +2136,12 @@ function cmdReabrir(o, d) {
   return k.chave + ' reaberto: «' + daqui + '» → «' + destino.nome + '» (no topo) ' + ondeFica(a) + '.';
 }
 
-/* anexo: descarrega as imagens de um cartão (todas, ou a dada) do R2 do alvo
-   para os.tmpdir()/rendorium-kanban (ou --para), cada uma com a extensão do
-   tipo verdadeiro (pelos primeiros bytes), e diz os caminhos. Confere as
-   chaves todas antes de descarregar alguma: só as do espaço kanban/ das rotas.
+/* anexo: descarrega os anexos de um cartão (todos, ou o dado) do R2 do alvo
+   para os.tmpdir()/rendorium-kanban (ou --para), cada um com a extensão do
+   tipo verdadeiro, lido dos bytes como as rotas o leem
+   (worker/src/lib/imagens.js:tipoDoFicheiro: .png, .pdf, .docx, .txt…; .bin
+   se não for nenhum), e diz os caminhos. Confere as chaves todas antes de
+   descarregar alguma: só as do espaço kanban/ das rotas.
    Recebe: o — as opções lidas; d — as dependências.
    Devolve: o texto com os caminhos; lança ErroKanban se algum falhar (com os que ficaram). */
 function cmdAnexo(o, d) {
@@ -2165,11 +2170,11 @@ function cmdAnexo(o, d) {
         : /specified key does not exist|NoSuchKey|object not found/i.test(t) ? 'não está no R2 (a base diz que existe, mas o objeto não está lá)' : erroDoWrangler(t).mensagem));
       return;
     }
-    const tipo = tipoDaImagem(bytes);
-    const final = path.join(pasta, chave + '-' + x.id + '.' + (tipo || 'bin'));
+    const tipo = tipoDoFicheiro(bytes, x.nome), ext = tipo ? TIPOS_DOS_ANEXOS[tipo].ext[0] : null;
+    const final = path.join(pasta, chave + '-' + x.id + '.' + (ext || 'bin'));
     rmSync(final, { force: true });
     renameSync(temp, final);
-    bons.push('  ' + final + ' (' + (tipo || 'tipo desconhecido: os primeiros bytes não são de png, jpg nem webp') + ', ' + Math.max(1, Math.round(bytes.length / 1024)) + ' KB) — «' + x.nome + '»');
+    bons.push('  ' + final + ' (' + (ext || 'tipo desconhecido: os bytes não são de nenhum dos tipos dos anexos') + ', ' + Math.max(1, Math.round(bytes.length / 1024)) + ' KB) — «' + x.nome + '»');
   });
   const texto = (bons.length ? conta(bons.length, 'anexo', 'anexos') + ' do ' + chave + ' ' + ondeFica(a) + ':\n' + bons.join('\n') : '');
   if (maus.length) throw new ErroKanban((texto ? texto + '\n' : '') + 'Não consegui descarregar ' + conta(maus.length, 'anexo', 'anexos') + ' do ' + chave + ':\n' + maus.map((m) => '  - ' + m).join('\n'));

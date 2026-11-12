@@ -81,6 +81,17 @@ var KB_FILTROS = { tipo: 'tipo', etiqueta: 'etiqueta', responsavel: 'responsáve
 var KB_ESTADOS_ORIGEM = { aberto: 'Aberto', em_resolucao: 'Em resolução', resolvido: 'Resolvido', removido: 'Removido', reposto: 'Reposto',
   aceite: 'Aceite', resolucao: 'Em resolução', proposta: 'Resposta proposta', concluido: 'Concluído' };
 var KB_SUB ='As tarefas da equipa: o que há para fazer, o que se testa e o que ficou feito.';
+// os anexos: o que o campo deixa escolher (o servidor confere cada um pelos bytes: lib/imagens.js:TIPOS_DOS_ANEXOS) e o teto
+var KB_ANEXO_ACEITA = 'image/png,image/jpeg,image/webp,application/pdf,.pdf,' +
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,' +
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,' +
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx,text/plain,.txt,text/csv,.csv';
+var KB_ANEXO_MAX = 10 * 1024 * 1024;
+// o nome curto de cada tipo de ficheiro que não é imagem, no bloco do anexo
+var KB_NOMES_DOS_ANEXOS = { 'application/pdf': 'PDF', 'text/plain': 'Texto', 'text/csv': 'CSV',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'Excel',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PowerPoint' };
 
 /* Os desenhos novos, em traço de 1.8 como os outros: o tipo de cada cartão,
    a prioridade, e as peças do cartão (pega, ações, comentários, anexos,
@@ -99,6 +110,8 @@ ICONES.kbPega = '<path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.0
 ICONES.kbMais = '<path d="M5 12h.01M12 12h.01M19 12h.01"/>';
 ICONES.kbComentario = '<path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 20 12z"/>';
 ICONES.kbAnexo = '<path d="M20 11l-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>';
+// um anexo que não é imagem: a folha com o canto dobrado e duas linhas de texto
+ICONES.kbFicheiro = '<path d="M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6"/>';
 ICONES.kbLigacao = '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>';
 ICONES.kbBloqueado = '<path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM5.6 5.6l12.8 12.8"/>';
 ICONES.kbCopiar = '<path d="M9 9h11v11H9zM5 15H4V4h11v1"/>';
@@ -132,6 +145,14 @@ function kbTelemovel() {
 function kbConta(n, um, varios) {
   n = Number(n) || 0;
   return n === 1 ? '1 ' + um : n + ' ' + varios;
+}
+// O tamanho de um ficheiro como se lê: 12 KB, 1,2 MB.
+// Recebe: n — os bytes.
+// Devolve: o texto.
+function kbTamanho(n) {
+  n = Number(n) || 0;
+  if (n < 1048576) return Math.max(1, Math.round(n / 1024)) + ' KB';
+  return (n / 1048576).toFixed(1).replace('.', ',') + ' MB';
 }
 // Um dia AAAA-MM-DD à portuguesa: 2026-11-09 → 09/11/2026 (o texto tal e qual se não for um dia).
 // Recebe: s — o dia.
@@ -751,22 +772,56 @@ function kbLigacoesHtml(chave, ls) {
     }).join('') + '</ul>' : '<p class="sub">Sem ligações.</p>') +
     '<button type="button" class="btn sm"' + comAcao('kbLigar', [chave]) + '>' + ic('kbLigacao', 'i-sm') + 'Adicionar ligação</button></div>';
 }
-/* Os anexos: as miniaturas das imagens (tocar abre a imagem), Remover em
-   cada uma e o «Adicionar imagem» (um campo de ficheiro escondido dentro do botão).
-   Recebe: chave; as — os anexos ({id, nome, url}).
+// O endereço de um anexo é o das rotas (/api/equipa/kanban/anexos/<id>)? Só esse vira ligação.
+// Recebe: u — o url que veio do servidor.
+// Devolve: true quando é.
+function kbAnexoBom(u) {
+  return /^\/api\/equipa\/kanban\/anexos\/[\w-]+$/.test(String(u || ''));
+}
+// Um anexo é uma imagem (PNG, JPEG ou WebP), que se mostra em miniatura?
+// Recebe: a — o anexo ({tipo}).
+// Devolve: true quando é.
+function kbEImagem(a) {
+  return /^image\/(png|jpeg|webp)$/.test(String((a && a.tipo) || ''));
+}
+/* Os anexos: as imagens em miniatura (tocar abre a imagem) e, por baixo, os
+   outros ficheiros, um bloco cada (kbFicheiroHtml); Remover em cada um, e o
+   «Adicionar ficheiro» (um campo de ficheiro escondido dentro do botão), com
+   o erro por baixo dele.
+   Recebe: chave; as — os anexos ({id, nome, tipo, tamanho, url, autor, created_at}).
    Devolve: o HTML. */
 function kbAnexosHtml(chave, as) {
-  var bom = function (u) { return /^\/api\/equipa\/kanban\/anexos\/[\w-]+$/.test(String(u || '')); };
+  var imagens = as.filter(kbEImagem), outros = as.filter(function (a) { return !kbEImagem(a); });
   return '<div class="kb-p-sec"><h3 class="lbl">Anexos</h3>' +
-    (as.length ? '<ul class="kb-anexos">' + as.map(function (a) {
-      return '<li class="kb-anexo">' + (bom(a.url) ? '<a href="' + esc(a.url) + '" target="_blank" rel="noopener" class="kb-anexo-img" title="' + esc(a.nome) + '">' +
+    (imagens.length ? '<ul class="kb-anexos">' + imagens.map(function (a) {
+      return '<li class="kb-anexo">' + (kbAnexoBom(a.url) ? '<a href="' + esc(a.url) + '" target="_blank" rel="noopener" class="kb-anexo-img" title="' + esc(a.nome) + '">' +
         '<img src="' + esc(a.url) + '" alt="' + esc(a.nome || 'Imagem') + '" loading="lazy" width="96" height="96"></a>' : '') +
         '<button type="button" class="btn sm ghost so-icone kb-anexo-x" aria-label="Remover ' + esc(a.nome || 'a imagem') + '"' + comAcao('kbAnexoRemover', [a.id]) + '>' +
         ic('fechar', 'i-sm') + '</button></li>';
-    }).join('') + '</ul>' : '<p class="sub">Sem anexos.</p>') +
-    '<label class="btn sm kb-anexar">' + ic('kbAnexo', 'i-sm') + 'Adicionar imagem' +
-    '<input type="file" accept="image/png,image/jpeg,image/webp" class="so-leitor" id="kbAnexoCampo"' + ligarA('mudar', 'kbAnexar', [chave]) + '></label>' +
+    }).join('') + '</ul>' : '') +
+    (outros.length ? '<ul class="kb-ficheiros">' + outros.map(kbFicheiroHtml).join('') + '</ul>' : '') +
+    (as.length ? '' : '<p class="sub">Sem anexos.</p>') +
+    '<label class="btn sm kb-anexar">' + ic('kbAnexo', 'i-sm') + 'Adicionar ficheiro' +
+    '<input type="file" accept="' + KB_ANEXO_ACEITA + '" class="so-leitor" id="kbAnexoCampo" aria-describedby="kbAnexoCampoErro"' +
+    ligarA('mudar', 'kbAnexar', [chave]) + '></label>' +
+    '<p class="erro-txt" id="kbAnexoCampoErro"></p>' +
     '<p class="sub n" id="kbAnexoEstado" role="status"></p></div>';
+}
+/* Um anexo que não é imagem, num bloco: o ícone, o nome e, por baixo, o
+   tipo, o tamanho («1,2 MB»), quem o adicionou e quando. Tocar descarrega-o
+   (o servidor manda-o como ficheiro, PDF incluído); o Remover vai ao lado.
+   Recebe: a — o anexo ({id, nome, tipo, tamanho, url, autor, created_at}).
+   Devolve: o HTML (um li). */
+function kbFicheiroHtml(a) {
+  var nome = esc(a.nome || 'Ficheiro');
+  var meta = [KB_NOMES_DOS_ANEXOS[a.tipo] || 'Ficheiro', kbTamanho(a.tamanho), (a.autor && a.autor.nome) || '', a.created_at ? data(a.created_at) : '']
+    .filter(Boolean).map(esc).join(' · ');
+  var dentro = '<span class="kb-ficheiro-ic">' + ic('kbFicheiro') + '</span><span class="kb-ficheiro-txt"><span class="kb-ficheiro-nome">' + nome + '</span>' +
+    '<span class="sub n kb-ficheiro-meta">' + meta + '</span></span>';
+  return '<li class="kb-ficheiro">' + (kbAnexoBom(a.url) ? '<a class="kb-ficheiro-a" href="' + esc(a.url) + '" download title="Descarregar ' + nome + '">' + dentro + '</a>'
+    : '<span class="kb-ficheiro-a">' + dentro + '</span>') +
+    '<button type="button" class="btn sm ghost so-icone kb-ficheiro-x" aria-label="Remover ' + nome + '"' + comAcao('kbAnexoRemover', [a.id]) + '>' +
+    ic('fechar', 'i-sm') + '</button></li>';
 }
 /* Os comentários (os teus com Editar e Remover) e a caixa de comentar; num
    cartão por decidir em Human Tests, o exemplo é o de uma recusa.
@@ -1059,32 +1114,43 @@ function kbLigacaoRemover(id) {
     kbRecarregar();
   }).catch(function (e) { avisar(e.message || 'Não deu para remover a ligação.', 'erro'); });
 }
-/* Envia a imagem escolhida como anexo do cartão (PNG, JPEG ou WebP, até 5 MB).
+// O ficheiro escolhido é de um tipo que pode ir (pela extensão ou pelo tipo que o browser diz)? Quem decide é o servidor, pelos bytes.
+// Recebe: f — o File.
+// Devolve: true quando vale a pena enviá-lo.
+function kbAnexoPodeIr(f) {
+  return /\.(png|jpe?g|webp|pdf|docx|xlsx|pptx|txt|log|csv)$/i.test(String(f.name || '')) || /^(image\/(png|jpeg|webp)|application\/pdf)$/.test(f.type || '');
+}
+/* Envia o ficheiro escolhido como anexo do cartão (imagem, PDF, Word, Excel,
+   PowerPoint, texto ou CSV, até 10 MB). Confere aqui o que dá para conferir;
+   o servidor reconhece-o pelos bytes e recusa o resto (415, 413), e o erro,
+   venha de onde vier, diz-se por baixo do botão (kbAnexoCampoErro).
    Recebe: chave; campo — o input type=file.
    Devolve: nada. */
 function kbAnexar(chave, campo) {
   var f = campo && campo.files && campo.files[0], estado = el('kbAnexoEstado');
   if (!f) return;
   var diz = function (t) { if (estado) estado.textContent = t; };
-  if (!/^image\/(png|jpeg|webp)$/.test(f.type || '')) { diz(''); avisar('Só imagens PNG, JPEG ou WebP.', 'erro'); campo.value = ''; return; }
-  if (f.size > 5 * 1024 * 1024) { diz(''); avisar('A imagem tem mais de 5 MB.', 'erro'); campo.value = ''; return; }
+  var recusa = function (t) { diz(''); marcarErro('kbAnexoCampo', t); if (campo) campo.value = ''; };
+  marcarErro('kbAnexoCampo', '');
+  if (!kbAnexoPodeIr(f)) return recusa('Esse ficheiro não entra: só imagens (PNG, JPEG, WebP), PDF, Word, Excel, PowerPoint, texto ou CSV.');
+  if (f.size > KB_ANEXO_MAX) return recusa('O ficheiro tem mais de 10 MB.');
   diz('A enviar ' + f.name + '…');
-  pedir(kbRota(chave, '/anexos'), { method: 'PUT', headers: { 'Content-Type': f.type, 'X-Nome': encodeURIComponent(f.name) }, body: f }).then(function () {
-    avisar('Imagem adicionada.');
+  pedir(kbRota(chave, '/anexos'), { method: 'PUT', headers: { 'Content-Type': f.type || 'application/octet-stream', 'X-Nome': encodeURIComponent(f.name) }, body: f }).then(function () {
+    avisar('Anexo adicionado.');
     if (kbAberto === chave) kbAbrir(chave, false);
     kbRecarregar();
-  }).catch(function (e) { diz(''); avisar(e.message || 'Não deu para enviar a imagem.', 'erro'); if (campo) campo.value = ''; });
+  }).catch(function (e) { recusa(e.message || 'Não deu para enviar o ficheiro.'); });
 }
 /* Remove um anexo (não volta: pergunta antes, na janela).
    Recebe: id — o id do anexo.
    Devolve: nada. */
 function kbAnexoRemover(id) {
   var chave = kbAberto;
-  kbJanela('Remover a imagem?', '', {
-    texto: 'A imagem sai do cartão e não volta.', botao: 'Remover', perigo: true,
+  kbJanela('Remover o anexo?', '', {
+    texto: 'O ficheiro sai do cartão e não volta.', botao: 'Remover', perigo: true,
     aoConfirmar: function () {
       return pedir('/api/equipa/kanban/anexos/' + encodeURIComponent(id), { method: 'DELETE' })
-        .then(function () { avisar('Imagem removida.'); if (kbAberto === chave) kbAbrir(chave, false); kbRecarregar(); });
+        .then(function () { avisar('Anexo removido.'); if (kbAberto === chave) kbAbrir(chave, false); kbRecarregar(); });
     },
   });
 }
@@ -1290,6 +1356,18 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
 .kb-anexo-x{position:absolute;top:-10px;right:-10px;background:var(--card);border:1px solid var(--line2);border-radius:999px}
 .kb-anexar{position:relative}
 .kb-anexar:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+/* um anexo que não é imagem: um bloco a toda a largura, que descarrega */
+.kb-ficheiros{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.kb-ficheiro{display:flex;align-items:center;gap:4px;padding-right:4px;border:1px solid var(--line2);border-radius:12px;background:var(--card)}
+.kb-ficheiro-a{flex:1;min-width:0;display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 6px 8px 10px;border-radius:11px;
+  color:var(--ink);text-decoration:none;transition:background-color var(--rapido) var(--curva)}
+a.kb-ficheiro-a:active{background:var(--press)}
+.kb-ficheiro-a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.kb-ficheiro-ic{flex:none;width:36px;height:36px;border-radius:10px;background:var(--chip);color:var(--muted);display:inline-flex;align-items:center;justify-content:center}
+.kb-ficheiro-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.kb-ficheiro-nome{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kb-ficheiro-meta{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kb-ficheiro-x{flex:none}
 .kb-coment{align-self:stretch}
 .kb-coment-acoes{display:flex;gap:4px;margin:-4px 0 -6px -10px}
 .kb-comentar{min-height:84px}
@@ -1327,6 +1405,8 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
   .kb-col-vazio-mais:active{background:var(--press)}
   .kb-c-topo .kb-mais{margin-left:auto}
   .kb-anular:hover{background:color-mix(in srgb,currentColor 12%,transparent)}
+  a.kb-ficheiro-a:hover{background:var(--tint)}
+  a.kb-ficheiro-a:active{background:var(--press)}
   .kb-hist>summary:hover .lbl{color:var(--ink)}
   .kb-pega{display:none}
 }
@@ -1371,7 +1451,7 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
 @media(pointer:coarse){
   .kb-pega,.kb-mais{width:44px;height:44px;margin:-10px -8px -10px 0}
   .kb-col-mais{min-height:44px}
-  .kb-anexo-x{width:44px;height:44px}
+  .kb-anexo-x,.kb-ficheiro-x{width:44px;height:44px}
   .kb-anular{min-height:44px;padding:0 14px}
 }
 /* menos movimento: o painel só aparece e desaparece, sem deslizar; o cartão

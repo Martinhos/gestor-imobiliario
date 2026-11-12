@@ -1125,7 +1125,8 @@ describe('reabrir', () => {
 });
 
 describe('anexo', () => {
-  // Recebe: nada. Devolve: { dev, pasta } — a base com o KAN-3 e três anexos, e uma pasta nova para os descarregar.
+  // Recebe: nada. Devolve: { dev, pasta } — a base com o KAN-3 e cinco anexos (duas imagens, um binário que
+  // não é de nenhum tipo, um PDF e um CSV), e uma pasta nova para os descarregar.
   function comAnexos() {
     const dev = novaBase();
     poeCartao(dev, 3, 'a-fazer');
@@ -1133,6 +1134,8 @@ describe('anexo', () => {
     poeAnexo(dev, 3, 'anx-png', { nome: 'ecra.png', created_at: 1 });
     poeAnexo(dev, 3, 'anx-webp', { nome: 'engana.png', tipo: 'image/webp', created_at: 2 });
     poeAnexo(dev, 3, 'anx-txt', { nome: 'estranho.png', created_at: 3 });
+    poeAnexo(dev, 3, 'anx-pdf', { nome: 'FINE.pdf', tipo: 'application/pdf', created_at: 4 });
+    poeAnexo(dev, 3, 'anx-csv', { nome: 'rendas.csv', tipo: 'text/csv', created_at: 5 });
     return { dev, pasta: mkdtempSync(path.join(os.tmpdir(), 'kanban-anexo-')) };
   }
   // Recebe: bytes — por chave do R2 (o que o R2 tem). Devolve: um descarregar que escreve esses bytes e guarda as chamadas.
@@ -1147,7 +1150,8 @@ describe('anexo', () => {
     f.vezes = [];
     return f;
   }
-  const R2 = { 'kanban/k3/anx-png': PNG, 'kanban/k3/anx-webp': WEBP, 'kanban/k3/anx-txt': Buffer.from('isto não é uma imagem') };
+  const R2 = { 'kanban/k3/anx-png': PNG, 'kanban/k3/anx-webp': WEBP, 'kanban/k3/anx-txt': Buffer.from([0x4d, 0x5a, 0x90, 0, 3, 0, 0, 0, 4, 0, 0, 0]),
+    'kanban/k3/anx-pdf': Buffer.from('%PDF-1.7\n%%EOF\n'), 'kanban/k3/anx-csv': Buffer.from('data;valor\n2026-11-12;650,00\n') };
 
   test('anexo: todos os de um cartão, com a extensão do tipo verdadeiro (não do nome), na pasta dada', () => {
     const { dev, pasta } = comAnexos();
@@ -1155,12 +1159,16 @@ describe('anexo', () => {
       const desc = r2(R2);
       const r = corre(['anexo', 'KAN-3', '--para', pasta], { dev }, { descarregar: desc });
       assert.equal(r.codigo, 0, r.err);
-      assert.match(r.out, /^3 anexos do KAN-3 no dev \(gestor-imobiliario-dev\):\n/);
-      assert.deepEqual(readdirSync(pasta).sort(), ['KAN-3-anx-png.png', 'KAN-3-anx-txt.bin', 'KAN-3-anx-webp.webp']);
+      assert.match(r.out, /^5 anexos do KAN-3 no dev \(gestor-imobiliario-dev\):\n/);
+      assert.deepEqual(readdirSync(pasta).sort(), ['KAN-3-anx-csv.csv', 'KAN-3-anx-pdf.pdf', 'KAN-3-anx-png.png', 'KAN-3-anx-txt.bin', 'KAN-3-anx-webp.webp']);
       assert.ok(readFileSync(path.join(pasta, 'KAN-3-anx-png.png')).equals(PNG));
+      assert.ok(readFileSync(path.join(pasta, 'KAN-3-anx-pdf.pdf')).equals(R2['kanban/k3/anx-pdf']));
       assert.match(r.out, /KAN-3-anx-webp\.webp \(webp, 1 KB\) — «engana\.png»/);
-      assert.match(r.out, /KAN-3-anx-txt\.bin \(tipo desconhecido: os primeiros bytes não são de png, jpg nem webp, 1 KB\)/);
-      assert.deepEqual(desc.vezes.map((x) => [x.alvo, x.chave]), [['dev', 'kanban/k3/anx-png'], ['dev', 'kanban/k3/anx-webp'], ['dev', 'kanban/k3/anx-txt']]);
+      assert.match(r.out, /KAN-3-anx-pdf\.pdf \(pdf, 1 KB\) — «FINE\.pdf»/);
+      assert.match(r.out, /KAN-3-anx-csv\.csv \(csv, 1 KB\) — «rendas\.csv»/);
+      assert.match(r.out, /KAN-3-anx-txt\.bin \(tipo desconhecido: os bytes não são de nenhum dos tipos dos anexos, 1 KB\)/);
+      assert.deepEqual(desc.vezes.map((x) => [x.alvo, x.chave]),
+        [['dev', 'kanban/k3/anx-png'], ['dev', 'kanban/k3/anx-webp'], ['dev', 'kanban/k3/anx-txt'], ['dev', 'kanban/k3/anx-pdf'], ['dev', 'kanban/k3/anx-csv']]);
       assert.ok(r.chamadas.every((c) => c.tipo === 'ler'));
     } finally { rmSync(pasta, { recursive: true, force: true }); }
   });
@@ -1194,7 +1202,7 @@ describe('anexo', () => {
       dev.exec("UPDATE kanban_anexos SET chave = 'kanban/k3/apagado' WHERE id = 'anx-txt'");
       const falta = corre(['anexo', 'KAN-3', '--para', pasta], { dev }, { descarregar: desc });
       assert.equal(falta.codigo, 1);
-      assert.match(falta.err, /^kanban: 2 anexos do KAN-3 no dev .+:\n.+KAN-3-anx-png\.png[\s\S]*Não consegui descarregar 1 anexo do KAN-3:\n {2}- anx-txt \(«estranho\.png»\): não está no R2/);
+      assert.match(falta.err, /^kanban: 4 anexos do KAN-3 no dev .+:\n.+KAN-3-anx-png\.png[\s\S]*Não consegui descarregar 1 anexo do KAN-3:\n {2}- anx-txt \(«estranho\.png»\): não está no R2/);
       assert.ok(!existsSync(path.join(pasta, 'KAN-3-anx-txt.descarregar')), 'o ficheiro a meio sai');
     } finally { rmSync(pasta, { recursive: true, force: true }); }
   });

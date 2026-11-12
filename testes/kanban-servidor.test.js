@@ -725,14 +725,14 @@ describe('os anexos', () => {
     assert.deepEqual((await rastoKanban(env)).slice(1), ['kanban.anexar ' + c.chave, 'kanban.anexo.remover ' + c.chave]);
   });
 
-  test('só PNG, JPEG ou WebP pelos bytes, até 5 MB, e não vazia; o nome sem X-Nome, ou malformado', async () => {
+  test('só os tipos da lista pelos bytes (o SVG não), até 10 MB, e não vazio; o nome sem X-Nome, ou malformado', async () => {
     const env = ambiente();
     const c = await novoCartao(env);
     const put = (corpo, headers) => chamarCru(env, DEV, 'PUT', K + '/cartoes/' + c.chave + '/anexos', corpo, headers);
     assert.equal((await put(new TextEncoder().encode('<svg onload=alert(1)>'), { 'Content-Type': 'image/png' })).status, 415);
     assert.equal((await put(new Uint8Array(0))).status, 400);
-    assert.equal((await put(PNG, { 'Content-Length': String(5 * 1024 * 1024 + 1) })).status, 413);
-    const grande = new Uint8Array(5 * 1024 * 1024 + 1);
+    assert.equal((await put(PNG, { 'Content-Length': String(10 * 1024 * 1024 + 1) })).status, 413);
+    const grande = new Uint8Array(10 * 1024 * 1024 + 1);
     grande.set(PNG);
     assert.equal((await put(grande)).status, 413);
     assert.equal(env.FILES.m.size, 0, 'nada chegou ao R2');
