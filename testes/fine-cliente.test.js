@@ -61,7 +61,7 @@ beforeEach(() => {
 afterEach(() => repor(app));
 
 describe('o botão', () => {
-  test('aparece com sessão, fora de produção, a quem edita — com o texto e a dica', () => {
+  test('aparece com sessão, a quem edita — com o texto e a dica', () => {
     const l = casa();
     const h = app.fineSect(l);
     assert.match(h, /Ler a partir da FINE ou do contrato/);
@@ -72,10 +72,10 @@ describe('o botão', () => {
     assert.match(h, /data-change="fineFicheiro\(this,'a'\)"/);
     assert.ok(!/ style=| on[a-z]+=/i.test(h), 'sem style= nem on…= (a CSP)');
   });
-  test('em produção não aparece', () => {
+  test('em produção aparece como no dev (o KAN-14 tirou o portão)', () => {
     const l = casa();
     app.CW.ambiente = 'producao';
-    igual(app.fineSect(l), '');
+    assert.match(app.fineSect(l), /fine_btn_a/);
   });
   test('sem sessão não aparece', () => {
     const l = casa();

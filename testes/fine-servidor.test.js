@@ -111,16 +111,14 @@ async function aConsola(fn) {
 /* ----------------------------- as recusas ------------------------------ */
 
 describe('POST /api/creditos/fine — as recusas pela ordem do contrato', () => {
-  test('em produção é 404, antes até da sessão, e com sessão também', async () => {
+  test('em produção lê como no dev: sem sessão é 401, com sessão é 200 (o KAN-14 tirou o portão)', async () => {
     const env = ambiente({ ENV_NAME: undefined, AI: aiFalso() });
     const sem = await ler(env, null, pdf());
-    assert.equal(sem.status, 404);
-    assert.equal(sem.error, 'Não encontrado.');
-    const quem = await conta(env, 'Ana');
-    const com = await ler(env, quem, pdf());
-    assert.equal(com.status, 404);
-    assert.equal(com.error, 'Não encontrado.');
-    assert.equal(env.AI.chamadas.md.length, 0, 'o Workers AI nem foi chamado');
+    assert.equal(sem.status, 401);
+    assert.equal(env.AI.chamadas.md.length, 0, 'sem sessão o Workers AI nem foi chamado');
+    const com = await ler(env, await conta(env, 'Ana'), pdf());
+    assert.equal(com.status, 200);
+    assert.equal(com.campos.euribor, 2.15);
   });
 
   test('sem sessão é 401', async () => {

@@ -4311,8 +4311,7 @@ preenche e a pessoa confirma, e que por baixo se preenche à mão. Uma segunda
 linha diz que os produtos facultativos que o documento indicar (seguros,
 cartões, ordenado domiciliado) aparecem mais abaixo, nos produtos da
 hipoteca, desligados, para a pessoa ligar os que tem. Só aparece
-com sessão, fora de produção e a quem pode editar a casa
-(fine.js:finePodeLer). O PDF fica anexado à hipoteca pelo caminho de sempre
+com sessão e a quem pode editar a casa (fine.js:finePodeLer). O PDF fica anexado à hipoteca pelo caminho de sempre
 (web/app/anexos.js:takeFiles), também quando a leitura falha, e o mesmo ficheiro não
 se anexa duas vezes. Os bytes vão ao POST /api/creditos/fine (fine.js:fineLer).
 
@@ -4325,9 +4324,15 @@ banco é sempre um nome da lista fechada (lib/fine.js:BANCOS) e nunca o texto
 do modelo, e o que falha vai para os ignorados. Uma resposta que chega sem a
 chaveta do fim (o modelo a encher o resto de espaços até ao teto dos tokens)
 lê-se na mesma, desde que cortada depois de um valor completo
-(lib/fine.js:respostaDoModelo). Nada do documento fica: nem
+(lib/fine.js:respostaDoModelo). Os valores que a ficha escreve em frases
+fixas (o indexante, o spread e a taxa fixa base e contratados, as prestações
+sem e com as vendas associadas facultativas, as comissões da secção 9) leem-se
+do próprio texto e passam por cima do modelo nessas chaves
+(lib/fine.js:lidoDoTexto); se o documento é um crédito, decide-o o modelo.
+Nada do documento fica: nem
 os bytes, nem o texto, nem a resposta vão para a base, para a consola ou para
-um relato de erro. A rota recusa em produção (404 antes da sessão), acima de
+um relato de erro. A política de privacidade diz este tratamento (web/legal.js,
+pontos 4 e 5). A rota recusa sem sessão, acima de
 5 MB, o que não começa por %PDF-, mais de 5 leituras por conta e por dia
 (menos no dev.rendorium.com, onde se testa e não há limite por conta), e
 acima do teto global do dia (rotas/fine.js:TETO_GLOBAL, tirado do custo

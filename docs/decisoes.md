@@ -109,6 +109,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-12 · Os anexos do kanban aceitam ficheiros, numa lista fechada pelos bytes (KAN-119)
 - 2026-11-12 · A Declaração é sempre a tua: sai o seletor de proprietário (KAN-73)
 - 2026-11-12 · A FINE verdadeira: as frases fixas da ficha passam por cima do modelo (KAN-15)
+- 2026-11-12 · A leitura da FINE sai do dev, e a política de privacidade di-la (KAN-14)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3864,3 +3865,20 @@ Na FINE do Martinho, 5 leituras de 5 deram tudo certo. Nas FINE de prova, as reg
 indexante certo e mais nada, e o modelo faz o resto como antes. Uma FINE envenenada pode escrever
 estas frases como escreve outra coisa qualquer: dá números, que as gamas e a verificação cruzada
 do cliente seguram como os do modelo.
+
+## 2026-11-12 · A leitura da FINE sai do dev, e a política de privacidade di-la (KAN-14)
+
+A leitura da FINE ficou só no dev desde 2026-11-01, à espera de FINE reais. Com a do Martinho a
+ler certa em 5 leituras de 5 (o KAN-15), perguntou-se se se preparava a promoção. Escolheu «Sim,
+preparar já», em vez de esperar por mais fichas de outros bancos.
+
+Ficou assim. A rota responde em produção como no dev, com o limite de 5 leituras por conta e por
+dia (que o dev.rendorium.com não tem) e o mesmo teto global. O botão aparece com sessão a quem
+edita a casa (fine.js:finePodeLer), em qualquer ambiente. O Workers AI já estava ligado à
+produção no [ai] do wrangler.toml. A política de privacidade diz o tratamento no ponto 4 (só a
+pedido, um modelo do Workers AI da Cloudflare, nem o texto nem a resposta guardados, o PDF só como
+anexo da hipoteca) e no ponto 5 (a Cloudflare também faz essa leitura). Por ser uma mudança de
+substância, a versão dos documentos subiu nos dois lados (web/legal.js e lib/http.js), e toda a
+gente aceita de novo ao abrir a app depois do «promove». Não se diz nada sobre o que a Cloudflare
+faz com os dados além disto, porque não se verificou daqui. A mínima continua a 58, acima dos 53
+que a FINE pedia.
