@@ -119,9 +119,14 @@ function fullAddress(p){
    campo «Rendas antecipadas (meses)» do formulário) mais a caução.
    Recebe: c — o contrato (objeto da base local).
    Devolve: o dicionário marcador → valor (objeto; strings prontas a inserir, mais
-   'contrato.diaPagamento' numérico — ou '' sem dia — e 'fotos' com a contagem de fotografias). */
+   'contrato.diaPagamento' numérico — ou '' sem dia —, 'fotos' com a contagem das
+   fotografias escolhidas que ainda existem no imóvel — uma apagada não conta,
+   e sem nenhuma o Anexo II (o registo fotográfico) não existe —, 'semFotos'
+   ('sim' sem nenhuma) e 'anexo.chaves', o número do Auto de entrega de chaves:
+   'III' com o registo fotográfico, 'II' sem ele). */
 function contractData(c){
   const p=prop(c.propertyId)||{};
+  const fotos=(p.photos||[]).filter(f=>(c.photoIds||[]).indexOf(f.id)>-1).length;
   const owners=ownersOfProp(p).map(owner).filter(Boolean);
   const tenants=ctTenants(c);
   const adv=Math.max(0,Math.round(Number(c.advance)||0)),antecipado=adv*(Number(c.rent)||0),caucao=Number(c.deposit)||0;
@@ -156,7 +161,7 @@ function contractData(c){
     'contrato.prazo':prazoTexto(c.start,c.end),
     'data.hoje':dataLonga(today()),
     'local':p.locality||p.concelho||(p.address||'').split(',').pop().replace(/\d{4}-\d{3}/,'').trim()||'Portugal',
-    fotos:(c.photoIds||[]).length
+    fotos:fotos,semFotos:fotos?'':'sim','anexo.chaves':fotos?'III':'II'
   };
 }
 // Substitui os marcadores {{chave}} pelos valores de d; os blocos {{#chave}}…{{/}} só sobrevivem se a chave tiver valor.
@@ -222,7 +227,7 @@ async function generateContractPdf(cid){
     if(tag==='secao'||tag==='anexo'){
       if(tag==='anexo')pdf.newPage();
       pdf.gap(6);pdf.need(13*1.3+10*1.42*3);
-      pdf.text(el.getAttribute('titulo'),{size:13,titulo:true,lead:13*1.3,after:8});
+      pdf.text(fillTpl(el.getAttribute('titulo'),d),{size:13,titulo:true,lead:13*1.3,after:8});
       [].slice.call(el.childNodes).forEach(ch=>{
         if(ch.nodeType!==1||skip(ch))return;
         /* as partes («SENHORIOS — …», «INQUILINOS — …») em cartões, com a
@@ -230,7 +235,7 @@ async function generateContractPdf(cid){
         const parte=ch.tagName==='p'&&/^(SENHORIOS|INQUILINOS) —/.exec(T(ch));
         if(parte)pdf.cartao({itens:[{texto:T(ch),cabeca:parte[0]}],after:8});
         else if(ch.tagName==='p')pdf.text(T(ch),{after:5});
-        else if(ch.tagName==='lista')[].slice.call(ch.getElementsByTagName('item')).forEach(it=>pdf.text(T(it),{marca:'•',recuo:12,corMarca:PDF_COR.cobalto,after:3}));
+        else if(ch.tagName==='lista')[].slice.call(ch.getElementsByTagName('item')).filter(it=>!skip(it)).forEach(it=>pdf.text(T(it),{marca:'•',recuo:12,corMarca:PDF_COR.cobalto,after:3}));
         else if(ch.tagName==='tabela')tabela(pdf,ch,c,p,d,imgs);
         else if(ch.tagName==='assinaturas')assinaturas(pdf,ch.getAttribute('parte'),c,p);
       });
@@ -536,9 +541,9 @@ const CONTRACT_XML=`<?xml version="1.0" encoding="utf-8"?>
   </clausula>
 
   <clausula titulo="ESTADO, INVENTÁRIO E ENTREGA INICIAL">
-    <n>O imóvel é entregue em condições de habitabilidade e conservação, no estado descrito no Inventário, no Auto de Entrega e no registo fotográfico anexos, que fazem parte integrante do contrato.</n>
+    <n>O imóvel é entregue em condições de habitabilidade e conservação, no estado descrito no Inventário{{#fotos}}, no Auto de Entrega e no registo fotográfico anexos{{/}}{{#semFotos}} e no Auto de Entrega anexos{{/}}, que fazem parte integrante do contrato.</n>
     <n>Os INQUILINOS dispõem de 10 dias após a entrega das chaves para comunicar por escrito anomalias preexistentes não registadas nos anexos, juntando fotografias sempre que possível.</n>
-    <n>A ausência dessa comunicação não impede a invocação de defeitos ocultos, mas presume-se que os elementos visíveis foram recebidos no estado documentado no inventário e nas fotografias.</n>
+    <n>A ausência dessa comunicação não impede a invocação de defeitos ocultos, mas presume-se que os elementos visíveis foram recebidos no estado documentado no inventário{{#fotos}} e nas fotografias{{/}}.</n>
     <n>No Auto de Entrega serão registadas as chaves entregues aos INQUILINOS.</n>
   </clausula>
 
@@ -610,8 +615,8 @@ const CONTRACT_XML=`<?xml version="1.0" encoding="utf-8"?>
   <secao titulo="ANEXOS">
     <lista>
       <item>Anexo I — Inventário e estado de conservação</item>
-      <item>Anexo II — Registo fotográfico</item>
-      <item>Anexo III — Auto de entrega de chaves</item>
+      <item opcional="fotos">Anexo II — Registo fotográfico</item>
+      <item>Anexo {{anexo.chaves}} — Auto de entrega de chaves</item>
     </lista>
   </secao>
 
@@ -622,7 +627,7 @@ const CONTRACT_XML=`<?xml version="1.0" encoding="utf-8"?>
   </secao>
 
   <anexo titulo="ANEXO I — INVENTÁRIO E ESTADO DE CONSERVAÇÃO">
-    <p>O inventário identifica os bens, equipamentos e principais elementos fixos entregues com o imóvel. O estado deverá ser confirmado na entrega e complementado pelo registo fotográfico anexo. A indicação “Novo” significa que o elemento é entregue sem uso anterior; “Usado” identifica um elemento já utilizado, prevalecendo sempre o estado efetivamente documentado na data da entrega.</p>
+    <p>O inventário identifica os bens, equipamentos e principais elementos fixos entregues com o imóvel. O estado deverá ser confirmado na entrega{{#fotos}} e complementado pelo registo fotográfico anexo{{/}}. A indicação “Novo” significa que o elemento é entregue sem uso anterior; “Usado” identifica um elemento já utilizado, prevalecendo sempre o estado efetivamente documentado na data da entrega.</p>
     <tabela fonte="inventario" colunas="N.º|Elemento / equipamento|Qt.|Estado"/>
   </anexo>
 
@@ -631,7 +636,7 @@ const CONTRACT_XML=`<?xml version="1.0" encoding="utf-8"?>
     <tabela fonte="fotos" colunas="N.º|Fotografia"/>
   </anexo>
 
-  <anexo titulo="ANEXO III — AUTO DE ENTREGA DE CHAVES">
+  <anexo titulo="ANEXO {{anexo.chaves}} — AUTO DE ENTREGA DE CHAVES">
     <p>Na data de início do contrato, os INQUILINOS declaram receber as seguintes chaves:</p>
     <tabela fonte="chaves" colunas="Tipo|Quantidade"/>
     <p opcional="contrato.inicio">Entregue em {{contrato.inicio}}.</p>

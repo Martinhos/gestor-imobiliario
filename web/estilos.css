@@ -939,6 +939,10 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .selbtn{width:100%;display:flex;align-items:center;gap:8px;min-height:46px;padding:0 14px;border:1px solid var(--line2);
   border-radius:12px;background:var(--field);cursor:pointer;text-align:left;font-weight:400}
 .selbtn span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* O nome de uma escolha nunca se corta (ticket de QA 42fbfdf1: os programas
+   de isenção do IRS no Editar contrato): num formulário o botão mostra-o
+   inteiro, em até duas linhas; os filtros e os chips do topo ficam numa linha. */
+.form .selbtn span{white-space:normal;overflow-wrap:break-word;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-height:1.3;padding:8px 0}
 @media(hover:hover) and (pointer:fine){.selbtn:hover{border-color:var(--faint)}}
 .selbtn svg{color:var(--faint);flex:0 0 auto}
 .selpop{display:none;position:absolute;left:0;right:0;top:calc(100% + 5px);z-index:15;background:var(--card);
@@ -946,7 +950,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .selpop.on{display:block}
 .selopt{width:100%;display:flex;align-items:center;gap:9px;min-height:40px;padding:8px 12px;border:0;background:transparent;
   border-radius:10px;cursor:pointer;text-align:left;font-size:15px}
-.selopt span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.selopt span{flex:1;min-width:0;overflow-wrap:break-word;line-height:1.3}
 @media(hover:hover) and (pointer:fine){.selopt:hover{background:var(--chip)}}
 .selopt.on{color:var(--accent-text);font-weight:600;background:var(--accent-soft)}
 .sdiv{height:1px;background:var(--line);margin:5px 6px}

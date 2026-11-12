@@ -27,6 +27,27 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 66,
+    data: '2026-11-12',
+    titulo: 'O contrato em PDF sem anexos vazios',
+    seccoes: [
+      {
+        titulo: 'Contrato em PDF',
+        afeta: ['contratos'],
+        itens: [
+          'Um contrato sem fotografias já não fala do registo fotográfico: a lista dos anexos, as cláusulas e os títulos deixam-no de fora, e o auto de entrega de chaves passa a ser o Anexo II.',
+        ],
+      },
+      {
+        titulo: 'Escolhas nos formulários',
+        afeta: ['app'],
+        itens: [
+          'Os nomes compridos de uma escolha, como os programas de isenção do IRS, leem-se inteiros: na lista partem em duas linhas em vez de ficarem cortados.',
+        ],
+      },
+    ],
+  },
+  {
     v: 65,
     data: '2026-11-11',
     titulo: 'Tarefas por guardar no aparelho',

@@ -254,3 +254,43 @@ describe('sem as letras, a Helvetica', () => {
     assert.equal(pedidos, 0);
   });
 });
+
+// KAN-76: o Anexo II (registo fotográfico) só existe com fotografias que
+// existem no imóvel; sem ele, o Auto de entrega de chaves passa a Anexo II.
+describe('o registo fotográfico só com fotografias', () => {
+  const junto = (b) => textos(b).map((x) => x.s).filter((s) => !RODAPE.test(s)).join(' ').replace(/\s+/g, ' ');
+
+  test('sem fotografias, nem a lista nem o anexo falam dele, e as chaves são o Anexo II', async () => {
+    const { gera } = montar(() => Promise.reject(new Error('sem rede')));
+    const t = junto(await gera());
+    // o «Auto de Restituição, com registo fotográfico» da restituição fala do fim do contrato, e fica
+    assert.doesNotMatch(t, /Registo fotográfico|REGISTO FOTOGRÁFICO|registo fotográfico anexo|nas fotografias|sem fotografias selecionadas/);
+    assert.ok(t.includes('Anexo II — Auto de entrega de chaves'), 'a lista dos anexos');
+    assert.ok(t.includes('ANEXO II — AUTO DE ENTREGA DE CHAVES'), 'o título do anexo');
+    assert.doesNotMatch(t, /Anexo III|ANEXO III/);
+    assert.ok(t.includes('no estado descrito no Inventário e no Auto de Entrega anexos'), 'a cláusula do estado');
+  });
+
+  test('uma fotografia que já foi apagada do imóvel não conta', async () => {
+    const { app, gera } = montar(() => Promise.reject(new Error('sem rede')));
+    app.db.contracts[0].photoIds = ['F-apagada'];
+    assert.equal(app.contractData(app.contract('C1')).fotos, 0);
+    const t = junto(await gera());
+    assert.doesNotMatch(t, /REGISTO FOTOGRÁFICO|sem fotografias selecionadas/);
+    assert.ok(t.includes('ANEXO II — AUTO DE ENTREGA DE CHAVES'));
+  });
+
+  test('com uma fotografia, o Anexo II é o registo fotográfico e as chaves o III', async () => {
+    const { app, gera } = montar(() => Promise.reject(new Error('sem rede')));
+    app.db.properties[0].photos = [{ id: 'F1', name: 'Sala' }];
+    app.db.contracts[0].photoIds = ['F1', 'F-apagada'];
+    app.__ctx.photoJpeg = async () => null;
+    assert.equal(app.contractData(app.contract('C1')).fotos, 1);
+    const t = junto(await gera());
+    assert.ok(t.includes('Anexo II — Registo fotográfico'));
+    assert.ok(t.includes('ANEXO II — REGISTO FOTOGRÁFICO'));
+    assert.ok(t.includes('Anexo III — Auto de entrega de chaves'));
+    assert.ok(t.includes('ANEXO III — AUTO DE ENTREGA DE CHAVES'));
+    assert.ok(t.includes('no Auto de Entrega e no registo fotográfico anexos'));
+  });
+});
