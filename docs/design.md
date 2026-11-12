@@ -1427,13 +1427,14 @@ projeção» / «Opções da avaliação» (aria-label e title); diz que abre um
 diálogo (aria-haspopup="dialog"), não diz aberto nem fechado, nunca acende e
 não leva o ponto dos filtros — o chip já está à vista. A Visão geral e o IRS · Anexo F continuam com o funil e o painel
 (vistas.js:anaPanelPadrao, fisco.js:vFisco). O da Visão geral tem o imóvel e,
-quando os há, os filtros comuns; o do IRS tem o titular (vistas.js:anaSelDono)
-e o ano dos rendimentos, sem filtros comuns, que não guardam titular. É só lá
-que se escolhem: a barra do IRS (estilos.css:.ana-barra) tem só as ações da
-página e não os repete — eram os mesmos filtros duas vezes. Por isso o ponto
-do funil conta o titular e também o ano, quando foi escolhido e não é o
-automático (fisco.js:fiscoAnaN, fisco.js:fiscoAnoAuto): sem o ano à vista na
-barra, o ponto diz que a página está noutro.
+quando os há, os filtros comuns; o do IRS tem só o ano dos rendimentos, sem
+filtros comuns, e a frase de quem é a declaração — não há titular a escolher,
+é sempre a de quem tem a sessão (ver «A Declaração sabe a tua situação»). É
+só lá que se escolhe o ano: a barra do IRS (estilos.css:.ana-barra) tem só as
+ações da página e não o repete. Por isso o ponto do funil conta o ano, quando
+foi escolhido e não é o automático (fisco.js:fiscoAnaN,
+fisco.js:fiscoAnoAuto): sem o ano à vista na barra, o ponto diz que a página
+está noutro.
 
 A janela das opções (vistas.js:anaOpcoes) tem as linhas das Definições ›
 Valores por omissão (estilos.css:.def-vr; vistas.js:anaLinhaOpcao) — são os
@@ -2986,7 +2987,7 @@ poupa-lhe a soma e a procura, não a assinatura.
 
 A página é a prancheta D-Declaracao, mais curta: a barra só tem as ações,
 juntas à direita e numa linha também no telemóvel (fisco.js:fisBarra,
-estilos.css:.fis-acoes); o ano e o titular escolhem-se no funil. As ações são
+estilos.css:.fis-acoes); o ano escolhe-se no funil. As ações são
 dois .btn.sm (36px no rato, 44 no dedo): «Guia», com o livro (icones.js:ic, o
 `livro`), que abre o guia público /guias/declarar-rendas numa página nova e
 diz no aria-label e no title «Guia de preenchimento do Anexo F»; e o botão de
@@ -3148,10 +3149,27 @@ As Definições têm uma linha que leva à página (ver «As Definições»). Va
 servidor, e uma base antiga ganha-o completo (dados.js:normIrsDefs) — sempre
 um objeto novo, nunca o do blank, que a nuvem copia por referência.
 
+- De quem é. A declaração é sempre a de quem tem a sessão, sem seletor de
+  proprietário (fisco.js:fiscoTitulares): só os imóveis onde essa conta tem
+  quota, e as rendas, as retenções, os gastos, as obras dos 24 meses e o
+  AIMI pela quota-parte dela — o Anexo F é por titular (CIRS art. 19.º).
+  Sem sessão é a do único proprietário (fisco.js:fiscoEu); com vários, os
+  valores vão por inteiro e «A tratar antes de entregar» di-lo. Um
+  movimento sem imóvel é da conta que o registou: conta por inteiro para
+  quem o recebeu ou pagou, se é titular da declaração, e sem «pago por»
+  conta para quem declara; de outro, fica fora. Com imóveis à vista e
+  nenhum com quota (só colabora), a página diz «Nenhum imóvel teu».
 - Titular. Sem conjunta é sempre A (cada um entrega o seu Anexo F). Em
-  conjunta, cada linha leva a letra do titular escolhido no painel; sem
-  titular, as letras dos donos do imóvel («A/B» num imóvel dos dois, que no
-  Portal vai em duas linhas) (fisco.js:fiscoTitularDe).
+  conjunta, quem declara leva a sua letra (A por omissão) e entra também a
+  parte de quem está marcado como B, o cônjuge: um imóvel dos dois dá duas
+  linhas, uma por titular, cada uma com a sua quota-parte, e o contrato
+  conta uma vez nos avisos e nos totais de contratos
+  (fisco.js:fiscoTitularDe, fisco.js:fiscoNContratos). Os subtítulos dizem
+  a parte quando não é inteira — «a tua quota-parte», «a tua parte e a do
+  titular B» — e nunca o nome de um filtro (fisco.js:fiscoParte). A lista do
+  A/B tem os donos de todos os imóveis com rendas no ano, quem declara à
+  cabeça com « (eu)», para o cônjuge com um imóvel só dele poder ser
+  marcado (fisco.js:fiscoDonosDoAno).
 - Isentos (6D). Um contrato isento fica na linha do 4.1, porque as
   instruções do 6D pedem o campo do 4.1 onde o imóvel foi identificado, com
   imposto zero; as rendas contam nas rendas e nos gastos do quadro, mas não no
@@ -5926,10 +5944,10 @@ Não há filtro global de proprietário: nem na gaveta, nem numa faixa por
 cima da vista, nem nos filtros das listas, das análises ou dos filtros
 comuns. Os valores são por inteiro, e quem procura um proprietário
 encontra-o pela pesquisa (a dos Imóveis procura os donos) ou escolhe o
-imóvel. O ownerFilter só vive no IRS · Anexo F, onde é o titular da
-declaração (vistas.js:anaSelDono, sem grupos; o × do chip dele é o
-navegacao.js:limparAmbito); o render e a mudança de separador largam-no
-fora dali (ambito.js:ambitoSemDono), e um valor de antes não filtra nada.
+imóvel. Nem o IRS · Anexo F tem titular a escolher: a declaração é a de
+quem tem a sessão (fisco.js:fiscoTitulares). Por isso nada na app escreve o
+ownerFilter a não ser para o pôr a '' (testes/sem-filtro-de-dono.test.js
+confere-o), e não há valor de antes que filtre um ecrã às escondidas.
 Um filtro comum guardado com proprietário aplica o resto e ignora essa
 parte, e editá-lo tira-a (definicoes.js:fcGuardar). A canalização
 (ambito.js:visiveis, ambito.js:scope, ambito.js:inScope, a quota do

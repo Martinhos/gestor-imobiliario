@@ -4,14 +4,16 @@
 // listas) tem o campo «Proprietário» — o «Pago ou recebido por» dos Movimentos
 // fica, e o seletor do imóvel da Visão geral lista também os proprietários,
 // cada um como os imóveis de que é comproprietário (não é o filtro global, e
-// as Projeções e a Avaliação não os têm). O ownerFilter é sempre '' fora do
-// IRS · Anexo F, onde é o titular da declaração: um valor de antes larga-se
-// no render e ao mudar de separador, e um filtro comum guardado com
-// proprietário aplica o resto e ignora essa parte. O botão do cabeçalho: a camada do painel só despe o «Concluir» que
+// as Projeções e a Avaliação não os têm). O ownerFilter é sempre '': nada na
+// app o escreve com outra coisa — nem o IRS · Anexo F, que deixou de ter
+// titular a escolher (KAN-73: a Declaração é a de quem tem a sessão) —, e um
+// filtro comum guardado com proprietário aplica o resto e ignora essa parte.
+// O botão do cabeçalho: a camada do painel só despe o «Concluir» que
 // vestiu, e a roda dentada fica com o nome dela.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
 import { carregarApp, carregarTudo, limpar, repor, elementos } from './arnes.js';
 
 const app = carregarApp({ hoje: '2026-09-06' });
@@ -52,41 +54,41 @@ describe('a gaveta e o topo', () => {
     }
   });
 
-  test('um ownerFilter de antes não filtra nada: o render larga-o fora do IRS, sem faixa, e a lista tem os dois imóveis', () => {
+  test('nada na app escreve o ownerFilter a não ser para o pôr a \'\': nenhum valor de antes pode filtrar um ecrã às escondidas', () => {
+    /* era o ambitoSemDono que o largava fora do IRS; com o titular do IRS fora
+       (KAN-73) já não há quem o escreva, e é isso que se guarda aqui */
+    const web = new URL('../web/', import.meta.url);
+    const js = (d) => readdirSync(new URL(d, web), { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? js(d + e.name + '/') : e.name.endsWith('.js') ? [d + e.name] : []);
+    const escritas = [];
+    for (const f of js('')) {
+      for (const m of readFileSync(new URL(f, web), 'utf8').matchAll(/\bownerFilter\s*=(?!=)\s*([^;,)}\n]+)/g)) {
+        escritas.push([f, m[1].trim()]);
+      }
+    }
+    assert.ok(escritas.length >= 3, 'o teste vê as escritas (' + escritas.length + ')');
+    assert.deepEqual(escritas.filter(([, v]) => v !== "''"), [], 'só se escreve vazio');
+    for (const n of ['ambitoSemDono', 'limparAmbito', 'onOwnerFilter', 'anaSelDono']) assert.equal(typeof app[n], 'undefined', n + ' saiu');
+    // e a lista, sem nada à mão, tem os dois imóveis, sem faixa
     const fixos = elementos(app);
-    app.ownerFilter = 'o2';
     app.tab = 'properties';
     app.render();
-    assert.equal(app.ownerFilter, '');
     const html = fixos.view.innerHTML;
     assert.doesNotMatch(html, /faixa-ambito|Quota \d/);
     assert.match(html, /T2 Lisboa/);
     assert.match(html, /T1 Porto/);
-    // um grupo de proprietários guardado também
-    app.ownerFilter = 'g:GO';
-    app.tab = 'dashboard';
-    app.render();
-    assert.equal(app.ownerFilter, '');
-    assert.doesNotMatch(fixos.view.innerHTML, /faixa-ambito|grupo Família|quota-parte/);
   });
 
-  test('no IRS · Anexo F o ownerFilter é o titular e fica; ao sair dele, larga-se antes de a gaveta se refazer', () => {
+  test('o IRS · Anexo F não tem titular a escolher: o painel só tem o ano, e o ponto do funil só o conta a ele', () => {
     elementos(app);
     app.tab = 'fisco';
-    app.ownerFilter = 'o1';
     app.render();
-    assert.equal(app.ownerFilter, 'o1', 'o titular da declaração');
-    let noBuildNav = null;
-    const buildNav = app.buildNav;
-    app.buildNav = () => { noBuildNav = app.ownerFilter; buildNav(); };
+    const html = app.vFisco();
+    assert.doesNotMatch(html, /ownerSel|Todos os proprietários|limparAmbito/);
+    assert.match(html, /id="sel_fiscoSel"/);
+    assert.equal(app.ANA_N(), 0);
     app.go('dashboard');
-    assert.equal(noBuildNav, '', 'os crachás da gaveta já não o contam');
     assert.equal(app.ownerFilter, '');
-    // o × do chip do titular (fisco.js:fisBarra) limpa só o titular
-    app.tab = 'fisco'; app.ownerFilter = 'o1'; app.dashProp = 'p1';
-    app.limparAmbito();
-    assert.equal(app.ownerFilter, '');
-    assert.equal(app.dashProp, 'p1', 'o imóvel em foco da visão geral não é do IRS');
   });
 });
 
@@ -126,12 +128,11 @@ describe('nenhum painel de filtros tem «Proprietário»', () => {
     const corpo = app.txFilterBody();
     assert.match(corpo, /Pago ou recebido por<div class="sel" id="sel_txPaidF">/);
     assert.doesNotMatch(corpo, /txOwnerF|>Proprietário</);
-    app.ownerFilter = 'o2';   // um de antes, posto à mão: não conta nem se resume, e larga-se
+    app.ownerFilter = 'o2';   // posto à mão (nada na app o escreve): não conta nem se resume
     assert.equal(app.txFilterCount(), 0);
     assert.equal(app.filterSummary(), '');
+    app.ownerFilter = '';
     app.tab = 'transactions';
-    app.ambitoSemDono();
-    assert.equal(app.ownerFilter, '');
     assert.equal(app.db.transactions.filter(app.txMatch).length, 2);
     app.txPaid = 'o2';
     assert.equal(app.txFilterCount(), 1);
@@ -139,7 +140,7 @@ describe('nenhum painel de filtros tem «Proprietário»', () => {
     assert.equal(app.txPaid, '');
   });
 
-  test('Visão geral: o painel tem o imóvel (e o filtro comum), conta só o imóvel; o IRS tem o titular sem grupos e sem filtro comum', () => {
+  test('Visão geral: o painel tem o imóvel (e o filtro comum), conta só o imóvel; o IRS não tem titular nem filtro comum', () => {
     app.db.settings.filters = [{ id: 'F1', name: 'Lisboa', kind: '', prop: 'p1', cat: '', sub: '', de: '', ate: '' }];
     const bar = app.dashBar();
     assert.doesNotMatch(bar, /ownerSel/);
@@ -157,9 +158,8 @@ describe('nenhum painel de filtros tem «Proprietário»', () => {
     app.ownerFilter = 'o1';
     assert.equal(app.dashAnaN(), 1, 'um proprietário não conta');
     app.ownerFilter = '';
-    const titular = app.anaSelDono('o1');
-    assert.match(titular, /id="sel_ownerSel"/);
-    assert.doesNotMatch(titular, /Família/, 'a declaração é por titular: sem grupos');
+    assert.equal(typeof app.anaSelDono, 'undefined', 'o seletor do titular saiu com ele (KAN-73)');
+    assert.doesNotMatch(app.vFisco(), /ownerSel|fcAplicar|Família/, 'a Declaração: sem titular, sem grupos, sem filtro comum');
     assert.doesNotMatch(app.anaPanel('<i></i>'), /fcAplicar/, 'sem o segundo argumento, sem filtro comum');
   });
 });

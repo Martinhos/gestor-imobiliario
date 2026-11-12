@@ -4,24 +4,18 @@
    âmbito das contas (scope, inScope), que é o visível onde o cargo abre as
    finanças. É estado de interface: vive à parte das funções puras que o leem.
 
-   A app já não tem filtro global de proprietário (o «Proprietário em foco»
-   saiu da gaveta, a faixa do âmbito saiu do topo e o campo «Proprietário»
-   saiu dos filtros das listas, das análises e dos filtros comuns). O
-   ownerFilter ficou só como o titular do IRS · Anexo F (fisco.js, pelo
-   seletor vistas.js:anaSelDono), que é por pessoa e na quota-parte dela; em
-   qualquer outro ecrã é sempre '' (ambitoSemDono). A canalização ficou
-   inteira — visiveis, scope, inScope, e a quota do saldos.js:sh e do
-   metricas.js, que o leem —: com o ownerFilter vazio dá o mesmo que não a
-   ter, e tirá-la era reescrever as contas da quota em ficheiros que o
-   titular do IRS ainda usa. */
+   A app não tem filtro de proprietário em lado nenhum: o global saiu (o
+   «Proprietário em foco» da gaveta, a faixa do âmbito no topo, o campo
+   «Proprietário» dos filtros das listas, das análises e dos filtros comuns),
+   e o titular do IRS · Anexo F também — a Declaração é sempre a de quem tem
+   a sessão (fisco.js:fiscoTitulares). Nada na app escreve o ownerFilter a
+   não ser para o pôr a '' (testes/sem-filtro-de-dono.test.js confere-o), e
+   por isso já não há o que largar ao mudar de ecrã. A canalização ficou
+   inteira — visiveis, scope, inScope, e a quota do saldos.js:sh, do
+   metricas.js e da avaliacao.js, que o leem —: com o ownerFilter vazio dá o
+   mesmo que não a ter, e os testes das contas por dono põem-no à mão para
+   exercitar a quota. Tirá-la é reescrever essas contas noutros ficheiros. */
 let ownerFilter='',dashProp='';
-/* Larga o proprietário fora do IRS · Anexo F, o único ecrã onde ele é o
-   titular da declaração: o render e a mudança de separador chamam-na, e assim
-   nenhum valor de antes — o titular escolhido no IRS, um atalho antigo que o
-   ponha — filtra outro ecrã às escondidas, sem faixa nem chip que o diga.
-   Recebe: nada (lê o tab).
-   Devolve: nada — põe o ownerFilter a '' fora do separador 'fisco'. */
-function ambitoSemDono(){if(ownerFilter&&tab!=='fisco')ownerFilter=''}
 // o filtro de proprietário atual é um grupo ('g:ID')?
 // Devolve: true se o filtro atual for um grupo; false caso contrário.
 const ownerIsGrp=()=>String(ownerFilter||'').startsWith('g:');

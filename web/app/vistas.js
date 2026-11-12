@@ -75,10 +75,9 @@ function hdrFiltN(){
 // fecha o painel de análise do separador atual (os filtros aplicam-se logo ao mexer)
 // Devolve: nada — fecha o painel e redesenha a vista.
 function anaApply(){anaOpen[tab]=false;render()}
-// limpa o imóvel em foco do separador de análise onde estamos (e, no IRS, o titular)
+// limpa o imóvel em foco do separador de análise onde estamos (e, no IRS, o ano)
 // Devolve: nada — limpa os filtros e redesenha a vista.
 function anaClear(){
-  ownerFilter='';   // o titular do IRS · Anexo F; fora dele já está vazio (ambito.js:ambitoSemDono)
   /* o imóvel em foco é de cada serviço de análise: cada um regista o seu
      «limpar» (servicos.js:registarServico, chave analise) */
   const a=analiseDe(tab);
@@ -87,7 +86,7 @@ function anaClear(){
 }
 // nº de filtros ativos no separador atual, contados pelo serviço que o tem
 // (a visão geral, as projeções e a avaliação contam o imóvel em foco; a
-// Declaração o titular; os movimentos os seus filtros e a pesquisa)
+// Declaração o ano; os movimentos os seus filtros e a pesquisa)
 // Devolve: número de filtros ativos (0 quando o separador não regista análise).
 const ANA_N=()=>{const a=analiseDe(tab);return a&&a.n?a.n():0};
 /* O vazio de uma lista quando os filtros não deixam nada: diz-o e oferece o
@@ -95,18 +94,6 @@ const ANA_N=()=>{const a=analiseDe(tab);return a&&a.n?a.n():0};
    estava copiado à letra em cinco.
    Devolve: o HTML do .empty (texto). */
 function vazioFiltro(){return `<div class="empty"><b>Nada neste filtro</b><div class="u-mt-10px"><button type="button" class="btn sm" data-toca="vista" data-click="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`}
-/* O seletor do titular do IRS · Anexo F (fisco.js, no painel dela): o
-   ownerSel, que escreve o ownerFilter. Já não é um filtro da app inteira —
-   esse saiu (ambito.js) —, e por isso só se escreve ali, sem grupos: a
-   declaração é por titular, e um grupo não o é. Sem proprietários não se
-   escreve.
-   Recebe: valor — o titular escolhido ('' para todos).
-   Devolve: o HTML do seletor (texto), ou ''. */
-function anaSelDono(valor){
-  if(!db.owners.length)return '';
-  const oo=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
-  return `<div class="u-w-100pc">${sel('ownerSel',valor,oo,'onOwnerFilter','vista')}</div>`;
-}
 /* As opções do seletor de imóvel de uma análise: todos, cada imóvel do âmbito
    e, depois de uma linha, os grupos de imóveis ('g:ID'). O painel da visão
    geral e o chip «Imóvel» das Projeções e da Avaliação escolhem do mesmo.
@@ -534,7 +521,6 @@ function render(){
      que os inquilinos, os movimentos e tudo o resto continuavam a trocar de
      golpe enquanto só três chamadas se lembravam de pedir. Só no mesmo ecrã —
      ver continuidade.js. */
-  ambitoSemDono();                 // fora do IRS não há proprietário em foco, nem um de antes
   const ecra=tab+'|'+(setPage||'');
   const antes=(ecra===_ecraPintado&&!contSuspensa)?medirContinuidade(view()):null;
   /* no mesmo ecrã, o painel dos filtros aberto fica onde estava rolado */
@@ -996,9 +982,6 @@ function lockPage(){try{
   else if(!on&&was){h.classList.remove('noscroll');document.body.style.top='';window.scrollTo(0,_lockY)}
 }catch(e){}}
 
-// muda o titular do IRS · Anexo F (o seletor vistas.js:anaSelDono, só na Declaração)
-// Devolve: nada — redesenha a vista.
-function onOwnerFilter(){ownerFilter=val('ownerSel')||'';render()}
 /* cartão reutilizável: saldos entre proprietários (de um imóvel ou de todos),
    embrulhado na sua fila (.cols) para os ecrãs que o põem solto — a Avaliação
    e os Movimentos. A Visão geral usa o cartão sem a fila (contasCard), porque

@@ -200,11 +200,12 @@ describe('o formulário do movimento abre-se de uma maneira', () => {
 
 describe('os vazios e o painel de análise, partilhados', () => {
   // achado A.2-14
-  test('«Nada neste filtro», a frase de quem liga um serviço e o seletor de proprietário da análise escrevem-se num sítio só', () => {
+  test('«Nada neste filtro» e a frase de quem liga um serviço escrevem-se num sítio só; o seletor de proprietário já não se escreve em lado nenhum', () => {
     const onde = (re) => jsDe('web/app').filter((f) => re.test(ler(f)));
     assert.deepEqual(onde(/<b>Nada neste filtro<\/b><div/), ['web/app/vistas.js']);
     assert.deepEqual(onde(/O suporte pode ligá-lo quando quiseres/), ['web/app/servicos.js']);
-    assert.deepEqual(onde(/sel\('ownerSel'/), ['web/app/vistas.js']);
+    // o último, o titular do IRS · Anexo F, saiu (KAN-73): a Declaração é a de quem tem a sessão
+    assert.deepEqual(onde(/sel\('ownerSel'/), []);
   });
 
   // achado A.2-14
@@ -220,7 +221,7 @@ describe('os vazios e o painel de análise, partilhados', () => {
       assert.doesNotMatch(h, /ownerSel/, nome + ': sem o seletor de proprietário');
       assert.match(h, /Todos os imóveis/, nome + ': o chip do imóvel');
     }
-    assert.match(app.vFisco(), /Todos os proprietários/, 'a Declaração: o titular, sem grupos');
+    assert.doesNotMatch(app.vFisco(), /Todos os proprietários|ownerSel/, 'a Declaração: sem titular a escolher, é a de quem tem a sessão');
     // sem imóveis e com os Imóveis desligados: a frase diz o nome e quem liga
     app.db.properties = [];
     app.definirServicosDesligados(['properties']);

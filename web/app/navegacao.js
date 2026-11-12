@@ -435,10 +435,8 @@ function goBarra(id){
   _ladoSep=(i>-1&&j>-1&&i!==j)?(j>i?1:-1):0;
   try{go(dest)}finally{_ladoSep=0}   // o go GLOBAL: a nuvem embrulha-o
 }
-/* Muda de separador: limpa a subpágina das Definições e o donut, larga o
-   titular do IRS ao sair dele (ambito.js:ambitoSemDono, antes do buildNav,
-   para os crachás não o contarem), fecha a gaveta, refaz a navegação e
-   repinta, com scroll para o topo. Vindo da barra
+/* Muda de separador: limpa a subpágina das Definições e o donut, fecha a
+   gaveta, refaz a navegação e repinta, com scroll para o topo. Vindo da barra
    de baixo (goBarra), o painel vira como uma fita para o lado certo.
    Recebe: id — o separador de destino (um id de TABS, ex.: 'transactions').
    Devolve: nada — redesenha a vista. */
@@ -451,7 +449,7 @@ function go(id){
   /* Quem chega pelo dedo já esteve à vista: o carrossel pintou-o a entrar
      (sepVizinho). Os gráficos não se desenham outra vez nem os números contam
      de zero — era ver o ecrã a recomeçar depois de já lá estar. */
-  const pintar=()=>{tab=id;ambitoSemDono();setPage='';aoMudarDeSeparador();closeDrawer();fecharFiltros();if(!desde)_entrar=1;buildNav();render();
+  const pintar=()=>{tab=id;setPage='';aoMudarDeSeparador();closeDrawer();fecharFiltros();if(!desde)_entrar=1;buildNav();render();
     try{window.scrollTo(0,0)}catch(e){}};
   /* tocar no separador aceso não é uma travessia, é uma repintura — e essa já
      tem o acompanhamento das peças */
@@ -1211,12 +1209,6 @@ function contagemDePessoas(id){
   /* os da lista: as contas com quem partilho (pessoas.js, dos Proprietários) */
   return typeof donosComPartilha==='function'?donosComPartilha().length:(db.owners||[]).length;
 }
-/* Limpa o titular do IRS · Anexo F: o × do chip «… · quota-parte» da barra
-   da Declaração (fisco.js:fisBarra). Era o «Limpar» da faixa do âmbito, que
-   saiu com o filtro global de proprietário (ambito.js); o nome ficou porque
-   é o que o fisco.js chama.
-   Devolve: nada — repinta. */
-function limparAmbito(){ownerFilter='';buildNav();render()}
 /* o rótulo do botão da ação do ecrã no cabeçalho, pela ação */
 const ROTULO_ACAO={movimento:'Novo movimento',imovel:'Novo imóvel',contrato:'Novo contrato',inquilino:'Novo inquilino',
   visita:'Marcar visita',planeado:'Novo recorrente',hipoteca:'Nova hipoteca'};

@@ -1,5 +1,5 @@
 /* ================= FISCO · PDF =================
-   O PDF do Anexo F do ano e do titular que a Declaração mostra: os quadros
+   O PDF do Anexo F do ano e de quem declara, como a Declaração o mostra: os quadros
    4.1 e 4.2 contrato a contrato, cada um em bloco campo → valor pela ordem do
    impresso, com o total de cada quadro, o 4.2A, o 4.2B e o 4.2C, os isentos
    do 6D, as rendas de anos anteriores (quadro 8), o AIMI (quadro 9), as faltas
@@ -16,9 +16,10 @@
    (WinAnsi): o espaço fino dos milhares e o sinal de menos da app passam a
    um espaço e a um hífen (fiscoPdfTxt), em vez de saírem como «?». */
 
-/* Descarrega o PDF do Anexo F do ano e do titular da página: o ano do
-   fiscoAnoAtual e o titular como no fiscoTexto (um grupo de proprietários
-   não se aplica — os valores vão por inteiro). No Android entrega o ficheiro
+/* Descarrega o PDF do Anexo F do ano e de quem declara, como a página: o
+   ano do fiscoAnoAtual e o resumoFiscal de quem tem a sessão (com o titular
+   B em conjunta), o mesmo do fiscoTexto e do CSV; o nome do ficheiro leva o
+   meu nome, e nenhum quando os valores vão por inteiro. No Android entrega o ficheiro
    ao seletor nativo, como o contrato em PDF. Sem o escritor (o serviço
    Contratos desligado nesta conta) ou sem linhas nos quadros, não descarrega
    e diz porquê num aviso. Espera pelas letras da app (pdfLetras), que sem
@@ -30,9 +31,9 @@ async function fiscoPdf(){
       :'O PDF faz-se com o serviço Contratos. '+fraseServicoDesligado('contracts'));
     return;
   }
-  const ano=fiscoAnoAtual(),r=resumoFiscal(ano,ownerIsGrp()?'':ownerFilter);
+  const ano=fiscoAnoAtual(),r=resumoFiscal(ano);
   if(!r.linhas.length){toast('Sem contratos nos quadros 4.1 e 4.2 em '+ano+': não há PDF para exportar.');return}
-  const nomeTit=r.titularId?ownerFilterName():'',hoje=today();
+  const nomeTit=r.porInteiro?'':((owner(r.titularId)||{}).name||''),hoje=today();
   if(typeof pdfLetras==='function')await pdfLetras();
   const bytes=fiscoPdfDocumento(r,nomeTit,hoje),name=fiscoPdfNome(ano,nomeTit,hoje);
   if(window.Android&&window.Android.saveAs)window.Android.saveAs(name,'application/pdf',b64Latin1(bytes));
@@ -40,7 +41,7 @@ async function fiscoPdf(){
   toast('PDF exportado.');
 }
 /* O nome do ficheiro: «anexo-f-AAAA-<titular>-<hoje>.pdf», o titular só
-   quando há um escolhido, tudo em minúsculas sem acentos, só com letras,
+   quando se sabe quem declara, tudo em minúsculas sem acentos, só com letras,
    algarismos e hífenes.
    Recebe: ano — o ano dos rendimentos; titular — o nome do titular ('' por
    inteiro); hoje — a data 'AAAA-MM-DD'.
@@ -158,7 +159,8 @@ function fiscoPdfLinha(pdf,r,l,red,medir){
   if(l.quota<1)F('Quota-parte',dec(r2(l.quota*100))+' %');
   F('Estimativa da app','líquido '+fiscoPdfEuro(l.liquido)+' · imposto '+fiscoPdfEuro(l.imposto)+' (não vai ao quadro)',{cor:PDF_COR.secundario});
   if(l.faltas.length){const f=l.faltas.join(', ');F('Falta',f.charAt(0).toUpperCase()+f.slice(1)+'.',{bold:true,cor:PDF_COR.cobaltoTexto})}
-  return fiscoPdfCartao(pdf,l.nome+(l.imovel?' · '+l.imovel:''),campos,{medir:!!medir});
+  /* em conjunta, as duas linhas de um contrato dos dois cônjuges distinguem-se pela letra no título */
+  return fiscoPdfCartao(pdf,l.nome+(l.imovel?' · '+l.imovel:'')+(r.variosTitulares?' · titular '+l.titular:''),campos,{medir:!!medir});
 }
 /* Um quadro de rendas (o 4.1 ou o 4.2): o título, um bloco por contrato
    (fiscoPdfLinha) e o total do quadro, com as mesmas somas do cartão da
@@ -170,8 +172,9 @@ function fiscoPdfLinha(pdf,r,l,red,medir){
 function fiscoPdfQuadro(pdf,r,q){
   const ls=r.linhas.filter(l=>l.quadro===q);if(!ls.length)return;
   const v=r.versao,red=q===v.quadros.comReducao,s=f=>r2(sum(ls.map(f))),tot=[],F=(c,x)=>tot.push([c,x,{bold:true}]);
+  const parte=fiscoParte(r,ls);
   fiscoPdfTitulo(pdf,'Quadro '+q+' · '+(red?'habitação permanente com redução pela duração':'contratos sem redução pela duração'),
-    fiscoN(ls.length,'contrato','contratos')+' com rendas em '+r.ano+' · '+(r.titularId?'na quota-parte do titular':'valores por inteiro'),q,
+    fiscoN(fiscoNContratos(ls),'contrato','contratos')+' com rendas em '+r.ano+(parte?' · '+parte:''),q,
     fiscoPdfLinha(pdf,r,ls[0],red,true));
   ls.forEach(l=>fiscoPdfLinha(pdf,r,l,red));
   const ob=s(l=>l.obras24.valor);
@@ -193,13 +196,14 @@ function fiscoPdfQuadro(pdf,r,q){
   fiscoPdfNota(pdf,'O 4.2C pergunta se nenhum destes contratos passa 150 % dos limites de renda por tipologia e concelho (Portaria 176/2019). Um que passe não tem redução e vai ao 4.1.');
 }
 /* O documento inteiro, a partir do resumo: o cabeçalho (IRS · Anexo F, o ano
-   dos rendimentos e o prazo da entrega, o titular na quota-parte ou os
-   valores por inteiro, a data), o aviso das regras quando o ano não tem
+   dos rendimentos e o prazo da entrega, quem declara na quota-parte — com o
+   titular B em conjunta, fisco.js:fiscoQuemDeclara — ou os valores por
+   inteiro, a data), o aviso das regras quando o ano não tem
    versão própria ou ela é provisória, os totais do ano (os números à cabeça
    da página), os quadros 4.1 e 4.2, o 6D, o quadro 8, o quadro 9, o que há a
    tratar e a nota final.
-   Recebe: r — o resumo (resumoFiscal); nomeTit — o nome do titular ('' por
-   inteiro); hoje — a data 'AAAA-MM-DD'.
+   Recebe: r — o resumo (resumoFiscal); nomeTit — o nome de quem declara (''
+   por inteiro); hoje — a data 'AAAA-MM-DD'.
    Devolve: os bytes do PDF (string latin-1, um carácter por byte). */
 function fiscoPdfDocumento(r,nomeTit,hoje){
   const pdf=PDF(),C=PDF_COR,v=r.versao,T=r.totais,Q=v.quadros,e=v.entrega||{};
@@ -208,14 +212,15 @@ function fiscoPdfDocumento(r,nomeTit,hoje){
   const F=(c,x,o)=>campos.push([c,x,o]),cartao=(t,o)=>{fiscoPdfCartao(pdf,t,campos,o);campos=[]};
   pdf.titulo('IRS · Anexo F',{size:22,after:10});
   pdf.text(fiscoPdfTxt('Rendimentos de '+r.ano+(e.de&&e.ate?' · entrega de '+irsDiaMes(e.de)+' a '+irsDiaMes(e.ate)+' de '+e.ate.slice(0,4):'')),{size:10.5,after:2});
-  pdf.text(fiscoPdfTxt(r.titularId?'Titular: '+(nomeTit||'—')+', na quota-parte':'Valores por inteiro, de todos os proprietários'),{size:10.5,after:2});
+  pdf.text(fiscoPdfTxt(r.porInteiro?'Valores por inteiro, de todos os proprietários'
+    :r.titulares.length>1?'Titulares: '+fiscoQuemDeclara(r)+', cada um na sua quota-parte':'Titular: '+(nomeTit||'—')+', na quota-parte'),{size:10.5,after:2});
   pdf.text(fiscoPdfTxt('Feito a '+dPT(hoje)+', com o que a app tem registado.'),{size:9,cor:C.secundario,after:8});
   const regras=!v.exato?'Ainda não há versão das regras de '+r.ano+': usam-se as de '+v.ano+(v.pedido>v.ano?', com as datas passadas para '+r.ano+' — as taxas e os quadros podem ter mudado.':', a mais antiga que a app tem.')
     :v.modelo&&!v.modelo.oficial?'Regras de '+v.ano+' em versão provisória: o Anexo F deste ano ainda não foi aprovado.':'';
   if(regras)pdf.caixa(fiscoPdfTxt(regras),{size:9.5,cor:C.cobaltoTexto,fundo:C.cobaltoSuave,after:8});
 
   const g=r2(sum(r.colunas.map(k=>T.gastos[k]))+T.obras24),aPagar=r2(T.imposto-T.retencoes);
-  fiscoPdfTitulo(pdf,'Totais de '+r.ano,fiscoN(r.linhas.length,'contrato','contratos')+' nos quadros 4.1 e 4.2');
+  fiscoPdfTitulo(pdf,'Totais de '+r.ano,fiscoN(fiscoNContratos(r.linhas),'contrato','contratos')+' nos quadros 4.1 e 4.2');
   F('Rendas ilíquidas',E(T.rendas),{bold:true});
   F('Retenções na fonte',E(T.retencoes),{bold:true});
   F('Gastos dedutíveis',E(g)+(T.obras24?' (com '+E(T.obras24)+' de obras dos 24 meses)':''),{bold:true});
@@ -231,13 +236,13 @@ function fiscoPdfDocumento(r,nomeTit,hoje){
 
   const is=r.linhas.filter(l=>l.isencao);
   if(is.length){
-    fiscoPdfTitulo(pdf,'Quadro 6D · rendimentos isentos',fiscoN(is.length,'contrato isento','contratos isentos')+' · ficam também na linha do 4.1','6D');
+    fiscoPdfTitulo(pdf,'Quadro 6D · rendimentos isentos',fiscoN(fiscoNContratos(is),'contrato isento','contratos isentos')+' · ficam também na linha do 4.1','6D');
     is.forEach(l=>{
       F('N.º do contrato na AT',l.atNumero||'falta');
       F('Programa',l.isencao.nome||l.isencao.curto||'—');
       F('Código',l.isencao.codigo||'por conhecer');
       F('Rendas ilíquidas',E(l.rendas));
-      cartao(l.nome+(l.imovel?' · '+l.imovel:''));
+      cartao(l.nome+(l.imovel?' · '+l.imovel:'')+(r.variosTitulares?' · titular '+l.titular:''));
     });
     F('Rendimento líquido isento',E(T.isentos.liquido),{bold:true});
     cartao('',{fundo:C.cobaltoSuave});
@@ -247,7 +252,7 @@ function fiscoPdfDocumento(r,nomeTit,hoje){
   const ant=r.linhas.filter(l=>l.anosAnteriores.length);
   if(ant.length){
     fiscoPdfTitulo(pdf,'Quadro '+Q.anosAnteriores+' · rendas de anos anteriores','recebidas em '+r.ano+' · já estão nas rendas de cada linha',Q.anosAnteriores);
-    ant.forEach(l=>l.anosAnteriores.forEach(a=>F(l.nome+' · de '+a.ano,E(a.valor)+' · linha do quadro '+l.quadro)));
+    ant.forEach(l=>l.anosAnteriores.forEach(a=>F(l.nome+(r.variosTitulares?' · titular '+l.titular:'')+' · de '+a.ano,E(a.valor)+' · linha do quadro '+l.quadro)));
     cartao('');
     fiscoPdfNota(pdf,'No 8A se optares pelo englobamento (o valor reparte-se pelos anos a que respeita), ou no 8B se entregares declarações de substituição desses anos, até cinco para trás.');
   }

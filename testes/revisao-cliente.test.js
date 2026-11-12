@@ -243,7 +243,7 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     assert.ok(fixos.view.innerHTML.length > 0);
   });
 
-  test('hdrFiltN, anaClear e limparFiltroAtual contam e limpam o que cada serviço regista, e o titular do IRS pela base', () => {
+  test('hdrFiltN, anaClear e limparFiltroAtual contam e limpam o que cada serviço regista, e o ano do IRS', () => {
     const app = carregarApp();
     elementos(app);
     semear(app);
@@ -265,10 +265,10 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     assert.equal(app.hdrFiltN(), 1);
     app.anaClear();
     assert.equal(app.repProp, ''); assert.equal(app.hdrFiltN(), 0);
-    app.tab = 'fisco'; app.ownerFilter = 'o1'; app.fiscoAno = '2020';
-    assert.equal(app.hdrFiltN(), 2, 'na Declaração o titular conta, e o ano escolhido fora do automático também (já não está à vista na barra)');
+    app.tab = 'fisco'; app.fiscoAno = '2020';
+    assert.equal(app.hdrFiltN(), 1, 'na Declaração conta o ano escolhido fora do automático (já não está à vista na barra); titular não há a escolher (KAN-73)');
     app.anaClear();
-    assert.equal(app.fiscoAno, ''); assert.equal(app.ownerFilter, '');
+    assert.equal(app.fiscoAno, ''); assert.equal(app.hdrFiltN(), 0);
     app.tab = 'properties';
     assert.equal(app.hdrFiltN(), 0, 'as listas contam pelo lf');
     app.tab = 'calendar';

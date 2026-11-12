@@ -231,7 +231,7 @@ describe('o resumo do quadro 4.1', () => {
 });
 
 describe('a vista, o texto e o CSV', () => {
-  test('vFisco mostra o quadro, as obrigações, as obras, o que ficou fora e os seletores', () => {
+  test('vFisco mostra o quadro, as obrigações, as obras, o que ficou fora e o seletor do ano', () => {
     const html = app.vFisco();
     assert.match(html, /Anexo F/);
     assert.match(html, /Fora da declaração/);
@@ -242,7 +242,7 @@ describe('a vista, o texto e o CSV', () => {
     assert.ok(html.includes('class="label">Rendas ilíquidas</div><div class="value ">' + app.euro(12500)));
     assert.ok(html.includes('class="label">Retenções na fonte</div><div class="value ">' + app.euro(500)), 'as retenções que já iam no quadro, à cabeça');
     assert.match(html, /id="fiscoSel"/);
-    assert.match(html, /id="ownerSel"/);
+    assert.doesNotMatch(html, /id="ownerSel"|Todos os proprietários/, 'sem o seletor do titular: a declaração é a de quem tem a sessão');
     assert.match(html, /<span id="lab_fiscoSel">2024<\/span>/, 'o ano da página no seletor do painel');
     assert.doesNotMatch(html, /fiscoAnoSel|fis-ano"|fiscoEscolherAno/, 'sem o ano na barra, nem uma pílula por ano');
     assert.doesNotMatch(html, /Partilhar resumo|fiscoPartilhar\(/, 'sem a partilha do resumo em texto');
@@ -282,9 +282,11 @@ describe('a vista, o texto e o CSV', () => {
     assert.equal(app.fiscoRotuloDoAviso("propView('v1')"), 'Abrir imóvel');
     assert.equal(app.fiscoRotuloDoAviso("go('transactions')"), 'Ver movimentos');
     const html = app.vFisco();
-    /* 2024 não tem versão das regras: o aviso disso vem à cabeça, em âmbar e sem botão */
+    /* 2024 não tem versão das regras: o aviso disso vem à cabeça, em âmbar e sem botão; e,
+       sem sessão com dois proprietários, logo a seguir o de que os valores vão por inteiro */
     assert.match(html, /<span class="badge amber fis-num">1<\/span><p>Ainda não há versão das regras de 2024\. Usam-se as de 2025, a mais antiga que a app tem\.<\/p><\/div>/);
-    assert.match(html, /<span class="badge red fis-num">2<\/span><p>Contrato Arroios: declarado à AT, sem o n\.º do contrato<\/p><button type="button" class="btn sm" data-toca="camada" data-click="ctView\('C1'\)">Abrir contrato<\/button>/);
+    assert.match(html, /<span class="badge amber fis-num">2<\/span><p>Sem sessão não se sabe qual dos proprietários és: os valores vão por inteiro/);
+    assert.match(html, /<span class="badge red fis-num">3<\/span><p>Contrato Arroios: declarado à AT, sem o n\.º do contrato<\/p><button type="button" class="btn sm" data-toca="camada" data-click="ctView\('C1'\)">Abrir contrato<\/button>/);
     assert.match(html, /<span class="badge grey fis-num">\d+<\/span><p>1 contrato marcado como não declarado fica fora deste resumo\.<\/p><\/div>/, 'o que só se diz não tem botão');
     assert.match(html, /<span class="badge red">N\.º do contrato na AT<\/span>/, 'o resumo dos quadros diz o que falta num selo');
   });
@@ -303,14 +305,18 @@ describe('a vista, o texto e o CSV', () => {
     assert.match(app.vFisco(), /Sem imóveis/);
   });
 
-  test('com um grupo de proprietários no filtro, os valores vão por inteiro e diz-se', () => {
-    app.db.groups.push(app.normGroup({ id: 'G', name: 'Família', kind: 'owner', ids: ['ana'] }));
-    app.ownerFilter = 'g:G';
+  test('sem sessão e com dois proprietários não se sabe quem és: os valores vão por inteiro, e diz-se', () => {
+    const r = app.resumoFiscal(ANO);
+    assert.equal(r.porInteiro, true);
+    assert.equal(r.semSessao, true);
+    assert.equal(r.linhas[0].quota, 1);
+    perto(r.linhas[0].rendas, 12500, 1e-9);
+    assert.ok(r.avisos.some((a) => /^Sem sessão não se sabe qual dos proprietários és/.test(a.texto) && a.nivel === 'aviso'));
     const html = app.vFisco();
-    assert.match(html, /não se aplica aqui/);
-    assert.equal(app.resumoFiscal(ANO, '').linhas[0].quota, 1);
-    perto(app.resumoFiscal(ANO, '').linhas[0].rendas, 12500, 1e-9);
-    app.ownerFilter = '';
+    assert.match(html, /<div class="hint u-mt-9px">Sem sessão não se sabe qual dos proprietários és: os valores vão por inteiro\./);
+    assert.match(html, /<span class="small">2024 · valores por inteiro<\/span>/);
+    // pedido de propósito ('' — por inteiro), não se avisa
+    assert.ok(!app.resumoFiscal(ANO, '').avisos.some((a) => /Sem sessão/.test(a.texto)));
   });
 
   test('o texto traz os mesmos números da página', () => {
@@ -356,8 +362,7 @@ describe('a vista, o texto e o CSV', () => {
     assert.equal(app.fiscoAnoAuto(), mes <= 6 && tem(Y - 1) ? Y - 1 : Y, 'o automático não muda com o escolhido');
   });
 
-  test('o ponto do funil: o titular, e o ano quando foi escolhido e não é o automático', () => {
-    app.ownerFilter = '';
+  test('o ponto do funil: só o ano, quando foi escolhido e não é o automático', () => {
     app.fiscoAno = '';
     assert.equal(app.fiscoAnaN(), 0, 'nada escolhido');
     app.fiscoAno = String(app.fiscoAnoAuto());
@@ -365,26 +370,25 @@ describe('a vista, o texto e o CSV', () => {
     app.fiscoAno = String(app.fiscoAnoAuto() - 3);
     assert.equal(app.fiscoAnaN(), 1, 'outro ano acende o ponto: já não está à vista na barra');
     app.ownerFilter = 'ana';
-    assert.equal(app.fiscoAnaN(), 2, 'com o titular, dois');
+    assert.equal(app.fiscoAnaN(), 1, 'um proprietário posto à mão não conta: não há titular a escolher');
     app.fiscoAnaLimpar();
     assert.equal(app.fiscoAno, '');
-    assert.equal(app.fiscoAnaN(), 1, 'limpar tira o ano; o titular limpa-o a base');
+    assert.equal(app.fiscoAnaN(), 0, 'limpar tira o ano');
     app.ownerFilter = '';
   });
 });
 
 describe('a barra, a partilha e os cartões dos quadros', () => {
-  test('a barra não repete o titular nem o ano: estão no painel do funil', () => {
-    for (const dono of ['', 'ana']) {
-      app.ownerFilter = dono;
+  test('a barra não repete o ano, que está no painel do funil, e não há titular a escolher em lado nenhum', () => {
+    for (const eu of ['', 'ana']) {
+      app.CW = eu ? { user: { id: eu } } : undefined;
       const html = app.vFisco();
       const barra = html.slice(html.indexOf('<div class="ana-barra">'), html.indexOf('<div class="grid fis-kpis">'));
       assert.ok(barra.length > 0, 'há barra');
       assert.doesNotMatch(barra, /fis-titular|Titular|quota-parte|Todos · por inteiro|class="chip|fiscoAnoSel|sel_/, 'só as ações');
-      assert.match(html, /id="ownerSel"/, 'o titular escolhe-se no painel');
-      assert.match(html, /id="fiscoSel"/, 'e o ano também');
+      assert.doesNotMatch(html, /id="ownerSel"/, 'nem o titular no painel');
+      assert.match(html, /id="fiscoSel"/, 'o ano escolhe-se no painel');
     }
-    app.ownerFilter = '';
     assert.equal(typeof app.onFiscoAnoBarra, 'undefined', 'o seletor da barra saiu');
   });
 
@@ -416,16 +420,16 @@ describe('o separador e o registo', () => {
     assert.equal(app.SUBPAGE.irs.label, 'IRS e dedução');
   });
 
-  test('a vista está nos mapas do render e o painel de análise conta o proprietário', () => {
+  test('a vista está nos mapas do render e o painel de análise conta só o ano', () => {
     app.tab = 'fisco';
+    app.fiscoAno = '';
     assert.equal(app.ANA_N(), 0);
-    app.ownerFilter = 'ana';
+    app.fiscoAno = '2020';
     assert.equal(app.ANA_N(), 1);
     app.render = () => {};
-    app.fiscoAno = '2020';
     app.anaClear();
     assert.equal(app.fiscoAno, '', 'o Limpar repõe o ano automático');
-    assert.equal(app.ownerFilter, '');
+    assert.equal(app.ANA_N(), 0);
     app.tab = 'dashboard';
   });
 

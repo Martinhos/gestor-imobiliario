@@ -191,7 +191,8 @@ describe('um cartão por quadro', () => {
     const html = app.vFisco(), r = app.resumoFiscal(ANO, '');
     assert.doesNotMatch(html, /Quadros 4\.1 e 4\.2|<th>Quadro<\/th>/, 'nenhum cartão fala dos dois quadros');
     const q1 = quadroDe(html, '4.1'), q2 = quadroDe(html, '4.2');
-    assert.match(q1, /^<h2 class="ana-tit">Quadro 4\.1 · sem redução pela duração<\/h2><span class="small">2025 · valores por inteiro<\/span>/);
+    // a Ana é a única proprietária, e tudo é dela: o subtítulo é só o ano (sem «por inteiro» nem quota)
+    assert.match(q1, /^<h2 class="ana-tit">Quadro 4\.1 · sem redução pela duração<\/h2><span class="small">2025<\/span>/);
     assert.match(q2, /^<h2 class="ana-tit">Quadro 4\.2 · com redução pela duração<\/h2>/);
     assert.match(q1, /<p class="fis-onde">Preenche no <b>quadro 4\.1<\/b> do Anexo F: uma linha por contrato\.<\/p>/);
     assert.match(q2, /<p class="fis-onde">Preenche no <b>quadro 4\.2<\/b> do Anexo F: uma linha por contrato, e no 4\.2A as datas de cada um\.<\/p>/);

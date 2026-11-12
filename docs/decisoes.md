@@ -107,6 +107,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-12 · Em Human Tests aceita-se num toque, e recusar é explicar (KAN-116, KAN-117)
 - 2026-11-12 · A pílula do QA é uma vista dos Erros do kanban (KAN-115)
 - 2026-11-12 · Os anexos do kanban aceitam ficheiros, numa lista fechada pelos bytes (KAN-119)
+- 2026-11-12 · A Declaração é sempre a tua: sai o seletor de proprietário (KAN-73)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1623,7 +1624,7 @@ abre a ficha dele. O ownerFilter ficou, como titular do IRS · Anexo F: a
 declaração é por titular (é ele que entrega o anexo), e o fisco.js lê o
 titular dali — tirá-lo partia o IRS, e dar ao titular um estado próprio é
 trabalho do fisco.js. Para não haver um filtro escondido, o render e a
-mudança de separador largam-no fora do IRS (ambito.js:ambitoSemDono): a
+mudança de separador largam-no fora do IRS (o ambitoSemDono do ambito.js): a
 regra é «fora do IRS é sempre ''», e não «ninguém o escreve», que um atalho
 antigo ou um filtro comum guardado podiam desmentir. A canalização
 (ambito.js:visiveis, ambito.js:scope, a quota do saldos.js:sh) ficou: com o
@@ -1631,6 +1632,10 @@ ownerFilter vazio é a identidade, e tirá-la era refazer as contas da quota
 em seis ficheiros e uma dúzia de testes de aritmética sem mudar nada do que
 se vê. O «Ver a app na quota de …» da ficha do proprietário saiu com ele:
 sem o filtro, levava à Visão geral e não mudava nada.
+
+Nota de 2026-11-12: o titular do IRS também saiu (KAN-73), e com ele o
+ambitoSemDono — a regra passou a ser «ninguém o escreve». Ver a entrada
+desse dia.
 
 O cartão «Por confirmar» na Agenda. O crachá da Agenda contava os planeados
 vencidos e não silenciados, mas a Agenda não mostrava nenhum: o Martinho via
@@ -3785,3 +3790,46 @@ ao PDF, o que tirava a caixa de areia a um ficheiro escrito por outros nesta ori
 de 5 para 10 MB, porque uma FINE digitalizada passa dos 5. A tabela já guardava o tipo e o nome,
 por isso não houve migração. Como o resto do back office, a mudança não leva aviso de novidades
 nem versão nova.
+
+## 2026-11-12 · A Declaração é sempre a tua: sai o seletor de proprietário (KAN-73)
+
+O Martinho perguntou no KAN-73: «Vale a pena ter o seletor de proprietário? O IRS deve ser só
+para mim. Os valores dividem-se pela percentagem de propriedade, ou é o valor total?» E decidiu,
+na conversa: «Só eu, sem seletor», com a conjunta a juntar o B. O seletor dava a declaração de
+outro proprietário, ou a de todos «por inteiro», e nenhuma das duas é a que alguém entrega: o
+Anexo F é por titular (CIRS art. 19.º), e num imóvel a meias cada um declara a sua quota.
+
+Ficou assim. A Declaração é a de quem tem a sessão (fisco.js:fiscoTitulares): só os imóveis onde
+essa conta tem quota, e as rendas, as retenções, os gastos, as obras dos 24 meses e o AIMI pela
+quota-parte dela. A resposta à segunda pergunta é a quota-parte, e não o total. Em tributação
+conjunta entra também a parte do proprietário marcado como B na «A tua situação fiscal» (o
+cônjuge): um imóvel dos dois dá duas linhas, uma por titular, cada uma com a sua letra e a sua
+quota, e o contrato conta uma vez nos avisos e nos totais de contratos. O painel do funil fica só
+com o ano, e o ponto dele só o conta a ele. A Declaração continua só em dev.
+
+Três regras que o pedido não trazia, decididas aqui:
+- Sem sessão, «eu» é o único proprietário, quando há um só (o exemplo sem conta tem a Maria Costa
+  sozinha). Com vários, não se adivinha: os valores vão por inteiro e «A tratar antes de
+  entregar» diz que não se sabe qual és. Na nuvem há sempre sessão; é o caminho dos testes.
+- Um movimento sem imóvel é da conta que o registou (na nuvem vive nos registos dela): conta por
+  inteiro para quem o recebeu ou pagou, se é titular da declaração, e para quem declara quando
+  não tem «pago por»; de outro, fica fora. Vale para as rendas, que vão a «Rendas sem contrato»,
+  fora do quadro, e para o AIMI do quadro 9. Antes, com um titular escolhido, uma renda sem imóvel
+  saía calada, e um AIMI sem imóvel só contava se o pagador era ele.
+- A lista do A/B tem os donos de todos os imóveis com rendas no ano que a conta vê, quem declara à
+  cabeça, e não só os desta declaração: o cônjuge com um imóvel só dele tem de lá estar para
+  poder ser marcado como B. Quem só colabora em imóveis de outros vê «Nenhum imóvel teu».
+
+O que saiu com o seletor: o anaSelDono e o onOwnerFilter do vistas.js, o limparAmbito do
+navegacao.js (o × de um chip que já não existia) e o ambitoSemDono do ambito.js, que largava o
+ownerFilter fora do IRS. Sem o IRS, nada na app o escreve a não ser para o pôr a '', e é um teste
+que o confere (testes/sem-filtro-de-dono.test.js), no lugar do guarda. O ownerFilter e a
+canalização dele ficaram: o saldos.js, o metricas.js, a avaliacao.js e a lista dos movimentos
+ainda o leem, e os testes das contas por dono põem-no à mão para exercitar a quota; tirá-los é
+reescrever essas contas, um trabalho à parte. O rótulo «Limpar o titular» do guião do back
+office (worker/src/equipa-guiao.js) ficou sem botão que o use.
+
+INCERTO: as instruções do Anexo F não dizem como vão os bens comuns do casal em conjunta. A app
+faz uma linha por titular com a quota de cada um, como o código já dizia e como o guia das regras
+de 2025 diz para a compropriedade («cada um declara a sua quota»). Se a AT quiser tudo na linha do A, a
+estimativa da página dá o mesmo imposto, que é linear na quota; mudam só as linhas.

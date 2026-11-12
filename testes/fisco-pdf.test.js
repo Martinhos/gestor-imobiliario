@@ -131,8 +131,8 @@ describe('o PDF do Anexo F', () => {
     assert.equal(app.fiscoPdfTxt('Łukasz Ōta'), '?ukasz Ota', 'a letra base quando a há');
   });
 
-  test('com um titular: a quota-parte dele e o nome dele no ficheiro', async () => {
-    app.ownerFilter = 'ana';
+  test('com sessão: a minha quota-parte e o meu nome no ficheiro, sem seletor nenhum', async () => {
+    app.CW = { user: { id: 'ana' } };
     await app.fiscoPdf();
     assert.equal(guardado.nome, 'anexo-f-2025-ana-simoes-2026-03-15.pdf');
     assert.match(guardado.nome, /^[a-z0-9-]+\.pdf$/);
@@ -141,6 +141,21 @@ describe('o PDF do Anexo F', () => {
     assert.ok(t.includes('6 250,00 €'), 'metade das rendas do Arroios');
     assert.ok(t.includes('50 %'), 'a quota-parte na linha');
     assert.ok(!t.some((s) => s.startsWith('Benfica longo')), 'o T1 Benfica não é da Ana');
+  });
+
+  test('em conjunta com o cônjuge como B: os dois titulares no cabeçalho, e uma linha de cada um com a letra no título', async () => {
+    app.db.settings.irs = { conjunta: true, titulares: { bruno: 'B' }, dispensaRecibos: false, outrosRendimentos: {} };
+    app.CW = { user: { id: 'ana' } };
+    await app.fiscoPdf();
+    assert.equal(guardado.nome, 'anexo-f-2025-ana-simoes-2026-03-15.pdf', 'o meu nome no ficheiro');
+    const t = textos(guardado.bytes);
+    assert.ok(t.includes('Titulares: Ana Simões (A) e Bruno (B), cada um na sua quota-parte'));
+    assert.ok(t.includes('Arroios · T2 Arroios · titular A'));
+    assert.ok(t.includes('Arroios · T2 Arroios · titular B'));
+    assert.ok(t.includes('Benfica longo · T1 Benfica · titular B'), 'o T1 Benfica, só do Bruno, entra pela letra dele');
+    assert.ok(t.includes('1 contrato com rendas em 2025 · a tua parte e a do titular B'), 'o Arroios conta uma vez');
+    assert.ok(t.includes('2 contratos nos quadros 4.1 e 4.2'));
+    assert.ok(t.includes('6 250,00 €'), 'metade das rendas do Arroios, em cada linha');
   });
 
   test('um contrato isento fica na linha do 4.1 e no 6D, com o programa e o código; o AIMI no quadro 9', async () => {
