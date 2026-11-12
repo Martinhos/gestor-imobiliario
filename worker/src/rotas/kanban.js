@@ -32,7 +32,7 @@
 import { json, err, body, badId, now, CSP_ANEXO } from '../lib/http.js';
 import { auditar } from '../lib/auditoria.js';
 import { PAPEIS, comoLista, catsDe } from '../lib/papeis.js';
-import { PREFIXO, TIPOS, PRIORIDADES, AUTOMATICO, QA_EM_CURSO, chaveDe, numeroDaChave, passosDaSincronizacao, passosDoComentarioQa, passosDoComentario, colunaDepoisDoComentario } from '../lib/kanban.js';
+import { PREFIXO, TIPOS, PRIORIDADES, AUTOMATICO, QA_EM_CURSO, chaveDe, numeroDaChave, passosDaSincronizacao, passosDoComentarioQa, passosDoComentario, colunaDepoisDoComentario, ticketSaiComOCartao, ticketVoltaComOCartao } from '../lib/kanban.js';
 import { tipoDaImagem, lerAte } from '../lib/imagens.js';
 
 // O começo de todos os caminhos daqui.
@@ -913,7 +913,10 @@ async function moverCartao(env, request, eu, chave) {
 }
 
 /* DELETE /api/equipa/kanban/cartoes/:chave (só o master): remoção branda
-   (removed_at), para o Anular; sai do quadro e deixa a linha «removido».
+   (removed_at), para o Anular; sai do quadro e deixa a linha «removido». O
+   cartão de um ticket de QA leva o ticket, no mesmo lote e com o mesmo
+   removed_at (lib/kanban.js:ticketSaiComOCartao): sai da pílula e do
+   scripts/qa.mjs listar, e o Anular repõe os dois.
    Recebe: env; eu — a sessão; chave — a do cartão.
    Devolve: promessa da Response {ok}, 403 ou 404. */
 async function removerCartao(env, eu, chave) {
@@ -927,14 +930,16 @@ async function removerCartao(env, eu, chave) {
       .bind(agora, autor.id, agora, k.id),
     env.DB.prepare("INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) VALUES (?, ?, ?, ?, 'removido', NULL, NULL)")
       .bind(k.id, agora, autor.id, autor.nome),
-  ]);
+  ].concat(k.origem_tipo === 'qa' && k.origem_id ? [ticketSaiComOCartao(k.origem_id, agora)].map((p) => env.DB.prepare(p.sql).bind(...p.params)) : []));
   return json({ ok: true });
 }
 
 /* POST /api/equipa/kanban/cartoes/:chave/repor (só o master): o Anular de
    uma remoção — o cartão volta ao sítio onde estava (a A fazer, se a coluna
-   dele entretanto saiu) e deixa a linha «reposto». Um que não está removido
-   responde como está, sem escrever.
+   dele entretanto saiu) e deixa a linha «reposto». O ticket de QA que saiu
+   com ele volta também (lib/kanban.js:ticketVoltaComOCartao: o do mesmo
+   removed_at; um que a limpeza das 24 h já apagou não volta). Um que não
+   está removido responde como está, sem escrever.
    Recebe: env; eu — a sessão; chave — a do cartão.
    Devolve: promessa da Response {cartao}, 403 ou 404. */
 async function reporCartao(env, eu, chave) {
@@ -950,7 +955,7 @@ async function reporCartao(env, eu, chave) {
       ' WHERE id = ?').bind(agora, k.id),
     env.DB.prepare("INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) VALUES (?, ?, ?, ?, 'reposto', NULL, NULL)")
       .bind(k.id, agora, autor.id, autor.nome),
-  ]);
+  ].concat(k.origem_tipo === 'qa' && k.origem_id ? [ticketVoltaComOCartao(k.origem_id, k.removed_at, agora)].map((p) => env.DB.prepare(p.sql).bind(...p.params)) : []));
   return devolverCartao(env, k.id, eu);
 }
 

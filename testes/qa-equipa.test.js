@@ -85,8 +85,8 @@ describe('as rotas do QA no back office', () => {
     assert.equal((await resp(pedir(env, ana, '/api/qa', 'POST', { body: 'da app' }))).status, 201);
     assert.equal((await criar(env, MARKETING, { body: 'do marketing' })).status, 201, 'um cargo que não vê pedidos também escreve');
     assert.equal((await criar(env, SUPORTE, { body: 'do suporte' })).status, 201);
-    const naApp = (await resp(pedir(env, ana, '/api/qa'))).tickets.map((t) => t.body).sort();
-    const noBackOffice = (await listar(env, MARKETING)).map((t) => t.body).sort();
+    const naApp = (await resp(pedir(env, ana, '/api/qa'))).tickets.map((t) => t.titulo).sort();
+    const noBackOffice = (await listar(env, MARKETING)).map((t) => t.titulo).sort();
     assert.deepEqual(naApp, ['da app', 'do marketing', 'do suporte']);
     assert.deepEqual(noBackOffice, naApp);
   });
@@ -168,14 +168,20 @@ describe('as rotas do QA no back office', () => {
     const novo = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes', { tipo: 'tarefa', titulo: 'Outra', coluna_id: 'a-fazer' }));
     const c2 = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + novo.cartao.chave + '/comentarios', { texto: 'ok' }));
     assert.equal(c2.coluna_id, 'a-fazer');
-    // o ticket removido na app: o cartão segue a regra dos outros — fica onde está, e em Human Tests volta a Auto Tests
-    assert.equal((await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/mover', { coluna_id: 'concluido', indice: 0 })).status, 200);
+    // o ticket removido na app leva o cartão (KAN-115): no kanban já não está, nem se comenta
     assert.equal((await resp(pedir(env, ana, '/api/qa/' + id, 'DELETE'))).status, 200);
-    const c3 = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/comentarios', { texto: 'ainda?' }));
-    assert.equal(c3.coluna_id, 'concluido');
-    assert.equal((await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/mover', { coluna_id: 'human-tests', indice: 0 })).status, 200);
-    const c4 = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/comentarios', { texto: 'e agora?' }));
-    assert.equal(c4.coluna_id, 'auto-tests');
+    assert.equal((await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/comentarios', { texto: 'ainda?' })).status, 404);
+  });
+
+  test('a pílula do back office mostra um cartão de pedido mudado para Erro só a quem vê os pedidos (KAN-115)', async () => {
+    const env = ambiente();
+    const agora = Date.now();
+    await env.DB.prepare("INSERT INTO kanban_cartoes (id, numero, tipo, titulo, descricao, coluna_id, posicao, prioridade, relator_id, relator_nome, origem_tipo, origem_id, created_at, updated_at)" +
+      " VALUES ('cp', 600, 'erro', 'Exportar', 'O texto da pessoa.', 'a-fazer', 0, 3, 's1', 'Sofia', 'pedido', 'p1', ?, ?)").bind(agora, agora).run();
+    assert.deepEqual((await listar(env, SUPORTE)).map((t) => [t.cartao, t.body]), [['KAN-600', 'O texto da pessoa.']], 'o suporte vê os pedidos');
+    assert.deepEqual(await listar(env, MARKETING), [], 'o marketing não');
+    assert.equal((await chamar(env, MARKETING, 'GET', '/api/equipa/qa/KAN-600/comentarios')).status, 404);
+    assert.equal((await chamar(env, SUPORTE, 'GET', '/api/equipa/qa/KAN-600/comentarios')).status, 200);
   });
 });
 

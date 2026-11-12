@@ -62,6 +62,14 @@ const mexer = (env, id, campos) => {
     .bind(...ks.map((k) => campos[k]), id).run();
 };
 
+// Recebe: env; id — o ticket; campos — {coluna: valor} a escrever no cartão dele (coluna_id leva o ticket, pelo gatilho da 0029).
+// Devolve: a promessa do run.
+const mexerCartao = (env, id, campos) => {
+  const ks = Object.keys(campos);
+  return env.DB.prepare('UPDATE kanban_cartoes SET ' + ks.map((k) => k + ' = ?').join(', ') + " WHERE origem_tipo = 'qa' AND origem_id = ?")
+    .bind(...ks.map((k) => campos[k]), id).run();
+};
+
 // Recebe: s — um texto.
 // Devolve: os bytes dele em UTF-8.
 const bytes = (s) => new TextEncoder().encode(s).length;
@@ -223,14 +231,16 @@ describe('listar os tickets', () => {
     const t = Date.now();
     await mexer(env, ids.abertoVelho, { created_at: t - 5 * HORA });
     await mexer(env, ids.abertoNovo, { created_at: t - 1 * HORA });
-    await mexer(env, ids.resolvidoCedo, { created_at: t - 1 * HORA, status: 'human-tests', resolution: 'feito', resolved_at: t - 4 * HORA });
-    await mexer(env, ids.resolvidoTarde, { created_at: t - 9 * HORA, status: 'human-tests', resolution: 'feito', resolved_at: t - 2 * HORA });
+    await mexerCartao(env, ids.resolvidoCedo, { coluna_id: 'human-tests' });
+    await mexerCartao(env, ids.resolvidoTarde, { coluna_id: 'human-tests' });
+    await mexer(env, ids.resolvidoCedo, { created_at: t - 1 * HORA, resolution: 'feito', resolved_at: t - 4 * HORA });
+    await mexer(env, ids.resolvidoTarde, { created_at: t - 9 * HORA, resolution: 'feito', resolved_at: t - 2 * HORA });
     assert.equal((await resp(pedir(env, a, '/api/qa/' + ids.removido, 'DELETE'))).status, 200);
     const lista = await listar(env, a);
-    assert.deepEqual(lista.map((x) => x.body), ['abertoNovo', 'abertoVelho', 'resolvidoTarde', 'resolvidoCedo']);
+    assert.deepEqual(lista.map((x) => x.titulo), ['abertoNovo', 'abertoVelho', 'resolvidoTarde', 'resolvidoCedo']);
   });
 
-  test('os abertos agrupados por gravidade (bloqueia, incomoda, detalhe, sem), e em cada grupo o mais recente à frente', async () => {
+  test('os abertos pela prioridade do cartão (a da gravidade ao nascer, e a que o kanban lhe der), e em cada uma o mais recente à frente (KAN-115)', async () => {
     const env = ambiente();
     const a = await conta(env, 'Ana');
     const t = Date.now();
@@ -238,15 +248,22 @@ describe('listar os tickets', () => {
       ['bloqueiaNovo', 'bloqueia', 4], ['semVelho', null, 8], ['resolvidoBloqueia', 'bloqueia', 1]];
     for (const [nome, grav, horas] of casos) {
       const id = (await criar(env, a, { body: nome, severity: grav || undefined })).id;
+      if (nome.startsWith('resolvido')) await mexerCartao(env, id, { coluna_id: 'human-tests' });
       await mexer(env, id, nome.startsWith('resolvido')
-        ? { created_at: t - horas * HORA, status: 'human-tests', resolution: 'feito', resolved_at: t }
+        ? { created_at: t - horas * HORA, resolution: 'feito', resolved_at: t }
         : { created_at: t - horas * HORA });
     }
-    const lista = await listar(env, a);
-    assert.deepEqual(lista.map((x) => x.body), ['bloqueiaNovo', 'bloqueiaVelho', 'incomoda', 'detalhe', 'semNovo', 'semVelho', 'resolvidoBloqueia']);
+    let lista = await listar(env, a);
+    // bloqueia → Mais alta (1), incomoda → Alta (2), sem → Média (3), detalhe → Baixa (4)
+    assert.deepEqual(lista.map((x) => x.titulo), ['bloqueiaNovo', 'bloqueiaVelho', 'incomoda', 'semNovo', 'semVelho', 'detalhe', 'resolvidoBloqueia']);
+    assert.deepEqual(lista.map((x) => x.prioridade), [1, 1, 2, 3, 3, 4, 1]);
+    // a prioridade é a do cartão: o kanban muda-a e a pílula segue
+    await mexerCartao(env, lista.find((x) => x.titulo === 'detalhe').id, { prioridade: 1 });
+    lista = await listar(env, a);
+    assert.deepEqual(lista.slice(0, 3).map((x) => x.titulo), ['detalhe', 'bloqueiaNovo', 'bloqueiaVelho']);
   });
 
-  test('as colunas do kanban: A fazer, depois Auto Tests (cada uma por gravidade), depois Human Tests', async () => {
+  test('as colunas do kanban: A fazer, depois Auto Tests (cada uma por prioridade), depois Human Tests', async () => {
     const env = ambiente();
     const a = await conta(env, 'Ana');
     const t = Date.now();
@@ -255,13 +272,14 @@ describe('listar os tickets', () => {
     for (const [nome, grav, status, horas] of casos) {
       const id = (await criar(env, a, { body: nome, severity: grav || undefined })).id;
       // o resolvido e o em resolução de detalhe mexidos há menos tempo: a ordem não pode vir do updated_at
+      await mexerCartao(env, id, { coluna_id: status, updated_at: nome === 'emDetalhe' ? t : t - 10 * HORA });
       await mexer(env, id, status === 'human-tests'
-        ? { created_at: t - horas * HORA, status, resolution: 'feito', resolved_at: t + HORA }
-        : { created_at: t - horas * HORA, status, updated_at: nome === 'emDetalhe' ? t : t - 10 * HORA });
+        ? { created_at: t - horas * HORA, resolution: 'feito', resolved_at: t + HORA }
+        : { created_at: t - horas * HORA, updated_at: nome === 'emDetalhe' ? t : t - 10 * HORA });
     }
     const lista = await listar(env, a);
-    assert.deepEqual(lista.map((x) => x.body), ['novoBloqueia', 'novoSem', 'emBloqueiaNovo', 'emBloqueia', 'emDetalhe', 'resolvido']);
-    assert.equal(lista.find((x) => x.body === 'emDetalhe').status, 'auto-tests');
+    assert.deepEqual(lista.map((x) => x.titulo), ['novoBloqueia', 'novoSem', 'emBloqueiaNovo', 'emBloqueia', 'emDetalhe', 'resolvido']);
+    assert.equal(lista.find((x) => x.titulo === 'emDetalhe').status, 'auto-tests');
   });
 
   test('cada ticket traz o autor com nome e email, a imagem como sim/não e o contexto como objeto', async () => {
@@ -280,9 +298,13 @@ describe('listar os tickets', () => {
     assert.equal(t.resolution, null);
     assert.equal(t.resolved_at, null);
     assert.ok(t.created_at > 0 && t.updated_at >= t.created_at);
-    assert.deepEqual(Object.keys(t).sort(), ['autor', 'body', 'cartao', 'context', 'created_at', 'id', 'imagem', 'resolution', 'resolved_at', 'severity', 'status', 'updated_at']);
+    assert.deepEqual(Object.keys(t).sort(), ['autor', 'body', 'cartao', 'context', 'created_at', 'id', 'imagem', 'prioridade', 'resolution', 'resolved_at', 'severity', 'status', 'ticket', 'titulo', 'updated_at']);
     assert.match(t.cartao, /^KAN-\d+$/, 'o cartão que o ticket criou');
-    const s = lista.find((x) => x.body === 'sem imagem');
+    assert.equal(t.ticket, true);
+    assert.equal(t.titulo, 'com imagem');
+    assert.equal(t.prioridade, 4, 'detalhe → Baixa');
+    assert.match(t.body, /^com imagem\n\nTicket de QA #[0-9A-F]{8} · gravidade: detalhe\.$/, 'a descrição do cartão');
+    const s = lista.find((x) => x.titulo === 'sem imagem');
     assert.equal(s.imagem, false);
     assert.equal(s.context, null);
     assert.equal(s.severity, null);
@@ -358,11 +380,12 @@ describe('listar os tickets', () => {
     const a = await conta(env, 'Ana');
     const t = Date.now();
     const st = env.DB.prepare(
-      `INSERT INTO qa_tickets (id, user_id, body, status, created_at, updated_at) VALUES (?, ?, ?, 'a-fazer', ?, ?)`);
-    for (let i = 0; i < 205; i++) await st.bind('q' + i, a.id, 'n' + i, t - i, t - i).run();
+      `INSERT INTO kanban_cartoes (id, numero, tipo, titulo, descricao, coluna_id, posicao, prioridade, relator_id, relator_nome, created_at, updated_at)
+       VALUES (?, ?, 'erro', ?, '', 'a-fazer', ?, 3, 'claude', 'Claude', ?, ?)`);
+    for (let i = 0; i < 205; i++) await st.bind('c' + i, 1000 + i, 'n' + i, i, t - i, t - i).run();
     const lista = await listar(env, a);
     assert.equal(lista.length, 200);
-    assert.equal(lista[0].id, 'q0', 'os mais recentes ficam');
+    assert.equal(lista[0].id, 'KAN-1000', 'os mais recentes ficam');
   });
 });
 
@@ -447,7 +470,8 @@ describe('reabrir', () => {
     const env = ambiente();
     const a = await conta(env, 'Ana');
     const id = (await criar(env, a, { body: 'x' })).id;
-    await mexer(env, id, { status: 'human-tests', resolution: 'Corrigido em abc123', resolved_at: Date.now() });
+    await mexerCartao(env, id, { coluna_id: 'human-tests' });
+    await mexer(env, id, { resolution: 'Corrigido em abc123', resolved_at: Date.now() });
     assert.equal((await listar(env, a))[0].status, 'human-tests');
     const r = await resp(pedir(env, a, '/api/qa/' + id + '/reabrir', 'POST'));
     assert.deepEqual(r, { status: 200, ok: true });
@@ -616,13 +640,13 @@ describe('as colunas do kanban', () => {
     assert.equal((await mover(env, a, id, 'concluido')).status, 404);
   });
 
-  test('um ticket de antes do kanban (sem cartão) ganha o cartão na coluna para onde vai', async () => {
+  test('um ticket de antes do kanban (sem cartão) não está na pílula, e ganha o cartão na coluna para onde vai', async () => {
     const env = ambiente();
     const a = await conta(env, 'Ana');
     const id = (await criar(env, a, { body: 'antigo', severity: 'bloqueia' })).id;
     await env.DB.prepare("DELETE FROM kanban_cartoes WHERE origem_tipo = 'qa'").run();
     await mexer(env, id, { status: 'concluido', resolved_at: 1 });
-    assert.equal((await listar(env, a))[0].cartao, null);
+    assert.deepEqual(await listar(env, a), [], 'não está no kanban, não está na pílula');
     assert.equal((await resp(pedir(env, a, '/api/qa/' + id + '/reabrir', 'POST'))).status, 200);
     const k = await cartaoDe(env, id);
     assert.equal(k.coluna_id, 'a-fazer');
@@ -650,11 +674,11 @@ describe('as colunas do kanban', () => {
     q = await daBase(env, id);
     assert.equal(q.status, 'para-depois');
     assert.equal(q.resolved_at, null);
-    // removido no kanban: o ticket fica; reposto, volta à coluna do cartão
+    // removido no kanban por SQL (sem a rota, que leva o ticket): o ticket fica; reposto, volta à coluna do cartão
     await env.DB.prepare('UPDATE kanban_cartoes SET removed_at = 1 WHERE numero = ?').bind(k.numero).run();
     await mover(env, a, id, 'auto-tests');
     assert.equal((await daBase(env, id)).status, 'auto-tests');
-    assert.equal((await listar(env, a))[0].cartao, null, 'o cartão removido não conta');
+    assert.deepEqual(await listar(env, a), [], 'um cartão removido não está na pílula');
     await env.DB.prepare('UPDATE kanban_cartoes SET removed_at = NULL WHERE numero = ?').bind(k.numero).run();
     assert.equal((await daBase(env, id)).status, 'para-depois', 'reposto, o cartão manda');
   });
@@ -798,5 +822,135 @@ describe('os comentários de um ticket', () => {
     const r = await comentar(env, t1, id, 'Ainda falha');
     assert.deepEqual(r.comentario.autor, { id: '4242', nome: 'Martinho' });
     assert.equal((await comentarios(env, t1, id)).comentarios[0].meu, true);
+  });
+});
+
+/* ------------------- a pílula é a vista dos Erros do kanban ------------------- */
+
+describe('a pílula é a vista dos Erros do kanban (KAN-115)', () => {
+  /* Um cartão escrito direto na base, como o kanban o deixa (sem passar pelas rotas do back office).
+     Recebe: env; numero; campos — junta-se a um Erro em A fazer, prioridade 3, do Mestre.
+     Devolve: a promessa do id do cartão. */
+  const cartao = async (env, numero, campos) => {
+    const c = Object.assign({ id: 'c' + numero, numero, tipo: 'erro', titulo: 'Cartão ' + numero, descricao: 'Descrição ' + numero, coluna_id: 'a-fazer',
+      posicao: numero, prioridade: 3, relator_id: 'm1', relator_nome: 'Mestre', created_at: Date.now() - numero, updated_at: Date.now() - numero }, campos);
+    const ks = Object.keys(c);
+    await env.DB.prepare('INSERT INTO kanban_cartoes (' + ks.join(', ') + ') VALUES (' + ks.map(() => '?').join(', ') + ')').bind(...ks.map((k) => c[k])).run();
+    return c.id;
+  };
+  // Recebe: env; numero. Devolve: a promessa da linha do cartão.
+  const lido = async (env, numero) => ({ ...(await env.DB.prepare('SELECT * FROM kanban_cartoes WHERE numero = ?').bind(numero).first()) });
+
+  test('o GET traz os Erros vivos, de QA e sem origem, e não traz os outros tipos nem os removidos; mudar o tipo entra e sai', async () => {
+    const env = ambiente();
+    const a = await conta(env, 'Ana');
+    const qa = (await criar(env, a, { body: 'do QA', severity: 'bloqueia' })).id;
+    await cartao(env, 501, { titulo: 'Erro à mão', prioridade: 2 });
+    await cartao(env, 502, { tipo: 'tarefa', titulo: 'Uma tarefa' });
+    await cartao(env, 503, { titulo: 'Erro removido', removed_at: 1 });
+    await cartao(env, 504, { tipo: 'historia', titulo: 'Um pedido', origem_tipo: 'pedido', origem_id: 'p1' });
+    let lista = await listar(env, a);
+    assert.deepEqual(lista.map((x) => [x.cartao === 'KAN-501' ? 'KAN-501' : 'qa', x.ticket, x.prioridade]), [['qa', true, 1], ['KAN-501', false, 2]]);
+    const mao = lista.find((x) => x.cartao === 'KAN-501');
+    assert.deepEqual(mao, {
+      id: 'KAN-501', cartao: 'KAN-501', ticket: false, titulo: 'Erro à mão', body: 'Descrição 501', prioridade: 2, status: 'a-fazer',
+      severity: null, context: null, imagem: false, resolution: null, resolved_at: null, created_at: mao.created_at, updated_at: mao.updated_at,
+      autor: { id: 'm1', nome: 'Mestre', email: '', discord: null },
+    });
+    assert.equal(lista.find((x) => x.ticket).id, qa, 'o de QA leva o id do ticket');
+    // a Tarefa passa a Erro: entra; o de QA passa a Tarefa: sai
+    await env.DB.prepare("UPDATE kanban_cartoes SET tipo = 'erro' WHERE numero = 502").run();
+    await env.DB.prepare("UPDATE kanban_cartoes SET tipo = 'tarefa' WHERE origem_id = ?").bind(qa).run();
+    lista = await listar(env, a);
+    assert.deepEqual(lista.map((x) => x.cartao).sort(), ['KAN-501', 'KAN-502']);
+  });
+
+  test('um cartão de pedido que passe a Erro não mostra a descrição a uma conta da app', async () => {
+    const env = ambiente();
+    const a = await conta(env, 'Ana');
+    await cartao(env, 510, { titulo: 'Exportar', descricao: 'O texto que a pessoa escreveu.', origem_tipo: 'pedido', origem_id: 'p1' });
+    const lista = await listar(env, a);
+    assert.deepEqual(lista, [], 'nem aparece: só quem vê os pedidos o vê');
+    assert.equal((await resp(pedir(env, a, '/api/qa/KAN-510/comentarios'))).status, 404, 'nem se mexe nele');
+  });
+
+  test('num Erro sem ticket, comentar, mover, Aceitar e reabrir escrevem no cartão; remover e repor são 403; captura 404', async () => {
+    const env = ambiente();
+    const a = await conta(env, 'Ana');
+    await cartao(env, 520, { titulo: 'Sem ticket' });
+    const k = (await lido(env, 520)).id;
+    // comentar em A fazer: fica lá
+    let r = await resp(pedir(env, a, '/api/qa/KAN-520/comentarios', 'POST', { texto: '  Visto no Samsung  ' }));
+    assert.equal(r.status, 201);
+    assert.equal(r.coluna, 'a-fazer');
+    assert.deepEqual(r.comentario.autor, { id: a.id, nome: 'Ana' });
+    const c = await resp(pedir(env, a, '/api/qa/kan-520/comentarios'));
+    assert.deepEqual(c.comentarios.map((x) => [x.texto, x.meu]), [['Visto no Samsung', true]], 'os comentários do cartão (a chave em qualquer caixa)');
+    // mover para Human Tests: o cartão vai, com a linha no histórico
+    r = await resp(pedir(env, a, '/api/qa/KAN-520/mover', 'POST', { coluna: 'human-tests' }));
+    assert.deepEqual(r, { status: 200, ok: true });
+    assert.equal((await lido(env, 520)).coluna_id, 'human-tests');
+    const hist = await env.DB.prepare("SELECT antes, depois, autor_id FROM kanban_historico WHERE cartao_id = ? AND campo = 'coluna'").bind(k).all();
+    assert.deepEqual(hist.results.map((h) => ({ ...h })), [{ antes: 'a-fazer', depois: 'human-tests', autor_id: a.id }]);
+    assert.equal((await listar(env, a))[0].status, 'human-tests');
+    // comentar em Human Tests: volta a Auto Tests, como no kanban
+    r = await resp(pedir(env, a, '/api/qa/KAN-520/comentarios', 'POST', { texto: 'Ainda falha' }));
+    assert.equal(r.coluna, 'auto-tests');
+    assert.equal((await lido(env, 520)).coluna_id, 'auto-tests');
+    // Aceitar: Concluído, com o concluido_at; reabrir: A fazer, sem ele
+    assert.equal((await resp(pedir(env, a, '/api/qa/KAN-520/mover', 'POST', { coluna: 'concluido' }))).status, 200);
+    let l = await lido(env, 520);
+    assert.equal(l.coluna_id, 'concluido');
+    assert.ok(l.concluido_at > 0);
+    assert.ok((await listar(env, a))[0].resolved_at > 0, 'numa coluna de fim conta como resolvido');
+    assert.equal((await resp(pedir(env, a, '/api/qa/KAN-520/reabrir', 'POST'))).status, 200);
+    l = await lido(env, 520);
+    assert.deepEqual([l.coluna_id, l.concluido_at], ['a-fazer', null]);
+    // as recusas
+    assert.equal((await resp(pedir(env, a, '/api/qa/KAN-520/mover', 'POST', { coluna: 'nao-existe' }))).status, 400);
+    for (const [m, p] of [['DELETE', ''], ['POST', '/repor']]) {
+      const x = await resp(pedir(env, a, '/api/qa/KAN-520' + p, m));
+      assert.equal(x.status, 403, m + p);
+      assert.match(x.error, /remove-se no kanban/);
+    }
+    assert.equal((await lido(env, 520)).removed_at, null, 'e o cartão fica');
+    assert.equal((await resp(pedir(env, a, '/api/qa/KAN-520/imagem'))).status, 404);
+    assert.equal((await resp(pedir(env, a, '/api/qa/KAN-520/comentarios', 'POST', { texto: '' }))).status, 400);
+  });
+
+  test('a chave de uma Tarefa, de um removido ou que não existe é 404; a de um cartão de QA vale o ticket', async () => {
+    const env = ambiente();
+    const a = await conta(env, 'Ana');
+    await cartao(env, 530, { tipo: 'tarefa' });
+    await cartao(env, 531, { removed_at: 1 });
+    for (const ch of ['KAN-530', 'KAN-531', 'KAN-999', 'KAN-0']) {
+      assert.equal((await resp(pedir(env, a, '/api/qa/' + ch + '/mover', 'POST', { coluna: 'concluido' }))).status, 404, ch);
+    }
+    const id = (await criar(env, a, { body: 'do QA' })).id;
+    const chave = (await listar(env, a)).find((x) => x.id === id).cartao;
+    assert.equal((await resp(pedir(env, a, '/api/qa/' + chave + '/mover', 'POST', { coluna: 'human-tests' }))).status, 200);
+    assert.equal((await daBase(env, id)).status, 'human-tests', 'pela chave, o ticket moveu-se (e o cartão com ele)');
+    const com = await resp(pedir(env, a, '/api/qa/' + chave + '/comentarios', 'POST', { texto: 'x' }));
+    assert.equal(com.coluna, 'auto-tests', 'e comenta como um ticket');
+  });
+
+  test('remover na pílula leva o cartão; o Anular repõe os dois; passadas 24 h não volta nenhum', async () => {
+    const env = ambiente();
+    const a = await conta(env, 'Ana');
+    const id = (await criar(env, a, { body: 'um' })).id;
+    assert.equal((await resp(pedir(env, a, '/api/qa/' + id, 'DELETE'))).status, 200);
+    const k = await env.DB.prepare('SELECT removed_at, removed_by FROM kanban_cartoes WHERE origem_id = ?').bind(id).first();
+    assert.ok(k.removed_at > 0);
+    assert.equal(k.removed_at, (await daBase(env, id)).removed_at);
+    assert.equal(k.removed_by, a.id);
+    assert.equal((await resp(pedir(env, a, '/api/qa/' + id + '/repor', 'POST'))).status, 200);
+    assert.equal((await env.DB.prepare('SELECT removed_at FROM kanban_cartoes WHERE origem_id = ?').bind(id).first()).removed_at, null);
+    assert.equal((await listar(env, a)).length, 1);
+    await resp(pedir(env, a, '/api/qa/' + id, 'DELETE'));
+    const velho = Date.now() - 25 * HORA;
+    await mexer(env, id, { removed_at: velho });
+    await env.DB.prepare('UPDATE kanban_cartoes SET removed_at = ? WHERE origem_id = ?').bind(velho, id).run();
+    assert.equal((await resp(pedir(env, a, '/api/qa/' + id + '/repor', 'POST'))).status, 404);
+    assert.ok((await env.DB.prepare('SELECT removed_at FROM kanban_cartoes WHERE origem_id = ?').bind(id).first()).removed_at > 0);
   });
 });

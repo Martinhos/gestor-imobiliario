@@ -183,9 +183,13 @@ describe('o SQL, corrido contra o esquema verdadeiro', () => {
     const por = Object.fromEntries(db.prepare(sqlListar(true)).all().map((l) => [l.id, ticketDaLinha(l).cartao]));
     assert.match(por['t-novo'], /^KAN-\d+$/);
     assert.equal(por['t-velho'], null);
-    // um cartão removido não conta
+    // um ticket cujo cartão foi removido no kanban sai do listar (KAN-115); os sem cartão nenhum ficam
     db.exec("UPDATE kanban_cartoes SET removed_at = 5 WHERE id = 'c-novo'");
-    assert.equal(ticketDaLinha(db.prepare(sqlListar(false)).all().find((l) => l.id === 't-novo')).cartao, null);
+    assert.equal(db.prepare(sqlListar(false)).all().find((l) => l.id === 't-novo'), undefined);
+    assert.equal(db.prepare(sqlListar(true)).all().find((l) => l.id === 't-novo'), undefined, 'nem com --todos');
+    assert.ok(db.prepare(sqlListar(false)).all().find((l) => l.id === 't-velho'), 'o de antes do kanban continua');
+    db.exec("UPDATE kanban_cartoes SET removed_at = NULL WHERE id = 'c-novo'");
+    assert.ok(db.prepare(sqlListar(false)).all().find((l) => l.id === 't-novo'), 'reposto, volta');
   });
 
   test('as colunas do kanban, pela ordem do quadro', () => {

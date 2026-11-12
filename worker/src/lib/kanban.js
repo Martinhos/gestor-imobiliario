@@ -329,6 +329,106 @@ export function passosDoComentarioQa(c) {
   );
 }
 
+/* Um ticket de QA e o seu cartão saem e voltam juntos (pedido do Martinho,
+   2026-11-12, KAN-115: «quero que o pill seja uma vista do kanban»):
+   remover o ticket na pílula remove o cartão, remover o cartão no kanban
+   remove o ticket, e cada Anular repõe os dois. Os dois ficam com o mesmo
+   removed_at, e é por ele que o Anular reconhece o par: só volta o que saiu
+   na mesma remoção (um ticket removido antes, por outra mão, fica onde está).
+   Correm no lote da rota que remove ou repõe (rotas/qa.js, rotas/kanban.js).
+
+   O ticket que sai com o cartão. Recebe: ticketId — o origem_id do cartão;
+   agora — ms (o removed_at do cartão). Devolve: {sql, params}. */
+export function ticketSaiComOCartao(ticketId, agora) {
+  return {
+    sql: 'UPDATE qa_tickets SET removed_at = ?, updated_at = ? WHERE id = ? AND removed_at IS NULL',
+    params: [agora, agora, String(ticketId)],
+  };
+}
+
+/* O ticket que volta com o cartão (o Anular do kanban): só o que saiu com
+   ele, no mesmo instante.
+   Recebe: ticketId — o origem_id do cartão; removidoEm — o removed_at que o
+   cartão tinha; agora — ms.
+   Devolve: {sql, params}. */
+export function ticketVoltaComOCartao(ticketId, removidoEm, agora) {
+  return {
+    sql: 'UPDATE qa_tickets SET removed_at = NULL, updated_at = ? WHERE id = ? AND removed_at = ?',
+    params: [agora, String(ticketId), Number(removidoEm)],
+  };
+}
+
+/* O cartão que sai com o ticket (remover na pílula): o cartão vivo do
+   ticket fica removido no mesmo instante, por quem removeu, com a linha
+   «removido» no histórico.
+   Recebe: ticketId — o id do ticket; autor — {id, nome}; agora — ms (o
+   removed_at do ticket).
+   Devolve: a lista de {sql, params}. */
+export function cartaoSaiComOTicket(ticketId, autor, agora) {
+  const vivo = "origem_tipo = 'qa' AND origem_id = ? AND removed_at IS NULL";
+  const a = autor && autor.id ? autor : AUTOMATICO;
+  return [
+    {
+      sql: "INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) SELECT id, ?, ?, ?, 'removido', NULL, NULL FROM kanban_cartoes WHERE " + vivo,
+      params: [agora, a.id, a.nome || '', String(ticketId)],
+    },
+    {
+      sql: 'UPDATE kanban_cartoes SET removed_at = ?, removed_by = ?, updated_at = ? WHERE ' + vivo,
+      params: [agora, a.id, agora, String(ticketId)],
+    },
+  ];
+}
+
+/* O cartão que volta com o ticket (o Anular da pílula): só o que saiu com
+   ele, no mesmo instante; volta à coluna onde estava (a A fazer, se ela
+   entretanto saiu, como o repor do kanban) e deixa a linha «reposto».
+   Recebe: ticketId; removidoEm — o removed_at que o ticket tinha; autor;
+   agora — ms.
+   Devolve: a lista de {sql, params}. */
+export function cartaoVoltaComOTicket(ticketId, removidoEm, autor, agora) {
+  const par = "origem_tipo = 'qa' AND origem_id = ? AND removed_at = ?";
+  const a = autor && autor.id ? autor : AUTOMATICO;
+  return [
+    {
+      sql: "INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) SELECT id, ?, ?, ?, 'reposto', NULL, NULL FROM kanban_cartoes WHERE " + par,
+      params: [agora, a.id, a.nome || '', String(ticketId), Number(removidoEm)],
+    },
+    {
+      sql: 'UPDATE kanban_cartoes SET removed_at = NULL, removed_by = NULL, updated_at = ?,' +
+        " coluna_id = CASE WHEN EXISTS (SELECT 1 FROM kanban_colunas c WHERE c.id = kanban_cartoes.coluna_id) THEN coluna_id ELSE 'a-fazer' END" +
+        ' WHERE ' + par,
+      params: [agora, String(ticketId), Number(removidoEm)],
+    },
+  ];
+}
+
+/* Os passos de um cartão que muda de coluna pela pílula (um Erro sem ticket
+   de QA: mover, reabrir, Aceitar, Recusar, Adiar): vai para o topo da
+   coluna, como o mover do kanban com o índice 0, com o concluido_at posto ao
+   entrar numa coluna de fim (mantido se já estava numa) e tirado nas outras,
+   e a linha «coluna» no histórico assinada por quem mexeu. Já nessa coluna,
+   nada muda.
+   Recebe: cartaoId; coluna — o id da coluna (que existe); autor — {id, nome}; agora — ms.
+   Devolve: a lista de {sql, params}. */
+export function passosDoCartaoNaColuna(cartaoId, coluna, autor, agora) {
+  const a = autor && autor.id ? autor : AUTOMATICO;
+  const muda = 'id = ? AND removed_at IS NULL AND coluna_id <> ?';
+  return [
+    {
+      sql: "INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) SELECT id, ?, ?, ?, 'coluna', coluna_id, ? FROM kanban_cartoes WHERE " + muda,
+      params: [agora, a.id, a.nome || '', coluna, cartaoId, coluna],
+    },
+    {
+      sql: 'UPDATE kanban_cartoes SET' +
+        ' posicao = (SELECT COALESCE(MIN(x.posicao), 1024) - 1024 FROM kanban_cartoes x WHERE x.coluna_id = ? AND x.removed_at IS NULL),' +
+        ' concluido_at = CASE WHEN ? IN (SELECT id FROM kanban_colunas WHERE fim = 1)' +
+        ' THEN CASE WHEN coluna_id IN (SELECT id FROM kanban_colunas WHERE fim = 1) THEN COALESCE(concluido_at, ?) ELSE ? END ELSE NULL END,' +
+        ' coluna_id = ?, updated_at = ? WHERE ' + muda,
+      params: [coluna, coluna, agora, agora, coluna, agora, cartaoId, coluna],
+    },
+  ];
+}
+
 // Quem comenta sem ser uma pessoa: o Claude (o scripts/kanban.mjs assina «claude») e a sincronização.
 const NAO_PESSOAS = ['claude', AUTOMATICO.id];
 

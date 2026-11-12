@@ -105,6 +105,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-12 · Os dados de exemplo têm um dono só: a própria conta (KAN-10, KAN-78)
 - 2026-11-12 · Os tickets de segurança decidem-se com Aceitar e Recusar (KAN-114)
 - 2026-11-12 · Em Human Tests aceita-se num toque, e recusar é explicar (KAN-116, KAN-117)
+- 2026-11-12 · A pílula do QA é uma vista dos Erros do kanban (KAN-115)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3727,3 +3728,35 @@ de uma pessoa num cartão em Human Tests devolve-o ao topo de Auto Tests, a fila
 deixa o cartão em Human Tests. Os cartões dos pedidos ficam de fora: a coluna deles segue o pedido,
 que se decide nos Pedidos. A pílula do QA na app mantém as três decisões dela (Recusar, Adiar e
 Aceitar). Como o resto do back office, a mudança não leva aviso de novidades nem versão nova.
+
+## 2026-11-12 · A pílula do QA é uma vista dos Erros do kanban (KAN-115)
+
+A pílula lia a tabela qa_tickets e o kanban lia os cartões, e os dois só se encontravam pelas
+colunas (2026-11-10). No resto divergiam. O Martinho mudou o KAN-10 de Tarefa para Erro e ele não
+apareceu na pílula; e um cartão de QA removido no kanban continuava lá e no scripts/qa.mjs listar,
+porque o gatilho kanban_qa_coluna só corre com o cartão vivo e nada mais levava a remoção ao
+ticket. Reproduzido no servidor isolado antes da correção. O pedido dele: «Quero que o pill seja uma
+vista do kanban. Os dados são os mesmos, portanto está tudo sempre sincronizado.»
+
+As duas decisões dele, perguntadas antes de começar:
+- A pílula mostra todos os cartões do tipo Erro do kanban, venham de onde vierem: os dos tickets de
+  QA, os criados à mão, os que a skill ticket cria. Um cartão que deixa de ser Erro sai, um que passa
+  a Erro entra. Os de QA continuam com a captura e o contexto.
+- A pílula agrupa pela prioridade do cartão (Mais alta a Mais baixa, os nomes do kanban), a mesma
+  para todos, no lugar da gravidade. O «Novo ticket» continua a pedir a gravidade, que vira a
+  prioridade do cartão como antes.
+
+Ficou assim. O GET da pílula lê os cartões Erro vivos e junta o ticket aos de QA. Um item de QA usa o
+id do ticket, para as rotas da captura e o scripts/qa.mjs não mudarem; um Erro sem ticket usa a
+chave KAN-N, que as mesmas rotas aceitam e escrevem no cartão: mover, reabrir, as três decisões e
+comentar, este como o comentário do kanban. Remover num Erro sem ticket não aparece, porque remover
+um cartão é do master, no kanban. O ticket e o cartão saem e voltam juntos, com o mesmo removed_at, e
+é por ele que cada Anular reconhece o par. A sincronização vive nas rotas, com o SQL em
+lib/kanban.js, sem migração nova.
+
+Duas consequências que ficam escritas. Os 75 tickets do dev que não têm cartão (os de antes do
+kanban, todos em Concluído) deixam a pílula, porque não estão no kanban; continuam no
+scripts/qa.mjs listar --todos. Um cartão de um pedido que alguém mude para Erro só aparece a quem vê
+os pedidos: a descrição é o texto que a pessoa escreveu na Ajuda, e as contas de teste da app nunca
+a viram nem veem. A pílula só existe fora de produção, por isso a mudança não leva aviso de
+novidades nem versão nova, como as outras mudanças só da pílula (KAN-97).

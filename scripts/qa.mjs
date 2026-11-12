@@ -30,8 +30,11 @@
 // comenta na pílula ou no kanban, o ticket volta a Auto Tests, e a nota do
 // resolver, que entra como comentário, é a resposta. Um ticket com um status
 // que não se conhece não se perde: aparece (com --todos) com o próprio
-// status. --json dá o mesmo na forma do GET /api/qa ({colunas, tickets} com
-// status e cartao, e comentariosPorResponder em cada um), para máquinas.
+// status. Um ticket cujo cartão foi removido no kanban não aparece: saem
+// juntos (KAN-115); os Erros do kanban sem ticket são do scripts/kanban.mjs.
+// --json dá o mesmo para máquinas ({colunas, tickets} com status e cartao, e
+// comentariosPorResponder em cada um; o GET /api/qa da pílula, desde o
+// KAN-115, lista os cartões Erro e traz mais campos).
 // imagem descarrega a captura para os.tmpdir()/rendorium-qa (ou --para) e
 // diz o caminho, com a extensão do tipo verdadeiro (png, jpg ou webp).
 // comecar leva os tickets dados a Auto Tests (recusa os que estão em Human
@@ -304,11 +307,19 @@ export function sqlListar(todos) {
 
 /* A condição dos tickets que o listar mostra (a mesma no SELECT dos tickets e
    no dos comentários deles): os não removidos e, sem --todos, só os da fila.
+   Um ticket cujo cartão foi removido no kanban também fica de fora: o ticket
+   e o cartão saem juntos (KAN-115; o kanban já remove o ticket, e isto apanha
+   os que o kanban removeu antes disso). Os de antes do kanban, sem cartão
+   nenhum, continuam.
    Recebe: todos — como em sqlListar.
    Devolve: o texto da condição, sobre qa_tickets com o nome q. */
 function ondeListar(todos) {
   const fila = FILA.concat(Object.keys(ANTIGOS).filter((k) => FILA.includes(ANTIGOS[k]))).map((c) => cita(c)).join(', ');
-  return 'q.removed_at IS NULL' + (todos ? '' : ' AND q.status IN (' + fila + ')');
+  const doTicket = "k.origem_tipo = 'qa' AND k.origem_id = q.id";
+  return 'q.removed_at IS NULL'
+    + ' AND (EXISTS (SELECT 1 FROM kanban_cartoes k WHERE ' + doTicket + ' AND k.removed_at IS NULL)'
+    + ' OR NOT EXISTS (SELECT 1 FROM kanban_cartoes k WHERE ' + doTicket + '))'
+    + (todos ? '' : ' AND q.status IN (' + fila + ')');
 }
 
 /* O SELECT dos comentários dos tickets que o listar mostra: os do cartão de

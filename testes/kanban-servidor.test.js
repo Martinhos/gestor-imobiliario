@@ -967,7 +967,7 @@ describe('os tickets de QA levam o seu cartão', () => {
     assert.match(r.cartao.descricao, /Ticket de QA #[0-9A-F]{8} · gravidade: bloqueia\.$/);
   });
 
-  test('reabrir volta a A fazer; remover e repor deixam a linha no histórico; repor o que não saiu não deixa', async () => {
+  test('reabrir volta a A fazer; remover na pílula leva o cartão e o Anular repõe os dois; repor o que não saiu não deixa linha (KAN-115)', async () => {
     const env = ambiente();
     const { id } = await ir(env, DEV, 'POST', '/api/equipa/qa', { body: 'Algo partido' });
     // o scripts/qa.mjs resolve por SQL e leva o cartão pela mesma regra
@@ -978,14 +978,38 @@ describe('os tickets de QA levam o seu cartão', () => {
     const k = cartaoDaOrigem(env, 'qa', id);
     assert.deepEqual([k.coluna_id, k.origem_estado], ['a-fazer', 'a-fazer']);
     assert.equal((await ir(env, DEV, 'POST', '/api/equipa/qa/' + id + '/repor')).status, 200);
-    assert.equal(uma(env, "SELECT COUNT(*) AS n FROM kanban_historico WHERE campo = 'origem'").n, 0, 'não estava removido');
+    assert.equal(uma(env, "SELECT COUNT(*) AS n FROM kanban_historico WHERE campo IN ('removido', 'reposto')").n, 0, 'não estava removido');
     assert.equal((await ir(env, DEV, 'DELETE', '/api/equipa/qa/' + id)).status, 200);
+    const fora = cartaoDaOrigem(env, 'qa', id), ticket = uma(env, 'SELECT removed_at FROM qa_tickets WHERE id = ?', id);
+    assert.ok(fora.removed_at > 0 && fora.removed_at === ticket.removed_at, 'o cartão saiu com o ticket, no mesmo instante');
+    assert.equal(fora.removed_by, 'd1', 'quem removeu na pílula');
+    assert.equal((await quadro(env)).cartoes.length, 0, 'e saiu do quadro');
     assert.equal((await ir(env, DEV, 'POST', '/api/equipa/qa/' + id + '/repor')).status, 200);
-    assert.deepEqual(todas(env, "SELECT depois, autor_id FROM kanban_historico WHERE campo = 'origem' ORDER BY id"),
-      [{ depois: 'removido', autor_id: 'automatico' }, { depois: 'reposto', autor_id: 'automatico' }]);
-    assert.equal(cartaoDaOrigem(env, 'qa', id).removed_at, null, 'o cartão nunca saiu do quadro');
+    assert.equal(cartaoDaOrigem(env, 'qa', id).removed_at, null, 'o Anular repôs o cartão');
+    assert.equal(uma(env, 'SELECT removed_at FROM qa_tickets WHERE id = ?', id).removed_at, null);
+    assert.deepEqual(todas(env, "SELECT campo, autor_id FROM kanban_historico WHERE campo IN ('removido', 'reposto') ORDER BY id"),
+      [{ campo: 'removido', autor_id: 'd1' }, { campo: 'reposto', autor_id: 'd1' }]);
     assert.deepEqual(historicoDe(env, k.id).filter((h) => h.campo === 'coluna').map((h) => [h.antes, h.depois]),
       [['a-fazer', 'human-tests'], ['human-tests', 'a-fazer']]);
+  });
+
+  test('remover o cartão de um ticket no kanban remove o ticket, e o Anular do kanban repõe-no; um removido antes fica (KAN-115)', async () => {
+    const env = ambiente();
+    const { id } = await ir(env, DEV, 'POST', '/api/equipa/qa', { body: 'Some no kanban' });
+    const chave = (await quadro(env)).cartoes[0].chave;
+    assert.equal((await ir(env, MASTER, 'DELETE', K + '/cartoes/' + chave)).ok, true);
+    const k = cartaoDaOrigem(env, 'qa', id), q = uma(env, 'SELECT removed_at FROM qa_tickets WHERE id = ?', id);
+    assert.ok(q.removed_at > 0 && q.removed_at === k.removed_at, 'o ticket saiu com o cartão');
+    assert.deepEqual((await ir(env, DEV, 'GET', '/api/equipa/qa')).tickets, [], 'e da pílula');
+    assert.equal((await ir(env, DEV, 'POST', '/api/equipa/qa/' + id + '/comentarios', { texto: 'x' })).status, 404, 'já não se comenta');
+    assert.equal((await ir(env, MASTER, 'POST', K + '/cartoes/' + chave + '/repor')).cartao.chave, chave);
+    assert.equal(uma(env, 'SELECT removed_at FROM qa_tickets WHERE id = ?', id).removed_at, null, 'o Anular do kanban repôs o ticket');
+    assert.deepEqual((await ir(env, DEV, 'GET', '/api/equipa/qa')).tickets.map((t) => [t.id, t.cartao]), [[id, chave]]);
+    // um ticket removido por outra mão antes do cartão não volta com ele
+    await env.DB.prepare('UPDATE qa_tickets SET removed_at = ? WHERE id = ?').bind(Date.now() - 1000, id).run();
+    assert.equal((await ir(env, MASTER, 'DELETE', K + '/cartoes/' + chave)).ok, true);
+    await ir(env, MASTER, 'POST', K + '/cartoes/' + chave + '/repor');
+    assert.ok(uma(env, 'SELECT removed_at FROM qa_tickets WHERE id = ?', id).removed_at > 0, 'o que saiu antes fica removido');
   });
 });
 
