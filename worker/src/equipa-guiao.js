@@ -2035,7 +2035,7 @@ var PAGINAS_RASTO = { '/': 'Início da montra', '/privacidade': 'Política de Pr
 // as secções da montra, pelo id (worker/src/landing.js)
 var SECCOES_RASTO = {
   inicio: 'Início', ligado: 'Do imóvel à renda, tudo ligado', imoveis: 'Imóveis', contratos: 'Contratos',
-  planeados: 'Planeados', computador: 'No computador', resto: 'O resto da gestão', contas: 'Contas entre donos',
+  planeados: 'Planeados', irs: 'IRS · Anexo F', computador: 'No computador', resto: 'O resto da gestão', contas: 'Contas entre donos',
   dados: 'Os dados são teus', guia: 'IRS das rendas: como declarar e o que podes deduzir', comecar: 'Começa pelo primeiro imóvel',
   'rasto-de-utilizacao': 'Rasto de utilização',
 };

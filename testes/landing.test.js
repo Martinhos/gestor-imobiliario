@@ -32,18 +32,19 @@ const html = await resposta.text();
    CSP_ESTRITA, que não aplica um <style> escrito dentro do HTML. */
 const css = CSS_LANDING;
 
-/* O que prometeria a Declaração do IRS, que só existe em dev: as palavras da
-   funcionalidade, em qualquer sítio do HTML (texto e metadados), e uma frase
-   que junte o IRS (ou a app) a declarar, calcular, preencher ou entregar.
+/* O que prometeria mais do que a Declaração do IRS faz. Desde 2026-11-12 ela
+   está em produção e a montra mostra-a (o ecrã #irs): o IRS, o Anexo F e o
+   Portal das Finanças podem aparecer. O que a app não faz continua proibido,
+   em qualquer sítio do HTML (texto e metadados): declarar, entregar, submeter
+   ou enviar por ti, ligar-se à AT, e o Modelo 2 (a comunicação dos contratos,
+   que a app não faz). «A app resume; quem declara és tu» é a frase da app
+   (navegacao.js, o sub do fisco) e passa.
    As frases partem-se nos blocos (parágrafos, títulos, ligações, metadados),
    e os valores do content, do aria-label, do alt e do title também contam.
-   O título do guia (guia-vista.js:H1, «… como declarar …», decisão do
-   Martinho de 2026-11-09) passa, e só ele, tal e qual: é o nome de uma
-   página de informação, não uma promessa da app.
    Recebe: h — o HTML. Devolve: a lista do que prometeria (vazia quando não há). */
 function promessasDoIrs(h) {
   const fora = [];
-  for (const re of [/Declaração/, /Modelo 2/, /Anexo F/, /Finanças/, /\bAT\b/]) if (re.test(h)) fora.push(String(re));
+  for (const re of [/Modelo 2/, /\bAT\b/]) if (re.test(h)) fora.push(String(re));
   const frases = h
     .replace(/<[^>]*?\s(?:content|aria-label|alt|title)="([^"]*)"[^>]*>/g, '\n$1\n')
     .replace(/<\/?(?:p|h[1-6]|li|div|section|header|footer|nav|ul|ol|a|button|title|form)\b[^>]*>/g, '\n')
@@ -51,9 +52,9 @@ function promessasDoIrs(h) {
     .split(/\n|(?<=[.;!?])\s/)
     .map((f) => f.replace(/\s+/g, ' ').trim()).filter(Boolean);
   for (const f of frases) {
-    if (f === TITULO_GUIA) continue;
-    const verbo = /\b(?:declar|calcul|preench|entreg)\w*/i;
-    if ((/IRS/.test(f) && verbo.test(f)) || /\b(?:Rendorium|app)\b.{0,30}\b(?:declara|calcula|preenche|entrega)\b/i.test(f)) fora.push(f);
+    const sem = f.replace(/quem declara és tu/gi, '');
+    if (/\b(?:Rendorium|app)\b.{0,30}\b(?:declara|entrega|submete|envia)\b/i.test(sem) ||
+      /\b(?:declar|entreg|submet|envi)\w*\b.{0,30}\bpor ti\b/i.test(f)) fora.push(f);
   }
   return fora;
 }
@@ -78,8 +79,8 @@ describe('a página de entrada', () => {
     const maquetes = [...html.matchAll(/<div class="([^"]+)" role="img" aria-label="([^"]+)">/g)]
       .map((m) => ({ classe: m[1], descricao: m[2] }));
     assert.deepEqual(maquetes.map((m) => m.classe), ['telemovel', 'telemovel imoveis', 'telemovel contratos',
-      'telemovel planeados', 'computador', 'acerto n'],
-      'o hero, os três ecrãs, o computador e as contas entre donos');
+      'telemovel planeados', 'telemovel irs', 'computador', 'acerto n'],
+      'o hero, os quatro ecrãs, o computador e as contas entre donos');
     maquetes.forEach((m) => assert.ok(m.descricao.length >= 60, 'uma descrição a sério: ' + m.descricao));
     assert.match(html, /<div class="hero-visual">\s*<div class="tile" aria-hidden="true">/,
       'o mosaico do hero é decoração, escondido dos leitores de ecrã');
@@ -308,12 +309,12 @@ describe('a página de entrada', () => {
 
   /* Quem abre a página percebe em segundos o que ela faz: o chapéu diz o que
      é, o título diz a vantagem, e cada ecrã que a entrega (Imóveis,
-     Contratos, Planeados) tem a sua secção, com o título e o telemóvel. */
+     Contratos, Planeados, IRS · Anexo F) tem a sua secção, com o título e o telemóvel. */
   test('o valor primeiro, e cada ecrã na sua secção', () => {
     assert.equal((html.match(/<h1[ >]/g) || []).length, 1, 'um título só');
     assert.match(html, /<p class="chapeu">Gestão de arrendamento para senhorios<\/p>\s*<h1>Nenhuma renda te passa despercebida\.<\/h1>/);
     assert.match(html, /<h2>Do imóvel à renda, tudo ligado<\/h2>/);
-    for (const id of ['imoveis', 'contratos', 'planeados']) {
+    for (const id of ['imoveis', 'contratos', 'planeados', 'irs']) {
       const s = new RegExp('<section class="wrap ecra-seccao[^"]*" id="' + id + '" aria-labelledby="t-' + id +
         '">[\\s\\S]*?<h3 id="t-' + id + '">[\\s\\S]*?<div class="telemovel ' + id + '" role="img"[\\s\\S]*?</section>').exec(html);
       assert.ok(s, 'a secção ' + id + ', com o título e a maquete');
@@ -321,41 +322,41 @@ describe('a página de entrada', () => {
     assert.ok(!/O que faz/.test(html), 'a grelha já não abre a página');
   });
 
-  /* A Declaração do IRS está na app de produção desde 2026-11-12, mas a montra
-     continua sem a prometer até o Martinho decidir mostrá-la. Desde 2026-11-08 o
-     IRS pode aparecer, mas só como o guia (guia-vista.js), que é informação
-     e não uma função da app: no botão do cabeçalho (e na linha da gaveta,
-     no telemóvel), no cartão #guia e na ligação do rodapé. O que promete a funcionalidade continua proibido na
-     página inteira, texto e metadados. */
-  test('o IRS só aparece como guia, e nada promete a Declaração', async () => {
+  /* A Declaração do IRS está na app de produção desde 2026-11-12, e a montra
+     mostra-a no ecrã #irs (decisão do Martinho: «Integra a declaração na
+     montra»). Fora dele, o IRS aparece só nas ligações para o guia
+     (guia-vista.js): o botão do cabeçalho (e a linha da gaveta, no
+     telemóvel), o cartão #guia e a ligação do rodapé. O título e a descrição
+     ficam sem ele: a pesquisa pelo IRS chega ao guia. Em toda a página, nada
+     promete mais do que a app faz. */
+  test('o IRS aparece no ecrã do Anexo F e nas ligações para o guia, sem prometer o que a app não faz', async () => {
     const previa = await paginaLanding({ raiz: false }).text();
     for (const [h, onde] of [[html, 'na raiz'], [previa, 'na pré-visualização']]) {
       const cab = /<header>[\s\S]*?<\/header>/.exec(h)[0];
       const cartao = /<section[^>]*id="guia"[\s\S]*?<\/section>/.exec(h)[0];
+      const ecra = /<section[^>]*id="irs"[\s\S]*?<\/section>/.exec(h)[0];
       const rodape = /<footer[\s\S]*?<\/footer>/.exec(h)[0];
       // as ligações para o guia: o botão em linha e a linha da gaveta, no cabeçalho, e a do rodapé
       const paraOGuia = new RegExp('<a [^>]*href="' + CAMINHO_GUIA + '"[^>]*>[\\s\\S]*?</a>', 'g');
       assert.match(cab, paraOGuia, 'o botão do cabeçalho ' + onde);
       assert.match(cartao, /IRS/, 'o cartão ' + onde);
       assert.match((rodape.match(paraOGuia) || []).join(''), /IRS/, 'a ligação do rodapé ' + onde);
-      const resto = h.replace(cartao, '').replace(paraOGuia, '');
-      assert.doesNotMatch(resto, /IRS/, 'o IRS fora do botão, do cartão e do rodapé ' + onde);
+      assert.match(ecra, /A app resume; quem declara és tu/, 'o ecrã diz que a app resume ' + onde);
+      const resto = h.replace(cartao, '').replace(ecra, '').replace(paraOGuia, '');
+      assert.doesNotMatch(resto, /IRS|Anexo F/, 'o IRS fora do ecrã, do botão, do cartão e do rodapé ' + onde);
       assert.deepEqual(promessasDoIrs(h), [], onde);
     }
   });
 
-  test('controlo: a guarda das promessas apanha o que prometeria a Declaração', () => {
-    for (const mau of ['<p>A Rendorium declara o IRS por ti.</p>', '<p>O IRS calculado num toque.</p>',
-      '<p>Preenche o teu IRS aqui</p>', '<meta content="Entrega a Declaração">', '<p>Anexo F pronto</p>',
-      '<p>Ligado à AT</p>', '<p>Modelo 2</p>', '<p>Portal das Finanças</p>', '<p>a app calcula as rendas</p>']) {
+  test('controlo: a guarda das promessas apanha o que a app não faz', () => {
+    for (const mau of ['<p>A Rendorium declara o IRS por ti.</p>', '<meta content="A app entrega o Anexo F">',
+      '<p>Ligado à AT</p>', '<p>Modelo 2</p>', '<p>A app submete a tua declaração</p>', '<p>Entregamos o IRS por ti</p>',
+      '<div aria-label="A app envia o IRS">']) {
       assert.ok(promessasDoIrs(mau).length > 0, mau);
     }
-    assert.deepEqual(promessasDoIrs('<h2>IRS: o que podes deduzir às rendas</h2><a>Guia do IRS das rendas</a>'), []);
-    // o título do guia passa tal e qual; o mesmo verbo noutra frase com IRS, não
-    assert.deepEqual(promessasDoIrs('<h2>' + TITULO_GUIA + '</h2>'), []);
-    for (const mau of ['<h2>IRS das rendas: como declarar com a app</h2>', '<p>' + TITULO_GUIA + ' na Rendorium</p>',
-      '<p>Como declarar o IRS num toque</p>']) {
-      assert.ok(promessasDoIrs(mau).length > 0, mau);
+    for (const bom of ['<h2>IRS: o que podes deduzir às rendas</h2><a>Guia do IRS das rendas</a>', '<h2>' + TITULO_GUIA + '</h2>',
+      '<p>A app resume; quem declara és tu, no Portal das Finanças.</p>', '<p>O resumo do Anexo F, com o imposto estimado.</p>']) {
+      assert.deepEqual(promessasDoIrs(bom), [], bom);
     }
   });
 
@@ -499,9 +500,9 @@ describe('a página de entrada', () => {
     assert.match(html, new RegExp('<meta property="og:description" content="' + desc + '">'), 'e as redes dizem o mesmo');
   });
 
-  /* Os três ecrãs contam a história do hero: as rendas em vigor nos Imóveis
-     somam o último mês do gráfico, e o que o hero diz estar por confirmar é
-     o que os Planeados mostram. */
+  /* Os ecrãs contam a história do hero: as rendas em vigor nos Imóveis
+     somam o último mês do gráfico, o que o hero diz estar por confirmar é
+     o que os Planeados mostram, e as rendas do Anexo F somam a receita. */
   test('os ecrãs e o hero contam a mesma história', () => {
     const sec = (id) => new RegExp('id="' + id + '"[\\s\\S]*?</section>').exec(html)[0];
     const euros = (t) => Number(t.replace(/\s/g, '').replace(',', '.').replace('−', '-'));
@@ -514,6 +515,13 @@ describe('a página de entrada', () => {
     const plan = sec('planeados');
     assert.equal((plan.match(/botao-maquete pequeno">Confirmar/g) || []).length, Number(porConfirmar), 'os por confirmar do hero');
     assert.equal((plan.match(/m-selo red">Em atraso/g) || []).length, Number(emAtraso), 'e os em atraso');
+    // as rendas do quadro do Anexo F somam a receita do ano do hero, e o imposto estimado é a soma das linhas
+    const receita = euros(/<p class="m-sub">Receita<\/p><p class="tit">([^<]+?)\s?€<\/p>/.exec(html)[1]);
+    const linhas = [...sec('irs').matchAll(/<span class="m-q-linha"><span>[^<]+<\/span><span>([^<]+?)\s?€<\/span><b>([^<]+?)\s?€<\/b>/g)];
+    assert.equal(linhas.length, 4, 'os quatro imóveis no quadro');
+    assert.equal(linhas.reduce((a, m) => a + euros(m[1]), 0), receita, 'as rendas do quadro somam a receita');
+    const total = euros(/<span class="m-q-linha total"><span>Imposto estimado<\/span><span><\/span><b>([^<]+?)\s?€<\/b>/.exec(sec('irs'))[1]);
+    assert.equal(Math.round(linhas.reduce((a, m) => a + euros(m[2]), 0) * 100), Math.round(total * 100), 'o total é a soma das linhas');
   });
 
   test('diz que é grátis e sem planos', () => {

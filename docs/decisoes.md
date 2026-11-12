@@ -111,6 +111,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-12 · A FINE verdadeira: as frases fixas da ficha passam por cima do modelo (KAN-15)
 - 2026-11-12 · A leitura da FINE sai do dev, e a política de privacidade di-la (KAN-14)
 - 2026-11-12 · A Declaração chega a produção
+- 2026-11-12 · A Declaração na montra, no quarto ecrã
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3894,3 +3895,15 @@ versões antigas continuam escondidas em produção, porque falam de mudanças p
 quem chega agora não viu antes. A montra não muda: continua a mostrar o IRS só como o guia, sem
 prometer a Declaração (testes/landing.test.js:promessasDoIrs), até o Martinho decidir mostrá-la. A
 mínima fica a 58: um aparelho na v67 só vê a Declaração quando atualizar.
+
+## 2026-11-12 · A Declaração na montra, no quarto ecrã
+
+Com a Declaração em produção, o Martinho pediu «Integra a declaração na montra». Ficou um quarto
+ecrã a seguir aos Planeados (landing.js:ECRAS, id irs), igual aos outros três: o texto de um lado e
+o telemóvel do outro, com o separador IRS · Anexo F (o cartão «A tratar antes de entregar» e o
+quadro 4.1 com as rendas e o imposto estimado de cada imóvel). Os números saem do mesmo portefólio
+(landing.js:quadroDaMontra): as rendas somam a receita do hero, e os gastos são o condomínio e o
+IMI que os Planeados mostram. O título e a descrição da montra ficam sem o IRS, para não competirem
+com o guia na pesquisa. A guarda testes/landing.test.js:promessasDoIrs deixou de proibir o IRS e o
+Anexo F e passou a proibir o que a app não faz: declarar, entregar, submeter ou enviar por ti, a AT
+e o Modelo 2.
