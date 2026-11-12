@@ -487,7 +487,7 @@ function boasVindas(e) {
   var nome = String((CW.user && CW.user.name) || '').trim().split(/\s+/)[0];
   var p = e.ps[e.atual];
   return '<section class="pp-boas" aria-label="Boas-vindas">' +
-    '<div class="pp-boas-mosaico imv-mosaico imv-t0" aria-hidden="true"></div>' +
+    '<div class="pp-boas-mosaico mosaico mosaico-t0" aria-hidden="true"></div>' +
     '<div class="pp-boas-txt">' +
       '<h2>Olá' + (nome ? ', ' + esc(nome) : '') + '. Vamos adicionar as tuas casas à app.</h2>' +
       '<p>Os números da Visão geral saem dos movimentos. ' + (e.nFeitos ? 'Continua ' : 'Começa ') + esc(p.fase) + '; o resto vem a seguir.</p>' +

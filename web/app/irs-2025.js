@@ -23,7 +23,7 @@
    - novidades: o que mudou neste ano, em frases para quem declara;
    - passos: o guia de preenchimento, [{titulo, texto}] — sem anos escritos:
      {ano} é o ano dos rendimentos e {ate} o último dia da entrega
-     (fisco.js:fiscoGuiaCard troca-os).
+     (a página já não os mostra: os passos vivem no guia público).
 
    Fontes (consultadas a 2026-10-08): o impresso e as instruções do Anexo F
    «em vigor a partir de janeiro de 2025» (info.portaldasfinancas.gov.pt,
@@ -89,7 +89,7 @@ registarAnoIrs({
   naturezas:{habitacional:'07',naoHabitacional:'06'},
   quadros:{semReducao:'4.1',comReducao:'4.2',datas:'4.2A',anosAnteriores:'8',englobamento:'6G',aimi:'9',cessados:'10'},
   prazos:{comunicacaoDuracao:'2026-02-15'},
-  /* Para simular o englobamento (quadro 6G; fisco.js:fiscoEnglobamento): as
+  /* Para simular o englobamento (quadro 6G; a página já não o simula): as
      taxas gerais do CIRS art. 68.º dos rendimentos de 2025, na redação da Lei
      55-A/2025, de 22 de julho (que baixou do 1.º ao 8.º escalão para todo o
      ano de 2025) — a versão do art. 68.º «em vigor até dezembro de 2025» no
@@ -109,7 +109,7 @@ registarAnoIrs({
   novidades:[
     'O Anexo F é o mesmo dos rendimentos de 2024: nenhum quadro, coluna ou código mudou.',
     'Quem tem dispensa do recibo de renda eletrónico (65 anos ou mais, ou sem caixa postal eletrónica e com poucas rendas) entrega a declaração anual das rendas até ao fim de fevereiro — era até ao fim de janeiro.',
-    'Desde julho de 2025 o inquilino com contabilidade organizada não retém quando a retenção seria inferior a 25 €; e o limite abaixo do qual o senhorio pode dispensar a retenção (com a menção no recibo) sobe para 15 000 € de rendas no ano.',
+    'Desde julho de 2025 o inquilino com contabilidade organizada não retém quando a retenção seria inferior a 25 €.',
     'Desde agosto de 2025 o inquilino pode comunicar o contrato às Finanças se o senhorio não o fizer — a obrigação continua a ser do senhorio.'],
   passos:[
     {titulo:'Antes de abrir o Portal',

@@ -279,7 +279,7 @@ function showAuth(msg, nota) {
   authEl.innerHTML =
     '<div class="ent' + (ch ? ' ent-com-faixa' : '') + '">' +
     (ch
-      ? '<div class="ent-faixa imv-mosaico imv-noite"><div class="ent-chip">' + marca + '</div></div>'
+      ? '<div class="ent-faixa mosaico mosaico-noite"><div class="ent-chip">' + marca + '</div></div>'
       : '<div class="ent-marca">' + marca + '</div>') +
     '<div class="ent-corpo">' +
     (ch ? '' : '<h1 class="ent-tit">O teu portefólio de arrendamento, arrumado.</h1>') +
@@ -701,7 +701,7 @@ function largarEmailPorConfirmar() {
 
 /* A faixa dos 7 dias: discreta, no fluxo da página logo abaixo do cabeçalho
    (a seguir ao #hdrSync), e rola com o conteúdo — não fica por cima da
-   navegação, das abas, do FAB nem da pílula do QA (estilos.css:.faixa-email).
+   navegação, das abas nem da pílula do QA (estilos.css:.faixa-email).
    Recebe: nada (lê CW.emailPorConfirmar).
    Devolve: nada — cria ou atualiza o #faixaEmail. */
 function pintarFaixaDoEmail() {
@@ -1110,8 +1110,8 @@ function entrasComo() {
 function casasDaChegada(casas) {
   if (!casas || !casas.length) return '';
   return '<div class="cv-casas">' + casas.map(function (h) {
-    var cor = typeof imvMosaico === 'function' ? imvMosaico(h) : 'imv-t0';
-    return '<div class="cv-casa"><div class="cv-capa imv-mosaico ' + cor + '" aria-hidden="true"></div><b>' + esc(h.name || 'Sem nome') + '</b></div>';
+    var cor = typeof imvMosaico === 'function' ? imvMosaico(h) : 'mosaico-t0';
+    return '<div class="cv-casa"><div class="cv-capa mosaico ' + cor + '" aria-hidden="true"></div><b>' + esc(h.name || 'Sem nome') + '</b></div>';
   }).join('') + '</div>';
 }
 

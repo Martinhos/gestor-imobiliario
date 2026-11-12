@@ -2,8 +2,8 @@
 // conjunta, o titular A ou B de cada proprietário, a dispensa dos recibos e o
 // Modelo 44), guardada nas definições; o AIMI no quadro 9; os contratos
 // isentos no 4.1 com o quadro 6D; a comunicação de fevereiro no 4.2A, o 4.2B
-// e o 4.2C; e a simulação do englobamento (quadro 6G) pelos escalões de cada
-// ano.
+// e o 4.2C; e o englobamento (quadro 6G), que a página deixou de simular — os
+// escalões continuam nas versões de cada ano, como dados.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -64,7 +64,7 @@ describe('as escolhas guardadas nas definições', () => {
     assert.equal(outra.settings.irs.conjunta, false);
   });
 
-  test('os interruptores, os titulares e os outros rendimentos gravam-se no sítio', () => {
+  test('os interruptores e os titulares gravam-se no sítio', () => {
     app.render = () => {};
     app.fiscoSetIrs('conjunta', true);
     app.fiscoSetIrs('dispensaRecibos', true);
@@ -77,11 +77,8 @@ describe('as escolhas guardadas nas definições', () => {
     app.fiscoSetTitular('__proto__', 'B');
     app.fiscoSetTitular('ninguem', 'B');
     assert.deepEqual(copia(app.db.settings.irs.titulares), { bruno: 'A' }, 'só um proprietário que existe');
-    app.fiscoSetOutros('18.000');
-    assert.equal(app.db.settings.irs.outrosRendimentos['2025'], 18000);
-    app.fiscoSetOutros('');
-    assert.equal('2025' in app.db.settings.irs.outrosRendimentos, false, 'vazio apaga');
     assert.equal(app.db.settings.irs.dispensaRecibos, true);
+    assert.equal(typeof app.fiscoSetOutros, 'undefined', 'os outros rendimentos do agregado já não se escrevem na página');
   });
 });
 
@@ -94,19 +91,19 @@ describe('o titular A ou B', () => {
     assert.equal(app.resumoFiscal(ANO, '').linhas[0].titular, 'A');
   });
 
-  test('em conjunta, a letra do titular escolhido; sem titular, as letras dos donos do imóvel', () => {
+  test('em conjunta, a letra de quem declara, e a do cônjuge (B) na linha dele; por inteiro, as letras dos donos do imóvel', () => {
     app.db.settings.irs = { conjunta: true, titulares: { ana: 'A', bruno: 'B' }, dispensaRecibos: false, outrosRendimentos: {} };
-    assert.equal(app.resumoFiscal(ANO, 'bruno').linhas[0].titular, 'B');
-    assert.equal(app.resumoFiscal(ANO, 'ana').linhas[0].titular, 'A');
+    assert.equal(app.resumoFiscal(ANO, 'bruno').linhas[0].titular, 'B', 'o Bruno declara sozinho: é ele o B, e não há outro B');
+    const ana = app.resumoFiscal(ANO, 'ana').linhas;
+    assert.deepEqual(copia(ana.map((l) => l.titular)), ['A', 'B'], 'a Ana declara com o cônjuge: uma linha de cada um, a A primeiro');
     assert.equal(app.resumoFiscal(ANO, '').linhas[0].titular, 'A/B', 'o imóvel é dos dois');
   });
 
-  test('a letra está na tabela, no texto e no fim do CSV', () => {
+  test('a letra está no cartão do contrato, no texto e no fim do CSV', () => {
     app.db.settings.irs = { conjunta: true, titulares: { bruno: 'B' }, dispensaRecibos: false, outrosRendimentos: {} };
-    app.ownerFilter = 'bruno';
+    app.CW = { user: { id: 'bruno' } };
     const html = app.vFisco();
-    assert.match(html, /<th class="u-ta-left">Tit\.<\/th>/);
-    assert.match(html, /<td class="u-ta-left">B<\/td>/);
+    assert.match(html, /<dt>Titular<\/dt><dd>B<\/dd>/);
     assert.match(app.fiscoTexto(), /· titular B\n/);
     let guardado = null;
     app.download = (nome, mime, conteudo) => { guardado = conteudo; };
@@ -121,7 +118,7 @@ describe('o titular A ou B', () => {
   test('o cartão «A tua situação fiscal» vem em linhas, ao lado dos prazos, com interruptores e o segmentado A/B só em conjunta', () => {
     let html = app.vFisco();
     const sit = html.indexOf('A tua situação fiscal');
-    assert.ok(sit > html.indexOf('IRS 2025') && sit > html.indexOf('A tratar antes de entregar') && sit < html.indexOf('fiscoPilha'), 'na grelha, depois do ano e das obrigações, antes dos quadros');
+    assert.ok(sit > html.indexOf('class="fis-grelha"') && sit > html.indexOf('A tratar antes de entregar') && sit < html.indexOf('fiscoPilha'), 'na grelha, depois das obrigações, antes dos quadros');
     assert.ok(html.includes('class="interruptor" role="switch" id="fiscoConjunta" aria-checked="false" aria-label="Tributação conjunta" data-toca="dados" data-click="fiscoSetIrs(\'conjunta\',true)"'));
     assert.match(html, /id="fiscoDispensa" aria-checked="false"[^>]*data-click="fiscoSetIrs\('dispensaRecibos',true\)"/);
     assert.doesNotMatch(html, /fiscoTit_/);
@@ -133,6 +130,144 @@ describe('o titular A ou B', () => {
     assert.match(html, /id="fiscoTit_bruno"/);
     assert.ok(html.includes('<button type="button" class="on" aria-pressed="true" data-toca="dados" data-click="fiscoSetTitular(\'bruno\',\'B\')">B</button>'), 'a letra do Bruno acesa no segmentado');
     assert.doesNotMatch(html, /\b(pôr|tirar|põe|tira)\b/i);
+  });
+});
+
+// KAN-73: «Vale a pena ter o seletor de proprietário? O IRS deve ser só para
+// mim. Os valores dividem-se pela percentagem de propriedade, ou é o valor
+// total?» — a Declaração é sempre a de quem tem a sessão, sem seletor, pela
+// quota-parte dela (o Anexo F é por titular, CIRS art. 19.º); em conjunta
+// entra também a do cônjuge, o proprietário marcado como B.
+describe('a Declaração é a de quem tem a sessão (KAN-73)', () => {
+  afterEach(() => repor(app));
+
+  /* o T1 Benfica (v2) é só do Bruno, com um contrato e rendas; o T2 Arroios
+     (v1) é dos dois a meias, com uma renda de dezembro com retenção e o IMI */
+  const casaDoBruno = () => {
+    app.db.contracts.push(app.normContract({ id: 'C9', name: 'Benfica', propertyId: 'v2', tenantIds: ['t2'], rent: 800, start: '2021-01-01', active: true,
+      fisco: { estado: 'declarado', numero: '999', finalidade: 'hp' } }));
+    rendas('C9', 800, 'v2');
+    mov({ kind: 'income', category: 'Rendas', sub: 'Renda mensal', amount: 750, retencao: 250, contractId: 'C1', recibo: true, date: ANO + '-12-20' });
+    mov({ kind: 'expense', category: 'Impostos', sub: 'IMI', amount: 300, date: ANO + '-04-10' });
+  };
+
+  test('dois proprietários a 50/50 e eu num deles: metade das rendas, das retenções e dos gastos, e só as minhas casas', () => {
+    casaDoBruno();
+    app.CW = { user: { id: 'ana' } };
+    const r = app.resumoFiscal(ANO);
+    assert.equal(r.titularId, 'ana', 'sem ninguém escolhido, é a da sessão');
+    assert.equal(r.porInteiro, false);
+    assert.deepEqual(copia(r.linhas.map((l) => l.contratoId)), ['C1'], 'o Benfica não é meu');
+    assert.equal(r.imoveis, 1);
+    const l = r.linhas[0];
+    perto(l.quota, 0.5);
+    perto(l.rendas, 6500, 1e-9, 'metade de 12 × 1000 + 750 + 250 retidos');
+    perto(l.retencoes, 125, 1e-9);
+    perto(l.gastos.imi, 150, 1e-9);
+    assert.equal(l.titular, 'A');
+    // a página: os mesmos números, sem seletor, e o subtítulo diz que é a minha parte
+    const html = app.vFisco();
+    assert.ok(html.includes('class="label">Rendas ilíquidas</div><div class="value ">' + app.euro(6500)), 'metade à cabeça');
+    assert.doesNotMatch(html, /Benfica/);
+    assert.doesNotMatch(html, /id="ownerSel"|Todos os proprietários|quota-parte de Ana|valores por inteiro/, 'nem o seletor, nem o nome de um filtro');
+    assert.match(html, /<span class="small">2025 · a tua quota-parte<\/span>/);
+    assert.match(html, /A declaração é a tua: rendas, retenções e gastos entram pela tua quota-parte de cada imóvel\./);
+    // o texto e o CSV são os mesmos
+    assert.match(app.fiscoTexto(), /^ANEXO F · QUADROS 4\.1 E 4\.2 — 2025 · Ana \(quota-parte\)\n/);
+    let csv = null;
+    app.download = (nome, mime, conteudo) => { csv = conteudo; };
+    app.fiscoCsv();
+    const linhas = csv.split('\n');
+    assert.equal(linhas.length, 2, 'o cabeçalho e o Arroios');
+    assert.match(linhas[1], /;"50";"6500";"125";/);
+    // o Bruno, na sessão dele, tem a outra metade e o Benfica inteiro
+    app.CW = { user: { id: 'bruno' } };
+    const b = app.resumoFiscal(ANO);
+    assert.deepEqual(copia(b.linhas.map((x) => x.contratoId)), ['C9', 'C1'], 'pela ordem dos imóveis: o T1 Benfica antes do T2 Arroios');
+    perto(b.totais.rendas, 6500 + 9600, 1e-9);
+  });
+
+  test('em conjunta com o cônjuge como B: entram as duas quotas, cada linha com a sua letra, e um contrato conta uma vez', () => {
+    casaDoBruno();
+    app.db.settings.irs = { conjunta: true, titulares: { bruno: 'B' }, dispensaRecibos: false, outrosRendimentos: {} };
+    app.db.contracts.find((c) => c.id === 'C1').fisco.numero = '';
+    app.CW = { user: { id: 'ana' } };
+    const r = app.resumoFiscal(ANO);
+    assert.deepEqual(copia(r.titulares), ['ana', 'bruno']);
+    assert.equal(r.variosTitulares, true);
+    // pela ordem dos imóveis (o T1 Benfica antes do T2 Arroios), e as duas linhas do Arroios juntas, a A primeiro
+    assert.deepEqual(copia(r.linhas.map((l) => [l.contratoId, l.titular, l.quota])), [['C9', 'B', 1], ['C1', 'A', 0.5], ['C1', 'B', 0.5]]);
+    const [c9, a, b] = r.linhas;
+    perto(c9.rendas, 9600, 1e-9);
+    perto(a.rendas, 6500, 1e-9);
+    perto(b.rendas, 6500, 1e-9);
+    perto(a.retencoes, 125, 1e-9);
+    perto(b.retencoes, 125, 1e-9);
+    perto(a.gastos.imi, 150, 1e-9);
+    perto(b.gastos.imi, 150, 1e-9);
+    perto(c9.gastos.imi, 0, 1e-9, 'o IMI é do Arroios');
+    perto(r.totais.rendas, 22600, 1e-9);
+    // o que é do contrato diz-se uma vez, e não «2 contratos»
+    const semNum = r.avisos.filter((a) => /sem o n\.º do contrato/.test(a.texto));
+    assert.equal(semNum.length, 1);
+    assert.match(semNum[0].texto, /^Contrato Arroios: declarado à AT/);
+    // a página: uma linha por titular, com a letra no campo e no cartão, e os contratos contados uma vez
+    const html = app.vFisco();
+    assert.match(html, /<dt>Titular<\/dt><dd>A<\/dd>/);
+    assert.match(html, /<dt>Titular<\/dt><dd>B<\/dd>/);
+    assert.match(html, /T2 Arroios · titular B · quota-parte 50%/);
+    assert.match(html, /Preenche no <b>quadro 4\.1<\/b> do Anexo F: uma linha por contrato e por titular\./);
+    assert.match(html, /<b>Total do quadro 4\.1<\/b><span class="small">2 contratos · líquido /);
+    assert.match(html, /<span class="small">2025 · a tua parte e a do titular B<\/span>/);
+    assert.match(html, /Em tributação conjunta entra também a do titular B, cada linha com a sua letra\./);
+    assert.match(html, /<span class="fis-linha-txt">Ana \(eu\)<\/span>/, 'na situação fiscal, eu à cabeça');
+    // o texto e o CSV também
+    assert.match(app.fiscoTexto(), /— 2025 · Ana \(A\) e Bruno \(B\) \(quota-parte\)\n/);
+    let csv = null;
+    app.download = (nome, mime, conteudo) => { csv = conteudo; };
+    app.fiscoCsv();
+    const linhas = csv.split('\n').slice(1);
+    assert.deepEqual(linhas.map((x) => x.match(/^"2025";"[^"]*";"([^"]+)"/)[1] + ' ' + x.match(/;"([AB])";"[^"]*";"[^"]*";"[^"]*";"[^"]*"$/)[1]),
+      ['Benfica B', 'Arroios A', 'Arroios B']);
+  });
+
+  test('um movimento sem imóvel é de quem o registou: conta se é meu (ou sem «pago por») ou do B em conjunta, e não se é de outro', () => {
+    app.CW = { user: { id: 'ana' } };
+    mov({ kind: 'income', category: 'Rendas', amount: 300, propertyId: '', contractId: null, date: ANO + '-05-05' });
+    mov({ kind: 'income', category: 'Rendas', amount: 200, propertyId: '', contractId: null, paidBy: 'bruno', date: ANO + '-05-06' });
+    mov({ kind: 'expense', category: 'Impostos', sub: 'AIMI', amount: 400, propertyId: '', paidBy: 'ana', date: ANO + '-09-20' });
+    mov({ kind: 'expense', category: 'Impostos', sub: 'AIMI', amount: 100, propertyId: '', paidBy: 'bruno', date: ANO + '-09-21' });
+    let r = app.resumoFiscal(ANO);
+    const sem = r.semContrato.find((s) => !s.propertyId);
+    assert.ok(sem, 'as rendas sem imóvel ficam à vista, em «Rendas sem contrato»');
+    perto(sem.rendas, 300, 1e-9, 'a do Bruno não');
+    assert.equal(sem.n, 1);
+    perto(r.aimi.total, 400, 1e-9, 'o AIMI que paguei, inteiro; o do Bruno não');
+    app.db.settings.irs = { conjunta: true, titulares: { bruno: 'B' }, dispensaRecibos: false, outrosRendimentos: {} };
+    r = app.resumoFiscal(ANO);
+    perto(r.semContrato.find((s) => !s.propertyId).rendas, 500, 1e-9, 'em conjunta o do B entra');
+    perto(r.aimi.total, 500, 1e-9);
+  });
+
+  test('quem sou eu sem sessão: o único proprietário; com vários, por inteiro; e com sessão sem imóveis meus, di-lo', () => {
+    // sem sessão e com um proprietário só, é ele
+    app.db.owners = app.db.owners.filter((o) => o.id === 'ana');
+    let r = app.resumoFiscal(ANO);
+    assert.equal(r.titularId, 'ana');
+    assert.equal(r.porInteiro, false);
+    assert.ok(!r.avisos.some((a) => /Sem sessão/.test(a.texto)));
+    // sem proprietários nenhuns, por inteiro e sem aviso
+    app.db.owners = [];
+    r = app.resumoFiscal(ANO);
+    assert.equal(r.porInteiro, true);
+    assert.equal(r.semSessao, false);
+    perto(r.totais.rendas, 12000, 1e-9);
+    // com sessão de quem não é dono de nada: o Anexo F não é dos imóveis dos outros
+    app.db.owners = [app.normPerson({ id: 'ana', name: 'Ana' }), app.normPerson({ id: 'bruno', name: 'Bruno' })];
+    app.CW = { user: { id: 'carla' } };
+    r = app.resumoFiscal(ANO);
+    assert.equal(r.imoveis, 0);
+    assert.match(app.vFisco(), /<b>Nenhum imóvel teu<\/b>/);
   });
 });
 
@@ -178,7 +313,7 @@ describe('as linhas da situação fiscal e o foco depois de gravar', () => {
     assert.deepEqual(focos, ['conjunta', 'B'], 'pelo data-click');
   });
 
-  test('os outros rendimentos gravam já, e o redesenho espera que o foco chegue ao campo seguinte', async () => {
+  test('gravar no change de um campo grava já, e o redesenho espera que o foco chegue ao campo seguinte', async () => {
     const doc = app.document;
     const seguinte = doc.getElementById('fisSeguinte');
     seguinte.id = 'fisSeguinte';
@@ -186,8 +321,8 @@ describe('as linhas da situação fiscal e o foco depois de gravar', () => {
     seguinte.focus = () => { focado++; doc.activeElement = seguinte; };
     app.render = () => { pintou++; doc.activeElement = doc.body; };
     doc.activeElement = doc.body;        // no change, o foco ainda vai a caminho do campo seguinte
-    app.fiscoSetOutros('18000');
-    assert.equal(app.db.settings.irs.outrosRendimentos['2025'], 18000, 'grava já');
+    app.fiscoGravarIrs((d) => { d.conjunta = true; }, true);
+    assert.equal(app.db.settings.irs.conjunta, true, 'grava já');
     assert.equal(pintou, 0, 'o redesenho espera que o foco assente');
     doc.activeElement = seguinte;        // o Tab acabou de o levar ao campo seguinte
     await new Promise((r) => setTimeout(r, 5));
@@ -329,49 +464,14 @@ describe('o englobamento (quadro 6G)', () => {
     assert.equal(app.irsAno(2027).englobamento.escaloes[0].ate, 8342, 'um ano sem versão usa os da mais recente');
   });
 
-  test('a coleta bate com a taxa média publicada, divide por dois em conjunta e soma a solidariedade', () => {
-    const e26 = app.irsAno(2026).englobamento;
-    perto(app.fiscoColeta(12587, e26, false) / 12587 * 100, 13.579, 0.001, 'taxa média do 2.º escalão de 2026');
-    perto(app.fiscoColeta(46566, e26, false) / 46566 * 100, 26.472, 0.001, 'e do 7.º');
-    perto(app.fiscoColeta(40000, e26, true), 2 * app.fiscoColeta(20000, e26, false), 1e-9);
-    const sem = 100000 * 0.48 - 11387.27;
-    perto(app.fiscoColeta(100000, e26, false), sem + 500, 0.01, '2,5 % sobre os 20 000 acima de 80 000');
-    assert.equal(app.fiscoColeta(0, e26, false), 0);
-  });
-
-  test('sem outros rendimentos englobar compensa; com muitos não; os isentos só sobem a taxa', () => {
-    const r = app.resumoFiscal(ANO, '');
-    let e = app.fiscoEnglobamento(r);
-    assert.equal(e.temOutros, false);
-    perto(e.especial, 3000);
-    const eng = app.irsAno(ANO).englobamento;
-    perto(e.englobando, app.fiscoColeta(12000, eng, false), 0.01);
-    assert.equal(e.compensa, true);
-    assert.match(app.vFisco(), /Englobar compensa<\/b>: menos/);
+  test('a página já não simula o englobamento: nem o cartão, nem o campo, nem a linha no texto', () => {
     app.db.settings.irs.outrosRendimentos = { 2025: 90000 };
-    e = app.fiscoEnglobamento(app.resumoFiscal(ANO, ''));
-    perto(e.englobando, app.fiscoColeta(102000, eng, false) - app.fiscoColeta(90000, eng, false), 0.01);
-    assert.equal(e.compensa, false);
     const html = app.vFisco();
-    assert.match(html, /Não englobar compensa<\/b>/);
-    assert.match(html, /value="90000"/);
-    assert.match(html, /É uma estimativa/);
-    // um contrato isento sobe a taxa dos outros, sem pagar ele
-    app.db.settings.irs.outrosRendimentos = {};
-    app.db.contracts.push(app.normContract({ id: 'C2', name: 'Benfica', propertyId: 'v2', tenantIds: ['t2'], rent: 500, start: '2022-01-01', active: true,
-      fisco: { estado: 'declarado', numero: '222', finalidade: 'hp', isencao: 'pma' } }));
-    rendas('C2', 500, 'v2');
-    e = app.fiscoEnglobamento(app.resumoFiscal(ANO, ''));
-    perto(e.isentos, 6000);
-    perto(e.englobando, app.fiscoColeta(18000, eng, false) / 18000 * 12000, 0.01);
-  });
-
-  test('em conjunta usa o quociente conjugal', () => {
-    app.db.settings.irs = { conjunta: true, titulares: {}, dispensaRecibos: false, outrosRendimentos: { 2025: 30000 } };
-    const e = app.fiscoEnglobamento(app.resumoFiscal(ANO, ''));
-    const eng = app.irsAno(ANO).englobamento;
-    perto(e.englobando, app.fiscoColeta(42000, eng, true) - app.fiscoColeta(30000, eng, true), 0.01);
-    assert.match(app.vFisco(), /quociente conjugal/);
+    assert.doesNotMatch(html, /Englobar ou não\?|fiscoOutros|Outros rendimentos coletáveis|quociente conjugal/);
+    assert.match(html, /sem englobamento/, 'o imposto estimado continua a dizer que é sem englobamento');
+    assert.doesNotMatch(app.fiscoTexto(), /Englobamento \(quadro 6G/);
+    assert.match(app.fiscoTexto(), /\(sem englobamento\)/);
+    for (const f of ['fiscoColeta', 'fiscoEnglobamento', 'fiscoEnglobamentoCard', 'fiscoSetOutros']) assert.equal(typeof app[f], 'undefined', f + ' saiu');
   });
 });
 

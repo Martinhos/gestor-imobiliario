@@ -124,7 +124,7 @@ describe('autonomia: cada serviço de análise carrega e rende só com a base', 
     assert.ok(r.avisos.length >= 3, 'há avisos (contrato por indicar, inquilino sem NIF, imóvel sem dados, renda sem contrato)');
     for (const a of r.avisos) assert.equal(a.abrir, '', a.texto + ' fica sem toque');
     const html = app.vFisco();
-    assert.match(html, /Anexo F · quadro 4\.1/);
+    assert.match(html, /Quadro 4\.1 · sem redução pela duração/);
     assert.doesNotMatch(html, /ctView\(|personView\(|propView\(|txView\(/);
   });
 });
@@ -138,12 +138,14 @@ describe('desligado: com os serviços que usam desligados, cada vista rende sem 
     // o atalho é uma função com nome (o go+setTimeout não se escreve numa ação declarada)
     assert.match(html, /data-click="dashVerSemImovel\(\)"/, 'controlo: as despesas sem imóvel levam aos movimentos');
     assert.match(html, /pendToggle\(\)/, 'controlo: o cartão dos por confirmar');
-    fixos.view.innerHTML = ''; app.dashDepois();
-    assert.match(fixos.view.innerHTML, /newTxPick\(\)/, 'controlo: o FAB do novo movimento');
+    // o FAB saiu: o novo movimento vive no + (acessos.js:acoesDeAdicionar), que segue o serviço
+    const noMais = () => Array.from(app.acoesDeAdicionar(), (a) => a.id).includes('movimento');
+    assert.ok(noMais(), 'controlo: o «Movimento» no +');
     desligar(app);
     html = app.vDashboard();
     assert.doesNotMatch(html, /dashVerSemImovel\(|go\('transactions'\)|newTxPick\(|pendToggle\(|confirmRec\(|propModal\(|go\('properties'\)/);
     assert.match(html, /Cashflow/, 'os indicadores ficam');
+    assert.ok(!noMais(), 'sem os Movimentos, o + não o tem');
     fixos.view.innerHTML = ''; app.dashDepois();
     assert.doesNotMatch(fixos.view.innerHTML, /newTxPick\(|class="fab"/);
     assert.match(fixos.view.innerHTML, /Personalizar painel/, 'a personalização é da base e fica');
@@ -234,14 +236,14 @@ describe('desligado: com os serviços que usam desligados, cada vista rende sem 
     desligar(app);
     html = app.vFisco();
     assert.doesNotMatch(html, /ctView\(|personView\(|propView\(|txView\(|go\('contracts'\)|go\('transactions'\)|go\('properties'\)/);
-    assert.match(html, /Anexo F · quadro 4\.1/, 'o quadro fica');
+    assert.match(html, /Quadro 4\.1 · sem redução pela duração/, 'o quadro fica');
     assert.match(html, /A tratar antes de entregar/, 'as obrigações ficam, sem toque');
     assert.match(html, /Fora da declaração/);
     assert.match(html, /Rendas sem contrato/);
     assert.match(html, /O serviço Contratos está desligado nesta conta\./);
     assert.match(html, /O serviço Movimentos está desligado nesta conta\./);
     assert.match(html, SUPORTE);
-    assert.match(html, /go\('settings'\)|hdrFiltToggle\(\)|fiscoCsv\(\)/, 'o que é da base fica');
+    assert.match(html, /go\('settings'\)|hdrFiltToggle\(\)|fiscoPartilha\(\)/, 'o que é da base fica');
     const r = app.resumoFiscal(ANO, '');
     for (const a of r.avisos) if (!/Definições/.test(a.texto)) assert.equal(a.abrir, '', a.texto + ' fica sem toque');
     // o vazio sem imóveis

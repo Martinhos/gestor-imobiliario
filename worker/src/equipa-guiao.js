@@ -80,7 +80,7 @@ var el = function (id) { return document.getElementById(id); };
 
 // dois algarismos: 7 → 07
 var dois = function (n) { return (n < 10 ? '0' : '') + n; };
-// o dia de um instante, à portuguesa e na hora de quem vê: 17/10/2026
+// o dia de um instante, à portuguesa e no fuso horário de quem vê: 17/10/2026
 var dia = function (t) {
   if (!t) return '—';
   var d = new Date(t);
@@ -142,7 +142,9 @@ var limpo = function (v) {
 
 // os ícones da ferramenta, em traço como os da app (o desenho de cada um)
 var ICONES = {
-  pedidos: '<path d="M4 5h16v11H8l-4 4z"/>',
+  // o quadro: três colunas de alturas diferentes, como cartões empilhados em cada uma
+  kanban: '<rect x="3.5" y="4" width="4.5" height="16" rx="1.2"/><rect x="9.75" y="4" width="4.5" height="10" rx="1.2"/><rect x="16" y="4" width="4.5" height="13" rx="1.2"/>',
+  pedidos:'<path d="M4 5h16v11H8l-4 4z"/>',
   erros: '<path d="M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
   procurar: '<path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4"/>',
   operacao: '<path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/>',
@@ -191,10 +193,17 @@ function enviar(rota, corpo) {
     body: JSON.stringify(corpo || {}),
   });
 }
-// termina a sessão de equipa no servidor e recarrega — cai no ecrã de entrada
-// Devolve: nada — recarrega a página.
+/* Termina a sessão de equipa no servidor. No dev, com uma sessão de teste
+   por baixo, o servidor diz depois:'/' — recarregar voltava a entrar por ela
+   (equipa.js:entrarPelaSessaoDeTeste), e sair é ir para a app; só o «/»
+   conta, nunca um endereço livre. Sem ele (produção, ou a app fechada a
+   quem entrou pelo /entrar) recarrega e cai no ecrã de entrada.
+   Devolve: nada — muda de página. */
 function sair() {
-  pedir('/api/equipa/sair', { method: 'POST' }).then(function () { location.reload(); });
+  pedir('/api/equipa/sair', { method: 'POST' }).then(function (j) {
+    if (j && j.depois === '/') location.assign('/');
+    else location.reload();
+  });
 }
 
 /* O aviso de baixo (o toast da app): diz o resultado de uma ação ou o erro
@@ -268,57 +277,309 @@ var veRastoTodos = eu.master || (eu.papeis || []).indexOf('admin') > -1;
 // quem pede o rasto de quem escreveu um pedido: os de cima e o suporte (o servidor confere o resto)
 var veRastoDoPedido = veRastoTodos || (eu.papeis || []).indexOf('suporte') > -1;
 
+/* As secções do back office, pela ordem em que aparecem. Cada uma abre se
+   os papéis a deixam ver (se); conta diz a lista cujos por tratar dão o
+   crachá. O Kanban só existe fora de produção (DADOS.kanban, a página só o
+   traz com o ENV_NAME): é o quadro da equipa, que o /equipa/kanban.js pinta
+   (verKanban, novoCartao). */
 var SECCOES = [
+  { id: 'kanban', nome: 'Kanban', icone: 'kanban', se: !!DADOS.kanban },
   { id: 'pedidos', nome: 'Pedidos', icone: 'pedidos', conta: 'pessoas', se: eu.cats.indexOf('user') > -1 },
   { id: 'erros', nome: 'Erros', icone: 'erros', conta: 'erros', se: eu.cats.some(function (c) { return c !== 'user'; }) },
   { id: 'pessoas', nome: 'Pessoas', icone: 'procurar', se: eu.cats.indexOf('user') > -1 },
   { id: 'operacao', nome: 'Operação', icone: 'operacao', se: eu.cats.indexOf('infra') > -1 },
   { id: 'rasto', nome: 'Rasto', icone: 'rasto', se: veRastoTodos },
 ];
+/* Os grupos da barra lateral e da gaveta, como os da app
+   (web/app/navegacao.js:NAV_GROUPS): ao cimo, sem título, o Kanban; depois
+   «Atendimento» (o que vem das pessoas) e «Plataforma» (o que vem da app e
+   do servidor), que se recolhem. Um grupo sem nenhuma secção que os papéis
+   abram desaparece com o título. */
+var GRUPOS_NAV = [
+  { id: '', nome: '', ids: ['kanban'] },
+  { id: 'atendimento', nome: 'Atendimento', ids: ['pedidos', 'pessoas'] },
+  { id: 'plataforma', nome: 'Plataforma', ids: ['erros', 'operacao', 'rasto'] },
+];
+/* A barra de baixo do telemóvel: os quatro primeiros destinos desta ordem
+   que os papéis abrem. No dev, Kanban · Pedidos · + · Erros · Pessoas; na
+   produção, sem Kanban nem +, Pedidos · Erros · Pessoas · Operação. Um
+   destino que o papel não abre dá o lugar ao seguinte. */
+var ORDEM_BARRA = ['kanban', 'pedidos', 'erros', 'pessoas', 'operacao', 'rasto'];
+/* Os grupos que a pessoa recolheu, pelo id. Ficam no aparelho e não na
+   conta (um telemóvel e um computador pedem arrumações diferentes); sem
+   nada guardado, ou com o armazenamento fechado, está tudo aberto. */
+var LS_NAV = 'eq_nav_fechadas';
+var navFechadas = (function () {
+  try {
+    var v = JSON.parse(localStorage.getItem(LS_NAV) || '[]');
+    return Array.isArray(v) ? v.filter(function (x) { return typeof x === 'string'; }) : [];
+  } catch (e) { return []; }
+})();
+// o endereço que o guião escreveu por último: o hashchange dele não volta a abrir a secção
+var enderecoMarcado = '';
 
-// marca a secção ativa e repinta a barra lateral; guarda a secção atual em seccao
-// Recebe: ativa — o id da secção a marcar (string: pedidos, erros, pessoas, operacao ou rasto).
-// Devolve: nada — redesenha os separadores.
+/* A secção de SECCOES com este id, se os papéis a abrem.
+   Recebe: id — o id da secção (string).
+   Devolve: o objeto da secção, ou null quando não existe ou o papel não a abre. */
+function seccaoDe(id) {
+  for (var i = 0; i < SECCOES.length; i++) if (SECCOES[i].id === id && SECCOES[i].se) return SECCOES[i];
+  return null;
+}
+/* O grupo da barra lateral onde vive uma secção (só os que têm título, que
+   são os que se recolhem).
+   Recebe: id — o id da secção.
+   Devolve: o id do grupo (string), ou '' quando está num grupo sem título. */
+function grupoDe(id) {
+  for (var i = 0; i < GRUPOS_NAV.length; i++) if (GRUPOS_NAV[i].nome && GRUPOS_NAV[i].ids.indexOf(id) > -1) return GRUPOS_NAV[i].id;
+  return '';
+}
+/* Grava no aparelho os grupos recolhidos. Um armazenamento que recusa
+   (cheio, ou fechado numa janela privada) não parte o toque: fica só em
+   memória até a página recarregar.
+   Devolve: nada. */
+function guardarNavFechadas() {
+  try { localStorage.setItem(LS_NAV, JSON.stringify(navFechadas)); } catch (e) {}
+}
+
+/* Marca a secção ativa e repinta a barra lateral e a de baixo; guarda a
+   secção atual em seccao. Chegar a uma secção abre o grupo dela, se estava
+   recolhido: nunca se fica num ecrã sem ver na barra onde se está. Só a
+   chegada abre — recolher à mão o grupo onde se está vale até se sair dele.
+   Mudar de secção acerta também o endereço (#secção), que quem pinta a
+   vista afina depois com o resto (um pedido, uma ficha).
+   Recebe: ativa — o id da secção a marcar (string, um dos ids de SECCOES).
+   Devolve: nada — redesenha a navegação. */
 function nav(ativa) {
+  if (ativa !== seccao) {
+    var g = grupoDe(ativa), i = g ? navFechadas.indexOf(g) : -1;
+    if (i > -1) { navFechadas.splice(i, 1); guardarNavFechadas(); }
+    marcarEndereco(ativa, '');
+  }
   seccao = ativa;
   pintarNav();
-  mostrarSeparador();
 }
-/* No telemóvel os separadores são uma fila que corre para o lado: traz o
-   ativo à vista mexendo só na fila, nunca na página. No computador a fila
-   cabe toda, e não faz nada.
-   Devolve: nada — acerta o scrollLeft da fila. */
-function mostrarSeparador() {
-  var n = el('nav'), fila = n && n.parentElement;
-  var ativo = fila && n.querySelector ? n.querySelector('[aria-current="page"]') : null;
-  if (!ativo || !(fila.scrollWidth > fila.clientWidth)) return;
-  var x = ativo.offsetLeft - fila.offsetLeft;
-  if (x < fila.scrollLeft || x + ativo.offsetWidth > fila.scrollLeft + fila.clientWidth) fila.scrollLeft = Math.max(0, x - 16);
+/* O crachá de quantos estão por tratar: quente nos pedidos, vermelho nos
+   erros, com o «por tratar» só para o leitor de ecrã.
+   Recebe: conta — 'pessoas' ou 'erros' (a cor); n — o número.
+   Devolve: o HTML do crachá (string), ou '' com zero. */
+function crachaNav(conta, n) {
+  if (!n) return '';
+  return '<span class="nb n' + (conta === 'erros' ? ' erro' : '') + '">' + (n >= 100 ? '99+' : n) +
+    '<span class="so-leitor"> por tratar</span></span>';
 }
-/* Pinta os separadores da barra lateral — só os que os papéis deixam ver —,
-   com o ativo marcado e o crachá de quantos estão por tratar nas listas.
-   Devolve: nada — redesenha o #nav. */
-function pintarNav() {
-  el('nav').innerHTML = SECCOES.filter(function (s) { return s.se; }).map(function (s) {
-    var n = s.conta ? contagens[s.conta] : 0;
-    return '<button type="button" class="nv"' + (s.id === seccao ? ' aria-current="page"' : '') + comAcao('ir', [s.id]) + '>' +
-      ic(s.icone) + '<span>' + s.nome + '</span>' +
-      (n ? '<span class="nb n' + (s.conta === 'erros' ? ' erro' : '') + '">' + (n >= 100 ? '99+' : n) +
-        '<span class="so-leitor"> por tratar</span></span>' : '') + '</button>';
+/* Um destino da barra lateral: o ícone, o nome (o primeiro <span>, que a
+   pílula do QA lê para dizer a secção no ticket) e o crachá.
+   Recebe: s — a secção (de SECCOES).
+   Devolve: o HTML do botão (string). */
+function itemNav(s) {
+  return '<button type="button" class="nv"' + (s.id === seccao ? ' aria-current="page"' : '') + comAcao('ir', [s.id]) + '>' +
+    ic(s.icone) + '<span>' + s.nome + '</span>' + crachaNav(s.conta, s.conta ? contagens[s.conta] : 0) + '</button>';
+}
+/* O HTML da barra lateral, grupo a grupo (GRUPOS_NAV), só com as secções
+   que os papéis abrem. Um grupo com título é um botão que o recolhe
+   (alternarSeccao, com aria-expanded e aria-controls) e um contentor com os
+   itens, que o CSS encolhe por grid-template-rows. O crachá do título — a
+   soma dos crachás dos itens, vermelho se algum for de erros — vai no HTML
+   mesmo aberto, e o CSS só o mostra recolhido: recolher muda uma classe e
+   um atributo, e o HTML gerado continua igual ao DOM.
+   Devolve: o HTML (string) para o #nav. */
+function navHtml() {
+  return GRUPOS_NAV.map(function (g) {
+    var itens = g.ids.map(seccaoDe).filter(Boolean);
+    if (!itens.length) return '';
+    var html = itens.map(itemNav).join('');
+    if (!g.nome) return html;
+    var fechada = navFechadas.indexOf(g.id) > -1, soma = 0, erro = false;
+    itens.forEach(function (s) {
+      var n = s.conta ? contagens[s.conta] || 0 : 0;
+      soma += n;
+      if (n && s.conta === 'erros') erro = true;
+    });
+    return '<div class="eq-sec' + (fechada ? ' fechada' : '') + '">' +
+      '<button type="button" class="eq-sec-tit" aria-expanded="' + (fechada ? 'false' : 'true') + '" aria-controls="eq-sec-' + g.id + '"' +
+      comAcao('alternarSeccao', [g.id]) + '><span class="eq-sec-txt">' + g.nome + '</span>' + crachaNav(erro ? 'erros' : 'pessoas', soma) +
+      ic('baixo', 'i-sm eq-sec-seta') + '</button>' +
+      '<div class="eq-sec-corpo" id="eq-sec-' + g.id + '"><div class="eq-sec-itens">' + html + '</div></div></div>';
   }).join('');
 }
-/* Muda de secção: marca o separador, volta ao cimo e abre a vista respetiva.
+/* Pinta a barra lateral (navHtml) e a barra de baixo (pintarBarra). Só
+   reescreve o #nav quando o HTML mudou: os crachás chegam a meio, e
+   reescrever o mesmo tirava o foco a quem anda de teclado na barra e
+   cortava a meio um grupo a recolher.
+   Devolve: nada — redesenha o #nav (se mudou) e a barra de baixo. */
+function pintarNav() {
+  var n = el('nav'), html = navHtml();
+  if (n && n.htmlPintado !== html) { n.innerHTML = html; n.htmlPintado = html; }
+  pintarBarra();
+}
+/* Recolhe ou abre um grupo da barra lateral. Muda o nó vivo — a classe do
+   grupo e o aria-expanded do título — e não repinta nem navega: a altura só
+   anima num nó que já lá estava, e o foco, que está no título, fica nele.
+   Guarda a escolha no aparelho (eq_nav_fechadas) e acerta o HTML guardado,
+   para a pintura seguinte não ver diferença.
+   Recebe: id — o id do grupo ('atendimento' ou 'plataforma').
+   Devolve: nada. */
+function alternarSeccao(id) {
+  if (!GRUPOS_NAV.some(function (g) { return g.nome && g.id === id; })) return;
+  var i = navFechadas.indexOf(id), fechar = i < 0;
+  if (fechar) navFechadas.push(id); else navFechadas.splice(i, 1);
+  guardarNavFechadas();
+  var n = el('nav');
+  var b = typeof document.querySelector === 'function' ? document.querySelector('#nav [aria-controls="eq-sec-' + id + '"]') : null;
+  if (!b || !b.parentNode || !b.parentNode.classList) { if (n) n.htmlPintado = ''; pintarNav(); return; }
+  b.setAttribute('aria-expanded', fechar ? 'false' : 'true');
+  b.parentNode.classList.toggle('fechada', fechar);
+  if (n) n.htmlPintado = navHtml();
+}
+/* Os destinos da barra de baixo: os quatro primeiros de ORDEM_BARRA que os
+   papéis abrem.
+   Devolve: array de ids de secção (zero a quatro). */
+function destinosDaBarra() {
+  return ORDEM_BARRA.filter(function (id) { return !!seccaoDe(id); }).slice(0, 4);
+}
+/* Pinta a barra de baixo do telemóvel (o #tabbar, que o CSS só mostra
+   abaixo dos 900px): os destinos (destinosDaBarra) com o ícone, o rótulo e
+   o crachá, o atual aceso, e — só com o kanban — o + a meio, «Novo cartão».
+   A barra diz quantos destinos tem (d1…d4) e se leva o + (mais), que é o
+   que a grelha do CSS lê para o manter a meio.
+   Devolve: nada — reescreve o #tabbar, se mudou. */
+function pintarBarra() {
+  var b = el('tabbar');
+  if (!b) return;
+  var ids = destinosDaBarra(), mais = !!DADOS.kanban;
+  var itens = ids.map(function (id) {
+    var s = seccaoDe(id);
+    return '<button type="button" class="eq-dest"' + (id === seccao ? ' aria-current="page"' : '') + comAcao('ir', [id]) + '>' +
+      ic(s.icone) + '<span class="eq-dest-txt">' + s.nome + '</span>' + crachaNav(s.conta, s.conta ? contagens[s.conta] : 0) + '</button>';
+  });
+  if (mais) itens.splice(Math.ceil(itens.length / 2), 0, '<button type="button" class="eq-mais" aria-label="Novo cartão"' + comAcao('maisDaBarra') + '>' + ic('mais') + '</button>');
+  var classe = 'eq-barra d' + ids.length + (mais ? ' mais' : ''), html = itens.join('');
+  if (b.htmlPintado === html && b.className === classe) return;
+  b.className = classe;
+  b.innerHTML = html;
+  b.htmlPintado = html;
+}
+
+/* A gaveta do telemóvel está aberta?
+   Devolve: true ou false. */
+function gavetaAberta() {
+  return !!(document.body && document.body.classList && document.body.classList.contains('eq-gaveta'));
+}
+/* Tira (ou devolve) ao Tab e ao leitor de ecrã o que fica atrás da gaveta
+   aberta: o cabeçalho, o miolo e a barra de baixo.
+   Recebe: sim — true para os tirar, false para os devolver.
+   Devolve: nada. */
+function atrasDaGaveta(sim) {
+  ['topo', 'principal', 'tabbar'].forEach(function (id) { var x = el(id); if (x) x.inert = sim; });
+}
+/* Abre a gaveta do telemóvel (o ☰): o véu por baixo, a página de trás
+   presa, a barra de baixo escondida (o CSS, pelo body.eq-gaveta) e o foco
+   no primeiro sítio que se alcança lá dentro — um destino ou o título de um
+   grupo, nunca um item recolhido. Acima dos 900px a barra é uma coluna do
+   ecrã e não há gaveta para abrir: pergunta-se ao próprio elemento, para
+   não haver dois sítios a saber onde é o corte.
+   Devolve: nada. */
+function abrirGaveta() {
+  var g = el('gaveta');
+  if (gavetaAberta() || !g || typeof getComputedStyle !== 'function' || getComputedStyle(g).position !== 'fixed') return;
+  document.body.classList.add('eq-gaveta');
+  document.documentElement.classList.add('eq-trava');
+  atrasDaGaveta(true);
+  var b = el('burger');
+  if (b) b.setAttribute('aria-expanded', 'true');
+  var a = document.querySelector('#nav .nv, #nav .eq-sec-tit');
+  try { if (a) a.focus(); } catch (e) {}
+}
+/* Fecha a gaveta do telemóvel, se estiver aberta, e solta a página.
+   Recebe: devolverFoco (opcional) — true para pôr o foco no ☰ (o fecho, o
+   véu e o Escape); escolher um destino não o devolve, que a vista muda.
+   Devolve: nada. */
+function fecharGaveta(devolverFoco) {
+  if (!gavetaAberta()) return;
+  document.body.classList.remove('eq-gaveta');
+  document.documentElement.classList.remove('eq-trava');
+  atrasDaGaveta(false);
+  var b = el('burger');
+  if (b) {
+    b.setAttribute('aria-expanded', 'false');
+    if (devolverFoco) try { b.focus(); } catch (e) {}
+  }
+}
+
+/* O endereço da página: #secção, ou #secção/resto (um pedido, uma ficha, o
+   alvo do rasto, um cartão do kanban). Lido no arranque e no hashchange.
+   Devolve: {seccao, resto} (texto; o resto já desfeito do encodeURIComponent). */
+function lerEndereco() {
+  var h = '';
+  try { h = String((typeof location !== 'undefined' && location.hash) || ''); } catch (e) {}
+  h = h.replace(/^#/, '');
+  var i = h.indexOf('/'), s = i < 0 ? h : h.slice(0, i), resto = i < 0 ? '' : h.slice(i + 1);
+  try { resto = decodeURIComponent(resto); } catch (e) {}
+  try { s = decodeURIComponent(s); } catch (e) {}
+  return { seccao: s, resto: resto };
+}
+/* Escreve no endereço onde se está (/equipa#kanban/KAN-77): recarregar volta
+   lá e a ligação abre o sítio. Troca a entrada do histórico em vez de criar
+   uma por secção (history.replaceState), e por isso não dispara o
+   hashchange. O kanban.js chama-a ao abrir e ao fechar um cartão.
+   Recebe: seccao — o id da secção; resto (opcional) — o que vem depois da barra.
+   Devolve: nada. */
+function marcarEndereco(seccao, resto) {
+  resto = resto == null ? '' : String(resto);
+  var novo = '#' + encodeURIComponent(String(seccao || '')) + (resto ? '/' + encodeURIComponent(resto) : '');
+  enderecoMarcado = novo;
+  try {
+    if (typeof history !== 'undefined' && history.replaceState && location.hash !== novo) history.replaceState(history.state, '', novo);
+  } catch (e) {}
+}
+/* O endereço mudou por fora (uma ligação #kanban/KAN-3, o endereço escrito
+   à mão): abre o que ele diz. O que o próprio guião escreveu não reabre nada.
+   Devolve: nada. */
+function seguirEndereco() {
+  var h = '';
+  try { h = String(location.hash || ''); } catch (e) {}
+  if (h === enderecoMarcado) return;
+  var a = lerEndereco();
+  ir(a.seccao, a.resto);
+}
+
+/* Muda de secção: fecha a gaveta, marca o destino, acerta o endereço, volta
+   ao cimo e abre a vista respetiva. Uma secção que o papel não abre (ou o
+   kanban sem DADOS.kanban, na produção) cai na primeira que abre.
    Recebe: s — o id da secção de destino (string, um dos ids de SECCOES);
-   alvo (opcional) — no rasto, o alvo da auditoria por que filtrar (abre a vista Equipa).
+   resto (opcional) — no rasto, o alvo da auditoria por que filtrar (abre a
+   vista Equipa); no kanban, a chave do cartão a abrir; nos pedidos e nos
+   erros, o id do pedido; nas pessoas, o id da conta.
    Devolve: nada — abre a vista. */
-function ir(s, alvo) {
+function ir(s, resto) {
+  var sec = seccaoDe(s);
+  if (!sec) { sec = SECCOES.filter(function (x) { return x.se; })[0] || null; resto = ''; }
+  if (!sec) return;
+  s = sec.id;
+  // a Operação não tem nada depois da barra: um resto lá não fica no endereço
+  resto = resto == null || s === 'operacao' ? '' : String(resto);
+  fecharGaveta();
   nav(s);
+  marcarEndereco(s, resto);
   if (typeof scrollTo === 'function') scrollTo(0, 0);
-  if (s === 'pedidos') verLista('pessoas', 'abertos');
-  else if (s === 'erros') verLista('erros', 'abertos');
-  else if (s === 'pessoas') verPessoas();
+  if (s === 'kanban') abrirKanban(resto);
+  else if (s === 'pedidos' || s === 'erros') {
+    var lista = verLista(s === 'pedidos' ? 'pessoas' : 'erros', 'abertos');
+    if (resto && lista && lista.then) lista.then(function () { if (seccao === s) verPedido(resto); });
+  } else if (s === 'pessoas') { if (resto) verPessoa(resto); else verPessoas(); }
   else if (s === 'operacao') verOperacao();
-  else if (s === 'rasto') verRastoEntrada(alvo);
+  else if (s === 'rasto') verRastoEntrada(resto);
+}
+/* O Kanban: o quadro é do /equipa/kanban.js (verKanban), que carrega depois
+   do guião. Sem ele — o ficheiro não chegou — diz-se isso, com o Recarregar,
+   em vez de uma página em branco.
+   Recebe: resto — '' ou a chave de um cartão ('KAN-77').
+   Devolve: nada — abre o quadro, ou pinta o vazio. */
+function abrirKanban(resto) {
+  if (typeof verKanban === 'function') { verKanban(resto || ''); return; }
+  el('conteudo').innerHTML = cabecalho('Kanban', 'As tarefas da equipa, coluna a coluna.') +
+    vazioHtml('O quadro não carregou.', 'Falta o /equipa/kanban.js nesta página. Recarrega; se continuar, avisa quem programa.',
+      '<button type="button" class="btn sm"' + comAcao('recarregar') + '>Recarregar</button>');
 }
 // conta os que estão por tratar numa lista que não está à vista, para o crachá da barra
 // Recebe: tipo — 'pessoas' ou 'erros' (string).
@@ -355,15 +616,18 @@ var TECNICAS = ['client', 'server', 'infra', 'seguranca'];
    a procura não o perder; cada linha abre o pedido ao lado.
    Recebe: tipo — 'pessoas' ou 'erros' (string); e — o estado do filtro
    ('abertos' ou '' para todos); q (opcional) — o texto da procura.
-   Devolve: nada — redesenha a vista com a lista. */
+   Devolve: a promessa da lista pintada (resolve também quando falha: o erro
+   já ficou no ecrã) — o ir abre o pedido do endereço depois dela. */
 function verLista(tipo, e, q) {
   estado = e;
   q = String(q || '').trim();
+  // a lista, sem pedido aberto: o endereço deixa de dizer um
+  marcarEndereco(tipo === 'pessoas' ? 'pedidos' : 'erros', '');
   var url = '/api/equipa/pedidos?tipo=' + tipo + '&estado=' + encodeURIComponent(e) +
     (q ? '&q=' + encodeURIComponent(q) : '');
   // o título fica no sítio enquanto a lista vem: só o miolo espera
   el('conteudo').innerHTML = cabecalho(LISTAS[tipo].titulo, LISTAS[tipo].sub) + esperaHtml();
-  pedir(url).then(function (d) {
+  return pedir(url).then(function (d) {
     var pedidos = d.pedidos || [];
     if (e === 'abertos' && !q) { contagens[tipo] = pedidos.length; pintarNav(); }
     listaAtual = { tipo: tipo, e: e, q: q, pedidos: pedidos };
@@ -384,7 +648,7 @@ function linhaPedido(p, ativo) {
     '<span class="sub n">' + quem +
     (p.n > 1 ? ' · ' + esc(p.n) + ' vezes' : '') +
     (p.versao ? ' · versão ' + esc(p.versao) : '') +
-    (p.category === 'seguranca' ? (p.refused_at ? ' · arquivado' : p.status === 'concluido' ? '' : p.accepted_at ? ' · decidido' : ' · por decidir')
+    (p.category === 'seguranca' ? (p.refused_at ? ' · recusado' : p.status === 'concluido' ? '' : p.accepted_at ? ' · aceite' : ' · por decidir')
       : tecnico || p.status === 'concluido' && !p.refused_at ? ''
       : p.refused_at ? ' · recusado' : p.proposta ? ' · resposta por enviar' : p.accepted_at ? ' · aceite' : ' · por decidir') +
     (p.assignee_nome ? ' · tomado por ' + esc(p.assignee_nome) : ' · #' + esc(curto(p.id))) + '</span></button>';
@@ -438,6 +702,8 @@ function verPedido(id) {
     var d = rs[0], p = d.pedido;
     var tipo = p.category === 'user' ? 'pessoas' : 'erros';
     nav(tipo === 'pessoas' ? 'pedidos' : 'erros');
+    // o endereço diz o pedido aberto: recarregar ou partilhar a ligação volta a ele
+    marcarEndereco(seccao, p.id);
     if (listaAtual && listaAtual.tipo === tipo) {
       // a linha da lista acompanha o que o pedido é agora (depois de responder, tomar, concluir)
       listaAtual.pedidos.forEach(function (x) {
@@ -476,7 +742,11 @@ function detalhePedido(d, tipo, comLista) {
     comAcao('verLista', [tipo, comLista ? listaAtual.e : 'abertos']) + '>' + ic('voltar') +
     (tipo === 'pessoas' ? 'Voltar aos pedidos' : 'Voltar aos erros') + '</button>' +
     '<div class="pd-det-tit"><div class="rq-topo">' + selo(p) + '</div><h2>' + esc(p.subject) + '</h2>' +
-    '<p class="sub n">' + meta.join(' · ') + '</p></div>' +
+    '<p class="sub n">' + meta.join(' · ') + '</p>' +
+    /* no dev, um pedido aceite tem o seu cartão no kanban (o servidor diz a
+       chave em d.cartao): leva lá, aberto */
+    (d.cartao && DADOS.kanban ? '<p class="sub">No kanban: <button type="button" class="ligacao"' + comAcao('ir', ['kanban', d.cartao]) + '>' +
+      'Cartão ' + esc(d.cartao) + '</button></p>' : '') + '</div>' +
     '<button type="button" class="btn"' + comAcao('agir', [p.id, 'atribuir']) + '>' + (meu ? 'Largar' : 'Tomar para mim') + '</button></div>';
 
   var autor = q && !q.desconhecido ? esc(q.nome || q.email) : 'Conta que já não existe';
@@ -521,19 +791,20 @@ function detalhePedido(d, tipo, comLista) {
     }
   } else if (p.category === 'seguranca') {
     /* um ticket de segurança (um limite atingido) também espera por uma
-       decisão: nada se faz sem a resolução proposta de alguém da equipa, e é
-       ela que se segue; arquivar conclui-o, com a justificação numa nota */
-    if (p.refused_at) decisao = '<p class="sub n pd-decidido">Arquivado por ' + esc(p.refused_by_nome || p.refused_by || 'alguém da equipa') + ' · ' + data(p.refused_at) + ' (a justificação está na nota interna acima)</p>';
+       decisão, com as mesmas duas ações dos pedidos: aceitar pede a resolução
+       proposta de alguém da equipa, e é ela que se segue; recusar conclui-o,
+       com a justificação numa nota */
+    if (p.refused_at) decisao = '<p class="sub n pd-decidido">Recusado por ' + esc(p.refused_by_nome || p.refused_by || 'alguém da equipa') + ' · ' + data(p.refused_at) + ' (a justificação está na nota interna acima)</p>';
     else if (p.accepted_at) {
       decisao = '<div class="pd-decisao pd-resolucao"><p><span class="pd-decisao-tit">Resolução proposta</span>' +
-        '<span class="sub n">Decidida por ' + esc(p.accepted_by_nome || p.accepted_by || 'alguém da equipa') + ' · ' + data(p.accepted_at) + '. É isto que se segue.</span></p>' +
+        '<span class="sub n">Aceite por ' + esc(p.accepted_by_nome || p.accepted_by || 'alguém da equipa') + ' · ' + data(p.accepted_at) + '. É isto que se segue.</span></p>' +
         '<p class="ms-texto">' + esc(p.accepted_changes || '') + '</p></div>';
     }
     else if (p.status !== 'concluido') {
       decisao = '<div class="pd-decisao"><p><span class="pd-decisao-tit">Por decidir</span>' +
-        '<span class="sub">Nada se faz sem uma resolução proposta: bloquear, contactar, subir o limite… Arquivar conclui-o, com a justificação.</span></p>' +
-        '<div class="pd-decisao-botoes"><button type="button" class="btn"' + comAcao('arquivarSeguranca', [p.id]) + '>Arquivar</button>' +
-        '<button type="button" class="btn primary"' + comAcao('decidirSeguranca', [p.id]) + '>Decidir</button></div></div>';
+        '<span class="sub">Nada se faz sem uma resolução proposta: bloquear, contactar, subir o limite… Recusar conclui-o, com a justificação.</span></p>' +
+        '<div class="pd-decisao-botoes"><button type="button" class="btn"' + comAcao('recusarSeguranca', [p.id]) + '>Recusar</button>' +
+        '<button type="button" class="btn primary"' + comAcao('aceitarSeguranca', [p.id]) + '>Aceitar</button></div></div>';
     }
   }
   /* a resposta proposta pelo Claude depois de implementar: vem já na caixa,
@@ -555,7 +826,7 @@ function detalhePedido(d, tipo, comLista) {
     '<span class="so-nota">só a equipa vê</span></span>' +
     '<button type="button" class="btn so-resposta"' + comAcao('guardarModelo') + '>Guardar como modelo</button>' +
     '<button type="button" class="btn so-resposta"' + comAcao('agir', [p.id, 'responder']) + '>Responder</button>' +
-    // um ticket de segurança por decidir só se conclui pelo Arquivar (com a justificação)
+    // um ticket de segurança por decidir só se conclui pelo Recusar (com a justificação)
     (p.category === 'seguranca' && !p.accepted_at ? ''
       : '<button type="button" class="btn primary so-resposta"' + comAcao('agir', [p.id, 'fechar']) + '>Responder e concluir</button>') +
     '<button type="button" class="btn primary so-nota"' + comAcao('agir', [p.id, 'nota']) + '>Guardar nota interna</button>' +
@@ -646,37 +917,37 @@ function recusarPedido(id) {
       .then(function () { avisar('Pedido recusado e concluído.'); verPedido(id); });
   }, { texto: 'O pedido fica concluído, e não segue para implementar.', botao: 'Recusar', perigo: true });
 }
-/* Decide um ticket de segurança (um limite atingido): a janela pede a
+/* Aceita um ticket de segurança (um limite atingido): a janela pede a
    resolução proposta (obrigatória), o que se vai fazer. O servidor regista
    quem, quando e a proposta, que fica também numa nota interna; é ela que se
    segue.
    Recebe: id — o id do ticket (string).
    Devolve: nada — abre a janela; ao confirmar, executa e reabre o detalhe. */
-function decidirSeguranca(id) {
-  formulario('Decidir o ticket de segurança', [{
+function aceitarSeguranca(id) {
+  formulario('Aceitar o ticket de segurança', [{
     nome: 'proposta', rotulo: 'Resolução proposta', tipo: 'area', max: 2000,
     ajuda: 'O que se faz: bloquear, contactar a pessoa, subir o limite… É isto que se segue. Só a equipa vê.',
     exemplo: 'Ex: Subir o limite das gravações para 120 em 15 min.',
   }], function (v) {
     return enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/aceitar', { texto: v.proposta })
-      .then(function () { avisar('Decidido: segue-se a resolução proposta.'); verPedido(id); });
-  }, { texto: 'O ticket segue para tratar, como escreveres aqui.', botao: 'Decidir' });
+      .then(function () { avisar('Aceite: segue-se a resolução proposta.'); verPedido(id); });
+  }, { texto: 'O ticket segue para tratar, como escreveres aqui.', botao: 'Aceitar' });
 }
-/* Arquiva um ticket de segurança (um falso alarme): a janela pede a
+/* Recusa um ticket de segurança (um falso alarme): a janela pede a
    justificação (obrigatória), que fica numa nota interna, e o ticket fica
    concluído. Não vai nada para ninguém. Se o limite voltar a ser atingido,
    reabre-se por decidir.
    Recebe: id — o id do ticket (string).
    Devolve: nada — abre a janela; ao confirmar, executa e reabre o detalhe. */
-function arquivarSeguranca(id) {
-  formulario('Arquivar o ticket de segurança', [{
-    nome: 'justificacao', rotulo: 'Porque se arquiva', tipo: 'area', max: 2000,
+function recusarSeguranca(id) {
+  formulario('Recusar o ticket de segurança', [{
+    nome: 'justificacao', rotulo: 'Porque se recusa', tipo: 'area', max: 2000,
     ajuda: 'Fica numa nota interna: não vai para ninguém.',
     exemplo: 'Ex: Falso alarme: era um teste da equipa.',
   }], function (v) {
     return enviar('/api/equipa/pedidos/' + encodeURIComponent(id) + '/recusar', { texto: v.justificacao })
-      .then(function () { avisar('Ticket arquivado e concluído.'); verPedido(id); });
-  }, { texto: 'O ticket fica concluído, sem nada a fazer. Se voltar a acontecer, reabre-se por decidir.', botao: 'Arquivar', perigo: true });
+      .then(function () { avisar('Ticket recusado e concluído.'); verPedido(id); });
+  }, { texto: 'O ticket fica concluído, sem nada a fazer. Se voltar a acontecer, reabre-se por decidir.', botao: 'Recusar', perigo: true });
 }
 // muda a categoria de um erro para a do chip e reabre o detalhe
 // Recebe: id — o id do pedido (string); categoria — a categoria nova (string, uma das TECNICAS).
@@ -727,6 +998,8 @@ function guardarModelo() {
 function verPessoas(q) {
   q = String(q || '').trim();
   ultimaProcura = q;
+  // a procura, sem ficha aberta: o endereço deixa de dizer uma
+  marcarEndereco('pessoas', '');
   var topo = cabecalho('Pessoas', 'Procurar por email, nome ou id. Só dados de conta: nunca o que está nas casas, valores ou inquilinos.',
     eu.master ? '<button type="button" class="btn"' + comAcao('criarConta') + '>' + ic('mais') + 'Criar conta</button>' : '') +
     '<div class="card pp-busca"><label class="procura">' + ic('procurar') + '<input id="q" type="search" placeholder="Pesquisar…" ' +
@@ -791,10 +1064,38 @@ function formulario(titulo, campos, aoConfirmar, opcoes) {
     if (d.open) return;
     formAberto = null;
     d.innerHTML = '';
+    travarPagina(false);
   };
   if (!d.open) d.showModal();
+  travarPagina(true);
   var primeiro = d.querySelector('input,textarea');
   if (primeiro && primeiro.focus) primeiro.focus();
+}
+
+// o scrollY da página quando a janela a trancou (travarPagina), para ela voltar ao sítio
+var travadaY = 0;
+/* Tranca a página por baixo da janela (o dialog#dialogo, a do guião ou a do
+   kanban), como a app tranca a dela (vistas.js:lockPage): o html.eq-trava
+   não rola, e o body fica preso com o top a -scrollY, para o que se vê não
+   mexer. Sem isto o showModal deixava-a rolar: um dedo no véu (o ::backdrop,
+   fora da caixa que rola da janela) passava o gesto à página (KAN-96). Ao soltar, a
+   página volta ao scrollY onde estava. Só mexe quando o estado muda: trancar
+   duas vezes não guarda o 0 da página já trancada.
+   Recebe: sim — true tranca; false solta.
+   Devolve: nada — mexe na classe do html, no top do body e no scroll. */
+function travarPagina(sim) {
+  try {
+    var h = document.documentElement, b = document.body, ja = h.classList.contains('eq-trava');
+    if (sim && !ja) {
+      travadaY = window.scrollY || 0;
+      h.classList.add('eq-trava');
+      b.style.top = -travadaY + 'px';
+    } else if (!sim && ja) {
+      h.classList.remove('eq-trava');
+      b.style.top = '';
+      window.scrollTo(0, travadaY);
+    }
+  } catch (e) { /* sem o travão, a janela abre na mesma */ }
 }
 
 /* Um campo da janela: o rótulo (com o * vermelho quando é obrigatório), a
@@ -914,6 +1215,7 @@ var ENTRADAS = { 'password + google': 'Palavra-passe e Google', password: 'Palav
    Devolve: nada — redesenha a vista com a ficha. */
 function verPessoa(id) {
   nav('pessoas');
+  marcarEndereco('pessoas', id);
   aCarregar('A abrir a ficha.');
   pedir('/api/equipa/pessoas/' + encodeURIComponent(id)).then(function (d) {
     var q = d.quem;
@@ -1728,12 +2030,14 @@ var SUBPAGINAS_RASTO = {
   privacidade: 'Política de Privacidade',
 };
 // as páginas da montra e dos documentos, pelo caminho
-var PAGINAS_RASTO = { '/': 'Início da montra', '/privacidade': 'Política de Privacidade', '/termos': 'Termos e Condições' };
+var PAGINAS_RASTO = { '/': 'Início da montra', '/privacidade': 'Política de Privacidade', '/termos': 'Termos e Condições',
+  '/guias/declarar-rendas': 'Guia do IRS das rendas' };
 // as secções da montra, pelo id (worker/src/landing.js)
 var SECCOES_RASTO = {
   inicio: 'Início', ligado: 'Do imóvel à renda, tudo ligado', imoveis: 'Imóveis', contratos: 'Contratos',
   planeados: 'Planeados', computador: 'No computador', resto: 'O resto da gestão', contas: 'Contas entre donos',
-  dados: 'Os dados são teus', comecar: 'Começa pelo primeiro imóvel', 'rasto-de-utilizacao': 'Rasto de utilização',
+  dados: 'Os dados são teus', guia: 'IRS das rendas: como declarar e o que podes deduzir', comecar: 'Começa pelo primeiro imóvel',
+  'rasto-de-utilizacao': 'Rasto de utilização',
 };
 // as janelas e os portões com nome próprio (web/cloud/rasto.js:rstIdDaCamada e rstPortao), já com as aspas
 var JANELAS_RASTO = {
@@ -1787,7 +2091,7 @@ var ACOES_RASTO = {
   newTplForTx: 'Criar modelo novo', newTagFromTx: 'Criar etiqueta nova', setKind: 'Escolher o tipo de movimento',
   txMudaTipo: 'Mudar o tipo', txPagoPor: 'Escolher quem pagou', setPayType: 'Escolher a forma de pagamento',
   onAmtReset: 'Repor', onLoanReset: 'Repor', pagarCredor: 'Pagar', 'CW.kpiToTx': 'Ver nos movimentos',
-  dashVerSemImovel: 'Ver movimentos sem imóvel',
+  dashVerSemImovel: 'Ver movimentos sem imóvel', podesFechar: 'Fechar «O que podes fazer»',
   // planeados
   newRec: 'Novo planeado', editRec: 'Editar o planeado', recView: 'Abrir o planeado', delRec: 'Apagar o planeado',
   confirmRec: 'Rever', quickConfirmRec: 'Confirmar', skipRec: 'Silenciar', 'CW.rejectRec': 'Rejeitar o planeado',
@@ -1809,9 +2113,9 @@ var ACOES_RASTO = {
   kpiModal: 'Ver a evolução', kpiPorque: 'Como se calcula', repFoco: 'Abrir a avaliação do imóvel', donutDrill: 'Abrir ou voltar no gráfico',
   anaChipFocar: 'Escolher o imóvel', repAnaLimpar: 'Voltar a todos os imóveis', projAnaLimpar: 'Voltar a todos os imóveis',
   dashPersonalizarPainel: 'Personalizar painel', 'CW.backToDash': 'Visão geral', 'CW.resetDashOrder': 'Repor ordem',
-  'CW.exitEdit': 'Concluir', fiscoEscolherAno: 'Escolher o ano', limparAmbito: 'Limpar o titular',
-  hdrFiltToggle: 'Todos · por inteiro', fiscoPartilhar: 'Partilhar resumo', fiscoCsv: 'Exportar CSV',
-  fiscoVerGuia: 'Guia de preenchimento', fiscoSetIrs: 'Escolher a coluna do IRS', fiscoSetTitular: 'Escolher o titular',
+  'CW.exitEdit': 'Concluir', limparAmbito: 'Limpar o titular',
+  hdrFiltToggle: 'Filtros', fiscoPartilha: 'Partilhar', fiscoCsv: 'Exportar CSV',
+  fiscoPdf: 'Exportar PDF', fiscoSetIrs: 'Escolher a coluna do IRS', fiscoSetTitular: 'Escolher o titular',
   // listas, filtros e seleção
   lpMenu: 'Opções', lfClear: 'Limpar', lfToggle: 'Filtros', lfApply: 'Fechar', lfLimparCampo: 'Limpar o campo',
   lqLimpar: 'Limpar a pesquisa', limparFiltroAtual: 'Limpar filtros',
@@ -1823,6 +2127,7 @@ var ACOES_RASTO = {
   // tarefas
   tfAbrir: 'Abrir as tarefas', tfFechar: 'Fechar', tfGuardar: 'Guardar', tfNovaTarefa: 'Adicionar tarefa',
   tfLimparPesquisa: 'Limpar a pesquisa', tfDobrar: 'Abrir ou fechar uma secção', tfPegaClique: 'Arrastar a tarefa',
+  tfDescartar: 'Descartar as tarefas por enviar',
   tfEditarTarefa: 'Editar a tarefa', tfRemoverTarefa: 'Remover a tarefa', tfNovaSeccao: 'Nova secção',
   tfRemoverSeccao: 'Remover a secção', tfMudarNomeSeccao: 'Mudar o nome da secção',
   // notificações
@@ -1850,7 +2155,8 @@ var ACOES_RASTO = {
   rstResponder: 'Aceitar ou Recusar o rasto', qaEnviar: 'Enviar ticket', qaGravidade: 'Escolher a gravidade',
   qaRemoverImagem: 'Remover a imagem', qaNovoTicket: 'Novo ticket', qaCarregarDeNovo: 'Tentar de novo',
   qaDobrar: 'Abrir ou fechar um ticket', qaAbrirTicket: 'Abrir o ticket', qaRemover: 'Remover', qaReabrir: 'Reabrir',
-  qaImagemDeNovo: 'Tentar de novo',
+  qaImagemDeNovo: 'Tentar de novo', qaAceitar: 'Aceitar', qaRecusar: 'Recusar', qaAdiar: 'Adiar',
+  qaComentar: 'Comentar', qaComentariosDeNovo: 'Tentar de novo',
   // conta, entrada, termos e documentos
   'CW.showAuth': 'Iniciar sessão', 'CW.submitAuth': 'Entrar ou criar conta', 'CW.modoDaEntrada': 'Entrar ou criar conta',
   'CW.verPalavraPasse': 'Mostrar a palavra-passe', 'CW.esqueci': 'Esqueci-me da palavra-passe', fecharRepor: 'Cancelar',
@@ -1880,7 +2186,7 @@ var ACOES_RASTO = {
   'CW.grupoLigacaoCriar': 'Criar ligação',
 };
 // os elementos que respondem ao toque sem data-click, pela classe ou pelo id
-var BOTOES_RASTO = { 'escolha-botao': 'Aceitar ou Recusar o rasto', bg: 'Fora da janela' };
+var BOTOES_RASTO = { 'escolha-botao': 'Aceitar ou Recusar o rasto', 'gaveta-botao': 'Abrir ou fechar o menu', bg: 'Fora da janela' };
 // os campos e os outros elementos que respondem ao toque, pela etiqueta (com o artigo, para a frase)
 var CAMPOS_RASTO = {
   input: 'num campo', textarea: 'numa caixa de texto', select: 'numa lista de escolha', label: 'no rótulo de um campo',
@@ -1990,6 +2296,7 @@ function ligacaoRasto(d) {
   if (host && !/(?:^|\.)rendorium\.com$/.test(host)) return '';
   if (caminho.indexOf('/privacidade') === 0) return 'Política de Privacidade';
   if (caminho.indexOf('/termos') === 0) return 'Termos e Condições';
+  if (caminho.indexOf('/guias/declarar-rendas') === 0) return 'Guia do IRS das rendas';
   if (caminho === '/' && !host) return chaves.indexOf('criar') > -1 ? 'Criar conta' : 'Início';
   return '';
 }
@@ -2588,8 +2895,8 @@ var ACOES = {
   mudarCategoria: function (d) { mudarCategoria(d.arg, d.arg2); },
   aceitarPedido: function (d) { aceitarPedido(d.arg); },
   recusarPedido: function (d) { recusarPedido(d.arg); },
-  decidirSeguranca: function (d) { decidirSeguranca(d.arg); },
-  arquivarSeguranca: function (d) { arquivarSeguranca(d.arg); },
+  aceitarSeguranca: function (d) { aceitarSeguranca(d.arg); },
+  recusarSeguranca: function (d) { recusarSeguranca(d.arg); },
   usarModelo: function (d) { usarModelo(d.arg); },
   guardarModelo: function () { guardarModelo(); },
   verPessoas: function () { verPessoas(ultimaProcura); },
@@ -2617,6 +2924,16 @@ var ACOES = {
   confirmarFormulario: function () { confirmarFormulario(); },
   fecharDialogo: function () { el('dialogo').close(); },
   fecharAviso: function () { esconderAviso(); },
+  abrirGaveta: function () { abrirGaveta(); },
+  fecharGaveta: function () { fecharGaveta(true); },
+  alternarSeccao: function (d) { alternarSeccao(d.arg); },
+  // o + da barra de baixo (só com o kanban): o novoCartao é do /equipa/kanban.js
+  maisDaBarra: function () {
+    if (!DADOS.kanban) return;
+    if (typeof novoCartao === 'function') novoCartao();
+    else ir('kanban');
+  },
+  recarregar: function () { location.reload(); },
 };
 
 /* Corre a ação do elemento mais próximo do alvo do evento que tenha o
@@ -2631,12 +2948,33 @@ function despachar(evento, tipo) {
   var nome = alvo.getAttribute('data-' + tipo);
   if (!Object.prototype.hasOwnProperty.call(ACOES, nome)) throw new Error('ação desconhecida: ' + nome);
   if (tipo === 'enter' && evento.preventDefault) evento.preventDefault();
-  ACOES[nome](alvo.dataset, alvo, evento);
+  try { ACOES[nome](alvo.dataset, alvo, evento); } finally { if (tipo === 'acao') largarFocoDoToque(evento, alvo); }
+}
+/* Larga o foco que um toque deixou no botão da ação, como a app
+   (web/app/eventos.js:largarFocoDoToque): o Chrome e o Samsung Internet focam
+   o botão tocado, e o foco ficava lá aceso. Só num clique do dedo ou da caneta
+   (o do teclado e o do rato ficam), só se o foco ainda está no elemento tocado
+   ou dentro dele (uma ação que levou o foco a outro sítio manda ela), e nunca
+   num campo. O anel do teclado (:focus-visible) continua para o Tab.
+   Recebe: evento — o click; alvo — o elemento com a ação.
+   Devolve: nada. */
+function largarFocoDoToque(evento, alvo) {
+  try {
+    var ponteiro = evento && evento.pointerType;
+    if (ponteiro !== 'touch' && ponteiro !== 'pen') return;
+    var a = document.activeElement;
+    if (!a || !alvo || a === document.body || a === document.documentElement) return;
+    if (a !== alvo && !(typeof alvo.contains === 'function' && alvo.contains(a))) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName || '') || a.isContentEditable) return;
+    if (typeof a.blur === 'function') a.blur();
+  } catch (e) { /* largar o foco é um cuidado: nunca trava a ação */ }
 }
 
 document.addEventListener('click', function (e) { despachar(e, 'acao'); });
 document.addEventListener('keydown', function (e) { if (e.key === 'Enter') despachar(e, 'enter'); });
 document.addEventListener('change', function (e) { despachar(e, 'mudar'); });
+// o Escape fecha a gaveta do telemóvel e devolve o foco ao ☰
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && gavetaAberta()) fecharGaveta(true); });
 // o quarto ouvinte não chama ações: acerta os contadores e tira o erro de um campo a que se volta a escrever
 document.addEventListener('input', function (e) {
   var t = e.target;
@@ -2646,8 +2984,35 @@ document.addEventListener('input', function (e) {
 });
 
 /* ------------------------------- arranque ------------------------------- */
-var primeira = SECCOES.filter(function (s) { return s.se; })[0];
-if (primeira) ir(primeira.id);
-else el('conteudo').innerHTML = vazioHtml('O teu papel não abre nenhuma secção daqui.', 'Pede a quem gere os acessos no Discord.');
-// os crachás das listas que não estão à vista
-SECCOES.forEach(function (s) { if (s.se && s.conta && s.id !== seccao) contar(s.conta); });`;
+
+/* Abre a primeira vista: a do endereço (/equipa#erros, /equipa#kanban/KAN-77),
+   ou a primeira secção que os papéis abrem; pede os crachás das listas que
+   não estão à vista; e passa a seguir o endereço (hashchange) e a fechar a
+   gaveta quando o ecrã passa os 900px (rodar o tablet com ela aberta deixava
+   a página presa).
+   Devolve: nada. */
+function arrancar() {
+  if (!SECCOES.some(function (s) { return s.se; })) {
+    pintarNav();
+    el('conteudo').innerHTML = vazioHtml('O teu papel não abre nenhuma secção daqui.', 'Pede a quem gere os acessos no Discord.');
+    return;
+  }
+  var a = lerEndereco();
+  ir(a.seccao, a.resto);
+  // os crachás das listas que não estão à vista
+  SECCOES.forEach(function (s) { if (s.se && s.conta && s.id !== seccao) contar(s.conta); });
+  if (typeof addEventListener === 'function') addEventListener('hashchange', seguirEndereco);
+  if (typeof matchMedia === 'function') {
+    var largo = matchMedia('(min-width: 900px)');
+    var aoMudar = function (e) { if (e.matches) fecharGaveta(); };
+    if (largo.addEventListener) largo.addEventListener('change', aoMudar);
+    else if (largo.addListener) largo.addListener(aoMudar);
+  }
+}
+/* O arranque espera pelo DOMContentLoaded: o /equipa/kanban.js carrega
+   DEPOIS do guião e tem de ter definido o verKanban antes de a primeira
+   secção abrir. Os scripts estão no fim do body, por isso quando o guião
+   corre o documento ainda está a ler-se (readyState 'loading') e o evento
+   ainda não disparou; noutro caso (o guião injetado depois) arranca logo. */
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar);
+else arrancar();`;

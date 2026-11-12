@@ -71,12 +71,18 @@ describe('o contrato, em texto', () => {
     assert.match(marca[0], /r\.createdBy/, 'o criador entra na marca');
   });
 
-  test('partilha.js tem os cartões do contrato e a vista do separador', () => {
-    const s = le('web/cloud/partilha.js');
-    for (const t of ['A minha ligação de partilha', 'Pedidos de partilha', "'Cargos'", 'Convidar colaborador',
-      "'Colaboradores'", 'Imóveis onde colaboras', 'Convites por usar', 'Escolher pelo grupo…', 'Vale 7 dias e uma só utilização',
-      'Como dou acesso a um gestor sem o tornar comproprietário?', 'function vColaboradores()']) {
+  test('partilha.js tem os cartões da partilha, e a página do separador vive em colaboradores.js', () => {
+    const s = le('web/cloud/partilha.js'), c = le('web/cloud/colaboradores.js');
+    for (const t of ['A minha ligação de partilha', 'Pedidos de partilha', 'Como dou acesso a um gestor sem o tornar comproprietário?']) {
       assert.ok(s.includes(t), 'texto: ' + t);
+    }
+    for (const t of ['Convidar colaborador', 'Quem colabora', 'Onde colaboras', 'Convites por usar', '>Cargos<', 'Escolher pelo grupo',
+      'Vale 7 dias e uma só utilização', 'function paginaDosColaboradores()']) {
+      assert.ok(c.includes(t), 'texto: ' + t);
+    }
+    // os cartões de antes do canvas de 2026-10 saíram com o vColaboradores, que já ninguém chamava
+    for (const f of ['vColaboradores', 'convidarCard', 'cargosCard', 'colaboradoresCard', 'colaboroCard', 'cwImoveisMeus']) {
+      assert.ok(!new RegExp('function ' + f + '\\b').test(s + c), 'saiu: ' + f);
     }
     assert.ok(!/function colabRow/.test(s), 'a Segurança não tem porta própria para os colaboradores: vivem no menu');
     const sub = /SUBPAGE\.cloud = .*/.exec(s)[0];
@@ -412,7 +418,7 @@ describe('os textos das permissões', () => {
 // A app montada com o estado de ESTADO() (ou o que a função mudar) na base e
 // em CW.state, para desenhar as vistas.
 // Recebe: muda (opcional) — função que recebe o estado e o altera antes de o usar.
-// Devolve: a janela da app, pronta para vCloud() e vColaboradores().
+// Devolve: a janela da app, pronta para vCloud() e paginaDosColaboradores().
 function comEstado(muda) {
   const { app } = montar();
   const st = ESTADO();

@@ -22,7 +22,7 @@
 window.LEGAL = (function () {
   'use strict';
 
-  var VERSION = '2026-10-30';
+  var VERSION = '2026-11-12';
   var OPERADOR = 'Martinho Fé Santos';
   var MORADA = '';                       // apartado, escritório virtual ou sede
   var NIF = '';                          // obrigatório quando houver cobrança
@@ -188,6 +188,11 @@ window.LEGAL = (function () {
     ul([
       '<b>Prestar o serviço</b> (criar a conta, guardar e sincronizar os teus dados, partilhar casas com ' +
       'quem indicares) — execução do contrato entre nós.',
+      '<b>Ler a FINE ou o contrato de um crédito</b>, só quando o pedes no formulário da hipoteca: o PDF ' +
+      'é passado a texto e lido por um modelo de inteligência artificial do Workers AI, da Cloudflare, ' +
+      'para propor os valores da hipoteca, que confirmas antes de guardar. Nem o texto nem a resposta ficam ' +
+      'guardados; o PDF fica só como anexo da hipoteca, como qualquer documento teu — execução do contrato, ' +
+      'a teu pedido.',
       '<b>Segurança e prevenção de abusos</b> (limites de tentativas, registos de acesso) — interesse ' +
       'legítimo em manter o serviço a funcionar e protegido.',
       '<b>Cumprir obrigações legais</b> — quando alguma norma nos obrigar a conservar ou fornecer informação.',
@@ -205,7 +210,8 @@ window.LEGAL = (function () {
     p('Não vendemos dados pessoais nem os cedemos para fins publicitários. Recorremos aos seguintes ' +
       'subcontratantes:') +
     ul([
-      '<b>Cloudflare, Inc.</b> — alojamento da aplicação, base de dados e sessões.',
+      '<b>Cloudflare, Inc.</b> — alojamento da aplicação, base de dados e sessões, e a leitura da FINE ou ' +
+      'do contrato de um crédito (Workers AI), quando a pedes.',
       '<b>Google Ireland Ltd.</b> — apenas se optares por entrar com a conta Google.',
       '<b>Resend, Inc.</b> — envio dos emails do serviço (confirmações, avisos e respostas do suporte).',
     ]) +

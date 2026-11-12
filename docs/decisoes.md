@@ -88,6 +88,28 @@ confere que cada uma aponta para código que existe.
 - 2026-11-06 · Os filtros mostram o que dizem, o menu fecha ao toque, e a redução de spread tem prazo
 - 2026-11-06 · A pesquisa não sai do documento enquanto se escreve
 - 2026-11-06 · Criar é no +, o selo «personalizado», e o que rola por cima não rola a página
+- 2026-11-08 · Um guia de declarar as rendas, sem prometer a Declaração
+- 2026-11-08 · O IRS na montra como guia, e a pílula do QA nas páginas públicas
+- 2026-11-08 · O «O que podes fazer» fecha-se, e a gaveta da montra fechada não ocupa espaço
+- 2026-11-09 · O back office do dev abre com a sessão de teste
+- 2026-11-09 · O back office com a navegação da app, e o kanban da equipa no lugar do Jira
+- 2026-11-09 · O kanban à maneira da app: folhas, seletores, a prioridade em palavras e a ordem por coluna
+- 2026-11-10 · Os tickets de QA nas colunas do kanban, nos dois sentidos
+- 2026-11-11 · Em Human Tests decide-se em vez de mover, e comentar devolve o ticket a Auto Tests
+- 2026-11-11 · A janela do back office tranca a página, e o rascunho do cartão fica no aparelho
+- 2026-11-11 · A folha do kanban tem dois tamanhos, e não uma altura livre
+- 2026-11-11 · O cartão por enviar fica no quadro, e pode haver vários
+- 2026-11-11 · A janela segue o teclado; a folga só quando rolar não chega (KAN-110)
+- 2026-11-11 · As tarefas por guardar ficam no aparelho até ao Guardar (KAN-105, a app)
+- 2026-11-12 · O kanban é uma fonte de trabalho do Claude, como os tickets (KAN-5)
+- 2026-11-12 · Os dados de exemplo têm um dono só: a própria conta (KAN-10, KAN-78)
+- 2026-11-12 · Os tickets de segurança decidem-se com Aceitar e Recusar (KAN-114)
+- 2026-11-12 · Em Human Tests aceita-se num toque, e recusar é explicar (KAN-116, KAN-117)
+- 2026-11-12 · A pílula do QA é uma vista dos Erros do kanban (KAN-115)
+- 2026-11-12 · Os anexos do kanban aceitam ficheiros, numa lista fechada pelos bytes (KAN-119)
+- 2026-11-12 · A Declaração é sempre a tua: sai o seletor de proprietário (KAN-73)
+- 2026-11-12 · A FINE verdadeira: as frases fixas da ficha passam por cima do modelo (KAN-15)
+- 2026-11-12 · A leitura da FINE sai do dev, e a política de privacidade di-la (KAN-14)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1085,7 +1107,7 @@ imóveis», que se parte pelos imóveis que eu tinha na data do movimento
 continua «Todos os imóveis», porque um acerto sem imóvel é mesmo de todos. E
 nos Colaboradores sem imóveis o cartão «Colaboradores», cujo vazio mandava
 criar uma ligação de convite que não se pode criar, deixa de se escrever
-(partilha.js:colaboradoresCard).
+(colaboradores.js:quemColaboraCard).
 
 ## 2026-10-08 · O IRS ganha uma versão por ano, e a Declaração deixa de deduzir a mais
 O Martinho pediu duas coisas: ter a certeza de que a feature do IRS está bem
@@ -1604,7 +1626,7 @@ abre a ficha dele. O ownerFilter ficou, como titular do IRS · Anexo F: a
 declaração é por titular (é ele que entrega o anexo), e o fisco.js lê o
 titular dali — tirá-lo partia o IRS, e dar ao titular um estado próprio é
 trabalho do fisco.js. Para não haver um filtro escondido, o render e a
-mudança de separador largam-no fora do IRS (ambito.js:ambitoSemDono): a
+mudança de separador largam-no fora do IRS (o ambitoSemDono do ambito.js): a
 regra é «fora do IRS é sempre ''», e não «ninguém o escreve», que um atalho
 antigo ou um filtro comum guardado podiam desmentir. A canalização
 (ambito.js:visiveis, ambito.js:scope, a quota do saldos.js:sh) ficou: com o
@@ -1612,6 +1634,10 @@ ownerFilter vazio é a identidade, e tirá-la era refazer as contas da quota
 em seis ficheiros e uma dúzia de testes de aritmética sem mudar nada do que
 se vê. O «Ver a app na quota de …» da ficha do proprietário saiu com ele:
 sem o filtro, levava à Visão geral e não mudava nada.
+
+Nota de 2026-11-12: o titular do IRS também saiu (KAN-73), e com ele o
+ambitoSemDono — a regra passou a ser «ninguém o escreve». Ver a entrada
+desse dia.
 
 O cartão «Por confirmar» na Agenda. O crachá da Agenda contava os planeados
 vencidos e não silenciados, mas a Agenda não mostrava nenhum: o Martinho via
@@ -2510,7 +2536,7 @@ ticket; a limpeza corre de passagem nas rotas e apaga primeiro a captura,
 para nunca ficar um objeto órfão no R2. Reabrir guarda a resolução, para quem
 pega outra vez no ticket ver o que já se tentou. O tipo da captura lê-se dos
 bytes, e não só do Content-Type, porque a imagem é escrita por uma conta e
-aberta por todas na mesma origem (worker/src/rotas/qa.js:tipoDaImagem).
+aberta por todas na mesma origem (worker/src/lib/imagens.js:tipoDaImagem).
 
 O user_id não tem chave estrangeira para users. Com ela, o DELETE FROM users da
 limpeza do dev falhava, ou os tickets tinham de sair primeiro, e o Martinho
@@ -2535,7 +2561,7 @@ dev, por isso passou a viajar assinado na ligação (worker/src/teste.js:ligacao
 A assinatura só conta o nome quando ele vem, para as ligações emitidas por um
 worker ainda sem esta versão (o bot de produção, até à promoção) continuarem a
 valer; essas aparecem como «Discord <id>». O ticket copia o id e o nome ao
-ser criado (worker/src/rotas/qa.js:discordDoAutor), para o autor sobreviver à
+ser criado (worker/src/teste.js:discordDoAutor), para o autor sobreviver à
 conta de teste.
 
 A seguir, o Martinho quis ver o nome logo, e não «Discord <id>» até à
@@ -3284,3 +3310,575 @@ aceite: num ecrã alto, onde a barra lateral cabe inteira, a roda por cima
 dela deixa de rolar a página. Ficou por decidir o html.noscroll com
 overscroll-behavior:none, que tiraria o puxar para recarregar com uma janela
 aberta.
+## 2026-11-08 · Um guia de declarar as rendas, sem prometer a Declaração
+
+O Martinho escreveu e verificou (a 2026-11-08, contra o artigo 41.º do Código
+do IRS e oito fontes da AT e do Diário da República) um guia do que o
+senhorio pode e não pode deduzir às rendas, e pediu-o na montra. Ficou em
+/guias/declarar-rendas (guia-vista.js:paginaGuia), a pasta pensada para mais
+guias. A montra tinha uma regra contra o IRS (testes/landing.test.js «não
+promete o IRS»), porque a Declaração da app só existe em dev; a regra fica,
+e o guia não a fura: é informação, e o cartão e a ligação da montra não usam
+a palavra nem dizem que a app declara. Perguntado, o Martinho escolheu o
+cartão e o rodapé, o endereço, as listas só de leitura (visto e cruz, sem
+caixas de marcar nem JavaScript) e o texto por tu; o conteúdo fiscal ficou
+como ele o escreveu, só com a pessoa do verbo trocada.
+
+As fontes foram confirmadas a abrir uma a uma. Do artigo 41.º, o n.º 1 diz
+«suportados e pagos» e o n.º 9 a comprovação documental, que é o «n.os 1 e 9»
+do guia; as fichas de 2016 a 2018 ainda citam «n.os 1 e 8», a numeração de
+antes de o n.º 8 passar a ser o da habitação própria a mais de 100 km.
+
+## 2026-11-08 · O IRS na montra como guia, e a pílula do QA nas páginas públicas
+
+O Martinho autorizou o IRS na montra («vou autorizar o IRS no futuro
+próximo») e pediu SEO para ele. A regra «nada do IRS» deu lugar a outra mais
+estreita: o IRS pode aparecer como guia (o «IRS» do cabeçalho, o cartão, o
+rodapé, o title e o h1 do guia), e o que continua proibido é prometer a
+funcionalidade enquanto a Declaração for só de dev — nenhuma frase diz que a
+app declara, calcula, preenche ou entrega o IRS (testes/landing.test.js,
+«promessasDoIrs»). O botão do topo diz «IRS» enquanto houver um guia só; com
+o segundo passa a «Guias», para uma página /guias que hoje não existe.
+
+O cabeçalho não levava quatro coisas a 360 px. Esconder o «Entrar» no
+telemóvel foi proposto e o Martinho preferiu uma gaveta: marca, «Criar conta»
+e ☰ à vista, «IRS» e «Entrar» lá dentro, num <details> para não pôr
+JavaScript na montra de produção.
+
+A pílula do QA deixou de acabar na app: o Martinho quer reportar a partir da
+montra e do guia no dev, e ir ao back office a partir dela. As páginas
+públicas ganharam uma camada como a do back office, com o mesmo qa.js, mas a
+falar com as /api/qa pelo cookie da conta; só no dev, só com sessão de conta,
+e nunca na raiz.
+
+## 2026-11-08 · O «O que podes fazer» fecha-se, e a gaveta da montra fechada não ocupa espaço
+
+Dois tickets de QA do Martinho. No primeiro, a montra no Samsung Internet
+ficava mais larga do que o ecrã, com «botões do lado direito»: era o painel da
+gaveta do ☰, que, fechado, ficava preso ao botão e saía pela direita. O
+contexto do ticket dizia 434 px de janela num telemóvel de 384, a mesma
+largura até onde o painel chegava. Com a gaveta fechada, o painel deixou de
+existir, na montra e no guia.
+
+No segundo, o Martinho pediu para se poder fechar o cartão «O que podes
+fazer». Escolheu um X no canto, como o do tutorial, em vez de um «Dispensar» no
+fundo, e que o cartão volte quando o cargo muda, em vez de ficar fechado para
+sempre ou só até à próxima visita: um cargo novo deixa fazer outras coisas, e
+isso merece ser lido outra vez.
+
+## 2026-11-09 · O back office do dev abre com a sessão de teste
+
+Um ticket de QA do Martinho (68c59ce4, bloqueia): no dev, «Back office» na
+pílula dava a página «Entra-se a partir do Discord», que ele leu como um erro.
+Não era: a sessão de equipa é outra, e só nascia do /entrar. Perguntado, ele
+escolheu que a sessão de teste abrisse o back office «como quem pediu o
+/test»: em nome da pessoa do Discord que pediu a ligação, com os cargos que
+ela tem no Discord, e quem não tem cargo continua a ver a página de entrada.
+Ficaram de fora dar acesso total a qualquer conta de teste e deixar como
+estava.
+
+A sessão de teste não passou a valer como sessão de equipa: ela abre uma
+sessão de equipa nova, igual à do /entrar (worker/src/equipa.js:guardarSessao),
+e daí para a frente nada sabe por onde se entrou — os papéis revistos de 15
+em 15 minutos, o sair, a pílula e os autores «equipa:<id>». A API do back
+office continua a pedir o cookie da equipa, e só as páginas (um GET ao
+/equipa, ao /equipa/ ou ao /equipa/docs) abrem a sessão, de volta ao próprio
+endereço. A pessoa é o users.test_owner, que só uma ligação assinada escreve;
+os cargos perguntam-se ao Discord nesse pedido, e como a ligação do /test não
+diz o servidor, perguntam-se nos servidores onde o bot do dev está
+(worker/src/equipa.js:servidoresDoBot) — os mesmos onde vivem os cargos das
+listas do dev. Uma navegação vinda de outro site não abre nada (o cookie da
+sessão de teste é SameSite=Lax e iria com ela), e sem a linha da auditoria a
+sessão apaga-se. Em produção e no percurso a função sai na primeira linha,
+sem ler nada.
+
+O «Sair» do back office apagava a sessão, mas o recarregar que se lhe segue
+voltava a entrar pela sessão de teste. Perguntado, o Martinho escolheu «Sair
+fica fora até novo /test»: no dev, o sair deixa uma marca num cookie
+(o gi_equipa_saiu, HttpOnly, um mês; saiu no mesmo dia, mais abaixo), com ela a sessão
+de teste não abre o back office, e tiram-na uma ligação nova do /test e o
+/entrar do Discord — as duas maneiras de dizer «quero entrar». Fora do dev
+não há marca.
+
+O discordDoAutor passou do rotas/qa.js para o teste.js
+(worker/src/teste.js:discordDoAutor): usá-lo do teste.js fazia um ciclo de
+importações (testes/quatro-olhos.test.js), e é ao teste.js que pertence.
+
+O menu da pílula no back office tinha só os tickets, porque a sessão da equipa não passava a porta do dev e a app e a montra davam 404. Desde que o back office se abre com a sessão de teste (equipa.js:entrarPelaSessaoDeTeste), quem lá está costuma ter o cookie dela, e na APK de dev, sem barra de endereços, ficava-se preso (ticket 895366f1, bloqueia). O menu passa a oferecer «Ver a montra» e «Voltar à app», mas só quando o servidor diz que a app abre daí: o index.js pergunta à porta do dev (teste.js:portaDoDev) para o / e põe o resultado nos dados da pílula (equipa-vista.js:htmlDoQa, QA_EQUIPA.app). Quem entrou pelo /entrar do Discord, sem sessão de teste, continua com os tickets apenas, em vez de um botão que dá 404. Fica de fora o «Back office», que é onde já se está.
+
+O guia do IRS das rendas (worker/src/guia-vista.js) lia-se como um parecer:
+«nos termos de», «cumulativamente», «documentalmente comprovados». O Martinho
+pediu um tom amigável e próximo, o da frase que deu para a abertura («Neste
+guia podes encontrar se tens de declarar as rendas no IRS, como o fazer e
+algumas despesas que podes descontar»), e escolheu o guia todo, incluindo a
+parte 4, o texto que ele próprio verificou (ticket 8615e719, KAN-72). Ficaram
+os factos, os números, os artigos, as fontes, os ids e o número de linhas de
+cada lista; mudaram as frases. O H1 e o título ficaram, porque a montra e o
+rasto os importam e o SEO depende deles.
+
+A marca de quem saiu do back office (o cookie gi_equipa_saiu) saiu no mesmo
+dia em que entrou. O Martinho carregou em «Sair», teve de voltar ao /entrar
+do Discord, e escreveu que entre o /test e o back office não deve haver
+barreira (ticket ab76041d, bloqueia, KAN-75). Sem a marca, recarregar depois
+do «Sair» voltava a entrar logo, e o «Sair» não fazia nada; por isso, no dev
+e com uma sessão de teste que abre a app, o «Sair» leva à app, e voltar ao
+back office é entrar outra vez. A quem ainda tem a marca no browser manda-se
+apagá-la (worker/src/equipa.js:apagarMarcaVelha), até ao fim do mês dela.
+
+A Declaração ficou mais curta a pedido do Martinho (tickets de QA ee55d6fe,
+75c3536b, 33db56fc, fb6fab4b e 0bab07a5, KAN-73). O ano passou de uma pílula
+por ano a um seletor, porque a fila crescia com os anos. Saíram a faixa azul
+das regras do ano e a dobra «Como preencher, passo a passo»: ele escolheu ter
+um guia só, o público (/guias/declarar-rendas), e o botão «Guia de
+preenchimento» leva lá; o prazo, o que mudou e os passos passaram para o guia,
+escritos de fontes oficiais (KAN-74), e o aviso de um ano sem versão própria
+foi para «A tratar antes de entregar». Saiu também a simulação do
+englobamento («não faz sentido»): pedia os outros rendimentos do agregado e
+dava um veredito que não se percebia; o guia explica a escolha. Os quadros
+4.1 e 4.2 eram tabelas largas que rolavam de lado no telemóvel; passaram a um
+cartão por contrato, campo → valor pela ordem do impresso, e a um PDF com os
+mesmos campos (fisco-pdf.js:fiscoPdf), que ele pediu. O PDF usa o escritor do
+contrato e por isso só aparece com os Contratos ligados.
+
+Ao passar para o guia, uma das novidades da versão de 2025 não se confirmou:
+o limite abaixo do qual o senhorio pode dispensar a retenção já era 15 000 €
+(o art. 53.º do CIVA, na redação de 2022), e não «subiu». Saiu do irs-2025.js
+e o guia di-lo como o que não mudou.
+
+O PDF do contrato deixou a Helvetica (que ficara a 2026-10-17 por o woff2
+vir em Brotli): o Martinho pediu-o com o estilo da app (KAN-76) e escolheu
+as letras da app embutidas, o aspeto com cartões e pílulas, e a marca só no
+rodapé, discreta, por ser um documento que as partes assinam. O Brotli
+desfaz-se uma vez, fora da app: um script converte os woff2 variáveis em TTF
+estáticos nos pesos usados (Geist 400 e 600, Bricolage 700 com o tamanho
+ótico a 24), cortados ao WinAnsi, cerca de 16 a 20 KB cada
+(.unlazy/pdf-estilo/letras.py). A licença é a OFL sem nome reservado, por
+isso os nomes ficam. As letras não entram na cache offline: sem rede o PDF
+sai na Helvetica em vez de não sair, e cada instalação poupa 52 KB que
+quase ninguém usa. O mesmo estilo foi para o PDF do Anexo F, que nasceu no
+mesmo dia.
+
+Na Declaração, o resumo dos quadros 4.1 e 4.2 numa tabela só, com o quadro
+numa coluna, lia-se como um cartão que falava dos dois quadros, e o Martinho
+ficou «sem perceber onde preencher» (ticket de QA 5cbde185). Das três saídas
+(um cartão por quadro, o resumo em duas tabelas, ou só mudar o texto) escolheu
+um cartão por quadro: o resumo misto saiu, e cada quadro abre com onde se
+preenche e os contratos dele (fisco.js:fiscoQuadroResumoHtml), em linhas e não
+numa tabela, para não voltar a rolar de lado no telemóvel. O PDF já ia por
+quadro e não mudou.
+
+## 2026-11-09 · O back office com a navegação da app, e o kanban da equipa no lugar do Jira
+
+O Martinho pediu o back office «numa gaveta e barra de navegação como na app»,
+com as secções que se recolhem e o que vai na barra à escolha de quem o fizesse.
+A barra lateral ganhou as secções da app: o Kanban ao cimo, «Atendimento»
+(Pedidos e Pessoas) e «Plataforma» (Erros, Operação e Rasto), que se recolhem,
+e o fundo com a Documentação e quem está. Os pedidos e as pessoas são de quem
+atende; os erros, a operação e o rasto, de quem constrói e opera — é a mesma
+divisão dos papéis (worker/src/lib/papeis.js:CATS_DO_PAPEL), e por isso a
+maior parte das pessoas da equipa vê uma secção só. No telemóvel saiu a fila
+de separadores que rolava de lado: a gaveta tem tudo, e a barra de baixo os
+quatro destinos de todos os dias. No dev são o Kanban, os Pedidos, os Erros e
+as Pessoas, com o + a criar um cartão; na produção, onde o kanban não existe,
+a Operação toma o lugar dele e não há +.
+
+No mesmo pedido: «um kanban com as mesmas funcionalidades do Jira. A partir
+de agora fica tudo neste kanban.» O board KAN do Jira (2026-11-08) já era o
+sítio de todas as tarefas, mas vivia fora do projeto: o Claude só lá chegava
+pelo conector, e o Martinho raramente lá ia. O kanban vive no back office,
+com as chaves do Jira (KAN-N) para as citações nos commits, no diário e na
+memória continuarem a valer. Tem as colunas do board (A fazer, Auto Tests,
+Human Tests, Concluído e Para depois), os tipos, os épicos e as subtarefas,
+as etiquetas, a prioridade, o responsável, os comentários, o histórico, os
+filtros e, a pedido dele, colunas editáveis (só o master), anexos de imagem
+e ligações entre cartões. Backlog e sprints ficaram de fora: nunca os usou.
+
+As escolhas dele: o kanban vive só no dev. Primeiro escolheu começar no dev e
+passar para a produção no «promove»; ao perguntar-se como um ticket de QA,
+que vive na base do dev, criaria o cartão no kanban da produção, decidiu
+«afinal mantém só em DEV». As rotas respondem 404 sem ENV_NAME, como as do
+QA, e a limpeza do dev não leva as tabelas do kanban. E «cartão automático»:
+cada ticket de QA novo e cada pedido aceite criam o seu cartão, e o cartão
+move-se quando o ticket muda de estado (em resolução para Auto Tests,
+resolvido para Human Tests, reaberto para A fazer). Os estados mudam em três
+sítios — as rotas do worker, o scripts/qa.mjs, que escreve por SQL direto, e o
+scripts/kanban.mjs, que lê os pedidos da produção —, e por isso a regra e o SQL
+vivem num módulo só (worker/src/lib/kanban.js:passosDaSincronizacao), que o
+worker liga com bind e os scripts escrevem em texto
+(worker/src/lib/kanban.js:sqlEmTexto). Um cartão só se move sozinho quando o
+estado da origem muda, e mover um cartão à mão nunca mexe no ticket: era a
+maneira de a sincronização nunca brigar com quem arruma o quadro. Um cartão
+que ele já passou a Concluído só sai de lá sozinho se o ticket reabrir.
+
+## 2026-11-09 · O kanban à maneira da app: folhas, seletores, a prioridade em palavras e a ordem por coluna
+
+O Martinho testou o kanban no Samsung no próprio dia e escreveu dezasseis tickets de QA, quase todos a
+dizer «como na app». O kanban tinha nascido com peças próprias — a janela centrada, os chips que abriam
+janelas, as etiquetas escritas à mão, um ícone por prioridade — e no telemóvel isso lia-se como outro
+produto. Passou a usar as maneiras da app: as janelas são a folha de baixo com a barra e o pé fixo
+(worker/src/equipa-kanban-janela.js:kbJanela), os filtros um painel com seletores
+(worker/src/equipa-kanban-filtros.js:kbFiltrosHtml), as etiquetas um seletor com «Nova etiqueta», e as
+colunas reordenam-se a arrastar como as tarefas.
+
+Três decisões foram dele, com mockups à frente. A prioridade é um selo com a palavra, e a Média, que é a
+de omissão, fica sem selo: as duas linhas do ícone dela eram o que não se percebia, e um selo «Média» em
+quase todos os cartões seria ruído (worker/src/equipa-kanban.js:kbPrioridadeHtml). A ordem é de cada
+coluna e de cada aparelho, e não do quadro para todos: ordenar é uma maneira de ler, e a ordem manual,
+que é a que se partilha, continua intacta por baixo; numa coluna ordenada o arrasto deixa de reordenar,
+porque o lugar onde se largava não seria o lugar onde o cartão ficava
+(worker/src/equipa-kanban-filtros.js:kbOrdemManual). E deslizar entre colunas no telemóvel é levar o
+cartão até à borda, e não um gesto rápido de lado: é o arrasto que já existia, que deixa escolher o
+lugar na coluna nova, e um deslize de lado num cartão disputaria a rolagem das colunas
+(worker/src/equipa-kanban-arrasto.js:kbArrBorda).
+
+O «Mover para» deixou de reordenar dentro da coluna, a pedido dele: só muda de coluna, e reordenar é a
+arrastar. O retângulo azul do toque já tinha sido resolvido na app; o back office ficou sem a regra até
+agora (worker/src/equipa-guiao.js:largarFocoDoToque). Para quatro agentes trabalharem ao mesmo tempo, o
+guião do kanban, que tinha 2080 linhas num só texto, ficou em quatro pedaços — o quadro, os filtros, o
+arrasto e a janela —, juntos num só script como antes.
+
+## 2026-11-10 · Os tickets de QA nas colunas do kanban, nos dois sentidos
+
+O Martinho pediu os tickets de QA «sincronizados com o Kanban. As mesmas colunas». Até aqui um ticket
+tinha três estados (novo, em resolução, resolvido) e o cartão só o seguia: arrumar o quadro à mão nunca
+mexia no ticket, e um ticket posto de lado no kanban continuava «em resolução» na pílula e no
+scripts/qa.mjs. Agora o ticket está sempre na coluna do seu cartão: o status de qa_tickets guarda o id da
+coluna (migrations/0029_qa_no_kanban.sql), a pílula mostra uma secção por coluna do quadro, pela ordem
+dele, e o «Para depois» passa a querer dizer o mesmo nos dois sítios — fora da fila de trabalho.
+
+Os dois sentidos têm donos diferentes. Do kanban para o ticket é um gatilho na base (kanban_qa_coluna):
+o cartão muda-se em três sítios — o arrasto e o Mover para do back office, o scripts/kanban.mjs, que
+escreve por SQL, e a própria sincronização —, e só um gatilho os apanha a todos sem nenhum se esquecer.
+Do ticket para o kanban fica a regra partilhada (worker/src/lib/kanban.js:passosDaSincronizacao), que
+agora leva o cartão para a coluna do ticket venha de onde vier, também de Concluído: quem age sobre o
+ticket (comecar, resolver, reabrir, mover) quer que o cartão o acompanhe. O ticket muda primeiro e
+sozinho (worker/src/lib/kanban.js:ticketQaNaColuna), como antes, para uma falha do kanban nunca o
+prender. Os pedidos de ajuda ficam com a regra antiga: o pedido vive na produção e o kanban no dev, e
+um gatilho não atravessa bases.
+
+Os tickets de antes do kanban não têm cartão; ficam na coluna que o estado antigo diz (resolvido conta
+como Concluído, porque foram testados antes de o kanban existir) e ganham cartão quando mudarem de
+coluna. O resolved_at acompanha a coluna: posto em Human Tests e nas de fim, tirado nas outras.
+
+## 2026-11-11 · Em Human Tests decide-se em vez de mover, e comentar devolve o ticket a Auto Tests
+O Martinho reabriu o KAN-98 com dois pedidos novos. «O aceitar, recusar ou adiar nos tickets deve ser
+em vez do mover, não adicionalmente» (KAN-106): em Human Tests o rodapé passa a ter só o «Remover» e as
+três decisões (cloud/qa.js:qaRodapeTicket), e a 384px os quatro cabem numa linha, com o «Remover» só
+com o caixote. «Devo poder adicionar comentários aos tickets. Se tiverem comentários, passam para auto
+tests e resolves o comentário» (KAN-107): os comentários de um ticket são os do cartão dele no kanban,
+sem tabela nova; comentar, na pílula ou no quadro, passa ticket e cartão a Auto Tests de qualquer coluna,
+numa transação só (worker/src/lib/kanban.js:passosDoComentarioQa); o scripts/qa.mjs listar mostra os
+comentários por responder, que se deduzem das datas (scripts/qa.mjs:porResponder), e a nota do resolver,
+que entra como comentário do Claude, é a resposta.
+
+## 2026-11-11 · A janela do back office tranca a página, e o rascunho do cartão fica no aparelho
+O Martinho reabriu o KAN-96 (a janela «Ordenar»): «Posso fazer scroll da página por debaixo do modal».
+O showModal torna a página inerte, mas não a impede de rolar: um dedo no véu (o ::backdrop, que não está
+dentro da caixa que rola da janela) passava o gesto direto à página, e o overscroll-behavior do dialog e
+do corpo só trava os gestos que começam neles, e só quando têm por onde rolar — a «Ordenar» não tem.
+Medido no browser sem cabeça a 384×785 com toque: o dedo no véu mexia a página 17 px para cada lado. A
+janela passa a trancar a página como a app tranca a dela (vistas.js:lockPage), com o html.eq-trava e o
+body preso com o top a -scrollY (worker/src/equipa-guiao.js:travarPagina), em todas as janelas do
+dialog#dialogo, as do kanban e as do guião; ao fechar, a página volta ao scrollY onde estava.
+
+No KAN-105 o Martinho esclareceu que «as alterações por enviar ao servidor devem estar no device». O
+cartão novo já só ia ao servidor no Adicionar; o que se perdia era o formulário ao fechar a janela. O
+rascunho vai para o localStorage a cada tecla e a cada escolha, um para o cartão novo e um por cartão
+editado, por pessoa da equipa (worker/src/equipa-kanban-filtros.js:kbRascunhoGuardar), e guarda só o que
+difere do que a janela abriu: ao editar, um cartão que outra pessoa mudou entretanto mostra o que ela
+mudou nos campos em que não se mexeu, em vez de o desfazer com o rascunho. Caduca aos 30 dias, para os
+abandonados não se acumularem.
+
+## 2026-11-11 · A folha do kanban tem dois tamanhos, e não uma altura livre
+No KAN-108 o Martinho pediu para «arrastar o topo do modal para cima para aumentar o tamanho»: a janela
+«Ordenar» tem a altura do conteúdo, e a lista do «Critério», que abre dentro do corpo, encolhia para
+caber nele (worker/src/equipa-kanban-filtros.js:kbSelAjustar). Medido a 384×785 com toque: a folha com
+318 px, a lista com 114 px dos 276 que tem, e puxar a barra 300 px para cima só a levantava 18 px, que a
+folha resistia. Abaixo dos 520px a folha passa a ter dois tamanhos, a natural e a alta, os 93dvh que já
+eram o teto (worker/src/equipa-kanban-janela.js:kbFolhaPosicao): puxada pela barra cresce colada ao dedo,
+e largada assenta numa das duas. Dois tamanhos e não uma altura livre onde se larga, como as folhas do
+sistema: assenta sempre num sítio previsível, uma folha a meia altura não serve a ninguém (nem cabe a
+lista, nem se vê o quadro), e uma altura que ficasse onde o dedo a deixou pedia que se lembrasse dela,
+janela a janela. Cada janela abre natural e a alta não passa para a que vem a seguir. O que cresce é a
+altura e não um transform, que só a mudava de sítio: o corpo precisa do espaço a sério para a lista se
+medir nele, e o pé fica em baixo. Um sacudir para baixo numa alta fica na natural e não fecha: um passo
+por gesto, que fechar é sair da janela e está a um gesto de distância
+(worker/src/equipa-kanban-janela.js:kbFolhaAltaAoLargar).
+
+## 2026-11-11 · O cartão por enviar fica no quadro, e pode haver vários
+O Martinho reabriu o KAN-105: «Adicionei uma tarefa, não guardei e fechei a aplicação. Quando voltei, a
+tarefa não estava lá. Deve estar e deve dizer que não foi enviada para o servidor.» Reproduzido no 8788
+a 384×785 com toque: o rascunho estava no aparelho (kb_rascunhos:<id> com o título escrito), mas o quadro
+não o mostrava nem depois de Cancelar nem depois de recarregar — só voltava a quem abrisse de novo o
+«Novo cartão», e quem procura uma tarefa procura-a no quadro. O cartão por enviar passa a estar no quadro
+(worker/src/equipa-kanban.js:kbRascunhoCartaoHtml), na coluna onde vai ficar e no topo, que é onde o
+servidor põe um cartão novo: ao enviar, o cartão real aparece no mesmo sítio e nada salta. Diz-se pelo
+selo «Por enviar» e pela frase «Ainda não foi para o servidor.», na cor da frente, para se ler também no
+escuro forçado do Samsung. Não conta no número da coluna, que continua a ser o dos cartões que a equipa
+vê, e os filtros não o escondem: só existe neste aparelho e é desta pessoa, e um filtro que o escondesse
+voltava a fazê-lo parecer perdido. Pode haver vários: com um só, cada «Novo cartão» abria com o anterior
+por enviar e o quadro só podia mostrar um; com um rascunho por «Novo cartão»
+(worker/src/equipa-kanban-filtros.js:kbRascunhoNovoId), começar outro não esconde o primeiro, e cada um
+reabre-se do quadro com o seu. As edições por guardar ficam no cartão do servidor, com o selo «Alterações
+por enviar» e a linha no painel (Continuar a editar, Descartar), e não noutro cartão ao lado: o cartão é
+um só, o que falta é enviar o que mudou. Um Adicionar que falha deixa o cartão por enviar, e sem rede a
+janela di-lo em português em vez do «Failed to fetch» do browser.
+
+## 2026-11-11 · A janela segue o teclado; a folga só quando rolar não chega (KAN-110)
+
+No telemóvel, a «Nova tarefa» (ticket de QA 9903fee2) abria «muito em cima»
+e as Notas ficavam fora do ecrã. Medido a 384×785 com o teclado simulado
+(visualViewport de 450px, o modo do Chrome por omissão): a folha (483px)
+continuava encostada ao fundo do layout, com o rodapé debaixo do teclado; e
+um toque nas Notas punha a folga .kb, que alongava o corpo de uma folha que
+não rolava — a folha crescia até 93dvh e o topo ia parar 172px acima do ecrã.
+Com o browser a deslocar o que se vê até ao fim, o cabeçalho já saía 33px por
+cima sem tocar em nada. E era o campo do nome que o Martinho via sair (o
+comentário dele: «a janela desliza muito para cima e o nome da tarefa ou o
+texto que estou a editar fica fora do ecrã»): com o foco automático no
+Tarefa, quando a janela visível encolhe antes de o browser a deslocar, o campo
+(429–475) fica atrás do teclado, a folga entra e a folha sobe 247px (topo de
+302 para 55); quando o deslocamento chega a seguir, medido com o campo onde
+ele estava, o que se vê começa em 227–278 e o nome ficou em −96…−50 (ou
+−45…1), por cima do ecrã. Só o cursor da escrita o trazia de volta, ao topo.
+
+Decidiu-se: (1) com o teclado aberto, o .modal ocupa só a janela visível
+(componentes.js:janelaSegueTeclado), para todas as janelas — o movimento
+tinha o mesmo rodapé debaixo do teclado; (2) a regra antiga da folga («só
+quando o corpo não tem para onde rolar sem ela», para centrar o campo) passa
+a «só quando, rolado até ao fim, o campo continua tapado»
+(componentes.js:campoAVista): centrar não vale uma folha a crescer.
+
+Não se usou o interactive-widget=resizes-content da meta viewport: faria o
+layout da app inteira encolher com o teclado (as barras fixas subiam por cima
+dele em todos os ecrãs), e o Safari do iPhone ignora-o.
+
+## 2026-11-11 · As tarefas por guardar ficam no aparelho até ao Guardar (KAN-105, a app)
+O Martinho reabriu o KAN-105: «Adicionei uma tarefa, não guardei e fechei a aplicação. Quando voltei,
+a tarefa não estava lá. Deve estar e deve dizer que não foi enviada para o servidor.» O ticket é sobre
+os dois (decisão dele, 2026-11-11): o kanban do back office e as Tarefas da app. Reproduzido no 8788 a
+384×785 com toque: Tarefas › Adicionar tarefa › Adicionar, sem Guardar, e recarregar — a ficha voltava
+com «Ainda não há tarefas.» e a janela vazia. O rascunho da janela vivia só em memória
+(tarefas.js:tfRascunho) e deitava-se fora ao fechar por qualquer caminho, até a mudar de separador.
+
+O rascunho passa a ficar no aparelho a cada mudança, e não a ir logo para o servidor: a decisão do
+Guardar continua (2026-10-25: cada toque a gravar batia no limite de 60 envios em 15 minutos), e o
+Guardar é que envia, tudo de uma vez. O aparelho é o sítio de guardar o que ainda não se decidiu
+enviar. Volta fundido a três com o registo, como a casa ao ler, porque entre fechar e voltar outra
+pessoa (ou outro aparelho) pode ter mudado a lista: abrir com o rascunho tal e qual e guardar desfazia
+o que ela fez. Diz-se pela linha no cimo da janela e pelo selo «Por enviar», com as mesmas palavras do
+kanban, e a ficha mostra as tarefas por enviar, porque é por lá que se volta. Sai no Guardar, no
+«Sair sem guardar» (é a pessoa a escolher), no Descartar (com Anular) e aos 30 dias, como no kanban;
+sair da app, mudar de separador ou a página morrer não o tira. Por conta, para o de uma pessoa nunca
+aparecer a outra que entre no mesmo aparelho.
+
+## 2026-11-12 · O kanban é uma fonte de trabalho do Claude, como os tickets (KAN-5)
+
+O kanban da equipa substituiu o Jira a 2026-11-09, mas o Claude só o usava de lado: ao resolver os
+tickets lia os pedidos, os erros, a segurança e o QA, e o kanban servia apenas para sincronizar os
+cartões dos pedidos. Uma tarefa escrita no quadro à mão nunca entrava no trabalho. O Martinho pediu
+que a skill dos tickets visse também os cartões, e uma skill própria que fizesse com eles o que a do
+QA faz com os tickets de QA; no KAN-5 escreveu «Já não quero utilizar o jira. Passa tudo para o
+kanban do backoffice».
+
+O scripts/kanban.mjs ganhou a fila e os passos dela, à imagem do scripts/qa.mjs: a fila é A fazer e
+Auto Tests, por extenso, com os bloqueios, os anexos e os comentários por responder
+(kanban.mjs:sqlFila, numa só leitura); comecar passa a Auto Tests e confere todos antes de mexer
+(kanban.mjs:impedimento); resolver leva a Human Tests com a nota, o commit e o que testar, e só com
+o commit publicado no dev (o ticket.mjs:publicadoDev, a mesma regra de quando um ticket fecha);
+reabrir volta a A fazer; anexo descarrega as imagens. Um cartão que nasceu de um ticket de QA ou de
+um pedido é esse ticket: os comandos da fila recusam-no e dizem o do qa.mjs ou do ticket.mjs, para
+cada coisa ter um caminho só — a resolução de um ticket de QA vive no ticket, e mover o cartão de um
+pedido não mexe no pedido. A configuração antiga do Jira na pasta do projeto saiu com o sim dele.
+
+## 2026-11-12 · Os dados de exemplo têm um dono só: a própria conta (KAN-10, KAN-78)
+
+O exemplo criava duas proprietárias à mão (Maria Costa e Pedro Costa, com quotas de 60/40). Desde
+2026-10-22 os proprietários da nuvem são contas, e só o perfil de quem tem a sessão sobe: depois da
+primeira sincronização as duas fichas desapareciam, os imóveis ficavam só da conta sem contacto
+nenhum, os movimentos ficavam «pagos por» alguém que já não existia e o «Usar o contacto de» dos
+contratos deixava de reconhecer a dona. Medido no 8788 isolado a 2026-11-12. Agora a dona do
+exemplo é a própria conta (arranque.js:donoDoExemplo): o exemplo só preenche os campos vazios do
+perfil, e sem sessão continua a ser a Maria Costa. A compropriedade sai do exemplo, porque precisa
+de duas contas. O exemplo só corre fora de produção (espera.js:podeExemplo), por isso os dados
+inventados nunca chegam ao perfil de ninguém a sério.
+
+Na mesma volta o exemplo ganhou um contrato de dez anos (o Quarto 4 do T3 Coimbra), para o quadro
+4.2 do Anexo F ter o que mostrar a quem testa.
+
+## 2026-11-12 · Os tickets de segurança decidem-se com Aceitar e Recusar (KAN-114)
+
+O cartão «Por decidir» de um ticket de segurança tinha Arquivar e Decidir, e o de um pedido de uma
+pessoa Recusar e Aceitar, no mesmo ecrã do back office e com a mesma rota por baixo. O Martinho, a
+testar no telemóvel, pediu as mesmas palavras: «a opção para aceitar o ticket não deve ser Decidir,
+mas aceitar. A outra opção deve ser Recusar». Passou a ser assim em tudo o que a equipa lê (os
+botões, as janelas, a linha da lista, o detalhe, os erros do servidor, o bot, o aviso no Discord e o
+scripts/ticket.mjs). O que cada ação faz não mudou: Aceitar pede a resolução proposta e Recusar a
+justificação. Os ids da auditoria (pedido.decidir, pedido.arquivar) e as notas antigas «Arquivado:»
+ficam como estavam, para o rasto não mudar de nome a meio.
+
+## 2026-11-12 · Em Human Tests aceita-se num toque, e recusar é explicar (KAN-116, KAN-117)
+
+Em Human Tests quem decide é o Martinho, e até aqui o kanban não o ajudava: o cartão aberto tinha
+só o «Mover para…», e um comentário a dizer o que estava mal deixava o cartão onde estava. Só os
+cartões dos tickets de QA voltavam a Auto Tests com um comentário (KAN-107). No KAN-10, a
+2026-11-12, ele comentou às 08:44, escreveu um ticket às 08:45 a pedir que fosse assim
+(«um ticket que eu adicione um comentário em human tests, passa para auto tests») e moveu o cartão
+à mão cinco segundos depois. No mesmo dia pediu a outra metade: «deve ter fixo em baixo a opção de
+aceitar. Se eu quiser recusar, tenho de fazer um comentário a explicar o que está mal».
+
+Ficou assim. Um cartão aberto em Human Tests tem no fundo uma barra fixa com o Aceitar, que o leva a
+Concluído, e a frase que diz como se recusa (equipa-kanban.js:kbDecidirHtml). Não há botão Recusar:
+recusar sem dizer porquê não serve a quem vai corrigir, e o comentário é a explicação. O comentário
+de uma pessoa num cartão em Human Tests devolve-o ao topo de Auto Tests, a fila do Claude
+(lib/kanban.js:colunaDepoisDoComentario). Só a partir de Human Tests, porque é aí que um comentário
+é uma recusa; noutra coluna é conversa. O comentário do Claude não conta: é a nota com que ele
+deixa o cartão em Human Tests. Os cartões dos pedidos ficam de fora: a coluna deles segue o pedido,
+que se decide nos Pedidos. A pílula do QA na app mantém as três decisões dela (Recusar, Adiar e
+Aceitar). Como o resto do back office, a mudança não leva aviso de novidades nem versão nova.
+
+## 2026-11-12 · A pílula do QA é uma vista dos Erros do kanban (KAN-115)
+
+A pílula lia a tabela qa_tickets e o kanban lia os cartões, e os dois só se encontravam pelas
+colunas (2026-11-10). No resto divergiam. O Martinho mudou o KAN-10 de Tarefa para Erro e ele não
+apareceu na pílula; e um cartão de QA removido no kanban continuava lá e no scripts/qa.mjs listar,
+porque o gatilho kanban_qa_coluna só corre com o cartão vivo e nada mais levava a remoção ao
+ticket. Reproduzido no servidor isolado antes da correção. O pedido dele: «Quero que o pill seja uma
+vista do kanban. Os dados são os mesmos, portanto está tudo sempre sincronizado.»
+
+As duas decisões dele, perguntadas antes de começar:
+- A pílula mostra todos os cartões do tipo Erro do kanban, venham de onde vierem: os dos tickets de
+  QA, os criados à mão, os que a skill ticket cria. Um cartão que deixa de ser Erro sai, um que passa
+  a Erro entra. Os de QA continuam com a captura e o contexto.
+- A pílula agrupa pela prioridade do cartão (Mais alta a Mais baixa, os nomes do kanban), a mesma
+  para todos, no lugar da gravidade. O «Novo ticket» continua a pedir a gravidade, que vira a
+  prioridade do cartão como antes.
+
+Ficou assim. O GET da pílula lê os cartões Erro vivos e junta o ticket aos de QA. Um item de QA usa o
+id do ticket, para as rotas da captura e o scripts/qa.mjs não mudarem; um Erro sem ticket usa a
+chave KAN-N, que as mesmas rotas aceitam e escrevem no cartão: mover, reabrir, as três decisões e
+comentar, este como o comentário do kanban. Remover num Erro sem ticket não aparece, porque remover
+um cartão é do master, no kanban. O ticket e o cartão saem e voltam juntos, com o mesmo removed_at, e
+é por ele que cada Anular reconhece o par. A sincronização vive nas rotas, com o SQL em
+lib/kanban.js, sem migração nova.
+
+Duas consequências que ficam escritas. Os 75 tickets do dev que não têm cartão (os de antes do
+kanban, todos em Concluído) deixam a pílula, porque não estão no kanban; continuam no
+scripts/qa.mjs listar --todos. Um cartão de um pedido que alguém mude para Erro só aparece a quem vê
+os pedidos: a descrição é o texto que a pessoa escreveu na Ajuda, e as contas de teste da app nunca
+a viram nem veem. A pílula só existe fora de produção, por isso a mudança não leva aviso de
+novidades nem versão nova, como as outras mudanças só da pílula (KAN-97).
+
+## 2026-11-12 · Os anexos do kanban aceitam ficheiros, numa lista fechada pelos bytes (KAN-119)
+
+O Martinho quis anexar as FINE ao KAN-14 e não conseguiu: «Há uma secção de anexos, mas só aceita
+imagens». O kanban vive no back office, que tem a sessão da equipa, e um anexo é escrito por uma
+pessoa e aberto por outras na mesma origem. Um ficheiro que o browser lesse como página (HTML, SVG,
+XML) corria lá dentro com essa sessão. Por isso não se abriu a porta a qualquer ficheiro.
+
+Ficou uma lista fechada, e cada tipo reconhece-se pelos próprios bytes, nunca pelo Content-Type nem
+pela extensão que o browser manda (worker/src/lib/imagens.js:tipoDoFicheiro). Entram as imagens de
+sempre e o PDF, pela assinatura no primeiro byte. Entram o Word, o Excel e o PowerPoint de agora,
+um ZIP com a peça principal de um deles, e sem macros nem ActiveX: os .doc e .xls antigos e os
+docm e xlsm ficam de fora, porque é neles que vivem as macros. Entram o texto e o CSV, só em
+UTF-8, sem nulos e sem marcação, para um HTML com outro nome não passar por texto. O CSV do Excel
+em Windows-1252 fica de fora por isso, e o Excel grava «CSV UTF-8» quando se pede.
+
+Só as imagens abrem no sítio. O resto desce como ficheiro (attachment), com a extensão do tipo
+verdadeiro no nome: um texto chamado «instalar.bat» desce como «instalar.bat.txt». O PDF desce
+também, e foi o que se perguntou primeiro. O visor de PDF do Chrome cancela um PDF em caixa de
+areia, e todos os anexos saem com a CSP_ANEXO, que traz sandbox. A outra saída era tirar o sandbox
+ao PDF, o que tirava a caixa de areia a um ficheiro escrito por outros nesta origem. O teto subiu
+de 5 para 10 MB, porque uma FINE digitalizada passa dos 5. A tabela já guardava o tipo e o nome,
+por isso não houve migração. Como o resto do back office, a mudança não leva aviso de novidades
+nem versão nova.
+
+## 2026-11-12 · A Declaração é sempre a tua: sai o seletor de proprietário (KAN-73)
+
+O Martinho perguntou no KAN-73: «Vale a pena ter o seletor de proprietário? O IRS deve ser só
+para mim. Os valores dividem-se pela percentagem de propriedade, ou é o valor total?» E decidiu,
+na conversa: «Só eu, sem seletor», com a conjunta a juntar o B. O seletor dava a declaração de
+outro proprietário, ou a de todos «por inteiro», e nenhuma das duas é a que alguém entrega: o
+Anexo F é por titular (CIRS art. 19.º), e num imóvel a meias cada um declara a sua quota.
+
+Ficou assim. A Declaração é a de quem tem a sessão (fisco.js:fiscoTitulares): só os imóveis onde
+essa conta tem quota, e as rendas, as retenções, os gastos, as obras dos 24 meses e o AIMI pela
+quota-parte dela. A resposta à segunda pergunta é a quota-parte, e não o total. Em tributação
+conjunta entra também a parte do proprietário marcado como B na «A tua situação fiscal» (o
+cônjuge): um imóvel dos dois dá duas linhas, uma por titular, cada uma com a sua letra e a sua
+quota, e o contrato conta uma vez nos avisos e nos totais de contratos. O painel do funil fica só
+com o ano, e o ponto dele só o conta a ele. A Declaração continua só em dev.
+
+Três regras que o pedido não trazia, decididas aqui:
+- Sem sessão, «eu» é o único proprietário, quando há um só (o exemplo sem conta tem a Maria Costa
+  sozinha). Com vários, não se adivinha: os valores vão por inteiro e «A tratar antes de
+  entregar» diz que não se sabe qual és. Na nuvem há sempre sessão; é o caminho dos testes.
+- Um movimento sem imóvel é da conta que o registou (na nuvem vive nos registos dela): conta por
+  inteiro para quem o recebeu ou pagou, se é titular da declaração, e para quem declara quando
+  não tem «pago por»; de outro, fica fora. Vale para as rendas, que vão a «Rendas sem contrato»,
+  fora do quadro, e para o AIMI do quadro 9. Antes, com um titular escolhido, uma renda sem imóvel
+  saía calada, e um AIMI sem imóvel só contava se o pagador era ele.
+- A lista do A/B tem os donos de todos os imóveis com rendas no ano que a conta vê, quem declara à
+  cabeça, e não só os desta declaração: o cônjuge com um imóvel só dele tem de lá estar para
+  poder ser marcado como B. Quem só colabora em imóveis de outros vê «Nenhum imóvel teu».
+
+O que saiu com o seletor: o anaSelDono e o onOwnerFilter do vistas.js, o limparAmbito do
+navegacao.js (o × de um chip que já não existia) e o ambitoSemDono do ambito.js, que largava o
+ownerFilter fora do IRS. Sem o IRS, nada na app o escreve a não ser para o pôr a '', e é um teste
+que o confere (testes/sem-filtro-de-dono.test.js), no lugar do guarda. O ownerFilter e a
+canalização dele ficaram: o saldos.js, o metricas.js, a avaliacao.js e a lista dos movimentos
+ainda o leem, e os testes das contas por dono põem-no à mão para exercitar a quota; tirá-los é
+reescrever essas contas, um trabalho à parte. O rótulo «Limpar o titular» do guião do back
+office (worker/src/equipa-guiao.js) ficou sem botão que o use.
+
+INCERTO: as instruções do Anexo F não dizem como vão os bens comuns do casal em conjunta. A app
+faz uma linha por titular com a quota de cada um, como o código já dizia e como o guia das regras
+de 2025 diz para a compropriedade («cada um declara a sua quota»). Se a AT quiser tudo na linha do A, a
+estimativa da página dá o mesmo imposto, que é linear na quota; mudam só as linhas.
+
+## 2026-11-12 · A FINE verdadeira: as frases fixas da ficha passam por cima do modelo (KAN-15)
+
+O Martinho leu a FINE dele no dev (uma mista do Millennium bcp, com o ActivoBank como
+intermediário, 109 páginas) e comentou o ticket de QA do indexante: «Foi essa FINE. Não está a
+preencher as taxas corretamente». Medido com o Workers AI verdadeiro, 3 leituras de 3: o granite
+acertava a taxa fixa, o spread, os anos, o capital e o prazo, mas deixava o indexante por ler,
+punha a prestação com as vendas associadas facultativas (564,22 €) no lugar da base (633,19 €) e
+não chegava às comissões, que estão depois do corte do texto. As FINE de prova tinham uma página;
+a verdadeira tem 200 000 caracteres de texto, com o rodapé de cada página colado às linhas.
+
+Tentou-se pelo modelo e não deu: com o texto cortado na secção 10 e sem os rodapés, e depois só
+com as secções dos valores (menos de metade), o indexante continuava por ler; com o prompt a
+dizer onde estão o indexante, a prestação e as comissões, perdeu também as condições contratadas.
+
+Ficou assim. Os valores que a ficha escreve em frases que a lei fixa leem-se do próprio texto,
+sem o modelo (lib/fine.js:lidoDoTexto): o indexante da frase da TAN do período variável, o spread
+e a taxa fixa base e contratados, as linhas «Prestação sem/com vendas associadas facultativas» e
+as comissões da secção 9. Só da secção 1 à 9, só quando a frase dá um valor sem ambiguidade, e
+nunca da frase do cenário de stress («se a taxa de juro subir para…»). O que elas leem passa por
+cima do modelo nessas chaves (lib/fine.js:comOTexto) e segue pelo validar como o resto. Com o
+spread e a taxa contratados lidos assim, o validar tem o total dos produtos facultativos, e uma
+lista que o modelo inventa (0,5 no seguro de vida e no multirriscos, numa ficha sem reduções por
+produto) cai para o «conjunto» que a ficha diz. Se o documento é um crédito, continua a decidir o
+modelo: sem nada aceite do que ele leu, as frases sozinhas não fazem uma hipoteca (é 422).
+
+Na FINE do Martinho, 5 leituras de 5 deram tudo certo. Nas FINE de prova, as regras leem o
+indexante certo e mais nada, e o modelo faz o resto como antes. Uma FINE envenenada pode escrever
+estas frases como escreve outra coisa qualquer: dá números, que as gamas e a verificação cruzada
+do cliente seguram como os do modelo.
+
+## 2026-11-12 · A leitura da FINE sai do dev, e a política de privacidade di-la (KAN-14)
+
+A leitura da FINE ficou só no dev desde 2026-11-01, à espera de FINE reais. Com a do Martinho a
+ler certa em 5 leituras de 5 (o KAN-15), perguntou-se se se preparava a promoção. Escolheu «Sim,
+preparar já», em vez de esperar por mais fichas de outros bancos.
+
+Ficou assim. A rota responde em produção como no dev, com o limite de 5 leituras por conta e por
+dia (que o dev.rendorium.com não tem) e o mesmo teto global. O botão aparece com sessão a quem
+edita a casa (fine.js:finePodeLer), em qualquer ambiente. O Workers AI já estava ligado à
+produção no [ai] do wrangler.toml. A política de privacidade diz o tratamento no ponto 4 (só a
+pedido, um modelo do Workers AI da Cloudflare, nem o texto nem a resposta guardados, o PDF só como
+anexo da hipoteca) e no ponto 5 (a Cloudflare também faz essa leitura). Por ser uma mudança de
+substância, a versão dos documentos subiu nos dois lados (web/legal.js e lib/http.js), e toda a
+gente aceita de novo ao abrir a app depois do «promove». Não se diz nada sobre o que a Cloudflare
+faz com os dados além disto, porque não se verificou daqui. A mínima continua a 58, acima dos 53
+que a FINE pedia.

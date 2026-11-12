@@ -568,8 +568,6 @@ nav .cnt.u-bg-v-warn{background:#9fb4ff!important;color:#0e1830} /* o azul infor
 .req{color:var(--danger);font-weight:700;margin-left:3px}
 /* quem pediu menos movimento ao sistema recebe menos movimento */
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
-/* O FAB respeita o recorte lateral em landscape */
-body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
 /* A barra de baixo: os quatro destinos quentes a um toque, no telemóvel.
    A gaveta fica para o resto — deixou de ser a única porta. */
 /* A barra de baixo de 2026-10: Início, Casas, + (Criar), Dinheiro, Agenda.
@@ -595,8 +593,7 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
    (.u-bg-v-warn, fundo --warn) leva a mesma tinta */
 .tabbar a .cnt{position:absolute;top:1px;left:calc(50% + 7px);background:var(--out);color:var(--accent-ink);font-size:10px;font-weight:700;min-width:15px;height:15px;border-radius:99px;display:grid;place-items:center;padding:0 3px}
 #hdrBell .cnt{position:absolute;top:1px;right:1px;background:var(--out);color:var(--accent-ink);font-size:10px;font-weight:700;min-width:15px;height:15px;border-radius:99px;display:grid;place-items:center;padding:0 3px}
-/* O + a meio da barra: no telemóvel é ele o botão de criar, e o FAB com o
-   leque somem (na @media de baixo). A coluna dele é auto e os destinos
+/* O + a meio da barra: no telemóvel é ele o botão de criar. A coluna dele é auto e os destinos
    repartem o resto; com menos de quatro destinos — quem colabora, um serviço
    desligado — a barra diz quantos são (d0…d3, navegacao.js:buildTabbar) e
    a grelha mantém o botão no CENTRO DO ECRÃ: com três, o terceiro destino
@@ -631,14 +628,11 @@ body .fab,body .fabmenu{right:calc(18px + var(--inset-right,0px))}
 .tabmais:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* nos ecrãs mais estreitos os quatro rótulos precisam da largura: a tecla encolhe */
 @media(max-width:340px){.tabmais{width:48px;height:48px;margin:0 2px}}
-/* body à frente: estas regras vivem ANTES das de base do .fab/.totop na
-   folha, e sem mais especificidade perdiam — o FAB voltava a aparecer */
+/* body à frente: estas regras vivem ANTES das de base do .totop na folha, e
+   sem mais especificidade perdiam */
 @media(max-width:900px){
   .tabbar{display:grid}
   .wrap{padding-bottom:calc(96px + var(--inset-bottom))}
-  /* o + da barra toma o lugar do FAB: o botão, o leque (aberto ou não) e o
-     espaço que o render lhe deixava no fundo somem todos */
-  body .fabmenu.on{display:none}
   /* o «topo» é um círculo ao centro, como o +: a 76px ficava a 6px dele */
   body .totop{bottom:calc(92px + var(--inset-bottom))}
   body.open .tabbar{display:none}
@@ -712,7 +706,7 @@ aside .fecha-gaveta{display:none;color:var(--side-ink)}
    forçado do Samsung Internet o fundo pode mudar de luz, e a borda continua
    a dizer o estado (docs/design.md, «Tema escuro e a regra do color-scheme»).
    O z 50 passa por cima das barras pegajosas das listas (.fwrap, 46) e fica
-   por baixo do FAB (58), do véu do menu (61) e das janelas. */
+   por baixo do «topo» (57), do véu do menu (61) e das janelas. */
 #hdrSync{display:block;height:0}
 #hdrSync:empty{display:none}
 .faixa-sync{position:fixed;z-index:50;left:calc(var(--rail) + clamp(16px,3vw,36px) + var(--inset-left));right:calc(clamp(16px,3vw,36px) + var(--inset-right));
@@ -881,9 +875,6 @@ main.sep-arrasto{overflow-x:clip}
 .atencao-acoes{flex:1 0 100%}
 .atencao-pedido{display:flex;flex-direction:column;gap:8px}
 .atencao-pedido p{margin:0}
-/* sem o FAB: no computador cria-se no «Criar» da barra lateral e na ação
-   do cabeçalho, no telemóvel no + da barra de baixo */
-body .fab,body .fabmenu,body .fabpad{display:none}
 .donut{display:flex;gap:14px;align-items:center;flex-wrap:wrap;min-width:0}
 .donut .pie{flex:0 0 132px;max-width:132px}
 .donut .leg{flex:1 1 160px;min-width:0}
@@ -948,6 +939,10 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .selbtn{width:100%;display:flex;align-items:center;gap:8px;min-height:46px;padding:0 14px;border:1px solid var(--line2);
   border-radius:12px;background:var(--field);cursor:pointer;text-align:left;font-weight:400}
 .selbtn span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* O nome de uma escolha nunca se corta (ticket de QA 42fbfdf1: os programas
+   de isenção do IRS no Editar contrato): num formulário o botão mostra-o
+   inteiro, em até duas linhas; os filtros e os chips do topo ficam numa linha. */
+.form .selbtn span{white-space:normal;overflow-wrap:break-word;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-height:1.3;padding:8px 0}
 @media(hover:hover) and (pointer:fine){.selbtn:hover{border-color:var(--faint)}}
 .selbtn svg{color:var(--faint);flex:0 0 auto}
 .selpop{display:none;position:absolute;left:0;right:0;top:calc(100% + 5px);z-index:15;background:var(--card);
@@ -955,7 +950,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .selpop.on{display:block}
 .selopt{width:100%;display:flex;align-items:center;gap:9px;min-height:40px;padding:8px 12px;border:0;background:transparent;
   border-radius:10px;cursor:pointer;text-align:left;font-size:15px}
-.selopt span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.selopt span{flex:1;min-width:0;overflow-wrap:break-word;line-height:1.3}
 @media(hover:hover) and (pointer:fine){.selopt:hover{background:var(--chip)}}
 .selopt.on{color:var(--accent-text);font-weight:600;background:var(--accent-soft)}
 .sdiv{height:1px;background:var(--line);margin:5px 6px}
@@ -995,13 +990,6 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .txq{flex:1 1 150px;min-width:130px;width:auto;padding:10px 12px}
 .filtbtn{position:relative}
 .filtbtn .dot{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--accent)}
-.fab{position:fixed;right:18px;bottom:calc(20px + var(--inset-bottom));z-index:58;width:56px;height:56px;border-radius:16px;
-  background:var(--accent);color:var(--accent-ink);border:0;display:flex;align-items:center;justify-content:center;
-  box-shadow:0 10px 24px rgba(16,24,40,.24);cursor:pointer}
-.fab:active{transform:scale(.96)}
-.fabmenu{position:fixed;right:18px;bottom:calc(86px + var(--inset-bottom));z-index:58;display:none;flex-direction:column;gap:9px;align-items:flex-end}
-.fabmenu.on{display:flex}
-.fabmenu .btn{box-shadow:0 6px 18px rgba(0,0,0,.22)}
 /* O painel de filtros ancora aqui. Pegajoso, e não só relativo: estava preso
    ao topo do conteúdo e desaparecia ao primeiro scroll — abria-se o filtro,
    rolava-se para ver o efeito, e o painel ficava para trás. Assim acompanha,
@@ -1029,7 +1017,6 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
    dentro da caixa do painel fazia um cartão dentro do outro */
 .fp-vazio{display:flex;flex-direction:column;align-items:flex-start;gap:8px;color:var(--muted);font-size:14px}
 .fp-vazio b{color:var(--ink);font-weight:600;font-size:15px}
-.fabpad{height:84px}
 .totop{position:fixed;left:50%;transform:translateX(-50%) scale(.9);bottom:calc(20px + var(--inset-bottom));z-index:57;width:44px;height:44px;
   border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);display:flex;align-items:center;justify-content:center;
   box-shadow:0 8px 22px rgba(0,0,0,.24);cursor:pointer;opacity:0;visibility:hidden}
@@ -1134,6 +1121,14 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
   /* a pega da folha de baixo: diz que é uma folha que sobe e desce */
   .sheet::before{content:"";display:block;flex:0 0 auto;width:36px;height:4px;border-radius:2px;background:var(--line2);margin:8px auto 0}
   .sheet .head{padding-top:10px}}
+/* O teclado aberto (componentes.js:janelaSegueTeclado). Quando o browser só
+   encolhe a janela visível, o .modal continuava com a altura do layout e a
+   folha, encostada em baixo, ficava com o fundo debaixo do teclado (KAN-110).
+   Com o teclado aberto o .modal ocupa só o que se vê, e a folha assenta por
+   cima do teclado, com a mesma proporção. */
+html.kb-aberto .modal{top:var(--vv-topo,0px);height:var(--vv-alto,100dvh)}
+html.kb-aberto .sheet{max-height:min(calc(var(--vv-alto,100dvh) * .88),880px)}
+@media(max-width:520px){html.kb-aberto .sheet{max-height:calc(var(--vv-alto,100dvh) * .93)}}
 .toast{position:fixed;left:50%;bottom:calc(22px + var(--inset-bottom) + var(--acima,0px));transform:translateX(-50%) translateY(80px);background:var(--toast);color:var(--toast-ink);padding:10px 16px;border-radius:14px;z-index:90;font-size:14.5px;font-weight:500;box-shadow:0 10px 30px rgba(16,24,40,.22);width:max-content;opacity:0;transition:opacity var(--medio) var(--curva-sai),transform var(--medio) var(--curva-sai);pointer-events:none;max-width:90vw;text-align:center;
   display:flex;align-items:center;justify-content:center;gap:12px}
 .toast.on{opacity:1;transform:translateX(-50%);pointer-events:auto;
@@ -1217,6 +1212,32 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
    escrito à mão de propósito: é a marca, não muda com o tema. */
 .marca{width:30px;height:30px;border-radius:8px;flex:0 0 auto;display:grid;place-items:center;color:#fff;background:var(--marca)}
 .marca svg{display:block}
+/* O mosaico (o .tile do canvas): um arco em cada um de dois cantos opostos e
+   um ponto ao meio, num quadrado de 28px que se repete. É a capa de um imóvel
+   sem fotografia e o desenho da marca por trás da entrada, da atualização, das
+   boas-vindas e das apresentações — por isso é da casa, e não dos Imóveis
+   (era o .imv-mosaico até 2026-11, KAN-8). Quatro tons, os do contrato do
+   redesign (§4): .mosaico-t0 cobalto (o de omissão), .mosaico-t1 âmbar,
+   .mosaico-t2 verde e .mosaico-t3 ardósia; um imóvel tem sempre o mesmo
+   (lista-imoveis.js:imvMosaico). Os hex do claro são os do canvas e só vivem aqui: um mosaico é um desenho,
+   não uma superfície da app, e não há token para ele. No escuro saem dos
+   tokens suaves e de cor, para não acender um pastel claro no meio do ecrã. */
+.mosaico{--mosaico-fundo:#dce4fb;--mosaico-traco:#3a5fd6;background-color:var(--mosaico-fundo);
+  background-image:radial-gradient(circle at 0 0,transparent 12px,var(--mosaico-traco) 12.5px,var(--mosaico-traco) 15px,transparent 15.5px),
+    radial-gradient(circle at 100% 100%,transparent 12px,var(--mosaico-traco) 12.5px,var(--mosaico-traco) 15px,transparent 15.5px),
+    radial-gradient(circle at 50% 50%,var(--mosaico-traco) 2.5px,transparent 3px);background-size:28px 28px}
+.mosaico-t1{--mosaico-fundo:#fae6d2;--mosaico-traco:#b65a16} /* âmbar do mosaico (canvas, contrato §4) */
+.mosaico-t2{--mosaico-fundo:#d9efe5;--mosaico-traco:#1e7a5b} /* verde do mosaico (canvas, contrato §4) */
+.mosaico-t3{--mosaico-fundo:#e3e6ec;--mosaico-traco:#5b6478} /* ardósia do mosaico (canvas, contrato §4) */
+:root.dark .mosaico-t0{--mosaico-fundo:var(--accent-soft);--mosaico-traco:var(--accent)}
+:root.dark .mosaico-t1{--mosaico-fundo:var(--warn-soft);--mosaico-traco:var(--warn)}
+:root.dark .mosaico-t2{--mosaico-fundo:var(--in-soft);--mosaico-traco:var(--in)}
+:root.dark .mosaico-t3{--mosaico-fundo:var(--chip);--mosaico-traco:var(--faint)}
+/* O mosaico azul-noite (o .tile do canvas M-Entrar e M-Atualizar), na
+   atualização e na faixa de entrar por uma ligação: igual nos dois temas, e
+   não o cobalto claro das capas (mosaico-t0), que sobre o --side dava um
+   cinzento-lavanda e na entrada uma faixa clara. */
+.mosaico.mosaico-noite{--mosaico-fundo:#16244A;--mosaico-traco:#9FB4FF} /* o fundo e os arcos do .tile do canvas M-Entrar/M-Atualizar, iguais nos dois temas */
 
 /* ======================= MOVIMENTO =======================
    Fundações. Tudo o que se mexe cita os tokens do :root (--rapido, --medio,
@@ -1226,7 +1247,7 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 
    --- O que se toca reage ao dedo ---
    A app desliga o realce nativo do toque em tudo (o -webkit-tap-highlight-color
-   transparente, lá em cima) e até aqui só o .card.tap e o .fab o devolviam. No
+   transparente, lá em cima) e até aqui só o .card.tap o devolvia. No
    telemóvel não há :hover: sem isto, tocar em «Guardar», numa opção de menu ou
    num separador da barra de baixo não dá sinal nenhum entre o dedo e o
    resultado — lê-se como app parada, e é o que provoca o segundo toque.
@@ -1273,9 +1294,6 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
 .btn.primary:active{background:var(--accent-fundo);border-color:var(--accent-fundo)}
 .btn.danger:active{background:var(--danger);filter:brightness(.82)}
 nav a:active,.railbtn:active{background:var(--side-on);color:#fff}
-/* o FAB tinha o scale(.96) declarado e nenhuma transição para o executar:
-   descia e subia em zero frames, na peça mais tocada da app */
-.fab{transition:transform var(--rapido) var(--curva)}
 
 /* A espera de um toque longo, que se vê encher. Sem isto ficava meio segundo
    uma laje cinzenta parada — o estado premido foi feito para um toque, que
@@ -1308,7 +1326,7 @@ svg [role="button"]:active,svg .tap:active{transform:none}
 .railbtn:focus-visible,.opt:focus-visible,.fold-head:focus-visible,
 .addbox:focus-visible,.tagadd:focus-visible,.tag button:focus-visible,
 .card.tap:focus-visible,.card.kpi.why:focus-visible,.card.kpi.evo:focus-visible,
-.legend .li.tap:focus-visible,.thumb:focus-visible,.fab:focus-visible,
+.legend .li.tap:focus-visible,.thumb:focus-visible,
 .chip:focus-visible,.segm>button:focus-visible,.segm>a:focus-visible,.interruptor:focus-visible,.linha:focus-visible,
 .burger:focus-visible,.totop:focus-visible,.qclear:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 /* Rede de segurança, e não repetição: o tornarFocavel (vistas.js:tornarFocavel)
@@ -1338,11 +1356,10 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
 /* abaixo dos 520px a janela é uma folha encostada em baixo: o gesto que o
    sistema ensina é subir, e até aqui ela materializava-se feita */
 @media(max-width:520px){.modal.open .sheet{animation:folhaSobe var(--lento) var(--curva-entra)}}
-/* a origem é o lado por onde o menu nasce: o do sel() cai do botão, o das
-   ações abre do canto direito e o do FAB sobe do canto de baixo */
+/* a origem é o lado por onde o menu nasce: o do sel() cai do botão e o das
+   ações abre do canto direito */
 .selpop.on{transform-origin:top center;animation:popEntra var(--rapido) var(--curva)}
 .menupop.on{transform-origin:top right;animation:popEntra var(--rapido) var(--curva)}
-.fabmenu.on{transform-origin:bottom right;animation:popEntra var(--rapido) var(--curva)}
 /* o painel de filtros é da família dos menus e entra como eles; a marca
    .entra é posta por quem o abre (vistas.js:fpanelEntra) e não sobrevive
    ao render seguinte — o painel já aberto não pisca a cada filtro mexido,
@@ -1578,10 +1595,8 @@ nav a:focus-visible,.railbtn:focus-visible{outline-color:var(--side-ink)}
 @media(prefers-reduced-motion:reduce){#cwUpdRoda{animation:none;border-color:#9fb4ff}} /* parada, a roda é um anel cobalto claro inteiro: o passo atual, sem girar */
 /* cloud/guia.js — o cartão flutuante do tutorial.
    Flutua, não é modal: quem segue os passos tem de poder mexer na app por
-   baixo enquanto lê. Acima do botão flutuante, abaixo dos modais — menos
+   baixo enquanto lê. Acima do «topo» (57), abaixo dos modais — menos
    quando um está aberto, e aí sobe acima dele (sobre-janela).
-   Acima do botão flutuante e não por cima dele: o tutorial manda carregar
-   nesse botão, e estava a tapá-lo.
    Entra em vez de aparecer. O cartão nasce logo a seguir a uma mudança de
    ecrã — o passo leva a pessoa às Definições e a vista inteira é repintada no
    mesmo instante — e um cartão parado no canto de baixo perde-se nisso tudo,
@@ -1715,6 +1730,23 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
    de os ler de relance. */
 #raiz#raiz .colab-acoes{display:flex;flex-wrap:wrap;gap:8px}
 #raiz#raiz .colab-acoes .btn{flex:1 1 auto;justify-content:center;min-height:44px;white-space:nowrap}
+/* O X do «O que podes fazer» (painel-geral.js:cartaoPodes, podesFechar): no
+   canto de cima à direita, como o «Fechar o tutorial» (.guia-fechar), 36px no
+   rato e 44 no dedo. O título guarda à direita o espaço do X, para um nome
+   comprido não lhe passar por baixo. O premido diz-se pela cor da frente (o
+   --accent), que sobrevive ao escurecimento à força do Samsung Internet; o
+   fundo --press vem do .btn:active. Com .btn.sm.so-icone no seletor, para
+   ganhar à largura de 36 e à altura de 40 do botão pequeno no dedo. */
+.card.colab-podes{position:relative}
+.colab-podes-tit{padding-right:36px}
+.btn.sm.so-icone.colab-podes-fechar{position:absolute;top:10px;right:10px;width:36px;min-height:36px;color:var(--muted)}
+@media(hover:hover) and (pointer:fine){.btn.sm.so-icone.colab-podes-fechar:hover{color:var(--ink);background:var(--tint)}}
+.btn.sm.so-icone.colab-podes-fechar:active{color:var(--accent);background:var(--press)}
+@media(max-width:520px){.btn.sm.so-icone.colab-podes-fechar{top:6px;right:6px}}
+@media(pointer:coarse){
+  .btn.sm.so-icone.colab-podes-fechar{top:4px;right:4px;width:44px;min-height:44px}
+  .colab-podes-tit{padding-right:40px}
+}
 /* ---- web/app/tarefas.js ---- */
 /* A lista de tarefas de um imóvel ou de um contrato (tarefas.js:tfLista): uma
    secção é um cabeçalho com o nome, a conta e o ⋯ dela, e as tarefas por
@@ -1738,6 +1770,13 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
 #raiz#raiz button.tf-nome{cursor:pointer}
 #raiz#raiz .tf-quando{font-size:11.5px;color:var(--muted);text-decoration:none}
 #raiz#raiz .tf-feita .tf-nome>span{text-decoration:line-through;color:var(--muted)}
+/* As notas de uma tarefa (tarefas.js:tfItemHtml): por baixo do nome, pequenas
+   e na cor secundária, com as mudanças de linha de quem as escreveu, cortadas
+   a duas linhas — o resto lê-se no formulário. Uma linha com notas fica mais
+   alta, e a pega e a caixa sobem para a altura do nome. */
+#raiz#raiz .tf-notas{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden;max-width:100%;
+  font-size:12.5px;font-weight:400;line-height:1.35;color:var(--muted);white-space:pre-line;overflow-wrap:anywhere;text-decoration:none}
+#raiz#raiz .tf-item.tf-com-notas{align-items:flex-start}
 /* O cabeçalho de uma secção é um botão da largura toda (tarefas.js:tfDobrar):
    a seta roda para o lado quando a secção está recolhida, e recolhida as
    tarefas somem — continuam no HTML, para a pesquisa e o arrasto. O lugar
@@ -2039,24 +2078,6 @@ button.vg-item-abrir:active{background:var(--press)}
    uma grelha de cartões e a ficha uma janela larga com os cartões em duas
    colunas — a mesma família, sem prancheta própria. */
 
-/* O mosaico das capas sem fotografia (o .tile do canvas): um arco em cada um
-   de dois cantos opostos e um ponto ao meio, num quadrado de 28px que se
-   repete. Quatro cores, as do contrato do redesign (§4: cobalto, âmbar, verde,
-   ardósia), escolhidas pelo imóvel de forma estável (lista-imoveis.js:imvMosaico).
-   Os hex do claro são os do canvas e só vivem aqui: um mosaico é um desenho,
-   não uma superfície da app, e não há token para ele. No escuro saem dos
-   tokens suaves e de cor, para não acender um pastel claro no meio do ecrã. */
-.imv-mosaico{--imv-fundo:#dce4fb;--imv-traco:#3a5fd6;background-color:var(--imv-fundo);
-  background-image:radial-gradient(circle at 0 0,transparent 12px,var(--imv-traco) 12.5px,var(--imv-traco) 15px,transparent 15.5px),
-    radial-gradient(circle at 100% 100%,transparent 12px,var(--imv-traco) 12.5px,var(--imv-traco) 15px,transparent 15.5px),
-    radial-gradient(circle at 50% 50%,var(--imv-traco) 2.5px,transparent 3px);background-size:28px 28px}
-.imv-t1{--imv-fundo:#fae6d2;--imv-traco:#b65a16} /* âmbar do mosaico (canvas, contrato §4) */
-.imv-t2{--imv-fundo:#d9efe5;--imv-traco:#1e7a5b} /* verde do mosaico (canvas, contrato §4) */
-.imv-t3{--imv-fundo:#e3e6ec;--imv-traco:#5b6478} /* ardósia do mosaico (canvas, contrato §4) */
-:root.dark .imv-t0{--imv-fundo:var(--accent-soft);--imv-traco:var(--accent)}
-:root.dark .imv-t1{--imv-fundo:var(--warn-soft);--imv-traco:var(--warn)}
-:root.dark .imv-t2{--imv-fundo:var(--in-soft);--imv-traco:var(--in)}
-:root.dark .imv-t3{--imv-fundo:var(--chip);--imv-traco:var(--faint)}
 /* A etiqueta por cima de uma fotografia (quantas fotos, «capa»): escura nos
    dois temas, porque assenta numa imagem e não numa superfície da app — o véu
    do canvas, rgba(14,24,48,.78), que é o --side a 78%. */
@@ -3295,6 +3316,17 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .cal-dia{display:flex;flex-direction:column;gap:12px;min-width:0}
 .cal-dia-tit{margin:2px 2px 0;font-size:17px}
 .cal-dia-lista{padding:0;overflow:hidden}
+/* A mudar de dia o painel cresce ou encolhe (calendario.js:calSel →
+   continuidade.js:crescerEmAltura), mas a caixa animada é o .cal-dia, que é
+   transparente: o que se vê é o cartão dos eventos e os botões. A encolher, o
+   painel é mais alto do que o que leva, e numa coluna flex a sobra ficava
+   vazia por baixo dos botões — o cartão e os botões tomavam o tamanho novo no
+   primeiro fotograma (medido a 384px: 236→49px num fotograma, 100% do
+   caminho) e só o «Por confirmar» por baixo deslizava. Durante a viagem o
+   cartão fica com a sobra: encolhe com o painel e os botões sobem com a borda.
+   A crescer já acompanhava: o overflow:hidden deixa-o encolher abaixo do
+   conteúdo (o min-height:auto de um item flex com overflow é 0). */
+.cal-dia.a-crescer>.cal-dia-lista{flex-grow:1}
 .cal-dia-lista .lbl{margin:0;padding:12px 14px 8px}
 .cal-dia-lista .cal-ev+.lbl{border-top:1px solid var(--line)}
 .cal-ev{display:flex;align-items:center;gap:12px;min-height:60px;padding:12px 14px;border-top:1px solid var(--line);cursor:pointer;transition:background-color var(--rapido) var(--curva)}
@@ -3440,17 +3472,8 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .ana{display:flex;flex-direction:column;gap:14px;min-width:0}
 .ana>*{min-width:0}
 .ana>.cols{margin-top:0}
-/* a barra do âmbito: chips, os campos da página e as ações */
+/* a barra do topo de uma análise (a da Declaração: só as ações, à direita) */
 .ana-barra{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px}
-.ana-ambito{flex:1 1 auto;min-width:0}
-.ana-ambito .chip{min-height:40px;max-width:100%;min-width:0}
-/* um nome comprido (de imóvel ou de proprietário) leva reticências no texto
-   do chip, que nunca passa da largura da barra: era a página a rolar de lado
-   no telemóvel, com o chip cortado a meio da palavra e sem o × */
-.ana-ambito .chip>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ana-ambito .lbl+.chip{margin-left:-2px}
-/* o rótulo «Titular» e o chip dele numa caixa só: quebram de linha juntos */
-.fis-titular{display:inline-flex;align-items:center;gap:8px;min-width:0;max-width:100%;margin-left:8px}
 .ana-acoes{display:flex;flex-wrap:wrap;gap:10px}
 /* o cartão da Análise: cabeçalho com o título e o subtítulo, e o resto em coluna */
 .ana-cartao{display:flex;flex-direction:column;gap:12px}
@@ -3472,11 +3495,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .ana .table tr[data-click]:active td{background:var(--press)}
 .ana .table tr[data-click]:focus-visible td{background:var(--tint)}
 .ana .table .ana-total td{background:var(--chip)}
-.ana-fixa th:first-child,.ana-fixa td:first-child,.ana-fixa-1 .table th:first-child,.ana-fixa-1 .table td:first-child{position:sticky;left:0;z-index:1;background:var(--card)}
-.ana-fixa-1 .table td:first-child{min-width:150px}
-/* a célula presa da linha dos totais é cinzenta como o resto da linha (a
-   regra de cima, da mesma força, pintava-a de branco) */
-.ana-fixa-1 .table tr.ana-total td{background:var(--chip)}
+.ana-fixa th:first-child,.ana-fixa td:first-child{position:sticky;left:0;z-index:1;background:var(--card)}
 
 /* ---- a Avaliação ---- */
 /* o herói: o valor de mercado e o valor por rendimento em barras à mesma
@@ -3558,40 +3577,33 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 @media(min-width:521px){.prj-tabela thead th{white-space:normal;vertical-align:bottom;min-width:76px;max-width:150px}}
 
 /* ---- o IRS · Anexo F ---- */
-/* a faixa das regras do ano, em cobalto suave */
-.fis-regras{display:flex;flex-direction:column;gap:8px;background:var(--accent-soft);border-color:var(--accent-soft);color:var(--accent-text)}
-.fis-regras-cab{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
-.fis-regras .badge{background:var(--card);color:var(--accent-text)}
-.fis-regras .badge.amber{background:var(--warn-soft);color:var(--warn)}
-.fis-regras .ana-tit{color:var(--ink)}
-.fis-entrega{flex:1 1 260px;font-size:14.5px;font-weight:500}
-.fis-guia-btn{margin-left:auto}
-.fis-regras-txt{margin:0;font-size:14px}
-.fis-novas .lbl{color:var(--accent-text)}
-.fis-novas ul{margin:4px 0 0;padding-left:18px;font-size:13.5px}
-.fis-novas li+li{margin-top:2px}
+/* a barra (fisco.js:fisBarra): só as ações, o guia e o partilhar, juntas à
+   direita e numa linha também no telemóvel — o ano e o titular vivem no
+   painel do funil. Os dois são .btn.sm (36px no rato, 44 no dedo, a regra
+   do pointer:coarse abaixo); o «Guia» tem o livro e a palavra, e o
+   partilhar só o ícone, quadrado */
+.fis-acoes{margin-left:auto;flex-wrap:nowrap;gap:8px}
+.fis-guia{gap:6px}
+.fis-guia>svg,.fis-acoes>.so-icone>svg{flex:none}
+/* a mesma barra em miniatura, na apresentação da 1.ª visita
+   (apresentacao-analise.js:aprAFiscoBarra): as ações juntas à direita */
+.apr-a-fis-acoes{display:flex;align-items:center;justify-content:flex-end;gap:6px}
 /* o imposto estimado em destaque, no azul-noite da barra lateral */
 .fis-kpis>.kpi:last-child{background:var(--side);border-color:var(--side-line)}
 .fis-kpis>.kpi:last-child .label,.fis-kpis>.kpi:last-child .foot,.fis-kpis>.kpi:last-child .expl{color:var(--side-text)}
 .fis-kpis>.kpi:last-child .value{color:var(--side-ink)}
 .fis-kpis>.kpi:last-child .expl{border-top-color:var(--side-line)}
 .fis-kpis>.kpi:last-child::after{background:var(--side-on);color:var(--side-ink)}
-/* as obrigações e o englobamento, a situação e os prazos, dois a dois */
+/* as obrigações à esquerda, a situação e os prazos empilhados à direita: com
+   três cartões em duas colunas, o terceiro ficava sozinho numa fila, com um
+   buraco ao lado; numa coluna só, um por baixo do outro */
 .fis-grelha{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:14px;align-items:start}
+.fis-grelha>.fis-tratar{grid-row:span 2}
 .fis-tratar{gap:10px}
 .fis-ob{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 0;border-top:1px solid var(--line)}
 .fis-ob .fis-num{flex:0 0 26px;width:26px;justify-content:center;padding:0}
 .fis-ob p{flex:1 1 200px;min-width:0;font-size:14.5px}
 .fis-ob .btn{flex:0 0 auto;margin-left:auto}
-.fis-outros{gap:6px}
-.fis-eur{display:flex;align-items:center;gap:8px;max-width:260px;min-height:46px;padding:0 14px;border:1px solid var(--line2);border-radius:12px;background:var(--field)}
-.fis-eur input{min-height:0;padding:0;border:0;border-radius:0;background:transparent}
-.fis-eur input:focus-visible{outline:0}
-.fis-eur:has(input:focus-visible){border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.fis-eur>span{color:var(--muted);font-weight:500}
-.fis-veredito{display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;background:var(--chip);font-size:14.5px}
-.fis-veredito.bom{background:var(--in-soft);color:var(--in)}
-.fis-veredito svg{flex:0 0 auto}
 /* a situação fiscal em linhas (M-SituacaoFiscal): interruptores e o A/B */
 .fis-sit{gap:0;padding:0;overflow:hidden}
 .fis-sit .ana-cab{padding:16px 16px 10px}
@@ -3619,27 +3631,63 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .fis-pz .small{display:block}
 .fis-pz .badge{flex:0 0 auto}
 @media(max-width:520px){.fis-pz.tap{margin:0 -14px;padding:10px 14px}}
-.fis-resumo .fis-ct{min-width:200px}
+/* o começo do cartão de um quadro (fisco.js:fiscoQuadroResumoHtml): onde se
+   preenche, e os contratos desse quadro em linhas — o contrato à esquerda, as
+   rendas e o imposto à direita —, sem tabela a rolar de lado; o total no fim */
+.fis-onde{margin:0 0 6px;font-size:14.5px}
+.fis-onde b{font-weight:600}
+.fis-qr{display:flex;flex-direction:column;margin:0 0 6px}
+.fis-qr-linha{display:flex;align-items:center;gap:12px;min-height:48px;padding:10px 0;border-top:1px solid var(--line)}
+.fis-qr-linha.tap{margin:0 -18px;padding:10px 18px;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
+@media(hover:hover) and (pointer:fine){.fis-qr-linha.tap:hover{background:var(--tint)}}
+.fis-qr-linha.tap:active{background:var(--press)}
+.fis-qr-nome{flex:1;min-width:0}
+.fis-qr-nome b{display:block;font-weight:600;font-size:14.5px;overflow-wrap:anywhere}
+.fis-qr-nome .small{display:block;overflow-wrap:anywhere}
+.fis-qr-falta{display:block;margin-top:4px}
+.fis-qr-num{flex:0 0 auto;text-align:right;font-variant-numeric:tabular-nums}
+.fis-qr-num b{display:block;font-weight:600}
+.fis-qr-num .small{display:block}
+.fis-qr-total{border-top-color:var(--line2)}
+.fis-q-campos{margin:10px 0 8px}
+@media(max-width:520px){.fis-qr-linha.tap{margin:0 -14px;padding:10px 14px}}
+/* os campos de cada quadro, um cartão por contrato: campo à esquerda, valor
+   à direita, pela ordem do impresso — sem tabela, que rolava de lado no
+   telemóvel. Lado a lado onde cabem; o total do quadro no fim, em cinzento */
+.fis-cts{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(330px,100%),1fr));gap:12px;align-items:start}
+.fis-ctc{display:flex;flex-direction:column;gap:6px;min-width:0;padding:12px 14px;border:1px solid var(--line2);border-radius:12px;background:var(--card)}
+.fis-ctc.tap{cursor:pointer;transition:background-color var(--rapido) var(--curva)}
+@media(hover:hover) and (pointer:fine){.fis-ctc.tap:hover{background:var(--tint)}}
+.fis-ctc.tap:active{background:var(--press)}
+.fis-ctc-cab{display:flex;align-items:flex-start;gap:10px}
+.fis-ctc-cab>svg{flex:0 0 auto;margin-top:2px;color:var(--muted)}
+.fis-ctc-nome{flex:1;min-width:0}
+.fis-ctc-nome b{display:block;font-weight:600;font-size:15px;overflow-wrap:anywhere}
+.fis-ctc-nome .small{display:block}
+.fis-ctc-falta{margin:0;font-size:13.5px;color:var(--danger)}
+.fis-ctc-grupo{margin:8px 0 0}
+.fis-campos{margin:0}
+.fis-campo{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.fis-campo dt{flex:1 1 auto;min-width:0;color:var(--muted)}
+.fis-campo dt .small{display:block;color:var(--ink);overflow-wrap:anywhere}
+.fis-campo dd{flex:0 1 auto;min-width:0;margin:0;text-align:right;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.fis-campo dd .badge{margin-left:4px;vertical-align:1px}
+.fis-campo dd>.badge:first-child{margin-left:0}
+.fis-ctc-total{background:var(--chip);border-color:var(--chip)}
+.fis-ctc-total .fis-campo{border-top-color:var(--line2)}
 @media(pointer:coarse){
-  .ana-ambito .chip,.fis-ab>button,.ana .btn.sm{min-height:44px}
+  .fis-ab>button,.ana .btn.sm{min-height:44px}
   /* um botão só de ícone pequeno (o ⓘ das contas entre proprietários) fica 44×44 */
   .ana .btn.sm.so-icone{width:44px}
 }
 @media(max-width:520px){
   .ana-barra{gap:8px}
-  /* no telemóvel as ações da página (o «Partilhar resumo» da Declaração)
-     ficam numa linha delas, lado a lado, a dividir a largura */
-  .ana-acoes{width:100%;gap:8px}
-  .ana-acoes>.btn{flex:1 1 auto;padding:0 10px;font-size:14px}
   .fis-ob .btn{margin-left:38px}
-  /* o rótulo do titular desce com o chip para a fila seguinte: sem recuo */
-  .fis-titular{margin-left:0}
   /* o botão do canto do cabeçalho (o ⓘ das contas) fica à direita do título
      e do subtítulo, em vez de cair numa fila só dele por baixo */
   .ana-cab:has(>.ana-extra){display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px}
   .ana-cab>.ana-extra{grid-column:2;grid-row:1/3;margin-left:0}
-  /* no guia, o título da dobra inteiro vale mais do que a contagem dos passos */
-  #fold_fiscoGuia .fsum{display:none}
+  .fis-ctc{padding:11px 12px}
 }
 /* ===== fim: 1.3.7 ===== */
 /* ===== ajustes-v40c: 1.5 — Projeções e Avaliação: chips e a roda dentada ===== */
@@ -3664,8 +3712,8 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 /* As ações da Avaliação são um botão só, de ícone (avaliacao.js:avaPartilha:
    o .btn.so-icone, 44×44), que abre o menu de ações da casa (.menupop). No
    telemóvel fica na linha do chip, à direita, em vez de descer para uma linha
-   dele (a regra do .ana-acoes de largura inteira, na secção 1.3.7, é a da
-   Declaração). O menu tem a largura das opções, sem partir «Exportar
+   dele (com largura automática: a regra antiga do .ana-acoes de largura
+   inteira era a da Declaração, que saiu). O menu tem a largura das opções, sem partir «Exportar
    movimentos (CSV)» em duas linhas, e nunca passa da largura do ecrã. */
 @media(max-width:520px){.ana-topo>.ana-acoes{width:auto}}
 .ava-partilha .menupop{width:max-content;max-width:calc(100vw - 32px)}
@@ -3978,8 +4026,8 @@ button.def-cat-abre:active{background:var(--press)}
 
 /* ---- cloud/guia.js:cartaoPassos e :jornadaInicial (M-PrimeirosPassos) ----
    As boas-vindas são um cartão azul-noite (o --side, igual nos dois temas)
-   com o mosaico cobalto por cima (lista-imoveis.js:imvMosaico, a classe
-   .imv-mosaico da folha dos Imóveis — o mesmo desenho das capas sem foto).
+   com o mosaico cobalto por cima (o componente .mosaico, no tom
+   .mosaico-t0 — o mesmo desenho das capas sem foto).
    Depois o cartão dos passos: o título e a conta, a barra verde do que está
    feito, e um passo por linha. Sem traço entre os círculos: numa lista não
    há nada a ligar, e o do passo atual é cheio (era transparente, e o traço da
@@ -4263,11 +4311,6 @@ div.pt-quota b{text-align:right}
    O azul-noite da barra de ponta a ponta, o mosaico por cima, e a caixa dos
    passos. O visto dos passos feitos é o verde-menta do canvas (#8fe3c0), que
    assenta sempre no azul-noite, nos dois temas. */
-/* O mosaico azul-noite (o .tile do canvas M-Entrar e M-Atualizar), na
-   atualização e na faixa de entrar por uma ligação: igual nos dois temas, e
-   não o cobalto claro das capas (imv-t0), que sobre o --side dava um
-   cinzento-lavanda e na entrada uma faixa clara. */
-.imv-mosaico.imv-noite{--imv-fundo:#16244A;--imv-traco:#9FB4FF} /* o fundo e os arcos do .tile do canvas M-Entrar/M-Atualizar, iguais nos dois temas */
 .upd-ecra{display:flex;flex-direction:column;background:var(--side);color:var(--side-ink)}
 .upd-mosaico{flex:0 0 200px;opacity:.55}
 .upd-corpo{flex:1 0 auto;display:flex;flex-direction:column;gap:18px;width:100%;max-width:520px;margin:0 auto;padding:28px 22px calc(28px + var(--inset-bottom))}
@@ -4741,6 +4784,28 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
    pela cor da frente, que o escuro forçado do Samsung não apaga */
 #raiz#raiz .tf-por-guardar{font-weight:650;color:var(--accent-text)}
 /* === fim: tarefas com Guardar (folha 1.2) === */
+/* === tarefas por enviar, no aparelho (KAN-105) === */
+/* O selo «Por enviar» (tarefas.js:tfSeloHtml), na lista da janela, no cartão
+   e na linha da ficha: a nuvem a subir e a palavra na cor da frente, letra e
+   contorno — o escuro forçado do Samsung escurece os fundos, e um selo só de
+   fundo desaparecia. Na lista vem por baixo do nome e não fica riscado numa
+   cumprida. */
+.tf-selo{display:inline-flex;align-items:center;gap:3px;flex:0 0 auto;height:22px;padding:0 7px 0 4px;border:1px solid currentColor;border-radius:6px;
+  color:var(--accent-text);font-size:11.5px;font-weight:650;line-height:1;white-space:nowrap;text-decoration:none}
+.tf-selo svg{width:14px;height:14px;flex:0 0 auto}
+#raiz#raiz .tf-item .tf-nome>span.tf-selo{color:var(--accent-text);text-decoration:none}
+/* A linha do cimo da janela aberta com um rascunho do aparelho
+   (tarefas.js:tfLinhaRascunhoHtml), como a do cartão do kanban: contorno e
+   letra na cor da frente, o «Descartar» ao lado, ou por baixo quando não cabe,
+   com a altura do dedo. */
+#raiz#raiz .tf-rascunho{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;margin:0 0 10px;padding:6px 6px 6px 12px;border:1px solid var(--accent);border-radius:12px;
+  background:var(--accent-soft);color:var(--accent-text);font-size:13px;line-height:1.4}
+#raiz#raiz .tf-rascunho-txt{flex:1 1 180px;min-width:0;margin:0}
+#raiz#raiz .tf-rascunho .btn{flex:none;min-height:44px;padding:0 12px;color:inherit;font-size:14px}
+/* As tarefas por enviar na linha da ficha do contrato (tarefas.js:tfLinhaDaFicha). */
+.tf-env{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.tf-env-linha{display:flex;align-items:center;gap:8px}
+/* === fim: tarefas por enviar === */
 /* === fotos rápidas (folha 1.3) === */
 /* A folha de baixo não rola por fora do corpo: a barra, o espaço à volta
    dela e o rodapé não têm nada que rolar, e um gesto vertical ali é o
@@ -4853,7 +4918,7 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 
 /* --- o kit das maquetes: a app em miniatura, só com tokens ---
    A cena é a imagem inteira: a superfície 2 e, atrás das peças, o mosaico da
-   marca (estilos.css:.imv-mosaico, nas quatro cores das capas, que no escuro
+   marca (estilos.css:.mosaico, nas quatro cores das capas, que no escuro
    saem dos tokens) — ou o azul-noite de ponta a ponta. As peças são as da
    app em ponto pequeno; o que sobe leva a --shadow, e o que a imagem ensina
    a tocar leva o contorno cobalto (.apr-alvo), que é da frente e o
@@ -4956,7 +5021,7 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 .apr-m-avatar{border-radius:50%;font-size:9px;font-weight:700}
 .apr-m-ico{border-radius:7px}
 /* a capa em miniatura: o mosaico desenhado ao dobro e encolhido a metade,
-   para os arcos ficarem à escala da peça (o .imv-mosaico tem 28px por quadrado) */
+   para os arcos ficarem à escala da peça (o .mosaico tem 28px por quadrado) */
 .apr-m-capa{flex:none;position:relative;display:block;width:24px;height:24px;border-radius:6px;overflow:hidden}
 .apr-m-capa>i{position:absolute;left:0;top:0;width:200%;height:200%;transform:scale(.5);transform-origin:0 0}
 .apr-m-imv{display:grid;grid-template-columns:44px 1fr;gap:9px;padding:8px}
@@ -5437,7 +5502,7 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 .apr-a-tabela.c4 .apr-a-tl>span:nth-child(2){text-align:left}
 .apr-a-tabela.c5 .apr-a-tl{grid-template-columns:26px repeat(4,minmax(0,1fr))}
 .apr-a-tabela.c6 .apr-a-tl{grid-template-columns:26px repeat(5,minmax(0,1fr))}
-.apr-a-tabela.q4 .apr-a-tl{grid-template-columns:38px minmax(0,1fr) auto auto}
+.apr-a-tabela.c3 .apr-a-tl{grid-template-columns:minmax(0,1fr) auto auto}
 .apr-a-tabela .apr-m-valor{font-size:inherit}
 .apr-a-col-anexo.nao{color:var(--out);font-weight:600}
 /* o herói da Avaliação (aprAHeroi): as duas barras à mesma escala, o
@@ -5533,12 +5598,10 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 .apr-a-cartao-prj .apr-a-legenda{flex-direction:row;flex-wrap:wrap;gap:2px 8px}
 .apr-a-cartao-prj .apr-a-cima,.apr-a-cartao-prj .apr-a-baixo{height:28px}
 .apr-a-cartao-foco{gap:6px;padding:8px}
-/* o IRS · Anexo F em miniatura (fisco.js): o ano em chips com o titular, a
-   faixa das regras do ano, os pontos de «A tratar antes de entregar», os
-   interruptores da situação fiscal (a bola do lado ligado diz o estado pela
-   forma) e o veredito do englobamento */
-.apr-a-anos{display:flex;align-items:center;justify-content:space-between;gap:6px}
-.apr-a-anos>.apr-m-chips{flex-wrap:nowrap}
+/* o IRS · Anexo F em miniatura (fisco.js): a faixa das regras do ano, os
+   pontos de «A tratar antes de entregar», os interruptores da situação
+   fiscal (a bola do lado ligado diz o estado pela forma) e o veredito do
+   englobamento */
 .apr-a-faixa{display:flex;flex-wrap:wrap;align-items:center;gap:3px 6px;padding:7px 9px;border-radius:10px;background:var(--accent-soft)}
 .apr-a-faixa>b{font-family:var(--letra-titulo);font-size:12px;color:var(--ink)}
 .apr-a-faixa>.apr-m-sub{flex:1 1 100%;color:var(--accent-text)}
@@ -5556,7 +5619,6 @@ label:has(>.req)>.rotulo-txt{grid-column:1}
 .apr-a-int.on::after{left:13px}
 .apr-a-veredito{display:flex;align-items:center;gap:5px;padding:5px 7px;border-radius:7px;background:var(--in-soft);color:var(--in);font-size:9.5px;font-weight:600}
 .apr-a-veredito>svg{flex:none}
-.apr-a-titular{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
 .apr-a-cartao-titular{gap:9px;padding:9px 10px}
 .apr-a-cartao-quadros{gap:2px;padding:6px 9px 4px}
 .apr-a-dobra{display:flex;align-items:center;gap:6px;font-size:10.5px}
@@ -5704,11 +5766,46 @@ body:has(.modal.open.qa-janela) .qa-pilula{z-index:60}
 .qa-quem{color:var(--muted);min-width:0;overflow-wrap:anywhere}
 p.qa-quem{margin:0}
 .qa-tem-img{display:inline-flex;color:var(--muted)}
+.qa-linha-cab .qa-cartao{color:var(--muted);font-variant-numeric:tabular-nums}
+/* A prioridade do cartão (cloud/qa.js:qaSelo), como o selo do quadro do kanban:
+   o ícone e a palavra na cor dela, na letra e no contorno, sem fundo — o
+   escurecimento forçado do Samsung apaga um fundo, mas a frente fica. A Média
+   não tem selo */
+.qa-prio{display:inline-flex;flex:none;align-items:center;gap:3px;min-height:22px;padding:0 7px 0 4px;border:1px solid currentColor;border-radius:6px;
+  font-size:11.5px;font-weight:650;line-height:1;white-space:nowrap}
+.qa-prio .i,.qa-prio svg{width:14px;height:14px;flex:none}
+.qa-p1{color:var(--danger)}
+.qa-p2{color:var(--warn)}
+.qa-p4{color:var(--accent)}
+.qa-p5{color:var(--muted)}
 .qa-linha-txt{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:14.5px;line-height:1.4;overflow-wrap:anywhere}
 .qa-desatual{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px;border-radius:12px;background:var(--warn-soft);color:var(--warn);font-size:13.5px;font-weight:600}
 /* Um ticket: o texto inteiro com as mudanças de linha, a captura, a
    resolução (verde) ou a resolução anterior (neutra), o contexto dobrado */
 .qa-ver-cab{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.qa-ver-cab .qa-cartao{margin-left:auto}
+.qa-janela .foot .qa-mover{flex:1;display:flex}
+.qa-janela .foot .qa-mover>.btn{flex:1;white-space:nowrap}
+/* Em Human Tests, o «Remover» e as três decisões (cloud/qa.js:qaHtmlDecisoes)
+   no lugar do «Mover»: numa linha só quando cabem; quando não cabem, as
+   decisões passam juntas para a linha delas, da largura toda, e o «Remover»
+   fica na de cima. Nenhum botão encolhe abaixo do texto. Os outros rodapés
+   não mudam (o :has só os apanha a eles) */
+.qa-janela .foot:has(>.qa-decisoes){flex-wrap:wrap}
+.qa-janela .foot:has(>.qa-decisoes)>.qa-remover{flex:1 0 auto}
+.qa-janela .foot>.qa-decisoes{flex:999 1 auto;display:flex;gap:10px;min-width:0}
+.qa-janela .foot>.qa-decisoes>.btn{flex:1 0 auto;white-space:nowrap}
+/* No telemóvel, menos enchimento de lado e, até 420px, o «Remover» só com o
+   caixote (o nome fica para o leitor de ecrã, e o aviso traz o Anular): a
+   384px os quatro cabem numa linha, com o alvo de 48px. Abaixo dos 341px já
+   não cabem — as decisões descem para a linha delas, e o «Remover» volta a
+   dizer o nome */
+@media(max-width:520px){.qa-janela .foot:has(>.qa-decisoes) .btn{padding:0 10px}}
+@media(min-width:341px) and (max-width:420px){
+  .qa-janela .foot:has(>.qa-decisoes)>.qa-remover{min-width:48px}
+  .qa-janela .foot:has(>.qa-decisoes)>.qa-remover>.qa-remover-txt{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+}
+.qa-ver-tit{margin:0;font-size:16px;font-weight:650;line-height:1.35;overflow-wrap:anywhere}
 .qa-ver-txt{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.5}
 .qa-ver-img{position:relative;min-height:120px;border:1px solid var(--line);border-radius:12px;background:var(--chip);overflow:hidden}
 .qa-ver-img img{display:block;width:100%;height:auto;max-height:70vh;max-height:70dvh;object-fit:contain}
@@ -5719,6 +5816,25 @@ p.qa-quem{margin:0}
 .qa-resolucao.anterior>b{color:var(--muted)}
 .qa-resolucao p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .btn.qa-remover{color:var(--danger)}
+/* O de cima da janela de um ticket (cloud/qa.js:qaHtmlTopo) numa caixa só
+   para se repintar sem tocar no campo de comentar: para a grelha do .form é
+   como se a caixa não existisse */
+.qa-ver-topo{display:contents}
+/* Os comentários (cloud/qa.js:qaHtmlComentarios): a conversa do cartão no
+   kanban, do mais antigo para o mais recente, cada um num fundo de chip; o
+   que vai a caminho do servidor esbatido pela opacidade, que o escurecimento
+   forçado do Samsung Internet deixa passar */
+.qa-coms{display:grid;gap:8px;min-width:0}
+.qa-coms-tit{margin:0;font-size:16px}
+.qa-coms-lista{display:grid;gap:8px;min-width:0}
+.qa-coms-itens{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.qa-com{display:grid;gap:4px;min-width:0;padding:10px 12px;border-radius:12px;background:var(--chip)}
+.qa-com.a-enviar{opacity:.6}
+.qa-com-txt{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px;line-height:1.45}
+.qa-coms-falhou{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.qa-coms-lista>.hint{margin:0}
+/* O campo para comentar (cloud/qa.js:qaHtmlComentar): o botão à direita, por baixo */
+.qa-comentar>.btn{justify-self:end}
 /* === fim: tickets de QA === */
 /* === qa-ronda2: visão geral === */
 /* Os meses previstos das entradas e saídas (graficos.js:cBars, previstoDe): a
@@ -5764,7 +5880,7 @@ p.qa-quem{margin:0}
 /* A faixa (entrada.js:pintarFaixaDoEmail) vive no fluxo da página, logo
    abaixo do cabeçalho (a seguir ao #hdrSync), e rola com o conteúdo: ao
    contrário da faixa sem ligação, fica 7 dias, e por cima do conteúdo
-   tapava-o esse tempo todo. Não tapa a navegação, as abas, o FAB nem a
+   tapava-o esse tempo todo. Não tapa a navegação, as abas nem a
    pílula do QA. Alinha com o .wrap (o mesmo recuo e a mesma largura útil).
    As cores: o par suave do âmbar (--warn-soft, texto --ink) com a borda em
    --warn, que é cor da frente — com o escurecimento forçado do Samsung

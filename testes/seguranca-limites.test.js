@@ -1,6 +1,6 @@
 // Os tickets de segurança: um limite da API atingido (o 429 do rateLimit)
 // abre, ou engorda, um ticket na fila do back office, e nenhum se trata sem
-// alguém da equipa escrever a resolução proposta (Decidir) — ou arquivá-lo,
+// alguém da equipa escrever a resolução proposta (Aceitar) — ou recusá-lo,
 // com a justificação. Contra o SQL a sério (testes/lib/bd.js): conta-se o
 // que o rateLimit escreve, porque uma força bruta não pode virar uma escrita
 // na D1 por pedido, e os pedidos das pessoas têm de continuar exatamente como
@@ -214,7 +214,7 @@ async function umTicket(env) {
   return { id: (await deSeguranca(env))[0].id, uid };
 }
 
-describe('Decidir: a resolução proposta é obrigatória', () => {
+describe('Aceitar: a resolução proposta é obrigatória', () => {
   test('sem proposta 400; com ela grava quem, quando e a proposta, e deixa a nota interna', async () => {
     const env = ambiente();
     const { id } = await umTicket(env);
@@ -230,31 +230,31 @@ describe('Decidir: a resolução proposta é obrigatória', () => {
     assert.ok(r.pedido.accepted_at > 0);
     assert.deepEqual(r.msgs.map((m) => [m.tipo, m.texto, m.nome]), [['nota', 'Resolução proposta: Subir o limite das gravações para 120 em 15 min.', 'Dina']]);
     assert.deepEqual((await auditoria(env)).map((x) => [x.acao, x.alvo]), [['pedido.decidir', id]]);
-    // decidido, não se decide outra vez
+    // aceite, não se aceita outra vez
     const outra = await chamar(env, ADMIN, 'POST', url(id, 'aceitar'), { texto: 'Bloquear.' });
     assert.equal(outra.status, 409);
-    assert.match((await outra.json()).error, /já foi decidido por Dina/);
+    assert.match((await outra.json()).error, /já foi aceite por Dina/);
   });
 
-  test('quem não vê a segurança não decide (o suporte)', async () => {
+  test('quem não vê a segurança não aceita (o suporte)', async () => {
     const env = ambiente();
     const { id } = await umTicket(env);
     assert.equal((await chamar(env, SUPORTE, 'POST', url(id, 'aceitar'), { texto: 'x' })).status, 403);
   });
 
-  test('por decidir não se conclui pelo Responder e concluir; decidido, sim', async () => {
+  test('por decidir não se conclui pelo Responder e concluir; aceite, sim', async () => {
     const env = ambiente();
     const { id } = await umTicket(env);
     const r = await chamar(env, MASTER, 'POST', url(id, 'fechar'), {});
     assert.equal(r.status, 400);
-    assert.match((await r.json()).error, /decide-o, ou arquiva-o/);
+    assert.match((await r.json()).error, /aceita-o, ou recusa-o/);
     await chamar(env, MASTER, 'POST', url(id, 'aceitar'), { texto: 'Contactar a pessoa.' });
     const f = await corpoDe(await chamar(env, MASTER, 'POST', url(id, 'fechar'), { texto: 'Contactada.' }));
     assert.equal(f.pedido.status, 'concluido');
   });
 });
 
-describe('Arquivar: a justificação é obrigatória, e não vai nada para ninguém', () => {
+describe('Recusar: a justificação é obrigatória, e não vai nada para ninguém', () => {
   test('sem justificação 400; com ela conclui, sem reply e sem email, com a nota interna', async () => {
     const env = ambiente({ RESEND_API_KEY: 'chave' });
     armarCorreio();
@@ -265,16 +265,16 @@ describe('Arquivar: a justificação é obrigatória, e não vai nada para ningu
     assert.equal(r.status, 200);
     assert.deepEqual([r.pedido.status, r.pedido.reply, r.pedido.refused_by_nome], ['concluido', null, 'Mestre']);
     assert.ok(r.pedido.refused_at > 0);
-    assert.deepEqual([r.pedido.accepted_at, r.pedido.accepted_changes], [null, null], 'arquivar larga a resolução proposta');
+    assert.deepEqual([r.pedido.accepted_at, r.pedido.accepted_changes], [null, null], 'recusar larga a resolução proposta');
     assert.deepEqual(r.msgs.map((m) => [m.tipo, m.texto]), [
-      ['nota', 'Resolução proposta: Bloquear a conta.'], ['nota', 'Arquivado: Falso alarme: era um teste da equipa.']]);
+      ['nota', 'Resolução proposta: Bloquear a conta.'], ['nota', 'Recusado: Falso alarme: era um teste da equipa.']]);
     assert.equal(emails.length, 0, 'a conta dona do ticket não recebe nada');
     assert.deepEqual((await auditoria(env)).map((x) => x.acao), ['pedido.decidir', 'pedido.arquivar']);
     assert.equal((await chamar(env, MASTER, 'POST', url(id, 'recusar'), { texto: 'outra vez' })).status, 409);
     assert.equal((await chamar(env, MASTER, 'POST', url(id, 'aceitar'), { texto: 'x' })).status, 409);
   });
 
-  test('a lista dos erros traz o que o guião lê para dizer por decidir, decidido ou arquivado', async () => {
+  test('a lista dos erros traz o que o guião lê para dizer por decidir, aceite ou recusado', async () => {
     const env = ambiente();
     const { id } = await umTicket(env);
     const linha = async () => (await corpoDe(await chamar(env, DEV, 'GET', '/api/equipa/pedidos', null, '?tipo=erros&estado=')))
@@ -318,7 +318,7 @@ describe('os pedidos das pessoas ficam como estavam', () => {
 });
 
 describe('um ticket que volta', () => {
-  test('arquivado, o limite volta a ser atingido: reabre sem decisão, no mesmo ticket', async () => {
+  test('recusado, o limite volta a ser atingido: reabre sem decisão, no mesmo ticket', async () => {
     const env = ambiente();
     const { id, uid } = await umTicket(env);
     await chamar(env, MASTER, 'POST', url(id, 'recusar'), { texto: 'Falso alarme.' });
@@ -384,7 +384,7 @@ describe('o aviso no Discord: ao abrir e ao reabrir, uma vez', () => {
     assert.equal((await deSeguranca(env))[0].n, 2);
   });
 
-  test('reabrir (depois de arquivado) avisa uma vez, a dizer que voltou', async () => {
+  test('reabrir (depois de recusado) avisa uma vez, a dizer que voltou', async () => {
     const env = comDiscord();
     const discord = armarDiscord();
     await ateRecusar(env, 'login:198.51.100.9', 10);

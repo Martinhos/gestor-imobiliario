@@ -356,8 +356,15 @@ describe('a Política de Privacidade do rasto', () => {
   });
 
   test('a versão dos documentos subiu junta nos dois lados', () => {
-    assert.equal(L.version, '2026-10-30');
+    // 2026-11-12: a leitura da FINE pelo Workers AI saiu do dev (KAN-14)
+    assert.equal(L.version, '2026-11-12');
     assert.equal(TERMS_VERSION, L.version, 'a que o servidor compara');
-    assert.match(texto, /Em vigor desde 30\/10\/2026/);
+    assert.match(texto, /Em vigor desde 12\/11\/2026/);
+  });
+
+  test('a leitura da FINE pelo Workers AI está na política: só a pedido, nada guardado além do anexo, e a Cloudflare a fazê-la', () => {
+    assert.match(texto, /Ler a FINE ou o contrato de um crédito, só quando o pedes no formulário da hipoteca/);
+    assert.match(texto, /Nem o texto nem a resposta ficam guardados; o PDF fica só como anexo da hipoteca/);
+    assert.match(texto, /Cloudflare, Inc\. — alojamento da aplicação, base de dados e sessões, e a leitura da FINE ou do contrato de um crédito \(Workers AI\), quando a pedes\./);
   });
 });

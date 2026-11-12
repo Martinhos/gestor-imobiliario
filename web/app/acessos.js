@@ -380,7 +380,7 @@ function fraseCurtaPodes(pid){
 function marcarVisitaNoImovel(pid,rid){
   chamarServico('visits','visitModal',null,rid?{propertyId:pid,roomId:rid}:{propertyId:pid});
 }
-/* Regista um movimento num imóvel: o caminho do FAB dos Movimentos (primeiro
+/* Regista um movimento num imóvel: o caminho do + dos Movimentos (primeiro
    o tipo), com o imóvel posto. O pagamento de crédito abate capital na ficha
    do imóvel: sem a poder editar, diz-se antes de abrir o formulário.
    Recebe: pid — o id do imóvel.
@@ -404,8 +404,8 @@ function editarFichaDeColaboracao(){
 /* Tudo o que se pode adicionar na app, pela ordem em que a folha do + da
    barra de baixo o oferece (navegacao.js:abrirAdicionar). É para toda a
    gente, dono incluído — ACOES_DO_CARGO é só de quem colabora. Cada uma diz
-   o serviço de que depende, a condição que a mostra — a MESMA do FAB da
-   lista respetiva, para o + e o FAB nunca discordarem — e a ação, escrita na
+   o serviço de que depende, a condição que a mostra — a MESMA das ações da
+   lista respetiva, para o + e a lista nunca discordarem — e a ação, escrita na
    gramática das ações (os nomes são de serviços: a gramática resolve-os na
    hora, e só se o serviço estiver ligado é que a ação se oferece). */
 const ACOES_DE_ADICIONAR=[

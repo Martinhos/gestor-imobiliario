@@ -2,19 +2,23 @@
 // os tickets do dev: lê os argumentos e recusa os que não conhece, só aceita a
 // base do dev ou a isolada (nunca a produção), escapa o texto que entra no SQL
 // (corrido contra o esquema verdadeiro, em SQLite), escreve o listar com tudo
-// o que é preciso para resolver um ticket sem abrir a app (os novos, os em
-// resolução e os resolvidos), passa os novos a em resolução (comecar), e monta
-// a nota do resolver com e sem commit.
+// o que é preciso para resolver um ticket sem abrir a app (a fila de A fazer e
+// Auto Tests, ou todas as colunas do kanban), leva os tickets às colunas
+// (comecar, resolver, reabrir, mover) com o cartão a seguir, monta a nota do
+// resolver com e sem commit, e diz os comentários por responder de cada ticket
+// (os de pessoas depois da última resposta do Claude, KAN-107).
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { baseDeTeste } from './lib/bd.js';
+import { passosDaSincronizacao, passosDoComentarioQa, sqlEmTexto, cartaoDoTicketQa } from '../worker/src/lib/kanban.js';
 import {
-  lerArgumentos, confereAlvo, alvoDe, ALVOS, configDoDev, cita, sqlListar, sqlUm, sqlResolver, sqlReabrir, sqlComecar, estadoLegivel,
+  lerArgumentos, confereAlvo, alvoDe, ALVOS, configDoDev, cita, sqlListar, sqlUm, sqlNaColuna, sqlColunas, colunaDaLinha, sqlDoCartao,
+  resolverColuna, ticketFechado, colunaDoStatus, estadoLegivel,
   notaDaResolucao, contextoLegivel, ticketDaLinha, textoDoTicket, textoDaLista, tipoDaImagem, erroDoWrangler,
-  lerJsonDoWrangler, mensagemPorMigrar, ErroQa,
+  lerJsonDoWrangler, mensagemPorMigrar, ErroQa, COMANDOS, USO, sqlComentarios, porResponder, juntarComentarios, comentariosPorExtenso,
 } from '../scripts/qa.mjs';
 
 const SCRIPT = fileURLToPath(new URL('../scripts/qa.mjs', import.meta.url));
@@ -28,7 +32,7 @@ function recusa(argv) {
 
 describe('os argumentos', () => {
   test('listar: por omissão o dev, só os por resolver e em texto', () => {
-    assert.deepEqual(lerArgumentos(['listar']), { comando: 'listar', id: null, ids: null, local: false, todos: false, json: false, para: null, nota: null, commit: null });
+    assert.deepEqual(lerArgumentos(['listar']), { comando: 'listar', id: null, ids: null, coluna: null, local: false, todos: false, json: false, para: null, nota: null, commit: null });
     const o = lerArgumentos(['listar', '--local', '--todos', '--json']);
     assert.equal(o.local && o.todos && o.json, true);
   });
@@ -56,8 +60,17 @@ describe('os argumentos', () => {
     assert.deepEqual([varios.id, varios.ids, varios.local], ['x1', ['x1', 'x2', 'x3'], true]);
   });
 
+  test('mover leva o id e a coluna (o nome pode vir em várias palavras) e o --local', () => {
+    assert.ok(COMANDOS.includes('mover') && /mover <id> <coluna>/.test(USO));
+    const a = lerArgumentos(['mover', 'x1', 'para-depois']);
+    assert.deepEqual([a.id, a.coluna, a.local], ['x1', 'para-depois', false]);
+    const b = lerArgumentos(['mover', 'x1', 'Para', 'depois', '--local']);
+    assert.deepEqual([b.id, b.coluna, b.local], ['x1', 'Para depois', true]);
+    assert.equal(lerArgumentos(['mover', 'x1', 'Para depois']).coluna, 'Para depois');
+  });
+
   test('recusa o que não conhece, com o código 2 e o uso', () => {
-    for (const argv of [[], ['apagar', 'x'], ['remover', 'x'], ['listar', '--loca'], ['listar', 'a mais'], ['imagem'],
+    for (const argv of [['mover'], ['mover', 'x1'], ['mover', 'x1', 'a', '--todos'], ['mover', "x' --", 'a-fazer'], [],['apagar', 'x'], ['remover', 'x'], ['listar', '--loca'], ['listar', 'a mais'], ['imagem'],
       ['resolver', 'x'], ['resolver', 'x', '--nota', '   '], ['resolver', 'x', '--nota'], ['resolver', 'x', '--nota', 'n', '--commit', 'nao-e-sha'],
       ['reabrir', 'x', '--todos'], ['comecar'], ['comecar', 'x', '--nota', 'n'], ['comecar', 'x', "y' --"], ['listar', '--json=sim'], ['imagem', "x' OR 1=1 --"], ['resolver', 'x', '--nota', 'a'.repeat(4001)]]) {
       const e = recusa(argv);
@@ -117,19 +130,26 @@ describe('o SQL, corrido contra o esquema verdadeiro', () => {
   const HOSTIL = "Não abre; DROP TABLE qa_tickets; --\nsegunda linha com 'plicas', \"aspas\", /* e */ \\ barra\u0000";
 
   // Recebe: nada.
-  // Devolve: a base em memória com duas contas e três tickets (um removido).
+  // Devolve: a base em memória com duas contas e tickets em várias colunas
+  // (um removido, um com o status antigo 'aberto' e um com um status desconhecido).
   function base() {
     const db = baseDeTeste()._db;
     db.exec(`INSERT INTO users (id, email, name, pass_hash, pass_salt, created_at) VALUES ('U1', 'maria@x.pt', 'Maria Costa', 'h', 's', 1), ('U2', 'rui@x.pt', 'Rui', 'h', 's', 1);
       INSERT INTO qa_tickets (id, user_id, body, severity, context, image_key, status, created_at, updated_at) VALUES
-        ('t-velho', 'U1', 'velho', 'detalhe', NULL, NULL, 'aberto', 100, 100),
-        ('t-novo', 'U2', 'novo', 'bloqueia', '{"versao":43}', 'qa/t-novo', 'aberto', 300, 300),
-        ('t-fora', 'U1', 'removido', NULL, NULL, NULL, 'aberto', 400, 400);
+        ('t-velho', 'U1', 'velho', 'detalhe', NULL, NULL, 'a-fazer', 100, 100),
+        ('t-novo', 'U2', 'novo', 'bloqueia', '{"versao":43}', 'qa/t-novo', 'a-fazer', 300, 300),
+        ('t-fora', 'U1', 'removido', NULL, NULL, NULL, 'a-fazer', 400, 400),
+        ('t-curso', 'U1', 'em curso', 'incomoda', NULL, NULL, 'auto-tests', 200, 200),
+        ('t-depois', 'U2', 'para depois', 'bloqueia', NULL, NULL, 'para-depois', 700, 700),
+        ('t-antigo', 'U1', 'antigo', NULL, NULL, NULL, 'aberto', 150, 150),
+        ('t-estranho', 'U1', 'estranho', NULL, NULL, NULL, 'coisa-rara', 160, 160);
       UPDATE qa_tickets SET removed_at = 500 WHERE id = 't-fora';
       INSERT INTO qa_tickets (id, user_id, body, status, resolution, resolved_at, created_at, updated_at) VALUES
-        ('t-r1', 'U1', 'r1', 'resolvido', 'feito', 250, 50, 250), ('t-r2', 'U2', 'r2', 'resolvido', 'feito', 260, 60, 260);`);
+        ('t-r1', 'U1', 'r1', 'human-tests', 'feito', 250, 50, 250), ('t-r2', 'U2', 'r2', 'concluido', 'feito', 260, 60, 260);`);
     return db;
   }
+  // Recebe: db, id. Devolve: a linha do ticket.
+  const um = (db, id) => db.prepare(sqlUm(id)).get();
 
   test('cita dobra as plicas, tira o nulo e escreve NULL e números', () => {
     assert.equal(cita("it's"), "'it''s'");
@@ -140,78 +160,210 @@ describe('o SQL, corrido contra o esquema verdadeiro', () => {
     assert.equal(cita('a\u0000b'), "'ab'");
   });
 
-  test('listar: sem os removidos, abertos do mais recente, depois os resolvidos pela resolução, com o autor', () => {
+  test('listar: por omissão só a fila (A fazer e Auto Tests, e o status antigo); Para depois e o resto de fora', () => {
     const db = base();
-    assert.deepEqual(db.prepare(sqlListar(false)).all().map((l) => l.id), ['t-novo', 't-velho']);
-    const todos = db.prepare(sqlListar(true)).all();
-    assert.deepEqual(todos.map((l) => l.id), ['t-novo', 't-velho', 't-r2', 't-r1']);
-    assert.equal(todos[0].autor_nome, 'Rui');
-    assert.equal(todos[0].autor_email, 'rui@x.pt');
-    assert.equal(db.prepare(sqlUm('t-fora')).get().removed_at, 500);
+    // por gravidade (bloqueia, incomoda, detalhe, sem gravidade); o autor vem junto
+    const fila = db.prepare(sqlListar(false)).all();
+    assert.deepEqual(fila.map((l) => l.id), ['t-novo', 't-curso', 't-velho', 't-antigo']);
+    assert.equal(fila[0].autor_nome, 'Rui');
+    assert.equal(fila[0].autor_email, 'rui@x.pt');
+    assert.equal(um(db, 't-fora').removed_at, 500);
   });
 
-  test('listar: os abertos por gravidade (bloqueia, incomoda, detalhe, sem) e em cada uma o mais recente primeiro', () => {
+  test('listar --todos: todas as colunas (resolvidos pela resolução), até a de status desconhecido, sem os removidos', () => {
     const db = base();
-    db.exec(`INSERT INTO qa_tickets (id, user_id, body, severity, status, created_at, updated_at) VALUES
-      ('t-bv', 'U1', 'b velho', 'bloqueia', 'aberto', 10, 10), ('t-i', 'U1', 'i', 'incomoda', 'aberto', 20, 20),
-      ('t-sn', 'U1', 's novo', NULL, 'aberto', 900, 900), ('t-sv', 'U1', 's velho', NULL, 'aberto', 5, 5);`);
-    assert.deepEqual(db.prepare(sqlListar(false)).all().map((l) => l.id), ['t-novo', 't-bv', 't-i', 't-velho', 't-sn', 't-sv']);
-    assert.deepEqual(db.prepare(sqlListar(true)).all().map((l) => l.id).slice(6), ['t-r2', 't-r1'], 'os resolvidos continuam pela resolução');
+    assert.deepEqual(db.prepare(sqlListar(true)).all().map((l) => l.id),
+      ['t-depois', 't-novo', 't-r2', 't-r1', 't-curso', 't-velho', 't-estranho', 't-antigo']);
   });
 
-  test('resolver guarda a nota hostil tal e qual, sem partir a instrução', () => {
+  test('listar: a chave do cartão (KAN-N) quando o ticket tem cartão, e só quando tem', () => {
+    const db = base();
+    const ev = { tipo: 'qa', id: 't-novo', estado: 'a-fazer', agora: 1000, novo: { uuid: 'c-novo', ...cartaoDoTicketQa({ id: 't-novo', body: 'novo', severity: 'bloqueia' }) } };
+    db.exec(passosDaSincronizacao(ev).map(sqlEmTexto).join(';\n'));
+    const por = Object.fromEntries(db.prepare(sqlListar(true)).all().map((l) => [l.id, ticketDaLinha(l).cartao]));
+    assert.match(por['t-novo'], /^KAN-\d+$/);
+    assert.equal(por['t-velho'], null);
+    // um ticket cujo cartão foi removido no kanban sai do listar (KAN-115); os sem cartão nenhum ficam
+    db.exec("UPDATE kanban_cartoes SET removed_at = 5 WHERE id = 'c-novo'");
+    assert.equal(db.prepare(sqlListar(false)).all().find((l) => l.id === 't-novo'), undefined);
+    assert.equal(db.prepare(sqlListar(true)).all().find((l) => l.id === 't-novo'), undefined, 'nem com --todos');
+    assert.ok(db.prepare(sqlListar(false)).all().find((l) => l.id === 't-velho'), 'o de antes do kanban continua');
+    db.exec("UPDATE kanban_cartoes SET removed_at = NULL WHERE id = 'c-novo'");
+    assert.ok(db.prepare(sqlListar(false)).all().find((l) => l.id === 't-novo'), 'reposto, volta');
+  });
+
+  test('as colunas do kanban, pela ordem do quadro', () => {
+    const db = base();
+    const cs = db.prepare(sqlColunas()).all().map(colunaDaLinha);
+    assert.deepEqual(cs.map((c) => c.id), ['a-fazer', 'auto-tests', 'human-tests', 'concluido', 'para-depois']);
+    assert.deepEqual(cs.map((c) => c.fim), [false, false, false, true, false]);
+    assert.equal(cs[4].nome, 'Para depois');
+  });
+
+  test('resolver (Human Tests) guarda a nota hostil tal e qual, sem partir a instrução', () => {
     const db = base();
     const nota = notaDaResolucao(HOSTIL, 'abc1234');
-    db.exec(sqlResolver('t-novo', nota, 900));
-    const l = db.prepare(sqlUm('t-novo')).get();
-    assert.equal(l.status, 'resolvido');
+    db.exec(sqlNaColuna('t-novo', 'human-tests', 900, nota));
+    const l = um(db, 't-novo');
+    assert.equal(l.status, 'human-tests');
     assert.equal(l.resolution, nota.replace(/\u0000/g, ''));
     assert.equal(l.resolved_at, 900);
     assert.equal(db.prepare("SELECT updated_at FROM qa_tickets WHERE id = 't-novo'").get().updated_at, 900);
-    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM qa_tickets').get().n, 5);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM qa_tickets').get().n, 9);
     // um id hostil também fica dentro das plicas (a linha de comandos já o recusa antes)
-    db.exec(sqlResolver("x' OR '1'='1", 'nada', 1));
+    db.exec(sqlNaColuna("x' OR '1'='1", 'human-tests', 1, 'nada'));
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM qa_tickets WHERE resolution = 'nada'").get().n, 0);
     // e não mexe nos removidos
-    db.exec(sqlResolver('t-fora', 'nada', 1));
-    assert.equal(db.prepare(sqlUm('t-fora')).get().status, 'aberto');
+    db.exec(sqlNaColuna('t-fora', 'human-tests', 1, 'nada'));
+    assert.equal(um(db, 't-fora').status, 'a-fazer');
   });
 
-  test('três estados: os novos, depois os em resolução (cada parte por gravidade), e só com --todos os resolvidos', () => {
+  test('comecar leva um ticket a Auto Tests e mexe só no status e no updated_at; os removidos ficam', () => {
     const db = base();
-    db.exec(`INSERT INTO qa_tickets (id, user_id, body, severity, status, created_at, updated_at) VALUES
-      ('t-ed', 'U1', 'em detalhe', 'detalhe', 'em_resolucao', 950, 990), ('t-eb', 'U1', 'em bloqueia', 'bloqueia', 'em_resolucao', 20, 20);`);
-    assert.deepEqual(db.prepare(sqlListar(false)).all().map((l) => l.id), ['t-novo', 't-velho', 't-eb', 't-ed']);
-    assert.deepEqual(db.prepare(sqlListar(true)).all().map((l) => l.id), ['t-novo', 't-velho', 't-eb', 't-ed', 't-r2', 't-r1']);
-  });
-
-  test('comecar passa um novo a em resolução, e só os novos que não foram removidos', () => {
-    const db = base();
-    db.exec(sqlComecar('t-velho', 700));
-    assert.equal(db.prepare(sqlUm('t-velho')).get().status, 'em_resolucao');
+    db.exec(sqlNaColuna('t-velho', 'auto-tests', 700));
+    assert.equal(um(db, 't-velho').status, 'auto-tests');
     assert.equal(db.prepare("SELECT updated_at FROM qa_tickets WHERE id = 't-velho'").get().updated_at, 700);
-    db.exec(sqlComecar('t-r1', 700));
-    assert.equal(db.prepare(sqlUm('t-r1')).get().status, 'resolvido', 'um resolvido não volta por aqui');
-    db.exec(sqlComecar('t-fora', 700));
-    assert.equal(db.prepare(sqlUm('t-fora')).get().status, 'aberto', 'nem um removido');
-    db.exec(sqlComecar("x' OR '1'='1", 700));
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM qa_tickets WHERE status = 'em_resolucao'").get().n, 1);
+    db.exec(sqlNaColuna('t-fora', 'auto-tests', 700));
+    assert.equal(um(db, 't-fora').status, 'a-fazer', 'nem um removido');
+    db.exec(sqlNaColuna("x' OR '1'='1", 'auto-tests', 700));
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM qa_tickets WHERE status = 'auto-tests'").get().n, 2);
   });
 
-  test('reabrir tira um em resolução de volta aos novos', () => {
+  test('reabrir volta a A fazer, larga o resolved_at e guarda a resolução', () => {
     const db = base();
-    db.exec(sqlComecar('t-novo', 700));
-    db.exec(sqlReabrir('t-novo', 800));
-    assert.equal(db.prepare(sqlUm('t-novo')).get().status, 'aberto');
-  });
-
-  test('reabrir volta a aberto, larga o resolved_at e guarda a resolução', () => {
-    const db = base();
-    db.exec(sqlReabrir('t-r1', 999));
-    const l = db.prepare(sqlUm('t-r1')).get();
-    assert.equal(l.status, 'aberto');
+    db.exec(sqlNaColuna('t-r1', 'a-fazer', 999));
+    const l = um(db, 't-r1');
+    assert.equal(l.status, 'a-fazer');
     assert.equal(l.resolved_at, null);
     assert.equal(l.resolution, 'feito');
+  });
+
+  test('mover: o resolved_at acompanha a coluna (posto ao chegar a Concluído, tirado ao ir para Para depois)', () => {
+    const db = base();
+    db.exec(sqlNaColuna('t-velho', 'concluido', 800));
+    assert.deepEqual({ ...um(db, 't-velho') }.resolved_at, 800);
+    db.exec(sqlNaColuna('t-velho', 'para-depois', 900));
+    const l = um(db, 't-velho');
+    assert.equal(l.status, 'para-depois');
+    assert.equal(l.resolved_at, null);
+    // de Human Tests para Concluído mantém o resolved_at de quando foi resolvido
+    db.exec(sqlNaColuna('t-r1', 'concluido', 950));
+    assert.equal(um(db, 't-r1').resolved_at, 250);
+  });
+
+  test('o ticket primeiro e o cartão depois: um ticket antigo sem cartão ganha-o ao mover, e mover o cartão à mão leva o ticket', () => {
+    const db = base();
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kanban_cartoes').get().n, 0);
+    db.exec(sqlNaColuna('t-antigo', 'para-depois', 1000));
+    assert.equal(um(db, 't-antigo').status, 'para-depois', 'o ticket já mudou antes de se tocar no cartão');
+    const novo = { uuid: 'c-antigo', ...cartaoDoTicketQa({ id: 't-antigo', body: 'antigo', severity: null }) };
+    db.exec(sqlDoCartao({ id: 't-antigo', estado: 'para-depois', agora: 1000, novo }));
+    const k = db.prepare("SELECT coluna_id, origem_tipo, origem_id FROM kanban_cartoes WHERE id = 'c-antigo'").get();
+    assert.deepEqual({ ...k }, { coluna_id: 'para-depois', origem_tipo: 'qa', origem_id: 't-antigo' });
+    assert.equal(um(db, 't-antigo').status, 'para-depois');
+    // repetir o mover não duplica o cartão
+    db.exec(sqlNaColuna('t-antigo', 'para-depois', 1100));
+    db.exec(sqlDoCartao({ id: 't-antigo', estado: 'para-depois', agora: 1100, novo: { ...novo, uuid: 'outro' } }));
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM kanban_cartoes').get().n, 1);
+    // o outro sentido, o gatilho da 0029: mover o cartão à mão leva o ticket
+    db.exec("UPDATE kanban_cartoes SET coluna_id = 'human-tests', updated_at = 1200 WHERE id = 'c-antigo'");
+    const l = um(db, 't-antigo');
+    assert.equal(l.status, 'human-tests');
+    assert.equal(l.resolved_at, 1200);
+  });
+
+  test('os comentários por responder no listar: os de pessoas depois da nota do resolver, no texto e no --json (KAN-107)', () => {
+    const db = base();
+    // quem testa comenta (a regra das rotas, em texto): o ticket e o cartão vão a Auto Tests
+    const comenta = (uuid, texto, agora, autor) => db.exec(passosDoComentarioQa({
+      ticket: { id: 't-novo', body: 'novo', severity: 'bloqueia' }, autor: autor || { id: '4242', nome: 'Martinho' }, texto, uuid, cartaoUuid: 'c-' + uuid, agora,
+    }).map(sqlEmTexto).join(';\n'));
+    comenta('m1', 'Antes da resolução', 1000);
+    assert.equal(um(db, 't-novo').status, 'auto-tests');
+    // o resolver: a nota é o comentário do Claude, e o ticket vai a Human Tests
+    db.exec(sqlNaColuna('t-novo', 'human-tests', 2000, 'Corrigido.'));
+    db.exec(sqlDoCartao({ id: 't-novo', estado: 'human-tests', agora: 2000, comentario: { uuid: 'r1', texto: 'Corrigido.' } }));
+    comenta('m2', 'Ainda falha\nno escuro', 3000);
+    comenta('m3', 'E no claro', 3100, { id: 'd1', nome: 'Dina' });
+    // nem a sincronização nem um removido contam
+    db.exec("INSERT INTO kanban_comentarios (id, cartao_id, autor_id, autor_nome, texto, created_at, updated_at) SELECT 'a1', id, 'automatico', 'Sincronização', 'auto', 3200, 3200 FROM kanban_cartoes WHERE origem_id = 't-novo'");
+    db.exec("INSERT INTO kanban_comentarios (id, cartao_id, autor_id, autor_nome, texto, created_at, updated_at, removed_at) SELECT 'x1', id, '4242', 'Martinho', 'apagado', 3300, 3300, 3400 FROM kanban_cartoes WHERE origem_id = 't-novo'");
+    assert.equal(um(db, 't-novo').status, 'auto-tests', 'comentar depois da resolução devolve-o a Auto Tests');
+    const linhas = db.prepare(sqlComentarios(false)).all();
+    assert.deepEqual(linhas.map((l) => l.id), ['m1', 'r1', 'm2', 'm3', 'a1']);
+    const tickets = juntarComentarios(db.prepare(sqlListar(false)).all().map(ticketDaLinha), linhas);
+    const t = tickets.find((x) => x.id === 't-novo');
+    assert.deepEqual(t.comentariosPorResponder, [
+      { id: 'm2', autor: { id: '4242', nome: 'Martinho' }, texto: 'Ainda falha\nno escuro', created_at: 3000 },
+      { id: 'm3', autor: { id: 'd1', nome: 'Dina' }, texto: 'E no claro', created_at: 3100 },
+    ]);
+    assert.ok(tickets.filter((x) => x.id !== 't-novo').every((x) => Array.isArray(x.comentariosPorResponder) && !x.comentariosPorResponder.length), 'os outros, vazia');
+    const texto = textoDaLista(tickets, {});
+    assert.match(texto, /^== t-novo · BLOQUEIA · Auto Tests · KAN-\d+ · 2 comentários por responder$/m);
+    assert.match(texto, /^Comentários por responder \(2\) — a nota do resolver é a resposta:\n {2}- Martinho, 01\/01\/1970, 01:00:\n {4}Ainda falha\n {4}no escuro\n {2}- Dina, 01\/01\/1970, 01:00:\n {4}E no claro$/m);
+    assert.doesNotMatch(texto, /Antes da resolução|auto$|apagado/m, 'o respondido, o automático e o removido não aparecem');
+    // o --json leva-os na forma de juntarComentarios (o JSON.stringify do cmdListar)
+    assert.equal(JSON.parse(JSON.stringify({ tickets })).tickets.find((x) => x.id === 't-novo').comentariosPorResponder.length, 2);
+    // um cartão removido leva os comentários com ele; --todos vê os das outras colunas
+    db.exec("UPDATE kanban_cartoes SET removed_at = 5 WHERE origem_id = 't-novo'");
+    assert.deepEqual(db.prepare(sqlComentarios(true)).all(), []);
+  });
+});
+
+describe('os comentários por responder', () => {
+  // Recebe: id, autor_id, created_at. Devolve: um comentário como o SELECT o dá.
+  const c = (id, autor, t) => ({ id, autor_id: autor, autor_nome: autor, texto: id, created_at: t });
+
+  test('porResponder: de pessoas, depois da última resposta do Claude; sem resposta, todos; nunca os automáticos nem os do Claude (KAN-107)', () => {
+    assert.deepEqual(porResponder([c('p1', 'u1', 10), c('p2', 'd1', 20)]).map((x) => x.id), ['p1', 'p2'], 'nunca resolvido: todos');
+    assert.deepEqual(porResponder([c('p1', 'u1', 10), c('r1', 'claude', 15), c('p2', 'd1', 20)]).map((x) => x.id), ['p2']);
+    assert.deepEqual(porResponder([c('p1', 'u1', 10), c('r1', 'claude', 15), c('p2', 'd1', 20), c('r2', 'claude', 25)]).map((x) => x.id), [], 'respondido');
+    assert.deepEqual(porResponder([c('a1', 'automatico', 30), c('r1', 'claude', 5)]).map((x) => x.id), [], 'a sincronização não pergunta');
+    assert.deepEqual(porResponder([c('r1', 'claude', 15), c('p1', 'u1', 15)]).map((x) => x.id), [], 'no mesmo instante da resposta conta como respondido');
+    // também na forma da API (autor: {id}) e sem ordem garantida
+    assert.deepEqual(porResponder([{ id: 'p2', autor: { id: 'u1' }, created_at: 20 }, { id: 'r1', autor: { id: 'claude' }, created_at: 30 }, { id: 'p3', autor: { id: 'u1' }, created_at: 40 }]).map((x) => x.id), ['p3']);
+    assert.deepEqual(porResponder(null), []);
+    assert.deepEqual(porResponder([null, 'x', c('p1', 'u1', 1)]).map((x) => x.id), ['p1']);
+  });
+
+  test('o cabeçalho diz quantos, com o plural certo (KAN-107)', () => {
+    assert.equal(comentariosPorExtenso(0), '');
+    assert.equal(comentariosPorExtenso(1), '1 comentário por responder');
+    assert.equal(comentariosPorExtenso(3), '3 comentários por responder');
+  });
+});
+
+describe('as colunas: o nome ou o id, o que fecha e o que se pega', () => {
+  const COLUNAS = [
+    { id: 'a-fazer', nome: 'A fazer', ordem: 1, fim: false }, { id: 'auto-tests', nome: 'Auto Tests', ordem: 2, fim: false },
+    { id: 'human-tests', nome: 'Human Tests', ordem: 3, fim: false }, { id: 'concluido', nome: 'Concluído', ordem: 4, fim: true },
+    { id: 'para-depois', nome: 'Para depois', ordem: 5, fim: false },
+    { id: '3f2a9c10-aaaa-4bbb-8ccc-123456789abc', nome: 'Em revisão', ordem: 6, fim: true },
+  ];
+
+  test('resolverColuna aceita o id e o nome, sem caixa nem acentos, e as colunas novas do master', () => {
+    for (const t of ['para-depois', 'para depois', 'Para depois', 'PARA-DEPOIS', ' para  depois ']) assert.equal(resolverColuna(t, COLUNAS).id, 'para-depois', t);
+    for (const t of ['concluido', 'Concluído', 'CONCLUÍDO']) assert.equal(resolverColuna(t, COLUNAS).id, 'concluido', t);
+    assert.equal(resolverColuna('auto tests', COLUNAS).id, 'auto-tests');
+    assert.equal(resolverColuna('em revisao', COLUNAS).id, '3f2a9c10-aaaa-4bbb-8ccc-123456789abc');
+    assert.equal(resolverColuna('3F2A9C10-AAAA-4BBB-8CCC-123456789ABC', COLUNAS).nome, 'Em revisão');
+  });
+
+  test('resolverColuna recusa a que não existe, a listar as que existem', () => {
+    for (const t of ['inexistente', '', '   ', "x' OR 1=1 --"]) {
+      assert.throws(() => resolverColuna(t, COLUNAS), (e) => e instanceof ErroQa && e.codigo === 2
+        && /Não há nenhuma coluna/.test(e.message) && /A fazer \(a-fazer\), Auto Tests \(auto-tests\)/.test(e.message) && /Para depois \(para-depois\)/.test(e.message), t);
+    }
+  });
+
+  test('ticketFechado: Human Tests e as colunas de fim não se pegam (reabre-se primeiro); o resto sim', () => {
+    const f = (status) => ticketFechado({ status }, COLUNAS);
+    for (const s of ['human-tests', 'concluido', 'resolvido', '3f2a9c10-aaaa-4bbb-8ccc-123456789abc']) assert.equal(f(s), true, s);
+    for (const s of ['a-fazer', 'auto-tests', 'para-depois', 'aberto', 'em_resolucao', 'coisa-rara']) assert.equal(f(s), false, s);
+  });
+
+  test('colunaDoStatus leva os status antigos às colunas da migração 0029', () => {
+    assert.deepEqual(['aberto', 'em_resolucao', 'resolvido', 'para-depois', 'x'].map(colunaDoStatus), ['a-fazer', 'auto-tests', 'concluido', 'para-depois', 'x']);
   });
 });
 
@@ -264,7 +416,10 @@ describe('o texto do listar', () => {
     const t = textoDoTicket(ticketDaLinha(LINHA), true);
     assert.match(t, /^== aaaa-1111 · BLOQUEIA · novo$/m);
     assert.match(textoDoTicket(ticketDaLinha(Object.assign({}, LINHA, { status: 'em_resolucao' }))), /^== aaaa-1111 · BLOQUEIA · em resolução$/m);
-    assert.deepEqual(['aberto', 'em_resolucao', 'resolvido', 'outro'].map(estadoLegivel), ['novo', 'em resolução', 'resolvido', 'outro']);
+    assert.match(textoDoTicket(ticketDaLinha(Object.assign({}, LINHA, { status: 'para-depois', cartao: 12 })), false, [{ id: 'para-depois', nome: 'Para depois' }]), /^== aaaa-1111 · BLOQUEIA · Para depois · KAN-12$/m);
+    assert.deepEqual(['aberto', 'em_resolucao', 'resolvido', 'outro'].map((x) => estadoLegivel(x)), ['novo', 'em resolução', 'resolvido', 'outro']);
+    assert.equal(estadoLegivel('para-depois'), 'Para depois');
+    assert.equal(estadoLegivel('uuid-1', [{ id: 'uuid-1', nome: 'Em revisão' }]), 'Em revisão');
     assert.match(t, /^Quem: Maria Costa <maria@x\.pt>$/m);
     assert.match(t, /^Quando: 28\/10\/2026, 13:05$/m);
     assert.match(t, /^Imagem: sim — node scripts\/qa\.mjs imagem aaaa-1111 --local$/m);
@@ -291,26 +446,37 @@ describe('o texto do listar', () => {
     assert.match(feito, /^Resolvido a 28\/10\/2026, 15:00:\n {2}Feito\.$/m);
   });
 
-  test('a lista: contagens com o plural certo, secções e o vazio', () => {
-    const g0 = (id, status) => ticketDaLinha(Object.assign({}, LINHA, { id, status }));
-    const abertos = [ticketDaLinha(LINHA)];
-    const r = ticketDaLinha(Object.assign({}, LINHA, { id: 'bbbb', status: 'resolvido', resolution: 'ok', resolved_at: 1 }));
-    const em = ticketDaLinha(Object.assign({}, LINHA, { id: 'cccc', status: 'em_resolucao' }));
-    assert.match(textoDaLista(abertos, {}), /^Tickets de QA no dev \(gestor-imobiliario-dev\): 1 novo, 0 em resolução\./);
-    const todos = textoDaLista(abertos.concat(em, r, r), { todos: true, local: true });
-    assert.match(todos, /^Tickets de QA na base isolada \(--local\): 1 novo, 1 em resolução, 2 resolvidos\./);
-    assert.ok(todos.indexOf('#### Novos (1)') > -1);
-    assert.ok(todos.indexOf('#### Novos (1)') < todos.indexOf('#### Em resolução (1)'));
-    assert.ok(todos.indexOf('#### Em resolução (1)') < todos.indexOf('== cccc'));
-    assert.ok(todos.indexOf('== cccc') < todos.indexOf('#### Resolvidos (2)'));
-    assert.match(textoDaLista([g0('n1', 'aberto'), g0('n2', 'aberto')], {}), /: 2 novos, 0 em resolução\./);
+  test('a lista: a fila por colunas com as contagens, as colunas do quadro com --todos, os status antigos e desconhecidos e o vazio', () => {
+    const COLS = [
+      { id: 'a-fazer', nome: 'A fazer', fim: false }, { id: 'auto-tests', nome: 'Auto Tests', fim: false },
+      { id: 'human-tests', nome: 'Human Tests', fim: false }, { id: 'concluido', nome: 'Concluído', fim: true },
+      { id: 'para-depois', nome: 'Para depois', fim: false },
+    ];
+    const t = (id, status, o) => ticketDaLinha(Object.assign({}, LINHA, { id, status }, o || {}));
+    const fila = textoDaLista([t('n1', 'a-fazer', { cartao: 7 }), t('e1', 'auto-tests')], { colunas: COLS });
+    assert.match(fila, /^Tickets de QA no dev \(gestor-imobiliario-dev\): A fazer 1, Auto Tests 1\. Só a fila de trabalho; `--todos` mostra/);
+    assert.ok(fila.indexOf('#### A fazer (1)') < fila.indexOf('== n1') && fila.indexOf('== n1') < fila.indexOf('#### Auto Tests (1)'));
+    assert.match(fila, /^== n1 · BLOQUEIA · A fazer · KAN-7$/m);
+    assert.match(fila, /^== e1 · BLOQUEIA · Auto Tests$/m);
+    // a fila vazia numa das colunas continua no cabeçalho
+    assert.match(textoDaLista([t('n1', 'a-fazer')], { colunas: COLS }), /: A fazer 1, Auto Tests 0\./);
+    // com --todos, pela ordem do quadro (Para depois é a última), e os que não têm coluna ao fim, com o próprio status
+    const todos = textoDaLista([t('p1', 'para-depois'), t('c1', 'concluido', { resolution: 'ok', resolved_at: 1 }), t('h1', 'human-tests', { resolution: 'ok', resolved_at: 1 }),
+      t('e1', 'auto-tests'), t('n1', 'a-fazer'), t('x1', 'coisa-rara'), t('v1', 'aberto')], { todos: true, local: true, colunas: COLS });
+    assert.match(todos, /^Tickets de QA na base isolada \(--local\): A fazer 2, Auto Tests 1, Human Tests 1, Concluído 1, Para depois 1, Estado «coisa-rara» 1\./);
+    assert.doesNotMatch(todos, /Só a fila/);
+    const marcas = ['#### A fazer (2)', '== n1', '== v1', '#### Auto Tests (1)', '== e1', '#### Human Tests (1)', '== h1', '#### Concluído (1)', '== c1',
+      '#### Para depois (1)', '== p1', '#### Estado «coisa-rara» (1)', '== x1'].map((x) => todos.indexOf(x));
+    assert.ok(marcas.every((v, i) => v > -1 && (i === 0 || v > marcas[i - 1])), 'pela ordem do quadro: ' + marcas.join(', '));
+    assert.match(todos, /^== x1 · BLOQUEIA · coisa-rara$/m);
+    assert.match(todos, /^Resolvido a .*:\n {2}ok$/m);
     // os abertos em grupos por gravidade, com quantos tem cada um
-    const g = (id, severity) => ticketDaLinha(Object.assign({}, LINHA, { id, severity }));
-    const grupos = textoDaLista([g('b1', 'bloqueia'), g('b2', 'bloqueia'), g('d1', 'detalhe'), g('s1', null)], {});
-    const marcas = ['##### Bloqueia (2)', '== b1', '== b2', '##### Detalhe (1)', '== d1', '##### Sem gravidade (1)', '== s1'].map((x) => grupos.indexOf(x));
-    assert.ok(marcas.every((v, i) => v > -1 && (i === 0 || v > marcas[i - 1])), 'pela ordem: ' + marcas.join(', '));
+    const g = (id, severity) => t(id, 'a-fazer', { severity });
+    const grupos = textoDaLista([g('b1', 'bloqueia'), g('b2', 'bloqueia'), g('d1', 'detalhe'), g('s1', null)], { colunas: COLS });
+    const m2 = ['##### Bloqueia (2)', '== b1', '== b2', '##### Detalhe (1)', '== d1', '##### Sem gravidade (1)', '== s1'].map((x) => grupos.indexOf(x));
+    assert.ok(m2.every((v, i) => v > -1 && (i === 0 || v > m2[i - 1])), 'pela ordem: ' + m2.join(', '));
     assert.doesNotMatch(grupos, /##### Incomoda/, 'um grupo vazio não aparece');
-    assert.equal(textoDaLista([], {}), 'Não há tickets de QA por resolver no dev (gestor-imobiliario-dev).');
+    assert.equal(textoDaLista([], {}), 'Não há tickets de QA por resolver (em A fazer nem em Auto Tests) no dev (gestor-imobiliario-dev).');
     assert.equal(textoDaLista([], { todos: true, local: true }), 'Não há tickets de QA na base isolada (--local).');
   });
 });

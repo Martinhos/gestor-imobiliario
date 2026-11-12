@@ -103,10 +103,10 @@ describe('a conta e a ligação a outro utilizador', () => {
     const cs = conferir('ligar', conta, { obrigatorios: ['cw_peer'], deixados: ['cw_lig_'] });
     assert.equal(cs.find((c) => c.id === 'cw_peer').placeholder, EX + 'A7KQ2MPX');
     assert.match(conta, /<label class="u-fx-1 u-minw-0">O id do outro utilizador <span class="req">\*<\/span><input id="cw_peer"/);
-    const convite = a.convidarCard();
+    const convite = a.corpoDoConvite({});   // a janela do convite (CW.conviteModal)
     conferir('convite', convite, { obrigatorios: [], exemplos: { cw_inv_label: EX + 'Para a Ana, contabilidade' } });
-    assert.match(convite, /<label>Cargo <span class="req">\*<\/span>/);
-    assert.match(convite, /<div class="flabel">Imóveis <span class="req">\*<\/span><\/div>/);
+    assert.match(convite, /<p class="flabel" id="cw_inv_cl">Cargo <span class="req">\*<\/span><\/p>/);
+    assert.match(convite, /<p class="flabel">Imóveis <span class="req">\*<\/span><\/p>/);
     assert.doesNotMatch(conta + convite, /Ex\.: /, 'nenhum «Ex.: » com ponto');
   });
 

@@ -5,12 +5,22 @@
 // engole-se); a etiqueta da primeira vez sai ao primeiro arrasto; as setas
 // mudam a pílula de sítio; o contexto que vai com o ticket (sem inventar, com
 // o rasto cortado); a descrição obrigatória; o envio (POST e depois o PUT da
-// captura, e só a captura outra vez quando é ela que falha); a lista (abertos
-// e resolvidos, pela ordem certa, e o número de abertos); as secções da lista
-// que abrem e fecham (os resolvidos recolhidos por nascença, o estado
-// guardado no aparelho); a pega do lado da borda, trocada só ao largar;
+// captura, e só a captura outra vez quando é ela que falha); a lista (uma
+// secção por coluna do kanban, pela ordem do quadro, A fazer sempre e as
+// outras só com tickets, as de omissão quando o servidor não as manda, e o
+// número dos de A fazer e Auto Tests); o selo com o nome da coluna e a chave
+// do cartão; «Mover» (as outras colunas, otimista, reposto ao falhar);
+// as secções da lista que abrem e fecham (as de fim e a Para depois
+// recolhidas por nascença, o estado guardado no aparelho pelo id da coluna);
+// a pega do lado da borda, trocada só ao largar;
+// o menu conforme o sítio (na app, Ver a montra e Back office; nas páginas
+// públicas, Voltar à app e Back office; no back office, os tickets e, quando a
+// app abre daí, Ver a montra e Voltar à app);
 // remover com Anular;
-// reabrir; o HTML gerado sem style= nem on…=, com o texto escapado; o autor
+// em Human Tests, «Remover» e as três decisões em vez do «Mover» (KAN-106);
+// os comentários na janela de um ticket, e comentar (obrigatório, otimista a
+// Auto Tests, reposto ao falhar, KAN-107);
+// reabrir (só em Human Tests e nas de fim); o HTML gerado sem style= nem on…=, com o texto escapado; o autor
 // de uma conta apagada como «Conta apagada»; e a pílula acima das janelas,
 // menos das do próprio QA. A app
 // inteira, nuvem incluída, com a API e o fetch simulados.
@@ -31,7 +41,7 @@ afterEach(() => zerar());
    sem rascunho, sem posição guardada, e a sessão de volta a produção.
    Devolve: nada. */
 function zerar() {
-  vm.runInContext('qaRemoverPilula();qaLista={tickets:null,falhou:false,aPedir:null};qaAbertos=null;qaRascunho=null;' +
+  vm.runInContext('qaRemoverPilula();qaLista={tickets:null,falhou:false,aPedir:null,colunas:null};qaAbertos=null;qaRascunho=null;' +
     'qaCamadaLista=null;qaCamadaTicket=null;qaOcupado={};qaEngoleAte=0;qaArrastouAqui=false;qaContextoGuardado=null;' +
     'qaPonteiro="";qaDobrasAqui={};localStorage.clear();modalStack.length=0;CW.ambiente="producao";CW.user=null;CW._rasto=[];', app.__ctx);
 }
@@ -74,8 +84,21 @@ function clique() {
 }
 
 const LIMITES = { esq: 12, dir: 378, topo: 12, fundo: 760, pw: 96, ph: 44 };
-const T = (id, o = {}) => Object.assign({ id, body: 'texto ' + id, severity: null, context: {}, imagem: false, status: 'aberto',
+const T = (id, o = {}) => Object.assign({ id, body: 'texto ' + id, titulo: 'texto ' + id, ticket: true, prioridade: 3, severity: null, context: {}, imagem: false, status: 'a-fazer', cartao: null,
   resolution: null, resolved_at: null, created_at: 1, updated_at: 1, autor: { id: 'u2', nome: 'Rui Lopes', email: 'rui@rendorium.test' } }, o);
+// as colunas do kanban como o GET /api/qa as manda (as fixas e a Para depois, pela ordem do quadro)
+const COLUNAS = [
+  { id: 'a-fazer', nome: 'A fazer', fim: false }, { id: 'auto-tests', nome: 'Auto Tests', fim: false },
+  { id: 'human-tests', nome: 'Human Tests', fim: false }, { id: 'concluido', nome: 'Concluído', fim: true },
+  { id: 'para-depois', nome: 'Para depois', fim: false },
+];
+/* Uma ordem de pedaços no HTML: cada um existe e vem depois do anterior.
+   Recebe: h — o HTML; pedacos — os textos, pela ordem esperada.
+   Devolve: nada (falha o teste). */
+function pelaOrdem(h, pedacos) {
+  const ordem = pedacos.map((x) => h.indexOf(x));
+  assert.ok(ordem.every((v, i) => v > -1 && (i === 0 || v > ordem[i - 1])), 'pela ordem: ' + pedacos.map((x, i) => x + '@' + ordem[i]).join(', '));
+}
 const SEM_EM_LINHA = /\sstyle=|\son[a-z]+\s*=/i;
 
 describe('a pílula só fora de produção', () => {
@@ -99,6 +122,94 @@ describe('a pílula só fora de produção', () => {
     app.CW.ambiente = 'producao';
     assert.equal(app.qaSincronizar(), false, 'o ambiente voltou a produção');
     assert.equal(app.qaPil, null, 'e a pílula saiu');
+  });
+
+  test('na app o menu leva à montra (o /montra, neste separador); no back office só quando a app abre daí', () => {
+    apiFalsa();
+    noDev();
+    assert.equal(app.qaSincronizar(), true);
+    assert.match(app.qaPil.innerHTML, /class="qa-menu-montra"[^>]*data-click="closePops\(\);qaVerMontra\(\)"[^>]*>[\s\S]*? Ver a montra<\/button>/);
+    const antes = app.location.href;
+    try {
+      app.qaVerMontra();
+      assert.equal(app.location.href, '/montra');
+    } finally { app.location.href = antes; }
+    // no back office a camada define o QA_EQUIPA; sem o app (a sessão de lá não passa a porta do dev) não há montra
+    vm.runInContext('globalThis.QA_EQUIPA = { ambiente: "dev" };', app.__ctx);
+    try {
+      assert.equal(app.qaNaEquipa(), true);
+      assert.doesNotMatch(app.qaHtmlMenu(0), /Ver a montra|qaVerMontra/);
+      assert.match(app.qaHtmlMenu(0), /Novo ticket[\s\S]*Ver tickets/, 'as outras duas continuam');
+    } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
+    // com o app (a porta do dev deixa abrir a app), a montra aparece também no back office
+    vm.runInContext('globalThis.QA_EQUIPA = { ambiente: "dev", app: true };', app.__ctx);
+    try {
+      assert.match(app.qaHtmlMenu(0), /class="qa-menu-montra"[^>]*data-click="closePops\(\);qaVerMontra\(\)"/);
+    } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
+    assert.equal(app.qaNaEquipa(), false);
+  });
+
+  /* Os rótulos dos botões de um menu, sem os ícones.
+     Recebe: h — o HTML do menu.
+     Devolve: a lista dos textos. */
+  const rotulos = (h) => [...h.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)].map((m) => m[1].replace(/<svg[\s\S]*?<\/svg>/g, '').trim());
+
+  test('o menu conforme o sítio: a app com a montra e o Back office, as páginas com Voltar à app e o Back office, o back office com os tickets e, se a app abre daí, a montra e a volta à app', () => {
+    apiFalsa();
+    noDev();
+    // na app
+    assert.equal(app.qaLugar(), 'app');
+    const naApp = app.qaHtmlMenu(2);
+    assert.deepEqual(rotulos(naApp), ['Novo ticket', 'Ver tickets (2)', 'Ver a montra', 'Back office']);
+    assert.ok(naApp.includes(app.ic('door', 17) + ' Ver a montra'), 'a montra com a porta');
+    assert.ok(naApp.includes(app.ic('users', 17) + ' Back office'), 'o back office com a equipa');
+    assert.match(naApp, /class="qa-menu-equipa" data-toca="camada" data-click="closePops\(\);qaBackOffice\(\)"/);
+    assert.doesNotMatch(naApp, /Voltar à app|qaVoltarApp/);
+    const antes = app.location.href;
+    try {
+      app.qaBackOffice();
+      assert.equal(app.location.href, '/equipa', 'o Back office abre o /equipa, neste separador');
+      app.qaVerMontra();
+      assert.equal(app.location.href, '/montra', 'e o Ver a montra continua');
+    } finally { app.location.href = antes; }
+    // nas páginas públicas (a montra e o guia), a camada define o QA_PAGINAS
+    vm.runInContext('globalThis.QA_PAGINAS = { ambiente: "dev" };', app.__ctx);
+    try {
+      assert.equal(app.qaLugar(), 'paginas');
+      assert.equal(app.qaNaEquipa(), false);
+      const nasPaginas = app.qaHtmlMenu(null);
+      assert.deepEqual(rotulos(nasPaginas), ['Novo ticket', 'Ver tickets', 'Voltar à app', 'Back office']);
+      assert.ok(nasPaginas.includes(app.ic('home', 17) + ' Voltar à app'), 'a app com a casa');
+      assert.match(nasPaginas, /class="qa-menu-app" data-toca="camada" data-click="closePops\(\);qaVoltarApp\(\)"/);
+      assert.doesNotMatch(nasPaginas, /Ver a montra|qaVerMontra/, 'já se está na montra');
+      try {
+        app.qaVoltarApp();
+        assert.equal(app.location.href, '/', 'Voltar à app vai para o /');
+      } finally { app.location.href = antes; }
+    } finally { vm.runInContext('delete globalThis.QA_PAGINAS;', app.__ctx); }
+    // no back office, a camada define o QA_EQUIPA: sem o app, só os tickets
+    vm.runInContext('globalThis.QA_EQUIPA = { ambiente: "dev" };', app.__ctx);
+    try {
+      assert.equal(app.qaLugar(), 'equipa');
+      assert.deepEqual(rotulos(app.qaHtmlMenu(0)), ['Novo ticket', 'Ver tickets (0)']);
+      assert.doesNotMatch(app.qaHtmlMenu(0), /Back office|Voltar à app|Ver a montra/);
+    } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
+    // dados que não chegaram (QA_EQUIPA nulo) também ficam só com os tickets
+    vm.runInContext('globalThis.QA_EQUIPA = null;', app.__ctx);
+    try {
+      assert.deepEqual(rotulos(app.qaHtmlMenu(0)), ['Novo ticket', 'Ver tickets (0)']);
+    } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
+    // com o app (a sessão de teste abre a app), a montra e a volta à app, sem o Back office
+    vm.runInContext('globalThis.QA_EQUIPA = { ambiente: "dev", app: true };', app.__ctx);
+    try {
+      const naEquipa = app.qaHtmlMenu(0);
+      assert.deepEqual(rotulos(naEquipa), ['Novo ticket', 'Ver tickets (0)', 'Ver a montra', 'Voltar à app']);
+      assert.ok(naEquipa.includes(app.ic('door', 17) + ' Ver a montra'), 'a montra com a porta');
+      assert.ok(naEquipa.includes(app.ic('home', 17) + ' Voltar à app'), 'a app com a casa');
+      assert.match(naEquipa, /class="qa-menu-app" data-toca="camada" data-click="closePops\(\);qaVoltarApp\(\)"/);
+      assert.doesNotMatch(naEquipa, /Back office|qaBackOffice/, 'já se está no back office');
+    } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
+    assert.equal(app.qaLugar(), 'app');
   });
 
   test('o render traz a pílula quando o ambiente chega do servidor', () => {
@@ -265,7 +376,7 @@ describe('o contexto', () => {
   });
 
   test('abrir o menu guarda o ecrã de agora e pede o número de abertos', async () => {
-    const pedidos = apiFalsa({ 'GET /api/qa': { tickets: [T('A1'), T('A2'), T('R1', { status: 'resolvido' })] } });
+    const pedidos = apiFalsa({ 'GET /api/qa': { colunas: COLUNAS, tickets: [T('A1'), T('A2', { status: 'auto-tests' }), T('R1', { status: 'human-tests' })] } });
     noDev();
     app.qaSincronizar();
     await app.qaLista.aPedir;
@@ -385,74 +496,334 @@ describe('o novo ticket', () => {
 });
 
 describe('a lista', () => {
-  test('os abertos do mais recente para o mais antigo, depois os «Resolvidos», e o número de abertos na pílula e no menu', async () => {
-    apiFalsa({ 'GET /api/qa': { tickets: [
-      T('A1', { created_at: 100 }), T('R1', { status: 'resolvido', resolved_at: 300 }), T('A2', { created_at: 200, severity: 'bloqueia', imagem: true }),
-      T('R2', { status: 'resolvido', resolved_at: 400 }),
-    ] } });
-    noDev();
-    app.qaSincronizar();
-    await app.qaLista.aPedir;
-    assert.equal(app.qaAbertos, 2);
-    igual(app.qaSeccoes(app.qaLista.tickets).abertos.map((t) => t.id), ['A2', 'A1']);
-    igual(app.qaSeccoes(app.qaLista.tickets).resolvidos.map((t) => t.id), ['R2', 'R1']);
-    const h = app.qaHtmlLista();
-    const ordem = ['Novos', "qaAbrirTicket('A2')", "qaAbrirTicket('A1')", 'Resolvidos', "qaAbrirTicket('R2')", "qaAbrirTicket('R1')"].map((x) => h.indexOf(x));
-    assert.ok(ordem.every((v, i) => v > -1 && (i === 0 || v > ordem[i - 1])), 'pela ordem: ' + ordem.join(', '));
-    assert.match(h, /<span class="badge red">Bloqueia<\/span>/, 'o selo da gravidade');
-    assert.match(h, /Com captura/, 'o sinal de que traz imagem');
-    assert.match(h, /Rui Lopes · /, 'quem o escreveu');
-    assert.equal(app.qaRotuloDoBotao(app.qaAbertos), 'Tickets de QA, 2 por resolver');
-    assert.equal(app.qaRotuloDoBotao(1), 'Tickets de QA, 1 por resolver');
-    assert.equal(app.qaRotuloDoBotao(0), 'Tickets de QA, nenhum por resolver');
-    assert.equal(app.qaRotuloVer(2), 'Ver tickets (2)');
-  });
-
-  test('três estados: «Novos», «Em resolução» e «Resolvidos»; o número conta os novos e os em resolução', async () => {
-    apiFalsa({ 'GET /api/qa': { tickets: [
-      T('E1', { status: 'em_resolucao', severity: 'detalhe', created_at: 900 }), T('N1', { created_at: 100 }),
-      T('E2', { status: 'em_resolucao', severity: 'bloqueia', created_at: 50 }), T('R1', { status: 'resolvido', resolved_at: 300 }),
-      T('X1', { status: 'esquisito', created_at: 80 }),
+  test('uma secção por coluna do kanban, pela ordem que o servidor manda, com o nome e quantos tem; A fazer sempre, as outras só com tickets', async () => {
+    const colunas = [COLUNAS[0], COLUNAS[4], COLUNAS[1], COLUNAS[2], { id: 'c0ffee-1', nome: 'Bloqueado', fim: false }, COLUNAS[3]];
+    apiFalsa({ 'GET /api/qa': { colunas, tickets: [
+      T('N1', { created_at: 100 }), T('N2', { prioridade: 1, created_at: 50, imagem: true }),
+      T('E1', { status: 'auto-tests', prioridade: 4, created_at: 900 }), T('E2', { status: 'auto-tests', prioridade: 1, created_at: 50 }),
+      T('H1', { status: 'human-tests', resolved_at: 300 }), T('H2', { status: 'human-tests', resolved_at: 400 }),
+      T('C1', { status: 'concluido', resolved_at: 10 }), T('D1', { status: 'para-depois' }), T('X1', { status: 'esquisito' }),
     ] } });
     noDev();
     app.qaSincronizar();
     await app.qaLista.aPedir;
     const s = app.qaSeccoes(app.qaLista.tickets);
-    igual(s.novos.map((t) => t.id), ['N1', 'X1'], 'um estado que não se conhece fica com os novos');
-    igual(s.emResolucao.map((t) => t.id), ['E2', 'E1'], 'por gravidade, como os novos');
-    igual(s.abertos.map((t) => t.id), ['N1', 'X1', 'E2', 'E1']);
-    assert.equal(app.qaAbertos, 4);
+    igual(s.seccoes.map((x) => x.id), ['a-fazer', 'para-depois', 'auto-tests', 'human-tests', 'c0ffee-1', 'concluido', 'esquisito'],
+      'a ordem do quadro, e no fim o status que não é uma coluna (o ticket não se perde)');
+    igual(s.seccoes.map((x) => x.ts.map((t) => t.id)), [['N2', 'N1'], ['D1'], ['E2', 'E1'], ['H2', 'H1'], [], ['C1'], ['X1']],
+      'pela prioridade do cartão nas por resolver, do resolvido há menos tempo nas resolvidas');
+    igual(s.abertos.map((t) => t.id), ['N2', 'N1', 'E2', 'E1'], 'por resolver: A fazer e Auto Tests');
+    assert.equal(app.qaAbertos, 4, 'o número da pílula');
+    assert.equal(app.qaRotuloDoBotao(app.qaAbertos), 'Tickets de QA, 4 por resolver');
+    assert.equal(app.qaRotuloVer(app.qaAbertos), 'Ver tickets (4)');
     const h = app.qaHtmlLista();
-    const ordem = ['>Novos<', "qaAbrirTicket('N1')", '>Em resolução<', "qaAbrirTicket('E2')", "qaAbrirTicket('E1')", '>Resolvidos<', "qaAbrirTicket('R1')"].map((x) => h.indexOf(x));
-    assert.ok(ordem.every((v, i) => v > -1 && (i === 0 || v > ordem[i - 1])), 'pela ordem: ' + ordem.join(', '));
-    assert.match(h, /<span class="qa-dobra-nome">Em resolução<\/span><span class="qa-sec-n">2<\/span>/);
-    const e2 = app.qaLista.tickets.find((t) => t.id === 'E2');
-    assert.match(app.qaHtmlTicket(e2), /<span class="badge loan">Em resolução<\/span>/);
-    assert.match(app.qaHtmlTicket(app.qaLista.tickets.find((t) => t.id === 'N1')), /<span class="badge">Novo<\/span>/);
-    assert.doesNotMatch(app.qaRodapeTicket(e2), /Reabrir/, 'um em resolução não se reabre: fecha-se');
-    // sem nenhum em resolução, a secção não aparece; sem novos, diz-se
-    app.qaLista.tickets = [T('R9', { status: 'resolvido', resolved_at: 1 })];
+    pelaOrdem(h, ['>A fazer<', "qaAbrirTicket('N2')", "qaAbrirTicket('N1')", '>Para depois<', "qaAbrirTicket('D1')",
+      '>Auto Tests<', "qaAbrirTicket('E2')", "qaAbrirTicket('E1')", '>Human Tests<', "qaAbrirTicket('H2')", "qaAbrirTicket('H1')",
+      '>Concluído<', "qaAbrirTicket('C1')", '>esquisito<', "qaAbrirTicket('X1')"]);
+    assert.match(h, /<span class="qa-dobra-nome">Auto Tests<\/span><span class="qa-sec-n">2<\/span>/);
+    assert.match(h, /<span class="qa-dobra-nome">Concluído<\/span><span class="qa-sec-n">1<\/span>/);
+    assert.doesNotMatch(h, /Bloqueado/, 'uma coluna sem tickets não aparece');
+    assert.match(h, /<span class="qa-prio qa-p1"><svg [^>]*>.*?<\/svg><span class="qa-so-leitor">Prioridade: <\/span>Mais alta<\/span>/, 'o selo da prioridade do cartão, com o ícone e a palavra');
+    assert.doesNotMatch(h, /qa-p3|Prioridade: <\/span>Média/, 'a Média não tem selo');
+    assert.match(h, /Com captura/, 'o sinal de que traz imagem');
+    assert.match(h, /Rui Lopes · /, 'quem o escreveu');
+    // sem nenhum em A fazer, a secção fica, a dizê-lo
+    app.qaLista.tickets = [T('H9', { status: 'human-tests', resolved_at: 1 })];
     const so = app.qaHtmlLista();
-    assert.doesNotMatch(so, /Em resolução/);
-    assert.match(so, /Nenhum ticket novo./);
+    pelaOrdem(so, ['>A fazer<', 'Nenhum ticket novo.', '>Human Tests<']);
+    assert.doesNotMatch(so, />Auto Tests</);
+    assert.equal(app.qaSeccoes(app.qaLista.tickets).abertos.length, 0);
   });
 
-  test('os novos em grupos por gravidade, cada um com o título e quantos tem, e em cada grupo o mais recente à frente', () => {
+  test('sem colunas na resposta (um servidor de antes), as cinco de omissão; Para depois aparece quando tem tickets', async () => {
+    apiFalsa({ 'GET /api/qa': { tickets: [T('P1', { status: 'para-depois' }), T('N1')] } });
+    await app.qaCarregar();
+    igual(app.qaColunas().map((c) => c.nome), ['A fazer', 'Auto Tests', 'Human Tests', 'Concluído', 'Para depois']);
+    igual(app.qaColunas().map((c) => c.fim), [false, false, false, true, false]);
+    const h = app.qaHtmlLista();
+    pelaOrdem(h, ['>A fazer<', "qaAbrirTicket('N1')", '>Para depois<', "qaAbrirTicket('P1')"]);
+    assert.doesNotMatch(h, />Auto Tests<|>Human Tests<|>Concluído</);
+    assert.equal(app.qaAbertos, 1, 'o de Para depois não conta');
+    // o que vem do servidor é validado: ids com a forma de um id de coluna, sem repetidos, com nome
+    igual(app.qaColunasDe([{ id: 'a-fazer', nome: 'A fazer' }, { id: 'a-fazer', nome: 'Outra' }, { id: 'mau id!' }, null, { id: 'x1', nome: '  ', fim: 1 }]),
+      [{ id: 'a-fazer', nome: 'A fazer', fim: false }, { id: 'x1', nome: 'x1', fim: true }]);
+    igual(app.qaColunasDe('lixo').map((c) => c.id), ['a-fazer', 'auto-tests', 'human-tests', 'concluido', 'para-depois']);
+  });
+
+  test('o selo do estado diz o nome da coluna: Auto Tests no roxo, Human Tests e as de fim no verde, as outras neutras; e a chave do cartão', () => {
+    app.qaLista.colunas = app.qaColunasDe(COLUNAS.concat([{ id: 'f1n4l', nome: 'Arquivado', fim: true }, { id: 'b10c', nome: '<b>Bloqueado</b>' }]));
+    assert.equal(app.qaSeloEstado('auto-tests'), '<span class="badge loan">Auto Tests</span>');
+    assert.equal(app.qaSeloEstado('human-tests'), '<span class="badge in">Human Tests</span>');
+    assert.equal(app.qaSeloEstado('concluido'), '<span class="badge in">Concluído</span>');
+    assert.equal(app.qaSeloEstado('f1n4l'), '<span class="badge in">Arquivado</span>', 'uma coluna de fim nova');
+    assert.equal(app.qaSeloEstado('a-fazer'), '<span class="badge grey">A fazer</span>');
+    assert.equal(app.qaSeloEstado('para-depois'), '<span class="badge grey">Para depois</span>');
+    assert.equal(app.qaSeloEstado('esquisito'), '<span class="badge grey">esquisito</span>', 'uma que não se conhece diz o id');
+    assert.equal(app.qaSeloEstado('b10c'), '<span class="badge grey">&lt;b&gt;Bloqueado&lt;/b&gt;</span>', 'o nome escapado');
+    const comCartao = app.qaHtmlTicket(T('K1', { status: 'auto-tests', cartao: 'KAN-12' }));
+    assert.match(comCartao, /<div class="qa-ver-cab"><span class="badge loan">Auto Tests<\/span><span class="small num qa-cartao"[^>]*>KAN-12<\/span><\/div>/);
+    assert.doesNotMatch(app.qaHtmlTicket(T('K2')), /qa-cartao/, 'sem cartão, nada');
+  });
+
+  test('«Reabrir» só nas colunas de fim; em Human Tests, «Remover» e as três decisões em vez do «Mover»; nas outras, «Mover» e «Fechar» (KAN-106)', () => {
+    app.qaLista.colunas = app.qaColunasDe(COLUNAS.concat([{ id: 'f1n4l', nome: 'Arquivado', fim: true }]));
+    for (const st of ['concluido', 'f1n4l']) {
+      const r = app.qaRodapeTicket(T('Q1', { status: st }));
+      assert.match(r, /data-click="qaReabrir\('Q1'\)">Reabrir</, st + ' reabre-se');
+      assert.doesNotMatch(r, />Fechar</, st);
+      assert.doesNotMatch(r, /qa-decisoes|Aceitar|Recusar|Adiar/, st + ' sem as decisões');
+    }
+    const ht = app.qaRodapeTicket(T('Q1', { status: 'human-tests' }));
+    assert.doesNotMatch(ht, /Reabrir|>Fechar</, 'em Human Tests decide-se');
+    assert.match(ht, /^<button type="button" class="btn qa-remover"[^>]*data-click="qaRemover\('Q1'\)">[\s\S]*?<\/svg><span class="qa-remover-txt"> Remover<\/span><\/button><div class="qa-decisoes">/, 'o «Remover» e logo as decisões');
+    assert.doesNotMatch(ht, /qa-mover|qaMover|menuOpen|data-menu=|Mover/, 'sem o «Mover»: as decisões são em vez dele');
+    assert.match(ht, /<div class="qa-decisoes"><button type="button" class="btn" data-toca="dados" data-click="qaRecusar\('Q1'\)">Recusar<\/button>/);
+    assert.match(ht, /data-click="qaAdiar\('Q1'\)">Adiar<\/button>/);
+    assert.match(ht, /<button type="button" class="btn primary" data-toca="dados" data-click="qaAceitar\('Q1'\)">Aceitar<\/button><\/div>$/, '«Aceitar», o primário, no fim');
+    assert.equal((ht.match(/<button /g) || []).length, 4, 'quatro botões: Remover, Recusar, Adiar e Aceitar');
+    assert.doesNotMatch(ht, SEM_EM_LINHA);
+    // sem a coluna Para depois (o master apagou-a), não há «Adiar»
+    app.qaLista.colunas = app.qaColunasDe(COLUNAS.filter((c) => c.id !== 'para-depois'));
+    const semDepois = app.qaRodapeTicket(T('Q1', { status: 'human-tests' }));
+    assert.doesNotMatch(semDepois, /Adiar/);
+    assert.match(semDepois, /Recusar[\s\S]*Aceitar/);
+    app.qaLista.colunas = app.qaColunasDe(COLUNAS.concat([{ id: 'f1n4l', nome: 'Arquivado', fim: true }]));
+    for (const st of ['a-fazer', 'auto-tests', 'para-depois', 'esquisito']) {
+      const r = app.qaRodapeTicket(T('Q1', { status: st }));
+      assert.doesNotMatch(r, /Reabrir/, st + ' não se reabre');
+      assert.match(r, /data-click="closeModal\(\)">Fechar</, st);
+      assert.match(r, /qaRemover\('Q1'\)[\s\S]*data-menu="acoes"[\s\S]*Mover<\/button>[\s\S]*Fechar/, st + ': «Remover», «Mover» e «Fechar», como antes');
+      assert.doesNotMatch(r, /qa-decisoes/, st);
+    }
+    assert.match(app.qaRodapeTicket(T('Q1', { status: 'concluido' })), /qaRemover\('Q1'\)[\s\S]*Mover<\/button>[\s\S]*Reabrir/, 'numa de fim, «Mover» e «Reabrir»');
+    // a resolução: «Resolução» onde está resolvido, «Resolução anterior» nas outras
+    assert.match(app.qaHtmlTicket(T('Q2', { status: 'human-tests', resolution: 'Feito', resolved_at: 5 })), /<b>Resolução<\/b>/);
+    assert.match(app.qaHtmlTicket(T('Q3', { status: 'auto-tests', resolution: 'Feito' })), /<b>Resolução anterior<\/b>/);
+  });
+
+  test('a janela de um ticket: os comentários pedidos à parte, com quem, quando e o texto com as mudanças de linha, e o campo para comentar (KAN-107)', async () => {
+    const pedidos = apiFalsa({
+      'GET /api/qa': { colunas: COLUNAS, tickets: [T('C1', { status: 'human-tests', resolution: 'Feito', resolved_at: 5 })] },
+      'GET /api/qa/:id/comentarios': { comentarios: [
+        { id: 'k1', autor: { id: '4242', nome: 'Martinho' }, texto: 'Ainda falha\n<b>no escuro</b>', created_at: Date.UTC(2026, 10, 11, 10, 0), meu: true },
+        { id: 'k2', autor: { id: 'claude', nome: 'Claude' }, texto: 'Corrigido.', created_at: Date.UTC(2026, 10, 11, 11, 0), meu: false },
+        null, { sem: 'id' },
+      ] },
+    });
+    const abertas = janelasFalsas(app, 'render', 'save');
+    noDev();
+    await app.qaCarregar();
+    // antes de abrir, o HTML diz que estão a chegar, e traz o campo
+    const h = app.qaHtmlTicket(app.qaLista.tickets[0]);
+    assert.match(h, /<section class="qa-coms" aria-labelledby="qa_coms_tit"><h3 class="qa-coms-tit" id="qa_coms_tit">Comentários<\/h3><div class="qa-coms-lista"><div class="espera qa-coms-espera">/);
+    assert.match(h, /<label>Comentário <span class="req">\*<\/span><textarea id="qa_com" maxlength="4000" rows="2" placeholder="Ex: [^"]+"><\/textarea><\/label>/, 'obrigatório, com o asterisco e um exemplo');
+    assert.match(h, /<button type="button" class="btn" id="qa_com_btn" data-toca="dados" data-click="qaComentar\(\)">Comentar<\/button>/);
+    pelaOrdem(h, ['qa-ver-topo', 'qa-resolucao', 'qa-coms', 'qa_com', 'Contexto']);
+    assert.match(h, /Comentar passa o ticket a Auto Tests/, 'fora de Auto Tests diz o que comentar faz');
+    assert.doesNotMatch(h, SEM_EM_LINHA);
+    pedidos.length = 0;
+    app.qaAbrirTicket('C1');
+    const L = abertas[0];
+    assert.equal(L.qaComs, null, 'à espera');
+    await new Promise((r) => setTimeout(r, 0));
+    igual(pedidos.map((p) => p[0] + ' ' + p[1]), ['GET /api/qa/C1/comentarios'], 'pedidos à parte, só para este ticket');
+    igual(L.qaComs.map((c) => c.id), ['k1', 'k2'], 'os que não têm forma de comentário ficam de fora');
+    const lista = L.el.querySelector('.qa-coms-lista').innerHTML;
+    assert.match(lista, /<ol class="qa-coms-itens"><li class="qa-com"><p class="small qa-quem">Martinho \(eu\) · [^<]+<\/p><p class="qa-com-txt">Ainda falha\n&lt;b&gt;no escuro&lt;\/b&gt;<\/p><\/li>/, 'o texto escapado, com a mudança de linha');
+    assert.match(lista, /<p class="small qa-quem">Claude · [^<]+<\/p><p class="qa-com-txt">Corrigido\.<\/p>/);
+    // sem comentários, o vazio; a falha, com «Tentar de novo», que pede outra vez
+    L.qaComs = [];
+    assert.match(app.qaHtmlComentarios(L, { status: 'auto-tests' }), /Ainda não há comentários\.[\s\S]*Quem programa responde aqui/);
+    apiFalsa({ 'GET /api/qa/:id/comentarios': new Error('sem rede') });
+    await app.qaCarregarComentarios(L);
+    assert.equal(L.qaComs, 'falhou');
+    assert.match(L.el.querySelector('.qa-coms-lista').innerHTML, /Não deu para carregar os comentários\.[\s\S]*data-click="qaComentariosDeNovo\(\)">Tentar de novo/);
+  });
+
+  test('comentar: obrigatório, com o erro junto ao campo e nada a sair; otimista a Auto Tests, e o comentário do servidor no fim (KAN-107)', async () => {
+    let servidor = 'human-tests';
+    let noPedido = null;
+    const pedidos = apiFalsa({
+      'GET /api/qa': () => ({ colunas: COLUNAS, tickets: [T('C1', { status: servidor, resolution: 'Feito', resolved_at: servidor === 'human-tests' ? 5 : null })] }),
+      'GET /api/qa/:id/comentarios': { comentarios: [] },
+      'POST /api/qa/:id/comentarios': (d) => {
+        const L = app.qaCamadaTicket;
+        noPedido = { status: app.qaLista.tickets[0].status, abertos: app.qaAbertos, campo: app.document.getElementById('qa_com').value,
+          lista: L.el.querySelector('.qa-coms-lista').innerHTML, botao: app.document.getElementById('qa_com_btn').textContent };
+        servidor = 'auto-tests';
+        return { ok: true, coluna: 'auto-tests', comentario: { id: 'srv1', autor: { id: 'u1', nome: 'Maria Costa' }, texto: d.texto, created_at: 9, meu: true } };
+      },
+    });
+    const avisos = [], falhas = [];
+    app.toast = (m) => avisos.push(m);
+    app.falhaCampo = (id, msg) => falhas.push([id, msg]);
+    const abertas = janelasFalsas(app, 'render', 'save');
+    noDev();
+    await app.qaCarregar();
+    app.qaAbrirTicket('C1');
+    await new Promise((r) => setTimeout(r, 0));
+    const L = abertas[0];
+    // vazio (ou só espaços): o erro junto ao campo, e nada sai
+    pedidos.length = 0;
+    app.document.getElementById('qa_com').value = '  \n ';
+    assert.equal(await app.qaComentar(), false);
+    igual(falhas, [['qa_com', 'Escreve o comentário.']]);
+    app.document.getElementById('qa_com').value = 'x'.repeat(4001);
+    assert.equal(await app.qaComentar(), false);
+    igual(falhas[1], ['qa_com', 'O comentário passa dos 4000 caracteres. Encurta-o.']);
+    igual(pedidos, []);
+    assert.equal(app.qaLista.tickets[0].status, 'human-tests', 'nada mudou');
+    // com texto: otimista, antes de o servidor responder
+    app.document.getElementById('qa_com').value = '  Ainda falha\r\nno escuro  ';
+    const ida = app.qaComentar();
+    assert.equal(app.qaLista.tickets[0].status, 'auto-tests', 'já está em Auto Tests');
+    assert.equal(await ida, true);
+    assert.equal(noPedido.status, 'auto-tests');
+    assert.equal(noPedido.abertos, 1, 'e conta no número da pílula');
+    assert.equal(noPedido.campo, '', 'o campo esvaziou-se');
+    assert.match(noPedido.lista, /<li class="qa-com a-enviar"><p class="small qa-quem">Maria Costa \(eu\) · a enviar…<\/p><p class="qa-com-txt">Ainda falha\nno escuro<\/p>/, 'o comentário aparece logo, a enviar');
+    assert.equal(noPedido.botao, 'A enviar…');
+    igual(pedidos.find((p) => p[0] === 'POST'), ['POST', '/api/qa/C1/comentarios', { texto: 'Ainda falha\nno escuro' }]);
+    igual(avisos, ['Comentário enviado. O ticket passou a Auto Tests.']);
+    igual(L.qaComs.map((c) => c.id), ['srv1'], 'o do servidor no lugar do provisório');
+    assert.equal(L.qaProvisorio, null);
+    assert.doesNotMatch(L.el.querySelector('.qa-coms-lista').innerHTML, /a enviar/);
+    assert.equal(app.document.getElementById('qa_com_btn').textContent, 'Comentar');
+    assert.equal(app.document.getElementById('qa_com_btn').disabled, false);
+    await app.qaLista.aPedir;
+    assert.ok(pedidos.some((p) => p[0] === 'GET' && p[1] === '/api/qa'), 'e a lista pede-se outra vez');
+    assert.equal(app.qaLista.tickets[0].status, 'auto-tests');
+    // a janela repintou-se sem tocar no campo: o rodapé já não tem as decisões
+    assert.doesNotMatch(L.el.querySelector('.foot').innerHTML, /qa-decisoes/);
+    assert.match(L.el.querySelector('.foot').innerHTML, /Mover<\/button>/);
+    // já em Auto Tests, o aviso não diz que passou
+    app.document.getElementById('qa_com').value = 'Mais um';
+    await app.qaComentar();
+    assert.equal(avisos[avisos.length - 1], 'Comentário enviado.');
+  });
+
+  test('comentar que falha: o ticket volta à coluna de antes, o texto volta ao campo e o erro diz porquê junto dele (KAN-107)', async () => {
+    const pedidos = apiFalsa({
+      'GET /api/qa': { colunas: COLUNAS, tickets: [T('C1', { status: 'concluido', resolution: 'Feito', resolved_at: 5 })] },
+      'GET /api/qa/:id/comentarios': { comentarios: [{ id: 'k1', autor: { id: 'u2', nome: 'Rui' }, texto: 'Antes', created_at: 3 }] },
+      'POST /api/qa/:id/comentarios': Object.assign(new Error('Já comentaste muitas vezes seguidas. Espera um pouco.'), { status: 429 }),
+    });
+    const falhas = [];
+    app.toast = () => {};
+    app.falhaCampo = (id, msg) => falhas.push([id, msg]);
+    const abertas = janelasFalsas(app, 'render', 'save');
+    noDev();
+    await app.qaCarregar();
+    app.qaAbrirTicket('C1');
+    await new Promise((r) => setTimeout(r, 0));
+    const L = abertas[0];
+    assert.equal(app.qaAbertos, 0);
+    app.document.getElementById('qa_com').value = 'Voltou';
+    const ida = app.qaComentar();
+    assert.equal(app.qaLista.tickets[0].status, 'auto-tests', 'otimista');
+    assert.equal(await app.qaComentar(), false, 'com um a caminho, o segundo não sai');
+    assert.equal(await ida, false);
+    const t = app.qaLista.tickets[0];
+    assert.deepEqual([t.status, t.resolved_at, t.updated_at], ['concluido', 5, 1], 'voltou a como estava');
+    assert.equal(app.qaAbertos, 0);
+    assert.equal(app.document.getElementById('qa_com').value, 'Voltou', 'o texto volta ao campo');
+    igual(falhas, [['qa_com', 'Já comentaste muitas vezes seguidas. Espera um pouco.']]);
+    igual(L.qaComs.map((c) => c.id), ['k1'], 'o provisório saiu');
+    assert.doesNotMatch(L.el.querySelector('.qa-coms-lista').innerHTML, /a enviar/);
+    assert.match(L.el.querySelector('.foot').innerHTML, /Reabrir/, 'o rodapé da coluna de antes');
+    assert.deepEqual(Object.keys(app.qaOcupado), [], 'e o ticket ficou livre');
+    igual(pedidos.filter((p) => p[0] === 'POST').map((p) => p[1]), ['/api/qa/C1/comentarios']);
+  });
+
+  test('«Mover»: um menu de ações com as outras colunas; o POST à rota certa, otimista, e a lista outra vez', async () => {
+    let servidor = 'a-fazer';
+    const noPedido = [];
+    const pedidos = apiFalsa({
+      'GET /api/qa': () => ({ colunas: COLUNAS, tickets: [T('A1', { status: servidor, resolved_at: servidor === 'human-tests' ? 777 : null })] }),
+      'POST /api/qa/:id/mover': (d) => {
+        const t = app.qaLista.tickets[0];
+        noPedido.push([t.status, typeof t.resolved_at, app.qaAbertos]);
+        servidor = d.coluna;
+        return { ok: true };
+      },
+    });
+    const avisos = [];
+    app.toast = (m) => avisos.push(m);
+    await app.qaCarregar();
+    const rodape = app.qaRodapeTicket(app.qaLista.tickets[0]);
+    assert.match(rodape, /<span class="menuwrap qa-mover" data-menu="acoes"><button type="button" class="btn" data-toca="camada" data-click="menuOpen\(event,'qaMover'\)" aria-expanded="false">/);
+    assert.match(rodape, /Mover<\/button><div class="menupop" id="menu_qaMover">/);
+    const opcoes = [...rodape.matchAll(/data-click="closePops\(\);qaMover\('A1','([\w-]+)'\)">[\s\S]*?<\/svg> ([^<]+)<\/button>/g)].map((m) => m[1] + ' ' + m[2]);
+    igual(opcoes, ['auto-tests Auto Tests', 'human-tests Human Tests', 'concluido Concluído', 'para-depois Para depois'], 'as outras colunas, pela ordem do quadro');
+    assert.doesNotMatch(rodape, SEM_EM_LINHA);
+    pedidos.length = 0;
+    assert.equal(await app.qaMover('A1', 'human-tests'), true);
+    igual(noPedido, [['human-tests', 'number', 0]], 'otimista: a lista e o número mudaram antes de o servidor responder');
+    igual(pedidos[0], ['POST', '/api/qa/A1/mover', { coluna: 'human-tests' }]);
+    igual(avisos, ['Ticket movido para Human Tests.']);
+    await app.qaLista.aPedir;
+    assert.ok(pedidos.some((p) => p[0] === 'GET' && p[1] === '/api/qa'), 'e a lista pede-se outra vez');
+    assert.equal(app.qaLista.tickets[0].status, 'human-tests');
+    assert.equal(app.qaLista.tickets[0].resolved_at, 777, 'o do servidor');
+    assert.match(app.qaRodapeTicket(app.qaLista.tickets[0]), /qaAceitar\('A1'\)/, 'em Human Tests já se decide');
+    // de uma resolvida para outra que não o é, o resolved_at sai logo
+    noPedido.length = 0;
+    assert.equal(await app.qaMover('A1', 'auto-tests'), true);
+    igual(noPedido, [['auto-tests', 'object', 1]]);
+    // um id que não tem a forma de uma coluna nem sai
+    pedidos.length = 0;
+    assert.equal(await app.qaMover('A1', 'mau id!'), false);
+    igual(pedidos, []);
+  });
+
+  test('«Mover» que falha: o ticket volta para onde estava, o aviso diz porquê, e um pedido de cada vez', async () => {
+    const pedidos = apiFalsa({
+      'GET /api/qa': { colunas: COLUNAS, tickets: [T('A1')] },
+      'POST /api/qa/:id/mover': Object.assign(new Error('Essa coluna não existe no kanban.'), { status: 400 }),
+    });
+    const avisos = [];
+    app.toast = (m) => avisos.push(m);
+    await app.qaCarregar();
+    assert.equal(app.qaAbertos, 1);
+    pedidos.length = 0;
+    const p = app.qaMover('A1', 'concluido');
+    assert.equal(app.qaLista.tickets[0].status, 'concluido', 'otimista');
+    assert.equal(app.qaAbertos, 0);
+    assert.equal(await app.qaMover('A1', 'auto-tests'), false, 'com um pedido a caminho, o segundo não sai');
+    assert.equal(await p, false);
+    const t = app.qaLista.tickets[0];
+    assert.equal(t.status, 'a-fazer', 'voltou para onde estava');
+    assert.equal(t.resolved_at, null);
+    assert.equal(t.updated_at, 1);
+    assert.equal(app.qaAbertos, 1, 'e o número também');
+    igual(avisos, ['Essa coluna não existe no kanban.']);
+    igual(pedidos.map((x) => x[0] + ' ' + x[1]), ['POST /api/qa/A1/mover'], 'só o pedido que saiu; num 400 a lista não se pede');
+    assert.deepEqual(Object.keys(app.qaOcupado), [], 'e o ticket ficou livre');
+    // sem frase do servidor, a nossa; num 404 o ticket já não existe e a lista pede-se
+    apiFalsa({ 'GET /api/qa': { colunas: COLUNAS, tickets: [] }, 'POST /api/qa/:id/mover': Object.assign(new Error(''), { status: 404 }) });
+    assert.equal(await app.qaMover('A1', 'concluido'), false);
+    assert.equal(avisos[1], 'Não deu para mover o ticket.');
+    await app.qaLista.aPedir;
+    igual(app.qaLista.tickets, []);
+  });
+
+  test('os de A fazer em grupos pela prioridade do cartão, com os nomes do kanban e quantos tem, e em cada grupo o mais recente à frente (KAN-115)', () => {
     const ts = [
-      T('S1', { created_at: 900 }), T('D1', { severity: 'detalhe', created_at: 500 }), T('B1', { severity: 'bloqueia', created_at: 100 }),
-      T('I1', { severity: 'incomoda', created_at: 300 }), T('B2', { severity: 'bloqueia', created_at: 200 }), T('S2', { created_at: 50 }),
-      T('R1', { status: 'resolvido', severity: 'bloqueia', resolved_at: 10 }),
+      T('S1', { created_at: 900 }), T('D1', { prioridade: 4, created_at: 500 }), T('B1', { prioridade: 1, created_at: 100 }),
+      T('I1', { prioridade: 2, created_at: 300 }), T('B2', { prioridade: 1, created_at: 200 }), T('S2', { created_at: 50 }),
+      T('R1', { status: 'concluido', prioridade: 1, resolved_at: 10 }),
     ];
     const s = app.qaSeccoes(ts);
-    igual(s.abertos.map((t) => t.id), ['B2', 'B1', 'I1', 'D1', 'S1', 'S2']);
-    igual(s.resolvidos.map((t) => t.id), ['R1']);
+    igual(s.abertos.map((t) => t.id), ['B2', 'B1', 'I1', 'S1', 'S2', 'D1']);
+    igual(s.seccoes.find((x) => x.id === 'concluido').ts.map((t) => t.id), ['R1']);
     const h = app.qaHtmlGrupos(s.abertos);
     const titulos = [...h.matchAll(/<h4 class="qa-grupo"><button [^>]*><span class="qa-dobra-nome">([^<]+)<\/span><span class="qa-grupo-n">(\d+)<\/span>/g)].map((m) => m[1] + ' ' + m[2]);
-    igual(titulos, ['Bloqueia 2', 'Incomoda 1', 'Detalhe 1', 'Sem gravidade 2']);
-    const ordem = ["qaAbrirTicket('B2')", "qaAbrirTicket('B1')", 'Incomoda', "qaAbrirTicket('I1')", 'Sem gravidade', "qaAbrirTicket('S2')"].map((x) => h.indexOf(x));
+    igual(titulos, ['Mais alta 2', 'Alta 1', 'Média 2', 'Baixa 1']);
+    const ordem = ["qaAbrirTicket('B2')", "qaAbrirTicket('B1')", '>Alta<', "qaAbrirTicket('I1')", '>Média<', "qaAbrirTicket('S2')", '>Baixa<', "qaAbrirTicket('D1')"].map((x) => h.indexOf(x));
     assert.ok(ordem.every((v, i) => v > -1 && (i === 0 || v > ordem[i - 1])), 'pela ordem: ' + ordem.join(', '));
-    // só uma gravidade: um grupo só
-    assert.equal((app.qaHtmlGrupos(app.qaSeccoes([T('X', { severity: 'detalhe' })]).abertos).match(/qa-grupo"/g) || []).length, 1);
+    // uma prioridade que não existe conta como Média; uma só prioridade: um grupo só
+    igual(app.qaSeccoes([T('Q1', { prioridade: 9 }), T('Q2', { prioridade: 2 })]).abertos.map((t) => t.id), ['Q2', 'Q1']);
+    assert.equal((app.qaHtmlGrupos(app.qaSeccoes([T('X', { prioridade: 4 })]).abertos).match(/qa-grupo"/g) || []).length, 1);
   });
 
   test('a espera, a falha com «Tentar de novo» e o vazio dizem cada um o que é', async () => {
@@ -481,32 +852,99 @@ describe('a lista', () => {
     assert.ok(pedidos.some((p) => p[0] === 'POST' && p[1] === '/api/qa/A1/repor'), 'o Anular repõe');
   });
 
-  test('reabrir: o POST, volta aos novos, e a resolução fica como «Resolução anterior»', async () => {
-    let reaberto = false;
+  test('reabrir: o POST, volta a A fazer logo (otimista), e a resolução fica como «Resolução anterior»', async () => {
+    let reaberto = false, noPedido = null;
     const pedidos = apiFalsa({
-      'GET /api/qa': () => ({ tickets: [T('R1', reaberto ? { resolution: 'Corrigido em abc123', updated_at: 7 }
-        : { status: 'resolvido', resolution: 'Corrigido em abc123', resolved_at: 5 })] }),
-      'POST /api/qa/:id/reabrir': () => { reaberto = true; return { ok: true }; },
+      'GET /api/qa': () => ({ colunas: COLUNAS, tickets: [T('R1', reaberto ? { resolution: 'Corrigido em abc123', updated_at: 7 }
+        : { status: 'human-tests', resolution: 'Corrigido em abc123', resolved_at: 5 })] }),
+      'POST /api/qa/:id/reabrir': () => { noPedido = app.qaLista.tickets[0].status; reaberto = true; return { ok: true }; },
     });
-    app.toast = () => {};
+    const avisos = [];
+    app.toast = (m) => avisos.push(m);
     await app.qaCarregar();
     const r1 = app.qaLista.tickets[0];
     assert.match(app.qaHtmlTicket(r1), /<b>Resolução<\/b><p>Corrigido em abc123<\/p>/);
-    assert.match(app.qaRodapeTicket(r1), /qaReabrir\('R1'\)">Reabrir</);
+    assert.match(app.qaRodapeTicket(r1), /qaRecusar\('R1'\)">Recusar</, 'em Human Tests reabre-se pelo «Recusar»');
+    assert.equal(app.qaAbertos, 0);
     assert.equal(await app.qaReabrir('R1'), true);
+    assert.equal(noPedido, 'a-fazer', 'já estava em A fazer quando o pedido saiu');
+    igual(avisos, ['Ticket reaberto.']);
     await app.qaLista.aPedir;
-    assert.ok(pedidos.some((p) => p[0] === 'POST' && p[1] === '/api/qa/R1/reabrir'));
+    const reab = pedidos.find((p) => p[0] === 'POST');
+    igual(reab.slice(0, 2), ['POST', '/api/qa/R1/reabrir'], 'a rota do reabrir');
+    assert.equal(reab[2], undefined, 'sem corpo');
     const agora = app.qaLista.tickets[0];
-    assert.equal(agora.status, 'aberto');
+    assert.equal(agora.status, 'a-fazer');
     assert.equal(app.qaAbertos, 1);
     assert.match(app.qaHtmlTicket(agora), /<b>Resolução anterior<\/b>/);
-    assert.doesNotMatch(app.qaRodapeTicket(agora), /Reabrir/, 'um novo não se reabre');
-    assert.match(app.qaHtmlTicket(agora), /<span class="badge">Novo<\/span>/);
+    assert.doesNotMatch(app.qaRodapeTicket(agora), /Reabrir/, 'em A fazer não se reabre');
+    assert.match(app.qaHtmlTicket(agora), /<span class="badge grey">A fazer<\/span>/);
+  });
+
+  test('reabrir que falha: o ticket volta a Human Tests e o aviso diz porquê', async () => {
+    apiFalsa({
+      'GET /api/qa': { colunas: COLUNAS, tickets: [T('R1', { status: 'human-tests', resolved_at: 5 })] },
+      'POST /api/qa/:id/reabrir': new Error('Sem ligação ao servidor.'),
+    });
+    const avisos = [];
+    app.toast = (m) => avisos.push(m);
+    await app.qaCarregar();
+    assert.equal(await app.qaReabrir('R1'), false);
+    const t = app.qaLista.tickets[0];
+    assert.equal(t.status, 'human-tests');
+    assert.equal(t.resolved_at, 5);
+    assert.equal(app.qaAbertos, 0);
+    igual(avisos, ['Sem ligação ao servidor.']);
+  });
+
+  test('Human Tests: «Aceitar» vai a Concluído, «Recusar» reabre (a A fazer), «Adiar» vai a Para depois', async () => {
+    let servidor = 'human-tests';
+    const pedidos = apiFalsa({
+      'GET /api/qa': () => ({ colunas: COLUNAS, tickets: [T('H1', { status: servidor, resolution: 'Feito em abc', resolved_at: 5 })] }),
+      'POST /api/qa/:id/mover': (d) => { servidor = d.coluna; return { ok: true }; },
+      'POST /api/qa/:id/reabrir': () => { servidor = 'a-fazer'; return { ok: true }; },
+    });
+    const avisos = [];
+    app.toast = (m) => avisos.push(m);
+    const casos = [
+      ['qaAceitar', ['POST', '/api/qa/H1/mover', { coluna: 'concluido' }], 'concluido', 'Ticket aceite.'],
+      ['qaRecusar', ['POST', '/api/qa/H1/reabrir'], 'a-fazer', 'Ticket recusado.'],
+      ['qaAdiar', ['POST', '/api/qa/H1/mover', { coluna: 'para-depois' }], 'para-depois', 'Ticket adiado.'],
+    ];
+    for (const [fn, pedido, coluna, aviso] of casos) {
+      servidor = 'human-tests';
+      await app.qaCarregar();
+      pedidos.length = 0; avisos.length = 0;
+      const ida = app[fn]('H1');
+      assert.equal(app.qaLista.tickets[0].status, coluna, fn + ': otimista, já está lá antes da resposta');
+      assert.equal(await ida, true, fn);
+      const post = pedidos.find((p) => p[0] === 'POST');
+      igual(post.slice(0, pedido.length), pedido, fn + ': a rota certa');
+      if (pedido.length === 2) assert.equal(post[2], undefined, fn + ': sem corpo');
+      igual(avisos, [aviso]);
+      await app.qaLista.aPedir;
+      assert.equal(app.qaLista.tickets[0].status, coluna, fn + ': e o servidor concorda');
+    }
+  });
+
+  test('uma decisão que falha: o ticket volta a Human Tests e o aviso diz porquê', async () => {
+    apiFalsa({
+      'GET /api/qa': { colunas: COLUNAS, tickets: [T('H1', { status: 'human-tests', resolved_at: 5 })] },
+      'POST /api/qa/:id/mover': new Error('Sem ligação ao servidor.'),
+    });
+    const avisos = [];
+    app.toast = (m) => avisos.push(m);
+    await app.qaCarregar();
+    assert.equal(await app.qaAceitar('H1'), false);
+    assert.equal(app.qaLista.tickets[0].status, 'human-tests');
+    assert.equal(app.qaLista.tickets[0].resolved_at, 5);
+    igual(avisos, ['Sem ligação ao servidor.']);
   });
 });
 
 describe('as secções da lista abrem e fecham', () => {
-  const LISTA = [T('B1', { severity: 'bloqueia' }), T('D1', { severity: 'detalhe' }), T('S1'), T('R1', { status: 'resolvido', resolved_at: 5 })];
+  const LISTA = [T('B1', { prioridade: 1 }), T('D1', { prioridade: 4 }), T('S1'), T('R1', { status: 'concluido', resolved_at: 5 }),
+    T('H1', { status: 'human-tests', resolved_at: 6 })];
 
   /* O estado de cada secção no HTML da lista: a chave e se está aberta, pela
      classe e pelo aria-expanded (que têm de concordar).
@@ -522,49 +960,61 @@ describe('as secções da lista abrem e fecham', () => {
     return r;
   }
 
-  test('por nascença os novos e os grupos de gravidade abertos, os resolvidos recolhidos; cada título é um botão que dobra', () => {
+  test('por nascença A fazer, os grupos de prioridade e Human Tests abertos, as de fim e a Para depois recolhidas; cada título é um botão que dobra', () => {
     app.qaLista.tickets = LISTA;
     const h = app.qaHtmlLista();
-    igual(estados(h), { novos: true, 'g-bloqueia': true, 'g-detalhe': true, 'g-sem': true, resolvidos: false });
-    assert.match(h, /<h3 class="qa-sec"><button type="button" class="qa-dobra-cab" id="qaCab-resolvidos" data-toca="nada" data-click="qaDobrar\('resolvidos'\)"/);
-    assert.match(h, /<span class="qa-dobra-nome">Resolvidos<\/span><span class="qa-sec-n">1<\/span>/, 'quantos tem vê-se com ela recolhida');
-    assert.match(h, /id="qaDobra-resolvidos"><div class="qa-dobra-itens"><div class="qa-dobra-dentro"><div class="qa-linhas"><button type="button" class="qa-linha"[^>]*qaAbrirTicket\('R1'\)/,
+    igual(estados(h), { 'a-fazer': true, 'p-1': true, 'p-4': true, 'p-3': true, 'human-tests': true, concluido: false });
+    assert.match(h, /<h3 class="qa-sec"><button type="button" class="qa-dobra-cab" id="qaCab-concluido" data-toca="nada" data-click="qaDobrar\('concluido'\)"/);
+    assert.match(h, /<span class="qa-dobra-nome">Concluído<\/span><span class="qa-sec-n">1<\/span>/, 'quantos tem vê-se com ela recolhida');
+    assert.match(h, /id="qaDobra-concluido"><div class="qa-dobra-itens"><div class="qa-dobra-dentro"><div class="qa-linhas"><button type="button" class="qa-linha"[^>]*qaAbrirTicket\('R1'\)/,
       'recolhida, as linhas continuam no HTML (é a folha que as esconde)');
     assert.doesNotMatch(h, SEM_EM_LINHA);
+    app.qaLista.tickets = [T('P1', { status: 'para-depois' })];
+    assert.equal(estados(app.qaHtmlLista())['para-depois'], false, 'o que fica para depois nasce recolhido');
+    // uma coluna de fim nova (do master) também nasce recolhida
+    app.qaLista.colunas = app.qaColunasDe(COLUNAS.concat([{ id: '3f2a-77', nome: 'Arquivado', fim: true }]));
+    app.qaLista.tickets = [T('Z1', { status: '3f2a-77', resolved_at: 1 })];
+    assert.equal(estados(app.qaHtmlLista())['3f2a-77'], false);
   });
 
-  test('tocar no título troca a secção no nó vivo, guarda no aparelho, e a lista repintada nasce igual', () => {
+  test('tocar no título troca a secção no nó vivo, guarda no aparelho pelo id da coluna, e a lista repintada nasce igual', () => {
     app.qaLista.tickets = LISTA;
-    const sec = app.document.getElementById('qaSec-resolvidos'), cab = app.document.getElementById('qaCab-resolvidos');
+    const sec = app.document.getElementById('qaSec-concluido'), cab = app.document.getElementById('qaCab-concluido');
     const classes = [], attrs = {};
     sec.classList = { toggle(c, on) { classes.push([c, on]); } };
     cab.setAttribute = (k, v) => { attrs[k] = v; };
-    assert.equal(app.qaDobrar('resolvidos'), true, 'os resolvidos abrem');
+    assert.equal(app.qaDobrar('concluido'), true, 'Concluído abre');
     igual(classes, [['fechada', false]]);
     igual(attrs, { 'aria-expanded': 'true' });
-    assert.equal(app.qaDobrar('g-detalhe'), false, 'um grupo recolhe-se');
-    igual(JSON.parse(app.localStorage.getItem('gi_qa_dobras')), { resolvidos: true, 'g-detalhe': false });
-    igual(estados(app.qaHtmlLista()), { novos: true, 'g-bloqueia': true, 'g-detalhe': false, 'g-sem': true, resolvidos: true });
-    assert.equal(app.qaDobrar('novos'), false);
-    assert.equal(estados(app.qaHtmlLista()).novos, false, 'os novos também se recolhem');
+    assert.equal(app.qaDobrar('p-4'), false, 'um grupo recolhe-se');
+    igual(JSON.parse(app.localStorage.getItem('gi_qa_dobras')), { concluido: true, 'p-4': false });
+    igual(estados(app.qaHtmlLista()), { 'a-fazer': true, 'p-1': true, 'p-4': false, 'p-3': true, 'human-tests': true, concluido: true });
+    assert.equal(app.qaDobrar('a-fazer'), false);
+    assert.equal(estados(app.qaHtmlLista())['a-fazer'], false, 'A fazer também se recolhe');
     assert.equal(app.qaDobrar('lixo'), null, 'uma chave que não existe não mexe em nada');
-    assert.ok(!('lixo' in JSON.parse(app.localStorage.getItem('gi_qa_dobras'))));
+    assert.equal(app.qaDobrar('para-depois'), null, 'nem a de uma coluna que não está à vista');
+    assert.equal(app.qaDobrar("x'); alert(1); ('"), null);
+    const guardado = JSON.parse(app.localStorage.getItem('gi_qa_dobras'));
+    assert.ok(!('lixo' in guardado) && !('para-depois' in guardado));
   });
 
-  test('guardado estragado vale a nascença; com o armazenamento vedado, o toque vale nesta sessão', () => {
+  test('guardado estragado vale a nascença; as chaves de antes não partem nada; com o armazenamento vedado, o toque vale nesta sessão', () => {
     app.qaLista.tickets = LISTA;
     app.localStorage.setItem('gi_qa_dobras', '{isto não é json');
-    igual(estados(app.qaHtmlLista()).resolvidos, false);
-    app.localStorage.setItem('gi_qa_dobras', JSON.stringify({ resolvidos: 'sim', novos: false, abertos: false, outra: true }));
-    igual(app.qaLerDobras(), { novos: false }, 'só as chaves que existem e com true ou false');
+    igual(estados(app.qaHtmlLista()).concluido, false);
+    app.localStorage.setItem('gi_qa_dobras', JSON.stringify({ concluido: 'sim', 'a-fazer': false, 'mau id!': true, outra: true }));
+    igual(app.qaLerDobras(), { 'a-fazer': false, outra: true }, 'só as chaves com a forma de uma e com true ou false');
+    // quem tinha as chaves dos três estados de antes vê a nascença das colunas
+    app.localStorage.setItem('gi_qa_dobras', JSON.stringify({ novos: false, 'em-resolucao': false, resolvidos: true }));
+    igual(estados(app.qaHtmlLista()), { 'a-fazer': true, 'p-1': true, 'p-4': true, 'p-3': true, 'human-tests': true, concluido: false });
     app.localStorage.clear();
     const real = app.localStorage;
     app.localStorage = { getItem() { throw new Error('vedado'); }, setItem() { throw new Error('vedado'); } };
     try {
-      assert.equal(app.qaDobraAberta('resolvidos'), false);
-      assert.equal(app.qaDobrar('resolvidos'), true);
-      assert.equal(app.qaDobraAberta('resolvidos'), true, 'fica em memória');
-      assert.equal(estados(app.qaHtmlLista()).resolvidos, true);
+      assert.equal(app.qaDobraAberta('concluido'), false);
+      assert.equal(app.qaDobrar('concluido'), true);
+      assert.equal(app.qaDobraAberta('concluido'), true, 'fica em memória');
+      assert.equal(estados(app.qaHtmlLista()).concluido, true);
     } finally {
       app.localStorage = real;
     }
@@ -612,7 +1062,7 @@ describe('a pega do lado da borda', () => {
 
 describe('o HTML gerado', () => {
   test('sem style= nem on…=, em todos os pedaços; o texto de quem escreve vai escapado', () => {
-    const t = T('X1', { body: 'Linha 1\nLinha 2', severity: 'detalhe', imagem: true, status: 'resolvido', resolution: 'Feito', resolved_at: 9,
+    const t = T('X1', { body: 'Linha 1\nLinha 2', severity: 'detalhe', imagem: true, status: 'human-tests', cartao: 'KAN-3', resolution: 'Feito', resolved_at: 9,
       context: { ecra: { tab: 'calendar' }, rasto: ['GET /api/state → 200'] } });
     const pedacos = [app.qaHtmlPilula(3, true), app.qaHtmlNovo({ ecra: {} }), app.qaHtmlImagem('blob:x'), app.qaHtmlImagem('a-preparar'),
       app.qaHtmlTicket(t), app.qaRodapeTicket(t), app.qaHtmlLinha(t)];
@@ -654,6 +1104,91 @@ describe('o ticket sobrevive à conta e a pílula às janelas', () => {
     const acima = css.indexOf('body:has(.modal.open) .qa-pilula{z-index:71}');
     const abaixo = css.indexOf('body:has(.modal.open.qa-janela) .qa-pilula{z-index:60}');
     assert.ok(acima > -1 && abaixo > acima, 'a regra das janelas do QA vem depois e ganha');
+  });
+});
+
+describe('a pílula é a vista dos Erros do kanban (KAN-115)', () => {
+  // um Erro criado no kanban, sem ticket de QA: a chave como id, o relator como quem
+  const K = (id, o = {}) => T(id, Object.assign({ ticket: false, cartao: id, titulo: 'Erro ' + id, body: 'Descrição de ' + id, context: null,
+    autor: { id: 'm1', nome: 'Mestre', email: '', discord: null } }, o));
+
+  test('um Erro sem ticket abre como «Erro KAN-N», com o título e a descrição do cartão, sem contexto nem «Remover»; com as decisões em Human Tests', async () => {
+    apiFalsa({ 'GET /api/qa': { colunas: COLUNAS, tickets: [K('KAN-7', { prioridade: 2 }), T('Q1')] }, 'GET /api/qa/:id/comentarios': { comentarios: [] } });
+    const abertas = janelasFalsas(app, 'render', 'save');
+    noDev();
+    await app.qaCarregar();
+    app.qaAbrirTicket('KAN-7');
+    const L = abertas[0];
+    assert.equal(L.t, 'Erro KAN-7');
+    assert.match(L.b, /<p class="qa-ver-tit">Erro KAN-7<\/p><p class="qa-ver-txt">Descrição de KAN-7<\/p>/);
+    assert.match(L.b, /class="qa-prio qa-p2"[\s\S]*Alta<\/span>/, 'o selo da prioridade');
+    assert.match(L.b, /Mestre · /, 'quem criou o cartão');
+    assert.doesNotMatch(L.b, /qaCtx|Contexto/, 'sem contexto: não veio de um ticket');
+    assert.doesNotMatch(L.f, /qaRemover/, 'remover um cartão é do master, no kanban');
+    assert.match(L.f, /Mover<\/button>/);
+    const ht = app.qaRodapeTicket(K('KAN-7', { status: 'human-tests' }));
+    assert.doesNotMatch(ht, /qaRemover/);
+    assert.match(ht, /qaRecusar\('KAN-7'\)[\s\S]*qaAceitar\('KAN-7'\)/, 'as decisões valem para ele');
+    // um ticket de QA continua como era
+    app.qaAbrirTicket('Q1');
+    assert.equal(abertas[1].t, 'Ticket de QA');
+    assert.match(abertas[1].f, /qaRemover\('Q1'\)/);
+    assert.match(abertas[1].b, /Contexto/);
+    // um servidor de antes (sem o campo ticket) dava só tickets
+    assert.equal(app.qaTemTicket({ id: 'x' }), true);
+  });
+
+  test('o número da pílula conta os Erros em A fazer e Auto Tests, de QA e sem ticket', async () => {
+    apiFalsa({ 'GET /api/qa': { colunas: COLUNAS, tickets: [K('KAN-1'), K('KAN-2', { status: 'auto-tests' }), T('Q1'), K('KAN-3', { status: 'human-tests' }), K('KAN-4', { status: 'para-depois' })] } });
+    noDev();
+    await app.qaCarregar();
+    assert.equal(app.qaAbertos, 3);
+  });
+
+  test('comentar num Erro sem ticket: em A fazer fica lá; em Human Tests passa a Auto Tests, como no kanban', async () => {
+    let servidor = 'a-fazer';
+    const pedidos = apiFalsa({
+      'GET /api/qa': () => ({ colunas: COLUNAS, tickets: [K('KAN-9', { status: servidor })] }),
+      'GET /api/qa/:id/comentarios': { comentarios: [] },
+      'POST /api/qa/:id/comentarios': (d) => ({ ok: true, coluna: servidor === 'human-tests' ? 'auto-tests' : servidor, comentario: { id: 's' + d.texto, autor: { id: 'u1', nome: 'Eu' }, texto: d.texto, created_at: 9, meu: true } }),
+    });
+    const avisos = [];
+    app.toast = (m) => avisos.push(m);
+    janelasFalsas(app, 'render', 'save');
+    noDev();
+    await app.qaCarregar();
+    app.qaAbrirTicket('KAN-9');
+    assert.match(app.qaCamadaTicket.b, /O comentário fica no cartão do kanban\./);
+    app.document.getElementById('qa_com').value = 'Visto';
+    const ida = app.qaComentar();
+    assert.equal(app.qaLista.tickets[0].status, 'a-fazer', 'em A fazer não sai do sítio');
+    assert.equal(await ida, true);
+    igual(pedidos.find((p) => p[0] === 'POST'), ['POST', '/api/qa/KAN-9/comentarios', { texto: 'Visto' }]);
+    igual(avisos, ['Comentário enviado.']);
+    // em Human Tests, comentar é recusar: volta a Auto Tests
+    await app.qaLista.aPedir;
+    servidor = 'human-tests';
+    await app.qaCarregar();
+    assert.equal(app.qaColunaDepoisDoComentario(app.qaLista.tickets[0]), 'auto-tests');
+    app.document.getElementById('qa_com').value = 'Ainda falha';
+    const ida2 = app.qaComentar();
+    assert.equal(app.qaLista.tickets[0].status, 'auto-tests', 'otimista');
+    await ida2;
+    assert.equal(avisos[avisos.length - 1], 'Comentário enviado. O cartão passou a Auto Tests.');
+    // num ticket de QA, de qualquer coluna para Auto Tests
+    assert.equal(app.qaColunaDepoisDoComentario(T('Q', { status: 'concluido' })), 'auto-tests');
+    assert.equal(app.qaColunaDepoisDoComentario(K('K', { status: 'concluido' })), 'concluido');
+  });
+
+  test('mover e aceitar um Erro sem ticket vão às rotas pela chave, e o aviso diz «Cartão»', async () => {
+    const pedidos = apiFalsa({ 'GET /api/qa': { colunas: COLUNAS, tickets: [K('KAN-5', { status: 'human-tests' })] } });
+    const avisos = [];
+    app.toast = (m) => avisos.push(m);
+    noDev();
+    await app.qaCarregar();
+    assert.equal(await app.qaAceitar('KAN-5'), true);
+    igual(pedidos.find((p) => p[0] === 'POST'), ['POST', '/api/qa/KAN-5/mover', { coluna: 'concluido' }]);
+    igual(avisos, ['Cartão aceite.']);
   });
 });
 

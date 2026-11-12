@@ -26,10 +26,16 @@ const RECURSOS = {
   '/paginas/rasto-montra.js': { tipo: JS, texto: async () => (await import('./landing.js')).GUIAO_RASTO_MONTRA },
   '/paginas/legal.css': { tipo: CSS, texto: async () => (await import('./legal-vista.js')).CSS_LEGAL },
   '/paginas/documento.js': { tipo: JS, texto: async () => (await import('./legal-vista.js')).GUIAO_LEGAL },
+  '/paginas/guia.css': { tipo: CSS, texto: async () => (await import('./guia-vista.js')).CSS_GUIA },
   '/paginas/teste.css': { tipo: CSS, texto: async () => (await import('./teste.js')).CSS_TESTE },
   // o ecrã de entrada da equipa também o usa, e esse é de quem ainda não entrou
   '/equipa/estilos.css': { tipo: CSS, texto: async () => (await import('./equipa-vista.js')).CSS_EQUIPA },
   '/equipa/guiao.js': { tipo: JS, sessao: true, texto: async () => (await import('./equipa-guiao.js')).GUIAO },
+  /* o kanban da equipa (equipa-kanban.js): a página só os pede fora de
+     produção, mas servem-se na mesma sem ENV_NAME — o guião só com sessão de
+     equipa, como o principal; o CSS a toda a gente, como o estilos.css */
+  '/equipa/kanban.css': { tipo: CSS, texto: async () => (await import('./equipa-kanban.js')).CSS_KANBAN },
+  '/equipa/kanban.js': { tipo: JS, sessao: true, texto: async () => (await import('./equipa-kanban.js')).GUIAO_KANBAN },
   '/equipa/docs.css': { tipo: CSS, sessao: true, texto: async () => (await import('./docs-vista.js')).CSS_DOCS },
   '/equipa/docs.js': { tipo: JS, sessao: true, texto: async () => (await import('./docs-vista.js')).GUIAO_DOCS },
 };

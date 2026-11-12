@@ -520,11 +520,12 @@ describe('higiene', () => {
   // achado A.2-18
   test('sem código morto nos contratos, e os comentários dos colaboradores apontam para onde a vista vive', () => {
     for (const f of MEUS) assert.doesNotMatch(ler(f), /\bctGroupF\b|\bonCtGroupF\b/, f);
-    const onde = fs.readdirSync(path.join(WEB, 'cloud')).filter((n) => n.endsWith('.js')).find((n) => /\nfunction vColaboradores\s*\(/.test(ler('cloud/' + n)));
-    assert.equal(onde, 'partilha.js');
+    // a página vive em cloud/colaboradores.js; o vColaboradores de partilha.js saiu (KAN-8)
+    const onde = fs.readdirSync(path.join(WEB, 'cloud')).filter((n) => n.endsWith('.js')).filter((n) => /\nfunction paginaDosColaboradores\s*\(/.test(ler('cloud/' + n)));
+    assert.deepEqual(onde, ['colaboradores.js']);
     const lc = ler('app/lista-colaboradores.js');
-    assert.doesNotMatch(lc, /vista é da nuvem \(cloud\/colaboradores\.js\)/, 'a vista não vive em cloud/colaboradores.js');
-    assert.match(lc, /cloud\/partilha\.js/);
+    assert.match(lc, /cloud\/colaboradores\.js:paginaDosColaboradores/, 'o comentário aponta para a página');
+    assert.doesNotMatch(lc, /vColaboradores|cloud\/partilha\.js/, 'e não para a vista que saiu');
   });
 
   // achado A.2-19a

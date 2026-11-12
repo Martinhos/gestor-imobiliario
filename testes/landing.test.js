@@ -16,7 +16,8 @@ import { webcrypto } from 'node:crypto';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
-import { paginaLanding, CSS_LANDING } from '../worker/src/landing.js';
+import { paginaLanding, CSS_LANDING, robotsTxt, sitemapXml } from '../worker/src/landing.js';
+import { CAMINHO_GUIA, CSS_GUIA, H1 as TITULO_GUIA } from '../worker/src/guia-vista.js';
 import { CSS_LEGAL } from '../worker/src/legal-vista.js';
 import { CSS_TESTE } from '../worker/src/teste.js';
 
@@ -30,6 +31,32 @@ const html = await resposta.text();
 /* Os estilos vivem à parte, em /paginas/landing.css: a página vai com a
    CSP_ESTRITA, que não aplica um <style> escrito dentro do HTML. */
 const css = CSS_LANDING;
+
+/* O que prometeria a Declaração do IRS, que só existe em dev: as palavras da
+   funcionalidade, em qualquer sítio do HTML (texto e metadados), e uma frase
+   que junte o IRS (ou a app) a declarar, calcular, preencher ou entregar.
+   As frases partem-se nos blocos (parágrafos, títulos, ligações, metadados),
+   e os valores do content, do aria-label, do alt e do title também contam.
+   O título do guia (guia-vista.js:H1, «… como declarar …», decisão do
+   Martinho de 2026-11-09) passa, e só ele, tal e qual: é o nome de uma
+   página de informação, não uma promessa da app.
+   Recebe: h — o HTML. Devolve: a lista do que prometeria (vazia quando não há). */
+function promessasDoIrs(h) {
+  const fora = [];
+  for (const re of [/Declaração/, /Modelo 2/, /Anexo F/, /Finanças/, /\bAT\b/]) if (re.test(h)) fora.push(String(re));
+  const frases = h
+    .replace(/<[^>]*?\s(?:content|aria-label|alt|title)="([^"]*)"[^>]*>/g, '\n$1\n')
+    .replace(/<\/?(?:p|h[1-6]|li|div|section|header|footer|nav|ul|ol|a|button|title|form)\b[^>]*>/g, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .split(/\n|(?<=[.;!?])\s/)
+    .map((f) => f.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  for (const f of frases) {
+    if (f === TITULO_GUIA) continue;
+    const verbo = /\b(?:declar|calcul|preench|entreg)\w*/i;
+    if ((/IRS/.test(f) && verbo.test(f)) || /\b(?:Rendorium|app)\b.{0,30}\b(?:declara|calcula|preenche|entrega)\b/i.test(f)) fora.push(f);
+  }
+  return fora;
+}
 
 describe('a página de entrada', () => {
   /* A página varia com a resposta ao rasto (um cookie): nunca numa cache
@@ -183,7 +210,9 @@ describe('a página de entrada', () => {
     criar.forEach((b) => assert.match(b.href, /\?criar=1$/, 'leva ao registo'));
     const entrar = botoes.filter((b) => /Abrir a app|Já tenho conta/.test(b.texto));
     entrar.forEach((b) => assert.ok(!/criar=1/.test(b.href), 'e estes não'));
-    assert.equal(new Set(botoes.map((b) => b.href)).size, 2, 'dois destinos, não um');
+    // os da conta: o «Ler o guia» leva a uma página de leitura, não à app
+    const daConta = botoes.filter((b) => !b.href.startsWith('/guias/'));
+    assert.equal(new Set(daConta.map((b) => b.href)).size, 2, 'dois destinos, não um');
   });
 
   /* A página tem mais de quatro mil pixéis: a marca e a porta de entrada não
@@ -292,11 +321,170 @@ describe('a página de entrada', () => {
     assert.ok(!/O que faz/.test(html), 'a grelha já não abre a página');
   });
 
-  /* A Declaração (o IRS) ainda só existe em dev: a montra de produção não
-     pode prometer o que a app de produção não tem. Vale o texto e os
-     metadados. */
-  test('não promete o IRS, que ainda só existe em dev', () => {
-    assert.ok(!/IRS|Anexo F|Modelo 2|\bAT\b|Finanças/.test(html), 'nem no texto nem nos metadados');
+  /* A Declaração do IRS ainda só existe em dev (soDev): a montra de produção
+     não pode prometer o que a app de produção não tem. Desde 2026-11-08 o
+     IRS pode aparecer, mas só como o guia (guia-vista.js), que é informação
+     e não uma função da app: no botão do cabeçalho (e na linha da gaveta,
+     no telemóvel), no cartão #guia e na ligação do rodapé. O que promete a funcionalidade continua proibido na
+     página inteira, texto e metadados. */
+  test('o IRS só aparece como guia, e nada promete a Declaração', async () => {
+    const previa = await paginaLanding({ raiz: false }).text();
+    for (const [h, onde] of [[html, 'na raiz'], [previa, 'na pré-visualização']]) {
+      const cab = /<header>[\s\S]*?<\/header>/.exec(h)[0];
+      const cartao = /<section[^>]*id="guia"[\s\S]*?<\/section>/.exec(h)[0];
+      const rodape = /<footer[\s\S]*?<\/footer>/.exec(h)[0];
+      // as ligações para o guia: o botão em linha e a linha da gaveta, no cabeçalho, e a do rodapé
+      const paraOGuia = new RegExp('<a [^>]*href="' + CAMINHO_GUIA + '"[^>]*>[\\s\\S]*?</a>', 'g');
+      assert.match(cab, paraOGuia, 'o botão do cabeçalho ' + onde);
+      assert.match(cartao, /IRS/, 'o cartão ' + onde);
+      assert.match((rodape.match(paraOGuia) || []).join(''), /IRS/, 'a ligação do rodapé ' + onde);
+      const resto = h.replace(cartao, '').replace(paraOGuia, '');
+      assert.doesNotMatch(resto, /IRS/, 'o IRS fora do botão, do cartão e do rodapé ' + onde);
+      assert.deepEqual(promessasDoIrs(h), [], onde);
+    }
+  });
+
+  test('controlo: a guarda das promessas apanha o que prometeria a Declaração', () => {
+    for (const mau of ['<p>A Rendorium declara o IRS por ti.</p>', '<p>O IRS calculado num toque.</p>',
+      '<p>Preenche o teu IRS aqui</p>', '<meta content="Entrega a Declaração">', '<p>Anexo F pronto</p>',
+      '<p>Ligado à AT</p>', '<p>Modelo 2</p>', '<p>Portal das Finanças</p>', '<p>a app calcula as rendas</p>']) {
+      assert.ok(promessasDoIrs(mau).length > 0, mau);
+    }
+    assert.deepEqual(promessasDoIrs('<h2>IRS: o que podes deduzir às rendas</h2><a>Guia do IRS das rendas</a>'), []);
+    // o título do guia passa tal e qual; o mesmo verbo noutra frase com IRS, não
+    assert.deepEqual(promessasDoIrs('<h2>' + TITULO_GUIA + '</h2>'), []);
+    for (const mau of ['<h2>IRS das rendas: como declarar com a app</h2>', '<p>' + TITULO_GUIA + ' na Rendorium</p>',
+      '<p>Como declarar o IRS num toque</p>']) {
+      assert.ok(promessasDoIrs(mau).length > 0, mau);
+    }
+  });
+
+  /* O guia é informação, não uma função da app: a montra leva até ele num
+     cartão antes do fecho e no rodapé, com o botão secundário — a ação
+     principal continua a ser criar conta. O título é português de Portugal
+     (o «Na hora de declarar as rendas» de antes era do Brasil), diz IRS, que
+     é o que se pesquisa, e é o h1 do guia (desde 2026-11-09, «como declarar
+     e o que podes deduzir»): quem clica encontra o que lhe prometeram. */
+  test('leva ao guia do IRS das rendas, sem o prometer como função da app', () => {
+    const cartao = /<section class="wrap guia-seccao" id="guia"[\s\S]*?<\/section>/.exec(html);
+    assert.ok(cartao, 'o cartão do guia existe');
+    assert.equal(TITULO_GUIA, 'IRS das rendas: como declarar e o que podes deduzir');
+    assert.match(cartao[0], /<h2 id="t-guia">IRS das rendas: como declarar e o que podes deduzir<\/h2>/);
+    assert.match(cartao[0], /<a class="btn" href="\/guias\/declarar-rendas">Ler o guia<\/a>/);
+    assert.doesNotMatch(cartao[0], /btn primary|Rendorium (?:declara|calcula)|a app/i);
+    assert.doesNotMatch(html, /na hora de/i, 'nada do português do Brasil');
+    assert.ok(html.indexOf('id="guia"') < html.indexOf('id="comecar"'), 'antes do fecho');
+    const rodape = /<footer[\s\S]*?<\/footer>/.exec(html)[0];
+    assert.match(rodape, /<a href="\/guias\/declarar-rendas">Guia do IRS das rendas<\/a>/);
+  });
+
+  /* O botão do topo diz «IRS» e leva ao guia (decisão do Martinho,
+     2026-11-08; um dia passa a «Guias»). É um botão secundário: o primário
+     continua a ser o «Criar conta». No computador vão os três em linha. */
+  test('o cabeçalho leva ao guia com o botão «IRS», em linha no computador', () => {
+    const cab = /<header>[\s\S]*?<\/header>/.exec(html)[0];
+    const botoes = [...cab.matchAll(/<a class="([^"]*)" href="([^"]*)"[^>]*>([^<]*)<\/a>/g)]
+      .map((m) => ({ classe: m[1], href: m[2], texto: m[3] }));
+    assert.deepEqual(botoes.map((b) => b.texto), ['IRS', 'Entrar', 'Criar conta']);
+    assert.equal(botoes[0].href, CAMINHO_GUIA, 'o «IRS» leva ao guia');
+    assert.match(botoes[0].classe, /\bfantasma\b/, 'e é secundário');
+    assert.doesNotMatch(botoes[0].classe, /\bprimary\b/);
+    assert.deepEqual(botoes.map((b) => /\bem-linha\b/.test(b.classe)), [true, true, false], 'o «Criar conta» não é dos que mudam de sítio');
+    assert.match(cab, /aria-label="Guia do IRS das rendas"/, 'quem ouve a página sabe que é um guia');
+  });
+
+  /* No telemóvel os quatro não cabem (medido no Chromium: pedem 426 px). Em
+     vez de esconder o «Entrar», o topo fica com a marca inteira, o «Criar
+     conta» e um ☰ que abre uma gaveta por baixo do cabeçalho com o «IRS» e o
+     «Entrar» (decisão do Martinho, 2026-11-08). Sem JavaScript: um
+     <details>, com o nome «Menu» para quem ouve e o marcador nativo tirado;
+     as duas metades nunca se mostram juntas, e o «Criar conta» nunca entra
+     na gaveta. */
+  test('no telemóvel, o ☰ abre uma gaveta com o «IRS» e o «Entrar», sem JavaScript', () => {
+    const cab = /<header>[\s\S]*?<\/header>/.exec(html)[0];
+    const gaveta = /<details class="gaveta">([\s\S]*?)<\/details>/.exec(cab);
+    assert.ok(gaveta, 'a gaveta é um <details> dentro do cabeçalho');
+    assert.match(gaveta[1], /<summary class="gaveta-botao" aria-label="Menu"><svg class="i riscas"[^>]*aria-hidden="true"[\s\S]*?<\/summary>/,
+      'o ☰ chama-se «Menu» e o desenho é decorativo');
+    const ligacoes = [...gaveta[1].matchAll(/<a href="([^"]+)"><span>([^<]+)<\/span><svg class="i seguir"/g)].map((m) => [m[2], m[1]]);
+    assert.deepEqual(ligacoes, [['IRS', CAMINHO_GUIA], ['Entrar', 'https://app.rendorium.com']], 'as duas linhas, com o chevron');
+    assert.doesNotMatch(gaveta[1], /Criar conta/, 'o «Criar conta» fica sempre à vista');
+    assert.ok(cab.indexOf('Criar conta') < cab.indexOf('<details'), 'à esquerda do ☰');
+    assert.doesNotMatch(html, /<script/i, 'abre e fecha sem JavaScript');
+    // as duas metades: cada uma no seu tamanho, com o mesmo corte
+    assert.match(css, /@media\(max-width:439px\)\{a\.btn\.em-linha\{display:none\}\}/);
+    assert.match(css, /@media\(min-width:440px\)\{\.gaveta\{display:none\}\}/);
+    assert.doesNotMatch(css, /a\.btn\.entrar\{display:none\}|\.marca \.tit\{position:absolute/, 'nada da regra antiga: a marca fica inteira');
+    assert.match(css, /\.gaveta-botao\{[^}]*width:44px;height:44px;[^}]*list-style:none/, 'o ☰ com alvo de dedo e sem o marcador');
+    assert.match(css, /\.gaveta-botao::-webkit-details-marker\{display:none\}/, 'nem o do Safari');
+    assert.match(css, /\.gaveta-painel a\{[^}]*min-height:48px/, 'cada linha com alvo de dedo');
+    assert.match(css, /\.gaveta\[open\] \.gaveta-botao\{border-color:var\(--accent\);color:var\(--accent-text\)\}/,
+      'aberto, diz-se pela frente: o contorno e o ícone');
+    assert.match(css, /\.gaveta-botao:focus-visible\{outline:2px solid var\(--accent\)/, 'o foco vê-se');
+    assert.match(css, /\.gaveta-painel\{position:absolute;top:100%;left:0;right:0;/, 'por baixo do cabeçalho, a toda a largura');
+  });
+
+  /* Ticket de QA 379eac34 (2026-11-08): no Chrome 143 o conteúdo de um
+     <details> fechado fica no ::details-content com content-visibility:hidden,
+     e a contenção faz dele o bloco que contém o painel absoluto. Fechada, a
+     gaveta deixava o painel preso ao ☰, a sair pela direita (até ~434 px num
+     ecrã de 384), e o Samsung Internet alargava a página para o mostrar. O
+     painel só existe com a gaveta aberta, na montra e no guia. */
+  test('fechada, o painel da gaveta não ocupa espaço (nem na montra, nem no guia)', () => {
+    for (const [nome, folha] of [['montra', css], ['guia', CSS_GUIA]]) {
+      assert.match(folha, /\.gaveta:not\(\[open\]\) \.gaveta-painel\{display:none\}/, nome + ': o painel fechado sai do layout');
+    }
+  });
+
+  /* A gaveta desce de cima para baixo (o recorte larga-a a partir do topo),
+     em .2s na curva da casa. O estado de base é o aberto: sem animações,
+     abre feita; e com menos movimento, não anima. */
+  test('a gaveta desce sem esconder nada, e quieta para quem pediu menos movimento', () => {
+    assert.match(css, /@keyframes gaveta-desce\{from\{clip-path:inset\(0 0 100% 0\);opacity:0\}\}/);
+    assert.match(css, /\.gaveta-painel\{[^}]*animation:gaveta-desce \.2s var\(--curva\)\}/);
+    assert.match(css, /@media\(prefers-reduced-motion:reduce\)\{\.gaveta-painel\{animation:none\}/);
+    assert.doesNotMatch(css.replace(/@media\(hover:hover\) and \(pointer:fine\)\{[\s\S]*?\n\}/g, ''), /\.gaveta[^{]*:hover/,
+      'o hover da gaveta só com rato');
+  });
+
+  /* A pílula do QA (equipa-qa.js:pilulaDasPaginas) entra no dev pelo
+     index.js, já pronta: a montra só lhe guarda o sítio, antes do </body>,
+     e sem ela não escreve nada. */
+  test('o espaço da pílula do QA: o op.qa entra tal e qual antes do </body>', async () => {
+    const qa = '<link rel="stylesheet" href="/paginas/qa.css"><script src="/paginas/qa.js"></script>';
+    const com = await paginaLanding({ raiz: false, qa }).text();
+    assert.ok(com.endsWith('</footer>\n' + qa + '</body></html>'), 'tal e qual, sem escapar');
+    assert.ok((await paginaLanding({ raiz: false }).text()).endsWith('</footer>\n</body></html>'), 'sem op.qa, nada');
+    assert.ok((await paginaLanding({ raiz: false, qa: 42 }).text()).endsWith('</footer>\n</body></html>'), 'só um texto');
+  });
+
+  /* O robots e o mapa do sítio (as rotas são do index.js): na raiz os
+     motores podem entrar e sabem onde estão a montra e o guia; fora dela (a
+     app, o dev) fecha-se tudo. */
+  test('o robots.txt deixa indexar só a raiz, e aponta o mapa do sítio', async () => {
+    const r = robotsTxt({ raiz: true });
+    assert.equal(r.headers.get('Content-Type'), 'text/plain; charset=utf-8');
+    assert.equal(r.headers.get('Cache-Control'), 'public, max-age=3600');
+    const t = await r.text();
+    assert.match(t, /^User-agent: \*$/m);
+    assert.match(t, /^Sitemap: https:\/\/rendorium\.com\/sitemap\.xml$/m);
+    assert.doesNotMatch(t, /^Disallow: \/\s*$/m, 'a raiz não se fecha');
+    for (const op of [{ raiz: false }, undefined]) {
+      const fora = await robotsTxt(op).text();
+      assert.match(fora, /^Disallow: \/$/m, 'fora da raiz fecha-se tudo');
+      assert.doesNotMatch(fora, /Sitemap/, 'e não aponta mapa nenhum');
+    }
+  });
+
+  test('o mapa do sítio tem a montra e o guia, e mais nada', async () => {
+    const r = sitemapXml();
+    assert.equal(r.headers.get('Content-Type'), 'application/xml; charset=utf-8');
+    assert.equal(r.headers.get('Cache-Control'), 'public, max-age=3600');
+    const t = await r.text();
+    assert.match(t, /^<\?xml version="1\.0" encoding="UTF-8"\?>\n<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
+    assert.deepEqual([...t.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]),
+      ['https://rendorium.com/', 'https://rendorium.com' + CAMINHO_GUIA]);
+    assert.match(t, /<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/, 'o guia com a data da revisão');
   });
 
   /* O que o Google mostra sem cortar: o título nos 60 caracteres e a

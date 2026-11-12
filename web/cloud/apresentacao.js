@@ -983,7 +983,7 @@ var APR_ABAS_DINHEIRO = ['Movimentos', 'Planeados', 'Créditos'];
 var APR_ABAS_PESSOAS = ['Inquilinos', 'Proprietários', 'Colaboradores'];
 
 /* A imagem inteira: o palco, com o fundo da superfície e o mosaico da marca
-   atrás das peças (estilos.css:.imv-mosaico, nas quatro cores das capas, ou
+   atrás das peças (estilos.css:.mosaico, nas quatro cores das capas, ou
    o azul-noite).
    Recebe: html — as peças; o (opcional) — {tom: 't0' cobalto, 't1' âmbar,
    't2' verde, 't3' ardósia ou 'noite' (o palco todo azul-noite); arranjo:
@@ -995,7 +995,7 @@ function aprCena(html, o) {
   var tom = /^(t[0-3]|noite)$/.test(o.tom || '') ? o.tom : 't0';
   var arranjo = /^(centro|tela|par|coluna|heroi)$/.test(o.arranjo || '') ? o.arranjo : 'centro';
   return '<div class="apr-cena apr-cena-' + arranjo + (tom === 'noite' ? ' apr-cena-noite' : '') + '">' +
-    '<span class="apr-fundo imv-mosaico imv-' + tom + '"></span>' + (html || '') + '</div>';
+    '<span class="apr-fundo mosaico mosaico-' + tom + '"></span>' + (html || '') + '</div>';
 }
 
 /* Duas peças sobrepostas: uma atrás, em cima à esquerda, e outra à frente,
@@ -1194,7 +1194,7 @@ function aprIcone(nome, o) {
    Devolve: o HTML. */
 function aprCapa(tom) {
   var t = /^t[0-3]$/.test(tom || '') ? tom : 't0';
-  return '<span class="apr-m-capa"><i class="imv-mosaico imv-' + t + '"></i></span>';
+  return '<span class="apr-m-capa"><i class="mosaico mosaico-' + t + '"></i></span>';
 }
 
 /* O cartão de um imóvel, como na lista dos Imóveis

@@ -243,7 +243,7 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     assert.ok(fixos.view.innerHTML.length > 0);
   });
 
-  test('hdrFiltN, anaClear e limparFiltroAtual contam e limpam o que cada serviço regista, e o titular do IRS pela base', () => {
+  test('hdrFiltN, anaClear e limparFiltroAtual contam e limpam o que cada serviço regista, e o ano do IRS', () => {
     const app = carregarApp();
     elementos(app);
     semear(app);
@@ -265,10 +265,10 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     assert.equal(app.hdrFiltN(), 1);
     app.anaClear();
     assert.equal(app.repProp, ''); assert.equal(app.hdrFiltN(), 0);
-    app.tab = 'fisco'; app.ownerFilter = 'o1'; app.fiscoAno = '2020';
-    assert.equal(app.hdrFiltN(), 1, 'na Declaração o titular conta, e o ano não é filtro');
+    app.tab = 'fisco'; app.fiscoAno = '2020';
+    assert.equal(app.hdrFiltN(), 1, 'na Declaração conta o ano escolhido fora do automático (já não está à vista na barra); titular não há a escolher (KAN-73)');
     app.anaClear();
-    assert.equal(app.fiscoAno, ''); assert.equal(app.ownerFilter, '');
+    assert.equal(app.fiscoAno, ''); assert.equal(app.hdrFiltN(), 0);
     app.tab = 'properties';
     assert.equal(app.hdrFiltN(), 0, 'as listas contam pelo lf');
     app.tab = 'calendar';
@@ -293,23 +293,22 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     assert.equal(fixos.hdrFilt.style.display, 'none');
   });
 
-  test('a visão geral ganha a criação rápida uma vez só, depois dos cartões, e o fabpad com ela; sem os Movimentos fica só o personalizar', () => {
+  // o FAB saiu (cria-se no + e na ação do cabeçalho): o «depois» da visão geral é só o personalizar
+  test('a visão geral ganha o «Personalizar painel» uma vez só, depois dos cartões, e nenhum FAB; sem os Movimentos o personalizar fica', () => {
     const app = carregarApp();
     const fixos = elementos(app);
     semear(app);
     app.tab = 'dashboard';
     app.render();
     const html = fixos.view.innerHTML;
-    assert.equal((html.match(/class="fab"/g) || []).length, 1, 'um FAB');
-    assert.equal((html.match(/fabpad/g) || []).length, 1, 'um fabpad');
-    assert.match(html, /newTxPick\(\)/);
-    assert.match(html, /id="dashPersonalizar"/);
+    assert.doesNotMatch(html, /class="fab|fabpad/, 'nenhum FAB');
+    assert.equal((html.match(/id="dashPersonalizar"/g) || []).length, 1, 'uma vez só');
     assert.ok(html.indexOf('Personalizar painel') > html.indexOf('donutCard'), 'entra depois dos cartões');
     assert.match(html, /id="pendCard"/, 'o cartão dos por confirmar (dos Planeados) está');
     app.definirServicosDesligados(['transactions']);
     app.render();
     const sem = fixos.view.innerHTML;
-    assert.doesNotMatch(sem, /class="fab"|newTxPick\(/);
+    assert.doesNotMatch(sem, /class="fab|fabpad/);
     assert.match(sem, /Personalizar painel/);
   });
 

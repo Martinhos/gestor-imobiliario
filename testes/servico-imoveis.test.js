@@ -378,7 +378,7 @@ describe('a lista, a ficha e o formulário na linguagem nova', () => {
     const cartao = (html, id) => { const i = html.indexOf('data-lp="prop:' + id + '"'), j = html.indexOf('data-lp="prop:', i + 1); return html.slice(i, j < 0 ? undefined : j); };
     let html = app.vProperties();
     const praia = cartao(html, 'p1'), campo = cartao(html, 'p2');
-    assert.match(praia, /<div class="imv-capa imv-mosaico imv-t[0-3]">/, 'sem fotos, o mosaico');
+    assert.match(praia, /<div class="imv-capa mosaico mosaico-t[0-3]">/, 'sem fotos, o mosaico');
     assert.equal(app.imvMosaico(app.prop('p1')), app.imvMosaico(app.normProp({ id: 'p1' })), 'a mesma cor para o mesmo imóvel');
     assert.match(praia, /<span class="badge in">Arrendado<\/span>/);
     assert.deepEqual([...praia.matchAll(/<div class="imv-kv"><span>([^<]*)<\/span>/g)].map((m) => m[1]), ['Renda', 'Yield', 'Dívida']);
@@ -387,7 +387,7 @@ describe('a lista, a ficha e o formulário na linguagem nova', () => {
     assert.doesNotMatch(praia, /class="iconbtn opcoes"/, 'o cartão já não tem o ⋮: tocar abre a ficha');
     app.prop('p1').photos = [app.normFile({ id: 'f1', name: 'Sala', type: 'image/jpeg', size: 10 }), app.normFile({ id: 'f2', name: 'Quarto', type: 'image/jpeg', size: 10 })];
     html = app.vProperties();
-    assert.match(cartao(html, 'p1'), /class="imv-capa imv-mosaico imv-t[0-3] pcover" id="th_f1"><span class="imv-nfotos">2 fotos<\/span>/, 'a primeira foto é a capa');
+    assert.match(cartao(html, 'p1'), /class="imv-capa mosaico mosaico-t[0-3] pcover" id="th_f1"><span class="imv-nfotos">2 fotos<\/span>/, 'a primeira foto é a capa');
     assert.equal(app.imvCorDoEstado('parcial'), '', 'parcial é o cobalto (o .badge sem cor)');
     assert.equal(app.imvCorDoEstado('vago'), 'amber');
   });

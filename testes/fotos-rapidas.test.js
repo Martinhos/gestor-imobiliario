@@ -287,6 +287,60 @@ describe('o foco num campo e o teclado', () => {
     assert.match(foco, /campoAVistaQuandoAssentar\(t\)/);
     assert.doesNotMatch(foco, /smooth|classList\.add\('kb'\)/);
   });
+
+  // KAN-110: a folga alongava o corpo de uma folha curta, e a folha crescia
+  // para cima do ecrã com o foco nas Notas da «Nova tarefa»
+  test('rolado até ao fim o campo já fica à vista: rola, e a folga não entra', () => {
+    app.visualViewport = { offsetTop: 0, height: 450, addEventListener() {}, removeEventListener() {} };
+    // o campo (430..474) passa o fundo do que se vê (450 - 12); o corpo só rola mais 50
+    const c = campo(430, { scrollTop: 200, scrollHeight: 950 });
+    assert.equal(app.campoAVista(c.t), true);
+    assert.equal(c.kb(), false, 'sem a folga, a folha não cresce');
+    assert.ok(c.corpo.scrollTop > 200, 'rola o que pode');
+  });
+});
+
+describe('a janela por cima do teclado (KAN-110)', () => {
+  test('kbJanelaVisivel: só com o teclado a tapar o layout, sem zoom de pinça', () => {
+    assert.equal(app.kbJanelaVisivel(null, 785), null, 'sem visualViewport');
+    assert.equal(app.kbJanelaVisivel({ height: 785, offsetTop: 0, scale: 1 }, 785), null, 'sem teclado');
+    assert.equal(app.kbJanelaVisivel({ height: 729, offsetTop: 0, scale: 1 }, 785), null, 'as barras do browser não são um teclado');
+    assert.equal(app.kbJanelaVisivel({ height: 392, offsetTop: 100, scale: 2 }, 785), null, 'com zoom de pinça fica como sempre');
+    assert.equal(app.kbJanelaVisivel({ height: 450, offsetTop: 0, scale: 1 }, 450), null, 'o layout encolheu com o teclado (alguns Samsung): já cabe');
+    assert.equal(app.kbJanelaVisivel({ height: 150, offsetTop: 230, scale: 1 }, 384), null, 'deitado, com o teclado, a folha ficava sem corpo: fica como sempre');
+    igual(app.kbJanelaVisivel({ height: 450.4, offsetTop: 227.2, scale: 1 }, 785), { topo: 227, alto: 450 });
+    igual(app.kbJanelaVisivel({ height: 450, offsetTop: -3 }, 785), { topo: 0, alto: 450 });
+  });
+
+  test('janelaSegueTeclado: o html.kb-aberto e as --vv-topo/--vv-alto entram com o teclado e saem com ele', () => {
+    const classes = new Set(), estilo = {};
+    const h = { clientHeight: 785, classList: { add: (x) => classes.add(x), remove: (x) => classes.delete(x), contains: (x) => classes.has(x) },
+      style: { setProperty: (k, v) => { estilo[k] = v; }, removeProperty: (k) => { delete estilo[k]; } } };
+    const antes = { de: app.document.documentElement, alto: app.innerHeight, vv: app.visualViewport };
+    try {
+      app.document.documentElement = h;
+      app.innerHeight = 785;
+      app.visualViewport = { height: 450, offsetTop: 227, scale: 1 };
+      igual(app.janelaSegueTeclado(), { topo: 227, alto: 450 });
+      assert.ok(classes.has('kb-aberto'));
+      igual(estilo, { '--vv-topo': '227px', '--vv-alto': '450px' });
+      app.visualViewport = { height: 785, offsetTop: 0, scale: 1 };
+      assert.equal(app.janelaSegueTeclado(), null);
+      assert.ok(!classes.has('kb-aberto'));
+      igual(estilo, {});
+    } finally {
+      app.document.documentElement = antes.de; app.innerHeight = antes.alto; app.visualViewport = antes.vv;
+    }
+  });
+
+  test('o arranque segue a janela visível, e o CSS põe a janela no que se vê', () => {
+    const arr = lerWeb('app/arranque.js');
+    assert.match(arr, /visualViewport\.addEventListener\('resize',janelaSegueTeclado\)/);
+    assert.match(arr, /visualViewport\.addEventListener\('scroll',janelaSegueTeclado\)/);
+    const css = lerWeb('estilos.css');
+    assert.match(css, /html\.kb-aberto \.modal\{top:var\(--vv-topo,0px\);height:var\(--vv-alto,100dvh\)\}/);
+    assert.match(css, /@media\(max-width:520px\)\{html\.kb-aberto \.sheet\{max-height:calc\(var\(--vv-alto,100dvh\) \* \.93\)\}\}/);
+  });
 });
 
 describe('o touchmove não-passivo da janela', () => {

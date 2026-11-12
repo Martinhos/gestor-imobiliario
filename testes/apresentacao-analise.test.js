@@ -274,17 +274,23 @@ describe('os números do exemplo', () => {
     }
   });
 
-  test('o resumo do IRS: o líquido são as rendas menos os gastos, o imposto à taxa do ano, e o englobamento pelos escalões da app', () => {
+  test('o resumo do IRS: o líquido são as rendas menos os gastos e o imposto à taxa do ano, sem englobamento, como a página', () => {
     montar();
     const ano = app.aprAFiscoAno(), f = app.aprAFisco(ano);
     assert.equal(f.rendas, app.aprAAno().receita);
     assert.equal(Math.round((f.rendas - f.gastos) * 100) / 100, f.liquido);
     assert.equal(f.taxa, app.irsRate({ rent: 950, start: '2025-03-01', end: '', active: true }, ano));
     assert.equal(f.imposto, Math.round(f.liquido * f.taxa) / 100);
-    const eng = app.irsAno(ano).englobamento;
-    if (eng && eng.escaloes && eng.escaloes.length) {
-      const esperado = Math.round((app.fiscoColeta(f.outros + f.liquido, eng, false) - app.fiscoColeta(f.outros, eng, false)) * 100) / 100;
-      assert.equal(f.englobando, esperado);
-    } else assert.equal(f.englobando, null);
+    assert.equal('englobando' in f, false, 'a página deixou de simular o englobamento, e a apresentação também');
+    /* a apresentação mostra o que a página tem: a barra só com o «Guia» e o
+       botão de partilha (o ano e o titular no funil), e nada da faixa azul, da
+       dobra do guia nem do englobamento */
+    const imgs = app.APRESENTACOES.fisco.imagens.map((x) => x.maquete() + ' ' + x.texto).join(' ');
+    assert.doesNotMatch(imgs, /apr-a-faixa|apr-a-dobra|Como preencher, passo a passo|Englobar|englob/);
+    assert.doesNotMatch(imgs, /apr-a-anos|apr-a-titular|chip <b>Titular|Guia de preenchimento|Todos · por inteiro/, 'sem o ano e o titular na barra');
+    assert.ok(imgs.includes('<span class="apr-a-fis-acoes"><span class="apr-m-botao pequeno">' + app.ic('livro', 12) + 'Guia</span><span class="apr-a-icobotao">' + app.ic('partilhar', 12) + '</span></span>'),
+      'a barra: o livro com «Guia» e a partilha só de ícone');
+    assert.match(imgs, /apr-m-botao pequeno apr-alvo">/, 'o «Guia» em destaque na imagem do titular');
+    assert.match(imgs, /escolhe-o no <b>funil<\/b> do cabeçalho, com o ano/);
   });
 });

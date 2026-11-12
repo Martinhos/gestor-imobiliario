@@ -932,7 +932,7 @@ describe('o kit das maquetes', () => {
       app.aprValor(-35), app.aprMais({ alvo: true }), app.aprBarra('dinheiro'), app.aprAviso('a', 'b', { icone: 'check', tom: 'in' }), app.aprSurge('x', 2, 'apr-heroi-a'),
     ].concat(app.aprImagensDe('boas-vindas').map((x) => x.html));
     for (const h of pecas) assert.doesNotMatch(h, /style=|\son[a-z]+=|<script/i, h.slice(0, 80));
-    assert.match(app.aprCena('', { tom: 'mau', arranjo: 'mau' }), /class="apr-cena apr-cena-centro"><span class="apr-fundo imv-mosaico imv-t0">/, 'um tom que não existe cai no cobalto');
+    assert.match(app.aprCena('', { tom: 'mau', arranjo: 'mau' }), /class="apr-cena apr-cena-centro"><span class="apr-fundo mosaico mosaico-t0">/, 'um tom que não existe cai no cobalto');
     assert.match(app.aprLinha({ titulo: '<x>' }), /&lt;x&gt;/, 'o texto passa pelo esc');
     assert.match(app.aprBarras([1, 5, 10]), /apr-a1".*apr-a5".*apr-a10"/, 'as alturas são classes, em décimos');
     assert.match(app.aprProgresso(37.5), /data-largura="37\.5"/, 'a largura vai pelo data-largura');

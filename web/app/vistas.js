@@ -75,10 +75,9 @@ function hdrFiltN(){
 // fecha o painel de análise do separador atual (os filtros aplicam-se logo ao mexer)
 // Devolve: nada — fecha o painel e redesenha a vista.
 function anaApply(){anaOpen[tab]=false;render()}
-// limpa o imóvel em foco do separador de análise onde estamos (e, no IRS, o titular)
+// limpa o imóvel em foco do separador de análise onde estamos (e, no IRS, o ano)
 // Devolve: nada — limpa os filtros e redesenha a vista.
 function anaClear(){
-  ownerFilter='';   // o titular do IRS · Anexo F; fora dele já está vazio (ambito.js:ambitoSemDono)
   /* o imóvel em foco é de cada serviço de análise: cada um regista o seu
      «limpar» (servicos.js:registarServico, chave analise) */
   const a=analiseDe(tab);
@@ -87,7 +86,7 @@ function anaClear(){
 }
 // nº de filtros ativos no separador atual, contados pelo serviço que o tem
 // (a visão geral, as projeções e a avaliação contam o imóvel em foco; a
-// Declaração o titular; os movimentos os seus filtros e a pesquisa)
+// Declaração o ano; os movimentos os seus filtros e a pesquisa)
 // Devolve: número de filtros ativos (0 quando o separador não regista análise).
 const ANA_N=()=>{const a=analiseDe(tab);return a&&a.n?a.n():0};
 /* O vazio de uma lista quando os filtros não deixam nada: diz-o e oferece o
@@ -95,18 +94,6 @@ const ANA_N=()=>{const a=analiseDe(tab);return a&&a.n?a.n():0};
    estava copiado à letra em cinco.
    Devolve: o HTML do .empty (texto). */
 function vazioFiltro(){return `<div class="empty"><b>Nada neste filtro</b><div class="u-mt-10px"><button type="button" class="btn sm" data-toca="vista" data-click="limparFiltroAtual()">${ic('x',13)} Limpar filtros</button></div></div>`}
-/* O seletor do titular do IRS · Anexo F (fisco.js, no painel dela): o
-   ownerSel, que escreve o ownerFilter. Já não é um filtro da app inteira —
-   esse saiu (ambito.js) —, e por isso só se escreve ali, sem grupos: a
-   declaração é por titular, e um grupo não o é. Sem proprietários não se
-   escreve.
-   Recebe: valor — o titular escolhido ('' para todos).
-   Devolve: o HTML do seletor (texto), ou ''. */
-function anaSelDono(valor){
-  if(!db.owners.length)return '';
-  const oo=[{v:'',label:'Todos os proprietários'}].concat(db.owners.map(o=>({v:o.id,label:o.name})));
-  return `<div class="u-w-100pc">${sel('ownerSel',valor,oo,'onOwnerFilter','vista')}</div>`;
-}
 /* As opções do seletor de imóvel de uma análise: todos, cada imóvel do âmbito
    e, depois de uma linha, os grupos de imóveis ('g:ID'). O painel da visão
    geral e o chip «Imóvel» das Projeções e da Avaliação escolhem do mesmo.
@@ -362,7 +349,7 @@ function listaViva(id,itens,cls,classesDoEstilo){
   itens=(itens||[]).filter(x=>x&&x.chave);
   _listasVivas.push({id:id,itens:itens});
   /* nasce CHEIA: uma vista tem de devolver o ecrã inteiro, e quem a lê — um
-     teste, o indexOf do fab, o próximo render — tem de lá encontrar tudo */
+     teste, o próximo render — tem de lá encontrar tudo */
   const dentro=itens.map(it=>comChave(it.html,it.chave)).join('');
   return `<div class="list${cls?' '+cls:''}${classesDoEstilo?' '+classesDoEstilo:''}" data-listaviva="${esc(id)}">${dentro}</div>`;
 }
@@ -437,11 +424,10 @@ function refrescarListasVivas(){
   let html;try{html=fn()}catch(e){_listasVivas=[];return false}
   if(!_listasVivas.length){_listasVivas=[];return false}
   /* o molde tem de ficar igual ao que o render produziria, senão as duas
-     árvores não batem certo e cai-se fora por nada — foi o que o fabpad fez */
-  if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
-  /* e a moldura da casca que o render põe por cima da vista (os separadores
-     da área): sem ela, uma tecla na pesquisa de uma lista fazia desaparecer
-     os separadores — a via parcial refaz o ecrã inteiro a partir deste molde */
+     árvores não batem certo e cai-se fora por nada: por isso leva a moldura
+     da casca que o render põe por cima da vista (os separadores da área).
+     Sem ela, uma tecla na pesquisa de uma lista fazia desaparecer os
+     separadores — a via parcial refaz o ecrã inteiro a partir deste molde */
   html=abasDaArea()+html;
   const registo={};_listasVivas.forEach(l=>{registo[l.id]=l.itens});
   _listasVivas=[];
@@ -535,7 +521,6 @@ function render(){
      que os inquilinos, os movimentos e tudo o resto continuavam a trocar de
      golpe enquanto só três chamadas se lembravam de pedir. Só no mesmo ecrã —
      ver continuidade.js. */
-  ambitoSemDono();                 // fora do IRS não há proprietário em foco, nem um de antes
   const ecra=tab+'|'+(setPage||'');
   const antes=(ecra===_ecraPintado&&!contSuspensa)?medirContinuidade(view()):null;
   /* no mesmo ecrã, o painel dos filtros aberto fica onde estava rolado */
@@ -550,7 +535,6 @@ function render(){
      diz e se relata (servicos.js:vistaNaoCarregouHtml). */
   const vista=vistaDoSeparador(tab);
   let html=vista?vista():separadorLigado(tab)?vistaNaoCarregouHtml(tab):servicoDesligadoHtml(tab);
-  if(html.indexOf('class="fab"')>-1)html+='<div class="fabpad"></div>';
   /* por cima de cada vista, a casca: os separadores da área
      (navegacao.js:abasDaArea) — da base, e não de cada serviço, para serem os
      mesmos em todo o lado */
@@ -618,7 +602,7 @@ let _pintarAParte=false;
    acontecer; o separador e o ecrã pintado também. O que o render escreve fora
    do #view (o cabeçalho) volta a ser o do separador onde se está, pela mesma
    via da repintura parcial (refrescarListasVivas). No fim saem as abas da
-   área (ficam as vivas, por cima), o botão flutuante e os ids — dois
+   área (ficam as vivas, por cima) e os ids — dois
    #txLista no documento davam um getElementById errado.
    Recebe: id — o separador a pintar; el — o contentor (já no documento).
    Devolve: true se pintou; false sem vista ou se a pintura rebentou. */
@@ -638,7 +622,6 @@ function pintarVistaAParte(id,el){
     el.removeAttribute('id');real.id='view';
     try{pintarCabecalhoDoEcra();if(window.CW&&CW.selCabecalho)CW.selCabecalho()}catch(e){}
   }
-  [].slice.call(el.querySelectorAll('.fab,.fabmenu')).forEach(e=>e.remove());
   if(typeof semIds==='function')semIds(el);
   return ok;
 }
@@ -999,9 +982,6 @@ function lockPage(){try{
   else if(!on&&was){h.classList.remove('noscroll');document.body.style.top='';window.scrollTo(0,_lockY)}
 }catch(e){}}
 
-// muda o titular do IRS · Anexo F (o seletor vistas.js:anaSelDono, só na Declaração)
-// Devolve: nada — redesenha a vista.
-function onOwnerFilter(){ownerFilter=val('ownerSel')||'';render()}
 /* cartão reutilizável: saldos entre proprietários (de um imóvel ou de todos),
    embrulhado na sua fila (.cols) para os ecrãs que o põem solto — a Avaliação
    e os Movimentos. A Visão geral usa o cartão sem a fila (contasCard), porque
@@ -1665,30 +1645,6 @@ function lfOrigem(k,base,origemDe){
         opcoes:[{v:'',label:rot.todos}].concat(ha.map(o=>({v:o,label:rot[o],n:n[o]||0})))};
     }};
 }
-/* Fecha o leque do botão flutuante (#fabMenu). Era um
-   document.getElementById('fabMenu').classList.remove('on') no atributo, e a
-   gramática das ações não tem nem o document nem o classList. Quem a chama é
-   um botão de dentro do leque, por isso o leque está sempre lá — como estava
-   para o código de antes.
-   Recebe: nada.
-   Devolve: nada — tira a classe .on ao leque. */
-function fabFecharMenu(){document.getElementById('fabMenu').classList.remove('on')}
-/* Abre e fecha o leque do botão flutuante (#fabMenu), pela mesma razão.
-   Recebe: nada.
-   Devolve: nada — alterna a classe .on do leque. */
-function fabAlternarMenu(){document.getElementById('fabMenu').classList.toggle('on')}
-/* botão flutuante de adicionar, no canto inferior direito (o espaço no fundo da página é acrescentado no render)
-   Recebe: actions — array de {act: código da ação do data-click, label, icon (opcional)}; com um só item sai o botão simples,
-   com vários sai também o menu.
-   Devolve: string HTML do botão (e do menu, quando há vários). */
-function fab(actions){
-  /* com nome: o + é um desenho, e um leitor de ecrã não lê desenhos. Tinha
-     `title`, que o rato mostra e o teclado não, e quando havia várias ações
-     nem isso — o botão que abre o leque anunciava-se «botão» e mais nada. */
-  if(actions.length===1)return `<button class="fab" data-toca="camada" data-click="${actions[0].act}" aria-label="${esc(actions[0].label||'')}" title="${esc(actions[0].label||'')}">${ic('plus',26)}</button>`;
-  return `<div class="fabmenu" id="fabMenu">${actions.map(a=>`<button class="btn primary" data-toca="camada" data-click="fabFecharMenu();${a.act}">${ic(a.icon||'plus',15)} ${esc(a.label)}</button>`).join('')}</div>
-  <button class="fab" data-toca="nada" aria-label="Adicionar" title="Adicionar" data-click="fabAlternarMenu()">${ic('plus',26)}</button>`;
-}
 /* A saída de um ecrã vazio: um botão, no meio, dentro da própria caixa.
 
    Um ecrã que diz «não há nada» e não diz por onde se começa é um beco.
@@ -1696,9 +1652,9 @@ function fab(actions){
    contratos sem imóveis, hipotecas sem imóveis, projeções sem contratos) e
    hoje é o botão de TODAS as listas vazias — imóveis, movimentos, pessoas,
    planeados, modelos, hipotecas, contratos, visitas —, com a mesma condição
-   do FAB de cada uma. O FAB deixou de ser o caminho no telemóvel: abaixo de
-   900px é o + da barra de baixo que o substitui (navegacao.js:abrirAdicionar),
-   e um vazio sem botão obrigava a ir procurá-lo. O molde é o que as visitas
+   do + de cada uma (acessos.js:acoesDeAdicionar). O botão flutuante de cada
+   lista saiu: cria-se no + da barra de baixo (navegacao.js:abrirAdicionar) e
+   na ação do cabeçalho, e um vazio sem botão obrigava a ir procurá-los. O molde é o que as visitas
    já usavam, para não nascer aqui um quinto desenho de botão.
    Recebe: label — o que o botão faz, escrito como verbo; act — o JavaScript do
    toque; toca — a família do ponto (ecra se muda de ecrã, camada se abre um

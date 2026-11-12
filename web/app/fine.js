@@ -23,8 +23,7 @@
    Nada se grava sem o Guardar da pessoa. Uma prestação lida que não bate
    com a que a app calcula dá um aviso junto ao bloco.
 
-   Só aparece com sessão, fora de produção e a quem pode editar a casa
-   (finePodeLer). Tudo o que vem do servidor entra por esc() ou por value,
+   Só aparece com sessão e a quem pode editar a casa (finePodeLer). Tudo o que vem do servidor entra por esc() ou por value,
    e passa outra vez pelas gamas do contrato (fineLimpar): a rota já as
    aplica, e a app não confia no que não escreveu. */
 
@@ -111,13 +110,11 @@ function fineDe(lid){
   if(!t[lid])t[lid]={ocupado:false,erro:'',marcas:{},lidos:0,faltou:null,estranhos:[],prazoMeses:0,prestacao:0,prestacaoComProdutos:0,produtosLidos:0,aviso:''};
   return t[lid];
 }
-/* O botão aparece? Só com sessão (a rota pede-a), fora de produção (a rota
-   responde 404 lá) e, numa casa que já existe, a quem a pode editar — quem
-   só colabora sem «Editar a ficha» nem chega ao formulário, e a guarda
-   repete-o.
+/* O botão aparece? Só com sessão (a rota pede-a) e, numa casa que já
+   existe, a quem a pode editar — quem só colabora sem «Editar a ficha» nem
+   chega ao formulário, e a guarda repete-o. Em produção como no dev.
    Devolve: true quando o botão se mostra. */
 function finePodeLer(){
-  if(!(window.CW&&CW.ambiente&&CW.ambiente!=='producao'))return false;
   if(!haSessao())return false;
   const id=pForm&&pForm.id;
   if(id&&prop(id)&&!pode(id,'house.edit'))return false;

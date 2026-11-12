@@ -269,7 +269,7 @@ describe('o despacho pelo registo', () => {
     assert.equal(app.analiseDe('dashboard').n(), 1);
     app.analiseDe('dashboard').limpar();
     assert.equal(app.dashProp, '');
-    assert.equal(app.analiseDe('fisco').n(), 1, 'a Declaração conta só o titular');
+    assert.equal(app.analiseDe('fisco').n(), 0, 'a Declaração também não conta um proprietário: só o ano, aqui o automático (KAN-73)');
     app.ownerFilter = '';
     assert.equal(typeof app.analiseDe('transactions').alternar, 'function', 'os movimentos têm painel próprio');
     assert.equal(typeof app.analiseDe('transactions').limpar, 'function', 'e limpam os seus filtros pelo botão dos estados vazios');

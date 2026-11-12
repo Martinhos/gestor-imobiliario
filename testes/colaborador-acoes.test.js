@@ -1,6 +1,6 @@
 // Quem colabora encontra o que o cargo lhe deixa fazer, e onde: as ações por
 // imóvel e as de todos, as frases, a barra de baixo, a ficha, a vista geral,
-// o cartão do imóvel, «Imóveis onde colaboras» e os primeiros passos. As
+// o cartão do imóvel, «Onde colaboras» e os primeiros passos. As
 // decisões vivem em web/app/acessos.js; a sessão simula-se com window.CW,
 // como em cargos.test.js.
 
@@ -250,13 +250,13 @@ describe('o cartão e o menu do imóvel', () => {
 });
 
 describe('a camada da nuvem', () => {
-  test('«Imóveis onde colaboras» diz o que o cargo deixa fazer, linha a linha', () => {
+  test('«Onde colaboras» diz o que o cargo deixa fazer, por dono e cargo', () => {
     const tudo = carregarTudo();
     casas(tudo, [GESTOR, ['tx.view'], null]);
     tudo.db.properties[2]._cargo = '';
-    const html = tudo.colaboroCard();
-    assert.match(html, /Cargo P1<\/span><span class="small u-d-block u-mt-3px">Podes marcar visitas e adicionar inquilinos<\/span>/);
-    assert.match(html, /Só podes consultar/);
+    const html = tudo.colaboroCartao();
+    assert.match(html, /Podes marcar visitas e adicionar inquilinos em <b>T1 Rui<\/b>\./);
+    assert.match(html, /Só podes consultar <b>T2 Rui<\/b>\./);
     assert.doesNotMatch(html, /T3 Rui/, 'o meu imóvel não é de colaboração');
   });
 

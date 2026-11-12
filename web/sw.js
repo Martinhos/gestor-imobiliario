@@ -68,7 +68,7 @@ const APP = [
   // os serviços
   'painel-geral', 'lista-imoveis', 'lista-contratos', 'lista-pessoas', 'lista-colaboradores',
   'lista-movimentos', 'projecoes', 'imovel', 'fine', 'pessoas', 'contrato', 'tarefas', 'planeados', 'visitas', 'calendario', 'movimento',
-  'creditos', 'contrato-pdf', 'avaliacao', 'fisco',
+  'creditos', 'contrato-pdf', 'avaliacao', 'fisco', 'fisco-pdf',
 ].map((n) => '/app/' + n + '.js');
 const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'grupos', 'ajuda', 'painel',
   'filtros', 'entrada', 'novidades', 'selecao', 'selecao-listas', 'guia',

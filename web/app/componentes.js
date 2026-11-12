@@ -712,8 +712,9 @@ function fotoNomeTecla(ev){
    fugia de baixo do dedo a meio do toque longo para selecionar texto.
    Agora o campo só se mexe se o teclado (ou a borda do corpo da janela) o
    tapa, medido pela janela visível (visualViewport), e de uma vez, sem
-   scroll suave por baixo do dedo; a folga .kb só entra quando o corpo não
-   tem para onde rolar sem ela. Espera-se o teclado assentar: o resize da
+   scroll suave por baixo do dedo; a folga .kb só entra quando, rolado até
+   ao fim, o corpo ainda deixa o campo tapado. Com o teclado aberto, a
+   janela fica no que se vê (janelaSegueTeclado). Espera-se o teclado assentar: o resize da
    janela visível (alisado), ou KB_ESPERA sem resize nenhum (o teclado já
    estava aberto, ou não há teclado). Vale para todos os campos (o focusin
    do arranque.js). */
@@ -757,9 +758,52 @@ function campoAVista(t){
   if(kbCampoAVista(r,area))return false;
   if(!dentro){try{t.scrollIntoView({block:'center'})}catch(e){}return true}
   const quer=Math.round((r.top+r.bottom)/2-(area.top+area.bottom)/2);
-  if(quer>0&&corpo.scrollHeight-corpo.clientHeight-corpo.scrollTop<quer)s.classList.add('kb');
+  /* sem a folga, o corpo rola até onde pode; a folga só entra se, rolado até
+     ao fim, o campo continua tapado — ela alonga o corpo, e numa folha curta
+     a folha crescia para cima, com o cabeçalho a sair do ecrã (KAN-110) */
+  const resta=corpo.scrollHeight-corpo.clientHeight-corpo.scrollTop;
+  if(quer>0&&resta<quer&&r.bottom-Math.max(resta,0)>area.bottom-KB_FOLGA)s.classList.add('kb');
   corpo.scrollTop+=quer;
   return true;
+}
+// a diferença mínima (px) entre o layout e a janela visível para ser um teclado, e não as barras do browser
+const KB_MINIMO=120;
+// abaixo desta altura (px) à vista — o telemóvel deitado, com o teclado — a folha ficava sem corpo: fica como sempre
+const KB_ALTO_MINIMO=280;
+/* O que se vê com o teclado aberto, quando o browser só encolhe a janela
+   visível (o Chrome do Android por omissão, o Safari do iPhone): o layout
+   fica com a altura toda, e uma janela presa a ele (.modal, position:fixed)
+   tinha o fundo debaixo do teclado. Sem teclado (ou com o layout a encolher
+   com ele, como em alguns Samsung), com zoom de pinça, com menos de
+   KB_ALTO_MINIMO à vista, ou sem visualViewport: null, e a janela fica como
+   sempre.
+   Recebe: vv — o window.visualViewport (ou null); altoLayout — a altura do
+   layout em px (o maior de innerHeight e documentElement.clientHeight).
+   Devolve: {topo, alto} em px do layout — onde começa e quanto mede o que
+   se vê —, ou null. */
+function kbJanelaVisivel(vv,altoLayout){
+  if(!vv||!(vv.height>=KB_ALTO_MINIMO))return null;
+  if(Math.abs((vv.scale||1)-1)>.01)return null;
+  if(!(altoLayout-vv.height>=KB_MINIMO))return null;
+  return {topo:Math.max(0,Math.round(vv.offsetTop||0)),alto:Math.round(vv.height)};
+}
+/* A janela segue o que se vê com o teclado aberto: o html.kb-aberto e as
+   --vv-topo/--vv-alto põem o .modal por cima do teclado, e a folha assenta
+   no fundo do que se vê (estilos.css, html.kb-aberto). Corre a cada resize e
+   scroll da janela visível (arranque.js).
+   Devolve: o {topo, alto} aplicado (kbJanelaVisivel), ou null se saiu. */
+function janelaSegueTeclado(){
+  const h=document.documentElement;if(!h)return null;
+  const alto=Math.max(window.innerHeight||0,h.clientHeight||0);
+  const j=kbJanelaVisivel(window.visualViewport||null,alto);
+  if(j){
+    h.style.setProperty('--vv-topo',j.topo+'px');h.style.setProperty('--vv-alto',j.alto+'px');
+    h.classList.add('kb-aberto');
+  }else if(h.classList.contains('kb-aberto')){
+    h.classList.remove('kb-aberto');
+    h.style.removeProperty('--vv-topo');h.style.removeProperty('--vv-alto');
+  }
+  return j;
 }
 /* O foco entrou num campo de escrever: espera o teclado assentar e traz o
    campo para a vista se ele o tapar (campoAVista). Um foco novo esquece o

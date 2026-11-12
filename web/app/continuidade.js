@@ -585,9 +585,6 @@ function deslizarPainel(pintar,d,desde){
     'px;width:'+w+'px;box-sizing:border-box;max-width:none;margin:0';
   while(v.firstChild)velho.appendChild(v.firstChild);
   semIds(velho);                   // dois #txLista no documento davam um getElementById errado
-  /* o botão flutuante do ecrã que sai não viaja: o do ecrã novo nasce no
-     mesmo canto, e dois botões iguais no mesmo sítio lêem-se como um erro */
-  [].slice.call(velho.querySelectorAll('.fab,.fabmenu')).forEach(e=>e.remove());
   caixa.appendChild(velho);camadaDeSaida().appendChild(caixa);
   /* As abas da área vivem fora do #view (navegacao.js:abasAssentar) e, na
      mesma área, ficam paradas: a repintura só lhes troca o aceso. De área para
@@ -607,11 +604,6 @@ function deslizarPainel(pintar,d,desde){
      de quem chega arranca à velocidade máxima (index.html) */
   const dur=msDoToken('--lento',340),curva=tokenTexto('--curva-fita','cubic-bezier(.4,0,.2,1)');
   const clipAntes=m.style.overflowX;m.style.overflowX='clip';
-  /* o transform do #view faz dele o bloco de referência de quem lá dentro é
-     position:fixed — o botão flutuante novo ia parar ao fundo de um painel de
-     seis mil pixéis. Fica escondido enquanto a fita corre. */
-  const fixos=[].slice.call(v.querySelectorAll('.fab,.fabmenu'));
-  fixos.forEach(e=>{e.style.visibility='hidden'});
   /* o: de onde o dedo largou a página — o resto da viagem é o mesmo */
   const o=Number(desde)||0;
   velho.animate([{transform:'translateX('+o+'px)'},{transform:'translateX('+(-d*w)+'px)'}],
@@ -621,7 +613,7 @@ function deslizarPainel(pintar,d,desde){
   const caixaAbas=abasNaFita(casa,abasAntes,ra,d,w,o,dur,curva);
   const fim=function(){
     if(_fimPainel!==fim)return;_fimPainel=null;
-    try{m.style.overflowX=clipAntes;fixos.forEach(e=>{e.style.visibility=''});caixa.remove();
+    try{m.style.overflowX=clipAntes;caixa.remove();
       if(caixaAbas)caixaAbas.remove()}catch(x){}};
   _fimPainel=fim;an.onfinish=fim;
   /* rede: num separador escondido a animação não corre e o onfinish nunca

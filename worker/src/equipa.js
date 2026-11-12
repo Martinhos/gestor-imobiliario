@@ -12,7 +12,13 @@
 
    A sessão de equipa é deliberadamente separada da de quem usa a app: outro
    cookie, outro espaço no KV, outra função de leitura. Nenhuma das duas se
-   pode fazer passar pela outra. */
+   pode fazer passar pela outra.
+
+   A exceção é só do dev, e só numa direção (entrarPelaSessaoDeTeste): lá, a
+   sessão de uma conta de teste abre uma sessão de equipa NOVA, em nome de
+   quem pediu a ligação do /test e com os cargos que o Discord lhe dá nesse
+   momento. A sessão de teste não serve de sessão de equipa — a API do back
+   office continua a pedir o cookie da equipa. */
 
 import { json, err } from './lib/http.js';
 import { auditar } from './lib/auditoria.js';
@@ -26,6 +32,11 @@ const GRAVAR_VERIFICACAO = 60 * 60 * 1000;  // e de quanto em quanto isso se esc
 // As verificações que este isolate já fez, token → quando: poupam o KV (ver reverPapeis).
 const verificadas = new Map();
 export const COOKIE = 'gi_equipa';
+// As páginas do back office que a sessão de teste do dev abre, e para onde se volta depois
+// de entrar: o próprio endereço, sempre um destes (entrarPelaSessaoDeTeste).
+const PAGINAS_DO_TESTE = ['/equipa', '/equipa/', '/equipa/docs'];
+// Quantos servidores do bot se perguntam, no máximo, pelos cargos de quem vem do /test.
+const TETO_SERVIDORES = 5;
 
 // 32 bytes de aleatório criptográfico em hexadecimal (64 caracteres):
 // serve de bilhete e de token de sessão.
@@ -200,6 +211,158 @@ async function reverPapeis(env, token, s) {
   return nova;
 }
 
+/* Uma sessão de equipa nova no KV, com a forma de sempre — a mesma pela
+   ligação do /entrar e pela sessão de teste do dev, para o resto (o
+   getEquipa, os papéis revistos, o sair, a pílula do QA) não saber por onde
+   se entrou. Os papéis contam como verificados agora: quem chama acabou de
+   os ter do Discord.
+   Recebe: env — o ambiente do worker (usa env.SESSIONS); quem — {discordId,
+   nome, papel, papeis?, guildId?} (o payload do bilhete, ou o que
+   entrarPelaSessaoDeTeste montou).
+   Devolve: promessa do token da sessão (64 hexadecimais), já gravada por
+   SESSAO_TTL. */
+async function guardarSessao(env, quem) {
+  const sessao = novoToken();
+  const agora = Date.now();
+  await env.SESSIONS.put('equipa:' + sessao, JSON.stringify({
+    discordId: quem.discordId, nome: quem.nome, papel: quem.papel,
+    papeis: quem.papeis || [quem.papel], desde: agora,
+    guildId: quem.guildId || null, verificadoEm: agora,
+  }), { expirationTtl: SESSAO_TTL });
+  return sessao;
+}
+
+/* Os servidores de Discord onde está o bot deste worker, perguntados com o
+   token dele. A ligação do /test não diz em que servidor foi pedida, e os
+   cargos só se perguntam a um servidor de cada vez (lib/bot.js:cargosDoMembro).
+   Os cargos que contam são os das listas deste worker (lib/papeis.js), que
+   são as do servidor onde o bot dele vive — o mesmo onde se corre o /entrar.
+   Com prazo, como as outras perguntas ao Discord: quem espera é uma página.
+   Recebe: env — o ambiente do worker (usa DISCORD_BOT_TOKEN).
+   Devolve: promessa da lista de ids de servidor (até TETO_SERVIDORES, pela
+   ordem do Discord), vazia sem token, sem rede ou com outra resposta. */
+async function servidoresDoBot(env) {
+  if (!env.DISCORD_BOT_TOKEN) return [];
+  const corta = typeof AbortController === 'function' ? new AbortController() : null;
+  const prazo = corta ? setTimeout(() => { try { corta.abort(); } catch (e) {} }, 3000) : null;
+  try {
+    const r = await fetch('https://discord.com/api/v10/users/@me/guilds', {
+      headers: { Authorization: 'Bot ' + env.DISCORD_BOT_TOKEN },
+      signal: corta ? corta.signal : undefined,
+    });
+    if (!r.ok) return [];
+    const l = await r.json();
+    return (Array.isArray(l) ? l : []).map((g) => String((g && g.id) || ''))
+      .filter((id) => /^\d{1,20}$/.test(id)).slice(0, TETO_SERVIDORES);
+  } catch (e) {
+    return [];
+  } finally {
+    if (prazo) clearTimeout(prazo);
+  }
+}
+
+/* Os papéis de equipa que uma pessoa tem agora, pelo mesmo caminho do
+   reverPapeis (lib/bot.js:cargosDoMembro e lib/papeis.js:papeisDe), no
+   primeiro servidor do bot onde é membro com algum papel. Os servidores
+   perguntam-se ao mesmo tempo; quem não é membro, ou um servidor que não
+   responde, não conta.
+   Recebe: env — o ambiente do worker; discordId — o id de Discord da pessoa.
+   Devolve: promessa de {guildId, papeis} (papeis do mais alto para o mais
+   baixo, nunca vazio), ou de null sem papel, sem servidor ou sem resposta. */
+async function papeisNosServidores(env, discordId) {
+  const servidores = await servidoresDoBot(env);
+  const respostas = await Promise.all(servidores.map((g) => cargosDoMembro(env, g, discordId)));
+  for (let i = 0; i < servidores.length; i++) {
+    const c = respostas[i];
+    if (!c || c.saiu) continue;
+    const papeis = papeisDe(env, { member: { user: { id: discordId }, roles: c.cargos } });
+    if (papeis.length) return { guildId: servidores[i], papeis };
+  }
+  return null;
+}
+
+/* No dev, o back office abre com a sessão de teste (decisão do Martinho,
+   2026-11-09, ticket de QA 68c59ce4): quem entrou na app por uma ligação do
+   /test e abre o /equipa sem sessão de equipa entra em nome da pessoa do
+   Discord que pediu essa ligação (users.test_owner,
+   teste.js:discordDaSessaoDeTeste), com os cargos que o Discord lhe dá
+   agora (papeisNosServidores). Abre-se uma sessão de equipa normal
+   (guardarSessao), fica na auditoria como entrada — com a conta de teste por
+   alvo e a dizer de onde veio — e volta-se ao mesmo endereço com o cookie
+   da equipa. Daí para a frente é uma sessão como as do /entrar.
+
+   Só abre:
+   · com o ENV_NAME 'dev' — a produção e o percurso saem na primeira linha,
+     sem ler nada;
+   · num GET de uma das PAGINAS_DO_TESTE: navegar, nunca a API (que continua
+     a pedir o cookie da equipa), e o regresso é sempre o próprio endereço,
+     de uma lista fechada, sem a query — nenhum redirecionamento livre;
+   · sem Sec-Fetch-Site de outro site: o cookie da sessão de teste é
+     SameSite=Lax e iria numa navegação vinda de fora. A sessão nova seria
+     sempre da própria pessoa, e o cookie só ficava no browser dela, mas
+     nenhuma página de fora tem de poder abrir sessões de equipa em nome de
+     ninguém. A pílula (mesma origem) e o endereço escrito à mão passam;
+   · com a sessão de uma conta de teste com dono, e um papel de equipa
+     confirmado pelo Discord neste pedido;
+   · com o rasto escrito: sem a linha da auditoria, a sessão apaga-se.
+   Ter saído antes não trava nada: entre a app de teste e o back office não
+   há barreira (ticket de QA ab76041d, que revê a marca de 2026-11-09 —
+   MARCA_VELHA); o «Sair» leva à app, e voltar ao /equipa entra logo.
+   Qualquer falha (a base, o KV, o Discord) fica na página de entrada de
+   sempre, nunca num 500.
+   Recebe: env — o ambiente do worker; request — o pedido (o cookie da sessão
+   de teste e o Sec-Fetch-Site); url — o URL dele.
+   Devolve: promessa da Response 303 com o Set-Cookie da equipa (e o que
+   apaga a MARCA_VELHA, se o browser ainda a traz), ou de null — e aí quem
+   chama mostra a página de entrada. */
+export async function entrarPelaSessaoDeTeste(env, request, url) {
+  if (env.ENV_NAME !== 'dev') return null;
+  if (request.method !== 'GET' || PAGINAS_DO_TESTE.indexOf(url.pathname) < 0) return null;
+  const site = request.headers.get('Sec-Fetch-Site');
+  if (site && site !== 'same-origin' && site !== 'none') return null;
+  try {
+    const { discordDaSessaoDeTeste } = await import('./teste.js');
+    const dono = await discordDaSessaoDeTeste(env, request);
+    if (!dono) return null;
+    const achados = await papeisNosServidores(env, dono.id);
+    if (!achados) return null;
+    const quem = {
+      discordId: dono.id, nome: dono.nome || dono.id,
+      papel: achados.papeis[0], papeis: achados.papeis, guildId: achados.guildId,
+    };
+    const sessao = await guardarSessao(env, quem);
+    if (!(await auditar(env, quem, 'equipa.entrar', dono.conta, 'pela sessão de teste do dev, sem o /entrar'))) {
+      await env.SESSIONS.delete('equipa:' + sessao);
+      return null;
+    }
+    const cabecalhos = new Headers({ Location: url.pathname, 'Set-Cookie': cookieDaEquipa(sessao), 'Cache-Control': 'no-store' });
+    apagarMarcaVelha(request, cabecalhos);
+    return new Response(null, { status: 303, headers: cabecalhos });
+  } catch (e) {
+    console.error('equipa pela sessão de teste', e && e.message);
+    return null;
+  }
+}
+
+/* O cookie que o «Sair» do back office do dev punha entre o 1fd0b23 e o
+   ticket de QA ab76041d, para a sessão de teste não voltar a entrar: o
+   Martinho quis depois que entre a app de teste e o back office não haja
+   barreira, e a marca deixou de se pôr e de se ler. Durava um mês (Max-Age
+   de 30 dias); quem ainda a tem no browser leva-a em cada pedido, por isso
+   o sair e a entrada pela sessão de teste mandam-na apagar. Pode sair do
+   código quando esse mês passar (2026-12-09). */
+const MARCA_VELHA = 'gi_equipa_saiu';
+
+/* Acrescenta a linha que apaga a MARCA_VELHA, só quando o pedido a traz: a
+   quem não a tem não se mexe em cookies que não são deste pedido.
+   Recebe: request — o pedido (o cabeçalho Cookie); cabecalhos — os Headers
+   da resposta, onde se acrescenta o Set-Cookie.
+   Devolve: nada. */
+function apagarMarcaVelha(request, cabecalhos) {
+  if (!new RegExp('(?:^|;\\s*)' + MARCA_VELHA + '=').test(request.headers.get('Cookie') || '')) return;
+  cabecalhos.append('Set-Cookie', MARCA_VELHA + '=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
+}
+
 /* As rotas de entrar e sair da ferramenta de equipa. Devolve a Response, ou
    null quando o pedido não é daqui e o worker deve seguir para as outras
    rotas. O que a ferramenta faz por dentro vive no equipa-api.js — aqui é
@@ -246,26 +409,18 @@ export async function rotasEquipa(c) {
     // cada entrada na ferramenta fica registada: é a porta dos dados pessoais
     await auditar(env, { discordId: b.discordId, nome: b.nome, papeis: b.papeis || [b.papel] },
       'equipa.entrar', null, null);
-    const sessao = novoToken();
-    const agora = Date.now();
-    await env.SESSIONS.put('equipa:' + sessao, JSON.stringify({
-      discordId: b.discordId, nome: b.nome, papel: b.papel,
-      papeis: b.papeis || [b.papel], desde: agora,
-      // os papéis do bilhete vieram do Discord há menos de cinco minutos
-      guildId: b.guildId || null, verificadoEm: agora,
-    }), { expirationTtl: SESSAO_TTL });
+    // os papéis do bilhete vieram do Discord há menos de cinco minutos
+    const sessao = await guardarSessao(env, b);
 
-    return new Response(null, {
-      // 303 e não 302: depois de um POST, o que se segue é um GET
-      status: 303,
-      headers: {
-        Location: depois === 'docs' ? '/equipa/docs' : '/equipa',
-        'Set-Cookie': cookieDaEquipa(sessao),
-        'Cache-Control': 'no-store',
-        // o endereço tinha um bilhete: não o deixar seguir para lado nenhum
-        'Referrer-Policy': 'no-referrer',
-      },
+    const cabecalhos = new Headers({
+      Location: depois === 'docs' ? '/equipa/docs' : '/equipa',
+      'Set-Cookie': cookieDaEquipa(sessao),
+      'Cache-Control': 'no-store',
+      // o endereço tinha um bilhete: não o deixar seguir para lado nenhum
+      'Referrer-Policy': 'no-referrer',
     });
+    // 303 e não 302: depois de um POST, o que se segue é um GET
+    return new Response(null, { status: 303, headers: cabecalhos });
   }
 
   if (path === '/api/equipa/eu' && method === 'GET') {
@@ -277,12 +432,24 @@ export async function rotasEquipa(c) {
   if (path === '/api/equipa/sair' && method === 'POST') {
     const e = await getEquipa(env, request);
     if (e) await env.SESSIONS.delete('equipa:' + e.token);
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Set-Cookie': cookieDaEquipa('', true),
-      },
+    const cabecalhos = new Headers({
+      'Content-Type': 'application/json; charset=utf-8',
+      'Set-Cookie': cookieDaEquipa('', true),
     });
+    const corpo = { ok: true };
+    /* No dev, com uma sessão de teste por baixo, o recarregar que se segue
+       ao sair voltava a entrar por ela (entrarPelaSessaoDeTeste): o sair
+       leva então à app, e o guião vai para o depois em vez de recarregar. É
+       a mesma pergunta que o index.js faz para oferecer «Voltar à app» na
+       pílula: a porta do dev deixa abrir o / a este pedido? Sem ela (quem
+       entrou pelo /entrar, sem sessão de teste) a app dava 404, e
+       recarrega-se para a página de entrada, como em produção. */
+    if (env.ENV_NAME === 'dev') {
+      apagarMarcaVelha(request, cabecalhos);
+      const { portaDoDev } = await import('./teste.js');
+      if ((await portaDoDev(env, request, new URL('/', url))) === null) corpo.depois = '/';
+    }
+    return new Response(JSON.stringify(corpo), { headers: cabecalhos });
   }
 
   return null;

@@ -64,14 +64,14 @@ const ON_NO_JS = /\son[a-z]+\s*=/i;
 const STYLE_NO_JS = /\sstyle\s*=/i;
 
 /* O que a CSP_ESTRITA recusaria numa página: scripts em linha (um
-   <script type="application/json"> não corre, e passa), <style>, atributos
-   on…= e style=.
+   <script type="application/json"> ou "application/ld+json" é um bloco de
+   dados que não corre, e passa), <style>, atributos on…= e style=.
    Recebe: html — a página.
    Devolve: a lista do que se recusaria (vazia quando está limpa). */
 function recusas(html) {
   const fora = [];
   for (const t of etiquetas(html)) {
-    if (/^<script\b/i.test(t) && !/\ssrc="/.test(t) && !/\stype="application\/json"/.test(t)) fora.push('script em linha: ' + t);
+    if (/^<script\b/i.test(t) && !/\ssrc="/.test(t) && !/\stype="application\/(?:ld\+)?json"/.test(t)) fora.push('script em linha: ' + t);
     if (/^<style\b/i.test(t)) fora.push('<style>: ' + t);
     if (/\son[a-z]+\s*=/i.test(t)) fora.push('on…=: ' + t);
     if (/\sstyle\s*=/i.test(t)) fora.push('style=: ' + t);
@@ -100,6 +100,7 @@ const PAGINAS = [
   ['a montra', '/montra', {}, 200],
   ['os termos', '/termos', {}, 200],
   ['a privacidade', '/privacidade', {}, 200],
+  ['o guia de declarar as rendas', '/guias/declarar-rendas', {}, 200],
   // sem sessão, o /equipa e o /equipa/docs mostram o ecrã de entrada com 401 (já era assim antes da CSP)
   ['o ecrã de entrada da equipa (sem sessão)', '/equipa', {}, 401],
   ['a ligação de entrada da equipa (que não existe)', '/equipa/entrar?t=' + 'a'.repeat(64), {}, 410],
@@ -125,6 +126,8 @@ describe('as páginas do worker, com a CSP sem unsafe-inline', () => {
 
   test('controlo: as guardas apanham o que a CSP_ESTRITA recusaria, também escondido', () => {
     assert.deepEqual(recusas('<p>limpo</p><script type="application/json" id="x">{}</script><script src="/a.js"></script>'), []);
+    assert.deepEqual(recusas('<script type="application/ld+json">{}</script>'), [], 'os dados dos motores de busca também não correm');
+    assert.equal(recusas('<script type="module">x()</script>').length, 1, 'um script em linha com outro tipo corre');
     assert.equal(recusas('<img alt="a > b" onerror="x()">').length, 1, 'um on…= depois de um > entre aspas');
     assert.equal(recusas("<img alt='a > b' style='color:red'>").length, 1, 'um style= com plicas depois de um > entre plicas');
     assert.equal(recusas('<form onsubmit=x()>').length, 1, 'um on…= sem aspas');
@@ -179,13 +182,32 @@ describe('as páginas do worker, com a CSP sem unsafe-inline', () => {
   test('o back office leva os dados da sessão num script que não corre, e o guião à parte', async () => {
     const html = await (await pedirAoWorker(await comSessaoDeEquipa(), '/equipa', { equipa: true })).text();
     const scripts = etiquetas(html).filter((t) => /^<script\b/.test(t));
-    // no dev (o ambiente dos testes tem ENV_NAME) junta-se a pílula do QA, também com os dados num script que não corre
+    // no dev (o ambiente dos testes tem ENV_NAME) juntam-se o kanban, a seguir ao guião, e a pílula do QA, também com os dados num script que não corre
     assert.deepEqual(scripts, ['<script type="application/json" id="dados-equipa">', '<script src="/equipa/guiao.js">',
-      '<script type="application/json" id="dados-qa">', '<script src="/equipa/qa.js">']);
+      '<script src="/equipa/kanban.js">', '<script type="application/json" id="dados-qa">', '<script src="/equipa/qa.js">']);
     assert.match(html, /data-acao="sair"/, 'o Sair vai pela delegação');
     const prod = await (await pedirAoWorker(await comSessaoDeEquipa(ambiente({ ENV_NAME: undefined })), '/equipa', { equipa: true })).text();
     assert.deepEqual(etiquetas(prod).filter((t) => /^<script\b/.test(t)), ['<script type="application/json" id="dados-equipa">', '<script src="/equipa/guiao.js">'],
       'em produção, sem a pílula');
+  });
+
+  /* No domínio raiz, a montra e o guia são as páginas a sério: o guia leva
+     os dados estruturados para os motores de busca, num bloco que não corre;
+     fora da raiz não há bloco nenhum, e a montra não tem script em lado
+     nenhum (a quem não respondeu ao rasto). */
+  test('na raiz, o único script em linha é o bloco de dados do guia', async () => {
+    const env = ambiente({ ENV_NAME: undefined });
+    const scripts = (html) => etiquetas(html).filter((t) => /^<script\b/i.test(t));
+    for (const [caminho, esperado] of [['/guias/declarar-rendas', ['<script type="application/ld+json">']], ['/', []]]) {
+      const r = await worker.fetch(new Request('https://rendorium.com' + caminho), env, { waitUntil() {} });
+      assert.equal(r.status, 200, caminho);
+      assert.equal(r.headers.get('Content-Security-Policy'), CSP_ESTRITA, caminho + ': o harden deixa-a passar');
+      const html = await r.text();
+      assert.deepEqual(recusas(html), [], caminho);
+      assert.deepEqual(scripts(html), esperado, caminho);
+    }
+    const previa = await (await pedirAoWorker(ambiente(), '/guias/declarar-rendas')).text();
+    assert.ok(!scripts(previa).some((t) => /ld\+json/.test(t)), 'fora da raiz, sem os dados estruturados');
   });
 
   test('a página de produção do /t/entrar também', async () => {
@@ -198,7 +220,7 @@ describe('as páginas do worker, com a CSP sem unsafe-inline', () => {
 });
 
 describe('os ficheiros que substituem o que estava em linha', () => {
-  const EQUIPA = ['/equipa/guiao.js', '/equipa/docs.css', '/equipa/docs.js'];
+  const EQUIPA = ['/equipa/guiao.js', '/equipa/kanban.js', '/equipa/docs.css', '/equipa/docs.js'];
 
   test('saem com o tipo certo, e o JavaScript compila', async () => {
     for (const c of CAMINHOS_DOS_RECURSOS) {

@@ -1,7 +1,6 @@
 // A leitura da FINE (ou do documento complementar do contrato) para
 // pré-preencher a hipoteca: POST /api/creditos/fine, com os bytes do PDF no
-// corpo. Só fora de produção (sem env.ENV_NAME é 404 antes até da sessão,
-// rotaFineEmProducao) e só com sessão.
+// corpo. Só com sessão; em produção como no dev, com o limite por conta.
 //
 // O PDF passa a texto no toMarkdown do Workers AI (de graça nos PDF), o texto
 // vai a um modelo sem ferramentas que devolve um JSON de esquema fechado, e o
@@ -12,7 +11,7 @@
 // (que relata e.message).
 import { json, err } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
-import { MODELO, MIN_TEXTO, textoUtil, pedidoAoModelo, respostaDoModelo, validar } from '../lib/fine.js';
+import { MODELO, MIN_TEXTO, textoUtil, pedidoAoModelo, respostaDoModelo, comOTexto, validar } from '../lib/fine.js';
 
 // O caminho da rota.
 const CAMINHO = '/api/creditos/fine';
@@ -58,27 +57,17 @@ function indisponivel() {
   return err(503, 'Não deu para ler o documento agora. Tenta daqui a pouco, ou preenche à mão.');
 }
 
-/* A primeira recusa da rota, antes da sessão: em produção (sem
-   env.ENV_NAME) o caminho não existe, com sessão ou sem ela.
-   Recebe: c — o contexto do pedido montado pelo handleApi (env, path).
-   Devolve: a Response 404 em produção no caminho da rota, ou nada
-   (undefined) para o encaminhador seguir. */
-export function rotaFineEmProducao(c) {
-  if (c.path === CAMINHO && !c.env.ENV_NAME) return err(404, 'Não encontrado.');
-}
-
 /* POST /api/creditos/fine, já com sessão: as recusas pela ordem do contrato
    (tamanho, PDF, limite da conta, teto global, Workers AI, texto, campos) e,
    passadas todas, os campos lidos.
    Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
    method, path e o utilizador em c.me).
-   Devolve: a Response — 200 {campos, ignorados, produtos?, prestacaoComProdutos?}; 404 em produção; 413, 415,
+   Devolve: a Response — 200 {campos, ignorados, produtos?, prestacaoComProdutos?}; 413, 415,
    429, 503 ou 422 com a frase do contrato — ou nada (undefined) quando o
    pedido não é desta rota. */
 export async function rotasFine(c) {
   const { env, request, method, me } = c;
   if (c.path !== CAMINHO) return;
-  if (!env.ENV_NAME) return err(404, 'Não encontrado.');
   if (method !== 'POST') return;
 
   const grande = () => err(413, 'O PDF é grande demais para ler (máx. 5 MB).');
@@ -124,8 +113,12 @@ export async function rotasFine(c) {
   }
   if (!bruto) return indisponivel();   // o modelo não devolveu JSON nenhum
 
-  const { campos, ignorados, produtos, prestacaoComProdutos } = validar(bruto);
-  if (!Object.keys(campos).length) return err(422, 'Este documento não tem os valores de um crédito.');
+  // se é um crédito, di-lo o modelo: sem nada aceite do que ele leu, as
+  // frases fixas sozinhas não fazem uma hipoteca
+  if (!Object.keys(validar(bruto).campos).length) return err(422, 'Este documento não tem os valores de um crédito.');
+  // o indexante, as taxas, as prestações e as comissões que as frases fixas
+  // da ficha dizem passam por cima do modelo (lib/fine.js:lidoDoTexto)
+  const { campos, ignorados, produtos, prestacaoComProdutos } = validar(comOTexto(bruto, texto));
   return json(resposta(campos, ignorados, produtos, prestacaoComProdutos));
 }
 

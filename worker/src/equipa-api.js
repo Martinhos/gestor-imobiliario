@@ -20,6 +20,7 @@ import { json, err, body, now, badId, CATEGORIAS } from './lib/http.js';
 import { catsDe } from './lib/papeis.js';
 import { auditar, registarOp } from './lib/auditoria.js';
 import { SERVICOS, servicoDe, servicosDesligados, guardarServico } from './lib/servicos.js';
+import { chaveDe, estadoDoPedido, cartaoDoPedido } from './lib/kanban.js';
 
 // Corta a `n` caracteres com reticências — para os resumos que vão para o rasto.
 // Recebe: s — o texto (qualquer valor; null e undefined contam como vazio); n — o máximo de caracteres.
@@ -244,13 +245,64 @@ async function avisarDono(env, ctx, t, texto) {
   if (ctx && ctx.waitUntil) ctx.waitUntil(envio); else await envio;
 }
 
+/* O cartão de um pedido no kanban da equipa acompanha o pedido: nasce quando
+   alguém aceita um pedido de uma pessoa (em A fazer, com quem aceitou como
+   relator) e move-se quando a equipa responde, fecha ou reabre — o estado
+   lido de novo da base, pela regra de lib/kanban.js:estadoDoPedido. Corre
+   também na produção, onde o kanban não existe: sem env.ENV_NAME não faz
+   nada, e uma falha fica no console.error, sem nunca mudar a resposta da
+   ação sobre o pedido.
+   Recebe: env — o ambiente do worker; eu — a sessão de equipa; acao — a ação
+   que se fez ('aceitar', 'responder', 'fechar', 'reabrir'; as outras não
+   mexem no cartão); t — o pedido depois da ação (a linha de tickets).
+   Devolve: promessa de nada (nunca lança). */
+async function kanbanDoPedido(env, eu, acao, t) {
+  if (!env.ENV_NAME || !t || ['aceitar', 'responder', 'fechar', 'reabrir'].indexOf(acao) < 0) return;
+  try {
+    let ev;
+    if (acao === 'aceitar') {
+      // só os pedidos das pessoas: um ticket de segurança aceite não é uma tarefa do kanban
+      if (t.category !== 'user') return;
+      ev = { estado: 'aceite', novo: Object.assign({ uuid: crypto.randomUUID() }, cartaoDoPedido(t)) };
+    } else {
+      const estado = estadoDoPedido(t);
+      if (!estado) return;
+      ev = { estado };
+    }
+    const autor = eu && eu.discordId ? { id: String(eu.discordId), nome: String(eu.nome || '') } : undefined;
+    const { sincronizarKanban } = await import('./rotas/kanban.js');
+    await sincronizarKanban(env, Object.assign({ tipo: 'pedido', id: t.id, agora: now(), autor }, ev));
+  } catch (e) {
+    console.error('kanban: o cartão do pedido ' + (t && t.id) + ' não acompanhou', e);
+  }
+}
+
+/* A chave do cartão de um pedido no kanban (para o «Cartão KAN-N» do detalhe).
+   Só se chama fora de produção; uma falha conta como sem cartão, e o detalhe
+   do pedido serve-se na mesma.
+   Recebe: env — o ambiente do worker; id — o id do pedido.
+   Devolve: promessa de 'KAN-N', ou de null quando não tem cartão (ou o cartão foi removido). */
+async function cartaoDoPedidoNoKanban(env, id) {
+  try {
+    const r = await env.DB.prepare(
+      "SELECT numero FROM kanban_cartoes WHERE origem_tipo = 'pedido' AND origem_id = ? AND removed_at IS NULL"
+    ).bind(id).first();
+    return r ? chaveDe(r.numero) : null;
+  } catch (e) {
+    console.error('kanban: o cartão do pedido ' + id + ' não se leu', e);
+    return null;
+  }
+}
+
 /* As rotas /api/equipa/* que fazem o trabalho: pedidos, pessoas, contas,
    endereços, operação e rasto. Chega cá com `eu` — a sessão de equipa — já
    verificado; tudo o que devolve passa primeiro pelo filtro das categorias
    do papel, e as ações sensíveis pelo eMaster. Devolve a Response, ou null
    quando a rota não é daqui.
    Os tickets de QA (/api/equipa/qa…, só no dev) vêm antes das categorias:
-   a pílula do QA é de toda a equipa, seja qual for o cargo.
+   a pílula do QA é de toda a equipa, seja qual for o cargo. O kanban
+   (/api/equipa/kanban…, só no dev, rotas/kanban.js) também: é de quem tiver
+   um papel da equipa.
    Recebe: c — o contexto do pedido ({ env, request, path, method, url, eu, ctx }),
    com a sessão de equipa em eu já verificada.
    Devolve: promessa da Response da rota, ou de null quando o caminho não é daqui. */
@@ -259,6 +311,10 @@ export async function rotasEquipaApi(c) {
   if (path === '/api/equipa/qa' || path.startsWith('/api/equipa/qa/')) {
     const { rotasQaDaEquipa } = await import('./rotas/qa.js');
     return (await rotasQaDaEquipa(c)) || err(404, 'Rota desconhecida.');
+  }
+  if (path === '/api/equipa/kanban' || path.startsWith('/api/equipa/kanban/')) {
+    const { rotasKanban } = await import('./rotas/kanban.js');
+    return (await rotasKanban(c)) || err(404, 'Rota desconhecida.');
   }
   const cats = categoriasDe(eu);
   if (!cats.length) return err(403, 'O teu papel não vê pedidos.');
@@ -312,7 +368,10 @@ export async function rotasEquipaApi(c) {
       `SELECT id, subject, status, created_at FROM tickets
         WHERE user_id = ? AND id <> ? AND category = 'user' ORDER BY created_at DESC LIMIT 10`
     ).bind(t.user_id, id).all()).results;
-    return json({ pedido: t, msgs, quem: await ficha(env, t.user_id), outros });
+    const resposta = { pedido: t, msgs, quem: await ficha(env, t.user_id), outros };
+    // fora de produção, a chave do cartão do pedido no kanban (o «Cartão KAN-N»)
+    if (env.ENV_NAME) resposta.cartao = await cartaoDoPedidoNoKanban(env, id);
+    return json(resposta);
   }
 
   /* ---- agir sobre um pedido ---- */
@@ -356,10 +415,10 @@ export async function rotasEquipaApi(c) {
       }
       await auditar(env, eu, 'pedido.atribuir', id, tomar ? 'tomou' : 'largou');
     } else if (acao === 'aceitar' && t.category === 'seguranca') {
-      /* Decidir um ticket de segurança (um limite atingido): a resolução
+      /* Aceitar um ticket de segurança (um limite atingido): a resolução
          proposta é obrigatória — bloquear, contactar, subir o limite… — e é
          ela que se segue (o Claude, pelo scripts/ticket.mjs, só pega nos
-         decididos). Grava-se nas colunas da aceitação (accepted_changes é a
+         aceites). Grava-se nas colunas da aceitação (accepted_changes é a
          proposta) e fica numa nota interna. As mesmas guardas do aceitar. */
       if (!texto) return err(400, 'Escreve a resolução proposta: é ela que se segue.');
       const r = await env.DB.prepare(
@@ -367,24 +426,24 @@ export async function rotasEquipaApi(c) {
           WHERE id = ? AND accepted_at IS NULL AND refused_at IS NULL AND status <> 'concluido'`
       ).bind(agora, eu.discordId || '?', eu.nome || '', texto, agora, id).run();
       if (!r.meta || r.meta.changes !== 1) {
-        return err(409, t.accepted_at ? 'Este ticket já foi decidido' + (t.accepted_by_nome ? ' por ' + t.accepted_by_nome : '') + '.'
-          : t.refused_at ? 'Este ticket foi arquivado' + (t.refused_by_nome ? ' por ' + t.refused_by_nome : '') + '.'
-            : 'Um ticket concluído não se decide: reabre-o primeiro.');
+        return err(409, t.accepted_at ? 'Este ticket já foi aceite' + (t.accepted_by_nome ? ' por ' + t.accepted_by_nome : '') + '.'
+          : t.refused_at ? 'Este ticket foi recusado' + (t.refused_by_nome ? ' por ' + t.refused_by_nome : '') + '.'
+            : 'Um ticket concluído não se aceita: reabre-o primeiro.');
       }
       await msg('nota', 'Resolução proposta: ' + texto);
       await auditar(env, eu, 'pedido.decidir', id, cortar(texto, 120));
     } else if (acao === 'recusar' && t.category === 'seguranca') {
-      /* Arquivar um ticket de segurança (um falso alarme): a justificação é
+      /* Recusar um ticket de segurança (um falso alarme): a justificação é
          obrigatória e fica numa nota interna. Conclui-o, e larga a resolução
          proposta, se havia. Não há pessoa a quem responder: nem reply, nem
          email. Se o limite voltar a ser atingido, reabre-se sem decisão
          (lib/limites.js). */
-      if (!texto) return err(400, 'Escreve porque se arquiva: fica no ticket.');
+      if (!texto) return err(400, 'Escreve porque se recusa: fica no ticket.');
       if (t.status === 'concluido') return err(409, 'Este ticket já está concluído.');
       const [, up] = await env.DB.batch([
         env.DB.prepare(
           'INSERT INTO ticket_msgs (id, ticket_id, tipo, texto, autor, nome, papel, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(crypto.randomUUID(), id, 'nota', 'Arquivado: ' + texto, eu.discordId || '?', eu.nome || '', eu.papel || '', agora),
+        ).bind(crypto.randomUUID(), id, 'nota', 'Recusado: ' + texto, eu.discordId || '?', eu.nome || '', eu.papel || '', agora),
         env.DB.prepare(
           `UPDATE tickets SET status = 'concluido', refused_at = ?, refused_by = ?, refused_by_nome = ?,
                   accepted_at = NULL, accepted_by = NULL, accepted_by_nome = NULL, accepted_changes = NULL,
@@ -465,9 +524,9 @@ export async function rotasEquipaApi(c) {
          reabrir larga a recusa, para o pedido se poder decidir de novo. */
       const estado = acao === 'fechar' ? 'concluido' : acao === 'reabrir' ? 'criado' : 'resolucao';
       if (acao === 'responder' && !texto) return err(400, 'Escreve a resposta.');
-      // um ticket de segurança sem decisão só sai pelo Arquivar, que pede a justificação
+      // um ticket de segurança sem decisão só sai pelo Recusar, que pede a justificação
       if (acao === 'fechar' && t.category === 'seguranca' && t.accepted_at == null && t.status !== 'concluido') {
-        return err(400, 'Um ticket de segurança por decidir não se conclui assim: decide-o, ou arquiva-o com a justificação.');
+        return err(400, 'Um ticket de segurança por decidir não se conclui assim: aceita-o, ou recusa-o com a justificação.');
       }
       /* Numa só transação: com dois statements soltos, um erro entre eles
          deixava o fio e a coluna reply a contarem histórias diferentes —
@@ -492,6 +551,8 @@ export async function rotasEquipaApi(c) {
     }
 
     const novo = await env.DB.prepare('SELECT * FROM tickets WHERE id = ?').bind(id).first();
+    // o cartão do pedido no kanban acompanha (só no dev; nunca muda esta resposta)
+    await kanbanDoPedido(env, eu, acao, novo);
     const msgs = (await env.DB.prepare(
       'SELECT id, tipo, texto, autor, nome, papel, at FROM ticket_msgs WHERE ticket_id = ? ORDER BY at'
     ).bind(id).all()).results;

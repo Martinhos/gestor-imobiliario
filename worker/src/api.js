@@ -34,7 +34,7 @@ import { rotasCasas, rotasTransferencias } from './rotas/casas.js';
 import { rotasConexoes } from './rotas/conexoes.js';
 import { rotasColaboradores, rotasPreVisualizacao } from './rotas/colaboradores.js';
 import { rotasGrupos, rotasPreVisualizacaoGrupo } from './rotas/grupos.js';
-import { rotasFine, rotaFineEmProducao } from './rotas/fine.js';
+import { rotasFine } from './rotas/fine.js';
 import { rotasContasDeTeste } from './teste.js';
 
 export { recordReport, CATEGORIAS };
@@ -130,11 +130,6 @@ export async function handleApi(request, env, ctx) {
   // e o que uma ligação de grupo partilhado é, pelas mesmas regras
   const previaGrupo = await rotasPreVisualizacaoGrupo(c);
   if (previaGrupo) return previaGrupo;
-
-  // a leitura da FINE não existe em produção, nem para quem tem sessão:
-  // o 404 vem antes do 401
-  const semFine = rotaFineEmProducao(c);
-  if (semFine) return semFine;
 
   c.me = await getSessionUser(env, request);
   if (!c.me) return err(401, 'Sessão inválida — inicia sessão de novo.');

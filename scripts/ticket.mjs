@@ -24,9 +24,9 @@
 // com o concluir (um erro que volta depois de concluído reabre-se sozinho).
 // Os tickets de segurança (categoria 'seguranca': um limite da API atingido,
 // worker/src/lib/limites.js) também esperam pela equipa: só se tratam depois
-// de alguém escrever a resolução proposta no back office (Decidir, gravada em
+// de alguém escrever a resolução proposta no back office (Aceitar, gravada em
 // accepted_*: accepted_changes é a proposta), e trata-se seguindo-a; fecham
-// com o concluir. Um arquivado (refused_*) está concluído e não se mexe nele;
+// com o concluir. Um recusado (refused_*) está concluído e não se mexe nele;
 // se o limite voltar a ser atingido, reabre-se sem decisão.
 // Fechar (propor e concluir com --commit) só depois de a correção estar
 // publicada no ramo certo: o publicado diz-o — produção pela etiqueta
@@ -406,9 +406,8 @@ function sqlNotaNoFio(uuid, id, texto, agora, condicao) {
 }
 
 /* O comecar: cada ticket recebido passa a em resolução — um erro sempre, um
-   pedido ou um de segurança só se aceite (decidido) e não recusado
-   (arquivado): a condição está no próprio UPDATE, para um que alguém recusou
-   entretanto não passar. Numa base sem a 0024 só os erros (os pedidos e os
+   pedido ou um de segurança só se aceite e não recusado: a condição está
+   no próprio UPDATE, para um que alguém recusou entretanto não passar. Numa base sem a 0024 só os erros (os pedidos e os
    de segurança ainda não se decidem lá).
    Recebe: ids — os ids conferidos; agora — o instante em ms; com0024 — se a
    base tem as colunas da 0024.
@@ -508,7 +507,7 @@ export function tem0024(l) {
 }
 
 /* Se o ticket espera por uma decisão da equipa antes de se tratar: os
-   pedidos das pessoas (Aceitar) e os de segurança (Decidir, com a resolução
+   pedidos das pessoas (Aceitar) e os de segurança (Aceitar, com a resolução
    proposta). Os outros erros não.
    Recebe: l — a linha de tickets (ou nada).
    Devolve: true ou false. */
@@ -517,7 +516,7 @@ export function precisaDeDecisao(l) {
 }
 
 /* A decisão sobre um pedido ou um ticket de segurança: 'aceite' (no de
-   segurança, decidido com a resolução proposta), 'recusado' (arquivado),
+   segurança, aceite com a resolução proposta), 'recusado',
    'por-decidir', ou 'sem-0024' numa base que ainda não a tem; null num erro.
    Recebe: l — a linha de tickets.
    Devolve: o texto da decisão (ou null). */
@@ -530,7 +529,7 @@ export function decisaoDe(l) {
 }
 
 /* A frase de quando um pedido não se pode implementar, ou um ticket de
-   segurança tratar (por decidir, recusado ou arquivado, ou a base ainda sem
+   segurança tratar (por decidir ou recusado, ou a base ainda sem
    a 0024).
    Recebe: l — a linha de tickets (um pedido ou um de segurança); a — o alvo.
    Devolve: a frase (texto). */
@@ -538,8 +537,8 @@ function porqueNaoSeImplementa(l, a) {
   const d = decisaoDe(l);
   if (l.category === 'seguranca') {
     if (d === 'sem-0024') return 'A base ' + ondeFica(a) + ' ainda não tem a decisão dos tickets (' + quandoChega0024(a) + '): o ticket de segurança ' + l.id + ' não se trata lá ainda.';
-    if (d === 'recusado') return 'O ticket de segurança ' + l.id + ' foi arquivado no back office' + (l.refused_by_nome ? ' por ' + l.refused_by_nome : '') + ': não se mexe nele.';
-    return 'O ticket de segurança ' + l.id + ' ainda não tem a resolução proposta no back office: só se trata depois de alguém da equipa a escrever (Decidir).';
+    if (d === 'recusado') return 'O ticket de segurança ' + l.id + ' foi recusado no back office' + (l.refused_by_nome ? ' por ' + l.refused_by_nome : '') + ': não se mexe nele.';
+    return 'O ticket de segurança ' + l.id + ' ainda não tem a resolução proposta no back office: só se trata depois de alguém da equipa a escrever (Aceitar).';
   }
   if (d === 'sem-0024') return 'A base ' + ondeFica(a) + ' ainda não tem a aceitação dos pedidos (' + quandoChega0024(a) + '): nenhum pedido de pessoa se implementa lá ainda (o ' + l.id + ' é um).';
   if (d === 'recusado') return 'O pedido ' + l.id + ' foi recusado no back office' + (l.refused_by_nome ? ' por ' + l.refused_by_nome : '') + ': não se implementa.';
@@ -547,7 +546,7 @@ function porqueNaoSeImplementa(l, a) {
 }
 
 /* O que o comecar faz a cada ticket, conferido antes de mexer em algum: um
-   pedido ou um de segurança por decidir, recusado (arquivado) ou numa base
+   pedido ou um de segurança por decidir, recusado ou numa base
    sem a 0024, um concluído ou um id que não existe param tudo.
    Recebe: ids — os ids pedidos; linhas — as linhas da base (sqlUns); a — o alvo.
    Devolve: { mexer: [linhas recebidas], jaEstavam: [linhas em resolução] };
@@ -597,15 +596,15 @@ export function confereConcluir(l, id, a) {
 }
 
 /* Se o reabrir pode devolver este ticket aos recebidos: um erro (ou um de
-   segurança não arquivado) em resolução ou concluído; um pedido aceite em
+   segurança não recusado) em resolução ou concluído; um pedido aceite em
    resolução. Um pedido por decidir, recusado ou concluído, e um de
-   segurança arquivado, são decisão da equipa, no back office.
+   segurança recusado, são decisão da equipa, no back office.
    Recebe: l — a linha (ou undefined); id — o id pedido; a — o alvo.
    Devolve: null para seguir, ou o texto «já está nos recebidos»; lança ErroTicket com a razão. */
 export function confereReabrir(l, id, a) {
   if (!l) throw new ErroTicket('Não há nenhum ticket com o id ' + id + ' ' + ondeFica(a) + ' (confirma com o listar; é o alvo certo?).');
   if (l.category === 'seguranca' && decisaoDe(l) === 'recusado') {
-    throw new ErroTicket('O ticket de segurança ' + id + ' foi arquivado' + (l.refused_by_nome ? ' por ' + l.refused_by_nome : '') + ': reabri-lo é decisão da equipa, no back office.');
+    throw new ErroTicket('O ticket de segurança ' + id + ' foi recusado' + (l.refused_by_nome ? ' por ' + l.refused_by_nome : '') + ': reabri-lo é decisão da equipa, no back office.');
   }
   if (l.category === 'seguranca') return l.status === 'criado' ? 'O ticket de segurança ' + id + ' já está nos recebidos.' : null;
   if (l.category !== 'user') return l.status === 'criado' ? 'O erro ' + id + ' já está nos recebidos.' : null;
@@ -664,12 +663,12 @@ export function estadoLegivel(status) {
 }
 
 /* A decisão de um ticket de segurança por extenso: a resolução proposta (o
-   que se segue), o arquivo, ou à espera.
+   que se segue), a recusa, ou à espera.
    Recebe: l — a linha de um ticket de segurança.
    Devolve: array de linhas (texto). */
 function decisaoDeSeguranca(l) {
   if (l.accepted_at === undefined) return ['Decisão: a decisão dos tickets ainda não chegou a esta base (falta a 0024): não se trata.'];
-  if (l.refused_at != null) return ['Decisão: arquivado' + (l.refused_by_nome ? ' por ' + l.refused_by_nome : '') + ' a ' + (quando(l.refused_at) || '?') + ' (a justificação está no fio).'];
+  if (l.refused_at != null) return ['Decisão: recusado' + (l.refused_by_nome ? ' por ' + l.refused_by_nome : '') + ' a ' + (quando(l.refused_at) || '?') + ' (a justificação está no fio).'];
   if (l.accepted_at != null) {
     return ['Decisão: proposta por ' + (l.accepted_by_nome || l.accepted_by || '?') + ' a ' + (quando(l.accepted_at) || '?') + ':',
       indenta(l.accepted_changes || '(sem texto)', '  '),
@@ -836,7 +835,7 @@ export function erroDoWrangler(texto) {
     return { tipo: 'coluna', coluna: nome, mensagem: 'A base não tem a coluna ' + nome + (COLUNAS_0024.includes(nome) ? ' (falta a migração 0024: à produção chega com o «promove», ao dev com o próximo deploy do ramo dev).' : ' (falta uma migração).') };
   }
   if (/not (?:logged in|authenticated)|wrangler login|Authentication error|code:?\s*10000|Invalid access token|CLOUDFLARE_API_TOKEN/i.test(t)) {
-    return { tipo: 'sem-sessao', mensagem: 'O wrangler não tem sessão na Cloudflare: corre `npx wrangler login` (ou define CLOUDFLARE_API_TOKEN) e repete.' };
+    return { tipo: 'sem-sessao', mensagem: 'O wrangler não tem sessão na Cloudflare, nem depois de o `wrangler whoami` tentar renovar o token: corre `npx wrangler whoami` para ver; só se disser «not authenticated» é preciso o `npx wrangler login` (no browser, pelo Martinho).' };
   }
   if (/fetch failed|ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|getaddrinfo|socket hang up|network/i.test(t)) {
     return { tipo: 'rede', mensagem: 'Sem ligação à Cloudflare (rede): repete daqui a pouco.' };
@@ -894,13 +893,22 @@ function mostraChamada(quem, args) {
 function correWrangler(args) {
   if (!existsSync(WRANGLER)) throw new ErroTicket('Não encontro o wrangler em ' + WRANGLER + ': corre `npm install` no app/.');
   mostraChamada('wrangler', args);
-  return comRepeticao(() => {
-    const r = spawnSync(process.execPath, [WRANGLER].concat(args), {
+  const umaVez = (a) => {
+    const r = spawnSync(process.execPath, [WRANGLER].concat(a), {
       cwd: RAIZ, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, timeout: 180000, windowsHide: true,
       env: Object.assign({}, process.env, { WRANGLER_SEND_METRICS: 'false', NO_COLOR: '1', FORCE_COLOR: '0' }),
     });
     if (r.error) throw new ErroTicket('O wrangler não correu: ' + r.error.message);
     return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
+  };
+  // a sessão é OAuth com token de uma hora: com ele expirado, o `whoami` renova-o
+  // (pelo refresh token) e repete-se uma vez antes de dizer que não há sessão
+  return comRepeticao(() => {
+    const r = umaVez(args);
+    if (r.status === 0 || erroDoWrangler(r.stdout + '\n' + r.stderr).tipo !== 'sem-sessao') return r;
+    mostraChamada('wrangler', ['whoami']);
+    umaVez(['whoami']);
+    return umaVez(args);
   });
 }
 
@@ -1195,7 +1203,7 @@ function cmdComecar(o, d) {
       if (!n || n.status !== 'resolucao') throw new ErroTicket('O ' + l.id + ' não ficou em resolução (está ' + (n ? estadoLegivel(n.status) : 'desaparecido') + '): alguém lhe mexeu entretanto? Vê o listar.');
       frase.set(l.id, (l.category === 'user' ? 'Pedido ' : l.category === 'seguranca' ? 'Ticket de segurança ' : 'Erro ') + l.id + ' em resolução ' + ondeFica(a) + '.'
         + (l.category === 'user' && l.accepted_changes ? ' Foi aceite com alterações: são elas que mandam.' : '')
-        + (l.category === 'seguranca' ? ' Segue-se a resolução proposta de ' + (l.accepted_by_nome || l.accepted_by || 'quem decidiu') + ' (no listar).' : ''));
+        + (l.category === 'seguranca' ? ' Segue-se a resolução proposta de ' + (l.accepted_by_nome || l.accepted_by || 'quem aceitou') + ' (no listar).' : ''));
     });
   }
   return o.ids.map((id) => frase.get(id)).join('\n');

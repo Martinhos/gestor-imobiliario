@@ -19,7 +19,7 @@ import { LIMITES, relatoDoLimite } from '../worker/src/lib/limites.js';
 import { TETO_GLOBAL, MAX_PDF, LEITURAS_POR_DIA } from '../worker/src/rotas/fine.js';
 import {
   BANCOS, bancoCanonico, validar, ESQUEMA, SISTEMA, MODELO, TETO_TEXTO, MIN_TEXTO,
-  mensagens, pedidoAoModelo, respostaDoModelo, textoUtil, PRODUTOS, MAX_TOKENS_RESPOSTA,
+  mensagens, pedidoAoModelo, respostaDoModelo, textoUtil, PRODUTOS, MAX_TOKENS_RESPOSTA, lidoDoTexto, comOTexto,
 } from '../worker/src/lib/fine.js';
 
 /* ------------------------------ armações ------------------------------- */
@@ -111,16 +111,14 @@ async function aConsola(fn) {
 /* ----------------------------- as recusas ------------------------------ */
 
 describe('POST /api/creditos/fine — as recusas pela ordem do contrato', () => {
-  test('em produção é 404, antes até da sessão, e com sessão também', async () => {
+  test('em produção lê como no dev: sem sessão é 401, com sessão é 200 (o KAN-14 tirou o portão)', async () => {
     const env = ambiente({ ENV_NAME: undefined, AI: aiFalso() });
     const sem = await ler(env, null, pdf());
-    assert.equal(sem.status, 404);
-    assert.equal(sem.error, 'Não encontrado.');
-    const quem = await conta(env, 'Ana');
-    const com = await ler(env, quem, pdf());
-    assert.equal(com.status, 404);
-    assert.equal(com.error, 'Não encontrado.');
-    assert.equal(env.AI.chamadas.md.length, 0, 'o Workers AI nem foi chamado');
+    assert.equal(sem.status, 401);
+    assert.equal(env.AI.chamadas.md.length, 0, 'sem sessão o Workers AI nem foi chamado');
+    const com = await ler(env, await conta(env, 'Ana'), pdf());
+    assert.equal(com.status, 200);
+    assert.equal(com.campos.euribor, 2.15);
   });
 
   test('sem sessão é 401', async () => {
@@ -364,7 +362,8 @@ describe('POST /api/creditos/fine — a leitura', () => {
     const r = await ler(env, await conta(env, 'Ana'), pdf());
     assert.equal(r.status, 200);
     assert.equal(r.campos.spread, 0);
-    assert.equal(r.campos.euribor, 0);
+    // o indexante não: a ficha escreve-o na frase fixa, e essa ganha ao modelo (lidoDoTexto)
+    assert.equal(r.campos.euribor, 2.15);
     assert.equal(r.campos.prestacao, 758.89, 'a prestação da ficha fica, e é com ela que o cliente compara');
   });
 
@@ -901,5 +900,108 @@ describe('lib/fine.js — o pedido ao modelo', () => {
   test('o texto útil tira os títulos do toMarkdown e aperta os espaços', () => {
     assert.equal(textoUtil('# documento.pdf\n## Contents\n### Page 1\nA   b\t c\n\n\n\nd\n### Page 12\n'), 'A b c\n\nd');
     assert.equal(textoUtil(null), '');
+  });
+});
+
+/* ---------------------- as frases fixas da FINE ------------------------ */
+
+// Uma FINE mista como o toMarkdown devolve a de um banco (a do KAN-15, com os
+// nomes e os números de identificação trocados): as linhas coladas, um rodapé
+// em cada página, o cenário de stress, as três prestações e a parte B depois
+// da secção 10.
+const RODAPE = 'Financiamento: Aquisição01-11-2026 20:40 / abcPágina 4 de 38Banco Exemplo, S.A., com sede na Rua 1, Lisboa.\n';
+const FINE_COLADA = 'FICHA DE INFORMAÇÃO NORMALIZADA EUROPEIAPARTE A\n1. MutuanteNome: Banco Comercial Português, S.A.,\n' + RODAPE +
+  '3. Principais características do empréstimoMontante e moeda do\nempréstimo a conceder:\n135.000,00 EURDuração do empréstimo: 480 meses\n' +
+  'Tipo de taxa de juro: Taxa de juro fixa durante 60 prestações, seguido de periodo de\n420 prestações a taxa variável.A taxa de juro variável resulta da soma de duas componentes:\n' +
+  'o indexante (Média Mensal Euribor 3 meses) e o spread,\nconforme descrito na Secção "4.Taxa de juro e outros custos".O valor do indexante corresponderá à Média Mensal da\n' +
+  'Euribor a 3 meses - Média aritmética simples das cotações diárias da Euribor a 3 meses na base de 360 dias\n' + RODAPE +
+  '4. Taxa de juro e outros custosA TAEG aplicável ao seu\nempréstimo é de:\n5,5%\nInclui:\n' +
+  'Taxa de juro (TAN): Durante o período de taxa da juro fixa:Taxa de juro fixa base: 4,800%Taxa de juro fixa contratada: 4,000%\n' +
+  'Aplicável nas condições descritas na Secção "8.Obrigações\nadicionais, vendas Associadas facultativas"Durante o período de taxa de juro variável:Taxa de juro nominal (TAN) base: 4,135% resultante da soma\n' +
+  'do indexante Média Mensal Euribor 3 meses de 2,635% e do\nspread base de 1,500%Taxa de juro nominal (TAN) contratada:\n' +
+  '3,335% resultante da soma do indexante Média Mensal\nEuribor 3 meses de 2,635% e do spread contratado de 0,700%\n' + RODAPE +
+  'Esta TAEG é calculada com base em pressupostos sobre a taxa de juro. Por exemplo, se\na taxa de juro subir para 6,613% (Média Mensal Euribor 3 meses de 5,113% e spread de 1,500%),\na TAEG poderá aumentar para 6,7%.\n' + RODAPE +
+  'Periodicidade das Prestações mensal\nNúmero de prestações 4806. Montante da PrestaçãoMontante da prestação inicial: 633,19 EUR - Prestação sem vendas associadas facultativas' +
+  '564,22 EUR - Prestação com vendas associadas facultativas485,47 EUR - Prestação com campanha e vendas associadas\nfacultativas\n' + RODAPE +
+  'se vença após a verificação semestral das referidas condições.9. Reembolso antecipadoTem a possibilidade de reembolsar antecipadamente este empréstimo.\n' +
+  'Custos do reembolso\nantecipado:\nDurante o período de taxa fixa: 2% sobre o capital a\nreembolsar antecipadamente; no período de taxa variável:\n0,5% sobre o capital a reembolsar antecipadamente. Acresce\n4% de Imposto do Selo.\n' + RODAPE +
+  'o valor exato dos custos de reembolso antecipado nesse momento.10. Caracteristicas flexíveisÉ possível transferir este empréstimo.\n' +
+  'PARTE B\nprestação de 1.111,11 EUR - Prestação sem vendas associadas facultativas; indexante Euribor 3 meses de 3,999%; durante o período de taxa fixa: 9% sobre o capital\n';
+
+describe('lib/fine.js:lidoDoTexto — as frases fixas da FINE passam por cima do modelo', () => {
+  test('a FINE mista colada: o indexante, as taxas base e contratadas, as duas prestações e as comissões', () => {
+    assert.deepEqual(lidoDoTexto(FINE_COLADA), {
+      euribor: 2.635, spread: 1.5, spread_bonificado: 0.7, taxa_fixa: 4.8, taxa_fixa_bonificada: 4,
+      prestacao: 633.19, prestacao_bonificada: 564.22, comissao_reembolso_fixa: 2, comissao_reembolso_variavel: 0.5,
+    });
+  });
+
+  test('o cenário de stress («se a taxa de juro subir para…») não é o indexante nem o spread', () => {
+    const stress = 'Por exemplo, se a taxa de juro subir para 6,613% (Média Mensal Euribor 3 meses de 5,113% e spread base de 1,500%).';
+    assert.deepEqual(lidoDoTexto(stress), {});
+    assert.equal(lidoDoTexto('TAN base: 4,135% resultante da soma do indexante Euribor 3 meses de 2,635%. ' + stress).euribor, 2.635);
+  });
+
+  test('o «de N %» do spread ou de uma taxa não passa por indexante; recusado um início, procura-se o seguinte', () => {
+    assert.deepEqual(lidoDoTexto('o indexante (Euribor a 3 meses) e o spread de 1,5 %'), {});
+    assert.equal(lidoDoTexto('Indexante no período de taxa variável | Euribor a 12 meses, com o valor de 2,300 % à data').euribor, 2.3);
+    assert.equal(lidoDoTexto('Indexante Euribor a 6 meses, com o valor de 2,150 %').euribor, 2.15);
+  });
+
+  test('dois valores diferentes, ou nenhum, são «não lido»: fica o do modelo', () => {
+    assert.deepEqual(lidoDoTexto('indexante de 2,1% e mais à frente o indexante de 2,2%'), {});
+    assert.deepEqual(lidoDoTexto('spread base de 1,0% e noutro sítio spread base de 1,2%'), {});
+    assert.deepEqual(lidoDoTexto('indexante de 2,1% e outra vez indexante de 2,100%'), { euribor: 2.1 });
+    assert.deepEqual(lidoDoTexto(''), {});
+    assert.deepEqual(lidoDoTexto(null), {});
+  });
+
+  test('as prestações: o valor antes do nome primeiro (as linhas coladas), depois do nome só sem ele; a com campanha nunca', () => {
+    assert.deepEqual(lidoDoTexto('Prestação sem vendas associadas facultativas: 1.206,73 EUR\nPrestação com vendas associadas facultativas: 1.098,06 EUR'),
+      { prestacao: 1206.73, prestacao_bonificada: 1098.06 });
+    assert.deepEqual(lidoDoTexto('485,47 EUR - Prestação com campanha e vendas associadas facultativas'), {});
+    // colado: o valor da linha de baixo a seguir ao nome não conta, porque a ficha já tem a forma «N EUR - nome»
+    assert.equal(lidoDoTexto('633,19 EUR - Prestação sem vendas associadas facultativas564,22 EUR - Prestação com vendas associadas facultativas').prestacao, 633.19);
+  });
+
+  test('as comissões só na secção 9; o que vem depois da secção 10 (a parte B, outras fichas) não conta', () => {
+    const sem9 = 'Durante o período de taxa fixa: 2% sobre o capital; no período de taxa variável: 0,5% sobre o capital.';
+    assert.deepEqual(lidoDoTexto(sem9), {});
+    assert.deepEqual(lidoDoTexto('9. Reembolso antecipado ' + sem9), { comissao_reembolso_fixa: 2, comissao_reembolso_variavel: 0.5 });
+    // a parte B da FINE_COLADA tem outra prestação, outro indexante e outra comissão: ficam de fora
+    const r = lidoDoTexto(FINE_COLADA);
+    assert.equal(r.prestacao, 633.19);
+    assert.equal(r.euribor, 2.635);
+    assert.equal(r.comissao_reembolso_fixa, 2);
+  });
+
+  test('comOTexto: o texto ganha nas chaves dele, o resto fica do modelo, e o bruto não muda', () => {
+    const bruto = { tipo_taxa: 'mista', euribor: null, prestacao: 564.22, spread: 1.5, banco: 'BCP' };
+    const junto = comOTexto(bruto, FINE_COLADA);
+    assert.equal(junto.euribor, 2.635);
+    assert.equal(junto.prestacao, 633.19);
+    assert.equal(junto.banco, 'BCP');
+    assert.equal(bruto.euribor, null, 'o bruto fica como veio');
+    for (const x of [null, undefined, 'texto', [1], 3]) assert.equal(comOTexto(x, FINE_COLADA), null);
+  });
+
+  test('na rota: o modelo sem o indexante e com a prestação trocada dá os valores da ficha', async () => {
+    const doModelo = {
+      banco: 'Banco Comercial Português, S.A.', montante: 135000, prazo_meses: 480, tipo_taxa: 'mista', anos_taxa_fixa: 5,
+      taxa_fixa: 4.8, taxa_fixa_bonificada: 4, indexante: '3m', euribor: null, spread: 1.5, spread_bonificado: null,
+      produtos: [{ tipo: 'seguro_vida', reducao_spread: 0.5, reducao_tan: 0.5 }], prestacao: 564.22, prestacao_bonificada: null,
+      comissao_reembolso_variavel: null, comissao_reembolso_fixa: null,
+    };
+    const env = ambiente({ AI: aiFalso({ md: FINE_COLADA, saida: { response: doModelo } }) });
+    const r = await ler(env, await conta(env, 'Ana'), pdf());
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.campos, {
+      bank: 'Millennium bcp', type: 'mista', index: '3m', outstanding: 135000, prazoMeses: 480, rate: 4.8, fixedYears: 5,
+      euribor: 2.635, spread: 1.5, amortFeeFix: 2, amortFeeVar: 0.5, prestacao: 633.19,
+    });
+    // o seguro de vida inventado cai para o conjunto que a ficha diz (4,8 − 4,0 e 1,5 − 0,7)
+    assert.deepEqual(r.produtos, [{ tipo: 'conjunto', spread: 0.8, tan: 0.8 }]);
+    assert.equal(r.prestacaoComProdutos, 564.22);
+    assert.deepEqual(r.ignorados, []);
   });
 });

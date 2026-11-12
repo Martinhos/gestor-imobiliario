@@ -367,7 +367,7 @@ async function cmdResponder(env, opts, pap, quem, ctx) {
 }
 
 // A recusa de concluir um ticket de segurança por decidir, no /fechar e no botão «Concluir».
-const SEGURANCA_SEM_DECISAO = 'Este ticket de segurança ainda não tem a resolução proposta: decide-o ou arquiva-o no back office (/equipa › Erros).';
+const SEGURANCA_SEM_DECISAO = 'Este ticket de segurança ainda não tem a resolução proposta: aceita-o ou recusa-o no back office (/equipa › Erros).';
 
 // /fechar: dá o pedido por concluído, com resposta final se vier texto. Um
 // ticket de segurança por decidir não se conclui (SEGURANCA_SEM_DECISAO).

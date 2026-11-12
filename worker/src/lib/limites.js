@@ -106,7 +106,7 @@ export function detalheDoLimite(key, limit, windowSec, t, fim) {
     'Hora: ' + HORA_DE_LISBOA.format(new Date(t)) + ' (hora de Lisboa), a primeira recusa',
     '',
     'Cada janela em que o limite volta a ser atingido soma uma vez a este ticket; as recusas seguintes dentro da mesma janela não se contam (nem gastam escritas).',
-    'Nada se faz sem a resolução proposta de alguém da equipa (Decidir, no back office).',
+    'Nada se faz sem a resolução proposta de alguém da equipa (Aceitar, no back office).',
   ].join('\n');
 }
 
@@ -137,7 +137,7 @@ async function avisarDoLimite(env, embed) {
    recordReport, que mede, avisa e junta pessoas de outra maneira (a cadência
    dos erros): um limite já só relata uma vez por janela.
    Um ticket que já existe soma uma vez, numa só escrita; se estava concluído
-   reabre e larga a decisão antiga (a resolução proposta ou o arquivo), para
+   reabre e larga a decisão antiga (a resolução proposta ou a recusa), para
    se decidir de novo: o que se decidiu da outra vez já foi feito, ou era um
    falso alarme. Sem conta, o dono é a conta do sistema (CONTA_SISTEMA de
    lib/relatos.js, criada aqui se ainda não existir, como lá). Abrir e

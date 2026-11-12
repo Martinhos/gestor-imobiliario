@@ -151,7 +151,7 @@ function propFicha(id){
    Devolve: o HTML da capa. */
 function imvCapaDaFicha(p,vFile){
   const fs=vFile?(p.photos||[]):[],f=fs[0],abre=`data-toca="camada" data-click="imvGaleria('${jsq(p.id)}')"`;
-  return `<div class="imv-fcapa imv-mosaico ${imvMosaico(p)}${f?' pcover':''}"${f?` id="th_${esc(f.id)}"`:''}>
+  return `<div class="imv-fcapa mosaico ${imvMosaico(p)}${f?' pcover':''}"${f?` id="th_${esc(f.id)}"`:''}>
     ${fs.length?`<button type="button" class="imv-capa-abre" tabindex="-1" aria-label="Ver as fotos" ${abre}></button>
     <button type="button" class="imv-fotos-btn" ${abre}>${ic('photo',16)} ${fs.length} foto${fs.length===1?'':'s'}</button>`:''}</div>`;
 }

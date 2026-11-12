@@ -27,6 +27,136 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 67,
+    data: '2026-11-12',
+    titulo: 'A hipoteca lê-se da FINE ou do contrato',
+    seccoes: [
+      {
+        titulo: 'Créditos à habitação',
+        afeta: ['creditos'],
+        itens: [
+          'No topo do formulário da hipoteca há «Ler a partir da FINE ou do contrato»: escolhes o PDF do banco e a app preenche o banco, o capital, o prazo, o tipo de taxa, as taxas, o indexante e as comissões, e põe nos produtos da hipoteca os produtos facultativos que o documento indicar, desligados. Confirmas antes de guardar, ou preenches à mão por baixo. Lês até 5 documentos por dia.',
+        ],
+      },
+      {
+        titulo: 'Política de privacidade',
+        afeta: ['conta'],
+        itens: [
+          'A política de privacidade diz como se lê a FINE ou o contrato: só quando o pedes, por um modelo do Workers AI da Cloudflare, sem guardar o texto nem a resposta. Ao abrires a app, a versão nova aparece para aceitares.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 66,
+    data: '2026-11-12',
+    titulo: 'O contrato em PDF sem anexos vazios',
+    seccoes: [
+      {
+        titulo: 'Contrato em PDF',
+        afeta: ['contratos'],
+        itens: [
+          'Um contrato sem fotografias já não fala do registo fotográfico: a lista dos anexos, as cláusulas e os títulos deixam-no de fora, e o auto de entrega de chaves passa a ser o Anexo II.',
+        ],
+      },
+      {
+        titulo: 'Escolhas nos formulários',
+        afeta: ['app'],
+        itens: [
+          'Os nomes compridos de uma escolha, como os programas de isenção do IRS, leem-se inteiros: na lista partem em duas linhas em vez de ficarem cortados.',
+        ],
+      },
+      {
+        titulo: 'A leitura da FINE',
+        afeta: ['creditos'],
+        soDev: true,
+        itens: [
+          'Numa FINE de banco com muitas páginas, o valor do indexante, a taxa fixa e o spread, a prestação sem as vendas associadas facultativas e as comissões de reembolso antecipado leem-se das frases da própria ficha: o indexante já não fica por ler, e a prestação que se confere é a base.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 65,
+    data: '2026-11-11',
+    titulo: 'Tarefas por guardar no aparelho',
+    seccoes: [
+      {
+        titulo: 'Tarefas',
+        afeta: ['imoveis', 'contratos'],
+        itens: [
+          'As tarefas que adicionas ou mudas e ainda não guardaste ficam no aparelho: fechar a app não as perde. Voltam com o selo «Por enviar» até tocares em Guardar.',
+        ],
+      },
+      {
+        titulo: 'Janelas no telemóvel',
+        afeta: ['app'],
+        itens: [
+          'Com o teclado aberto, a janela fica por cima dele: o título e o campo onde escreves ficam à vista desde o início, sem a janela fugir para cima.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 64,
+    data: '2026-11-11',
+    titulo: 'Notas nas tarefas',
+    seccoes: [
+      {
+        titulo: 'Tarefas',
+        afeta: ['imoveis', 'contratos'],
+        itens: [
+          'Cada tarefa de um imóvel ou de um contrato pode ter notas: escreve-as no formulário da tarefa. Na lista aparecem por baixo do nome, e a pesquisa também procura nelas.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 63,
+    data: '2026-11-10',
+    titulo: 'A barra do IRS mais simples',
+    seccoes: [
+      {
+        titulo: 'IRS · Anexo F',
+        afeta: ['movimentos'],
+        soDev: true,
+        itens: [
+          'O ano e o titular escolhem-se só no funil do cabeçalho, já não também na barra. O ponto do funil acende quando estás noutro ano que não o habitual.',
+          'O CSV e o PDF estão no botão de partilha, numa janela com as duas opções. O «Partilhar resumo» em texto saiu.',
+          'O guia de preenchimento abre no botão «Guia», com um livro, mais pequeno.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 62,
+    data: '2026-11-09',
+    titulo: 'O contrato em PDF com a cara da app',
+    seccoes: [
+      {
+        titulo: 'Contratos',
+        afeta: ['contratos'],
+        itens: [
+          'O contrato em PDF tem agora a letra e o aspeto da app: o imóvel e as partes em cartões, o número de cada cláusula em destaque, as assinaturas lado a lado e o número da página em todas as folhas. O texto do contrato é o mesmo.',
+        ],
+      },
+    ],
+  },
+  {
+    v: 61,
+    data: '2026-11-08',
+    titulo: 'Fechar o «O que podes fazer»',
+    seccoes: [
+      {
+        titulo: 'Colaboradores',
+        afeta: ['colaboradores'],
+        itens: [
+          'O cartão «O que podes fazer», no topo da Visão geral de quem colabora, tem um X no canto. Fica fechado nesta conta e neste aparelho, e volta sozinho quando o teu cargo muda.',
+        ],
+      },
+    ],
+  },
+  {
     v: 60,
     data: '2026-11-06',
     titulo: 'Criar é no +',

@@ -283,6 +283,179 @@ export function pedidoAoModelo(texto) {
   };
 }
 
+/* ---- O que se lê do texto sem o modelo ----
+   Uma FINE verdadeira (a mista do Millennium bcp do KAN-15: 109 páginas,
+   200 000 caracteres, os rodapés de cada página colados ao texto) deixa o
+   granite sem o indexante, troca a prestação base pela com as vendas
+   associadas facultativas e não chega às comissões, que estão depois do
+   TETO_TEXTO — medido com .unlazy/fine-real/medir-real.mjs, 3 leituras de 3,
+   e sem melhoras com o texto cortado nem com o prompt a dizer onde estão. Mas
+   esses valores vêm em frases que a lei fixa («resultante da soma do
+   indexante … de N %», «Prestação sem vendas associadas facultativas»,
+   «período de taxa fixa: N %»), e lidos assim não dependem do modelo. Cada
+   regra só responde com um valor sem ambiguidade; o que ela diz passa por cima
+   do modelo nessa chave, e tudo continua pelo validar. Uma FINE envenenada pode
+   escrever estas frases como escreve qualquer outra: dá números, que as gamas
+   e a verificação cruzada do cliente seguram como os do modelo. */
+
+// Um número à portuguesa, numa expressão regular: «2,635», «0,5», «2», «-0,1».
+const NUM_PT = '(-?\\d{1,2}(?:,\\d{1,4})?)';
+// Um valor em euros à portuguesa, com as duas casas: «633,19», «1.206,73».
+const EUR_PT = '(\\d{1,3}(?:\\.\\d{3})*,\\d{2})';
+// «Prestação», com ou sem os acentos que o PDF perdeu.
+const PRESTACAO = 'Presta[çc][ãa]o';
+
+/* Um número escrito à portuguesa como número de JavaScript.
+   Recebe: t — o texto («1.206,73», «2,635», «2»).
+   Devolve: o número (NaN se não for). */
+function numeroPt(t) {
+  return Number(String(t).replace(/\./g, '').replace(',', '.'));
+}
+
+/* A zona onde as regras procuram: a FINE da secção 1 à 9 — corta no título
+   da secção 10 que vem depois do 9 («Reembolso antecipado»), porque o que vem
+   depois (a parte B, os quadros, outras fichas do mesmo PDF) repete valores
+   noutras condições. Sem esses títulos, o mesmo corte do modelo.
+   Recebe: texto — o texto útil do documento.
+   Devolve: { zona, s9 } — o texto a ler e onde começa a secção 9 nele (-1 sem ela). */
+function zonaDasRegras(texto) {
+  const t = String(texto == null ? '' : texto);
+  const s9 = t.search(/(?:^|[^\d])9\.\s*Reembolso antecipado/i);
+  if (s9 < 0) return { zona: t.slice(0, TETO_TEXTO), s9: -1 };
+  const s10 = t.slice(s9).search(/(?:^|[^\d])10\.\s*Caracter/i);
+  return { zona: s10 > 0 ? t.slice(0, s9 + s10) : t.slice(0, TETO_TEXTO), s9 };
+}
+
+/* O valor do indexante: «indexante … de N %» ou «Euribor … de N %» — na
+   mista, na frase da TAN do período variável. Não contam a frase do cenário
+   de stress («se a taxa de juro subir para 6,613 % (Média Mensal Euribor 3
+   meses de 5,113 % …)»: «subir», «aumentar» ou «por exemplo» até 100
+   caracteres antes), nem uma em que o «de N %» já é do spread ou de uma taxa.
+   Recebe: zona — o texto a ler.
+   Devolve: o número, quando todos os candidatos dão o mesmo; null se não há
+   nenhum ou se há dois diferentes. */
+function euriborDoTexto(zona) {
+  const re = new RegExp('(?:indexante|euribor)([^%]{0,100}?)\\bde\\s+' + NUM_PT + '\\s*%', 'gi');
+  const vistos = new Set();
+  let m;
+  while ((m = re.exec(zona))) {
+    const antes = zona.slice(Math.max(0, m.index - 100), m.index);
+    // recusada, procura-se outra vez logo a seguir ao início: «Indexante no
+    // período de taxa variável: Euribor a 12 meses, com o valor de 2,300 %»
+    // não serve a partir do «Indexante», mas serve a partir do «Euribor»
+    if (/subir|aumentar|por exemplo/i.test(antes) || /spread|taxa|TAN\b/i.test(m[1])) { re.lastIndex = m.index + 1; continue; }
+    vistos.add(numeroPt(m[2]));
+  }
+  return vistos.size === 1 ? [...vistos][0] : null;
+}
+
+/* Uma das prestações das linhas «N EUR - Prestação sem/com vendas
+   associadas facultativas»: o valor antes do nome, como na FINE do KAN-15, e
+   só quando a ficha não tem nenhuma assim, o valor depois do nome. A ordem
+   conta: o toMarkdown cola as linhas («…sem vendas associadas
+   facultativas564,22 EUR - Prestação com…»), e lido nos dois sentidos o
+   valor da linha de baixo parecia desta. A «com campanha e vendas
+   associadas» não é nenhuma das duas.
+   Recebe: zona — o texto a ler; qual — 'sem' ou 'com'.
+   Devolve: o valor em euros, quando a ficha o escreve uma vez (ou sempre o
+   mesmo); senão null. */
+function prestacaoDoTexto(zona, qual) {
+  const nome = PRESTACAO + '\\s+' + qual + '\\s+vendas\\s+associadas';
+  // o travessão é o que liga o valor ao nome que vem a seguir; sem ele, o
+  // valor é o fim da linha de cima («…facultativas: 1.206,73 EUR\nPrestação com…»)
+  const formas = [
+    new RegExp(EUR_PT + '\\s*(?:EUR|€)\\s*[-–—]\\s*' + nome, 'gi'),
+    new RegExp(nome + '\\s+facultativas\\s*[-–—:]?\\s*' + EUR_PT + '\\s*(?:EUR|€)(?!\\s*[-–—]\\s*' + PRESTACAO + ')', 'gi'),
+  ];
+  for (const re of formas) {
+    const vistos = new Set();
+    let m;
+    while ((m = re.exec(zona))) vistos.add(numeroPt(m[1]));
+    if (vistos.size) return vistos.size === 1 ? [...vistos][0] : null;
+  }
+  return null;
+}
+
+/* Uma taxa com o nome escrito à frente («spread base de 1,500 %», «Taxa de
+   juro fixa contratada: 4,000 %»), fora da frase do cenário de stress.
+   Recebe: zona — o texto a ler; nome — a expressão regular (texto) do nome.
+   Devolve: o número, quando a ficha o escreve uma vez (ou sempre o mesmo);
+   senão null. */
+function taxaComNome(zona, nome) {
+  const re = new RegExp(nome + '\\s*(?:de|:)?\\s*' + NUM_PT + '\\s*%', 'gi');
+  const vistos = new Set();
+  let m;
+  while ((m = re.exec(zona))) {
+    if (/subir|aumentar|por exemplo/i.test(zona.slice(Math.max(0, m.index - 100), m.index))) continue;
+    vistos.add(numeroPt(m[1]));
+  }
+  return vistos.size === 1 ? [...vistos][0] : null;
+}
+
+// As taxas que a ficha escreve com o nome à frente, base e contratada (ou
+// bonificada), com a chave do ESQUEMA de cada uma.
+const TAXAS_COM_NOME = [
+  ['spread', 'spread\\s+base'],
+  ['spread_bonificado', 'spread\\s+(?:contratado|bonificado)'],
+  ['taxa_fixa', 'taxa\\s+de\\s+juro\\s+fixa\\s+base'],
+  ['taxa_fixa_bonificada', 'taxa\\s+de\\s+juro\\s+fixa\\s+(?:contratada|bonificada)'],
+];
+
+/* As comissões de reembolso antecipado da secção 9: «período de taxa (de
+   juro) fixa: N %» e «período de taxa (de juro) variável: N %».
+   Recebe: zona — o texto a ler; s9 — onde começa a secção 9 (-1 sem ela).
+   Devolve: { fixa, variavel } — cada uma o número, ou null quando a ficha não
+   a escreve assim (ou a escreve com dois valores). */
+function comissoesDoTexto(zona, s9) {
+  const out = { fixa: null, variavel: null };
+  if (s9 < 0) return out;
+  const sec = zona.slice(s9);
+  for (const [k, palavra] of [['fixa', 'fixa'], ['variavel', 'vari[aá]vel']]) {
+    const re = new RegExp('per[ií]odo\\s+de\\s+taxa\\s+(?:de\\s+juro\\s+)?' + palavra + '\\s*[:|]\\s*' + NUM_PT + '\\s*%', 'gi');
+    const vistos = new Set();
+    let m;
+    while ((m = re.exec(sec))) vistos.add(numeroPt(m[1]));
+    if (vistos.size === 1) out[k] = [...vistos][0];
+  }
+  return out;
+}
+
+/* O que as frases fixas da FINE dizem, com as chaves do ESQUEMA: o indexante,
+   o spread e a taxa fixa base e contratados, as duas prestações e as duas
+   comissões de reembolso antecipado. Só as chaves que se leram sem
+   ambiguidade. O spread e a taxa fixa contratados importam também pelos
+   produtos: com eles, o validar tem o total das reduções, e uma lista que o
+   modelo inventou (0,5 no seguro de vida e 0,5 no multirriscos, numa ficha
+   que não dá reduções por produto — 1 leitura de 3 na FINE do KAN-15) cai
+   para o «conjunto» que a ficha diz.
+   Recebe: texto — o texto útil do documento (textoUtil).
+   Devolve: { euribor?, spread?, spread_bonificado?, taxa_fixa?,
+   taxa_fixa_bonificada?, prestacao?, prestacao_bonificada?,
+   comissao_reembolso_fixa?, comissao_reembolso_variavel? } — números. */
+export function lidoDoTexto(texto) {
+  const { zona, s9 } = zonaDasRegras(texto);
+  const out = {};
+  const poe = (k, v) => { if (typeof v === 'number' && Number.isFinite(v)) out[k] = v; };
+  poe('euribor', euriborDoTexto(zona));
+  for (const [k, nome] of TAXAS_COM_NOME) poe(k, taxaComNome(zona, nome));
+  poe('prestacao', prestacaoDoTexto(zona, 'sem'));
+  poe('prestacao_bonificada', prestacaoDoTexto(zona, 'com'));
+  const c = comissoesDoTexto(zona, s9);
+  poe('comissao_reembolso_fixa', c.fixa);
+  poe('comissao_reembolso_variavel', c.variavel);
+  return out;
+}
+
+/* A resposta do modelo com o que as frases fixas do texto dizem por cima
+   (lidoDoTexto): nessas chaves ganha o texto. O resto fica como o modelo o
+   deu, e o validar decide tudo a seguir.
+   Recebe: bruto — o objeto do modelo (ou null); texto — o texto útil.
+   Devolve: um objeto novo (o bruto não muda), ou null quando o bruto não é objeto. */
+export function comOTexto(bruto, texto) {
+  if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) return null;
+  return Object.assign({}, bruto, lidoDoTexto(texto));
+}
+
 /* O JSON que o modelo devolveu, venha como objeto (o JSON mode costuma dar
    já o objeto em `response`), como texto a interpretar, ou na forma da
    OpenAI (choices[0].message.content), que alguns modelos do catálogo usam.

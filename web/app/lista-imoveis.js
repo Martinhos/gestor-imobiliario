@@ -92,11 +92,11 @@ function imvCorDoEstado(k){const c={arrendado:'in',parcial:'',vago:'amber',propr
    por um FNV-1a e a cor sai dos bits de cima, que são os bem misturados (os
    de baixo de um hash multiplicativo repetem-se entre ids parecidos).
    Recebe: p — o imóvel.
-   Devolve: a classe do mosaico ('imv-t0' a 'imv-t3'). */
+   Devolve: a classe do mosaico ('mosaico-t0' a 'mosaico-t3'). */
 function imvMosaico(p){
   const s=String((p&&p.id)||'');let h=2166136261;
   for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}
-  return 'imv-t'+((h>>>28)&3);
+  return 'mosaico-t'+((h>>>28)&3);
 }
 /* A capa do cartão: o mosaico do imóvel e, com fotos que o cargo deixa ver, a
    primeira por cima (o propsDepois pinta-a, pelo id th_) e quantas são.
@@ -104,7 +104,7 @@ function imvMosaico(p){
    Devolve: o HTML da capa. */
 function imvCapa(p,vFile){
   const fs=vFile?(p.photos||[]):[],f=fs[0];
-  return `<div class="imv-capa imv-mosaico ${imvMosaico(p)}${f?' pcover':''}"${f?` id="th_${esc(f.id)}"`:''}>${fs.length?`<span class="imv-nfotos">${fs.length} foto${fs.length===1?'':'s'}</span>`:''}</div>`;
+  return `<div class="imv-capa mosaico ${imvMosaico(p)}${f?' pcover':''}"${f?` id="th_${esc(f.id)}"`:''}>${fs.length?`<span class="imv-nfotos">${fs.length} foto${fs.length===1?'':'s'}</span>`:''}</div>`;
 }
 /* Os três números do cartão, cada um só se o cargo e os serviços o deixam
    ver: com renda, a renda, a yield e a dívida; num imóvel de arrendamento

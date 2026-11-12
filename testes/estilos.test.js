@@ -165,7 +165,7 @@ describe('a escada das camadas', () => {
     assert.ok(acima('.modal', 'aside'), 'acima do menu lateral');
     assert.ok(acima('.modal', '.scrim'), 'e do véu da gaveta');
     assert.ok(acima('.modal', '.tabbar'), 'e da barra de baixo');
-    assert.ok(acima('.modal', '.fab'), 'e do botão flutuante');
+    assert.ok(acima('.modal', '.totop'), 'e do «topo», o botão que flutua');
   });
 
   /* O que fica ACIMA do modal só pode ser o que não esconde nada com que se
@@ -307,11 +307,11 @@ describe('movimento', () => {
     });
   });
 
-  /* O .fab tinha o scale(.96) no :active e nenhuma transition para o executar:
-     descia e subia em zero frames, na peça mais tocada da app. */
-  test('o FAB tem transição para o scale que já declarava', () => {
-    assert.match(cssLimpo, /\.fab\{transition:transform var\(--rapido\)/);
-    assert.match(cssLimpo, /\.fab:active\{transform:scale\(\.96\)\}/);
+  /* O botão flutuante de cada lista (o .fab, escondido em todos os ecrãs
+     desde a casca de 2026-10) saiu da folha com a função que o escrevia: cria-se no +
+     da barra de baixo e na ação do cabeçalho. */
+  test('o FAB saiu da folha', () => {
+    assert.doesNotMatch(cssLimpo, /\.fab(?:menu|pad)?(?![\w-])/);
   });
 
   test('o estado premido cobre tudo o que se toca', () => {

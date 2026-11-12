@@ -94,6 +94,35 @@ function harden(res) {
   return out;
 }
 
+/* A conta da sessão de quem pede uma página pública, para a pílula do QA.
+   Em produção (sem env.ENV_NAME) nem se lê a sessão: a pílula não existe lá.
+   Uma falha do KV ou da D1 conta como sem conta — a pílula não aparece, e a
+   página serve-se na mesma.
+   Recebe: env — o ambiente do worker; request — o pedido.
+   Devolve: promessa de {id, name, email} ou null. */
+async function contaDaPagina(env, request) {
+  if (!env.ENV_NAME) return null;
+  try {
+    const { getSessionUser } = await import('./auth.js');
+    return (await getSessionUser(env, request)) || null;
+  } catch (e) {
+    console.error('conta da página', e && e.message);
+    return null;
+  }
+}
+
+/* O HTML da pílula do QA para a montra e o guia (equipa-qa.js:pilulaDasPaginas):
+   '' na raiz (a montra de produção, que se guarda em cache) e fora do dev.
+   Recebe: env; request; naRaiz — true no rendorium.com.
+   Devolve: promessa do texto ('' sem pílula). */
+async function pilulaDaPagina(env, request, naRaiz) {
+  if (naRaiz || !env.ENV_NAME) return '';
+  const conta = await contaDaPagina(env, request);
+  if (!conta) return '';
+  const { pilulaDasPaginas } = await import('./equipa-qa.js');
+  return pilulaDasPaginas(env, conta);
+}
+
 export default {
   // Uma vez por dia: cópia da base para o R2 e resumo do consumo. A cópia
   // vai primeiro para o resumo do mesmo dia já poder dizer se correu bem —
@@ -234,6 +263,23 @@ export default {
         : await rotaRastoDaMontra(env, request, url));
     }
 
+    /* O robots.txt e o sitemap.xml (landing.js): na raiz abrem a montra e o
+       guia aos motores de busca, fora dela fecham tudo. Antes do
+       reencaminhamento da raiz para a app, que os engolia. */
+    if (url.pathname === '/robots.txt' || url.pathname === '/sitemap.xml') {
+      const { robotsTxt, sitemapXml } = await import('./landing.js');
+      return harden(url.pathname === '/robots.txt' ? robotsTxt({ raiz: naRaiz }) : sitemapXml());
+    }
+
+    /* A pílula do QA nas páginas públicas (equipa-qa.js): o /paginas/qa.js e
+       o /paginas/qa.css, antes do recursoDePagina, que não os conhece. Só fora
+       de produção — em produção o recurso dá 404 sem ler a sessão. */
+    if (url.pathname === '/paginas/qa.js' || url.pathname === '/paginas/qa.css') {
+      const { recursoDoQaDasPaginas } = await import('./equipa-qa.js');
+      const r = await recursoDoQaDasPaginas(env, url, request.method, await contaDaPagina(env, request));
+      if (r) return harden(r);
+    }
+
     /* Os CSS e os JavaScript das páginas que o worker escreve, que vão com a
        CSP_ESTRITA e já não trazem nada em linha (paginas-recursos.js).
        Antes de tudo: a landing e os documentos legais também os pedem no
@@ -252,6 +298,13 @@ export default {
       return harden(paginaLegal(caminho, { raiz: naRaiz }));
     }
 
+    /* O guia «Declarar as rendas» (guia-vista.js), pelo mesmo motivo: em
+       qualquer endereço, e antes do reencaminhamento da raiz para a app. */
+    if (caminho === 'guias/declarar-rendas') {
+      const { paginaGuia } = await import('./guia-vista.js');
+      return harden(paginaGuia({ raiz: naRaiz, qa: await pilulaDaPagina(env, request, naRaiz) }));
+    }
+
     /* A montra tem de poder ver-se ANTES de ser publicada. Fora do domínio
        raiz é o /montra que a serve — a raiz do dev continua a ser a app, que é
        para isso que esse ambiente serve. Em produção o /montra é só um atalho
@@ -260,7 +313,7 @@ export default {
       const { paginaLanding } = await import('./landing.js');
       // a escolha do rasto deste aparelho (o cookie rd_escolha): sem ela, a faixa
       const { lerCookiesDoRasto } = await import('./lib/rasto.js');
-      return harden(paginaLanding({ raiz: naRaiz, escolha: lerCookiesDoRasto(request).escolha }));
+      return harden(paginaLanding({ raiz: naRaiz, escolha: lerCookiesDoRasto(request).escolha, qa: await pilulaDaPagina(env, request, naRaiz) }));
     }
 
     /* O domínio raiz é a montra; a app vive em app.rendorium.com. Qualquer
@@ -300,9 +353,12 @@ export default {
 
     /* A ferramenta de equipa. Vive fora da API de quem usa a app e tem a sua
        própria sessão — quem entra aqui não tem casas nem movimentos, e uma
-       sessão de cliente não abre nada disto. */
+       sessão de cliente não abre nada disto. No dev, as páginas (não a API)
+       sem sessão de equipa abrem-na com a sessão de teste de quem tem cargo
+       no Discord (equipa.js:entrarPelaSessaoDeTeste, que fora do dev devolve
+       null sem ler nada). */
     if (url.pathname.startsWith('/equipa') || url.pathname.startsWith('/api/equipa/')) {
-      const { rotasEquipa, getEquipa } = await import('./equipa.js');
+      const { rotasEquipa, getEquipa, entrarPelaSessaoDeTeste } = await import('./equipa.js');
       const c = { env, request, ctx, url, path: url.pathname.replace(/\/+$/, ''), method: request.method };
       try {
         // a pílula do QA no back office do dev (equipa-qa.js): o guião e o CSS dela
@@ -315,12 +371,18 @@ export default {
         if (url.pathname === '/equipa' || url.pathname === '/equipa/') {
           const { paginaEquipa } = await import('./equipa-vista.js');
           const eu = await getEquipa(env, request);
-          return harden(paginaEquipa(eu, { qa: env.ENV_NAME || '' }));
+          const entrou = eu ? null : await entrarPelaSessaoDeTeste(env, request, url);
+          if (entrou) return harden(entrou);
+          // a pílula só oferece a app e a montra se a porta do dev as deixa abrir a este pedido
+          const appAbre = (!!eu && !!env.ENV_NAME) ? (await portaDoDev(env, request, new URL('/', url))) === null : false;
+          return harden(paginaEquipa(eu, { qa: env.ENV_NAME || '', app: appAbre }));
         }
         // a documentação da casa: gerada do código no deploy, para a equipa
         if (url.pathname === '/equipa/docs') {
           const eu = await getEquipa(env, request);
           if (!eu) {
+            const entrou = await entrarPelaSessaoDeTeste(env, request, url);
+            if (entrou) return harden(entrou);
             const { paginaEquipa } = await import('./equipa-vista.js');
             return harden(paginaEquipa(null));
           }

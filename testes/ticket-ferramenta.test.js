@@ -543,8 +543,8 @@ describe('os tickets de segurança', () => {
     assert.deepEqual([um(sem, 's-decidido').status, um(sem, 'e-n').status], ['criado', 'resolucao'], 'sem a 0024 não há decisão: não se trata');
     const linhas = (ids) => comSeguranca().prepare(sqlUns(ids)).all();
     assert.throws(() => confereComecar(['e-n', 's-decidir'], linhas(['e-n', 's-decidir']), L),
-      /O ticket de segurança s-decidir ainda não tem a resolução proposta no back office: só se trata depois de alguém da equipa a escrever \(Decidir\)\. Não mexi em nenhum\./);
-    assert.throws(() => confereComecar(['s-arquivado'], linhas(['s-arquivado']), L), /foi arquivado no back office por Ana: não se mexe nele\. Não mexi em nenhum\./);
+      /O ticket de segurança s-decidir ainda não tem a resolução proposta no back office: só se trata depois de alguém da equipa a escrever \(Aceitar\)\. Não mexi em nenhum\./);
+    assert.throws(() => confereComecar(['s-arquivado'], linhas(['s-arquivado']), L), /foi recusado no back office por Ana: não se mexe nele\. Não mexi em nenhum\./);
   });
 
   test('comecar de ponta a ponta: recusa o por decidir sem mexer; o decidido fica em resolução, com a proposta a mandar', () => {
@@ -573,7 +573,7 @@ describe('os tickets de segurança', () => {
     assert.match(t, /== s-decidir · [^\n]*\nAssunto: Limite atingido: tentativas de entrada · IP 203\.0\.113\.9\nQuem: Sem utilizador\n[\s\S]*?Ocorrências: 4 · 0 pessoas/);
     assert.doesNotMatch(t, /s-arquivado/);
     const todos = corre(['listar', '--local', '--todos'], db).out;
-    assert.match(todos, /Decisão: arquivado por Ana a [\d/]+, [\d:]+ \(a justificação está no fio\)\./);
+    assert.match(todos, /Decisão: recusado por Ana a [\d/]+, [\d:]+ \(a justificação está no fio\)\./);
   });
 
   test('propor não; concluir só o decidido; reabrir um arquivado é da equipa', () => {
@@ -590,7 +590,7 @@ describe('os tickets de segurança', () => {
     assert.equal(corre(['concluir', 's-arquivado', '--nota', 'x', '--sem-commit', '--local'], db).out, 'O ticket de segurança s-arquivado já está concluído.\n');
     const r = corre(['reabrir', 's-arquivado', '--local'], db);
     assert.equal(r.codigo, 1);
-    assert.match(r.err, /foi arquivado por Ana: reabri-lo é decisão da equipa, no back office/);
+    assert.match(r.err, /foi recusado por Ana: reabri-lo é decisão da equipa, no back office/);
     assert.equal(um(db, 's-arquivado').status, 'concluido');
     const r2 = corre(['reabrir', 's-decidido', '--local'], db);
     assert.equal(r2.codigo, 0, r2.err);

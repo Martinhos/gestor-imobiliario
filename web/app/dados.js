@@ -257,9 +257,10 @@ function normPerson(p){const o=Object.assign({id:uid(),name:'',phone:'',email:''
    secções pela ordem em que foram criadas, e as tarefas, cada uma presa a uma
    secção ou a nenhuma (seccao vazia). Uma tarefa que aponte para uma secção que
    já não existe passa para «sem secção» em vez de desaparecer; feitaEm é o dia
-   em que foi marcada como cumprida, e só fica numa tarefa cumprida.
+   em que foi marcada como cumprida, e só fica numa tarefa cumprida; notas é o
+   texto livre da tarefa, aparado nas pontas ('' sem notas).
    Recebe: t — a lista em bruto ({seccoes, itens}, parcial, ou nada).
-   Devolve: um objeto novo {seccoes:[{id,nome}], itens:[{id,nome,seccao,feita,feitaEm}]}. */
+   Devolve: um objeto novo {seccoes:[{id,nome}], itens:[{id,nome,seccao,feita,feitaEm,notas}]}. */
 function normTarefas(t){
   const o=t&&typeof t==='object'&&!Array.isArray(t)?t:{};
   const seccoes=(Array.isArray(o.seccoes)?o.seccoes:[]).filter(x=>x&&typeof x==='object')
@@ -268,7 +269,8 @@ function normTarefas(t){
   const itens=(Array.isArray(o.itens)?o.itens:[]).filter(x=>x&&typeof x==='object')
     .map(x=>{const feita=!!x.feita,sec=idSeguro(x.seccao||'');
       return {id:idSeguro(x.id||uid()),nome:String(x.nome||'').trim(),seccao:ids.indexOf(sec)>-1?sec:'',
-        feita:feita,feitaEm:feita&&/^\d{4}-\d{2}-\d{2}$/.test(String(x.feitaEm||''))?String(x.feitaEm):''}});
+        feita:feita,feitaEm:feita&&/^\d{4}-\d{2}-\d{2}$/.test(String(x.feitaEm||''))?String(x.feitaEm):'',
+        notas:typeof x.notas==='string'?x.notas.trim():''}});
   return {seccoes:seccoes,itens:itens};
 }
 /* normaliza um imóvel e migra o que mudou entre versões: equity passa a purchase, o crédito único

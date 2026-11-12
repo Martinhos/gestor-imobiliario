@@ -77,6 +77,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - Fora da app: a montra, os emails e o back office
 - A app em serviços
 - Os tickets de QA
+- O kanban da equipa
 - O rasto das pessoas
 - A CSP sem «unsafe-inline»
 - Os eventos declaram-se, e uma ação é uma gramática
@@ -158,13 +159,15 @@ exemplos de hex fora dos tokens com licença são hoje a marca (o branco da
 casa, estilos.css:.marca), o véu da janela de baixo
 (estilos.css:.modal.under), o verde e o laranja do escuro nas setas do
 Cashflow da Visão geral, que é azul-noite nos dois temas
-(estilos.css:.vg-kpi.cf), e as cores do mosaico das capas no claro.
+(estilos.css:.vg-kpi.cf), e as cores do mosaico no claro.
 
 Uma capa sem fotografia leva o mosaico do canvas — arcos em cantos opostos e
 um ponto, num quadrado de 28px — numa de quatro cores, cobalto, âmbar, verde
 e ardósia, escolhida pelo imóvel de forma estável: um FNV-1a do id, pelos
-bits de cima (lista-imoveis.js:imvMosaico; estilos.css:.imv-mosaico e as
-variantes estilos.css:.imv-t1 a .imv-t3). Os hex do claro são os do canvas e
+bits de cima (lista-imoveis.js:imvMosaico). O mosaico é um componente da
+casa, e não dos Imóveis (ver «Componentes da casa»): estilos.css:.mosaico e
+os tons estilos.css:.mosaico-t1 a .mosaico-t3, e o azul-noite
+estilos.css:.mosaico-noite. Os hex do claro são os do canvas e
 vivem só aí, com comentário; no escuro saem dos tokens suaves e de cor. A
 etiqueta por cima de uma fotografia («3 fotos», «capa») é escura nos dois
 temas, porque assenta numa imagem e não no fundo do tema
@@ -321,7 +324,7 @@ cabeçalho (estilos.css:header.top), 25 a barra pegajosa
 (estilos.css:.toolbar.stick), 30 o menu de ações (estilos.css:.menupop), 40
 a barra de baixo (estilos.css:.tabbar), 45 e 46 o painel de filtros
 (estilos.css:.fpanel, estilos.css:.fwrap), 57 o «topo» (estilos.css:.totop),
-58 o FAB, que já não se vê (estilos.css:.fab), 59 o cartão do tutorial
+59 o cartão do tutorial
 (cloud/guia.js:#cwGuia), 61 o véu da gaveta (estilos.css:.scrim), 62
 a gaveta (estilos.css:aside), 70 a janela (estilos.css:.modal), 71 o mesmo
 cartão do tutorial quando há uma janela aberta
@@ -567,7 +570,11 @@ A caixa que cresce não mexe o que fica. Durante a viagem leva a classe
 estilos.css:.a-crescer, que encosta as linhas ao topo: a encolher, a caixa é
 maior do que o que já leva dentro, e numa grelha (o .sect) a altura a mais
 repartia-se pelas linhas — o nome, a morada e o segmentado afastavam-se até
-280px e voltavam. O scroll de quem rola (continuidade.js:quemRola)
+280px e voltavam. Quando a caixa animada é transparente e o que se vê é um
+cartão lá dentro (o painel do dia do Calendário), é o cartão que fica com a
+sobra durante a viagem (estilos.css:.cal-dia.a-crescer>.cal-dia-lista): numa
+coluna flex a altura a mais ficava vazia por baixo, e o cartão e os botões
+tomavam o tamanho novo no primeiro fotograma. O scroll de quem rola (continuidade.js:quemRola)
 guarda-se antes de pintar e repõe-se depois de a animação começar: pintar
 com o conteúdo já curto prende o scroll ao fundo novo, e o conteúdo saltava;
 daí em diante encolhe com a caixa. As peças com chave (data-parte;
@@ -677,7 +684,7 @@ pode(pid,perm) antes de mostrar uma ação (acessos.js:pode). Num imóvel onde
 o utilizador só colabora, o cargo diz o que se vê e o que se adiciona; o
 servidor já despe os dados e recusa as escritas, mas um botão que leva a
 uma recusa é um botão a mais. Por isso cada ação pergunta primeiro: a folha
-das opções filtra-as (componentes.js:lpMenu), os FABs, a
+das opções filtra-as (componentes.js:lpMenu), a ação do cabeçalho, a
 folha do + da barra de baixo e os seletores de imóvel dos formulários só
 listam onde se pode adicionar (acessos.js:casasComo,
 acessos.js:acoesDeAdicionar, acessos.js:propOptsPara; movimento.js:txBody), a
@@ -689,6 +696,14 @@ proprietários (vistas.js:balancesCard, acessos.js:souDono). Editar e apagar
 chega mesmo a um guardar sem permissão, recusa-se com a frase de
 acessos.js:motivoRecusa num toast, nunca com um selo vermelho mais tarde.
 Sem sessão nada disto existe: tudo é «dono» (acessos.js:cargoDe).
+
+A vista geral de quem só colabora abre com o cartão «O que podes fazer»
+(painel-geral.js:cartaoPodes), com um X no canto que o fecha
+(painel-geral.js:podesFechar). O fecho é desta conta e deste aparelho, e vale
+para o cargo de agora: guarda a assinatura das ações e de haver finanças
+(painel-geral.js:podesAssinatura), e o cartão volta quando ela muda. Sem
+finanças, o cartão fechado dá lugar a um vazio curto que diz porque não há
+contas (painel-geral.js:vazioSemContasColab).
 
 openModal(title,body,foot,menuHtml) (componentes.js:openModal) abre uma
 janela por cima do que houver; a anterior desce na pilha, escurecida e
@@ -748,8 +763,24 @@ por baixo do dedo (componentes.js:campoAVista) — um campo à vista fica onde
 está, e o toque longo para selecionar texto não o vê fugir. Espera-se o
 teclado assentar: o último resize da janela visível, ou 300ms sem resize
 (componentes.js:campoAVistaQuandoAssentar, chamado pelo focusin do
-arranque.js). A folga do teclado (.sheet.kb, 300px no fundo do corpo) só entra
-quando o corpo não tem para onde rolar sem ela, e sai no focusout.
+arranque.js). O corpo rola até onde pode; a folga do teclado (.sheet.kb,
+300px no fundo do corpo) só entra quando, rolado até ao fim, o campo continua
+tapado, e sai no focusout — ela alonga o corpo, e numa folha curta a folha
+crescia para cima e o cabeçalho saía do ecrã.
+
+Com o teclado aberto, a janela fica por cima dele. Quando o browser só
+encolhe a janela visível (o Chrome do Android e o Samsung Internet por
+omissão, o Safari do iPhone), o layout mantém a altura toda e o .modal, preso
+a ele, tinha o fundo debaixo do teclado. O html.kb-aberto, com --vv-topo e
+--vv-alto, põe o .modal no que se vê, e a folha assenta no fundo disso, com a
+mesma proporção (93% no telemóvel, 88% até 880px acima dos 520px)
+(componentes.js:janelaSegueTeclado, a cada resize e scroll da janela visível;
+estilos.css, html.kb-aberto). Só conta como teclado uma diferença de 120px ou
+mais entre o layout e a janela visível, sem zoom de pinça, com pelo menos
+280px à vista (componentes.js:kbJanelaVisivel): as barras do browser, um zoom
+e o telemóvel deitado (onde a folha ficava sem corpo) ficam como sempre, e
+onde o layout encolhe com o teclado (alguns Samsung) a janela já cabe
+sozinha.
 
 A folha segue o dedo e o véu aclara à proporção (componentes.js:folhaVeu);
 para cima resiste (componentes.js:folhaElastico, nunca mais de 24px, com uma
@@ -880,16 +911,15 @@ cabeçalho, visível mesmo com a secção fechada (estilos.css:.fold-head, o
 .fsum). É HTML: um texto que venha de quem usa — um NIF, uma categoria, a
 taxa de um crédito — entra por esc(), como em todo o lado.
 
-fab(actions) (vistas.js:fab) escreve o botão de criar de uma lista, que
-desde 2026-10 não se vê em ecrã nenhum: o CSS da casca esconde o FAB, o
-leque e o espaço do fundo (estilos.css:.fab, vistas.js:render e o .fabpad).
-Quem cria é o + a meio da barra de baixo no telemóvel e, no computador, o
-«Criar» da barra lateral e a ação principal no cabeçalho
-(estilos.css:.tabmais, navegacao.js:abrirAdicionar,
-navegacao.js:pintarAcaoDoCabecalho — ver «A fita da barra de baixo»), com
-a mesma condição (acessos.js:acoesDeAdicionar). Só os Movimentos e a Visão
-geral ainda o escrevem; as outras listas já não, e quem cria no vazio delas
-é o botão da ação, dentro da caixa (vistas.js:saida).
+Uma lista não tem botão de criar seu. Quem cria é o + a meio da barra de
+baixo no telemóvel e, no computador, o «Criar» da barra lateral e a ação
+principal no cabeçalho (estilos.css:.tabmais, navegacao.js:abrirAdicionar,
+navegacao.js:pintarAcaoDoCabecalho — ver «A fita da barra de baixo»), todos
+com a mesma condição (acessos.js:acoesDeAdicionar); no vazio de uma lista é
+o botão da ação, dentro da caixa (vistas.js:saida). O botão redondo do canto
+(o FAB) escondeu-se em todos os ecrãs com a casca de 2026-10 e saiu em
+2026-11 (KAN-8): a função que o escrevia, o leque, o espaço que o render lhe
+deixava no fundo e as regras da folha.
 
 kpi(label,value,cls,foot,why,evo,acao,o) (vistas.js:kpi) é o cartão
 indicador: rótulo, valor grande, rodapé em muted. Com why ganha um «?» no
@@ -931,6 +961,17 @@ Os restantes: tagField para etiquetas removíveis
 tipo de movimento (estilos.css:.opt, estilos.css:.seg), .empty para o
 estado vazio (estilos.css:.empty), .tip para a dica dos gráficos
 (estilos.css:.tip; graficos.js:chartTip).
+
+O mosaico (estilos.css:.mosaico) é o desenho da casa: a capa de um imóvel
+sem fotografia (lista-imoveis.js:imvCapa, imovel.js:imvCapaDaFicha), a faixa
+da marca na entrada por uma ligação (entrada.js:showAuth), as capas dos
+imóveis de um convite (entrada.js:casasDaChegada), as boas-vindas
+(guia.js:boasVindas), os ecrãs da versão (novidades.js:ecraDaVersao) e o
+fundo das cenas das apresentações (apresentacao.js:aprCena). Leva sempre um tom: .mosaico-t0 a .mosaico-t3 —
+cobalto, âmbar, verde, ardósia —, o do imóvel pelo lista-imoveis.js:imvMosaico
+ou o da cena; e .mosaico-noite, o azul-noite igual nos dois temas, onde
+assenta no --side. Até 2026-11 chamava-se .imv-mosaico, com os tons .imv-t0
+a .imv-t3, e vivia na secção dos Imóveis da folha; o desenho é o mesmo.
 
 O segmentado (estilos.css:.segm) é um trilho --chip com a escolha acesa por
 cima, no desenho do .chip.on e do .opt.on: o fundo --accent-soft, o texto
@@ -1384,17 +1425,16 @@ vistas.js:pintarRoda; o «alternar» do registo da análise —
 projecoes.js:prjOpcoes, avaliacao.js:avaOpcoes). O nome é «Opções da
 projeção» / «Opções da avaliação» (aria-label e title); diz que abre um
 diálogo (aria-haspopup="dialog"), não diz aberto nem fechado, nunca acende e
-não leva o ponto dos filtros — o chip já está à vista. A Visão geral e o IRS
-· Anexo F continuam com o funil e o painel (vistas.js:anaPanelPadrao,
-fisco.js:fisBarra). O da Visão geral tem o imóvel e, quando os há, os
-filtros comuns; o do IRS tem o titular (vistas.js:anaSelDono), sem filtros
-comuns, que não guardam titular. O IRS abre com a sua barra
-(estilos.css:.ana-barra): os anos e o titular em chips e as ações da página
-à direita; o chip do titular com ▾ abre o painel (vistas.js:hdrFiltToggle) e
-com × larga-o (navegacao.js:limparAmbito). Um chip com nome tem o texto num
-<span>, que leva as reticências, e nunca passa da largura da barra
-(estilos.css:.ana-ambito, o .chip>span): com um nome comprido, a página
-rolava de lado no telemóvel.
+não leva o ponto dos filtros — o chip já está à vista. A Visão geral e o IRS · Anexo F continuam com o funil e o painel
+(vistas.js:anaPanelPadrao, fisco.js:vFisco). O da Visão geral tem o imóvel e,
+quando os há, os filtros comuns; o do IRS tem só o ano dos rendimentos, sem
+filtros comuns, e a frase de quem é a declaração — não há titular a escolher,
+é sempre a de quem tem a sessão (ver «A Declaração sabe a tua situação»). É
+só lá que se escolhe o ano: a barra do IRS (estilos.css:.ana-barra) tem só as
+ações da página e não o repete. Por isso o ponto do funil conta o ano, quando
+foi escolhido e não é o automático (fisco.js:fiscoAnaN,
+fisco.js:fiscoAnoAuto): sem o ano à vista na barra, o ponto diz que a página
+está noutro.
 
 A janela das opções (vistas.js:anaOpcoes) tem as linhas das Definições ›
 Valores por omissão (estilos.css:.def-vr; vistas.js:anaLinhaOpcao) — são os
@@ -1421,11 +1461,10 @@ A/B do titular), pelo data-click, que não muda ao redesenhar. No change de
 um campo o foco ainda vai a caminho do seguinte, por isso o redesenho espera
 que ele assente (um setTimeout); num clique é logo (avaliacao.js:avaRepintar,
 projecoes.js:prjRepintar, fisco.js:fisRepintar; o fisco.js:fiscoGravarIrs
-recebe o adiar, que o fisco.js:fiscoSetOutros passa). Por isso cada campo
+recebe o adiar de quem grava num change). Por isso cada campo
 que grava ao sair tem id (#avaYield, #prjHorizonte, #prjAumento e
-#prjInflacao, na janela das opções, vistas.js:anaOpcoes; #fiscoOutros, na
-página). São três cópias, como os cartões: cada serviço
-carrega sozinho.
+#prjInflacao, na janela das opções, vistas.js:anaOpcoes). São três cópias,
+como os cartões: cada serviço carrega sozinho.
 
 Um cartão da Análise tem o título na letra dos títulos, a 18px (16 no
 telemóvel), com o subtítulo ao lado (estilos.css:.ana-cartao;
@@ -1438,8 +1477,7 @@ uma ficha tem hover e premido diferentes. Numa tabela com a primeira coluna
 presa, a linha dos totais escreve o «Total» só na primeira célula, sem
 colspan — a célula presa com várias colunas passava por cima dos valores ao
 rolar —, e essa célula é cinzenta como o resto da linha
-(estilos.css:.ana-fixa-1, o tr.ana-total td; fisco.js:fiscoQuadroCard,
-avaliacao.js:repCard). No
+(o tr.ana-total td; avaliacao.js:repCard). No
 telemóvel, o botão do canto do cabeçalho de um cartão fica à direita do
 título e do subtítulo, numa grelha, em vez de cair numa fila só dele
 (estilos.css:.ana-cab:has(>.ana-extra)).
@@ -1937,8 +1975,8 @@ As da Visão geral, da Análise e das Definições (cloud/apresentacao-analise.j
 fazem as contas com as regras da app: o ano soma os meses do exemplo
 (apresentacao-analise.js:aprAAno), a Avaliação reparte-o pelos imóveis
 (apresentacao-analise.js:aprAPorImovel), as Projeções levam-no para a frente
-com a taxa de cada ano (irs.js:irsRate), e o IRS estima o englobamento pelos
-escalões do ano (fisco.js:fiscoColeta). A da Visão geral mostra a cara que a
+com a taxa de cada ano (irs.js:irsRate), e o IRS estima o imposto à taxa de
+cada contrato (apresentacao-analise.js:aprAFisco). A da Visão geral mostra a cara que a
 conta tem, pela ordem do painel-geral.js:vDashboard
 (apresentacao-analise.js:aprACaraDoPainel): a jornada, o vazio sem imóveis, o
 vazio com eles, os números, e o «O que podes fazer» de quem só colabora sem
@@ -2196,10 +2234,6 @@ menuOpen tem de ser esta porta (testes/ui/invariantes.js). Sem essa regra,
 o próximo botão de opções nasce com outro desenho e ninguém dá por ele até
 alguém tentar usar a app sem saber que o toque longo existe.
 
-O botão redondo do canto também ganhou nome (vistas.js:fab). Tinha
-`title`, que o rato mostra e o teclado não, e quando havia várias ações
-nem isso — o botão que abre o leque anunciava-se «botão».
-
 Um ecrã que diz «não há nada» e não diz por onde se começa é um beco.
 Cada vazio tem o botão da sua ação, à vista, dentro da própria caixa
 (vistas.js:saida) — o molde que as visitas já usavam. Primeiro foram os
@@ -2208,12 +2242,12 @@ quatro sítios onde não havia caminho nenhum: avaliação sem imóveis
 (lista-contratos.js:vContracts, projecoes.js:vProjections) e hipotecas sem
 imóveis (creditos.js:vCredits) — esta última com um botão que só dava um
 aviso a dizer que faltava um imóvel, e um caminho que acaba num aviso não
-é um caminho. Depois todas as listas, mesmo as que tinham FAB: o botão do
-canto — e, no telemóvel, o + da barra de baixo (navegacao.js:abrirAdicionar)
-— é um caminho que quem chega de novo não associa ao ecrã vazio, e a vista
-geral já mostrava que um botão verde no meio do vazio é o que se toca. A
-condição é a do FAB dessa lista (acessos.js:casasComo): sem poder adicionar
-não há botão, e «Nada neste filtro» nunca o tem.
+é um caminho. Depois todas as listas: o + da barra de baixo
+(navegacao.js:abrirAdicionar) e a ação do cabeçalho são um caminho que quem
+chega de novo não associa ao ecrã vazio, e a vista geral já mostrava que um
+botão verde no meio do vazio é o que se toca. A condição é a do + para essa
+lista (acessos.js:casasComo, acessos.js:acoesDeAdicionar): sem poder
+adicionar não há botão, e «Nada neste filtro» nunca o tem.
 
 ## Um aviso não tapa o que se pede para carregar
 O toast mora a 22px do fundo, que é exatamente onde o rodapé de um modal
@@ -2661,8 +2695,8 @@ estava e que um «Ver» lá dentro tinha desfeito.
 
 ## As tarefas de um imóvel ou de um contrato
 Um imóvel e um contrato têm uma lista de tarefas, organizada em secções,
-onde se pesquisa pelo nome da tarefa, pela secção e pelas cumpridas ou por
-cumprir.
+onde se pesquisa pelo nome da tarefa, pelas notas dela, pela secção e pelas
+cumpridas ou por cumprir.
 
 A lista vive dentro do registo (`tarefas: {seccoes, itens}`,
 dados.js:normTarefas), e não num kind próprio: sobe e desce com o imóvel ou o
@@ -2706,8 +2740,46 @@ ligado; sem diferenças, o retrato é o de agora — pesquisar, filtrar, ou marc
 e desmarcar a mesma tarefa não pergunta nada (voltar a marcar uma que já
 estava cumprida devolve-lhe o dia de então). O Cancelar com alterações também
 pergunta (tarefas.js:tfFechar). Fechada a janela por qualquer caminho, o
-rascunho vai-se (tarefas.js:tfEsquecer). A leitura de fundo não corre com uma
+rascunho sai da memória (tarefas.js:tfEsquecer), mas não do aparelho. A leitura de fundo não corre com uma
 janela aberta (cloud/nucleo.js:pullNow), por isso o rascunho não é pisado.
+
+O rascunho com alterações fica no aparelho a cada mudança (tarefas.js:tfRascAcompanhar, chamado pelo
+tarefas.js:tfMudar), por conta e por registo: `gi_tf_rascunhos:<conta>` → `{'imovel:P1': {b, r, t}}`,
+com b as tarefas do registo de onde o rascunho partiu, r o rascunho e t a hora da última mudança
+(tarefas.js:LS_TF_RASCUNHOS, tarefas.js:tfRascGuardar). A conta é a da sessão (acessos.js:meuId):
+o rascunho de uma conta nunca aparece a outra que entre no mesmo aparelho, e sem sessão não se guarda
+nada (tarefas.js:tfRascChave). Fechar a app, recarregar, mudar de separador com a janela aberta ou a
+página morrer não o tira. Sai quando o Guardar grava (tarefas.js:tfGuardar), quando a pessoa responde
+«Sair sem guardar» à pergunta (tarefas.js:tfSaiuSemGuardar, pelo componentes.js:_forcaFecho; sob
+automação, onde a pergunta não se faz, um caminho de abandono vale como a resposta), com o «Descartar»,
+quando as alterações se desfazem uma a uma, ou ao fim de 30 dias sem mexer
+(tarefas.js:TF_RASCUNHO_DIAS, tarefas.js:tfRascTodos, que tira os caducados e o que não tem a forma de
+um rascunho). Com o armazenamento fechado, tudo trabalha como antes, só em memória. Nunca grava
+sozinho: só o Guardar envia.
+
+Abrir a janela de um registo com um rascunho guardado abre com ele, fundido a três com o que o registo
+tem agora (tarefas.js:tfComRascunho, tarefas.js:tfFundir, que é o cloud/nucleo.js:fundirTres da casa):
+o que outra pessoa ou outro aparelho mudou entretanto fica, o que se mudou aqui também, e só sai o que
+se removeu aqui. O que fica no aparelho passa a partir do registo de agora. Um rascunho que, fundido,
+já é igual ao registo não conta e sai. A janela abre já com alterações por guardar (o Cancelar e o
+«Sair sem guardar?»), e no cimo, logo a seguir ao «Adicionar tarefa», a linha «Alterações guardadas
+neste aparelho hoje às HH:MM: ainda não foram para o servidor.» (ou «ontem às», ou «a D/M às»;
+tarefas.js:tfLinhaRascunhoHtml, tarefas.js:tfQuando), com «Descartar» (tarefas.js:tfDescartar): as
+alterações saem da janela e do aparelho, a janela fica com o que o registo tem, e o aviso traz o
+«Anular» de seis segundos, que as devolve — juntas com o que se fez entretanto — só na janela onde se
+descartou. Com a linha, o resumo não repete «Alterações por guardar». A linha tem contorno e letra na
+cor da frente (estilos.css:.tf-rascunho), como a do cartão do kanban, e o «Descartar» a altura do dedo.
+
+Na lista, cada tarefa nova ou mudada e por guardar (tarefas.js:tfPorEnviar: a que a base não tem, ou
+tem diferente; mudar só a ordem não conta) leva o selo «Por enviar» por baixo do nome
+(tarefas.js:tfSeloHtml, estilos.css:.tf-selo): a nuvem a subir e a palavra na cor da frente, letra e
+contorno, que o escuro forçado do Samsung não apaga como apaga um fundo; numa cumprida não fica
+riscado. A ficha também as mostra: o cartão do imóvel (tarefas.js:tfCartaoDaFicha) põe as por enviar
+à cabeça, com o selo no lugar da secção, e a linha do contrato (tarefas.js:tfLinhaDaFicha) mostra até
+três por baixo do resumo; o resumo acaba em «· 1 por enviar» (ou «· alterações por enviar» quando só se
+removeu ou mudou a ordem; tarefas.js:tfResumoHtml). Quem volta à ficha vê-as logo, e tocar abre a
+janela com o rascunho. Só quem pode alterar a lista vê o rascunho; fechada a janela com o aparelho
+mudado, a ficha por baixo repinta-se (componentes.js:refrescarFichas).
 
 A pesquisa repinta só a lista, e o campo não perde o foco; o limpar dela é o
 ic('x',14). Uma tarefa cumprida fica riscada no mesmo sítio, sem saltar para
@@ -2733,6 +2805,18 @@ tarefas.js:TF_BOTAO_EDITAR) — e não «Guardar», porque ainda não grava nada
 Cancelar o nome devolve o seletor à escolha de antes. Uma tarefa
 nova fica no fim da secção; editar e mudar de secção leva-a para o fim da
 nova. O «Adicionar secção» do ⋯ da janela continua lá.
+
+Cada tarefa pode ter notas: texto livre e opcional, no campo «Notas» do
+formulário, por baixo da secção (um textarea com o placeholder «Opcional»,
+tarefas.js:tfFormTarefa). O Enter no nome continua a aplicar; nas notas muda
+de linha. Ficam no item, aparadas nas pontas, e '' sem nada
+(dados.js:normTarefas), e chegam ao rascunho pelo mesmo caminho do nome
+(tarefas.js:tfGuardarTarefa): mudar só as notas é uma alteração por guardar.
+Na lista vêm por baixo do nome, pequenas e na cor secundária, com as mudanças
+de linha de quem as escreveu, cortadas a duas linhas (tarefas.js:tfItemHtml,
+estilos.css:.tf-notas); o resto lê-se no formulário. A pesquisa também
+procura nelas (tarefas.js:tfPassa). O cartão da ficha do imóvel não as
+mostra: é um resumo.
 
 As secções recolhem-se. O cabeçalho de cada uma é um botão da largura toda
 (tarefas.js:tfSeccaoHtml) — a seta, o nome e «x de n» cumpridas —, com
@@ -2901,24 +2985,40 @@ imposto à cabeça é a estimativa sem englobamento; a página chama a cada uma
 estimativa, porque é. Quem declara é a pessoa, no Portal das Finanças; a app
 poupa-lhe a soma e a procura, não a assinatura.
 
-A página é a prancheta D-Declaracao: o ano dos rendimentos em chips
-(fisco.js:fiscoEscolherAno); a faixa das regras do ano, com o selo do modelo
-e a porta «Guia de preenchimento», que abre a dobra do guia e lhe põe o foco
-(fisco.js:fiscoAnoCard, fisco.js:fiscoVerGuia); os cinco números do ano, com
-as retenções na fonte à cabeça e o imposto estimado no cartão azul-noite
-(fisco.js:fiscoKpis); a grelha «A tratar antes de entregar», «Englobar ou
-não?», «A tua situação fiscal» e «Prazos da AT»; o resumo dos quadros 4.1 e
-4.2 numa tabela só (fisco.js:fisResumoQuadros); e os campos de cada quadro,
-linha a linha (fisco.js:fiscoQuadroCard). «Fora da declaração» diz-se também
-quando não há nada fora (fisco.js:fisNadaForaCard). Na barra, o rótulo
-«Titular» e o chip dele vivem numa caixa só e quebram de linha juntos
-(estilos.css:.fis-titular, fisco.js:fisBarra). O NIF formatado nunca parte
-entre linhas (fisco.js:fiscoLinhaHtml, com o .u-ws-nowrap; o fmtNIF continua
-com espaços normais). «Partilhar resumo» diz num aviso a cópia que o browser
-recusa («Não foi possível copiar o resumo.», fisco.js:fiscoPartilhar), em
-vez de ficar um erro por apanhar. No telemóvel, a dobra do guia esconde a
-contagem dos passos, porque o título inteiro vale mais
-(estilos.css:#fold_fiscoGuia, o .fsum).
+A página é a prancheta D-Declaracao, mais curta: a barra só tem as ações,
+juntas à direita e numa linha também no telemóvel (fisco.js:fisBarra,
+estilos.css:.fis-acoes); o ano escolhe-se no funil. As ações são
+dois .btn.sm (36px no rato, 44 no dedo): «Guia», com o livro (icones.js:ic, o
+`livro`), que abre o guia público /guias/declarar-rendas numa página nova e
+diz no aria-label e no title «Guia de preenchimento do Anexo F»; e o botão de
+partilha, só de ícone, no feitio do da Avaliação (avaliacao.js:avaPartilha),
+que abre a janela de escolha da casa (componentes.js:pickModal,
+fisco.js:fiscoPartilha) com «Exportar CSV» e «Exportar PDF»
+(fisco-pdf.js:fiscoPdf, só com os Contratos ligados, onde vive o escritor do
+PDF), cada uma com o ícone e uma linha do que leva. Não há partilha do resumo
+em texto: o CSV e o PDF já levam os números. A app não tem guia
+próprio nem faixa das regras do ano: o prazo, o que mudou e os passos vivem
+no guia. Um ano sem versão própria das regras, ou com uma provisória, di-lo
+em «A tratar antes de entregar» (fisco.js:fiscoAvisos). Depois, os cinco
+números do ano, com as retenções na fonte à cabeça e o imposto estimado no
+cartão azul-noite (fisco.js:fiscoKpis); a grelha «A tratar antes de
+entregar», «A tua situação fiscal» e «Prazos da AT»; e um cartão por
+quadro, o 4.1 e o 4.2, com tudo o que é desse quadro lá dentro e nada do
+outro (fisco.js:fiscoQuadroCard): o título diz o quadro e o que lá vai
+(«Quadro 4.1 · sem redução pela duração»); abre com onde se preenche e o
+resumo dos contratos dele, um por linha, com as rendas, o imposto estimado e
+o que falta, e o total do quadro (fisco.js:fiscoQuadroResumoHtml); e depois
+os campos, num cartão por contrato, campo → valor pela ordem do impresso, sem
+rolar de lado (fisco.js:fiscoContratoHtml, fisco.js:fiscoCamposDe), com um
+cartão do total no fim. Nenhum cartão fala dos dois quadros ao mesmo tempo:
+uma tabela só, com o quadro numa coluna, não dizia onde se preenchia cada
+contrato. O PDF leva os mesmos
+campos e os mesmos números. Não há simulação do englobamento: comparar com
+os escalões pedia os outros rendimentos do agregado e não se lia; o guia
+explica a escolha, e o imposto à cabeça diz «sem englobamento». «Fora da
+declaração» diz-se também quando não há nada fora
+(fisco.js:fisNadaForaCard). O NIF formatado nunca parte entre linhas (o
+.u-ws-nowrap; o fmtNIF continua com espaços normais).
 
 «A tratar antes de entregar» (fisco.js:fiscoObrigacoesCard) é numerado, e
 cada aviso leva o selo do seu nível — vermelho o que falta à AT, âmbar o que
@@ -2980,7 +3080,7 @@ e cada dado tem a fonte no cabeçalho do ficheiro.
 O nome é o ano dos RENDIMENTOS, não o da entrega: o irs-2026.js é a
 declaração que se entrega em 2027. É assim que o Modelo 3 identifica a
 declaração, é o ano que a página escolhe e é o ano a que a lei do Orçamento
-se aplica; a página diz sempre os dois (fisco.js:fiscoAnoCard).
+se aplica; o PDF diz sempre os dois (fisco-pdf.js:fiscoPdfDocumento).
 
 Quem lê é o motor (irs.js:irsAno, irs.js:irsTaxa, irs.js:irsReducao). A taxa
 de um contrato num ano sai da versão desse ano, e fica a mais baixa entre a
@@ -2999,8 +3099,9 @@ quando as regras forem conhecidas: o scripts/nova-versao-irs.js copia a
 por uma frase verdadeira e regista o ficheiro no index.html, no sw.js, no
 arnês e no MAPA; depois alguém confirma com o Orçamento, a portaria do Modelo
 3 e o ofício-circulado da AT, e muda o que mudou. Os passos do guia não
-escrevem anos — dizem {ano} e {ate}, que o fisco.js:fiscoGuiaCard troca —
-para a cópia não arrastar anos velhos. O testes/irs-anos.test.js confere cada
+escrevem anos — dizem {ano} e {ate} — para a cópia não arrastar anos
+velhos; a página já não os mostra (vivem no guia público), mas ficam na
+versão como dados. O testes/irs-anos.test.js confere cada
 versão, o registo dela e o próprio guião, numa cópia da árvore.
 
 ## O que o contrato diz ao IRS para lá das datas
@@ -3044,15 +3145,31 @@ toca-se inteira (60px), e não só no botão de 28px: <label class="fis-linha
 fis-linha-toque">, com hover e premido próprios e o peso normal, que o label
 da casa é a 600 (estilos.css:.fis-linha-toque). Dentro do <label> o texto vai
 em <span>, nunca em <p>. Gravar não tira o foco (ver «Padrões de página»).
-Os outros rendimentos coletáveis do agregado, por ano, vivem no cartão do
-englobamento, e as Definições têm uma linha que leva à página (ver «As Definições»). Vai com as definições para o
+As Definições têm uma linha que leva à página (ver «As Definições»). Vai com as definições para o
 servidor, e uma base antiga ganha-o completo (dados.js:normIrsDefs) — sempre
 um objeto novo, nunca o do blank, que a nuvem copia por referência.
 
+- De quem é. A declaração é sempre a de quem tem a sessão, sem seletor de
+  proprietário (fisco.js:fiscoTitulares): só os imóveis onde essa conta tem
+  quota, e as rendas, as retenções, os gastos, as obras dos 24 meses e o
+  AIMI pela quota-parte dela — o Anexo F é por titular (CIRS art. 19.º).
+  Sem sessão é a do único proprietário (fisco.js:fiscoEu); com vários, os
+  valores vão por inteiro e «A tratar antes de entregar» di-lo. Um
+  movimento sem imóvel é da conta que o registou: conta por inteiro para
+  quem o recebeu ou pagou, se é titular da declaração, e sem «pago por»
+  conta para quem declara; de outro, fica fora. Com imóveis à vista e
+  nenhum com quota (só colabora), a página diz «Nenhum imóvel teu».
 - Titular. Sem conjunta é sempre A (cada um entrega o seu Anexo F). Em
-  conjunta, cada linha leva a letra do titular escolhido no painel; sem
-  titular, as letras dos donos do imóvel («A/B» num imóvel dos dois, que no
-  Portal vai em duas linhas) (fisco.js:fiscoTitularDe).
+  conjunta, quem declara leva a sua letra (A por omissão) e entra também a
+  parte de quem está marcado como B, o cônjuge: um imóvel dos dois dá duas
+  linhas, uma por titular, cada uma com a sua quota-parte, e o contrato
+  conta uma vez nos avisos e nos totais de contratos
+  (fisco.js:fiscoTitularDe, fisco.js:fiscoNContratos). Os subtítulos dizem
+  a parte quando não é inteira — «a tua quota-parte», «a tua parte e a do
+  titular B» — e nunca o nome de um filtro (fisco.js:fiscoParte). A lista do
+  A/B tem os donos de todos os imóveis com rendas no ano, quem declara à
+  cabeça com « (eu)», para o cônjuge com um imóvel só dele poder ser
+  marcado (fisco.js:fiscoDonosDoAno).
 - Isentos (6D). Um contrato isento fica na linha do 4.1, porque as
   instruções do 6D pedem o campo do 4.1 onde o imóvel foi identificado, com
   imposto zero; as rendas contam nas rendas e nos gastos do quadro, mas não no
@@ -3067,12 +3184,6 @@ um objeto novo, nunca o do blank, que a nuvem copia por referência.
   n.º 24, com as duas rendas; e a resposta do 4.2C só quando todos os
   contratos celebrados desde 2024 estão confirmados dentro do limite
   (fisco.js:fiscoReducoesHtml).
-- Englobamento (6G). Os escalões de cada ano vivem na versão
-  (`englobamento`, com a fonte ao lado). A simulação compara o imposto à taxa
-  especial com o que as rendas acrescentam aos outros rendimentos pelos
-  escalões, com o quociente conjugal em conjunta (fisco.js:fiscoColeta,
-  fisco.js:fiscoEnglobamento). É uma estimativa e di-lo: sem deduções à
-  coleta, sem mínimo de existência.
 - Modelo 44. Com a dispensa dos recibos ligada, as rendas sem recibo deixam
   de ser falta e «A tratar antes de entregar» ganha a linha do Modelo 44,
   com o prazo (fim de fevereiro desde as rendas de 2025;
@@ -3147,7 +3258,7 @@ do canvas, liso, que encolhe ao carregar. Fica **inteiro dentro da barra**:
 a primeira versão era um círculo a subir 12px acima da borda e no telemóvel
 saía cortado — o que ultrapassa a barra fica à mercê de quem recorta —, e a
 segunda uma tecla em relevo de 64×50, que o canvas de 2026-10 trocou. O FAB
-saiu de todos os ecrãs (estilos.css:.fab, escondido): no telemóvel cria-se
+saiu de todos os ecrãs (escondido em 2026-10, removido em 2026-11): no telemóvel cria-se
 no +, no computador no «Criar» da barra lateral e na ação do cabeçalho. O + e
 o «Criar» abrem a mesma folha (navegacao.js:abrirAdicionar), que fecha
 primeiro a gaveta do telemóvel (navegacao.js:closeDrawer): «Novo movimento»
@@ -3529,12 +3640,21 @@ deixa-a com o que mudou. O «Descarregar PDF» do rodapé fecha-a e gera
 (contrato-pdf.js:ctPdfDescarregar), ou, enquanto falta alguma coisa, diz a
 primeira e fica.
 
-O ficheiro veste as cores do tema claro, seja qual for o da app
-(contrato-pdf.js:PDF_COR, contrato-pdf.js:pdfCor): os títulos das cláusulas
-e das secções a cobalto, o total numa caixa cobalto suave, os traços na cor
-do contorno e as notas a cinzento. A letra é a Helvetica, uma das catorze
-que todo o leitor de PDF tem: a Geist e a Bricolage só entravam embutidas
-(o porquê está no diário, a 2026-10-17).
+O ficheiro tem o aspeto da app no tema claro, seja qual for o da app
+(contrato-pdf.js:PDF_COR, contrato-pdf.js:pdfCor). A letra é a da app,
+embutida: a Geist no texto e a Bricolage Grotesque nos títulos, em TTF
+estáticos só com o latim (web/fonts/geist-400.ttf, geist-600.ttf,
+bricolage-grotesque-700.ttf), que se vão buscar uma vez por sessão, só ao
+gerar (contrato-pdf.js:pdfLetras). Sem rede, ou sem resposta em 5 s, o PDF
+sai na Helvetica, com as larguras dela, e nunca deixa de se gerar. O título
+leva um traço cobalto curto; o imóvel e as partes vão em cartões
+arredondados de fundo suave; cada cláusula tem o número numa pílula cobalto
+ao lado do «CLÁUSULA PRIMEIRA — …», que fica escrito por ser texto legal; o
+total vai numa caixa cobalto suave; as tabelas têm o cabeçalho num fundo
+suave; as assinaturas vão duas por linha, num traço desenhado. Todas as
+páginas têm o rodapé «Feito com o Rendorium» e «Página N de M», escrito no
+fim, quando já se sabe o M. O escritor é o mesmo para o Anexo F
+(fisco-pdf.js:fiscoPdf), com os quadros num cartão por contrato.
 
 ## As Pessoas e as Visitas
 «Pessoas» é a porta da casca para os Inquilinos, os Proprietários e os
@@ -4191,8 +4311,7 @@ preenche e a pessoa confirma, e que por baixo se preenche à mão. Uma segunda
 linha diz que os produtos facultativos que o documento indicar (seguros,
 cartões, ordenado domiciliado) aparecem mais abaixo, nos produtos da
 hipoteca, desligados, para a pessoa ligar os que tem. Só aparece
-com sessão, fora de produção e a quem pode editar a casa
-(fine.js:finePodeLer). O PDF fica anexado à hipoteca pelo caminho de sempre
+com sessão e a quem pode editar a casa (fine.js:finePodeLer). O PDF fica anexado à hipoteca pelo caminho de sempre
 (web/app/anexos.js:takeFiles), também quando a leitura falha, e o mesmo ficheiro não
 se anexa duas vezes. Os bytes vão ao POST /api/creditos/fine (fine.js:fineLer).
 
@@ -4205,9 +4324,15 @@ banco é sempre um nome da lista fechada (lib/fine.js:BANCOS) e nunca o texto
 do modelo, e o que falha vai para os ignorados. Uma resposta que chega sem a
 chaveta do fim (o modelo a encher o resto de espaços até ao teto dos tokens)
 lê-se na mesma, desde que cortada depois de um valor completo
-(lib/fine.js:respostaDoModelo). Nada do documento fica: nem
+(lib/fine.js:respostaDoModelo). Os valores que a ficha escreve em frases
+fixas (o indexante, o spread e a taxa fixa base e contratados, as prestações
+sem e com as vendas associadas facultativas, as comissões da secção 9) leem-se
+do próprio texto e passam por cima do modelo nessas chaves
+(lib/fine.js:lidoDoTexto); se o documento é um crédito, decide-o o modelo.
+Nada do documento fica: nem
 os bytes, nem o texto, nem a resposta vão para a base, para a consola ou para
-um relato de erro. A rota recusa em produção (404 antes da sessão), acima de
+um relato de erro. A política de privacidade diz este tratamento (web/legal.js,
+pontos 4 e 5). A rota recusa sem sessão, acima de
 5 MB, o que não começa por %PDF-, mais de 5 leituras por conta e por dia
 (menos no dev.rendorium.com, onde se testa e não há limite por conta), e
 acima do teto global do dia (rotas/fine.js:TETO_GLOBAL, tirado do custo
@@ -4420,7 +4545,7 @@ sem lhe levar o foco (entrada.js:marcarCampo); ao enviar, é o falhaCampo.
 email, que é para onde vai a ligação.
 
 A faixa de quem chega por um convite tem o mosaico azul-noite
-(estilos.css:.imv-mosaico.imv-noite: #16244A com arcos #9FB4FF, iguais nos
+(estilos.css:.mosaico.mosaico-noite: #16244A com arcos #9FB4FF, iguais nos
 dois temas, o .tile das pranchetas M-Entrar e M-Atualizar). Os imóveis do
 convite são cartões — contorno, raio 14, o mosaico de 64px e o nome dentro
 (entrada.js:casasDaChegada, também no entrada.js:modalLigar e no
@@ -5824,10 +5949,10 @@ Não há filtro global de proprietário: nem na gaveta, nem numa faixa por
 cima da vista, nem nos filtros das listas, das análises ou dos filtros
 comuns. Os valores são por inteiro, e quem procura um proprietário
 encontra-o pela pesquisa (a dos Imóveis procura os donos) ou escolhe o
-imóvel. O ownerFilter só vive no IRS · Anexo F, onde é o titular da
-declaração (vistas.js:anaSelDono, sem grupos; o × do chip dele é o
-navegacao.js:limparAmbito); o render e a mudança de separador largam-no
-fora dali (ambito.js:ambitoSemDono), e um valor de antes não filtra nada.
+imóvel. Nem o IRS · Anexo F tem titular a escolher: a declaração é a de
+quem tem a sessão (fisco.js:fiscoTitulares). Por isso nada na app escreve o
+ownerFilter a não ser para o pôr a '' (testes/sem-filtro-de-dono.test.js
+confere-o), e não há valor de antes que filtre um ecrã às escondidas.
 Um filtro comum guardado com proprietário aplica o resto e ignora essa
 parte, e editá-lo tira-a (definicoes.js:fcGuardar). A canalização
 (ambito.js:visiveis, ambito.js:scope, ambito.js:inScope, a quota do
@@ -5948,6 +6073,37 @@ partilha (og:image), que as redes mostram sem correr CSS, e que o
 scripts/capturas.js tira. Os documentos legais e a entrada de teste
 (worker/src/legal-vista.js, worker/src/teste.js) são da mesma família.
 
+O guia «Declarar as rendas» (guia-vista.js:paginaGuia, em
+/guias/declarar-rendas, em qualquer endereço como os documentos) também é:
+cabeçalho de vidro, leitura a 820 px, as secções em cartões numerados com um
+índice de âncoras, e nenhum JavaScript — o conteúdo vive como dados no
+módulo e o HTML sai deles. É informação, não uma função da app: diz o que a
+lei deixa deduzir às rendas e o que não deixa, e nunca que a Rendorium
+declara ou calcula alguma coisa. O que se deduz leva um visto verde e o que
+não se deduz uma cruz vermelha, e cada linha diz o sentido também ao leitor
+de ecrã; as condições levam um ponto, as notas âmbar o que pede cuidado. As
+fontes só ligam para endereços oficiais confirmados a abrir. A montra leva
+até ele pelo «IRS» do cabeçalho, por um cartão antes do fecho e pelo rodapé.
+O IRS aparece como guia, e só como guia: nenhuma frase diz que a app declara,
+calcula, preenche ou entrega o IRS, porque a Declaração ainda só existe em
+dev (testes/landing.test.js, «promessasDoIrs»). Quando houver mais guias, o
+«IRS» passa a «Guias» e leva a uma página /guias.
+
+O guia navega-se: um caminho no topo («Início › Guia do IRS das rendas», com
+a página atual em aria-current) e um «Voltar ao início» levam à montra — «/»
+na raiz, «/montra» fora dela. Na raiz leva, como blocos de dados que a CSP
+não corre, o BreadcrumbList e o Article em ld+json (guia-vista.js:paginaGuia);
+o robots.txt e o sitemap.xml (landing.js:robotsTxt, landing.js:sitemapXml)
+abrem a montra e o guia aos motores de busca e fecham tudo fora da raiz.
+
+No telemóvel, o cabeçalho da montra e do guia fica com a marca, o «Criar
+conta» (a ação principal, sempre à vista) e um ☰ que abre uma gaveta com o
+«IRS» e o «Entrar»; no computador as três ligações ficam em linha. A gaveta
+é um <details>: abre e fecha sem JavaScript. Fechada, o painel não existe
+(.gaveta:not([open]) .gaveta-painel{display:none}): o conteúdo de um
+<details> fechado é um bloco com contenção, que prende o painel absoluto ao
+☰ e o deixa sair pela direita do ecrã.
+
 Os emails (worker/src/lib/correio.js:molde) não são páginas: não há CSP, mas
 há o Gmail e o Outlook. Estilos em linha, tabelas com o cartão a 560px (uma
 tabela condicional para o Outlook do Windows), dois <style> só a
@@ -5981,8 +6137,37 @@ recebe.
 O back office (worker/src/equipa-vista.js, worker/src/equipa-guiao.js) tem a
 barra lateral GRAFITE e a marca em ardósia, de propósito diferente do
 azul-noite da app, para nunca se confundir uma com a outra; o resto é a
-linguagem da app (cobalto, cartões, selos, chips, interruptores). Nada de
-alert(), prompt(), confirm() nem <select>: o que pede valores ou um motivo
+linguagem da app (cobalto, cartões, selos, chips, interruptores). O toque
+também: o realce nativo do browser (o retângulo azul) fica desligado em tudo,
+o sinal do dedo é o :active de cada botão, e o foco que um toque deixa no
+botão sai depois da ação, menos num campo e com o teclado
+(worker/src/equipa-guiao.js:largarFocoDoToque). A navegação
+é a da app (ver «Navegação»): a barra lateral arruma as secções em grupos
+(equipa-guiao.js:GRUPOS_NAV) — ao cimo, sem título, o Kanban, só fora de
+produção; «Atendimento», com os Pedidos e as Pessoas; e «Plataforma», com os
+Erros, a Operação e o Rasto — e no fundo, pegados e sempre à vista, a
+Documentação e o cartão de quem está, com o Sair. É a divisão dos papéis: quem
+atende vê o primeiro grupo, quem constrói e opera o segundo, e um grupo sem
+nenhuma secção que o papel abra desaparece com o título
+(equipa-guiao.js:navHtml). Os dois grupos com título recolhem-se como os da
+app (equipa-guiao.js:alternarSeccao): o título é um botão com aria-expanded,
+a altura anima por grid-template-rows, recolhido mostra a soma dos crachás
+dos itens, o estado fica no aparelho (eq_nav_fechadas), e chegar a uma secção
+abre o grupo dela. Abaixo dos 900px, o cabeçalho tem o ☰ e a marca, a barra
+lateral é uma gaveta com véu (equipa-guiao.js:abrirGaveta,
+equipa-guiao.js:fecharGaveta) — o foco entra nela, o fundo fica inerte, e
+fecha com o Escape, com o véu ou ao escolher um destino — e há uma barra de
+baixo de 76 px com quatro destinos (equipa-guiao.js:destinosDaBarra,
+equipa-guiao.js:ORDEM_BARRA): no dev o Kanban, os Pedidos, os Erros e as
+Pessoas, com o + a meio a criar um cartão; na produção, sem kanban, os
+Pedidos, os Erros, as Pessoas e a Operação, sem +. Um destino que o papel não
+abre dá o lugar ao seguinte. A altura dela é a variável --eq-barra, de que o
+conteúdo, o aviso de baixo e a pílula do QA se afastam. O endereço diz onde
+se está — a secção e, quando há, o pedido, a pessoa ou o cartão abertos
+(/equipa#pedidos/<id>, /equipa#kanban/KAN-77) —, por isso recarregar volta lá
+e uma ligação abre o sítio (equipa-guiao.js:marcarEndereco,
+equipa-guiao.js:seguirEndereco). Nada de alert(), prompt(), confirm() nem
+<select>: o que pede valores ou um motivo
 abre a janela de confirmação, o resultado diz-se no aviso de baixo, e
 desligar um serviço pergunta numa faixa âmbar do próprio cartão, com os
 dependentes que caem junto (equipa-guiao.js:mostrarAvisoDesligar).
@@ -6010,11 +6195,12 @@ um por limite e por conta ou IP (lib/limites.js:relatoDoLimite, a tabela
 lib/limites.js:LIMITES), e avisa no Discord; as recusas seguintes na mesma
 janela não escrevem nada. A deduplicação dos avisos e os relatos não contam.
 Um ticket de segurança não se trata sem decisão, nem no back office nem no
-bot do Discord: o cartão «Por decidir» tem
-Arquivar e Decidir. Decidir pede a resolução proposta, obrigatória
-(equipa-guiao.js:decidirSeguranca), que fica com quem e quando e é o que se
-segue; Arquivar pede a justificação (equipa-guiao.js:arquivarSeguranca) e
-conclui-o sem mandar nada a ninguém. Um limite que volta depois de concluído
+bot do Discord: o cartão «Por decidir» tem as mesmas duas ações de um
+pedido, Recusar e Aceitar. Aceitar pede a resolução proposta, obrigatória
+(equipa-guiao.js:aceitarSeguranca), que fica com quem e quando e é o que se
+segue; Recusar pede a justificação (equipa-guiao.js:recusarSeguranca) e
+conclui-o sem mandar nada a ninguém. A linha da lista e o detalhe dizem
+«por decidir», «aceite» ou «recusado». Um limite que volta depois de concluído
 reabre o ticket, por decidir. A skill ticket só pega num ticket de segurança
 com a resolução proposta.
 
@@ -6205,14 +6391,26 @@ ordem de carregamento.
 ## Os tickets de QA
 
 Fora de produção há uma pílula «QA» que quem testa arrasta para onde estorvar
-menos e que abre «Novo ticket» e «Ver tickets». Os tickets ficam na D1 do
-ambiente e quem programa lê-os e fecha-os com scripts/qa.mjs. Um ticket tem
-três estados: novo (o status 'aberto', como nasce e como volta ao reabrir),
-em resolução ('em_resolucao', que só o scripts/qa.mjs comecar marca, logo que
-quem programa pega nele) e resolvido. Em produção nada
-disto existe: nem a pílula (cloud/qa.js:qaDeveExistir pede um CW.ambiente que
-não seja 'producao', e sessão) nem as rotas (worker/src/rotas/qa.js:rotasQa
-responde 404 sem env.ENV_NAME, antes de ler o corpo).
+menos e que abre «Novo ticket» e «Ver tickets». A pílula é uma vista do
+kanban da equipa: «Ver tickets» mostra os cartões do tipo Erro, venham de
+onde vierem — os dos tickets de QA, os criados à mão no quadro, os que a
+skill ticket cria —, nas colunas e com a prioridade deles, e o que se faz num
+lado vê-se no outro, porque os dados são os mesmos. Um cartão que passa a
+Erro entra na pílula, um que deixa de o ser sai, e um removido no kanban
+também. Os tickets de QA ficam na D1 do ambiente e quem programa lê-os e
+fecha-os com scripts/qa.mjs. Cada ticket tem o seu cartão e está sempre na
+coluna dele: o status é o id da coluna (A fazer, como nasce e como volta ao
+reabrir; Auto Tests, quando quem programa pega nele; Human Tests, resolvido e
+à espera de quem testa; Concluído; Para depois; e as que o master criar).
+Mover o cartão no kanban move o ticket (o gatilho kanban_qa_coluna da
+migração 0029), e mover o ticket move o cartão
+(worker/src/lib/kanban.js:passosDaSincronizacao). O ticket e o cartão também
+saem e voltam juntos: remover um remove o outro, e cada Anular repõe os dois
+(worker/src/lib/kanban.js:cartaoSaiComOTicket, worker/src/lib/kanban.js:ticketSaiComOCartao).
+Em produção nada disto existe: nem a pílula (cloud/qa.js:qaDeveExistir pede
+um CW.ambiente que não seja 'producao', e sessão) nem as rotas
+(worker/src/rotas/qa.js:rotasQa responde 404 sem env.ENV_NAME, antes de ler o
+corpo).
 
 A pílula vive no body, fora do #view, e aparece no render que traz o ambiente
 do servidor (cloud/qa.js:qaSincronizar). É a pega de pontos, o inseto
@@ -6249,6 +6447,34 @@ fazem o mesmo sem rato (cloud/qa.js:qaTecla). O arrasto não anima (é
 manipulação direta); o encaixe anima o transform no --medio, ou no --lento
 quando atravessa o ecrã, e de uma vez sem movimento (cloud/qa.js:qaDeslizar).
 
+A pílula aparece em todo o lado fora de produção: na app, no back office e
+nas páginas públicas que o worker escreve (a montra e o guia). Nas páginas
+públicas entra pela camada das páginas (equipa-qa.js:pilulaDasPaginas, com o
+/paginas/qa.js e o /paginas/qa.css de equipa-qa.js:recursoDoQaDasPaginas): o
+mesmo cloud/qa.js, a falar com as /api/qa pelo cookie da sessão da conta,
+e só quando a página tem essa sessão (no dev.rendorium.com, a de uma conta de
+teste). A montra da raiz nunca a leva. O menu depende do sítio
+(cloud/qa.js:qaLugar): na app, «Novo ticket», «Ver tickets», «Ver a montra»
+e «Back office»; nas páginas públicas, «Voltar à app» no lugar de «Ver a
+montra»; no back office, os dois primeiros e, quando a sessão de teste de
+quem lá está abre a app, também «Ver a montra» e «Voltar à app» (o worker
+diz-o nos dados da pílula, QA_EQUIPA.app, com a porta do dev para o /;
+sem ela o menu fica só com os tickets, para não oferecer um botão que dá
+404), sem «Back office». «Ver a montra», «Voltar à
+app» e «Back office» abrem no mesmo separador — na APK de dev, no mesmo
+WebView, que leva o cookie e não tem barra de endereços. No dev, o «Back
+office» entra sem o /entrar: uma página do back office sem sessão de equipa,
+aberta com a sessão de uma conta de teste, abre uma sessão de equipa em nome
+de quem pediu a ligação do /test, com os cargos que o Discord lhe dá nesse
+momento, e fica na auditoria como entrada; sem cargo, com o Discord em baixo
+ou vinda de outro site fica a página de entrada, e a API do back office pede
+sempre o cookie da equipa (worker/src/equipa.js:entrarPelaSessaoDeTeste).
+Entre a app de teste e o back office não há barreira: no dev, o «Sair» fecha
+a sessão de equipa e, quando a sessão de teste abre a app, leva a ela (o
+/api/equipa/sair responde depois:'/' e o worker/src/equipa-guiao.js:sair
+segue-o); voltar ao back office abre logo outra sessão de equipa pela de
+teste.
+
 O menu é o menu de ações da casa (data-menu="acoes"). Abri-lo guarda o ecrã
 de agora (cloud/qa.js:qaMenuAbriu): o contexto do ticket é o de quando se
 tocou na pílula. O contexto (cloud/qa.js:qaContexto) leva o separador, a
@@ -6260,18 +6486,32 @@ vai junto» e no ticket aberto (cloud/qa.js:qaHtmlContexto).
 O novo ticket (cloud/qa.js:qaNovoTicket) pede a descrição (obrigatória), a
 gravidade (bloqueia, incomoda, detalhe, ou nenhuma) e uma captura de ecrã,
 escolhida ou colada com Ctrl+V e encolhida no cliente
-(cloud/qa.js:qaEncolherImagem). Enviar é o POST e depois o PUT da captura; se
-só a captura falha, a janela fica aberta e o botão passa a «Enviar a imagem»,
-sem repetir o ticket (cloud/qa.js:qaEnviar). A lista (cloud/qa.js:qaVerTickets)
-tem os «Novos», em grupos por gravidade (bloqueia, incomoda, detalhe, sem
-gravidade) e em cada grupo do mais recente para o mais antigo
-(cloud/qa.js:qaSeccoes, qaHtmlGrupos; a API e o scripts/qa.mjs dão a mesma
-ordem), depois os «Em resolução», pela mesma ordem mas numa lista só, e no fim
-os «Resolvidos»; as duas últimas só aparecem quando há. Tocar abre o ticket
-para ler, com o selo do estado (cloud/qa.js:qaSeloEstado: «Novo», «Em
-resolução» em --loan, «Resolvido» em --in), a captura, o contexto e a
-resolução (ou a «Resolução anterior» de um reaberto). Os novos, os em
-resolução, os resolvidos e cada grupo de gravidade dos novos abrem e
+(cloud/qa.js:qaEncolherImagem). A gravidade vira a prioridade do cartão
+(worker/src/lib/kanban.js:prioridadeDaGravidade: bloqueia é Mais alta,
+incomoda Alta, detalhe Baixa, nenhuma Média), e daí em diante quem manda é a
+prioridade do cartão, que se muda no kanban. Enviar é o POST e depois o PUT
+da captura; se só a captura falha, a janela fica aberta e o botão passa a
+«Enviar a imagem», sem repetir o ticket (cloud/qa.js:qaEnviar). A lista
+(cloud/qa.js:qaVerTickets) tem uma secção por coluna do kanban, pela ordem do
+quadro (as colunas vêm com a lista; cloud/qa.js:qaColunasDe): «A fazer»
+sempre, em grupos pela prioridade do cartão, com os nomes do kanban (Mais
+alta, Alta, Média, Baixa, Mais baixa), e em cada grupo do mais recente para o
+mais antigo (cloud/qa.js:qaSeccoes, qaHtmlGrupos; a API dá a mesma ordem), e
+as outras só quando têm itens — as por resolver pela mesma ordem numa lista
+só, as resolvidas (Human Tests e as de fim) do resolvido há menos tempo para
+trás. O número da pílula são os Erros em A fazer e em Auto Tests. Cada linha
+tem o selo da prioridade como o do quadro — o ícone e a palavra na cor dela,
+na letra e no contorno, sem fundo, e nenhum na Média (cloud/qa.js:qaSelo,
+estilos.css:.qa-prio) —, a chave do cartão, o sinal da captura, quem e
+quando, e o título do cartão. Tocar abre o item para ler, com o selo da
+coluna (cloud/qa.js:qaSeloEstado: Auto Tests em --loan, Human Tests e as de
+fim em --in, as outras neutras), o da prioridade, a chave do cartão (KAN-N),
+o título e a descrição do cartão e a resolução (ou a «Resolução anterior» de
+um reaberto); um ticket de QA traz também a captura e o contexto. Um Erro
+que não veio de um ticket abre como «Erro KAN-N», com quem o criou no kanban
+no lugar do autor, sem captura nem contexto (cloud/qa.js:qaTemTicket,
+cloud/qa.js:qaTituloDaJanela).
+As secções e cada grupo de prioridade de A fazer abrem e
 fecham como as secções da gaveta (cloud/qa.js:qaHtmlDobra, cloud/qa.js:qaDobrar):
 o título é um botão da largura toda, de 44px, com o nome, quantos tem e a
 seta, aria-expanded e aria-controls; tocar troca a classe .fechada no nó vivo,
@@ -6279,13 +6519,49 @@ sem repintar, e a altura anda por grid-template-rows de 1fr a 0fr
 (estilos.css:.qa-dobra-corpo), com o visibility a tirar as linhas do Tab só
 no fim do fecho. O estado é do aparelho (cloud/qa.js:QA_LS_DOBRAS), só com as
 secções que se tocaram; sem nada guardado, ou estragado, os abertos e os
-grupos abrem e os resolvidos nascem recolhidos (cloud/qa.js:QA_DOBRAS_FECHADAS,
+grupos abrem e as colunas de fim e o Para depois nascem recolhidos (cloud/qa.js:QA_DOBRAS_FECHADAS,
 cloud/qa.js:qaDobraAberta). Com o armazenamento vedado, o toque vale nesta
 sessão (cloud/qa.js:qaDobrasAqui). A lista que o servidor repinta
 (cloud/qa.js:qaPintarLista) nasce já no estado guardado, sem transição.
-«Remover» não pergunta: o aviso traz o Anular (cloud/qa.js:qaRemover).
-«Reabrir» devolve um resolvido aos novos (cloud/qa.js:qaReabrir); um novo ou
-em resolução tem «Fechar», porque passar a em resolução é só do script.
+«Remover» só existe num ticket de QA, leva o cartão com ele e não pergunta:
+o aviso traz o Anular, que repõe os dois (cloud/qa.js:qaRemover). Num Erro
+sem ticket não há «Remover»: remover um cartão é do master, no kanban.
+«Mover» passa o item (o ticket e o cartão) a outra coluna, logo no ecrã e
+reposto se o servidor recusar (cloud/qa.js:qaMover, cloud/qa.js:qaPassarDeColuna,
+cloud/qa.js:qaColunaNoEcra).
+Em Human Tests o item está à espera de um sim ou de um não, e as três
+decisões de quem testa vêm em vez do «Mover», a seguir ao «Remover»
+(cloud/qa.js:qaRodapeTicket, cloud/qa.js:qaHtmlDecisoes): «Recusar» devolve o
+ticket a A fazer pelo reabrir, e a resolução fica como «Resolução anterior»
+(cloud/qa.js:qaRecusar); «Adiar» passa-o a Para depois, e só aparece quando o
+kanban tem essa coluna (cloud/qa.js:qaAdiar); «Aceitar», o primário, passa-o
+a Concluído (cloud/qa.js:qaAceitar). Todas mudam o ticket logo no ecrã e
+repõem-no se o servidor recusar, como o «Mover». Os quatro ficam numa linha
+quando cabem; quando não cabem, as decisões descem juntas para a linha delas,
+da largura toda (estilos.css:.qa-decisoes). No telemóvel os botões têm menos
+enchimento de lado e, entre 341px e 420px, o «Remover» é só o caixote, com o
+nome para o leitor de ecrã e um alvo de 48px: a 384px, a largura do Samsung
+do Martinho, cabem os quatro. «Reabrir» devolve um ticket de uma coluna de
+fim a A fazer (cloud/qa.js:qaReabrir); nas outras colunas há «Mover» e
+«Fechar».
+
+Qualquer item leva comentários, e são os do cartão no kanban
+(kanban_comentarios): a mesma conversa na pílula, no back office e no
+quadro, sem tabela nova. A janela do item pede-os à parte, só para ele
+(cloud/qa.js:qaCarregarComentarios; a lista não os traz), e mostra-os do
+mais antigo para o mais recente, com quem, quando e o texto com as mudanças
+de linha (cloud/qa.js:qaHtmlComentarios); por baixo, o campo «Comentário»,
+obrigatório, com o erro junto dele, e «Comentar» (cloud/qa.js:qaHtmlComentar).
+Comentar um ticket de QA passa-o a Auto Tests, de qualquer coluna: é o sinal
+de que há o que responder. Num Erro sem ticket o comentário é o do kanban: em
+Human Tests devolve-o a Auto Tests (recusar é comentar o que está mal), e
+noutra coluna fica onde está (cloud/qa.js:qaColunaDepoisDoComentario). Como o
+«Mover», é logo no ecrã — o comentário aparece «a enviar…», o campo
+esvazia-se e o item muda de coluna, quando muda — e, se o servidor
+recusar, o ticket volta à coluna de antes, o texto volta ao campo e o erro
+diz porquê junto dele (cloud/qa.js:qaComentar). Quando o ticket muda, a
+janela troca o de cima, os comentários e o rodapé e deixa o campo onde está,
+com o que lá estiver escrito (cloud/qa.js:qaRepintarTicket).
 
 Quem escreveu um ticket numa conta de teste é a conta do Discord que pediu a
 ligação do /test, e não a conta de teste: a ligação leva o nome do Discord
@@ -6293,7 +6569,7 @@ assinado (teste.js:ligacaoTeste, o parâmetro n; a assinatura só o conta
 quando vem, por isso as ligações de um worker sem esta versão continuam a
 valer), abri-la guarda-o no KV (teste.js:chaveNomeDev), e criar o ticket
 copia o id (users.test_owner) e o nome para o próprio ticket
-(worker/src/rotas/qa.js:discordDoAutor), porque o /test limpar apaga as
+(worker/src/teste.js:discordDoAutor), porque o /test limpar apaga as
 contas de teste. Quando a ligação não trouxe o nome (as do bot de produção
 antes de o saberem pôr), pergunta-se ao Discord com o token do bot e guarda-se
 no mesmo sítio por 30 dias (teste.js:nomeDoDevNoDiscord, lib/bot.js:nomeNoDiscord);
@@ -6303,7 +6579,7 @@ usa o mesmo. A app mostra «Nome (Discord)», e «Discord <id>» só quando nem 
 bot soube responder (cloud/qa.js:qaAutor). Numa conta normal é o nome
 da conta, e uma conta normal apagada aparece como «Conta apagada».
 
-No servidor, os tickets vivem na tabela qa_tickets
+No servidor, os tickets de QA vivem na tabela qa_tickets
 (migrations/0023_qa_tickets.sql), à parte dos pedidos de ajuda: não são
 suporte, não vão ao Discord nem ao back office. Todas as contas do ambiente
 veem e mexem em todos; o user_id é só quem escreveu, sem chave estrangeira,
@@ -6312,12 +6588,57 @@ para o ticket sobreviver à conta e à limpeza do dev (os qa_tickets ficam em
 contexto até 16 KB, cortado pelo rasto mais antigo
 (worker/src/rotas/qa.js:contextoParaGuardar); a captura até 3 MB, no R2 em
 qa/<id>, e só PNG, JPEG ou WebP pelos próprios bytes
-(worker/src/rotas/qa.js:tipoDaImagem), servida com a CSP dos anexos. Trava aos
+(worker/src/lib/imagens.js:tipoDaImagem), servida com a CSP dos anexos. Trava aos
 30 tickets por hora por pessoa. Remover é brando
-(worker/src/rotas/qa.js:removerTicket), para o Anular; passadas 24 h a linha
+(worker/src/rotas/qa.js:removerTicket), para o Anular, e leva o cartão com o
+mesmo removed_at; o Anular só repõe o cartão que saiu nessa remoção
+(worker/src/rotas/qa.js:reporTicket). Do outro lado é igual: o master remove
+o cartão de um ticket no kanban e o ticket sai com ele, no mesmo lote, e o
+Anular do kanban repõe-no (worker/src/rotas/kanban.js:removerCartao,
+worker/src/rotas/kanban.js:reporCartao). Passadas 24 h a linha do ticket
 apaga-se de vez com a captura, de passagem nas rotas
-(worker/src/rotas/qa.js:limparRemovidos). Reabrir guarda a resolução. A
-ordem do GET é a dos três estados (worker/src/rotas/qa.js:listarTickets).
+(worker/src/rotas/qa.js:limparRemovidos), e o cartão reposto depois disso
+volta como um Erro sem ticket. Reabrir guarda a resolução.
+
+O GET /api/qa não lê os tickets: lê os cartões do tipo Erro que não estão
+removidos, com as colunas do kanban, e junta a cada cartão de um ticket de
+QA vivo o ticket dele (worker/src/rotas/qa.js:listarTickets). Cada item leva
+a chave do cartão, a prioridade, a coluna, o título e a descrição do cartão
+e, num ticket, o contexto, a captura, o autor e a resolução; sem ticket, o
+autor é o relator do cartão (worker/src/rotas/qa.js:itemParaFora). O id é o
+do ticket nos de QA — as rotas da captura e o scripts/qa.mjs continuam a
+usá-lo — e a chave KAN-N nos outros. As rotas /api/qa/:id aceitam as duas:
+a chave de um cartão com o ticket vivo vale o id dele, e a de um Erro sem
+ticket vai às rotas do cartão (worker/src/rotas/qa.js:cartaoDaPilula,
+worker/src/rotas/qa.js:rotasDoCartao), que movem o cartão para o topo da
+coluna com a linha «coluna» no histórico assinada por quem mexeu
+(worker/src/lib/kanban.js:passosDoCartaoNaColuna), comentam como o kanban
+(worker/src/lib/kanban.js:passosDoComentario), recusam remover e repor com
+403 e não têm captura. A chave de outro tipo, de um removido ou que não
+existe é 404. Um cartão de um pedido que alguém mude para Erro só aparece a
+quem vê os pedidos (o suporte e o master no back office): a descrição dele é
+o texto que a pessoa escreveu na Ajuda, e as contas da app nunca a veem. Um
+ticket sem cartão nenhum (os de antes do kanban) não está no kanban e por
+isso não está na pílula; continua no scripts/qa.mjs listar. A ordem do GET é
+a das colunas do quadro, com as de fim no fim; nas por resolver pela
+prioridade e do mais recente; em Human Tests e nas de fim do resolvido há
+menos tempo.
+
+Um comentário entra por POST /api/qa/:id/comentarios {texto}, na conta e no
+back office (worker/src/rotas/qa.js:comentarTicket): aparado, de 1 a 4000
+caracteres, travado aos 60 por hora por pessoa. Numa transação só, o ticket
+passa a Auto Tests, o cartão nasce se o ticket ainda não o tinha e vai com
+ele, com a linha «coluna» do histórico assinada por quem comentou, e o
+comentário fica no cartão (worker/src/lib/kanban.js:passosDoComentarioQa).
+Quem assina é a pessoa do Discord quando a há — a da sessão de equipa, ou a
+que pediu o /test numa conta de teste —, com o id do Discord, como o kanban
+assina os comentários de quem lá escreve: a mesma pessoa muda e remove os
+seus no quadro; numa conta normal, a conta
+(worker/src/rotas/qa.js:autorDoComentario). Com o cartão removido do kanban
+(um que saiu antes de o ticket sair com ele), o comentário não teria onde
+ficar: 409, e o ticket fica onde está. O GET
+/api/qa/:id/comentarios dá os do cartão, sem os removidos, até 500
+(worker/src/rotas/qa.js:lerComentarios).
 
 No back office do dev (/equipa) há a mesma pílula, com as mesmas funções, e é o
 próprio cloud/qa.js que corre lá: o worker serve um /equipa/qa.js que junta,
@@ -6348,7 +6669,15 @@ script só fala com a base e o bucket do dev, ou com a base isolada do 8788
 wrangler sem shell e escapa o SQL, porque as notas trazem texto livre. Só
 escreve com comecar (os novos passam a em resolução; recusa um resolvido),
 resolver (a nota e uma linha «Commit: <sha>») e reabrir. Remover
-não existe no script: é de quem testa, na app.
+não existe no script: é de quem testa, na app. O listar mostra, em cada
+ticket, os comentários por responder — no texto, no cabeçalho dele e por
+extenso; no --json, em comentariosPorResponder: os de pessoas escritos
+depois da última resposta do Claude, ou todos quando ele ainda não
+respondeu, sem os da sincronização (scripts/qa.mjs:porResponder). Um ticket
+cujo cartão foi removido no kanban não aparece (scripts/qa.mjs:sqlListar), e
+os Erros sem ticket ficam no scripts/kanban.mjs. A nota do
+resolver entra no cartão como comentário do Claude, e é essa a resposta: o
+ticket volta a Human Tests e os comentários deixam de estar por responder.
 
 Os pedidos da Ajuda e os erros apanhados (a tabela tickets, de produção e do
 dev) leem-se e fecham-se com `node scripts/ticket.mjs listar | comecar | nota
@@ -6366,6 +6695,239 @@ scripts/ticket.mjs:publicadoProd, o commit dentro da etiqueta publicado, que o
 deploy de produção move depois de a produção responder): um erro fechado antes
 disso reabria-se sozinho na ocorrência seguinte. Uma base sem a 0024 (a
 produção até ao «promove») lista na mesma, e lá nenhum pedido se implementa.
+
+## O kanban da equipa
+
+As tarefas da equipa vivem num kanban no back office, e só no dev
+(dev.rendorium.com/equipa › Kanban): todas, as que vêm da conversa, as dos
+tickets de QA e as dos pedidos aceites. Substituiu o board KAN do Jira e
+guardou as chaves dele (KAN-N): o contador começa na última do Jira
+(migrations/0028_kanban.sql), e os cartões novos continuam a numeração. Em
+produção não existe: as rotas respondem 404 sem ENV_NAME, como as do QA
+(worker/src/rotas/kanban.js:rotasKanban), a página não carrega o guião nem o
+CSS dele, e a barra lateral e a de baixo não têm a secção. A limpeza do dev
+não lhe toca.
+
+As colunas são as do board — A fazer, Auto Tests, Human Tests, Concluído e
+Para depois — e o master acrescenta, muda de nome, reordena e remove as que
+estão vazias (worker/src/equipa-kanban-janela.js:kbColunas): uma linha por
+coluna, com a pega, o nome, os selos e a contagem, e um ⋯ com as ações dela
+(Renomear, Marcar de fim, Remover, e Subir e Descer para o teclado); a ordem
+muda-se a arrastar pela pega, como as tarefas da app, e grava-se ao largar
+(worker/src/equipa-kanban-janela.js:kbColunasGravar). As quatro primeiras
+são fixas: a sincronização usa-as, e mudam de nome mas não saem; o
+Concluído é a coluna de fim (o progresso dos épicos, a data de feito). Um
+cartão tem a chave, o tipo (Épico, História, Tarefa, Subtarefa ou Erro), o
+título, a descrição, a prioridade (de Mais alta a Mais baixa), as etiquetas,
+o responsável (uma pessoa da equipa, ou o Claude), o relator, o pai (o
+épico, ou a tarefa de uma subtarefa), o prazo, e por baixo as subtarefas, as
+ligações (bloqueia, é bloqueado por, relaciona-se com), os anexos (no R2),
+os comentários (cada um muda e remove só os seus) e o histórico de
+cada mudança. Qualquer papel da equipa vê e mexe; remover um cartão é do
+master, e brando, com Anular no aviso; o cartão de um ticket de QA leva o
+ticket com ele, e o Anular repõe os dois (ver «Os tickets de QA»). Os
+cartões do tipo Erro são também a lista da pílula do QA.
+
+Os anexos de um cartão são uma lista fechada de tipos, cada um reconhecido
+pelos próprios bytes e nunca pelo Content-Type nem pelo nome
+(worker/src/lib/imagens.js:TIPOS_DOS_ANEXOS,
+worker/src/lib/imagens.js:tipoDoFicheiro): imagens PNG, JPEG e WebP, PDF,
+Word, Excel e PowerPoint (docx, xlsx e pptx, sem macros nem ActiveX) e texto
+ou CSV em UTF-8, sem marcação. HTML, SVG e XML não entram, nem com outro nome
+ou outro tipo. Cada anexo vai até 10 MB. O «Adicionar ficheiro» diz por baixo
+do botão porque é que um ficheiro não entrou: o tipo, com a lista do que se
+aceita, ou o tamanho. As imagens mostram-se em miniatura e abrem no sítio. Os
+outros ficheiros são um bloco com o ícone, o nome, o tipo, o tamanho («1,2
+MB»), quem o adicionou e quando
+(worker/src/equipa-kanban.js:kbFicheiroHtml), e tocar descarrega-os. O
+servidor manda-os como ficheiro (attachment), com a extensão do tipo
+verdadeiro no nome, em nosniff e com a CSP dos anexos, que traz sandbox
+(worker/src/rotas/kanban.js:servirAnexo). O PDF também desce, porque o Chrome
+não abre um PDF em caixa de areia.
+
+O quadro lê-se num número fixo de consultas, seja qual for o número de
+cartões (worker/src/rotas/kanban.js:lerQuadro), e os filtros — tipo,
+etiqueta, responsável («Os meus»), prioridade e épico — aplicam-se no
+browser sobre o quadro inteiro (worker/src/equipa-kanban-filtros.js:kbPassa), para
+um arrasto com filtros ligados mandar ao servidor a posição certa entre os
+cartões escondidos; a pesquisa vai ao servidor, porque procura também na
+descrição. Os filtros ficam na sessão. São como os da app: a pesquisa sempre
+à vista e o funil, com o número dos ligados, que abre por baixo um painel com
+Limpar e Fechar, quantos cartões passam e um seletor por campo, que abre a
+lista e aplica logo (worker/src/equipa-kanban-filtros.js:kbFiltrosHtml). O
+seletor é um só componente, de uma escolha ou de várias, um botão e uma lista
+de botões, nunca o seletor nativo (worker/src/equipa-kanban-filtros.js:kbSelHtml);
+é ele que escolhe as etiquetas de um cartão, das que já há no quadro, com
+«Nova etiqueta» no fim da lista, como a «Nova categoria» dos movimentos. Cada
+coluna ordena-se à parte, pelo botão do cabeçalho
+(worker/src/equipa-kanban-filtros.js:kbOrdenar): a ordem do quadro (a de
+omissão, a que o arrasto muda), Prioridade, Título, Criação, Última alteração
+ou Prazo, guardada no aparelho; a janela tem dois seletores, o «Critério» e
+o «Sentido» (com os dois rótulos do critério, e escondido na ordem do
+quadro), que aplicam logo e deixam a janela aberta, e trocar de critério
+mantém o sentido; o cabeçalho diz
+quando a coluna está ordenada, e numa coluna ordenada arrastar muda o cartão
+de coluna mas não de lugar dentro dela
+(worker/src/equipa-kanban-filtros.js:kbOrdemManual). No computador as colunas estão lado a
+lado e a rolagem de lado é do quadro, nunca da página; no telemóvel vê-se
+uma coluna de cada vez, com um segmentado das colunas e as contagens por
+cima, e passa-se à vizinha a deslizar. O escolhido mostra-se no contorno e na
+letra, e não só no fundo, por causa do escuro forçado.
+
+Arrasta-se com o rato e com o dedo (worker/src/equipa-kanban-arrasto.js:kbPousar). No
+dedo, pela pega, e não com um toque longo, que disputava a rolagem; tocar na
+pega sem arrastar abre o «Mover para…», que lista só as outras colunas e põe
+o cartão no topo da escolhida — reordenar na mesma coluna é a arrastar
+(worker/src/equipa-kanban.js:kbMoverPara). Quando o lugar onde o cartão vai
+cair muda, os cartões à volta deslizam para lhe abrir espaço, e não saltam
+(worker/src/equipa-kanban-arrasto.js:kbDeslizar). No telemóvel, levar o cartão
+pela pega até à borda do ecrã e mantê-lo lá passa o quadro à coluna do lado,
+uma de cada vez, com a borda acesa e uma seta
+(worker/src/equipa-kanban-arrasto.js:kbArrBorda). Largar move o
+cartão logo; se o servidor recusar, volta ao sítio e o aviso diz porquê
+(worker/src/equipa-kanban-arrasto.js:kbMover). O servidor põe-no a meio dos vizinhos
+e renumera a coluna de uma vez quando o intervalo fica pequeno
+(worker/src/rotas/kanban.js:moverCartao). Mover para outra coluna deixa a
+linha no histórico; reordenar na mesma não.
+
+Tocar num cartão é lê-lo: um painel ao lado no computador, a folha inteira no
+telemóvel, acima da barra de baixo, e o endereço passa a #kanban/KAN-N, que
+abre o cartão de fresco (worker/src/equipa-kanban.js:verKanban). Editar e
+Remover vivem no ⋯ do cimo do cartão aberto, ao lado do fechar, como nas
+fichas da app (worker/src/equipa-kanban.js:kbMenuPainel); «Mover para…» e
+«Copiar a ligação» ficam lado a lado por baixo do título. A prioridade lê-se
+num selo com o ícone e a palavra, na cor dela, e a Média, a de omissão, não
+tem selo (worker/src/equipa-kanban.js:kbPrioridadeHtml). Numa coluna sem
+cartão nenhum, o sítio do vazio é o próprio «Adicionar cartão». O formulário
+pede o Tipo e o Título, com o asterisco; o resto diz «Opcional» ou dá um
+exemplo, e o erro aparece ao lado do campo.
+
+Em Human Tests decide-se: ou se aceita, ou se recusa a explicar o que está
+mal. Um cartão aberto em Human Tests tem no fundo do painel uma barra fixa,
+sempre à vista enquanto o corpo rola, no computador e na folha do telemóvel
+(worker/src/equipa-kanban.js:kbDecidirHtml): a frase «Para recusar, comenta o
+que está mal: o cartão volta a Auto Tests.», o Comentar, que leva à caixa do
+comentário, e o Aceitar, o botão primário, que põe o cartão no topo de
+Concluído pelo caminho do «Mover para…», com o Anular no aviso
+(worker/src/equipa-kanban.js:kbAceitar). A barra é filha do painel que rola,
+por baixo do corpo: no fim do scroll fica depois do histórico, sem o tapar.
+Recusar é comentar: o comentário de uma pessoa num cartão em Human Tests
+leva-o ao topo de Auto Tests, a fila do Claude, no mesmo lote, com a linha
+«coluna» do histórico assinada por quem comentou
+(worker/src/lib/kanban.js:colunaDepoisDoComentario), e o aviso diz que o
+cartão voltou. Noutra coluna o comentário não move nada, e o do Claude
+também não: a nota dele fica com o cartão já em Human Tests. Os cartões dos
+pedidos ficam de fora das duas regras: não têm a barra, e comentar não os
+move, porque a coluna deles segue o pedido, que se decide nos Pedidos. Num
+cartão por decidir, o exemplo da caixa é o de uma recusa.
+
+As janelas do kanban (as escolhas, os formulários, o ⋯, as colunas) têm o
+cabeçalho, o corpo que rola sozinho e o pé com os botões sempre à vista
+(worker/src/equipa-kanban-janela.js:kbJanela). Abaixo dos 520px são a folha de
+baixo da app: sobem do fundo com a barra no topo e fecham-se a arrastar para
+baixo pelo cabeçalho, ou pelo corpo no topo do scroll, com o véu a aclarar
+(worker/src/equipa-kanban-janela.js:kbFolhaPousar). Nunca arrancam de um
+campo nem do que tem gesto próprio (a pega das colunas, a lista de um
+seletor), que se marca com data-gesto. A folha tem dois tamanhos: a natural,
+a altura do conteúdo, e a alta, os 93dvh do teto, com o corpo a crescer e o
+pé em baixo. Puxada pela barra para cima, a natural cresce colada ao dedo (a
+altura, não um transform) até ao teto, e acima dele resiste; numa alta, para
+baixo encolhe até à natural, e só daí para baixo desce e fecha
+(worker/src/equipa-kanban-janela.js:kbFolhaPosicao). Largada, fica no outro
+tamanho passado um terço do caminho entre os dois (no máximo 160px), ou com
+um sacudir nesse sentido; um sacudir para baixo numa alta leva-a à natural,
+não a fecha (worker/src/equipa-kanban-janela.js:kbFolhaAltaAoLargar). Assenta
+numa transição da altura em --medio, com a --curva-entra; sem movimento, não
+segue o dedo e salta para o tamanho ao largar; assente, a lista de um seletor
+aberta mede-se outra vez para usar o espaço novo
+(worker/src/equipa-kanban-janela.js:kbFolhaVolta). Uma folha cuja natural já
+enche o teto só resiste. Cada janela abre natural, e a que troca de conteúdo
+(o ⋯ para o Editar) volta à natural
+(worker/src/equipa-kanban-janela.js:kbFolhaNatural); com o rato, ou acima dos
+520px, nada disto existe. Com uma janela aberta, a do kanban ou
+a do guião, a página por baixo não rola, nem ao dedo, nem à roda, nem ao
+teclado, e ao fechar fica onde estava: a janela tranca-a como a app tranca a
+dela, com o html.eq-trava e o body preso no sítio
+(worker/src/equipa-guiao.js:travarPagina). O scroll do corpo da janela e o
+arrasto da folha continuam a ser dela.
+
+O que se escreve num cartão, ao criar ou ao editar, fica no aparelho até o
+servidor o aceitar (worker/src/equipa-kanban-filtros.js:kbRascunhoGuardar),
+por pessoa, guardado a cada tecla e a cada escolha, e o quadro mostra-o.
+Cada «Novo cartão» — o do cimo, o + da barra, o «Adicionar cartão» de uma
+coluna e o «Adicionar subtarefa» — começa vazio, com um rascunho seu
+(worker/src/equipa-kanban-filtros.js:kbRascunhoNovoId), e pode haver vários.
+Fechar o formulário com alguma coisa escrita (mudar só a coluna não conta),
+arrastá-lo para baixo, recarregar a página ou fechar a app deixa o cartão no
+quadro, na coluna dele, no topo da lista — onde o servidor o vai pôr —, com
+o tracejado na cor da frente, o selo «Por enviar» (letra e contorno) e a
+frase «Ainda não foi para o servidor.»
+(worker/src/equipa-kanban.js:kbRascunhoCartaoHtml). Não conta no número da
+coluna, que é o dos cartões do quadro, e os filtros não o escondem: é teu e
+está à espera de ti. Não tem pega nem se arrasta (não existe no servidor):
+muda-se de coluna no formulário; o de uma coluna que já não existe fica em A
+fazer. Tocar nele reabre o formulário com o rascunho, com a linha que diz de
+quando é, o Adicionar e «Descartar rascunho»; o ⋯ dele só descarta. O
+Adicionar que o servidor aceita apaga o rascunho, e o cartão real toma-lhe o
+lugar no topo da coluna (worker/src/equipa-kanban-filtros.js:kbGuardarCartao);
+o que falha — o servidor recusa, ou não há rede, e então a janela diz «Sem
+ligação ao servidor. O cartão fica no quadro, por enviar.» — deixa-o. Um
+cartão do servidor com alterações tuas por guardar tem no quadro o selo
+«Alterações por enviar» (worker/src/equipa-kanban.js:kbCartaoHtml); o
+rascunho guarda só o que difere do cartão, e um cartão que outra pessoa mudou
+entretanto mostra o que ela mudou nos campos em que não se mexeu. Aberto, o
+painel tem a linha «Alterações por enviar» com «Continuar a editar» (o
+Editar, com o rascunho) e «Descartar» (worker/src/equipa-kanban.js:kbPainelRascHtml).
+Descartar, de onde for, tira-o do quadro na hora e o aviso traz o Anular
+(worker/src/equipa-kanban-filtros.js:kbRascunhoDescartarDe). Um rascunho
+igual ao que o formulário abre não conta, os que ficam 30 dias sem se mexer
+saem do aparelho, e o rascunho único de antes (sem id) passa ao formato novo
+na primeira leitura (worker/src/equipa-kanban-filtros.js:kbRascunhosTodos).
+Sem armazenamento, o quadro e o formulário funcionam como se não houvesse
+rascunhos.
+
+Os tickets criam o seu cartão sozinhos, e movem-no quando mudam de estado
+(worker/src/lib/kanban.js:passosDaSincronizacao, a regra única que as rotas,
+o scripts/qa.mjs e o scripts/kanban.mjs correm). Um ticket de QA novo é um
+Erro em A fazer, com o texto, a gravidade como prioridade e a etiqueta qa; em
+resolução vai para Auto Tests, resolvido para Human Tests (com a nota como
+comentário) e reaberto volta a A fazer. Um pedido de uma pessoa aceite no
+back office é uma História em A fazer, com as alterações da aceitação; em
+resolução vai para Auto Tests, e com a resposta proposta ou concluído para
+Human Tests. Os erros e os tickets de segurança não criam cartão. Um cartão só
+se move sozinho quando o estado da origem muda, e mover um cartão à mão nunca
+mexe no ticket; um cartão em Concluído só sai de lá sozinho se o ticket
+reabrir. Os cartões dos tickets de QA são a exceção: estão sempre na coluna
+do ticket, nos dois sentidos (a migração 0029), e um comentário num deles,
+no quadro ou na pílula, passa ticket e cartão a Auto Tests, de qualquer
+coluna (worker/src/rotas/kanban.js:comentar); os outros cartões só voltam a
+Auto Tests a partir de Human Tests (acima). Os pedidos da produção vivem noutra base: o scripts/kanban.mjs
+sincronizar lê-os, só com SELECT, e leva-os ao kanban do dev; no cartão, a
+origem diz «Pedido da produção» e liga ao back office da produção. Os ganchos
+correm também na produção, onde não há kanban, e aí não fazem nada; uma falha
+deles nunca faz falhar a ação do ticket.
+
+A descrição de um cartão de um pedido é o texto que a pessoa escreveu, e só a
+vê quem vê os pedidos (worker/src/rotas/kanban.js:vePedidos — hoje, o suporte e
+o master): aos outros, o cartão diz que o texto só se mostra a quem vê os
+pedidos, a pesquisa não o procura, o histórico não o mostra e a descrição não
+se muda. O título — o assunto — e os comentários são de todos.
+
+O detalhe de um pedido com cartão leva a ele, «Cartão KAN-N»
+(worker/src/equipa-guiao.js:detalhePedido). O Claude lê e escreve o kanban com
+o scripts/kanban.mjs — listar, ver, criar, editar, mover, comentar, ligar,
+importar-jira e sincronizar, e os da fila de trabalho: fila, anexo, comecar,
+resolver e reabrir —, no dev e na base isolada do 8788, e nunca escreve na
+produção; cada escrita deixa a linha no histórico do cartão e no rasto da
+equipa. A fila são os cartões de A fazer e de Auto Tests, por coluna e, em
+cada uma, pela prioridade, cada um por extenso, com os bloqueios à cabeça, o
+comando que busca os anexos e os comentários por responder (os de pessoas
+depois do último do Claude). Os cartões que vêm de um ticket de QA ou de um
+pedido tratam-se pelo scripts/qa.mjs e pelo scripts/ticket.mjs: a fila diz o
+comando, e o comecar, o resolver e o reabrir recusam-nos com ele. O resolver
+só leva a Human Tests um cartão de A fazer ou de Auto Tests, com o commit já
+publicado no dev (scripts/ticket.mjs:publicadoDev), e deixa a nota e o que
+testar como comentários do Claude.
 
 ## O rasto das pessoas
 Com o sim de quem usa, a app e a montra guardam onde se toca, e nunca o quê,
@@ -6860,7 +7422,11 @@ setas, o Home e o End andam pelas opções, e o Escape com a lista aberta fecha
 só a lista e devolve o foco ao botão (componentes.js:selTecla). Escolher
 redesenha as opções pela mesma função do sel() (componentes.js:selOpcaoDesenho):
 o on, o aria-selected e o visto ficam só na escolhida, nos mesmos botões, e o
-foco fica onde estava (componentes.js:selPick). Escolher uma opção não tem
+foco fica onde estava (componentes.js:selPick). O nome de uma escolha nunca
+se corta: na lista as opções partem em mais linhas (estilos.css:.selopt), e
+num formulário o botão mostra o nome inteiro em até duas linhas
+(estilos.css:.form .selbtn span); os filtros e os chips do topo ficam numa
+linha (testes/sel-nome-inteiro.test.js). Escolher uma opção não tem
 ação por omissão: o selPick trava a propagação e o default. Quase todos os
 sel() vivem dentro de um <label>, e o label passa ao botão do sel() o clique
 que não vem de um botão de dentro; num Chromium de antes de 2026 (o Samsung
@@ -6885,7 +7451,7 @@ Alturas em unidades de ecrã escrevem-se em vh e logo a seguir em dvh
 barras do browser à mostra, vh é maior do que o que se vê e o topo da
 folha saía por cima. A área segura entra por --inset-* (estilos.css::root,
 estilos.css:.brand, estilos.css:header.top, estilos.css:.wrap,
-estilos.css:.fab, estilos.css:.tabbar; tema.js:fitInsets). O que rola
+estilos.css:.totop, estilos.css:.tabbar; tema.js:fitInsets). O que rola
 por cima da página, ou a cobre, contém o fim: chegar ao fim e continuar não
 rola o que está por trás. Levam overscroll-behavior:contain a lista de um
 sel() e o menu ⋯ (estilos.css:.selpop, estilos.css:.menupop, que rola
@@ -6956,7 +7522,7 @@ testes/estilos.test.js).
 Não se declara color-scheme só «light» (index.html:<meta name="color-scheme">).
 
 Não se escreve um hex fora do :root e da PAL sem um comentário a dizer
-porquê (as cores do mosaico das capas, estilos.css:.imv-t1, são o exemplo
+porquê (as cores do mosaico, estilos.css:.mosaico-t1, são o exemplo
 com licença).
 
 Não se pinta de vermelho o que não destrói: recusar um planeado desta vez

@@ -128,7 +128,7 @@ describe('autonomia: os inquilinos, os proprietários e os colaboradores rendem 
     assert.ok(app.servicoLigado('properties'), 'o fecho dos requer');
     for (const id of ['tenants', 'owners', 'contracts', 'transactions']) assert.ok(!app.servicoLigado(id), id + ' desligado');
     assert.equal(typeof app.vistaDoSeparador('colaboradores'), 'function');
-    assert.equal(app.vColaboradores, undefined, 'a nuvem não está carregada');
+    assert.equal(app.paginaDosColaboradores, undefined, 'a nuvem não está carregada');
     limpar(app);
     const vazio = app.vColabTab();
     assert.ok(vazio.length > 0);
@@ -303,11 +303,11 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     const { app, esp, chamadas } = montarNuvem();
     app.definirServicosDesligados(['colaboradores']);
     assert.ok(app.servicoLigado('properties') && app.servicoLigado('tenants') && app.servicoLigado('owners'), 'os outros ficam');
-    for (const f of ['ligacaoCard', 'pedidosCard', 'cargosCard', 'convidarCard', 'colaboradoresCard', 'colaboroCard']) {
+    for (const f of ['ligacaoCard', 'pedidosCard', 'cargosTabelaCard', 'quemColaboraCard', 'colaboroCartao']) {
       assert.equal(app[f](), '', f + ' devolve vazio');
     }
     igual(app.pedidosRecebidos(), [], 'o sino não conta pedidos');
-    const vc = app.vColaboradores();
+    const vc = app.paginaDosColaboradores();
     assert.match(vc, /Colaboradores está desligado nesta conta/);
     assert.ok(!/CW\.cargoModal|Convidar colaborador|Maria|CW\.sairDeImovel/.test(vc), 'a vista não traz os cartões');
     assert.match(app.vColabTab(), /desligado nesta conta/, 'o separador passa a mesma página');
@@ -358,12 +358,12 @@ describe('desligado: com os outros desligados, as pessoas rendem sem os atalhos'
     assert.ok(ultimo(esp.modais).corpo.includes("ctModal(null,null,'t1')"), 'e o «Novo contrato» já com a pessoa');
     app.lpMenu('per:tenant:t1');
     assert.ok(ultimo(esp.folhas).labels.includes('Novo contrato'), ultimo(esp.folhas).labels.join(' | '));
-    for (const [f, t] of [['ligacaoCard', 'CW.ligacaoRodar()'], ['pedidosCard', 'Ana quer partilhar T1 Braga contigo'], ['cargosCard', 'Gestor de visitas'],
-      ['convidarCard', 'Convidar colaborador'], ['colaboradoresCard', 'Maria'], ['colaboroCard', "CW.sairDeImovel('C9')"]]) {
+    for (const [f, t] of [['ligacaoCard', 'CW.ligacaoRodar()'], ['pedidosCard', 'Ana quer partilhar T1 Braga contigo'], ['cargosTabelaCard', 'Gestor de visitas'],
+      ['convitesCard', "CW.revogarConvite('i1')"], ['quemColaboraCard', 'Maria'], ['colaboroCartao', "CW.sairDeImovel('C9')"]]) {
       assert.ok(app[f]().includes(t), f + ' traz ' + t);
     }
     assert.equal(app.pedidosRecebidos().length, 1);
-    assert.match(app.vColaboradores(), /Convidar colaborador/);
+    assert.match(app.paginaDosColaboradores(), /CW\.conviteModal\(\)">[\s\S]*? Convidar colaborador/);
     app.tab = 'tenants';
     assert.match(app.abasDaArea(), /go\('colaboradores'\)">Colaboradores <span class="n">1<\/span>/, 'ligado e com sessão, os Colaboradores são o terceiro das Pessoas');
     const conta = app.vCloud();
