@@ -16,6 +16,13 @@
 //   node scripts/kanban.mjs importar-jira <ficheiro.json> [--local]
 //   node scripts/kanban.mjs sincronizar [--local]
 //
+// A fila de trabalho (a forma do scripts/qa.mjs, para os cartões todos):
+//   node scripts/kanban.mjs fila [--json] [--local]
+//   node scripts/kanban.mjs anexo <KAN-N> [<id-do-anexo>] [--para <pasta>] [--local]
+//   node scripts/kanban.mjs comecar <KAN-N> [<KAN-N>…] [--local]
+//   node scripts/kanban.mjs resolver <KAN-N> --nota "…" (--commit <sha> | --sem-commit) [--testar "…"] [--local]
+//   node scripts/kanban.mjs reabrir <KAN-N> [--local]
+//
 // listar mostra o quadro por coluna (chave, tipo, prioridade, etiquetas e
 // título de cada cartão), sem as colunas de fim (Concluído) a não ser com
 // --todos ou --coluna; --json dá as colunas e os cartões na forma da rota
@@ -24,10 +31,34 @@
 // escreve a chave nova (o número a seguir ao maior, como as rotas), no topo da
 // coluna; editar muda só o que se der («nenhum» remove o pai ou o prazo, e
 // --etiquetas "" remove as etiquetas); mover leva o cartão para o topo da
-// coluna (o id ou o nome dela) e nunca mexe no ticket de onde veio; comentar e
-// ligar acrescentam. Cada escrita deixa as linhas certas no histórico do
-// cartão (kanban_historico) e uma no audit_log, assinadas pelo Claude
-// ({id: 'claude', nome: 'Claude'}).
+// coluna (o id ou o nome dela): o pedido de onde um cartão veio não se mexe,
+// mas o ticket de QA vai com o cartão (o gatilho kanban_qa_coluna, da
+// migração 0029); comentar e ligar acrescentam. Cada escrita deixa as linhas
+// certas no histórico do cartão (kanban_historico) e uma no audit_log,
+// assinadas pelo Claude ({id: 'claude', nome: 'Claude'}).
+//
+// fila é o trabalho por fazer: os cartões não removidos em A fazer e em Auto
+// Tests, uma secção por coluna pela ordem do quadro e, em cada uma, pela
+// prioridade (Mais alta primeiro) e pela posição; cada cartão por extenso,
+// como o ver (sem o histórico), com os bloqueios à cabeça, o comando que
+// busca os anexos e os comentários todos, com os por responder (os de
+// pessoas depois do último do Claude, qa.mjs:porResponder) contados e
+// marcados. Lê tudo numa só chamada ao wrangler, sejam quantos forem os
+// cartões. Um cartão com origem trata-se pelo script dela, e a fila diz o
+// comando: o ticket de QA pelo scripts/qa.mjs (a skill qa), o pedido pelo
+// scripts/ticket.mjs (a skill ticket; um pedido que não está na base do dev
+// é da produção, --prod). anexo descarrega as imagens de um cartão do R2
+// (kanban/<cartao>/<anexo>, as rotas) para os.tmpdir()/rendorium-kanban (ou
+// --para), com a extensão do tipo verdadeiro. comecar leva os cartões a Auto
+// Tests, no topo; confere-os todos antes de escrever e recusa sem mexer em
+// nenhum se um não existe, foi removido, está em Human Tests ou numa coluna
+// de fim (reabre-se primeiro) ou tem origem. resolver leva um cartão sem
+// origem de A fazer ou de Auto Tests a Human Tests, numa só escrita, com a
+// nota como comentário do Claude (e «Commit: <sha curto>» por baixo) e, com
+// --testar, o comentário «O que testar: …»; com --commit, e fora da base
+// isolada, só se o commit estiver publicado no dev (ticket.mjs:publicadoDev:
+// no origin/dev e com o CI verde). reabrir devolve um cartão sem origem ao
+// topo de A fazer, de qualquer coluna.
 // importar-jira lê a exportação do board KAN ({issues: {nodes: [{key,
 // fields}]}}) e cria os cartões com as mesmas chaves, as colunas pelos
 // estados, os tipos, as prioridades, as etiquetas, o pai, o prazo, a
@@ -59,7 +90,7 @@
 // wrangler é escrita no stderr antes de correr.
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
@@ -68,7 +99,10 @@ import {
   chaveDe, numeroDaChave, estadoDoPedido, cartaoDoPedido, passosDaSincronizacao, sqlEmTexto,
   TIPOS, NOMES_DOS_TIPOS, PRIORIDADES, NOMES_DAS_PRIORIDADES,
 } from '../worker/src/lib/kanban.js';
-import { configDoAlvo, comRepeticao, erroDoWrangler as erroDoWranglerTicket, lerJsonDoWrangler, ErroTicket } from './ticket.mjs';
+import {
+  configDoAlvo, comRepeticao, erroDoWrangler as erroDoWranglerTicket, lerJsonDoWrangler, ErroTicket, publicadoDev,
+} from './ticket.mjs';
+import { porResponder, comentariosPorExtenso, tipoDaImagem } from './qa.mjs';
 
 // O worker/src não tem um package.json com "type": "module", e o Node avisa no
 // stderr, a cada corrida, que leu a lib/kanban.js como ES module: cala-se esse
@@ -82,12 +116,18 @@ const WRANGLER = path.join(RAIZ, 'node_modules', 'wrangler', 'bin', 'wrangler.js
 const PERSIST = path.join(RAIZ, '.wrangler', 'state-revisao');
 const PASTA_TEMP = path.join(os.tmpdir(), 'rendorium-kanban');
 
-export const COMANDOS = ['listar', 'ver', 'criar', 'editar', 'mover', 'comentar', 'ligar', 'importar-jira', 'sincronizar'];
+export const COMANDOS = ['listar', 'ver', 'criar', 'editar', 'mover', 'comentar', 'ligar', 'importar-jira', 'sincronizar',
+  'fila', 'anexo', 'comecar', 'resolver', 'reabrir'];
 // os dois sítios onde o script lê e escreve, e só estes
 export const ALVOS = {
   remoto: { nome: 'dev', local: false, base: 'gestor-imobiliario-dev' },
   local: { nome: 'local', local: true, base: 'gestor-imobiliario' },
 };
+// o bucket do R2 de cada um (o FILES do wrangler.toml: o env.dev e o do topo), onde vivem os anexos
+const BUCKETS = { dev: 'gestor-imobiliario-dev', local: 'gestor-imobiliario' };
+// a fila de trabalho: as colunas que o fila mostra, pela ordem do quadro
+export const FILA = ['a-fazer', 'auto-tests'];
+const A_FAZER = 'a-fazer', AUTO_TESTS = 'auto-tests', HUMAN_TESTS = 'human-tests';
 // a produção, só para o sincronizar LER os pedidos aceites (nunca para escrever)
 export const PRODUCAO = { nome: 'prod', local: false, base: 'gestor-imobiliario' };
 // quem assina o que o script escreve, e os comentários que vêm do Jira
@@ -101,6 +141,7 @@ const TETO_DESCRICAO = 20000;
 const TETO_COMENTARIO = 8000;        // o mesmo da rota dos comentários
 const TETO_TEXTO_JIRA = 50000;       // uma instrução da D1 não passa dos 100 KB
 const TETO_ETIQUETAS = 20;
+const TETO_NOTA = 4000;              // a nota e o «o que testar» do resolver (os do qa.mjs)
 const TIPOS_DE_LIGACAO = ['bloqueia', 'bloqueado', 'relaciona'];
 
 // os estados do board KAN e a coluna de cada um (o nome sem caixa nem acentos)
@@ -119,6 +160,11 @@ export const USO = [
   '  node scripts/kanban.mjs ligar <KAN-N> bloqueia|bloqueado|relaciona <KAN-M> [--local]',
   '  node scripts/kanban.mjs importar-jira <ficheiro.json> [--local]',
   '  node scripts/kanban.mjs sincronizar [--local]',
+  '  node scripts/kanban.mjs fila [--json] [--local]',
+  '  node scripts/kanban.mjs anexo <KAN-N> [<id-do-anexo>] [--para <pasta>] [--local]',
+  '  node scripts/kanban.mjs comecar <KAN-N> [<KAN-N>…] [--local]',
+  '  node scripts/kanban.mjs resolver <KAN-N> --nota "…" (--commit <sha> | --sem-commit) [--testar "…"] [--local]',
+  '  node scripts/kanban.mjs reabrir <KAN-N> [--local]',
   '',
   'Tipos: ' + TIPOS.join(', ') + '. Prioridades: 1 (Mais alta) a 5 (Mais baixa), 3 é a Média.',
   'Sem --local é o kanban do dev na Cloudflare (gestor-imobiliario-dev); com --local, a base isolada do 8788 (.wrangler/state-revisao).',
@@ -309,11 +355,48 @@ export function confereEtiquetas(texto) {
   return lista;
 }
 
+/* Um sha de commit (7 a 40 algarismos hexadecimais), em minúsculas.
+   Recebe: sha — o texto do --commit.
+   Devolve: o sha aparado em minúsculas; lança ErroKanban (código 2) se não o for. */
+export function confereCommit(sha) {
+  const t = String(sha == null ? '' : sha).trim().toLowerCase();
+  if (!/^[0-9a-f]{7,40}$/.test(t)) throw new ErroKanban('O --commit «' + t + '» não é um sha (7 a 40 algarismos hexadecimais; git log --oneline mostra-o).', 2);
+  return t;
+}
+
+/* Um texto obrigatório do resolver (a --nota, o --testar): aparado, não vazio
+   e até 4000 caracteres, como no scripts/qa.mjs.
+   Recebe: texto — o que veio; opcao — o nome da opção, para a mensagem.
+   Devolve: o texto aparado; lança ErroKanban (código 2) se vier vazio ou comprido. */
+export function confereNota(texto, opcao) {
+  const t = limpo(texto).trim();
+  if (!t) throw new ErroKanban('O ' + opcao + ' não pode ficar vazio.', 2);
+  if (t.length > TETO_NOTA) throw new ErroKanban('O ' + opcao + ' passa dos ' + TETO_NOTA + ' caracteres.', 2);
+  return t;
+}
+
+/* O id de um anexo (o uuid que a rota lhe dá, como o ver e a fila o mostram),
+   antes de chegar ao SQL.
+   Recebe: texto — o que veio.
+   Devolve: o id aparado; lança ErroKanban (código 2) se não tiver a forma. */
+export function confereIdDoAnexo(texto) {
+  const t = String(texto == null ? '' : texto).trim();
+  if (!/^[A-Za-z0-9_-]{1,100}$/.test(t)) throw new ErroKanban('«' + t + '» não é um id de anexo (letras, algarismos e hífenes, como a fila o mostra).', 2);
+  return t;
+}
+
 /* ------------------------- argumentos ----------------------------------- */
 
 const CAMPOS = ['--titulo', '--descricao', '--tipo', '--etiquetas', '--prioridade', '--pai', '--prazo'];
-// as opções de cada comando (as que levam valor e as que são só um sinal) e quantos valores soltos leva
+// as opções de cada comando (as que levam valor e as que são só um sinal), os
+// valores soltos que pede, os que pode levar a mais (opcionais) e se aceita
+// vários do último (varios: as chaves do comecar)
 const OPCOES = {
+  fila: { sinais: ['--local', '--json'], valores: [], soltos: [] },
+  anexo: { sinais: ['--local'], valores: ['--para'], soltos: ['a chave do cartão'], opcionais: ['o id do anexo'] },
+  comecar: { sinais: ['--local'], valores: [], soltos: ['a chave do cartão'], varios: true },
+  resolver: { sinais: ['--local', '--sem-commit'], valores: ['--nota', '--commit', '--testar'], soltos: ['a chave do cartão'] },
+  reabrir: { sinais: ['--local'], valores: [], soltos: ['a chave do cartão'] },
   listar: { sinais: ['--local', '--todos', '--json'], valores: ['--coluna', '--etiqueta'], soltos: [] },
   ver: { sinais: ['--local', '--json'], valores: [], soltos: ['a chave do cartão'] },
   criar: { sinais: ['--local'], valores: CAMPOS.concat(['--coluna']), soltos: [] },
@@ -340,20 +423,21 @@ function confereColunaDada(texto) {
    «--titulo=texto». Recusa o que não conhece em vez de o ignorar: uma opção
    mal escrita (--loca) ia ao dev em vez da base local.
    Recebe: argv — os argumentos depois do script (array de texto).
-   Devolve: { comando, local, todos, json, numero, outro, coluna, etiqueta,
-   ligacao, ficheiro, texto, campos } — campos tem só os campos dados (no
-   criar, com os valores de omissão); lança ErroKanban (código 2) com a razão
-   e o uso. */
+   Devolve: { comando, local, todos, json, numero, numeros, outro, coluna,
+   etiqueta, ligacao, ficheiro, texto, campos, anexo, para, nota, commit,
+   semCommit, testar } — campos tem só os campos dados (no criar, com os
+   valores de omissão); numeros só no comecar (as chaves, sem repetidas);
+   lança ErroKanban (código 2) com a razão e o uso. */
 export function lerArgumentos(argv) {
   const lista = Array.isArray(argv) ? argv.slice() : [];
   const comando = lista.shift();
   const falha = (porque) => { throw new ErroKanban(porque + '\n\n' + USO, 2); };
   if (!comando) falha('Falta o comando.');
   if (!COMANDOS.includes(comando)) falha('Não conheço o comando «' + comando + '».');
-  const { sinais, valores, soltos: pedidos } = OPCOES[comando];
+  const { sinais, valores, soltos: pedidos, opcionais = [], varios = false } = OPCOES[comando];
   const r = {
-    comando, local: false, todos: false, json: false, numero: null, outro: null, coluna: null, etiqueta: null,
-    ligacao: null, ficheiro: null, texto: null, campos: {},
+    comando, local: false, todos: false, json: false, numero: null, numeros: null, outro: null, coluna: null, etiqueta: null,
+    ligacao: null, ficheiro: null, texto: null, campos: {}, anexo: null, para: null, nota: null, commit: null, semCommit: false, testar: null,
   };
   const dados = {};
   const soltos = [];
@@ -364,7 +448,7 @@ export function lerArgumentos(argv) {
     const nome = igual > 0 ? a.slice(0, igual) : a;
     if (sinais.includes(nome)) {
       if (igual > 0) falha('A opção ' + nome + ' não leva valor.');
-      r[nome.slice(2)] = true;
+      r[nome === '--sem-commit' ? 'semCommit' : nome.slice(2)] = true;
     } else if (valores.includes(nome)) {
       let v;
       if (igual > 0) v = a.slice(igual + 1);
@@ -377,10 +461,27 @@ export function lerArgumentos(argv) {
     } else falha('O comando ' + comando + ' não aceita a opção ' + nome + '.');
   }
   if (soltos.length < pedidos.length) falha('Falta ' + pedidos[soltos.length] + '.');
-  if (soltos.length > pedidos.length) falha('Não sei o que fazer com «' + soltos.slice(pedidos.length).join(' ') + '».');
+  const cabem = pedidos.length + opcionais.length;
+  if (!varios && soltos.length > cabem) falha('Não sei o que fazer com «' + soltos.slice(cabem).join(' ') + '».');
   const tem = (k) => Object.prototype.hasOwnProperty.call(dados, k);
 
-  if (['ver', 'editar', 'mover', 'comentar', 'ligar'].includes(comando)) r.numero = confereChave(soltos[0]);
+  if (['ver', 'editar', 'mover', 'comentar', 'ligar', 'anexo', 'comecar', 'resolver', 'reabrir'].includes(comando)) r.numero = confereChave(soltos[0]);
+  if (comando === 'comecar') r.numeros = soltos.map(confereChave).filter((n, i, todos) => todos.indexOf(n) === i);
+  if (comando === 'anexo') {
+    if (soltos.length > 1) r.anexo = confereIdDoAnexo(soltos[1]);
+    if (tem('--para')) {
+      r.para = dados['--para'].trim();
+      if (!r.para) falha('O --para precisa de uma pasta.');
+    }
+  }
+  if (comando === 'resolver') {
+    if (!tem('--nota')) falha('O resolver precisa de --nota com o que se fez (fica como comentário do Claude no cartão).');
+    r.nota = confereNota(dados['--nota'], '--nota');
+    if (tem('--commit') && r.semCommit) falha('Ou --commit ou --sem-commit, não os dois.');
+    if (!tem('--commit') && !r.semCommit) falha('O resolver precisa de --commit <sha> (a mudança, publicada no dev) ou de --sem-commit (não houve código a mudar).');
+    if (tem('--commit')) r.commit = confereCommit(dados['--commit']);
+    if (tem('--testar')) r.testar = confereNota(dados['--testar'], '--testar');
+  }
   if (comando === 'mover') r.coluna = confereColunaDada(soltos[1]);
   if (comando === 'ligar') {
     const tipo = normal(soltos[1]);
@@ -585,6 +686,74 @@ export function sqlArvore() {
   return 'SELECT id, numero, tipo, titulo, pai_id, removed_at FROM kanban_cartoes';
 }
 
+// os cartões da fila (não removidos, nas colunas de FILA), para as subconsultas
+const IDS_DA_FILA = 'SELECT id FROM kanban_cartoes WHERE removed_at IS NULL AND coluna_id IN (' + FILA.map(() => '?').join(', ') + ')';
+
+/* A origem dos cartões dados (o ticket de QA ou o pedido, se estiver nesta
+   base): o tipo, o id, o estado e o resumo (o texto do ticket, o assunto do
+   pedido), com o número do cartão.
+   Recebe: onde — a condição sobre os cartões c (texto com ?); params — os valores dela.
+   Devolve: a instrução (texto). */
+function sqlOrigens(onde, params) {
+  return instrucao("SELECT c.numero, 'qa' AS tipo, q.id, q.status AS estado, q.body AS resumo FROM qa_tickets q"
+    + " JOIN kanban_cartoes c ON c.origem_tipo = 'qa' AND c.origem_id = q.id WHERE " + onde
+    + " UNION ALL SELECT c.numero, 'pedido', t.id, t.status, t.subject FROM tickets t"
+    + " JOIN kanban_cartoes c ON c.origem_tipo = 'pedido' AND c.origem_id = t.id WHERE " + onde, params.concat(params));
+}
+
+/* A fila numa só chamada, sejam quantos forem os cartões: as colunas, os
+   cartões não removidos de A fazer e de Auto Tests (por extenso, pela coluna,
+   pela prioridade e pela posição), as subtarefas deles, os comentários, as
+   ligações dos dois lados (com a coluna do outro cartão), os anexos e as
+   origens.
+   Recebe: nada.
+   Devolve: as sete instruções (array de texto). */
+export function sqlFila() {
+  const naFila = 'c.removed_at IS NULL AND c.coluna_id IN (' + FILA.map(() => '?').join(', ') + ')';
+  return [
+    sqlColunas(),
+    instrucao('SELECT ' + CURTO + ', c.descricao, c.relator_id, c.relator_nome' + DE_CARTOES + ' WHERE ' + naFila
+      + ' ORDER BY COALESCE(k.ordem, 999999), c.prioridade, c.posicao, c.numero', FILA),
+    instrucao('SELECT ' + CURTO + DE_CARTOES + ' WHERE c.removed_at IS NULL AND c.pai_id IN (' + IDS_DA_FILA + ')' + ORDEM_DO_QUADRO, FILA),
+    instrucao('SELECT x.numero AS cartao, m.id, m.autor_id, m.autor_nome, m.texto, m.created_at, m.updated_at'
+      + ' FROM kanban_comentarios m JOIN kanban_cartoes x ON x.id = m.cartao_id'
+      + ' WHERE m.removed_at IS NULL AND m.cartao_id IN (' + IDS_DA_FILA + ') ORDER BY m.created_at, m.id', FILA),
+    instrucao("SELECT x.numero AS cartao, l.id, CASE WHEN l.tipo = 'relaciona' THEN 'relaciona' WHEN l.de_id = x.id THEN 'bloqueia' ELSE 'bloqueado' END AS tipo,"
+      + ' o.numero, o.titulo, o.tipo AS cartao_tipo, o.coluna_id, o.removed_at'
+      + ' FROM kanban_ligacoes l JOIN (SELECT id, numero FROM kanban_cartoes WHERE id IN (' + IDS_DA_FILA + ')) x ON l.de_id = x.id OR l.para_id = x.id'
+      + ' JOIN kanban_cartoes o ON o.id = CASE WHEN l.de_id = x.id THEN l.para_id ELSE l.de_id END'
+      + ' ORDER BY l.created_at, l.id', FILA),
+    instrucao('SELECT x.numero AS cartao, a.id, a.nome, a.tipo, a.tamanho, a.autor_id, a.autor_nome, a.created_at'
+      + ' FROM kanban_anexos a JOIN kanban_cartoes x ON x.id = a.cartao_id WHERE a.cartao_id IN (' + IDS_DA_FILA + ') ORDER BY a.created_at, a.id', FILA),
+    sqlOrigens(naFila, FILA),
+  ];
+}
+
+/* Os cartões dados, para os conferir antes de lhes mexer (o comecar, o
+   resolver, o reabrir): a forma curta e a descrição de cada um (também os
+   removidos), as colunas e as origens deles.
+   Recebe: numeros — os N (array de inteiros).
+   Devolve: as três instruções (array de texto). */
+export function sqlConferir(numeros) {
+  const lugares = numeros.map(() => '?').join(', ');
+  return [
+    instrucao('SELECT ' + CURTO + ', c.descricao' + DE_CARTOES + ' WHERE c.numero IN (' + lugares + ') ORDER BY c.numero', numeros),
+    sqlColunas(),
+    sqlOrigens('c.numero IN (' + lugares + ')', numeros),
+  ];
+}
+
+/* Os anexos de um cartão, com a chave do R2, e o próprio cartão (para dizer
+   se não existe).
+   Recebe: numero — o N.
+   Devolve: as duas instruções (array de texto). */
+export function sqlAnexos(numero) {
+  return [
+    instrucao('SELECT id, numero, removed_at FROM kanban_cartoes WHERE numero = ?', [numero]),
+    instrucao('SELECT a.id, a.chave, a.nome, a.tipo, a.tamanho FROM kanban_anexos a WHERE a.cartao_id = ' + ID_DO_NUMERO + ' ORDER BY a.created_at, a.id', [numero]),
+  ];
+}
+
 /* A linha do audit_log de uma escrita do script (quem 'claude', papel
    'script'), como as rotas da equipa deixam; com condicao, só se ela se
    cumprir (um INSERT … SELECT … WHERE).
@@ -664,11 +833,15 @@ export function sqlEditar(cartao, mudancas, paiId, agora, autor = CLAUDE) {
 /* O mover: para o topo da coluna (a posição a 1024 acima do primeiro que lá
    está). Mudar de coluna deixa a linha «coluna» no histórico e acerta o
    concluido_at (posto ao chegar a uma coluna de fim, tirado ao sair); subir
-   na mesma coluna não deixa linha. Nunca mexe no ticket de onde o cartão veio.
+   na mesma coluna não deixa linha. O pedido de onde um cartão veio não se
+   mexe; o ticket de QA sim: o gatilho kanban_qa_coluna (a migração 0029) leva-o
+   para a coluna do cartão, na mesma escrita.
    Recebe: cartao — o cartão como está (id, chave, coluna_id); coluna — a
-   coluna de destino ({id, fim}); agora — ms; autor — {id, nome}.
+   coluna de destino ({id, fim}); agora — ms; autor — {id, nome}; acao
+   (opcional) — a ação do rasto ('kanban.mover' por omissão; o comecar, o
+   resolver e o reabrir dizem a sua).
    Devolve: as instruções (array de texto). */
-export function sqlMover(cartao, coluna, agora, autor = CLAUDE) {
+export function sqlMover(cartao, coluna, agora, autor = CLAUDE, acao = 'kanban.mover') {
   const muda = cartao.coluna_id !== coluna.id;
   const out = [];
   if (muda) out.push(sqlHistorico(cartao.id, agora, autor, 'coluna', cartao.coluna_id, coluna.id));
@@ -676,8 +849,35 @@ export function sqlMover(cartao, coluna, agora, autor = CLAUDE) {
     + ' posicao = (SELECT COALESCE(MIN(k.posicao), 1024) - 1024 FROM kanban_cartoes k WHERE k.coluna_id = ? AND k.removed_at IS NULL AND k.id <> ?),'
     + ' concluido_at = ' + (coluna.fim ? (muda ? '?' : 'COALESCE(concluido_at, ?)') : 'NULL') + ', updated_at = ? WHERE id = ?',
   [coluna.id, coluna.id, cartao.id].concat(coluna.fim ? [agora] : [], [agora, cartao.id])));
-  out.push(sqlAuditoria('kanban.mover', cartao.chave, muda ? cartao.coluna_id + ' → ' + coluna.id : 'topo de ' + coluna.id, agora));
+  out.push(sqlAuditoria(acao, cartao.chave, muda ? cartao.coluna_id + ' → ' + coluna.id : 'topo de ' + coluna.id, agora));
   return out;
+}
+
+/* O resolver numa escrita: o comentário do Claude com a nota (e, com commit,
+   a linha «Commit: <sha curto>» por baixo, como o qa.mjs:notaDaResolucao), o
+   comentário «O que testar: …» quando o há (um instante depois, para ficar por
+   baixo), e o cartão para o topo de Human Tests, com a linha «coluna» no
+   histórico e uma só linha no rasto ('kanban.resolver').
+   Recebe: cartao — o cartão (id, chave, coluna_id); coluna — Human Tests
+   ({id, fim}); nota — o texto (já com o commit, notaDoResolver); testar — o
+   que testar (ou null); agora — ms; uuids — [o id do comentário da nota, o do
+   «o que testar»].
+   Devolve: as instruções (array de texto). */
+export function sqlResolver(cartao, coluna, nota, testar, agora, uuids) {
+  const comentario = (uuid, texto, quando) => instrucao('INSERT INTO kanban_comentarios (id, cartao_id, autor_id, autor_nome, texto, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [uuid, cartao.id, CLAUDE.id, CLAUDE.nome, texto, quando, quando]);
+  const out = [comentario(uuids[0], nota, agora)];
+  if (testar) out.push(comentario(uuids[1], 'O que testar: ' + testar, agora + 1));
+  return out.concat(sqlMover(cartao, coluna, agora + 1, CLAUDE, 'kanban.resolver'));
+}
+
+/* A nota do resolver como fica no comentário: o texto e, com commit, a linha
+   «Commit: <sha curto>» (os 7 primeiros algarismos) por baixo.
+   Recebe: nota — o que se fez; commit (opcional) — o sha.
+   Devolve: o texto do comentário. */
+export function notaDoResolver(nota, commit) {
+  const n = String(nota || '').trim();
+  return commit ? n + '\n\nCommit: ' + String(commit).slice(0, 7) : n;
 }
 
 /* O comentar: o comentário, assinado pelo autor, e o updated_at do cartão.
@@ -835,38 +1035,145 @@ export function textoDoHistorico(h, nomeDaColuna) {
 export function detalheDasLinhas(linhas) {
   const [cs, subs, coms, hist, ligs, anexos, origens, colunas] = linhas;
   if (!cs || !cs[0]) return null;
-  const l = cs[0];
-  const pessoa = (id, nome) => ({ id, nome: nome || '' });
-  const o = origens && origens[0];
+  return detalheDoCartao(cs[0], {
+    subtarefas: subs, comentarios: coms, historico: hist, ligacoes: ligs, anexos, origem: origens && origens[0], colunas: (colunas || []).map(colunaDaLinha),
+  });
+}
+
+/* Uma pessoa (autor, relator) na forma das rotas.
+   Recebe: id; nome — o nome (ou nada).
+   Devolve: { id, nome }. */
+function pessoa(id, nome) {
+  return { id, nome: nome || '' };
+}
+
+/* Um cartão por extenso, na forma do GET /api/equipa/kanban/cartoes/:chave,
+   a partir da linha dele e das linhas que lhe pertencem (o ver lê-as para um
+   cartão, a fila para todos de uma vez).
+   Recebe: l — a linha do cartão (CURTO, com descricao, relator_id e
+   relator_nome); partes — { subtarefas, comentarios, historico, ligacoes,
+   anexos (as linhas de cada coisa, ou nada), origem (a linha da origem nesta
+   base, ou nada), colunas (já colunaDaLinha) }.
+   Devolve: { cartao, subtarefas, comentarios, historico, ligacoes, anexos,
+   origem, colunas } — origem com naBase (se o ticket está nesta base). */
+function detalheDoCartao(l, partes) {
+  const o = partes.origem;
   return {
     cartao: Object.assign(cartaoDaLinha(l), {
       descricao: l.descricao || '', relator: pessoa(l.relator_id, l.relator_nome), removed_by: l.removed_by == null ? null : l.removed_by,
     }),
-    subtarefas: (subs || []).map(cartaoDaLinha),
-    comentarios: (coms || []).map((m) => ({ id: m.id, autor: pessoa(m.autor_id, m.autor_nome), texto: m.texto, created_at: m.created_at, updated_at: m.updated_at })),
-    historico: (hist || []).map((h) => ({ at: h.at, autor: pessoa(h.autor_id, h.autor_nome), campo: h.campo, antes: h.antes, depois: h.depois })),
-    ligacoes: (ligs || []).map((g) => ({
+    subtarefas: (partes.subtarefas || []).map(cartaoDaLinha),
+    comentarios: (partes.comentarios || []).map((m) => ({ id: m.id, autor: pessoa(m.autor_id, m.autor_nome), texto: m.texto, created_at: m.created_at, updated_at: m.updated_at })),
+    historico: (partes.historico || []).map((h) => ({ at: h.at, autor: pessoa(h.autor_id, h.autor_nome), campo: h.campo, antes: h.antes, depois: h.depois })),
+    ligacoes: (partes.ligacoes || []).map((g) => ({
       id: g.id, tipo: g.tipo, cartao: { chave: chaveDe(g.numero), titulo: g.titulo, tipo: g.cartao_tipo, coluna_id: g.coluna_id, removido: g.removed_at != null },
     })),
-    anexos: (anexos || []).map((a) => ({
+    anexos: (partes.anexos || []).map((a) => ({
       id: a.id, nome: a.nome, tipo: a.tipo, tamanho: Number(a.tamanho) || 0, url: '/api/equipa/kanban/anexos/' + a.id, autor: pessoa(a.autor_id, a.autor_nome), created_at: a.created_at,
     })),
     origem: l.origem_tipo ? {
       tipo: l.origem_tipo, id: l.origem_id, estado: l.origem_estado == null ? null : l.origem_estado,
-      resumo: o && o.resumo != null ? String(o.resumo).slice(0, 600) : null, estado_do_ticket: o ? o.estado : null,
+      resumo: o && o.resumo != null ? String(o.resumo).slice(0, 600) : null, estado_do_ticket: o ? o.estado : null, naBase: !!o,
     } : null,
-    colunas: (colunas || []).map(colunaDaLinha),
+    colunas: partes.colunas || [],
   };
 }
 
-/* Um cartão por extenso, como o ver o escreve.
-   Recebe: det — o detalhe (detalheDasLinhas); local — true se veio da base isolada.
+/* As linhas da fila (sqlFila) em cartões por extenso, pela ordem da base.
+   Recebe: linhas — os resultados das sete instruções de sqlFila, pela ordem.
+   Devolve: { colunas: as da base (colunaDaLinha), cartoes: os detalhes
+   (detalheDoCartao, sem histórico), cada um com comentariosPorResponder e
+   bloqueadoPor }. */
+export function filaDasLinhas(linhas) {
+  const [cols, cs, subs, coms, ligs, anexos, origens] = linhas;
+  const colunas = (cols || []).map(colunaDaLinha);
+  // as linhas de cada coisa, pelo número do cartão a que pertencem
+  const porCartao = (lista, chave) => {
+    const m = new Map();
+    (lista || []).forEach((x) => { const n = Number(x[chave]); if (!m.has(n)) m.set(n, []); m.get(n).push(x); });
+    return m;
+  };
+  const s = porCartao(subs, 'pai_numero'), c = porCartao(coms, 'cartao'), g = porCartao(ligs, 'cartao'), a = porCartao(anexos, 'cartao'), o = porCartao(origens, 'numero');
+  const cartoes = (cs || []).map((l) => {
+    const n = Number(l.numero);
+    const det = detalheDoCartao(l, { subtarefas: s.get(n), comentarios: c.get(n), ligacoes: g.get(n), anexos: a.get(n), origem: (o.get(n) || [])[0], colunas });
+    return Object.assign(det, { comentariosPorResponder: porResponder(det.comentarios), bloqueadoPor: bloqueiosDe(det) });
+  });
+  return { colunas, cartoes };
+}
+
+/* Os cartões que ainda bloqueiam este: os «é bloqueado por» cujo outro
+   cartão não foi removido nem está numa coluna de fim (a regra do bloqueado
+   das rotas e do listar).
+   Recebe: det — o detalhe (detalheDoCartao), com as colunas.
+   Devolve: a lista de { chave, titulo, coluna_id }. */
+export function bloqueiosDe(det) {
+  const fim = new Set((det.colunas || []).filter((k) => k.fim).map((k) => k.id));
+  return det.ligacoes.filter((x) => x.tipo === 'bloqueado' && !x.cartao.removido && !fim.has(x.cartao.coluna_id))
+    .map((x) => ({ chave: x.cartao.chave, titulo: x.cartao.titulo, coluna_id: x.cartao.coluna_id }));
+}
+
+/* O alvo do scripts/ticket.mjs para um pedido: o da base em que o cartão
+   está, se o pedido estiver nela; senão a produção (os pedidos da produção
+   chegam ao kanban do dev pelo sincronizar e não estão na base do dev).
+   Recebe: origem — a do detalhe ({naBase}); local — true na base isolada.
+   Devolve: '--prod', '--dev' ou '--local'. */
+export function alvoDoPedido(origem, local) {
+  if (!origem || !origem.naBase) return '--prod';
+  return local ? '--local' : '--dev';
+}
+
+/* O comando com que se trata um cartão com origem, no script da origem: o
+   ticket de QA pelo scripts/qa.mjs, o pedido pelo scripts/ticket.mjs.
+   Recebe: origem — a do detalhe ({tipo, id, naBase}); local — true na base
+   isolada; acao — 'comecar', 'resolver' ou 'reabrir'.
+   Devolve: o comando (texto). */
+export function comandoDaOrigem(origem, local, acao) {
+  if (origem.tipo === 'qa') {
+    const resto = acao === 'resolver' ? ' --nota "…" [--commit <sha>]' : '';
+    return 'node scripts/qa.mjs ' + acao + ' ' + origem.id + resto + (local ? ' --local' : '');
+  }
+  const resto = acao === 'resolver' ? ' --resposta "…" --nota "…" (--commit <sha> | --sem-commit)' : '';
+  return 'node scripts/ticket.mjs ' + (acao === 'resolver' ? 'propor' : acao) + ' ' + origem.id + resto + ' ' + alvoDoPedido(origem, local);
+}
+
+/* A frase que diz por onde se trata um cartão com origem, com o comando.
+   Recebe: origem — a do detalhe; local — true na base isolada; acao — como em comandoDaOrigem.
+   Devolve: o texto («trata-se pelo scripts/qa.mjs (a skill qa): node scripts/qa.mjs comecar …»). */
+export function porOndeSeTrata(origem, local, acao) {
+  const qa = origem.tipo === 'qa';
+  return 'trata-se pelo scripts/' + (qa ? 'qa' : 'ticket') + '.mjs (a skill ' + (qa ? 'qa' : 'ticket') + '), com o id do '
+    + (qa ? 'ticket' : 'pedido') + ': ' + comandoDaOrigem(origem, local, acao);
+}
+
+/* O comando que descarrega um anexo (ou todos, sem id).
+   Recebe: chave — 'KAN-N'; id (opcional) — o do anexo; local — true na base isolada.
+   Devolve: o comando (texto). */
+export function comandoDoAnexo(chave, id, local) {
+  return 'node scripts/kanban.mjs anexo ' + chave + (id ? ' ' + id : '') + (local ? ' --local' : '');
+}
+
+/* Um cartão por extenso, como o ver e a fila o escrevem: o cabeçalho (com os
+   comentários por responder), os bloqueios à cabeça, os campos, a origem (e
+   por onde se trata, com o comando), a descrição, as subtarefas, as
+   ligações, os anexos (com o comando que os busca), os comentários todos
+   (os por responder marcados) e, no ver, o histórico.
+   Recebe: det — o detalhe (detalheDasLinhas ou um cartão de filaDasLinhas);
+   local — true se veio da base isolada; opcoes (opcional) — { fila: true
+   para o cabeçalho da fila (### …, sem a coluna nem a base) e sem o histórico }.
    Devolve: o texto (várias linhas). */
-export function textoDoCartao(det, local) {
+export function textoDoCartao(det, local, opcoes = {}) {
   const k = det.cartao;
   const nomeDaColuna = (id) => { const c = det.colunas.find((x) => x.id === id); return c ? c.nome : id; };
+  const porResp = porResponder(det.comentarios);
+  const marcados = new Set(porResp.map((m) => m.id));
   const L = [];
-  L.push(k.chave + ' · ' + (NOMES_DOS_TIPOS[k.tipo] || k.tipo) + ' · ' + (NOMES_DAS_PRIORIDADES[k.prioridade] || k.prioridade) + ' · «' + nomeDaColuna(k.coluna_id) + '» (' + ondeFica(alvoDe(local)) + ')');
+  const cabeca = k.chave + ' · ' + (NOMES_DOS_TIPOS[k.tipo] || k.tipo) + ' · ' + (NOMES_DAS_PRIORIDADES[k.prioridade] || k.prioridade);
+  const porExtenso = comentariosPorExtenso(porResp.length);
+  L.push(opcoes.fila ? '### ' + cabeca + (porExtenso ? ' · ' + porExtenso : '')
+    : cabeca + ' · «' + nomeDaColuna(k.coluna_id) + '» (' + ondeFica(alvoDe(local)) + ')' + (porExtenso ? ' · ' + porExtenso : ''));
+  const bloqueios = bloqueiosDe(det);
+  if (bloqueios.length) L.push('BLOQUEADO por ' + bloqueios.map((b) => b.chave + ' «' + b.titulo + '» (em «' + nomeDaColuna(b.coluna_id) + '»)').join(', ') + '.');
   if (k.removed_at != null) L.push('REMOVIDO a ' + quando(k.removed_at) + (k.removed_by ? ' por ' + k.removed_by : '') + ' (repor é do master, no back office).');
   L.push('Título: ' + k.titulo);
   L.push('Etiquetas: ' + (k.etiquetas.length ? k.etiquetas.join(', ') : 'nenhuma'));
@@ -877,8 +1184,9 @@ export function textoDoCartao(det, local) {
   if (det.origem) {
     const og = det.origem;
     L.push('Origem: ' + (og.tipo === 'qa' ? 'ticket de QA ' : 'pedido ') + og.id + ' (último estado visto: ' + (og.estado || '?') + ')'
-      + (og.resumo == null ? ' — não está nesta base' + (og.tipo === 'pedido' ? ' (um pedido da produção?)' : '') : ':'));
+      + (og.resumo == null ? ' — não está nesta base' + (og.tipo === 'pedido' ? ' (um pedido da produção)' : '') : ':'));
     if (og.resumo != null) L.push(indenta(og.resumo, '  '));
+    L.push('  Este cartão ' + porOndeSeTrata(og, local, 'comecar'));
   }
   L.push('Criado: ' + quando(k.created_at) + ' · atualizado: ' + quando(k.updated_at) + (k.concluido_at != null ? ' · concluído: ' + quando(k.concluido_at) : ''));
   L.push('Descrição:' + (k.descricao ? '' : ' nenhuma'));
@@ -893,16 +1201,59 @@ export function textoDoCartao(det, local) {
     det.ligacoes.forEach((g) => L.push('  ' + frase[g.tipo] + ' ' + g.cartao.chave + ' «' + g.cartao.titulo + '» (' + nomeDaColuna(g.cartao.coluna_id) + (g.cartao.removido ? ', removido' : '') + ')'));
   }
   if (det.anexos.length) {
-    L.push('Anexos (' + det.anexos.length + '):');
-    det.anexos.forEach((a) => L.push('  ' + (a.nome || a.id) + ' (' + a.tipo + ', ' + Math.max(1, Math.round(a.tamanho / 1024)) + ' KB) — ' + (a.autor.nome || a.autor.id) + ', ' + quando(a.created_at)));
+    L.push('Anexos (' + det.anexos.length + '; ' + (det.anexos.length === 1 ? 'busca-se' : 'todos') + ' com ' + comandoDoAnexo(k.chave, null, local) + '):');
+    det.anexos.forEach((a) => L.push('  ' + (a.nome || a.id) + ' (' + a.tipo + ', ' + Math.max(1, Math.round(a.tamanho / 1024)) + ' KB) — ' + (a.autor.nome || a.autor.id) + ', ' + quando(a.created_at)
+      + ' — ' + comandoDoAnexo(k.chave, a.id, local)));
   }
-  L.push('Comentários (' + det.comentarios.length + '):' + (det.comentarios.length ? '' : ' nenhum'));
+  L.push('Comentários (' + det.comentarios.length + (porResp.length ? ', ' + porResp.length + ' por responder' : '') + '):' + (det.comentarios.length ? '' : ' nenhum'));
   det.comentarios.forEach((m) => {
-    L.push('  ' + (m.autor.nome || m.autor.id) + ' · ' + quando(m.created_at) + (m.updated_at !== m.created_at ? ' (editado a ' + quando(m.updated_at) + ')' : ''));
+    L.push('  ' + (m.autor.nome || m.autor.id) + ' · ' + quando(m.created_at) + (m.updated_at !== m.created_at ? ' (editado a ' + quando(m.updated_at) + ')' : '')
+      + (marcados.has(m.id) ? ' · POR RESPONDER' : ''));
     L.push(indenta(m.texto, '    '));
   });
-  L.push('Histórico:');
-  det.historico.forEach((h) => L.push('  ' + quando(h.at) + ' · ' + (h.autor.nome || h.autor.id) + ' · ' + textoDoHistorico(h, nomeDaColuna)));
+  if (!opcoes.fila) {
+    L.push('Histórico:');
+    det.historico.forEach((h) => L.push('  ' + quando(h.at) + ' · ' + (h.autor.nome || h.autor.id) + ' · ' + textoDoHistorico(h, nomeDaColuna)));
+  }
+  return L.join('\n');
+}
+
+/* As colunas da fila (A fazer e Auto Tests), com o nome e pela ordem que têm
+   no quadro (o master pode renomeá-las e reordená-las); uma que a base não
+   tenha fica com o id por nome, no fim.
+   Recebe: colunas — as da base (colunaDaLinha).
+   Devolve: a lista de {id, nome, ordem, …}. */
+export function colunasDaFila(colunas) {
+  return FILA.map((id) => colunas.find((k) => k.id === id) || { id, nome: id, ordem: Infinity })
+    .sort((x, y) => (x.ordem - y.ordem) || FILA.indexOf(x.id) - FILA.indexOf(y.id));
+}
+
+/* O texto da fila: o cabeçalho (onde, e quantos em cada coluna) e uma secção
+   por coluna da fila, pela ordem do quadro, com os cartões por extenso; vazia,
+   uma frase.
+   Recebe: fila — { colunas, cartoes } (filaDasLinhas); local — true na base isolada.
+   Devolve: o texto. */
+export function textoDaFila(fila, local) {
+  const onde = ondeFica(alvoDe(local));
+  if (!fila.cartoes.length) return 'Não há cartões por resolver em A fazer nem em Auto Tests ' + onde + '.';
+  const colunas = colunasDaFila(fila.colunas);
+  const deles = (id) => fila.cartoes.filter((c) => c.cartao.coluna_id === id);
+  const porResp = fila.cartoes.reduce((n, c) => n + c.comentariosPorResponder.length, 0);
+  const bloqueados = fila.cartoes.filter((c) => c.bloqueadoPor.length).length;
+  const comOrigem = fila.cartoes.filter((c) => c.origem).length;
+  const extra = [];
+  if (porResp) extra.push(comentariosPorExtenso(porResp));
+  if (bloqueados) extra.push(conta(bloqueados, 'bloqueado', 'bloqueados'));
+  if (comOrigem) extra.push(conta(comOrigem, 'com origem (trata-se pelo script dela)', 'com origem (tratam-se pelo script delas)'));
+  const L = ['Fila do kanban ' + onde + ': ' + colunas.map((k) => k.nome + ' ' + deles(k.id).length).join(', ') + ' (' + conta(fila.cartoes.length, 'cartão', 'cartões') + ')'
+    + (extra.length ? '; ' + extra.join(', ') : '') + '.'];
+  colunas.forEach((k) => {
+    const lista = deles(k.id);
+    L.push('');
+    L.push('## ' + k.nome + ' (' + lista.length + ')');
+    if (!lista.length) L.push('  (vazia)');
+    lista.forEach((c) => { L.push(''); L.push(textoDoCartao(c, local, { fila: true })); });
+  });
   return L.join('\n');
 }
 
@@ -1322,9 +1673,36 @@ function escreverNoWrangler(a, instrucoes) {
 
 /* ------------------------- os comandos ---------------------------------- */
 
-/* As dependências de fora (o wrangler, o relógio, os ids, o ficheiro), com as
-   verdadeiras por omissão: os testes trocam-nas para correr sem rede.
-   Recebe: deps — as que se querem trocar ({ ler, escrever, agora, uuid, lerFicheiro }).
+/* Corre um programa do sistema (o git ou o gh, para o publicadoDev), sem
+   shell, na raiz do repositório.
+   Recebe: programa — 'git' ou 'gh'; args — os argumentos.
+   Devolve: { status, stdout, stderr }; lança ErroKanban se não estiver instalado. */
+function correPrograma(programa, args) {
+  if (process.env.KANBAN_VERBOSO === '1') process.stderr.write('[kanban] ' + programa + ' ' + args.join(' ') + '\n');
+  const r = spawnSync(programa, args, { cwd: RAIZ, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 180000, windowsHide: true });
+  if (r.error) {
+    throw new ErroKanban(r.error.code === 'ENOENT' ? 'Não encontro o ' + programa + ' no PATH' + (programa === 'gh' ? ' (o GitHub CLI: https://cli.github.com).' : '.')
+      : 'O ' + programa + ' não correu: ' + r.error.message);
+  }
+  return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
+}
+
+/* Descarrega um objeto do R2 do alvo para um ficheiro, pelo wrangler (o dev
+   ou a base isolada: a guarda corre antes).
+   Recebe: a — o alvo; chave — a chave do objeto (kanban/<cartao>/<anexo>);
+   ficheiro — onde o escrever.
+   Devolve: { status, stdout, stderr } do wrangler. */
+function descarregarDoR2(a, chave, ficheiro) {
+  confereAlvo(a);
+  return correWrangler(['r2', 'object', 'get', BUCKETS[a.nome] + '/' + chave].concat(argsDoAlvo(a), ['--file', ficheiro]));
+}
+
+/* As dependências de fora (o wrangler, o R2, o git e o gh, o relógio, os ids,
+   o ficheiro), com as verdadeiras por omissão: os testes trocam-nas para
+   correr sem rede.
+   Recebe: deps — as que se querem trocar ({ ler, escrever, agora, uuid,
+   lerFicheiro, publicadoDev (sha → { publicado, razao, sha }), descarregar
+   ((alvo, chave, ficheiro) → { status, stdout, stderr }) }).
    Devolve: as dependências completas. */
 function dependencias(deps = {}) {
   return {
@@ -1333,6 +1711,8 @@ function dependencias(deps = {}) {
     agora: deps.agora || (() => Date.now()),
     uuid: deps.uuid || (() => randomUUID()),
     lerFicheiro: deps.lerFicheiro || ((f) => readFileSync(path.resolve(f), 'utf8')),
+    publicadoDev: deps.publicadoDev || ((sha) => publicadoDev(sha, { git: (args) => correPrograma('git', args), gh: (args) => correPrograma('gh', args) })),
+    descarregar: deps.descarregar || descarregarDoR2,
   };
 }
 
@@ -1564,11 +1944,244 @@ function cmdSincronizar(o, d) {
   return L.join('\n');
 }
 
+/* ------------------------- a fila de trabalho -------------------------- */
+
+/* A fila na forma do --json: as colunas da fila (com quantos cartões há nela)
+   e os cartões por extenso, cada um com a coluna, os comentários (com
+   porResponder em cada), comentariosPorResponder, bloqueadoPor, os anexos e a
+   origem com o comando.
+   Recebe: fila — de filaDasLinhas; a — o alvo; local — true na base isolada.
+   Devolve: o objeto. */
+export function filaParaJson(fila, a, local) {
+  const colunas = colunasDaFila(fila.colunas)
+    .map((k) => ({ id: k.id, nome: k.nome, cartoes: fila.cartoes.filter((c) => c.cartao.coluna_id === k.id).length }));
+  const cartoes = fila.cartoes.map((det) => {
+    const k = Object.assign({}, det.cartao);
+    delete k.removed_at;
+    delete k.removed_by;
+    const marcados = new Set(det.comentariosPorResponder.map((m) => m.id));
+    return Object.assign(k, {
+      coluna: (colunas.find((x) => x.id === k.coluna_id) || {}).nome || k.coluna_id,
+      subtarefas_lista: det.subtarefas.map((s) => ({ chave: s.chave, tipo: s.tipo, titulo: s.titulo, coluna_id: s.coluna_id })),
+      ligacoes: det.ligacoes,
+      bloqueadoPor: det.bloqueadoPor,
+      anexos: det.anexos.map((x) => Object.assign({}, x, { comando: comandoDoAnexo(k.chave, x.id, local) })),
+      origem: det.origem ? Object.assign({}, det.origem, {
+        script: det.origem.tipo === 'qa' ? 'scripts/qa.mjs' : 'scripts/ticket.mjs', skill: det.origem.tipo === 'qa' ? 'qa' : 'ticket',
+        comando: comandoDaOrigem(det.origem, local, 'comecar'),
+      }) : null,
+      comentarios: det.comentarios.map((m) => Object.assign({}, m, { porResponder: marcados.has(m.id) })),
+      comentariosPorResponder: det.comentariosPorResponder,
+    });
+  });
+  return { alvo: a.nome, colunas, cartoes };
+}
+
+/* fila: o trabalho por fazer, em texto ou em JSON, numa só chamada ao
+   wrangler. Sem as tabelas (o dev antes do deploy da 0028) não é um erro:
+   diz-se e sai bem.
+   Recebe: o — as opções lidas; d — as dependências.
+   Devolve: o texto. */
+function cmdFila(o, d) {
+  const a = alvoDe(o.local);
+  let linhas;
+  try {
+    linhas = ler(d, a, sqlFila());
+  } catch (e) {
+    if (e.tipo !== 'por-migrar') throw e;
+    return o.json ? JSON.stringify({ alvo: a.nome, colunas: [], cartoes: [], porMigrar: true, aviso: e.message }, null, 2) : 'Tabelas por migrar. ' + e.message;
+  }
+  const fila = filaDasLinhas(linhas);
+  return o.json ? JSON.stringify(filaParaJson(fila, a, o.local), null, 2) : textoDaFila(fila, o.local);
+}
+
+/* Os cartões dados, como estão, para os conferir antes de mexer: numa só
+   leitura, cada um com a origem (e se ela está nesta base) e as colunas.
+   Recebe: d — as dependências; a — o alvo; numeros — os N.
+   Devolve: { porNumero: Map N → detalhe (detalheDoCartao, sem as listas), colunas }. */
+function conferidos(d, a, numeros) {
+  const [cs, cols, origens] = ler(d, a, sqlConferir(numeros));
+  const colunas = cols.map(colunaDaLinha);
+  const porNumero = new Map();
+  cs.forEach((l) => porNumero.set(Number(l.numero), detalheDoCartao(l, { origem: origens.find((x) => Number(x.numero) === Number(l.numero)), colunas })));
+  return { porNumero, colunas };
+}
+
+/* O que impede um comando do fluxo (comecar, resolver, reabrir) de mexer num
+   cartão: não existe, foi removido, ou tem origem (trata-se pelo script
+   dela, e diz-se o comando). A coluna confere-a cada comando.
+   Recebe: det — o detalhe (ou undefined); numero — o N; a — o alvo; acao — o comando.
+   Devolve: a razão (texto), ou null se se pode seguir. */
+function impedimento(det, numero, a, acao) {
+  const chave = chaveDe(numero);
+  if (!det) return chave + ' não existe ' + ondeFica(a) + ' (confirma com a fila; é --local?)';
+  const k = det.cartao;
+  if (k.removed_at != null) return chave + ' foi removido a ' + quando(k.removed_at) + ' (repor é do master, no back office)';
+  const og = det.origem;
+  if (!og) return null;
+  const vem = chave + ' vem ' + (og.tipo === 'qa' ? 'do ticket de QA ' : 'do pedido ') + og.id + ': ';
+  if (acao === 'reabrir' && og.tipo === 'pedido') {
+    return vem + 'reabrir um pedido é da equipa, no back office, ou, se estiver em resolução, ' + comandoDaOrigem(og, a.local, 'reabrir');
+  }
+  return vem + porOndeSeTrata(og, a.local, acao);
+}
+
+/* Recusa um comando do fluxo sem mexer em nada, com as razões todas.
+   Recebe: razoes — as razões (array de texto, não vazio); varios — true no comecar com mais de um cartão.
+   Devolve: nada; lança sempre ErroKanban. */
+function recusaSemMexer(razoes, varios) {
+  if (razoes.length === 1 && !varios) throw new ErroKanban(razoes[0] + '. Não mexi no cartão.');
+  throw new ErroKanban('Não mexi em nenhum cartão:\n' + razoes.map((r) => '  - ' + r + '.').join('\n'));
+}
+
+/* comecar: leva os cartões dados ao topo de Auto Tests, logo que se pega
+   neles. Confere-os todos antes de escrever: um que não existe, foi removido,
+   tem origem (o comando certo) ou está em Human Tests ou numa coluna de fim
+   (reabre-se primeiro) faz recusar tudo. Um que já estava em Auto Tests fica
+   e diz-se. Os outros vão numa só escrita, e confirma-se que ficaram.
+   Recebe: o — as opções lidas (o.numeros); d — as dependências.
+   Devolve: o texto com o que ficou em cada um. */
+function cmdComecar(o, d) {
+  const a = alvoDe(o.local);
+  const { porNumero, colunas } = conferidos(d, a, o.numeros);
+  const destino = colunaPorTexto(colunas, AUTO_TESTS);
+  const nome = (id) => (colunas.find((k) => k.id === id) || { nome: id }).nome;
+  const razoes = [];
+  o.numeros.forEach((n) => {
+    const det = porNumero.get(n);
+    const r = impedimento(det, n, a, 'comecar');
+    if (r) { razoes.push(r); return; }
+    const c = det.cartao.coluna_id;
+    if (c === HUMAN_TESTS || colunas.some((k) => k.id === c && k.fim)) {
+      razoes.push(det.cartao.chave + ' está em «' + nome(c) + '»: reabre-o primeiro (node scripts/kanban.mjs reabrir ' + det.cartao.chave + (o.local ? ' --local' : '') + ')');
+    }
+  });
+  if (razoes.length) recusaSemMexer(razoes, o.numeros.length > 1);
+  const mexer = o.numeros.map((n) => porNumero.get(n).cartao).filter((k) => k.coluna_id !== destino.id);
+  const agora = d.agora();
+  // ao contrário, para o primeiro dado ficar no topo
+  escrever(d, a, mexer.slice().reverse().reduce((sql, k, i) => sql.concat(sqlMover(k, destino, agora + i, CLAUDE, 'kanban.comecar')), []));
+  if (mexer.length) {
+    const ficaram = ler(d, a, [instrucao('SELECT numero, coluna_id FROM kanban_cartoes WHERE numero IN (' + mexer.map(() => '?').join(', ') + ')', mexer.map((k) => k.numero))])[0];
+    const falhou = mexer.filter((k) => !ficaram.some((l) => Number(l.numero) === k.numero && l.coluna_id === destino.id));
+    if (falhou.length) throw new ErroKanban('Não ficaram em «' + destino.nome + '»: ' + falhou.map((k) => k.chave).join(', ') + ' (vê a fila).');
+  }
+  return o.numeros.map((n) => {
+    const k = porNumero.get(n).cartao;
+    return k.coluna_id === destino.id ? k.chave + ' já estava em «' + destino.nome + '».'
+      : k.chave + ': «' + nome(k.coluna_id) + '» → «' + destino.nome + '» (no topo) ' + ondeFica(a) + '.';
+  }).join('\n');
+}
+
+/* resolver: leva um cartão sem origem, de A fazer ou de Auto Tests, a Human
+   Tests: confere o cartão, depois (com --commit, fora da base isolada) que o
+   commit está publicado no dev (ticket.mjs:publicadoDev: no origin/dev e com
+   o CI verde), e só então escreve, numa transação, a nota (com o commit) e o
+   que testar como comentários do Claude e o mover; confirma no fim.
+   Recebe: o — as opções lidas; d — as dependências.
+   Devolve: o texto com de onde para onde e o que ficou. */
+function cmdResolver(o, d) {
+  const a = alvoDe(o.local);
+  const { porNumero, colunas } = conferidos(d, a, [o.numero]);
+  const det = porNumero.get(o.numero);
+  const r = impedimento(det, o.numero, a, 'resolver');
+  if (r) recusaSemMexer([r], false);
+  const k = det.cartao;
+  const nome = (id) => (colunas.find((x) => x.id === id) || { nome: id }).nome;
+  if (!FILA.includes(k.coluna_id)) {
+    recusaSemMexer([k.chave + ' está em «' + nome(k.coluna_id) + '»: o resolver só leva a Human Tests um cartão de A fazer ou de Auto Tests'
+      + (k.coluna_id === HUMAN_TESTS ? ' (este já lá está)' : ' (se voltou ao trabalho, reabre-o primeiro: node scripts/kanban.mjs reabrir ' + k.chave + (o.local ? ' --local' : '') + ')')], false);
+  }
+  const destino = colunaPorTexto(colunas, HUMAN_TESTS);
+  if (o.commit && !o.local) {
+    const p = d.publicadoDev(o.commit);
+    if (!p || !p.publicado) {
+      throw new ErroKanban('O commit ' + o.commit + ' ainda não está publicado no dev, e não mexi no ' + k.chave + '. POR PUBLICAR: ' + ((p && p.razao) || 'sem razão'));
+    }
+  }
+  const nota = notaDoResolver(o.nota, o.commit);
+  const uuids = [d.uuid(), o.testar ? d.uuid() : null];
+  escrever(d, a, sqlResolver(k, destino, nota, o.testar, d.agora(), uuids));
+  const [ficou, coms] = ler(d, a, [
+    instrucao('SELECT coluna_id FROM kanban_cartoes WHERE numero = ?', [o.numero]),
+    instrucao('SELECT id FROM kanban_comentarios WHERE id IN (?, ?)', [uuids[0], uuids[1] || uuids[0]]),
+  ]);
+  if (!ficou[0] || ficou[0].coluna_id !== destino.id || coms.length !== (o.testar ? 2 : 1)) {
+    throw new ErroKanban('O ' + k.chave + ' não ficou como devia (em «' + destino.nome + '», com ' + (o.testar ? 'os dois comentários' : 'a nota') + '): vê-o com o ver.');
+  }
+  return k.chave + ': «' + nome(k.coluna_id) + '» → «' + destino.nome + '» (no topo) ' + ondeFica(a) + ', com a nota'
+    + (o.commit ? ' (commit ' + o.commit.slice(0, 7) + ')' : ' (sem commit)') + (o.testar ? ' e o que testar, como comentários do Claude.' : ', como comentário do Claude.');
+}
+
+/* reabrir: devolve um cartão sem origem ao topo de A fazer, de qualquer
+   coluna; um que já está em A fazer fica, sem se escrever nada.
+   Recebe: o — as opções lidas; d — as dependências.
+   Devolve: o texto com de onde para onde. */
+function cmdReabrir(o, d) {
+  const a = alvoDe(o.local);
+  const { porNumero, colunas } = conferidos(d, a, [o.numero]);
+  const det = porNumero.get(o.numero);
+  const r = impedimento(det, o.numero, a, 'reabrir');
+  if (r) recusaSemMexer([r], false);
+  const k = det.cartao;
+  const destino = colunaPorTexto(colunas, A_FAZER);
+  if (k.coluna_id === destino.id) return k.chave + ' já está em «' + destino.nome + '» ' + ondeFica(a) + ': não mexi.';
+  const daqui = (colunas.find((x) => x.id === k.coluna_id) || { nome: k.coluna_id }).nome;
+  escrever(d, a, sqlMover(k, destino, d.agora(), CLAUDE, 'kanban.reabrir'));
+  const ficou = ler(d, a, [instrucao('SELECT coluna_id FROM kanban_cartoes WHERE numero = ?', [o.numero])])[0][0];
+  if (!ficou || ficou.coluna_id !== destino.id) throw new ErroKanban('O ' + k.chave + ' não ficou em «' + destino.nome + '»: vê-o com o ver.');
+  return k.chave + ' reaberto: «' + daqui + '» → «' + destino.nome + '» (no topo) ' + ondeFica(a) + '.';
+}
+
+/* anexo: descarrega as imagens de um cartão (todas, ou a dada) do R2 do alvo
+   para os.tmpdir()/rendorium-kanban (ou --para), cada uma com a extensão do
+   tipo verdadeiro (pelos primeiros bytes), e diz os caminhos. Confere as
+   chaves todas antes de descarregar alguma: só as do espaço kanban/ das rotas.
+   Recebe: o — as opções lidas; d — as dependências.
+   Devolve: o texto com os caminhos; lança ErroKanban se algum falhar (com os que ficaram). */
+function cmdAnexo(o, d) {
+  const a = alvoDe(o.local);
+  const chave = chaveDe(o.numero);
+  const [cs, anexos] = ler(d, a, sqlAnexos(o.numero));
+  if (!cs[0]) throw new ErroKanban('Não há nenhum cartão ' + chave + ' ' + ondeFica(a) + ' (confirma com a fila; é --local?).');
+  if (!anexos.length) throw new ErroKanban('O ' + chave + ' não tem anexos ' + ondeFica(a) + '.');
+  const escolhidos = o.anexo ? anexos.filter((x) => x.id === o.anexo) : anexos;
+  if (!escolhidos.length) throw new ErroKanban('O ' + chave + ' não tem o anexo ' + o.anexo + '. Os dele: ' + anexos.map((x) => x.id + ' («' + x.nome + '»)').join(', ') + '.');
+  const estranhos = escolhidos.filter((x) => !/^kanban\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/.test(String(x.chave)));
+  if (estranhos.length) throw new ErroKanban('A chave do R2 de ' + estranhos.map((x) => x.id + ' («' + x.chave + '»)').join(', ') + ' não é do espaço kanban/: não descarrego nada.');
+  const pasta = path.resolve(o.para || PASTA_TEMP);
+  mkdirSync(pasta, { recursive: true });
+  const bons = [], maus = [];
+  escolhidos.forEach((x) => {
+    const temp = path.join(pasta, chave + '-' + x.id + '.descarregar');
+    rmSync(temp, { force: true });
+    const r = d.descarregar(a, x.chave, temp);
+    // o wrangler deixa um ficheiro vazio quando falha
+    const bytes = existsSync(temp) ? readFileSync(temp) : null;
+    if (r.status !== 0 || !bytes || !bytes.length) {
+      rmSync(temp, { force: true });
+      const t = String(r.stdout || '') + '\n' + String(r.stderr || '');
+      maus.push(x.id + ' («' + x.nome + '»): ' + (r.status === 0 ? 'veio vazio do R2'
+        : /specified key does not exist|NoSuchKey|object not found/i.test(t) ? 'não está no R2 (a base diz que existe, mas o objeto não está lá)' : erroDoWrangler(t).mensagem));
+      return;
+    }
+    const tipo = tipoDaImagem(bytes);
+    const final = path.join(pasta, chave + '-' + x.id + '.' + (tipo || 'bin'));
+    rmSync(final, { force: true });
+    renameSync(temp, final);
+    bons.push('  ' + final + ' (' + (tipo || 'tipo desconhecido: os primeiros bytes não são de png, jpg nem webp') + ', ' + Math.max(1, Math.round(bytes.length / 1024)) + ' KB) — «' + x.nome + '»');
+  });
+  const texto = (bons.length ? conta(bons.length, 'anexo', 'anexos') + ' do ' + chave + ' ' + ondeFica(a) + ':\n' + bons.join('\n') : '');
+  if (maus.length) throw new ErroKanban((texto ? texto + '\n' : '') + 'Não consegui descarregar ' + conta(maus.length, 'anexo', 'anexos') + ' do ' + chave + ':\n' + maus.map((m) => '  - ' + m).join('\n'));
+  return texto;
+}
+
 /* Corre a linha de comandos e devolve o código de saída; os erros conhecidos
    saem numa linha clara no stderr, sem pilha.
    Recebe: argv — os argumentos depois do script; deps (opcional) — as
-   dependências a trocar ({ ler, escrever, agora, uuid, lerFicheiro }), para os
-   testes; saida (opcional) — { out, err }, onde escrever (o stdout e o stderr por omissão).
+   dependências a trocar ({ ler, escrever, agora, uuid, lerFicheiro,
+   publicadoDev, descarregar }), para os testes; saida (opcional) — { out,
+   err }, onde escrever (o stdout e o stderr por omissão).
    Devolve: o código de saída (0 bem, 1 falhou, 2 argumentos). */
 export function principal(argv, deps, saida) {
   const out = (saida && saida.out) || ((t) => process.stdout.write(t));
@@ -1579,6 +2192,7 @@ export function principal(argv, deps, saida) {
     const fazer = {
       listar: cmdListar, ver: cmdVer, criar: cmdCriar, editar: cmdEditar, mover: cmdMover, comentar: cmdComentar,
       ligar: cmdLigar, 'importar-jira': cmdImportarJira, sincronizar: cmdSincronizar,
+      fila: cmdFila, anexo: cmdAnexo, comecar: cmdComecar, resolver: cmdResolver, reabrir: cmdReabrir,
     }[o.comando];
     out(fazer(o, d) + '\n');
     return 0;

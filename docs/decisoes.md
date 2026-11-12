@@ -101,6 +101,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-11 · O cartão por enviar fica no quadro, e pode haver vários
 - 2026-11-11 · A janela segue o teclado; a folga só quando rolar não chega (KAN-110)
 - 2026-11-11 · As tarefas por guardar ficam no aparelho até ao Guardar (KAN-105, a app)
+- 2026-11-12 · O kanban é uma fonte de trabalho do Claude, como os tickets (KAN-5)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3658,3 +3659,22 @@ kanban, e a ficha mostra as tarefas por enviar, porque é por lá que se volta. 
 «Sair sem guardar» (é a pessoa a escolher), no Descartar (com Anular) e aos 30 dias, como no kanban;
 sair da app, mudar de separador ou a página morrer não o tira. Por conta, para o de uma pessoa nunca
 aparecer a outra que entre no mesmo aparelho.
+
+## 2026-11-12 · O kanban é uma fonte de trabalho do Claude, como os tickets (KAN-5)
+
+O kanban da equipa substituiu o Jira a 2026-11-09, mas o Claude só o usava de lado: ao resolver os
+tickets lia os pedidos, os erros, a segurança e o QA, e o kanban servia apenas para sincronizar os
+cartões dos pedidos. Uma tarefa escrita no quadro à mão nunca entrava no trabalho. O Martinho pediu
+que a skill dos tickets visse também os cartões, e uma skill própria que fizesse com eles o que a do
+QA faz com os tickets de QA; no KAN-5 escreveu «Já não quero utilizar o jira. Passa tudo para o
+kanban do backoffice».
+
+O scripts/kanban.mjs ganhou a fila e os passos dela, à imagem do scripts/qa.mjs: a fila é A fazer e
+Auto Tests, por extenso, com os bloqueios, os anexos e os comentários por responder
+(kanban.mjs:sqlFila, numa só leitura); comecar passa a Auto Tests e confere todos antes de mexer
+(kanban.mjs:impedimento); resolver leva a Human Tests com a nota, o commit e o que testar, e só com
+o commit publicado no dev (o ticket.mjs:publicadoDev, a mesma regra de quando um ticket fecha);
+reabrir volta a A fazer; anexo descarrega as imagens. Um cartão que nasceu de um ticket de QA ou de
+um pedido é esse ticket: os comandos da fila recusam-no e dizem o do qa.mjs ou do ticket.mjs, para
+cada coisa ter um caminho só — a resolução de um ticket de QA vive no ticket, e mover o cartão de um
+pedido não mexe no pedido. A configuração antiga do Jira na pasta do projeto saiu com o sim dele.

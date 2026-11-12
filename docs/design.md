@@ -6787,9 +6787,18 @@ se muda. O título — o assunto — e os comentários são de todos.
 O detalhe de um pedido com cartão leva a ele, «Cartão KAN-N»
 (worker/src/equipa-guiao.js:detalhePedido). O Claude lê e escreve o kanban com
 o scripts/kanban.mjs — listar, ver, criar, editar, mover, comentar, ligar,
-importar-jira e sincronizar —, no dev e na base isolada do 8788, e nunca
-escreve na produção; cada escrita deixa a linha no histórico do cartão e no
-rasto da equipa.
+importar-jira e sincronizar, e os da fila de trabalho: fila, anexo, comecar,
+resolver e reabrir —, no dev e na base isolada do 8788, e nunca escreve na
+produção; cada escrita deixa a linha no histórico do cartão e no rasto da
+equipa. A fila são os cartões de A fazer e de Auto Tests, por coluna e, em
+cada uma, pela prioridade, cada um por extenso, com os bloqueios à cabeça, o
+comando que busca os anexos e os comentários por responder (os de pessoas
+depois do último do Claude). Os cartões que vêm de um ticket de QA ou de um
+pedido tratam-se pelo scripts/qa.mjs e pelo scripts/ticket.mjs: a fila diz o
+comando, e o comecar, o resolver e o reabrir recusam-nos com ele. O resolver
+só leva a Human Tests um cartão de A fazer ou de Auto Tests, com o commit já
+publicado no dev (scripts/ticket.mjs:publicadoDev), e deixa a nota e o que
+testar como comentários do Claude.
 
 ## O rasto das pessoas
 Com o sim de quem usa, a app e a montra guardam onde se toca, e nunca o quê,
