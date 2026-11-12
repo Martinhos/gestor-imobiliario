@@ -825,7 +825,7 @@ ${alturasDasBarras()}
 .botao-maquete.pequeno{min-height:26px;padding:0 10px;border-radius:8px;font-size:11px;align-self:flex-start;
   background:var(--accent);color:var(--accent-ink)}
 
-/* as capas sem fotografia, nos quatro tons do mosaico da app (.imv-t0…t3) */
+/* as capas sem fotografia, nos quatro tons do mosaico da app (.mosaico-t0…t3) */
 .tile.t1{--mosaico-fundo:#FAE6D2;--mosaico-traco:#B65A16}
 .tile.t2{--mosaico-fundo:#D9EFE5;--mosaico-traco:#1E7A5B}
 .tile.t3{--mosaico-fundo:#E3E6EC;--mosaico-traco:#5B6478}

@@ -16,8 +16,7 @@
    ele qual for, por isso nenhuma ação precisa de saber para onde voltar. A
    página do separador (paginaDosColaboradores, o canvas de 2026-10:
    D-Colaboradores) e as janelas do convite (M-Convidar, M-ConviteCriado)
-   vivem aqui, no fim; os cartões antigos (vColaboradores, convidarCard,
-   cargosCard, colaboradoresCard) continuam em partilha.js. */
+   vivem aqui, no fim. */
 'use strict';
 
 /* O URL da ligação permanente só se mostra na criação, e fica guardado no
@@ -253,28 +252,6 @@ function casasMarcadas(prefixo) {
     return e && e.checked;
   }).map(function (p) { return p.id; });
 }
-
-/* Marca, no convite, os imóveis de um grupo escolhido em «Escolher pelo
-   grupo…» — o seletor do cartão antigo (partilha.js:convidarCard); a janela
-   do convite usa os chips (CW.conviteGrupo). É só um atalho: a lista
-   guardada é a dos imóveis marcados agora — os que se juntarem ao grupo
-   depois não entram.
-   Recebe: nada (lê o seletor cw_inv_grupo).
-   Devolve: nada — marca as caixas e repõe o seletor. */
-window.cwInvGrupo = function () {
-  var v = val('cw_inv_grupo') || '';
-  if (v.indexOf('g:') !== 0) return;
-  var g = (db.groups || []).find(function (x) { return x.id === v.slice(2); });
-  if (!g) return;
-  (g.ids || []).forEach(function (pid) {
-    var e = document.getElementById('cw_inv_h_' + pid);
-    if (e) e.checked = true;
-  });
-  var inp = document.getElementById('cw_inv_grupo');
-  if (inp) inp.value = '';
-  var lab = document.getElementById('lab_cw_inv_grupo');
-  if (lab) lab.textContent = 'Escolher pelo grupo…';
-};
 
 /* Marca todo o texto de um campo. Era o this.select() escrito no on…= do
    campo da ligação, e o select() não está na lista dos métodos que uma ação
@@ -662,29 +639,6 @@ function pedidosRecebidos() {
   var sr = (CW.state && CW.state.shareRequests) || {};
   return sr.incoming || [];
 }
-
-/* ---------------- o que o cargo deixa fazer ---------------- */
-
-/* «Imóveis onde colaboras» (partilha.js:colaboroCard) diz o dono e o nome do
-   cargo, e o nome não diz o que o cargo abre. Aqui acrescenta-se a cada linha
-   a frase de acessos.js:fraseCurtaPodes. As linhas vêm pela ordem de
-   db.properties com _cargo, cada uma a abrir com o seu cartão, e o bloco do
-   texto fecha no primeiro «</span></span>» dela; uma linha com outra forma
-   fica como estava.
-   Devolve: o HTML do cartão (texto), ou '' sem imóveis de colaboração. */
-var _colaboroCard_podes = colaboroCard;
-colaboroCard = function () {
-  var html = _colaboroCard_podes();
-  if (!html) return html;
-  var casas = (db.properties || []).filter(function (p) { return p._cargo; });
-  var linha = '<div class="card u-p-11px-13px';
-  var partes = html.split(linha);
-  for (var i = 1; i < partes.length && i <= casas.length; i++) {
-    var frase = fraseCurtaPodes(casas[i - 1].id);
-    if (frase) partes[i] = partes[i].replace('</span></span>', '</span><span class="small u-d-block u-mt-3px">' + esc(frase) + '</span></span>');
-  }
-  return partes.join(linha);
-};
 
 /* ---------------- a página dos Colaboradores ---------------- */
 

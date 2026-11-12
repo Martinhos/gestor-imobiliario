@@ -217,7 +217,7 @@ describe('o «Atualizar agora» sem servidor', () => {
     app.document.body.appendChild = (el) => { html = el.innerHTML; return el; };
     app.gateAtualizar(99);
     assert.match(html, /<p id="cwUpdErro" class="upd-erro" role="alert"><\/p><button type="button" class="btn upd-botao"/);
-    assert.match(html, /<div class="upd-mosaico imv-mosaico imv-noite" aria-hidden="true">/, 'com o mosaico azul-noite do canvas');
+    assert.match(html, /<div class="upd-mosaico mosaico mosaico-noite" aria-hidden="true">/, 'com o mosaico azul-noite do canvas');
   });
 
   test('a página das novidades tem o cabeçalho dela, e não o do separador', () => {

@@ -293,23 +293,22 @@ describe('regressão: o que o go, o botão de filtros e os «depois de pintar» 
     assert.equal(fixos.hdrFilt.style.display, 'none');
   });
 
-  test('a visão geral ganha a criação rápida uma vez só, depois dos cartões, e o fabpad com ela; sem os Movimentos fica só o personalizar', () => {
+  // o FAB saiu (cria-se no + e na ação do cabeçalho): o «depois» da visão geral é só o personalizar
+  test('a visão geral ganha o «Personalizar painel» uma vez só, depois dos cartões, e nenhum FAB; sem os Movimentos o personalizar fica', () => {
     const app = carregarApp();
     const fixos = elementos(app);
     semear(app);
     app.tab = 'dashboard';
     app.render();
     const html = fixos.view.innerHTML;
-    assert.equal((html.match(/class="fab"/g) || []).length, 1, 'um FAB');
-    assert.equal((html.match(/fabpad/g) || []).length, 1, 'um fabpad');
-    assert.match(html, /newTxPick\(\)/);
-    assert.match(html, /id="dashPersonalizar"/);
+    assert.doesNotMatch(html, /class="fab|fabpad/, 'nenhum FAB');
+    assert.equal((html.match(/id="dashPersonalizar"/g) || []).length, 1, 'uma vez só');
     assert.ok(html.indexOf('Personalizar painel') > html.indexOf('donutCard'), 'entra depois dos cartões');
     assert.match(html, /id="pendCard"/, 'o cartão dos por confirmar (dos Planeados) está');
     app.definirServicosDesligados(['transactions']);
     app.render();
     const sem = fixos.view.innerHTML;
-    assert.doesNotMatch(sem, /class="fab"|newTxPick\(/);
+    assert.doesNotMatch(sem, /class="fab|fabpad/);
     assert.match(sem, /Personalizar painel/);
   });
 

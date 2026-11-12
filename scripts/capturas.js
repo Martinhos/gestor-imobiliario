@@ -1,22 +1,28 @@
-/* A imagem de partilha da página de entrada.
-   ------------------------------------------
-   Desde o redesign de 2026-10 a montra desenha a app em maquetes de HTML e
-   CSS (worker/src/landing.js), que seguem os tokens e não envelhecem; as
-   capturas que ela mostrava saíram. Fica a imagem que as redes sociais, o
-   WhatsApp e o Discord mostram quando se partilha a ligação (og:image): essa
-   não corre CSS, e é a app a sério, tirada do mesmo browser que corre o
-   percurso.
+/* A imagem de partilha da montra.
+   ------------------------------
+   A imagem que as redes sociais, o WhatsApp e o Discord mostram quando se
+   partilha a ligação de rendorium.com (og:image). Desde 2026-11-12 (KAN-6) é
+   o topo da própria montra (worker/src/landing.js): é o que a pessoa vê ao
+   abrir a ligação, desenha a app em maquetes que seguem os tokens, e não
+   depende dos dados de exemplo — a de antes era a Visão geral da app com eles,
+   e envelheceu com a navegação antiga, o prazo do Modelo 2 e um cashflow
+   negativo. A montra só promete o que a produção tem (a skill
+   rendorium-montra, A2), por isso a imagem também.
 
-   Correm contra um servidor local (npm run dev) e em 127.0.0.1 DE PROPÓSITO:
-   é outra origem que o localhost, portanto outro localStorage. Não há sessão
-   iniciada, não há nada que suba para a nuvem, e os dados são os de exemplo —
-   nunca os de ninguém.
+   Corre contra um servidor local, no /montra (fora do domínio raiz é aí que a
+   montra se serve), sem sessão nenhuma. A pílula QA e a faixa do rasto saem
+   da imagem se lá estiverem.
+
+   A janela é 1440×756 e a escala 1200/1440: o topo fica com a composição do
+   computador (o texto e o telemóvel inteiros) e a imagem sai a 1200×630, a
+   medida que o WhatsApp, o Discord e as redes recortam sem cortar nada.
 
    Sai só clara: quem a mostra não conhece o tema de ninguém. O WebP é feito no
    próprio browser (canvas.toDataURL), para isto não precisar de mais uma
    dependência só para converter uma imagem.
 
-   Correr: node scripts/capturas.js   (com o servidor local a servir a app) */
+   Correr: URL_APP=http://127.0.0.1:8788 node scripts/capturas.js
+   (com um servidor local de pé; o de omissão é o 127.0.0.1:8787) */
 
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -25,43 +31,23 @@ const path = require('path');
 const URL_APP = process.env.URL_APP || 'http://127.0.0.1:8787';
 const DESTINO = path.join(__dirname, '..', 'web', 'img', 'landing');
 
-/* O que se fotografa. A largura e a altura são as da janela: uma captura de
-   ecrã inteiro numa vista comprida daria uma tira de três mil pixéis que
-   ninguém consegue ler num cartão. */
+/* O que se fotografa: o caminho, a janela e a escala. A imagem sai com
+   largura × escala por altura × escala pixéis. */
 const CAPTURAS = [
-  /* a imagem que aparece quando se partilha a ligação: 1200x630 é a medida que
-     o WhatsApp, o Discord e as redes recortam sem cortar nada */
-  { nome: 'partilha', tab: 'dashboard', largura: 1200, altura: 630, escala: 1, soClara: true },
+  { nome: 'partilha', caminho: '/montra', largura: 1440, altura: 756, escala: 1200 / 1440, soClara: true },
 ];
 
-/* Põe a app num estado apresentável: sem ecrã de entrada, com os dados de
-   exemplo, sem o cartão dos primeiros passos e no separador pedido.
-   Recebe: page — a página do Playwright; tab — o separador a mostrar.
+/* Põe a montra num estado apresentável: sem a pílula QA nem a faixa do rasto,
+   no topo, e com os números do telemóvel já no valor final.
+   Recebe: page — a página do Playwright.
    Devolve: promessa que resolve quando o ecrã estiver pronto. */
-async function prepararApp(page, tab) {
+async function prepararMontra(page) {
   await page.evaluate(() => {
-    try { hideAuth(); } catch (e) { /* já escondido */ }
-    document.documentElement.classList.remove('noscroll');
-    document.body.style.top = '';
-    /* o seed acaba num «Dados de exemplo carregados», e um aviso desses numa
-       imagem da página de entrada lê-se como um erro do produto */
-    const _toast = window.toast;
-    window.toast = function () {};
-    if (!(db.properties || []).length) _seed_guia();
-    window.toast = _toast;
-    const t = document.getElementById('toast');
-    if (t) { t.className = 'toast'; t.textContent = ''; }
-    try { localStorage.setItem('gi_passos_fora', '1'); } catch (e) {}
-    const g = document.getElementById('cwGuia');
-    if (g) g.remove();
-  });
-  await page.evaluate((t) => {
-    tab = t; setPage = ''; donutCat = '';
-    buildNav(); render();
+    document.querySelectorAll('.qa-pilula, .qa-camada, aside.escolha').forEach((e) => e.remove());
     window.scrollTo(0, 0);
-  }, tab);
-  // os gráficos desenham-se em meio segundo (--desenho); deixa-os acabar
-  await page.waitForTimeout(950);
+  });
+  // a entrada (--entrada, .65s) e os números a contar (até 1,2 s); deixa-os acabar
+  await page.waitForTimeout(1600);
 }
 
 /* Converte um PNG em WebP dentro do próprio browser. Poupa uma dependência
@@ -83,7 +69,7 @@ async function paraWebp(page, png) {
   return Buffer.from(b64, 'base64');
 }
 
-/* Tira todas as capturas, nos dois temas, e escreve-as em web/img/landing.
+/* Tira todas as capturas, nos temas de cada uma, e escreve-as em web/img/landing.
    Devolve: promessa que resolve quando estiverem todas escritas. */
 async function correr() {
   fs.mkdirSync(DESTINO, { recursive: true });
@@ -101,8 +87,8 @@ async function correr() {
         timezoneId: 'Europe/Lisbon',
       });
       const page = await ctx.newPage();
-      await page.goto(URL_APP, { waitUntil: 'networkidle' });
-      await prepararApp(page, c.tab);
+      await page.goto(URL_APP + c.caminho, { waitUntil: 'networkidle' });
+      await prepararMontra(page);
       const png = await page.screenshot({ type: 'png' });
       const webp = await paraWebp(page, png);
       const ficheiro = path.join(DESTINO, c.soClara ? `${c.nome}.webp` : `${c.nome}-${tema}.webp`);

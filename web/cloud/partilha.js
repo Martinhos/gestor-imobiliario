@@ -1,8 +1,8 @@
 /* A pagina Seguranca (palavra-passe, sessoes e apagar a conta), a partilha
    entre contas por baixo dos Proprietarios (o meu id, as ligacoes, os
-   pedidos e a ligacao de partilha) e as acoes delas, e Colaboradores
-   (cargos, convites e quem colabora em cada imovel; as acoes destes vivem em
-   colaboradores.js). */
+   pedidos e a ligacao de partilha) e as acoes delas. A pagina dos
+   Colaboradores (cargos, convites e quem colabora em cada imovel) e as acoes
+   dela vivem em colaboradores.js. */
 'use strict';
 
 /* ---------------- página "Segurança" ---------------- */
@@ -131,13 +131,7 @@ function connCard(c) {
     '<span class="pt-acoes">' + btns + menuHtml + '</span></div>';
 }
 
-/* ---------------- colaboradores, cargos e a ligação de partilha ---------------- */
-
-// Os imóveis que criei eu — onde gero convites e colaboradores.
-// Devolve: array de imóveis de db.properties.
-function cwImoveisMeus() {
-  return (db.properties || []).filter(function (p) { return cwMinha(p); });
-}
+/* ---------------- a ligação de partilha e os pedidos ---------------- */
 
 /* O cartão «A minha ligação de partilha» (o canvas M-Partilha): o título
    com o selo «Ativa», o que a ligação faz, quantos pedidos chegaram por ali,
@@ -303,168 +297,6 @@ function pedidosCard() {
   })).join('');
   return card('Pedidos de partilha', inc.length ? inc.length + ' por responder' : 'À espera de resposta',
     '<div class="pd-lista">' + linhas + '</div>');
-}
-
-// O cartão «Cargos»: um por linha com o resumo do que abre e o menu de
-// editar/apagar, e o botão de criar. Sem cargos, a dica de por onde começar.
-// Devolve: o HTML do cartão (texto).
-function cargosCard() {
-  if (!servicoLigado('colaboradores')) return '';
-  var roles = CW.state.roles || [];
-  var lista = roles.length
-    ? '<div class="list u-g-8px">' + roles.map(function (r) {
-        var n = Number(r.n) || 0;
-        return '<div class="card u-p-11px-13px u-d-flex u-ai-center u-g-10px">' +
-          '<span class="u-fx-1 u-minw-0"><b class="u-d-block">' + esc(r.name) + '</b>' +
-          '<span class="small">' + esc(resumoPerms(r.perms)) + (n ? ' · ' + n + (n === 1 ? ' pessoa' : ' pessoas') : '') + '</span></span>' +
-          menu('cargo_' + r.id, [
-            { label: 'Editar cargo', icon: 'dots', act: "CW.cargoModal('" + jsq(r.id) + "')" },
-            { label: 'Apagar cargo', icon: 'trash', danger: true, act: "CW.apagarCargo('" + jsq(r.id) + "')" },
-          ]) + '</div>';
-      }).join('') + '</div>'
-    : '<div class="hint">Cria um cargo para dizeres o que um colaborador pode ver e adicionar — ou começa por um dos três prontos: Gestor de visitas, Contabilista, Ver tudo.</div>';
-  return card('Cargos', 'O que cada colaborador pode fazer',
-    lista + '<div class="toolbar u-mt-11px"><button class="btn" data-toca="camada" data-click="CW.cargoModal()">' + ic('plus', 15) + ' Novo cargo</button></div>');
-}
-
-/* O cartão «Convidar colaborador»: o cargo, as caixas dos meus imóveis (com o
-   atalho «Escolher pelo grupo…») e o botão que cria a ligação de uso único.
-   Por baixo, os convites por usar, cada um com «Revogar».
-   Devolve: o HTML do cartão (texto). */
-function convidarCard() {
-  if (!servicoLigado('colaboradores')) return '';
-  var roles = CW.state.roles || [];
-  var meus = cwImoveisMeus();
-  var invites = CW.state.invites || [];
-  var form;
-  if (!roles.length) form = '<div class="hint">Cria primeiro um cargo, no cartão «Cargos» em baixo.</div>' + saida('Novo cargo', 'CW.cargoModal()', 'camada');
-  else if (!meus.length) {
-    // o formulário do imóvel é do serviço dos Imóveis: desligado, a nota diz quem o liga
-    form = '<div class="hint">Ainda não tens imóveis para partilhar — cria um primeiro.</div>' +
-      (servicoLigado('properties') ? saida('Adicionar imóvel', 'propModal()', 'camada') : vazioServicoDesligado('properties'));
-  } else {
-    var grupos = typeof gOpts === 'function' ? gOpts('prop') : [];
-    form = '<div class="form">' +
-      '<label>Cargo <span class="req">*</span>' + sel('cw_inv_cargo', roles[0].id, roles.map(function (r) { return { v: r.id, label: r.name }; }), '', 'rascunho') + '</label>' +
-      '<div><div class="flabel">Imóveis <span class="req">*</span></div><div class="list u-g-7px">' + meus.map(function (p) {
-        return '<label class="check"><input type="checkbox" id="cw_inv_h_' + p.id + '"><span class="u-minw-0"><b>' + esc(p.name || 'Sem nome') + '</b>' +
-          (p.address ? ' <span class="small">' + esc(p.address) + '</span>' : '') + '</span></label>';
-      }).join('') + '</div>' +
-      (grupos.length
-        ? '<div class="u-mt-9px">' + sel('cw_inv_grupo', '', [{ v: '', label: 'Escolher pelo grupo…' }].concat(grupos), 'cwInvGrupo', 'rascunho') +
-          '<div class="hint u-mt-6px">Imóveis que juntares ao grupo depois não entram — edita o colaborador.</div></div>'
-        : '') + '</div>' +
-      '<label>Nota para ti (opcional)<input id="cw_inv_label" maxlength="60" placeholder="Ex: Para a Ana, contabilidade" autocomplete="off"></label>' +
-      '<div class="toolbar"><button class="btn primary" data-toca="dados" data-click="CW.criarConvite()">' + ic('key', 15) + ' Criar ligação de convite</button></div>' +
-      '<div class="hint">Vale 7 dias e uma só utilização. Quem a abrir entra (ou cria conta) e fica com o cargo nesses imóveis — sem quota-parte.</div></div>';
-  }
-  var pendentes = invites.length
-    ? '<div class="section-title">Convites por usar</div><div class="list u-g-8px">' + invites.map(function (i) {
-        var casas = (i.houses || []).map(function (h) { return h.name || 'Sem nome'; }).join(', ');
-        var expira = i.expiresAt ? new Date(Number(i.expiresAt)).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' }) : '';
-        return '<div class="card u-p-11px-13px u-d-flex u-ai-center u-g-10px">' +
-          '<span class="u-fx-1 u-minw-0"><b class="u-d-block">' + esc(i.roleName || 'Cargo') + (i.label ? ' · ' + esc(i.label) : '') + '</b>' +
-          '<span class="small">' + esc(casas) + (expira ? ' · expira a ' + esc(expira) : '') + '</span></span>' +
-          '<button class="btn sm danger u-fx-0-0-auto" data-toca="dados" data-click="CW.revogarConvite(\'' + jsq(i.id) + '\')">Revogar</button></div>';
-      }).join('') + '</div>'
-    : '';
-  return card('Convidar colaborador', 'Uma ligação de uso único, com um cargo', form + pendentes);
-}
-
-/* O cartão «Colaboradores»: por imóvel meu, quem colabora, com o cargo e os
-   botões de mudar e remover. Só quem criou o imóvel gere colaboradores —
-   nos imóveis em compropriedade fica a dica. Sem imóvel nenhum (nem meu nem
-   partilhado comigo) não há cartão: o vazio dele mandava «criar uma ligação
-   de convite em cima», e sem imóveis não há convite que se possa criar — o
-   cartão de cima já diz que o primeiro passo é o imóvel.
-   Devolve: o HTML do cartão (texto), ou '' sem imóveis. */
-function colaboradoresCard() {
-  if (!servicoLigado('colaboradores')) return '';
-  var meus = cwImoveisMeus().filter(function (p) { return (p._colaboradores || []).length; });
-  var partilhados = (db.properties || []).filter(function (p) { return p._sharedFrom && !p._cargo; });
-  if (!cwImoveisMeus().length && !partilhados.length) return '';
-  var corpo = meus.length
-    ? meus.map(function (p) {
-        return '<div class="section-title u-mt-14px">' + esc(p.name || 'Sem nome') + '</div><div class="list u-g-8px">' +
-          p._colaboradores.map(function (c) {
-            return '<div class="card u-p-11px-13px">' +
-              '<div class="u-d-flex u-ai-center u-g-11px"><span class="avatar u-w-32px u-h-32px u-fx-0-0-32px u-fs-12px">' +
-              esc(typeof initials === 'function' ? initials(c.name) : (c.name || '?').slice(0, 2)) + '</span>' +
-              '<span class="u-fx-1 u-minw-0"><b class="u-d-block">' + esc(c.name || c.userId || '') + '</b>' +
-              '<span class="badge grey">' + esc(c.roleName || 'Colaborador') + '</span></span></div>' +
-              '<div class="toolbar u-mt-9px"><button class="btn sm" data-toca="camada" data-click="CW.mudarColaborador(\'' + jsq(c.id) + '\')">Mudar cargo ou imóveis</button>' +
-              '<button class="btn sm danger" data-toca="dados" data-risco="destroi" data-click="CW.removerColaborador(\'' + jsq(c.id) + '\')">Remover</button></div></div>';
-          }).join('') + '</div>';
-      }).join('')
-    : '<div class="hint">Ainda não tens colaboradores. Cria uma ligação de convite em cima.</div>';
-  var nota = partilhados.length
-    ? '<div class="hint u-mt-11px">Nos imóveis que outros partilharam contigo, só quem criou o imóvel gere colaboradores.</div>'
-    : '';
-  return card('Colaboradores', 'Quem colabora em cada imóvel', corpo + nota);
-}
-
-// O cartão «Imóveis onde colaboras»: um por imóvel com o dono, o cargo e o
-// «Sair» (por linha de colaboração). Vazio quando não colaboro em nenhum.
-// Devolve: o HTML do cartão (texto), ou '' sem imóveis de colaboração.
-function colaboroCard() {
-  if (!servicoLigado('colaboradores')) return '';
-  var casas = (db.properties || []).filter(function (p) { return p._cargo; });
-  if (!casas.length) return '';
-  var linhas = casas.map(function (p) {
-    return '<div class="card u-p-11px-13px u-d-flex u-ai-center u-g-10px">' +
-      '<span class="u-fx-1 u-minw-0"><b class="u-d-block">' + esc(p.name || 'Sem nome') + '</b>' +
-      '<span class="small">de ' + esc(p._sharedFrom || '') + ' · </span><span class="badge grey">' + esc(p._cargo) + '</span></span>' +
-      (p._collabId
-        ? '<button class="btn sm danger u-fx-0-0-auto" data-toca="dados" data-risco="destroi" data-click="CW.sairDeImovel(\'' + jsq(p._collabId) + '\')">Sair</button>'
-        : '') + '</div>';
-  }).join('');
-  return card('Imóveis onde colaboras', 'Como colaborador, não como dono',
-    '<div class="list u-g-8px">' + linhas + '</div>' +
-    '<div class="hint u-mt-11px">Não tens quota-parte nestes imóveis nem entras nas contas entre proprietários. Ao sair, o que registaste fica com o dono.</div>');
-}
-
-/* O separador «Colaboradores» (menu, no grupo Pessoas): quem ajuda a gerir os
-   meus imóveis e com que cargo. Abre com uma frase a dizer o que é um
-   colaborador e depois, por esta ordem: convidar (a ligação de uso único),
-   quem colabora em cada imóvel, os cargos e os imóveis onde sou eu o
-   colaborador. Sem cargos, sem convites e sem colaboradores, o vazio convida
-   a criar o primeiro cargo — é ele que diz o que a pessoa pode fazer. Com o
-   serviço desligado nesta conta (o render já não chega aqui; um atalho
-   antigo pode), fica o ecrã que diz o nome e quem o liga.
-   Devolve: string de HTML da página, pronta a inserir com innerHTML. */
-function vColaboradores() {
-  if (!servicoLigado('colaboradores')) return servicoDesligadoHtml('colaboradores');
-  if (!CW.user) {
-    return card('Colaboradores', 'Sem sessão iniciada',
-      '<div class="hint">Convidar quem ajuda a gerir precisa de conta: é ela que guarda os cargos e os convites.</div>' +
-      '<div class="toolbar u-mt-11px"><button class="btn primary" data-toca="camada" data-click="CW.showAuth()">Iniciar sessão</button></div>');
-  }
-  var gap = '<div class="u-h-14px"></div>';
-  var intro = '<div class="hint u-m-0-0-12px">Um colaborador entra nos imóveis que lhe deres, com um cargo que diz o que pode ver e adicionar — ' +
-    'sem quota-parte e sem entrar nas contas entre proprietários.</div>';
-  var colab = colaboroCard();
-  var roles = CW.state.roles || [];
-  var temGente = ((CW.state.collaborators || []).length + (CW.state.invites || []).length) > 0;
-  /* «não tens nada» e «ainda não falámos com o servidor» são coisas
-     diferentes: o CW.state não é guardado no aparelho, e num arranque sem
-     rede dizer «ainda não tens colaboradores» a quem tem é mentira que
-     parece perda de dados. Os imóveis onde colaboro vêm do db local e
-     mostram-se na mesma. */
-  if (!CW._pulled) {
-    return intro + card('Cargos e colaboradores', 'À espera do servidor',
-      '<div class="hint">Ainda não recebemos a lista deste dispositivo. Sem ligação, os cargos, os convites e quem colabora aparecem assim que a app voltar a sincronizar.</div>') +
-      (colab ? gap + colab : '');
-  }
-  if (!roles.length && !temGente) {
-    return intro +
-      '<div class="empty"><b>Ainda não tens colaboradores</b>Começa pelo cargo: é ele que diz o que a pessoa vê e o que pode adicionar. ' +
-      'Depois convida-a com uma ligação de uso único.' +
-      '<div class="u-mt-10px"><button type="button" class="btn primary sm" data-toca="camada" data-click="CW.cargoModal()">' + ic('plus', 13) + ' Novo cargo</button></div></div>' +
-      (colab ? gap + colab : '');
-  }
-  // sem imóveis o cartão «Colaboradores» não se escreve (colaboradoresCard), e o espaço dele também não
-  var colaboradores = colaboradoresCard();
-  return intro + convidarCard() + (colaboradores ? gap + colaboradores : '') + gap + cargosCard() + (colab ? gap + colab : '');
 }
 
 var FRASE_DA_PARTILHA = 'Partilhar uma casa dá acesso a tudo o que ela tem: contratos, movimentos e pessoas.';

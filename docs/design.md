@@ -159,13 +159,15 @@ exemplos de hex fora dos tokens com licença são hoje a marca (o branco da
 casa, estilos.css:.marca), o véu da janela de baixo
 (estilos.css:.modal.under), o verde e o laranja do escuro nas setas do
 Cashflow da Visão geral, que é azul-noite nos dois temas
-(estilos.css:.vg-kpi.cf), e as cores do mosaico das capas no claro.
+(estilos.css:.vg-kpi.cf), e as cores do mosaico no claro.
 
 Uma capa sem fotografia leva o mosaico do canvas — arcos em cantos opostos e
 um ponto, num quadrado de 28px — numa de quatro cores, cobalto, âmbar, verde
 e ardósia, escolhida pelo imóvel de forma estável: um FNV-1a do id, pelos
-bits de cima (lista-imoveis.js:imvMosaico; estilos.css:.imv-mosaico e as
-variantes estilos.css:.imv-t1 a .imv-t3). Os hex do claro são os do canvas e
+bits de cima (lista-imoveis.js:imvMosaico). O mosaico é um componente da
+casa, e não dos Imóveis (ver «Componentes da casa»): estilos.css:.mosaico e
+os tons estilos.css:.mosaico-t1 a .mosaico-t3, e o azul-noite
+estilos.css:.mosaico-noite. Os hex do claro são os do canvas e
 vivem só aí, com comentário; no escuro saem dos tokens suaves e de cor. A
 etiqueta por cima de uma fotografia («3 fotos», «capa») é escura nos dois
 temas, porque assenta numa imagem e não no fundo do tema
@@ -322,7 +324,7 @@ cabeçalho (estilos.css:header.top), 25 a barra pegajosa
 (estilos.css:.toolbar.stick), 30 o menu de ações (estilos.css:.menupop), 40
 a barra de baixo (estilos.css:.tabbar), 45 e 46 o painel de filtros
 (estilos.css:.fpanel, estilos.css:.fwrap), 57 o «topo» (estilos.css:.totop),
-58 o FAB, que já não se vê (estilos.css:.fab), 59 o cartão do tutorial
+59 o cartão do tutorial
 (cloud/guia.js:#cwGuia), 61 o véu da gaveta (estilos.css:.scrim), 62
 a gaveta (estilos.css:aside), 70 a janela (estilos.css:.modal), 71 o mesmo
 cartão do tutorial quando há uma janela aberta
@@ -682,7 +684,7 @@ pode(pid,perm) antes de mostrar uma ação (acessos.js:pode). Num imóvel onde
 o utilizador só colabora, o cargo diz o que se vê e o que se adiciona; o
 servidor já despe os dados e recusa as escritas, mas um botão que leva a
 uma recusa é um botão a mais. Por isso cada ação pergunta primeiro: a folha
-das opções filtra-as (componentes.js:lpMenu), os FABs, a
+das opções filtra-as (componentes.js:lpMenu), a ação do cabeçalho, a
 folha do + da barra de baixo e os seletores de imóvel dos formulários só
 listam onde se pode adicionar (acessos.js:casasComo,
 acessos.js:acoesDeAdicionar, acessos.js:propOptsPara; movimento.js:txBody), a
@@ -909,16 +911,15 @@ cabeçalho, visível mesmo com a secção fechada (estilos.css:.fold-head, o
 .fsum). É HTML: um texto que venha de quem usa — um NIF, uma categoria, a
 taxa de um crédito — entra por esc(), como em todo o lado.
 
-fab(actions) (vistas.js:fab) escreve o botão de criar de uma lista, que
-desde 2026-10 não se vê em ecrã nenhum: o CSS da casca esconde o FAB, o
-leque e o espaço do fundo (estilos.css:.fab, vistas.js:render e o .fabpad).
-Quem cria é o + a meio da barra de baixo no telemóvel e, no computador, o
-«Criar» da barra lateral e a ação principal no cabeçalho
-(estilos.css:.tabmais, navegacao.js:abrirAdicionar,
-navegacao.js:pintarAcaoDoCabecalho — ver «A fita da barra de baixo»), com
-a mesma condição (acessos.js:acoesDeAdicionar). Só os Movimentos e a Visão
-geral ainda o escrevem; as outras listas já não, e quem cria no vazio delas
-é o botão da ação, dentro da caixa (vistas.js:saida).
+Uma lista não tem botão de criar seu. Quem cria é o + a meio da barra de
+baixo no telemóvel e, no computador, o «Criar» da barra lateral e a ação
+principal no cabeçalho (estilos.css:.tabmais, navegacao.js:abrirAdicionar,
+navegacao.js:pintarAcaoDoCabecalho — ver «A fita da barra de baixo»), todos
+com a mesma condição (acessos.js:acoesDeAdicionar); no vazio de uma lista é
+o botão da ação, dentro da caixa (vistas.js:saida). O botão redondo do canto
+(o FAB) escondeu-se em todos os ecrãs com a casca de 2026-10 e saiu em
+2026-11 (KAN-8): a função que o escrevia, o leque, o espaço que o render lhe
+deixava no fundo e as regras da folha.
 
 kpi(label,value,cls,foot,why,evo,acao,o) (vistas.js:kpi) é o cartão
 indicador: rótulo, valor grande, rodapé em muted. Com why ganha um «?» no
@@ -960,6 +961,17 @@ Os restantes: tagField para etiquetas removíveis
 tipo de movimento (estilos.css:.opt, estilos.css:.seg), .empty para o
 estado vazio (estilos.css:.empty), .tip para a dica dos gráficos
 (estilos.css:.tip; graficos.js:chartTip).
+
+O mosaico (estilos.css:.mosaico) é o desenho da casa: a capa de um imóvel
+sem fotografia (lista-imoveis.js:imvCapa, imovel.js:imvCapaDaFicha), a faixa
+da marca na entrada por uma ligação (entrada.js:showAuth), as capas dos
+imóveis de um convite (entrada.js:casasDaChegada), as boas-vindas
+(guia.js:boasVindas), os ecrãs da versão (novidades.js:ecraDaVersao) e o
+fundo das cenas das apresentações (apresentacao.js:aprCena). Leva sempre um tom: .mosaico-t0 a .mosaico-t3 —
+cobalto, âmbar, verde, ardósia —, o do imóvel pelo lista-imoveis.js:imvMosaico
+ou o da cena; e .mosaico-noite, o azul-noite igual nos dois temas, onde
+assenta no --side. Até 2026-11 chamava-se .imv-mosaico, com os tons .imv-t0
+a .imv-t3, e vivia na secção dos Imóveis da folha; o desenho é o mesmo.
 
 O segmentado (estilos.css:.segm) é um trilho --chip com a escolha acesa por
 cima, no desenho do .chip.on e do .opt.on: o fundo --accent-soft, o texto
@@ -2221,10 +2233,6 @@ menuOpen tem de ser esta porta (testes/ui/invariantes.js). Sem essa regra,
 o próximo botão de opções nasce com outro desenho e ninguém dá por ele até
 alguém tentar usar a app sem saber que o toque longo existe.
 
-O botão redondo do canto também ganhou nome (vistas.js:fab). Tinha
-`title`, que o rato mostra e o teclado não, e quando havia várias ações
-nem isso — o botão que abre o leque anunciava-se «botão».
-
 Um ecrã que diz «não há nada» e não diz por onde se começa é um beco.
 Cada vazio tem o botão da sua ação, à vista, dentro da própria caixa
 (vistas.js:saida) — o molde que as visitas já usavam. Primeiro foram os
@@ -2233,12 +2241,12 @@ quatro sítios onde não havia caminho nenhum: avaliação sem imóveis
 (lista-contratos.js:vContracts, projecoes.js:vProjections) e hipotecas sem
 imóveis (creditos.js:vCredits) — esta última com um botão que só dava um
 aviso a dizer que faltava um imóvel, e um caminho que acaba num aviso não
-é um caminho. Depois todas as listas, mesmo as que tinham FAB: o botão do
-canto — e, no telemóvel, o + da barra de baixo (navegacao.js:abrirAdicionar)
-— é um caminho que quem chega de novo não associa ao ecrã vazio, e a vista
-geral já mostrava que um botão verde no meio do vazio é o que se toca. A
-condição é a do FAB dessa lista (acessos.js:casasComo): sem poder adicionar
-não há botão, e «Nada neste filtro» nunca o tem.
+é um caminho. Depois todas as listas: o + da barra de baixo
+(navegacao.js:abrirAdicionar) e a ação do cabeçalho são um caminho que quem
+chega de novo não associa ao ecrã vazio, e a vista geral já mostrava que um
+botão verde no meio do vazio é o que se toca. A condição é a do + para essa
+lista (acessos.js:casasComo, acessos.js:acoesDeAdicionar): sem poder
+adicionar não há botão, e «Nada neste filtro» nunca o tem.
 
 ## Um aviso não tapa o que se pede para carregar
 O toast mora a 22px do fundo, que é exatamente onde o rodapé de um modal
@@ -3232,7 +3240,7 @@ do canvas, liso, que encolhe ao carregar. Fica **inteiro dentro da barra**:
 a primeira versão era um círculo a subir 12px acima da borda e no telemóvel
 saía cortado — o que ultrapassa a barra fica à mercê de quem recorta —, e a
 segunda uma tecla em relevo de 64×50, que o canvas de 2026-10 trocou. O FAB
-saiu de todos os ecrãs (estilos.css:.fab, escondido): no telemóvel cria-se
+saiu de todos os ecrãs (escondido em 2026-10, removido em 2026-11): no telemóvel cria-se
 no +, no computador no «Criar» da barra lateral e na ação do cabeçalho. O + e
 o «Criar» abrem a mesma folha (navegacao.js:abrirAdicionar), que fecha
 primeiro a gaveta do telemóvel (navegacao.js:closeDrawer): «Novo movimento»
@@ -4514,7 +4522,7 @@ sem lhe levar o foco (entrada.js:marcarCampo); ao enviar, é o falhaCampo.
 email, que é para onde vai a ligação.
 
 A faixa de quem chega por um convite tem o mosaico azul-noite
-(estilos.css:.imv-mosaico.imv-noite: #16244A com arcos #9FB4FF, iguais nos
+(estilos.css:.mosaico.mosaico-noite: #16244A com arcos #9FB4FF, iguais nos
 dois temas, o .tile das pranchetas M-Entrar e M-Atualizar). Os imóveis do
 convite são cartões — contorno, raio 14, o mosaico de 64px e o nome dentro
 (entrada.js:casasDaChegada, também no entrada.js:modalLigar e no
@@ -7318,7 +7326,7 @@ Alturas em unidades de ecrã escrevem-se em vh e logo a seguir em dvh
 barras do browser à mostra, vh é maior do que o que se vê e o topo da
 folha saía por cima. A área segura entra por --inset-* (estilos.css::root,
 estilos.css:.brand, estilos.css:header.top, estilos.css:.wrap,
-estilos.css:.fab, estilos.css:.tabbar; tema.js:fitInsets). O que rola
+estilos.css:.totop, estilos.css:.tabbar; tema.js:fitInsets). O que rola
 por cima da página, ou a cobre, contém o fim: chegar ao fim e continuar não
 rola o que está por trás. Levam overscroll-behavior:contain a lista de um
 sel() e o menu ⋯ (estilos.css:.selpop, estilos.css:.menupop, que rola
@@ -7389,7 +7397,7 @@ testes/estilos.test.js).
 Não se declara color-scheme só «light» (index.html:<meta name="color-scheme">).
 
 Não se escreve um hex fora do :root e da PAL sem um comentário a dizer
-porquê (as cores do mosaico das capas, estilos.css:.imv-t1, são o exemplo
+porquê (as cores do mosaico, estilos.css:.mosaico-t1, são o exemplo
 com licença).
 
 Não se pinta de vermelho o que não destrói: recusar um planeado desta vez

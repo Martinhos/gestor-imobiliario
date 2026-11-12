@@ -435,7 +435,7 @@ function visApaga(id){
    o resto preenche-se quando o contrato for a sério. Num imóvel onde só
    colaboro a ficha fica presa a ele (houseId): é assim que sobe como registo
    desse imóvel e chega ao dono mesmo sem contrato. Num imóvel meu é uma
-   ficha minha, como as do FAB (o critério de newTenantFromCt) — presa ao
+   ficha minha, como as do + (o critério de newTenantFromCt) — presa ao
    imóvel, perdia-se com ele.
    Recebe: id — a visita a converter.
    Devolve: nada — abre o personModal de um inquilino novo pré-preenchido. */

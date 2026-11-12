@@ -19,13 +19,38 @@ escreve-se com `comAcao('nome', [valores])` (o Enter num campo com
 `ligarA('enter', …)`, o change com `ligarA('mudar', …)`), que dá
 `data-acao="nome"` e os valores em `data-arg`, `data-arg2` e `data-arg3`,
 cada um pelo `esc()`; o nome tem de estar na tabela `ACOES`, que é a única
-coisa que os três ouvintes do document chamam; e a aparência vai por classes
+coisa que os três ouvintes das ações chamam (há mais ouvintes no document:
+ver a armadilha a seguir); e a aparência vai por classes
 do CSS_EQUIPA. O equipa-guiao.test.js confere as crases e faz parse do guião
 gerado por papel — se rebentar aí, foi isto —, e o csp-paginas.test.js
 confere que nem a página nem o guião trazem nada que a CSP recuse. E os
 dados da sessão entram no `<script type="application/json">` pelo
 `paraScript` da vista, nunca por um JSON.stringify cru: um nome com
 `</script>` fechava o bloco.
+
+## O back office tem um quarto ouvinte no document, e não chama ações
+Os três ouvintes das ações (o click, o keydown do Enter e o change) passam
+pelo worker/src/equipa-guiao.js:despachar, que só corre o que está na tabela
+`ACOES`. O quarto, o do `input`, não passa: a cada tecla num campo acerta o
+contador de caracteres do campo que tem `data-contar`
+(worker/src/equipa-guiao.js:contarCaracteres) e tira o erro de qualquer campo
+com `aria-invalid="true"` (worker/src/equipa-guiao.js:marcarErro, com o id
+do campo e o texto vazio). Morde de três maneiras. Não há `ligarA('input',
+…)`: uma ação em `ACOES` nunca corre enquanto se escreve, e quem precisa de
+reagir à escrita põe um atributo que este ouvinte leia ou tem o seu próprio
+ouvinte — como a pesquisa do kanban, no campo #kbQ, com a espera de 300 ms
+(worker/src/equipa-kanban-filtros.js:kbPesquisar). Um campo marcado com erro
+perde-o à primeira tecla, mesmo que o que se escreveu continue errado: a
+validação que o quer manter volta a marcá-lo no Enter ou no change. E o erro
+encontra-se pelo id (o campo e o `<id>Erro`): um campo com `aria-invalid`
+sem id fica vermelho depois de corrigido. Não são os únicos ouvintes que não
+chamam ações: o do Escape fecha a gaveta do telemóvel
+(worker/src/equipa-guiao.js:fecharGaveta), e os pedaços do kanban juntam os
+seus — o dos filtros escuta o keydown e o click na captura e, com uma lista
+ou o painel abertos, o Escape fica por ali (stopPropagation), e a gaveta não
+o vê (worker/src/equipa-kanban-filtros.js:kbSelFechar,
+worker/src/equipa-kanban-filtros.js:kbFiltrosFechar). Quem conta os ouvintes
+do document para saber o que uma tecla faz tem de contar todos.
 
 ## node:sqlite não aceita ?1 repetido
 A D1 aceita parâmetros numerados (`?1` usado duas vezes); o node:sqlite

@@ -4,7 +4,7 @@
 // «Opcional» (ou o rótulo diz «(opcional)» quando o placeholder é um exemplo
 // que vale a pena manter) e nenhum obrigatório o diz; a marca das datas
 // vazias põe-se e tira-se; a regra do «dd/mm/aaaa» vive só no WebKit do
-// iPhone; e os vazios têm o botão com a condição do FAB — nunca o de um
+// iPhone; e os vazios têm o botão com a condição do + — nunca o de um
 // filtro que não deixou nada.
 
 import { test, describe, afterEach } from 'node:test';
@@ -373,7 +373,7 @@ describe('um botão em cada vazio', () => {
     assert.ok(!f.includes(botao('ctModal()')));
   });
 
-  test('quem só vê não tem botão nenhum: a condição é a do FAB de cada lista', () => {
+  test('quem só vê não tem botão nenhum: a condição é a do + para cada lista', () => {
     soVe();
     assert.ok(!app.vTransactions().includes(botao('newTxPick()')), 'movimentos');
     assert.ok(!app.vTenants().includes(botao("personModal('tenant')")), 'inquilinos');
@@ -381,7 +381,7 @@ describe('um botão em cada vazio', () => {
     assert.ok(!rec.includes(botao('newRec()')) && !rec.includes(botao('newTpl()')), 'planeados e modelos');
     assert.ok(!app.vCredits().includes(botao('newMort()')), 'hipotecas');
     assert.ok(!app.vContracts().includes(botao('ctModal()')), 'contratos');
-    // e nenhum FAB, que é a mesma condição
+    // e nenhum FAB, que saiu de todas as listas
     for (const v of ['vTransactions', 'vTenants', 'vRecurring', 'vCredits', 'vContracts']) assert.doesNotMatch(app[v](), /class="fab"/, v);
     // com «Adicionar movimentos» no imóvel de colaboração, o botão dos movimentos volta
     app.window.CW.cargos.P1.perms = ['tx.add'];

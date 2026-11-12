@@ -458,7 +458,7 @@ function aprAPainelJornada() {
           (q.tutorial ? aprBotao(q.tutorial, { pequeno: true }) : '') + '</span>' : '') + '</span></span>';
   }).join('');
   return aprCena(aprAEcra('Visão geral', aprADireita('painel'),
-    '<span class="apr-a-ola"><i class="imv-mosaico imv-t0"></i><b>Olá' + (nome ? ', ' + esc(nome) : '') + '. Vamos adicionar as tuas casas à app.</b></span>' +
+    '<span class="apr-a-ola"><i class="mosaico mosaico-t0"></i><b>Olá' + (nome ? ', ' + esc(nome) : '') + '. Vamos adicionar as tuas casas à app.</b></span>' +
     aprCartao('<span class="apr-m-cartao-cab"><b>Primeiros passos</b><span class="apr-m-sub">' + j.nFeitos + ' de ' + n + ' feitos</span></span>' +
       aprProgresso(j.nFeitos / n * 100, { tom: 'in' }) + '<span class="apr-a-passos">' + passos + '</span>', { classe: 'apr-a-jornada' }), true),
     { tom: 't0', arranjo: 'tela' });

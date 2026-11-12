@@ -1,8 +1,8 @@
 // O + a meio da barra de baixo: o que cada pessoa pode adicionar
 // (acessos.js:acoesDeAdicionar), a ação natural de cada ecrã
 // (acessos.js:acaoDoSeparador), a barra com o botão a meio e a folha que ele
-// abre (navegacao.js:buildTabbar, navegacao.js:abrirAdicionar), o CSS que
-// esconde o FAB no telemóvel, e o design que o cita. A sessão simula-se com
+// abre (navegacao.js:buildTabbar, navegacao.js:abrirAdicionar), o FAB que
+// saiu (nem as listas o escrevem nem a folha o tem), e o design que o cita. A sessão simula-se com
 // window.CW, como em colaborador-acoes.test.js.
 
 import { test, describe, afterEach } from 'node:test';
@@ -51,7 +51,7 @@ describe('acoesDeAdicionar', () => {
     assert.equal(a[8].icon, 'layers', 'o grupo tem o ícone do separador Grupos');
   });
 
-  test('sem sessão é o dono; sem imóveis ficam de fora o contrato, a visita e a hipoteca — como os FABs', () => {
+  test('sem sessão é o dono; sem imóveis ficam de fora o contrato, a visita e a hipoteca', () => {
     limpar(app);
     delete app.window.CW;
     app.db.properties = [app.normProp({ id: 'P1', name: 'T1', ownerIds: [] })];
@@ -517,7 +517,7 @@ describe('a folha de estilos e o design', () => {
   });
 
   test('o FAB saiu: cria-se no «Criar» da barra lateral, na ação do cabeçalho e no + da barra de baixo', () => {
-    assert.match(css, /\nbody \.fab,body \.fabmenu,body \.fabpad\{display:none\}/, 'em todos os ecrãs');
+    assert.doesNotMatch(css, /\.fab(?:menu|pad)?(?![\w-])/, 'nem a regra que o escondia: nenhuma lista o escreve');
     const i = css.indexOf('@media(max-width:900px){\n  .tabbar{display:grid}');
     assert.ok(i > -1, 'a media query da barra existe');
     const bloco = fatia(css, i);
@@ -525,6 +525,13 @@ describe('a folha de estilos e o design', () => {
     assert.match(bloco, /\.wrap\{padding-bottom:calc\(96px/, 'o conteúdo não fica debaixo da barra');
     assert.match(css, /\.nav-criar\{/, 'o «Criar» da barra lateral');
     assert.match(css, /#hdrAcao:empty\{display:none\}/, 'a ação do cabeçalho, escondida quando não há');
+  });
+
+  test('nenhum ecrã escreve o FAB: nem os Movimentos nem a vista geral', () => {
+    limpar(app);
+    app.db.properties = [app.normProp({ id: 'P1', name: 'T1' })];
+    for (const f of ['vTransactions', 'vDashboard']) assert.doesNotMatch(app[f](), /class="fab|fabpad|fabmenu/, f);
+    assert.equal(app.fab, undefined, 'a função que o escrevia saiu');
   });
 
   test('docs/design.md cita o + e a folha, e diz que o FAB saiu de todos os ecrãs', () => {

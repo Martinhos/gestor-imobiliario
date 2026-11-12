@@ -1296,6 +1296,7 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
   .kb-pega,.kb-mais{width:44px;height:44px;margin:-10px -8px -10px 0}
   .kb-col-mais{min-height:44px}
   .kb-anexo-x{width:44px;height:44px}
+  .kb-anular{min-height:44px;padding:0 14px}
 }
 /* menos movimento: o painel só aparece e desaparece, sem deslizar; o cartão
    assenta de uma vez */

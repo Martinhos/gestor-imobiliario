@@ -148,7 +148,7 @@ describe('a jornada no lugar da vista geral', () => {
     semear(app, false);
     app.db.owners[0].nif = '';   // nada feito: o perfil é o primeiro
     let html = app.vDashboard();
-    assert.match(html, /<section class="pp-boas" aria-label="Boas-vindas"><div class="pp-boas-mosaico imv-mosaico imv-t0" aria-hidden="true"><\/div>/);
+    assert.match(html, /<section class="pp-boas" aria-label="Boas-vindas"><div class="pp-boas-mosaico mosaico mosaico-t0" aria-hidden="true"><\/div>/);
     assert.match(html, /<h2>Olá, Maria\. Vamos adicionar as tuas casas à app\.<\/h2>/);
     assert.match(html, /<p>Os números da Visão geral saem dos movimentos\. Começa pelo teu perfil; o resto vem a seguir\.<\/p>/);
     app.db.owners[0].nif = '123456789';
@@ -186,7 +186,7 @@ describe('a jornada no lugar da vista geral', () => {
     assert.doesNotMatch(com, /Ainda não há dados para mostrar|<!--sem-movimentos-->/);
   });
 
-  test('o vazio sem movimentos não escreve o «Personalizar painel», mas escreve o FAB do movimento', () => {
+  test('o vazio sem movimentos não escreve o «Personalizar painel» nem o FAB, que saiu: o movimento cria-se no +', () => {
     const app = montar();
     semear(app, true);
     app.localStorage.setItem('gi_passos_fora', '1');
@@ -194,7 +194,8 @@ describe('a jornada no lugar da vista geral', () => {
     fixos.view.innerHTML = app.vDashboard();
     app.dashDepois();
     assert.doesNotMatch(fixos.view.innerHTML, /Personalizar painel/);
-    assert.match(fixos.view.innerHTML, /newTxPick\(\)/);
+    assert.doesNotMatch(fixos.view.innerHTML, /class="fab|fabpad/);
+    assert.ok(Array.from(app.acoesDeAdicionar(), (a) => a.id).includes('movimento'), 'o «Movimento» está no +');
   });
 
   test('quem só colabora não vê a jornada no lugar da vista: «O que podes fazer» primeiro, os passos a seguir', () => {
@@ -262,14 +263,15 @@ describe('a jornada no lugar da vista geral', () => {
     }
   });
 
-  test('o «depois» da vista geral não escreve o «Personalizar painel» na jornada (não há blocos para arrumar), mas escreve o FAB do movimento', () => {
+  test('o «depois» da vista geral não escreve o «Personalizar painel» na jornada (não há blocos para arrumar); o movimento é o passo seguinte, e está no +', () => {
     const app = montar();
     semear(app, true);
     const fixos = elementos(app);
     fixos.view.innerHTML = app.vDashboard();
     app.dashDepois();
     assert.doesNotMatch(fixos.view.innerHTML, /Personalizar painel/);
-    assert.match(fixos.view.innerHTML, /newTxPick\(\)/, 'o FAB fica: o movimento é o passo seguinte');
+    assert.doesNotMatch(fixos.view.innerHTML, /class="fab|fabpad/, 'o FAB saiu');
+    assert.ok(Array.from(app.acoesDeAdicionar(), (a) => a.id).includes('movimento'), 'o «Movimento» está no +');
     // e com movimentos, o botão volta
     app.db.transactions.push(app.normTx({ id: 'X1', kind: 'income', category: 'Rendas', amount: 800, propertyId: 'P1', date: app.YEAR + '-01-05' }));
     fixos.view.innerHTML = app.vDashboard();

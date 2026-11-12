@@ -1,7 +1,6 @@
 /* ================= COLABORADORES, O SEPARADOR (serviço colaboradores) ================= */
 /* O separador dos colaboradores: a página e as ações dos cargos e dos
-   convites são da nuvem (cloud/colaboradores.js; os cartões de antes do
-   canvas de 2026-10, com o vColaboradores, ficaram em cloud/partilha.js), e
+   convites são da nuvem (cloud/colaboradores.js:paginaDosColaboradores), e
    aqui fica só o que se mostra sem ela. Veio de vistas.js quando a app
    passou a serviços; regista-se no fim. */
 /* O separador dos Colaboradores, o terceiro das Pessoas (navegacao.js:PESSOAS)

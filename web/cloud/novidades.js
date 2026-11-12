@@ -190,14 +190,14 @@ function mostrarNovidadesSeHouver() {
 
 /* O miolo dos dois ecrãs da versão (o canvas M-Atualizar): o azul-noite da
    barra lateral de ponta a ponta, o mosaico azul-noite por cima (o .tile do
-   canvas, estilos.css:.imv-noite — o cobalto claro das capas, imv-t0, dava
+   canvas, estilos.css:.mosaico-noite — o cobalto claro das capas, mosaico-t0, dava
    um cinzento-lavanda sobre o --side), o título, a frase, e por baixo o que
    cada um tem — a caixa dos passos, a nota e o botão.
    Recebe: titulo — o título; frase — o texto por baixo dele (de confiança);
    resto — o HTML que vem a seguir (a caixa dos passos, a nota, o botão).
    Devolve: o HTML do ecrã (texto). */
 function ecraDaVersao(titulo, frase, resto) {
-  return '<div class="upd-mosaico imv-mosaico imv-noite" aria-hidden="true"></div>' +
+  return '<div class="upd-mosaico mosaico mosaico-noite" aria-hidden="true"></div>' +
     '<div class="upd-corpo">' +
       '<h1 class="upd-tit">' + titulo + '</h1>' +
       '<p class="upd-frase num">' + frase + '</p>' +
@@ -422,7 +422,7 @@ function bannerAtualizar(v) {
   if (document.getElementById('cwUpdBar')) return;
   var el = document.createElement('div');
   el.id = 'cwUpdBar';
-  // 59: acima do botão flutuante (58) e abaixo dos modais — senão
+  // 59: acima do «topo» (57) e abaixo dos modais — senão
   // tapava o rodapé de um modal aberto
   el.className = 'card';
   el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + var(--inset-bottom));z-index:59;' +

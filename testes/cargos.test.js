@@ -433,14 +433,17 @@ describe('o que se esconde', () => {
     assert.deepEqual(Array.from(app.TABBAR), ['dashboard', 'casas', 'dinheiro', 'calendar'], 'a constante não muda');
   });
 
-  test('o FAB de novo movimento só existe onde posso adicionar', () => {
+  // o FAB saiu: o «Movimento» vive no + (acessos.js:acoesDeAdicionar), com a mesma condição
+  test('o «Movimento» do + só existe onde posso adicionar', () => {
     tresCasas();
     app.db.transactions = [app.normTx({ id: 'T1', label: 'Luz', propertyId: 'P1', amount: 10 })];
-    assert.match(app.vTransactions(), /class="fab"/);
+    const ids = () => Array.from(app.acoesDeAdicionar(), (a) => a.id);
+    assert.ok(ids().includes('movimento'));
     app.window.CW.cargos.P1 = { dono: false, nome: 'Gestor de visitas', perms: GESTOR };
     app.window.CW.cargos.P2 = { dono: false, nome: 'Gestor de visitas', perms: GESTOR };
-    assert.doesNotMatch(app.vTransactions(), /class="fab"/);
-    assert.doesNotMatch(app.vContracts(), /class="fab"/);
+    assert.ok(!ids().includes('movimento'), ids().join(' | '));
+    assert.ok(!ids().includes('contrato'), ids().join(' | '));
+    assert.doesNotMatch(app.vTransactions() + app.vContracts(), /class="fab"/, 'e nenhuma lista o escreve');
   });
 
   test('a ficha de um imóvel de colaboração abre só de leitura', () => {

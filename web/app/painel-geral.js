@@ -480,24 +480,22 @@ function orphanCard(){
    Recebe: nada.
    Devolve: nada — entra em edição, ou não faz nada sem a camada da nuvem. */
 function dashPersonalizarPainel(){if(window.CW&&CW.enterEdit)CW.enterEdit()}
-/* O que o painel pinta depois de o render pôr o HTML: a criação rápida.
-   A visão geral era o único ecrã sem criação rápida: registar uma renda
-   avulsa custava quatro toques de viagem. Entra depois de o painel rearranjar
-   os cartões, para não virar um cartão arrastável. O FAB abre um movimento
-   novo, que é dos Movimentos: com esse serviço desligado nesta conta fica só
-   o botão de personalizar, que é da base. Na jornada e no vazio sem
+/* O que o painel pinta depois de o render pôr o HTML: o «Personalizar
+   painel», no fim. Entra depois de o painel rearranjar os cartões, para não
+   virar um cartão arrastável, e uma vez só (o #dashPersonalizar é a marca).
+   É só de quem pode registar movimentos, como era a criação rápida que aqui
+   vivia: quem só vê fica com o painel como está. Na jornada e no vazio sem
    movimentos (as marcas <!--jornada--> e <!--sem-movimentos--> de
-   vDashboard) não há blocos para arrumar, e um botão que entra num modo
-   de edição sem nada para arrastar é um beco: não se escreve; o FAB fica,
-   que registar o primeiro movimento é precisamente o passo seguinte.
-   Devolve: nada — acrescenta o botão e o FAB ao #view quando fazem sentido. */
+   vDashboard) não há blocos para arrumar, e um botão que entra num modo de
+   edição sem nada para arrastar é um beco: a caixa fica, vazia. Criar um
+   movimento é no + da barra de baixo e na ação do cabeçalho
+   (acessos.js:acoesDeAdicionar), como em todos os ecrãs.
+   Devolve: nada — acrescenta a caixa do botão ao #view quando faz sentido. */
 function dashDepois(){
   if(view().querySelector('#dashPersonalizar')||!(podeSemImovel()||casasComo('tx.add').length))return;
-  const novoTx=servicoLigado('transactions')?fab([{act:'newTxPick()',label:'Novo movimento'}])+'<div class="fabpad"></div>':'';
   const h=view().innerHTML;
   const arrumar=h.indexOf('<!--jornada-->')>-1||h.indexOf('<!--sem-movimentos-->')>-1?'':'<button type="button" class="btn sm" data-toca="modo" data-click="dashPersonalizarPainel()">'+ic('grip',13)+' Personalizar painel</button>';
-  view().insertAdjacentHTML('beforeend',
-    '<div id="dashPersonalizar" class="u-ta-center u-m-2px-0-0">'+arrumar+'</div>'+novoTx);
+  view().insertAdjacentHTML('beforeend','<div id="dashPersonalizar" class="u-ta-center u-m-2px-0-0">'+arrumar+'</div>');
 }
 // nº de filtros ativos no painel de análise da visão geral: o imóvel em foco
 // Devolve: número de filtros ativos (0 ou 1).

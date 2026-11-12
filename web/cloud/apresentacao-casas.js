@@ -270,7 +270,7 @@ function aprCAcoes(chips) {
    Devolve: o HTML. */
 function aprCCapaLarga(tom, n) {
   var t = /^t[0-3]$/.test(tom || '') ? tom : 't0';
-  return '<span class="apr-c-fcapa"><i class="imv-mosaico imv-' + t + '"></i>' +
+  return '<span class="apr-c-fcapa"><i class="mosaico mosaico-' + t + '"></i>' +
     (n > 0 ? '<span class="apr-c-nfotos">' + ic('photo', 10) + esc(n + (n === 1 ? ' foto' : ' fotos')) + '</span>' : '') + '</span>';
 }
 

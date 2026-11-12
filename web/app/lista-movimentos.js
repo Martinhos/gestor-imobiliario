@@ -575,13 +575,11 @@ function txLinhaExtra(t,mes){return {}}
    uma vez cada — dá o mesmo total, sem depender de como se juntaram.
    Devolve: string com o HTML completo da vista. */
 function vTransactions(){
-  const adiciona=podeSemImovel()||casasComo('tx.add').length;   /* a condição do FAB e do vazio */
-  /* o FAB está escondido em todos os ecrãs (a casca); fica pela condição, que é a do vazio */
-  const fabHtml=adiciona?fab([{label:'Novo movimento',act:'newTxPick()'}]):'';
+  const adiciona=podeSemImovel()||casasComo('tx.add').length;   /* a condição do botão do vazio, que é a do + (acessos.js:acoesDeAdicionar) */
   txLinhasPintadas=0;txLista=[];   /* sem linhas, nenhuma: a lista de uma pintura anterior não fica a fingir que ainda se vê */
-  if(!db.transactions.length)return txFilterPainel()+fabHtml+(esperaDoServidor()||`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.${adiciona?saida('Registar movimento','newTxPick()','camada'):''}</div>`);
+  if(!db.transactions.length)return txFilterPainel()+(esperaDoServidor()||`<div class="empty"><b>Sem movimentos</b>Regista a primeira renda recebida ou despesa paga.${adiciona?saida('Registar movimento','newTxPick()','camada'):''}</div>`);
   /* a pesquisa e o botão dos filtros, o painel logo por baixo, e os chips */
-  const head=txBarraHtml()+txFilterPainel()+txChipsHtml()+fabHtml;
+  const head=txBarraHtml()+txFilterPainel()+txChipsHtml();
   const partes=db.transactions.filter(txMatch),list=linhasDaLista(partes),vv={};   /* o valor na vista uma vez por linha: o comparador pede-o vezes sem conta */
   if(txSort==='amount')list.forEach(t=>{vv[t.id]=valorNaVista(t)});   /* a linha de um lote vale a soma das partes */
   /* pela data, e no mesmo dia pela hora a que foram adicionados (txPorDataECriacao):

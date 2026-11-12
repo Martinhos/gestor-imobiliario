@@ -410,9 +410,14 @@ textarea.campo{min-height:110px;padding:12px 14px;resize:vertical;line-height:1.
   .tb.empilha tr.tb-erro{border-top:0;padding-top:0}
 }
 
-/* ---- o aviso de baixo (o toast da app) ---- */
+/* ---- o aviso de baixo (o toast da app) ----
+   A largura é a do conteúdo (width:max-content), até ao teto do max-width.
+   Sem ela, um position:fixed com left:50% só tem metade do ecrã para se
+   encolher (o «shrink-to-fit» mede do left até à borda direita): a 384px o
+   aviso ficava com 192px, e com o Anular do kanban o texto partia-se sílaba a
+   sílaba numa coluna (KAN-111). */
 .eq-toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:10px;
-  max-width:min(560px,calc(100vw - 32px));padding:10px 10px 10px 16px;border-radius:14px;background:var(--toast);color:var(--toast-ink);
+  width:max-content;max-width:min(560px,calc(100vw - 32px));padding:10px 10px 10px 16px;border-radius:14px;background:var(--toast);color:var(--toast-ink);
   font-size:14px;font-weight:500;box-shadow:var(--shadow);opacity:0;visibility:hidden;transform:translate(-50%,12px);
   transition:opacity var(--medio) var(--curva),transform var(--medio) var(--curva),visibility 0s linear var(--medio)}
 .eq-toast.on{opacity:1;visibility:visible;transform:translate(-50%,0);transition-delay:0s}

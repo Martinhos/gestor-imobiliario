@@ -102,6 +102,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-11 · A janela segue o teclado; a folga só quando rolar não chega (KAN-110)
 - 2026-11-11 · As tarefas por guardar ficam no aparelho até ao Guardar (KAN-105, a app)
 - 2026-11-12 · O kanban é uma fonte de trabalho do Claude, como os tickets (KAN-5)
+- 2026-11-12 · Os dados de exemplo têm um dono só: a própria conta (KAN-10, KAN-78)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -1099,7 +1100,7 @@ imóveis», que se parte pelos imóveis que eu tinha na data do movimento
 continua «Todos os imóveis», porque um acerto sem imóvel é mesmo de todos. E
 nos Colaboradores sem imóveis o cartão «Colaboradores», cujo vazio mandava
 criar uma ligação de convite que não se pode criar, deixa de se escrever
-(partilha.js:colaboradoresCard).
+(colaboradores.js:quemColaboraCard).
 
 ## 2026-10-08 · O IRS ganha uma versão por ano, e a Declaração deixa de deduzir a mais
 O Martinho pediu duas coisas: ter a certeza de que a feature do IRS está bem
@@ -3678,3 +3679,18 @@ reabrir volta a A fazer; anexo descarrega as imagens. Um cartão que nasceu de u
 um pedido é esse ticket: os comandos da fila recusam-no e dizem o do qa.mjs ou do ticket.mjs, para
 cada coisa ter um caminho só — a resolução de um ticket de QA vive no ticket, e mover o cartão de um
 pedido não mexe no pedido. A configuração antiga do Jira na pasta do projeto saiu com o sim dele.
+
+## 2026-11-12 · Os dados de exemplo têm um dono só: a própria conta (KAN-10, KAN-78)
+
+O exemplo criava duas proprietárias à mão (Maria Costa e Pedro Costa, com quotas de 60/40). Desde
+2026-10-22 os proprietários da nuvem são contas, e só o perfil de quem tem a sessão sobe: depois da
+primeira sincronização as duas fichas desapareciam, os imóveis ficavam só da conta sem contacto
+nenhum, os movimentos ficavam «pagos por» alguém que já não existia e o «Usar o contacto de» dos
+contratos deixava de reconhecer a dona. Medido no 8788 isolado a 2026-11-12. Agora a dona do
+exemplo é a própria conta (arranque.js:donoDoExemplo): o exemplo só preenche os campos vazios do
+perfil, e sem sessão continua a ser a Maria Costa. A compropriedade sai do exemplo, porque precisa
+de duas contas. O exemplo só corre fora de produção (espera.js:podeExemplo), por isso os dados
+inventados nunca chegam ao perfil de ninguém a sério.
+
+Na mesma volta o exemplo ganhou um contrato de dez anos (o Quarto 4 do T3 Coimbra), para o quadro
+4.2 do Anexo F ter o que mostrar a quem testa.

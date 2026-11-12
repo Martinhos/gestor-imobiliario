@@ -138,12 +138,14 @@ describe('desligado: com os serviços que usam desligados, cada vista rende sem 
     // o atalho é uma função com nome (o go+setTimeout não se escreve numa ação declarada)
     assert.match(html, /data-click="dashVerSemImovel\(\)"/, 'controlo: as despesas sem imóvel levam aos movimentos');
     assert.match(html, /pendToggle\(\)/, 'controlo: o cartão dos por confirmar');
-    fixos.view.innerHTML = ''; app.dashDepois();
-    assert.match(fixos.view.innerHTML, /newTxPick\(\)/, 'controlo: o FAB do novo movimento');
+    // o FAB saiu: o novo movimento vive no + (acessos.js:acoesDeAdicionar), que segue o serviço
+    const noMais = () => Array.from(app.acoesDeAdicionar(), (a) => a.id).includes('movimento');
+    assert.ok(noMais(), 'controlo: o «Movimento» no +');
     desligar(app);
     html = app.vDashboard();
     assert.doesNotMatch(html, /dashVerSemImovel\(|go\('transactions'\)|newTxPick\(|pendToggle\(|confirmRec\(|propModal\(|go\('properties'\)/);
     assert.match(html, /Cashflow/, 'os indicadores ficam');
+    assert.ok(!noMais(), 'sem os Movimentos, o + não o tem');
     fixos.view.innerHTML = ''; app.dashDepois();
     assert.doesNotMatch(fixos.view.innerHTML, /newTxPick\(|class="fab"/);
     assert.match(fixos.view.innerHTML, /Personalizar painel/, 'a personalização é da base e fica');

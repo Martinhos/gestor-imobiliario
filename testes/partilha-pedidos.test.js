@@ -88,29 +88,34 @@ const GRUPO = (st) => {
 
 /* ------------------------------------------------ o «Convidar colaborador» nos vazios */
 
+/* A janela do convite (colaboradores.js:CW.conviteModal), que tomou o lugar
+   do cartão «Convidar colaborador» de antes do canvas de 2026-10. */
 describe('o «Convidar colaborador» sem cargos ou sem imóveis', () => {
-  test('sem cargos, a frase fica e ganha o botão «Novo cargo»', () => {
-    const { app } = comEstado((st) => { st.roles = []; });
-    const h = app.convidarCard();
-    assert.match(h, /Cria primeiro um cargo, no cartão «Cargos» em baixo\./);
-    assert.match(h, /data-toca="camada" data-click="CW\.cargoModal\(\)">Novo cargo</);
+  test('sem cargos, a frase diz que o primeiro passo é o cargo e o botão «Novo cargo» leva lá', () => {
+    const { app, esp } = comEstado((st) => { st.roles = []; });
+    app.CW.conviteModal();
+    const j = esp.abertas[0];
+    assert.match(j.b, /Primeiro, um cargo: é ele que diz o que a pessoa vê e o que pode adicionar\./);
+    assert.match(j.f, /data-toca="camada" data-click="closeModal\(\);CW\.cargoModal\(\)">[\s\S]*? Novo cargo</);
   });
 
   test('sem imóveis meus, a frase fica e ganha o botão «Adicionar imóvel», que abre o formulário do imóvel', () => {
-    const { app } = comEstado((st) => { st.houses = []; });
-    const h = app.convidarCard();
-    assert.match(h, /Ainda não tens imóveis para partilhar — cria um primeiro\./);
-    assert.match(h, /data-toca="camada" data-click="propModal\(\)">Adicionar imóvel</);
+    const { app, esp } = comEstado((st) => { st.houses = []; });
+    app.CW.conviteModal();
+    const j = esp.abertas[0];
+    assert.match(j.b, /Ainda não tens imóveis teus para partilhar/);
+    assert.match(j.f, /data-toca="camada" data-click="closeModal\(\);propModal\(\)">Adicionar imóvel</);
   });
 
   test('sem o serviço dos Imóveis, em vez do botão fica a frase de quem o liga', () => {
-    const { app } = comEstado((st) => { st.houses = []; });
+    const { app, esp } = comEstado((st) => { st.houses = []; });
     // o fecho dos serviços desliga os Colaboradores com os Imóveis (requer): o ramo só se vê trocando a pergunta
     app.servicoLigado = (id) => id !== 'properties';
-    const h = app.convidarCard();
-    assert.match(h, /Ainda não tens imóveis para partilhar/);
-    assert.ok(h.includes(app.fraseServicoDesligado('properties')), 'a frase de serviço desligado: ' + h);
-    assert.ok(!h.includes('propModal()') && !h.includes('Adicionar imóvel'), 'sem o botão');
+    app.CW.conviteModal();
+    const j = esp.abertas[0];
+    assert.match(j.b, /Ainda não tens imóveis teus para partilhar/);
+    assert.ok(j.b.includes(app.fraseServicoDesligado('properties')), 'a frase de serviço desligado: ' + j.b);
+    assert.ok(!(j.b + j.f).includes('propModal()') && !(j.b + j.f).includes('Adicionar imóvel'), 'sem o botão');
   });
 });
 
