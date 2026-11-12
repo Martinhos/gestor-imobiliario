@@ -6310,7 +6310,8 @@ atalho antigo pinta um ecrã que diz o nome e quem liga, sem juízo
 que o ambiente tem (servicos.js:servicoLigado).
 
 Um serviço pode ainda não ter chegado a produção: com soDev no catálogo
-(servicos.js:SERVICOS; hoje só a Declaração, o fisco) está desligado para
+(servicos.js:SERVICOS; hoje nenhum — a Declaração, o fisco, saiu dele a
+2026-11-12) está desligado para
 toda a gente em produção, e existe em dev (servicos.js:servicoForaDoAmbiente).
 O servicos.js:servicoLigado pergunta-o além da lista dos desligados, e a
 barra esconde-o pelo acessos.js:separadoresEscondidos; ligá-lo no back

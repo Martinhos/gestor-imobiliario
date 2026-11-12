@@ -110,6 +110,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-12 · A Declaração é sempre a tua: sai o seletor de proprietário (KAN-73)
 - 2026-11-12 · A FINE verdadeira: as frases fixas da ficha passam por cima do modelo (KAN-15)
 - 2026-11-12 · A leitura da FINE sai do dev, e a política de privacidade di-la (KAN-14)
+- 2026-11-12 · A Declaração chega a produção
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3882,3 +3883,14 @@ substância, a versão dos documentos subiu nos dois lados (web/legal.js e lib/h
 gente aceita de novo ao abrir a app depois do «promove». Não se diz nada sobre o que a Cloudflare
 faz com os dados além disto, porque não se verificou daqui. A mínima continua a 58, acima dos 53
 que a FINE pedia.
+
+## 2026-11-12 · A Declaração chega a produção
+
+O Martinho pediu «Ativa o IRS para toda a gente». Saiu o soDev do fisco no catálogo
+(servicos.js:SERVICOS), e por isso a Declaração passa a existir em produção para todas as contas
+com o serviço ligado (ausência na user_services = ligado), como os outros serviços. O mecanismo do
+soDev fica, sem nenhum serviço a usá-lo. As novidades da v68 anunciam-na; as secções soDev das
+versões antigas continuam escondidas em produção, porque falam de mudanças pequenas a uma página que
+quem chega agora não viu antes. A montra não muda: continua a mostrar o IRS só como o guia, sem
+prometer a Declaração (testes/landing.test.js:promessasDoIrs), até o Martinho decidir mostrá-la. A
+mínima fica a 58: um aparelho na v67 só vê a Declaração quando atualizar.

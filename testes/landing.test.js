@@ -321,8 +321,8 @@ describe('a página de entrada', () => {
     assert.ok(!/O que faz/.test(html), 'a grelha já não abre a página');
   });
 
-  /* A Declaração do IRS ainda só existe em dev (soDev): a montra de produção
-     não pode prometer o que a app de produção não tem. Desde 2026-11-08 o
+  /* A Declaração do IRS está na app de produção desde 2026-11-12, mas a montra
+     continua sem a prometer até o Martinho decidir mostrá-la. Desde 2026-11-08 o
      IRS pode aparecer, mas só como o guia (guia-vista.js), que é informação
      e não uma função da app: no botão do cabeçalho (e na linha da gaveta,
      no telemóvel), no cartão #guia e na ligação do rodapé. O que promete a funcionalidade continua proibido na

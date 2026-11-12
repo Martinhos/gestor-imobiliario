@@ -27,6 +27,21 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 68,
+    data: '2026-11-12',
+    titulo: 'O IRS das rendas, para toda a gente',
+    seccoes: [
+      {
+        titulo: 'IRS · Anexo F',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'Em Análise › IRS · Anexo F tens o resumo para preencheres o Anexo F: as rendas e os gastos de cada contrato arrumados pelos quadros 4.1 e 4.2, pela tua quota-parte, com o imposto estimado. A app resume; quem declara és tu, no Portal das Finanças.',
+          'Em «A tratar antes de entregar» vês o que falta nos teus dados, como um NIF ou um artigo matricial. O CSV e o PDF estão no botão de partilha, e o «Guia» explica como declarar as rendas.',
+        ],
+      },
+    ],
+  },
+  {
     v: 67,
     data: '2026-11-12',
     titulo: 'A hipoteca lê-se da FINE ou do contrato',
