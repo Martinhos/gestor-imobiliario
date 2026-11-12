@@ -239,6 +239,46 @@ function ecraPlaneados(hoje) {
 <div class="m-cartao m-plan-lista">${seguintes.map(([nome, quando, origem, cor, v]) => `<div class="m-plan"><div class="m-entre"><span><b>${nome}</b><span class="m-sub">${quando}</span></span><b class="n ${cor}">${eurosDaMontra(v, true)}</b></div><div class="m-selos">${origem}</div></div>`).join('')}</div>`;
 }
 
+/* O resumo do Anexo F do mesmo portefólio, no ano dos dez meses: as rendas
+   de cada imóvel somam a RECEITA (o T3 com os 140 € a mais do terceiro mês,
+   o T1 com os oito meses antes de ficar vago), e os gastos são os que as
+   outras maquetes mostram — o condomínio do T3 todos os meses e a primeira
+   prestação do IMI do T2. Tudo no quadro 4.1, sem redução, a 25 %.
+   Devolve: [{nome, rendas, imposto}], um por imóvel. */
+function quadroDaMontra() {
+  const n = RECEITA_MES.length;
+  const linhas = [
+    { nome: 'T3 Bonfim', rendas: rendaDaCasa(CASAS[0]) * n + 140, gastos: 45 * n },
+    { nome: 'T2 Paranhos', rendas: rendaDaCasa(CASAS[1]) * n, gastos: 142 },
+    { nome: 'T0 Campanhã', rendas: rendaDaCasa(CASAS[2]) * n, gastos: 0 },
+    { nome: 'T1 Cedofeita', rendas: 690 * (n - 2), gastos: 0 },
+  ];
+  return linhas.map((l) => ({ nome: l.nome, rendas: l.rendas, imposto: (l.rendas - l.gastos) * 0.25 }));
+}
+
+/* O ecrã do IRS · Anexo F (web/app/fisco.js): o cartão «A tratar antes de
+   entregar» com o que falta nos dados (fiscoObrigacoesCard), e o cartão do
+   quadro 4.1 com as rendas e o imposto estimado de cada imóvel
+   (fiscoQuadroResumoHtml).
+   Recebe: hoje — a Date do pedido, para o ano.
+   Devolve: o HTML do interior do ecrã. */
+function ecraIrs(hoje) {
+  const ano = hoje.getUTCFullYear();
+  const linhas = quadroDaMontra();
+  const imposto = linhas.reduce((a, l) => a + l.imposto, 0);
+  const ponto = (num, texto, botao) => `<div class="m-ponto">${selo(String(num), 'red')}<span><span class="m-ponto-txt">${texto}</span><span class="botao-maquete pequeno">${botao}</span></span></div>`;
+  return `<p class="tit ecra-titulo">Análise</p>${abasDaMaquete(['Avaliação', 'Projeções', 'IRS · Anexo F'], 'IRS · Anexo F')}
+<div class="m-cartao m-irs-cartao"><div class="m-entre"><span class="m-cab"><span class="tit">A tratar antes de entregar</span>${selo('2', 'amber')}</span></div>
+<span class="m-sub">2 pontos de ${ano}</span>
+${ponto(1, 'Inquilino Tiago Lopes: sem NIF', 'Abrir inquilino')}
+${ponto(2, 'Imóvel T1 Cedofeita: sem artigo matricial', 'Abrir imóvel')}</div>
+<div class="m-cartao m-irs-cartao"><div class="m-entre"><span class="m-cab"><span class="tit">Quadro 4.1 · sem redução</span></span></div>
+<span class="m-sub">preenche no quadro 4.1</span>
+<div class="m-q n"><span class="m-q-linha cab"><span>Imóvel</span><span>Rendas</span><span>Imposto</span></span>
+${linhas.map((l) => `<span class="m-q-linha"><span>${l.nome}</span><span>${eurosDaMontra(l.rendas)}</span><b>${eurosDaMontra(l.imposto, true)}</b></span>`).join('')}
+<span class="m-q-linha total"><span>Imposto estimado</span><span></span><b>${eurosDaMontra(imposto, true)}</b></span></div></div>`;
+}
+
 // o resto do que a app faz, com o tom do quadrado do ícone (as cores suaves do contrato)
 const CAPACIDADES = [
   { titulo: 'Créditos à habitação', tom: 'loan', d: 'M3 10h18M5 10v8M9 10v8M15 10v8M19 10v8M3 21h18M12 3l9 5H3z',
@@ -249,7 +289,7 @@ const CAPACIDADES = [
     texto: 'Quem vem ver que imóvel e quando, e um aviso antes de um contrato acabar.' },
 ];
 
-/* Os três ecrãs, cada um na sua secção: o que mostra, porque importa, e o
+/* Os quatro ecrãs, cada um na sua secção: o que mostra, porque importa, e o
    telemóvel com a maquete. O tom é o do mosaico por trás do telemóvel. */
 const ECRAS = [
   { id: 'imoveis', chapeu: 'Imóveis', tom: 't0', titulo: 'Todos os imóveis num relance',
@@ -267,6 +307,11 @@ const ECRAS = [
     pontos: ['Confirmas num toque, e o seguinte fica agendado.', 'As rendas em atraso à vista, a vermelho, até as resolveres.', 'O sino junta tudo o que pede a tua atenção.'],
     rotulo: 'O ecrã dos Planeados num telemóvel: três rendas por confirmar, uma delas em atraso, cada uma com o botão Confirmar, e a seguir a prestação do crédito, o condomínio e o IMI que vêm aí.',
     ecra: ecraPlaneados },
+  { id: 'irs', chapeu: 'IRS · Anexo F', tom: 't3', titulo: 'O IRS das rendas, já resumido',
+    texto: 'As rendas e os gastos de cada imóvel chegam arrumados pelo quadro do Anexo F onde os escreves, com o imposto estimado. A app resume; quem declara és tu, no Portal das Finanças.',
+    pontos: ['Por titular, cada um pela sua quota-parte.', 'O que falta nos teus dados, como um NIF ou um artigo matricial, antes de entregares.', 'O resumo em PDF ou CSV, e o guia de como declarar as rendas ao lado.'],
+    rotulo: 'O ecrã do IRS · Anexo F num telemóvel: dois pontos a tratar antes de entregar, um inquilino sem NIF e um imóvel sem artigo matricial, e o quadro 4.1 com as rendas e o imposto estimado de cada um dos quatro imóveis.',
+    ecra: ecraIrs },
 ];
 
 // o que fica do lado de quem usa a app
@@ -279,10 +324,10 @@ const DADOS = [
 
 /* O que os motores de busca e as redes mostram. Com os termos que um senhorio
    procura (gestão de arrendamento, controlo de rendas, rendas em atraso), e
-   sem o IRS: a montra fala da app, e a Declaração ainda só existe em dev. A
-   pesquisa pelo IRS chega ao guia (guia-vista.js), que tem os metadados
-   dele, e a montra só lhe dá ligações: o botão do cabeçalho, o cartão e o
-   rodapé. O título fica nos 60 caracteres e a descrição nos 160, o que o
+   sem o IRS: a pesquisa pelo IRS chega ao guia (guia-vista.js), que tem os
+   metadados dele. Na página, o IRS aparece no ecrã do Anexo F (a Declaração
+   existe em produção desde 2026-11-12) e nas ligações para o guia: o botão
+   do cabeçalho, o cartão e o rodapé. O título fica nos 60 caracteres e a descrição nos 160, o que o
    Google mostra sem cortar. */
 const TITULO = 'Rendorium — gestão de arrendamento para senhorios';
 const DESCRICAO = 'App grátis para senhorios: imóveis, contratos e rendas num só sítio. ' +
@@ -861,6 +906,19 @@ ${alturasDasBarras()}
 .m-plan-lista .m-plan:first-child{padding-top:0}
 .m-plan-lista .m-plan:last-child{padding-bottom:0}
 .m-valor{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+
+/* o ecrã do IRS · Anexo F: os pontos a tratar, e o quadro com uma linha por imóvel */
+.m-irs-cartao{padding:10px;display:flex;flex-direction:column;gap:6px}
+.m-ponto{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:start;padding-top:6px;border-top:1px solid var(--line)}
+.m-ponto > span:last-child{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.m-ponto-txt{font-size:11px;font-weight:500;line-height:1.35}
+.m-q{display:flex;flex-direction:column}
+.m-q-linha{display:grid;grid-template-columns:1fr auto 64px;gap:8px;align-items:baseline;padding:5px 0;font-size:11px;white-space:nowrap}
+.m-q-linha > :not(:first-child){text-align:right}
+.m-q-linha + .m-q-linha{border-top:1px solid var(--line)}
+.m-q-linha.cab{padding-top:2px;font-size:9.5px;color:var(--muted)}
+.m-q-linha b{font-weight:600}
+.m-q-linha.total{font-weight:600}
 
 /* ------------------------------------------------------------- secções
    o chapéu: a palavra que diz de que se fala, por cima do título */
