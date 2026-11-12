@@ -45,6 +45,14 @@ var AVISOS = [
           'Os nomes compridos de uma escolha, como os programas de isenção do IRS, leem-se inteiros: na lista partem em duas linhas em vez de ficarem cortados.',
         ],
       },
+      {
+        titulo: 'A leitura da FINE',
+        afeta: ['creditos'],
+        soDev: true,
+        itens: [
+          'Numa FINE de banco com muitas páginas, o valor do indexante, a taxa fixa e o spread, a prestação sem as vendas associadas facultativas e as comissões de reembolso antecipado leem-se das frases da própria ficha: o indexante já não fica por ler, e a prestação que se confere é a base.',
+        ],
+      },
     ],
   },
   {

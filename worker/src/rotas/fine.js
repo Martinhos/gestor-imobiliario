@@ -12,7 +12,7 @@
 // (que relata e.message).
 import { json, err } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
-import { MODELO, MIN_TEXTO, textoUtil, pedidoAoModelo, respostaDoModelo, validar } from '../lib/fine.js';
+import { MODELO, MIN_TEXTO, textoUtil, pedidoAoModelo, respostaDoModelo, comOTexto, validar } from '../lib/fine.js';
 
 // O caminho da rota.
 const CAMINHO = '/api/creditos/fine';
@@ -124,8 +124,12 @@ export async function rotasFine(c) {
   }
   if (!bruto) return indisponivel();   // o modelo não devolveu JSON nenhum
 
-  const { campos, ignorados, produtos, prestacaoComProdutos } = validar(bruto);
-  if (!Object.keys(campos).length) return err(422, 'Este documento não tem os valores de um crédito.');
+  // se é um crédito, di-lo o modelo: sem nada aceite do que ele leu, as
+  // frases fixas sozinhas não fazem uma hipoteca
+  if (!Object.keys(validar(bruto).campos).length) return err(422, 'Este documento não tem os valores de um crédito.');
+  // o indexante, as taxas, as prestações e as comissões que as frases fixas
+  // da ficha dizem passam por cima do modelo (lib/fine.js:lidoDoTexto)
+  const { campos, ignorados, produtos, prestacaoComProdutos } = validar(comOTexto(bruto, texto));
   return json(resposta(campos, ignorados, produtos, prestacaoComProdutos));
 }
 

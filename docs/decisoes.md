@@ -108,6 +108,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-12 · A pílula do QA é uma vista dos Erros do kanban (KAN-115)
 - 2026-11-12 · Os anexos do kanban aceitam ficheiros, numa lista fechada pelos bytes (KAN-119)
 - 2026-11-12 · A Declaração é sempre a tua: sai o seletor de proprietário (KAN-73)
+- 2026-11-12 · A FINE verdadeira: as frases fixas da ficha passam por cima do modelo (KAN-15)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3833,3 +3834,33 @@ INCERTO: as instruções do Anexo F não dizem como vão os bens comuns do casal
 faz uma linha por titular com a quota de cada um, como o código já dizia e como o guia das regras
 de 2025 diz para a compropriedade («cada um declara a sua quota»). Se a AT quiser tudo na linha do A, a
 estimativa da página dá o mesmo imposto, que é linear na quota; mudam só as linhas.
+
+## 2026-11-12 · A FINE verdadeira: as frases fixas da ficha passam por cima do modelo (KAN-15)
+
+O Martinho leu a FINE dele no dev (uma mista do Millennium bcp, com o ActivoBank como
+intermediário, 109 páginas) e comentou o ticket de QA do indexante: «Foi essa FINE. Não está a
+preencher as taxas corretamente». Medido com o Workers AI verdadeiro, 3 leituras de 3: o granite
+acertava a taxa fixa, o spread, os anos, o capital e o prazo, mas deixava o indexante por ler,
+punha a prestação com as vendas associadas facultativas (564,22 €) no lugar da base (633,19 €) e
+não chegava às comissões, que estão depois do corte do texto. As FINE de prova tinham uma página;
+a verdadeira tem 200 000 caracteres de texto, com o rodapé de cada página colado às linhas.
+
+Tentou-se pelo modelo e não deu: com o texto cortado na secção 10 e sem os rodapés, e depois só
+com as secções dos valores (menos de metade), o indexante continuava por ler; com o prompt a
+dizer onde estão o indexante, a prestação e as comissões, perdeu também as condições contratadas.
+
+Ficou assim. Os valores que a ficha escreve em frases que a lei fixa leem-se do próprio texto,
+sem o modelo (lib/fine.js:lidoDoTexto): o indexante da frase da TAN do período variável, o spread
+e a taxa fixa base e contratados, as linhas «Prestação sem/com vendas associadas facultativas» e
+as comissões da secção 9. Só da secção 1 à 9, só quando a frase dá um valor sem ambiguidade, e
+nunca da frase do cenário de stress («se a taxa de juro subir para…»). O que elas leem passa por
+cima do modelo nessas chaves (lib/fine.js:comOTexto) e segue pelo validar como o resto. Com o
+spread e a taxa contratados lidos assim, o validar tem o total dos produtos facultativos, e uma
+lista que o modelo inventa (0,5 no seguro de vida e no multirriscos, numa ficha sem reduções por
+produto) cai para o «conjunto» que a ficha diz. Se o documento é um crédito, continua a decidir o
+modelo: sem nada aceite do que ele leu, as frases sozinhas não fazem uma hipoteca (é 422).
+
+Na FINE do Martinho, 5 leituras de 5 deram tudo certo. Nas FINE de prova, as regras leem o
+indexante certo e mais nada, e o modelo faz o resto como antes. Uma FINE envenenada pode escrever
+estas frases como escreve outra coisa qualquer: dá números, que as gamas e a verificação cruzada
+do cliente seguram como os do modelo.
