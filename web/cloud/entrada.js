@@ -15,8 +15,8 @@
    O núcleo continua a dizer os mesmos estados (cloud/nucleo.js:tentarLigar,
    ligou, caiuALigacao, pushNow), e é aqui que se decide o que se vê:
      'off'  — sem rede, ou sem resposta a tempo: a faixa vermelha «Sem
-              ligação ao servidor.», com «N alterações por enviar.» por
-              baixo quando as há. Fica até à tentativa seguinte.
+              ligação ao servidor.», com «N alterações por enviar — sobem
+              quando houver rede.» por baixo quando as há. Fica até à tentativa seguinte.
      'liga' — vindo de 'off' (ou de uma tentativa que ainda não acabou), é a
               nova tentativa: a faixa fica, laranja, «A tentar ligar ao
               servidor…», com a mesma contagem (a classe .tenta). Sem ela a
@@ -66,7 +66,9 @@ function setSyncBadge(state, n) {
   var q = state === 'off' ? (Number(n) || alteracoesPorEnviar()) : (setSyncBadge._n || 0);
   setSyncBadge._n = q;
   var frase = tenta ? 'A tentar ligar ao servidor…' : 'Sem ligação ao servidor.';
-  var conta = !q ? '' : q === 1 ? '1 alteração por enviar.' : q + ' alterações por enviar.';
+  /* e diz quando sobem, para ninguém ficar à espera de as enviar à mão
+     (o pedido do Martinho no KAN-22): a faixa só existe sem ligação */
+  var conta = !q ? '' : q === 1 ? '1 alteração por enviar — sobe quando houver rede.' : q + ' alterações por enviar — sobem quando houver rede.';
   var classe = tenta ? 'tenta' : 'fora';
   var k = classe + '|' + conta, kAntes = setSyncBadge._k || '';
   // a mesma faixa outra vez: não se refaz nem se anuncia
@@ -617,8 +619,8 @@ function fecharRepor() {
       '<div class="hint">8+ caracteres, com maiúscula, minúscula, número e símbolo.</div>' +
       '<div id="rp_err" class="small u-c-v-danger"></div></div>' +
       '<div class="toolbar u-mt-14px u-d-flex u-g-8px u-jc-flex-end">' +
-      '<button class="btn" data-click="fecharRepor()">Cancelar</button>' +
-      '<button class="btn primary" data-click="CW.reporConfirmar()">Guardar</button></div></div>';
+      '<button class="btn" data-toca="camada" data-click="fecharRepor()">Cancelar</button>' +
+      '<button class="btn primary" data-toca="dados" data-click="CW.reporConfirmar()">Guardar</button></div></div>';
     document.body.appendChild(el);
     try { document.getElementById('rp_1').focus(); } catch (e) {}
   }, 700);
@@ -1235,7 +1237,7 @@ CW.resgatarChegada = function () {
       esquecerChegada(ch.tipo);
       openModal(ch.tipo === 'convite' ? 'Este convite já não vale' : 'Esta ligação não serve',
         '<div class="hint u-fs-14px">' + esc(e.message || 'Essa ligação não serve.') + '</div>',
-        '<button class="btn primary" data-click="closeModal()">Fechar</button>');
+        '<button class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>');
       largar();
     });
   };

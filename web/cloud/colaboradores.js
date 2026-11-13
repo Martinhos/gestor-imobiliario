@@ -935,7 +935,7 @@ CW.conviteModal = function () {
     var ligado = servicoLigado('properties');
     openModal('Convidar colaborador', '<div class="form"><p class="hint u-fs-14px">Ainda não tens imóveis teus para partilhar — um colaborador entra nos imóveis que criaste. Cria um primeiro.</p>' +
       (ligado ? '' : vazioServicoDesligado('properties')) + '</div>',
-      '<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>' +
+      '<button class="btn' + (ligado ? '' : ' primary') + '" data-toca="camada" data-click="closeModal()">Fechar</button>' +
       (ligado ? '<button class="btn primary" data-toca="camada" data-click="closeModal();propModal()">Adicionar imóvel</button>' : ''));
     return;
   }

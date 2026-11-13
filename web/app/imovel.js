@@ -376,7 +376,7 @@ function imvGaleria(id){
   const fs=p.photos||[];if(!fs.length)return;
   openModal('Fotos · '+p.name,`<div class="imv-galeria">${fs.map((f,i)=>
     `<button type="button" class="imv-gfoto pcover" id="th_${esc(f.id)}" data-toca="camada" data-click="openMeta('${jsq(f.id)}')" aria-label="${esc(f.name||('Foto '+(i+1)))}">${i===0?'<span class="imv-nfotos">capa</span>':''}</button>`).join('')}</div>`,
-    `<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`);
+    `<button type="button" class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>`);
   paintThumbs(fs);
 }
 /* «Registar despesa» da ficha: o formulário da despesa já com o imóvel (é

@@ -17,6 +17,11 @@
    cria conta já a tem por vista (as boas-vindas marcam-na): esta é
    sobretudo das contas de antes, e de quem a revê pela Ajuda.
 
+   Os ecrãs da Avaliação, das Projeções e do IRS são os de uma área, como
+   a app os mostra no telemóvel desde o KAN-120: o nome «Análise» no
+   cabeçalho e as abas por baixo dele, com a do separador acesa
+   (aprAEcraDaAnalise).
+
    Os números são os do portefólio inventado (apresentacao.js:APR_EXEMPLO):
    o ano soma os meses dele (aprAAno), a Avaliação reparte-o pelos imóveis
    (aprAPorImovel), as Projeções levam-no para a frente (aprAProjecao). O
@@ -375,16 +380,45 @@ function aprADireita(qual) {
 }
 
 /* O ecrã do telemóvel de um separador desta folha: o aprTela com o
-   cabeçalho e os botões dele, e a barra de baixo — acesa no Início na
-   Visão geral, apagada na Análise e nas Definições, que vivem no menu.
+   cabeçalho e os botões dele, as abas da área (na Análise) e a barra de
+   baixo — acesa no Início na Visão geral, apagada na Análise e nas
+   Definições, que não são destinos dela.
    Recebe: titulo — o do cabeçalho; direita — os botões (aprADireita);
-   corpo — o HTML; inicio (opcional) — verdade na Visão geral.
+   corpo — o HTML; inicio (opcional) — verdade na Visão geral; abas
+   (opcional) — o HTML das abas por baixo do cabeçalho (apresentacao.js:aprAbas).
    Devolve: o HTML (o ecrã, para dentro de uma aprCena com arranjo 'tela'). */
-function aprAEcra(titulo, direita, corpo, inicio) {
+function aprAEcra(titulo, direita, corpo, inicio, abas) {
   /* o desenho do apresentacao.js:aprTela, com o cabeçalho de cada ecrã: o
      aprTela escreve-o sempre com o sino e o selecionar das listas */
-  return '<div class="apr-tela com-barra">' + aprCabeca(titulo, { direita: direita }) +
+  return '<div class="apr-tela com-barra">' + aprCabeca(titulo, { direita: direita }) + (abas || '') +
     '<div class="apr-tela-corpo">' + (corpo || '') + '</div>' + aprBarra(inicio ? 'inicio' : '') + '</div>';
+}
+
+/* As abas da Análise que esta conta vê, como navegacao.js:abasDaArea as
+   escreve: as portas da área (navegacao.js:AREAS) que não estão escondidas
+   (acessos.js:separadoresEscondidos — um cargo, a Declaração desligada),
+   com o rótulo de cada separador. Lidas da app, e não escritas à mão como
+   as das Casas e do Dinheiro (apresentacao.js:APR_ABAS_CASAS): a do IRS
+   some com o serviço dele, e a maquete não pode mostrar uma aba que a
+   página não tem.
+   Devolve: os rótulos (array), ou null com uma porta só à vista — aí a app
+   não escreve a fila, e o título é o do separador. */
+function aprAAbasDaAnalise() {
+  var fora = typeof separadoresEscondidos === 'function' ? separadoresEscondidos() : [];
+  var nomes = AREAS.analise.ids.filter(function (id) { return portaVisivel(id, fora); })
+    .map(function (id) { return rotuloDaPorta(id).label; });
+  return nomes.length > 1 ? nomes : null;
+}
+
+/* O ecrã do telemóvel de um separador da Análise, como a app o mostra
+   desde o KAN-120: o nome da área no cabeçalho (navegacao.js:tituloDoEcraHtml)
+   e as abas por baixo dele, com a deste separador acesa (aprAAbasDaAnalise).
+   Recebe: aba — o rótulo do separador (o de TABS); direita — os botões
+   (aprADireita); corpo — o HTML.
+   Devolve: o HTML (o ecrã, para dentro de uma aprCena com arranjo 'tela'). */
+function aprAEcraDaAnalise(aba, direita, corpo) {
+  var abas = aprAAbasDaAnalise();
+  return abas ? aprAEcra(AREAS.analise.label, direita, corpo, false, aprAbas(abas, aba)) : aprAEcra(aba, direita, corpo);
 }
 
 /* ------------------------------------------------------ a Visão geral */
@@ -708,7 +742,7 @@ function aprAHeroi(valor, noiAnual, conta) {
    Devolve: o HTML da imagem. */
 function aprAAvaliacaoHeroi() {
   var a = aprAAno();
-  return aprCena(aprAEcra('Avaliação', aprADireita('roda'),
+  return aprCena(aprAEcraDaAnalise('Avaliação', aprADireita('roda'),
     '<span class="apr-a-topo">' + aprAChipImovel('') + '<span class="apr-a-icobotao">' + ic('partilhar', 12) + '</span></span>' +
     aprCartao(aprAHeroi(a.valor, a.noiAnual, true), { classe: 'apr-a-cartao-heroi' })),
     { tom: 't0', arranjo: 'tela' });
@@ -807,7 +841,7 @@ function aprAColunasDaProjecao(anos) {
    Devolve: o HTML da imagem. */
 function aprAProjecoesFluxos() {
   var pj = aprAProjecao().anos, ini = pj[0], fim = pj[pj.length - 1];
-  return aprCena(aprAEcra('Projeções', aprADireita('roda'),
+  return aprCena(aprAEcraDaAnalise('Projeções', aprADireita('roda'),
     aprAKpis([aprAKpi('Renda anual hoje', money(ini.rendas), { nota: 'a preços de ' + ini.ano }),
       aprAKpi('Cashflow em ' + fim.ano, money(fim.cashflow), { tom: fim.cashflow >= 0 ? 'pos' : 'neg', nota: 'com IRS, despesas e prestações' })]) +
     aprACartao('Entradas e saídas por ano', '', aprALegenda([['Rendas', 'in'], ['IRS', 'irs'], ['Despesas', 'out'], ['Prestações', 'loan']]) +
@@ -918,7 +952,7 @@ function aprAFiscoResumo() {
     var c = ex.contrato(id), r = c.renda * n;
     return [esc(c.inquilino), esc(aprDinheiro(r)), '<b>' + esc(aprDinheiro(f.imposto * r / f.rendas)) + '</b>'];
   };
-  return aprCena(aprAEcra('IRS · Anexo F', aprADireita('funil'),
+  return aprCena(aprAEcraDaAnalise('IRS · Anexo F', aprADireita('funil'),
     aprAFiscoBarra(false) +
     aprACartao('Quadro 4.1 · sem redução', 'preenche no quadro 4.1', aprATabela(['Contrato', 'Rendas', 'Imposto'],
       [linha('c5'), linha('c1')], { cols: 'c3' }), { classe: 'apr-a-cartao-quadros' })),

@@ -34,7 +34,7 @@ window.__fileLoaded=function(name,text){
 function bkPasteBox(){
   openModal('Colar cópia de segurança',`<div class="form">
     <label>O conteúdo da cópia (.json) <span class="req">*</span><textarea id="bkText" class="u-minh-130px u-font-13px-1p5-ui-monospace-menlo-monospace" placeholder="Ex: {&quot;properties&quot;:[…],&quot;transactions&quot;:[…]}"></textarea></label></div>`,
-    `<button class="btn" data-click="closeModal()">Cancelar</button><button class="btn primary" data-click="bkReporColado()">Repor</button>`);
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="bkReporColado()">Repor</button>`);
 }
 /* Repõe a cópia colada na caixa do bkPasteBox. Era a ação do botão Repor, escrita
    no atributo de clique como bkLoad(val('bkText')): o val é um const de topo
@@ -147,7 +147,7 @@ function wipe(){
        na tua conta e nos outros aparelhos — não só neste.<br><br>
        · Para limpar só este dispositivo, sai da conta primeiro (Definições → Segurança → Terminar sessão).<br>
        · Para apagar a conta e tudo o que lá está, usa Definições → Segurança → Apagar a conta.</div>`,
-      '<button class="btn primary" data-click="closeModal()">Percebi</button>');
+      '<button class="btn primary" data-toca="camada" data-click="closeModal()">Percebi</button>');
     return;
   }
   confirmModal('Apagar tudo','Isto apaga imóveis, contratos, pessoas, movimentos e definições deste dispositivo.',()=>{

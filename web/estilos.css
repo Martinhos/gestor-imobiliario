@@ -154,7 +154,7 @@ header.top{position:sticky;top:0;z-index:20;background:var(--blur);-webkit-backd
   display:flex;align-items:center;gap:12px}
 body.rolada header.top{border-bottom-color:var(--line)}
 /* o título da página na Bricolage: 32px no computador, 22 no telemóvel
-   (a @media de baixo), com o subtítulo só no computador */
+   (a @media de baixo), com o subtítulo por baixo nos dois */
 header.top h1{font-size:32px;line-height:1.1;margin:0}
 header.top .sub{color:var(--muted);font-size:14px;margin-top:4px}
 .burger{display:none;border:0;background:transparent;border-radius:12px;padding:0;width:44px;height:44px;cursor:pointer;color:var(--ink);margin-left:-8px}
@@ -171,7 +171,9 @@ header.top .sub{color:var(--muted);font-size:14px;margin-top:4px}
   .wrap{padding:4px calc(16px + var(--inset-right)) calc(44px + var(--inset-bottom)) calc(16px + var(--inset-left))}
   header.top{padding:calc(10px + var(--inset-top)) calc(8px + var(--inset-right)) 6px calc(8px + var(--inset-left));gap:4px}
   header.top h1{font-size:22px}
-  header.top .sub{display:none}
+  /* o subtítulo por baixo do nome da área, numa linha (o KAN-22): o estado do
+     separador (navegacao.js:subtituloDoEcra); o que não cabe acaba em … */
+  header.top .sub{font-size:12.5px;line-height:1.3;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .burger{margin-left:0}
 }
 @media(max-width:520px){.hideS{display:none}}

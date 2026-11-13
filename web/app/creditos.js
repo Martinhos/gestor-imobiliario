@@ -782,7 +782,7 @@ function amortModal(pid,lid,trocar){
   }
   (trocar?setModal:openModal)('Amortização · '+p.name,`<div class="form">
     ${ls.length>1?`<label>Ver${sel('amSel',amortLid,opts,'onAmortSel','vista')}</label>`:''}
-    ${body}</div>`,`<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`);
+    ${body}</div>`,`<button class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>`);
 }
 // Mudou a hipoteca no select do modal da amortização: reconstrói o conteúdo.
 // Devolve: nada — reconstrói o modal via amortModal.

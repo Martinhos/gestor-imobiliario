@@ -10,7 +10,7 @@ function swPick(input){const f=input.files&&input.files[0];if(!f)return;input.va
 function swPasteBox(){
   openModal('Colar CSV do Splitwise',`<div class="form"><div class="hint">Abre o CSV, copia tudo e cola aqui — incluindo a linha dos títulos.</div>
     <label>O CSV <span class="req">*</span><textarea id="swText" class="u-minh-120px u-font-13px-1p5-ui-monospace-menlo-monospace" placeholder="Ex: Date,Description,Category,Cost,Currency"></textarea></label></div>`,
-    `<button class="btn" data-click="closeModal()">Cancelar</button><button class="btn primary" data-click="swParseColado()">Continuar</button>`);
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="camada" data-click="swParseColado()">Continuar</button>`);
 }
 /* O «Continuar» do swPasteBox: lê o textarea e entrega o texto ao swParse.
    Era um onclick com swParse(val('swText')), e o val é um const de topo — não
@@ -66,7 +66,7 @@ function swMapModal(){
     <label>A minha quota-parte (%)<input id="sw_quota" type="text" inputmode="decimal" value="${dec(db.settings.quota||100)}" placeholder="Opcional" data-input="swRefresh()" autocomplete="off"></label>
     <div class="hint">O Splitwise exporta o custo total. Se divides a casa a meias, põe 50 e a app lança só metade. Em branco: 100 %.</div>
     <div class="divider"></div><div id="swPrev">${swPrevHtml(swPrepare(iDate,iDesc,iCost,iCat,100,db.settings.quota||100))}</div></div>`,
-    `<button class="btn" data-click="closeModal()">Cancelar</button><button class="btn primary" data-click="swDo(${iDate},${iDesc},${iCost},${iCat})">Importar</button>`);
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="swDo(${iDate},${iDesc},${iCost},${iCat})">Importar</button>`);
 }
 // Refaz a pré-visualização (#swPrev) quando o utilizador mexe na quota-parte.
 // Devolve: nada — redesenha a pré-visualização no DOM.

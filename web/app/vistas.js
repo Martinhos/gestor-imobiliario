@@ -876,7 +876,7 @@ function kpiModal(id){
     ${(d.yearly||[]).length>1?`<div><div class="flabel">${d.yearlyTitle||'Ano a ano'}</div>${cLine([{name:k.title,values:vals,color:cor}],d.yearly.map(y=>String(y.label)),{h:170,fmt,marks:d.marks})}</div>`:''}
     ${tabelaDoKpi(k,d,fmt)}
     ${d.note?`<div class="hint">${d.note}</div>`:''}</div>`;
-  openModal(k.title,body,`<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`+
+  openModal(k.title,body,`<button class="btn${k.acao?'':' primary'}" data-toca="camada" data-click="closeModal()">Fechar</button>`+
     (k.acao?`<button class="btn primary" data-toca="vista" data-click="closeModal();${k.acao.act}">${esc(k.acao.label)}</button>`:''));
 }
 /* anos com movimentos que contam nesta vista (o mesmo peso das métricas: imóvel,

@@ -116,11 +116,11 @@ describe('a faixa (cloud/entrada.js:setSyncBadge)', () => {
     assert.deepEqual(tempos, [], 'nem recibos a recolher');
   });
 
-  test('«off» escreve «Sem ligação ao servidor.», com «N alterações por enviar.» quando as há', () => {
+  test('«off» escreve «Sem ligação ao servidor.», com «N alterações por enviar — sobem quando houver rede.» quando as há', () => {
     const { app, el } = comFaixa(3);
     app.setSyncBadge('off');
     assert.equal(el.className, 'fora');
-    assert.equal(texto(el), 'Sem ligação ao servidor. 3 alterações por enviar.');
+    assert.equal(texto(el), 'Sem ligação ao servidor. 3 alterações por enviar — sobem quando houver rede.');
     assert.match(el.innerHTML, /^<div class="faixa-sync entra">/, 'a primeira entrada desliza');
     assert.ok(el.innerHTML.includes(app.ic('nuvemFora', 18)), 'a nuvem com a cruz');
     assert.equal(el.atr['aria-live'], 'polite', 'a falha diz-se');
@@ -130,7 +130,7 @@ describe('a faixa (cloud/entrada.js:setSyncBadge)', () => {
   test('uma alteração diz-se no singular; nenhuma, não se diz', () => {
     const um = comFaixa(1);
     um.app.setSyncBadge('off');
-    assert.equal(texto(um.el), 'Sem ligação ao servidor. 1 alteração por enviar.');
+    assert.equal(texto(um.el), 'Sem ligação ao servidor. 1 alteração por enviar — sobe quando houver rede.');
     const zero = comFaixa(0);
     zero.app.setSyncBadge('off');
     assert.equal(texto(zero.el), 'Sem ligação ao servidor.');
@@ -140,10 +140,10 @@ describe('a faixa (cloud/entrada.js:setSyncBadge)', () => {
   test('o n dado ganha à contagem; sem n, conta a nuvem (pendentesLocais); sem a nuvem, zero', () => {
     const a = comFaixa(7);
     a.app.setSyncBadge('off', 2);
-    assert.match(texto(a.el), /2 alterações por enviar\.$/);
+    assert.match(texto(a.el), /2 alterações por enviar — sobem quando houver rede\.$/);
     const b = comFaixa(7);
     b.app.setSyncBadge('off');
-    assert.match(texto(b.el), /7 alterações por enviar\.$/);
+    assert.match(texto(b.el), /7 alterações por enviar — sobem quando houver rede\.$/);
     const c = comFaixa(0);
     c.app.pendentesLocais = () => { throw new Error('sem estado'); };
     c.app.setSyncBadge('off');
@@ -163,7 +163,7 @@ describe('a faixa (cloud/entrada.js:setSyncBadge)', () => {
     app.setSyncBadge('off');
     app.setSyncBadge('liga');
     assert.equal(el.className, 'tenta');
-    assert.equal(texto(el), 'A tentar ligar ao servidor… 2 alterações por enviar.', 'com a contagem da falha');
+    assert.equal(texto(el), 'A tentar ligar ao servidor… 2 alterações por enviar — sobem quando houver rede.', 'com a contagem da falha');
     assert.match(el.innerHTML, /^<div class="faixa-sync tenta">/, 'sem .entra: troca no sítio');
     assert.ok(el.innerHTML.includes(app.ic('nuvemLiga', 18)), 'a nuvem com o relógio');
     assert.equal(el.atr['aria-live'], 'off', 'a roda das tentativas não se anuncia');
@@ -179,7 +179,7 @@ describe('a faixa (cloud/entrada.js:setSyncBadge)', () => {
     app.setSyncBadge('liga');
     app.pendentesLocais = () => ({ n: 4 });
     app.setSyncBadge('off');
-    assert.match(texto(el), /4 alterações por enviar\.$/);
+    assert.match(texto(el), /4 alterações por enviar — sobem quando houver rede\.$/);
     assert.equal(el.atr['aria-live'], 'polite', 'quatro em vez de duas é notícia');
     el.innerHTML = 'marca';
     app.setSyncBadge('off');

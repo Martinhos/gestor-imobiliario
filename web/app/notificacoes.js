@@ -285,7 +285,7 @@ function notifTransfVer(lote){
   const fim=concluir?'Todos aceitaram: aceita para concluir.':!varios?'Nada muda até aceitares.':responder?'Nada muda até todos aceitarem.':'Nada muda até os outros aceitarem.';
   const l=jsq(lote),fechar='<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>';
   const aceitar=`<button type="button" class="btn primary" data-toca="dados" data-click="notifTransfAceitar('${l}')">Aceitar</button>`;
-  const pe=concluir?fechar+aceitar:responder?`<button type="button" class="btn" data-toca="dados" data-click="notifTransfRecusar('${l}')">Recusar</button>`+aceitar:fechar;
+  const pe=concluir?fechar+aceitar:responder?`<button type="button" class="btn" data-toca="dados" data-click="notifTransfRecusar('${l}')">Recusar</button>`+aceitar:fechar.replace('class="btn"','class="btn primary"');
   const L=openModal('Pedido de '+notifTransfNome(t.from),
     `<div class="form trf-ver"><p>${quem} quer transferir o controlo de ${nomes} a ${porQuem}.</p>${frases.map(f=>`<p class="small">${f}</p>`).join('')}${prog}<p class="small">${fim}</p></div>`,pe);
   if(L)L.trf=lote;

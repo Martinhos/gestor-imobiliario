@@ -27,6 +27,30 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 69,
+    data: '2026-11-13',
+    titulo: 'A Análise com abas',
+    seccoes: [
+      {
+        titulo: 'Navegação',
+        afeta: ['app'],
+        itens: [
+          'A Avaliação, as Projeções e o IRS · Anexo F passam a ter abas no topo, como as Casas e o Dinheiro. No telemóvel, desliza de lado para passar de um para o outro.',
+          'No telemóvel, por baixo do nome da área, uma linha diz o estado do ecrã. Nos Contratos, quantos estão em vigor, a acabar e por começar.',
+          'Sem rede, a faixa vermelha diz que as alterações por enviar sobem quando houver rede.',
+          'Nas janelas com um botão só, o «Fechar» é azul em todas.',
+        ],
+      },
+      {
+        titulo: 'Menus',
+        afeta: ['app'],
+        itens: [
+          'Um menu aberto junto à ponta esquerda do ecrã já não sai pelo lado. Era o caso do «Mover» na janela de um ticket.',
+        ],
+      },
+    ],
+  },
+  {
     v: 68,
     data: '2026-11-12',
     titulo: 'O IRS das rendas, para toda a gente',

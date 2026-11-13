@@ -214,7 +214,7 @@ CW.startFromToday = function (id, doPreencher) {
     return doPreencher ? CW.fillNext() : undefined;
   }
   openModal('Começar a partir de hoje', '<div class="hint u-fs-14px">' + comecarHojeFrase(r, s) + '</div>',
-    '<button class="btn" data-click="' + (doPreencher ? 'CW.fillNext()' : 'closeModal()') + '">Cancelar</button>' +
+    '<button class="btn" data-toca="camada" data-click="' + (doPreencher ? 'CW.fillNext()' : 'closeModal()') + '">Cancelar</button>' +
     '<button class="btn primary" data-toca="dados" data-click="_ok()">Confirmar</button>');
   _ok = function () {
     closeModal();

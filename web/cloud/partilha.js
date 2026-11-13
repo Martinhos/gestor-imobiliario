@@ -983,8 +983,8 @@ CW.deleteAccount = function () {
     '<div class="hint u-m-n4px-0-0">Só fica vazia se entras com o Google.</div>' +
     '<div id="cw_del_e" class="small u-c-v-danger"></div></div>';
   openModal('Apagar a minha conta', body,
-    '<button class="btn" data-click="closeModal()">Cancelar</button>' +
-    '<button class="btn danger" data-click="CW.doDeleteAccount()">Apagar definitivamente</button>');
+    '<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button>' +
+    '<button class="btn danger" data-toca="dados" data-click="CW.doDeleteAccount()">Apagar definitivamente</button>');
 };
 
 /* Apaga a conta na API (confirmação e palavra-passe validadas lá) e limpa

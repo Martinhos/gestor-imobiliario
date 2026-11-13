@@ -337,7 +337,7 @@ function ctVerAnexos(id,qual){
   else if(qual==='fotos'){titulo='Registo fotográfico';corpo=`<div class="ct-fotos">${fotos.map(f=>`<figure class="ct-foto"><div class="pcover ct-foto-img" id="th_${esc(f.id)}"></div><figcaption class="small">${esc(f.name||'Fotografia')}</figcaption></figure>`).join('')}</div>`}
   else if(qual==='anexos'&&vf){titulo='Anexos';corpo=(c.files||[]).map(f=>`<button type="button" class="ct-anexo" data-toca="camada" data-click="openMeta('${jsq(f.id)}')">${ic('clip',18)}<span>${esc(f.name||'ficheiro')}</span>${ic('chevR',16)}</button>`).join('')}
   if(!corpo)return;
-  openModal(titulo,`<div class="ct-lista-anexos">${corpo}</div>`,`<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`);
+  openModal(titulo,`<div class="ct-lista-anexos">${corpo}</div>`,`<button type="button" class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>`);
   if(qual==='fotos')paintThumbs(fotos);
 }
 /* A ficha de um contrato: o que tocar num contrato passa a abrir.

@@ -285,7 +285,7 @@ function tfTitulo(){
    Devolve: o HTML do rodapé. */
 function tfRodape(){
   const ok=tfAlvo&&tfPodeAlterar(tfAlvo.tipo,tfAlvo.id);
-  if(!ok)return `<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`;
+  if(!ok)return `<button type="button" class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>`;
   return `<button type="button" class="btn" id="tf_fechar" data-toca="camada" data-click="tfFechar()">${tfMudou()?'Cancelar':'Fechar'}</button>`
     +`<button type="button" class="btn primary" data-toca="dados" data-click="tfGuardar()">Guardar</button>`;
 }

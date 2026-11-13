@@ -483,3 +483,14 @@ scripts/kanban.mjs e os passos do cartão no scripts/qa.mjs partem a frase em
 `'BEGIN TRANS' || 'ACTION'` (o valor guardado é o mesmo). O UPDATE da nota no
 `qa.mjs resolver` e o scripts/ticket.mjs ainda não o fazem: uma nota com essas
 palavras não se escreve inteira.
+
+## Um menu encostado à direita de um botão do lado esquerdo sai do ecrã
+O .menupop tem right:0 (encosta-se à direita do botão) e cresce para a
+esquerda, com 200px no mínimo. Num botão que fica do lado esquerdo — o
+«Mover» da janela de um Erro sem ticket (cloud/qa.js:qaHtmlMover), sozinho à
+esquerda do rodapé porque não há «Remover» — o menu começava em -30px a 384 e
+em -42px a 360 (KAN-121). O ajustarPop só olhava para cima e para baixo.
+Agora mede também a esquerda (pelo offsetLeft, que o scale da entrada não
+toca) e o componentes.js:encostoPop decide. Um menu novo não precisa de CSS
+próprio para isto; um que o CSS já encoste à esquerda (a pílula com
+data-lado="esq") continua igual enquanto couber.

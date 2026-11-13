@@ -49,11 +49,20 @@ const NAV_GROUPS=[{label:'',ids:['dashboard']},{label:'Casas',ids:['properties',
    2026-10-20). Sem sessão na nuvem escondem-se (acessos.js:separadoresEscondidos),
    e o segmentado fica com os dois de sempre. */
 const PESSOAS=['tenants','owners','colaboradores'];
-/* As áreas da barra de baixo do telemóvel: cada uma é uma porta para vários
-   separadores, que no topo do ecrã se trocam por separadores segmentados
-   (abasDaArea). A Visão geral e a Agenda são um separador só cada uma. */
+/* As áreas do telemóvel: cada uma junta vários separadores, que no topo do
+   ecrã se trocam por abas (abasDaArea), se percorrem com o dedo
+   (vizinhoNaArea) e se lembram de onde se ficou (_ultimoNaArea); no
+   cabeçalho do telemóvel lê-se o nome da área (tituloDoEcraHtml). As Casas e
+   o Dinheiro são também destinos da barra de baixo (TABBAR). A Análise não:
+   a barra fica com quatro destinos e a Análise abre-se pela gaveta, mas lá
+   dentro é uma área como as outras — a Avaliação, as Projeções e o IRS ·
+   Anexo F eram três ecrãs soltos, e quem estava num não via os outros dois
+   (o pedido do Martinho no KAN-120). As portas são as do grupo da gaveta
+   com o mesmo nome (NAV_GROUPS), pela mesma ordem. A Visão geral e a Agenda
+   são um separador só cada uma. */
 const AREAS={casas:{label:'Casas',icon:'building',ids:['properties','groups','contracts','pessoas','visits']},
-  dinheiro:{label:'Dinheiro',icon:'carteira',ids:['transactions','recurring','credits']}};
+  dinheiro:{label:'Dinheiro',icon:'carteira',ids:['transactions','recurring','credits']},
+  analise:{label:'Análise',icon:'bars',ids:['reports','projections','fisco']}};
 /* o último separador visitado em cada área: voltar a «Casas» na barra de
    baixo volta aos Contratos se era lá que se estava, e não aos Imóveis */
 const _ultimoNaArea={};
@@ -67,9 +76,9 @@ function idsDaPorta(id){return id==='pessoas'?PESSOAS:[id]}
    Recebe: id — a porta; fora — os ids escondidos (separadoresEscondidos).
    Devolve: true/false. */
 function portaVisivel(id,fora){return idsDaPorta(id).some(x=>(fora||[]).indexOf(x)<0)}
-/* A área da barra de baixo onde vive um separador.
+/* A área onde vive um separador (AREAS).
    Recebe: id — um id de TABS.
-   Devolve: 'casas', 'dinheiro', ou '' quando não está em nenhuma. */
+   Devolve: 'casas', 'dinheiro', 'analise', ou '' quando não está em nenhuma. */
 function areaDe(id){
   return Object.keys(AREAS).find(a=>AREAS[a].ids.some(p=>idsDaPorta(p).indexOf(id)>-1))||'';
 }
@@ -296,7 +305,9 @@ function crachaHtml(id,onde){
    Início, as duas áreas — Casas e Dinheiro, cada uma com os seus separadores
    no topo — e a Agenda; o + vai a meio. São as mesmas portas da barra lateral,
    agrupadas: tudo o que se faz todos os dias fica a um toque, e a área
-   lembra-se do separador onde se estava (_ultimoNaArea). */
+   lembra-se do separador onde se estava (_ultimoNaArea). A Análise é uma
+   área sem lugar aqui (AREAS): abre-se pela gaveta, e lá dentro nenhum
+   destino da barra se acende. */
 const TABBAR=['dashboard','casas','dinheiro','calendar'];
 /* o rótulo e o ícone de cada destino da barra de baixo */
 const BARRA_ROTULO={dashboard:['Início','painel'],calendar:['Agenda','cal']};
@@ -458,7 +469,8 @@ function go(id){
 }
 /* ---- deslizar entre os separadores de uma área ----
    No telemóvel, os separadores de uma área (Imóveis, Grupos, Contratos,
-   Pessoas, Visitas; Movimentos, Planeados, Créditos) são um carrossel: arrastar de
+   Pessoas, Visitas; Movimentos, Planeados, Créditos; Avaliação, Projeções,
+   IRS · Anexo F) são um carrossel: arrastar de
    lado na vista leva a página com o dedo, e largar depois de um quarto da
    largura, ou com um sacudir, acaba a viagem até ao vizinho pela fita da
    barra de baixo (continuidade.js:deslizarPainel), a partir de onde o dedo a
@@ -1003,8 +1015,9 @@ function ajudaBrilhoPasso(){
   if(++_ajudaBrilhoVoltas<AJUDA_BRILHO_VOLTAS)ajudaBrilhoArmar();
 }
 /* Os separadores de uma área, no topo do ecrã do telemóvel (o canvas, M-Casas
-   e M-Movimentos): Imóveis/Grupos/Contratos/Pessoas/Visitas e
-   Movimentos/Planeados/Créditos, num segmentado — com o crachá do separador
+   e M-Movimentos): Imóveis/Grupos/Contratos/Pessoas/Visitas,
+   Movimentos/Planeados/Créditos e Avaliação/Projeções/IRS · Anexo F, num
+   segmentado — com o crachá do separador
    na aba, quando o serviço dele registou um (o dos Grupos: os pedidos para
    entrar nos meus grupos partilhados). No computador escondem-se
    (estilos.css:.abas-area) — lá a barra lateral mostra as portas todas. E nas
@@ -1240,22 +1253,23 @@ function pintarAcaoDoCabecalho(){
   b.innerHTML=ic('plus',18)+'<span>'+(ROTULO_ACAO[a.id]||a.label)+'</span>';
   b.setAttribute('data-click',a.act);
 }
-/* A área com separadores onde o separador atual vive: Casas ou Dinheiro,
-   quando mostram mais do que uma porta (abasDaArea escreve-as no topo).
-   Uma área com uma porta só à vista (um cargo, um serviço desligado) não
-   conta: lá o separador é o ecrã inteiro.
+/* A área com separadores onde o separador atual vive: Casas, Dinheiro ou
+   Análise, quando mostram mais do que uma porta (abasDaArea escreve-as no
+   topo). Uma área com uma porta só à vista (um cargo, um serviço desligado
+   — a Declaração desligada deixa a Análise com duas) não conta: lá o
+   separador é o ecrã inteiro.
    Recebe: fora (opcional) — os ids escondidos (separadoresEscondidos); sem ele pergunta.
-   Devolve: 'casas', 'dinheiro', ou ''. */
+   Devolve: 'casas', 'dinheiro', 'analise', ou ''. */
 function areaComSeparadores(fora){
   const f=fora||(typeof separadoresEscondidos==='function'?separadoresEscondidos():[]);
   const area=areaDe(tab);
   return area&&AREAS[area].ids.filter(id=>portaVisivel(id,f)).length>1?area:'';
 }
-/* O título do cabeçalho. Numa área com separadores (Casas, Dinheiro) leva os
-   dois nomes, cada um no seu <span>: o do separador, que o computador mostra
-   (a barra lateral não diz em que área se está), e o da área, que o
-   telemóvel mostra (o canvas: M-Casas e M-Movimentos — os separadores logo
-   por baixo já dizem onde se está). Quem escolhe é a CSS
+/* O título do cabeçalho. Numa área com separadores (Casas, Dinheiro,
+   Análise) leva os dois nomes, cada um no seu <span>: o do separador, que o
+   computador mostra (a barra lateral não diz em que área se está), e o da
+   área, que o telemóvel mostra (o canvas: M-Casas e M-Movimentos — os
+   separadores logo por baixo já dizem onde se está). Quem escolhe é a CSS
    (estilos.css:#pageTitle .tit-area), e não uma medida no render: assim
    acompanha uma rotação ou um redimensionar sem repintar.
    Recebe: meta — o separador ou a subpágina das Definições ({label}).
@@ -1265,7 +1279,9 @@ function tituloDoEcraHtml(meta){
   if(!area)return esc(meta.label);
   return '<span class="tit-sep">'+esc(meta.label)+'</span><span class="tit-area">'+esc(AREAS[area].label)+'</span>';
 }
-/* O subtítulo do cabeçalho (só no computador): o do separador (TABS.sub) ou
+/* O subtítulo do cabeçalho — no computador por baixo do nome do separador,
+   no telemóvel por baixo do nome da área, numa linha (estilos.css: header.top
+   .sub; o KAN-22): o do separador (TABS.sub) ou
    o da subpágina das Definições; na Visão geral, com movimentos, o período
    dos indicadores (o canvas, Main: «Ano de 2026 · até hoje, 17/10/2026») —
    os indicadores somam o ano corrente inteiro (metricas.js:metrics), por
@@ -1273,10 +1289,13 @@ function tituloDoEcraHtml(meta){
    eles vão em vez de «até hoje». Nos Colaboradores, quantas pessoas
    colaboram e quantos convites esperam (cloud/colaboradores.js:resumoDosColaboradores),
    o que dizia a linha das Definições antes de eles passarem para as Pessoas.
+   Nos Contratos, o estado deles (lista-contratos.js:resumoDosContratos:
+   «4 em vigor · 1 a acabar»), ou a descrição quando não há nenhum vivo.
    Recebe: meta — o separador ou a subpágina ({sub}).
    Devolve: o texto (string). */
 function subtituloDoEcra(meta){
   if(tab==='colaboradores')return typeof resumoDosColaboradores==='function'?resumoDosColaboradores():meta.sub;
+  if(tab==='contracts')return (typeof resumoDosContratos==='function'&&resumoDosContratos())||meta.sub;
   if(tab!=='dashboard'||!(db.transactions||[]).length)return meta.sub;
   const hoje=today(),ano=String(YEAR);
   const ultimo=db.transactions.reduce((m,t)=>{const d=String(t.date||'');return d.indexOf(ano)===0&&d>m?d:m},'');

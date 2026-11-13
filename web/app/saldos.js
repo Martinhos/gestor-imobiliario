@@ -291,7 +291,7 @@ function balancesDetail(pid){
       <div class="small">${l.t.kind==='settle'?nm(l.t.paidBy)+' → '+nm(l.t.toId):(KIND[l.t.kind]||{}).short+' · '+(isIn(l.t.kind)?'recebeu ':'pagou ')+nm(l.t.paidBy)+(splitLabel(l.t)?' · '+splitLabel(l.t):' · quotas')}${!pid?' · '+esc(l.p.name):''} · <b>${euro2(l.t.amount)}</b></div>
       <div class="chips u-mt-6px">${ids.map(o=>`<span class="badge grey">${nm(o)} <b class="${l.eff[o]>0?'pos':l.eff[o]<0?'neg':''}">${l.eff[o]?(l.eff[o]>0?'+':'−')+euro2(Math.abs(l.eff[o])/100):'—'}</b> · saldo ${euro2(saldo[o]/100)}</span>`).join('')}</div></div>`}).join('')}</div>
     <div class="hint">"Saldo" é o acumulado até esse movimento: positivo a receber, negativo a pagar. Toca num movimento para o editar.</div></div>`,
-    `<button class="btn" data-click="closeModal()">Fechar</button>`);
+    `<button class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>`);
 }
 /* saldos entre comproprietários, em euros por dono: quem pagou fica a crédito e a
    parte de cada um sai das quotas ou da divisão escolhida no movimento; as

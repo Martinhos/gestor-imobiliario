@@ -116,7 +116,8 @@ describe('o vizinho de cada separador', () => {
   });
 
   test('fora de uma área com separadores não há vizinho nenhum', () => {
-    for (const id of ['dashboard', 'calendar', 'settings', 'reports', 'fisco']) {
+    // a Análise é uma área desde o KAN-120: os vizinhos dela estão no analise-abas.test.js
+    for (const id of ['dashboard', 'calendar', 'settings']) {
       em(app, id);
       assert.deepEqual(lados(app), ['', ''], id);
     }

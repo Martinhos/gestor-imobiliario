@@ -642,7 +642,13 @@ escolhido volta a todos (definicoes.js:gruposApagarLocal). O menu vira-se para c
 encolhe para caber no primeiro antepassado que corta
 (componentes.js:posicaoPop, componentes.js:ajustarPop). Nunca cresce até
 ao espaço disponível: um menu de 16 categorias tomava 488px do ecrã (a
-nota do posicaoPop).
+nota do posicaoPop). Na horizontal fica também dentro do que corta
+(componentes.js:encostoPop): o .menupop encosta-se à direita do botão e
+cresce para a esquerda, e quando assim sai do ecrã (ou da janela) passa a
+alinhar-se à esquerda do botão; se nem assim couber, fica dentro do limite,
+a 10px da ponta. Só mexe quando sai: os menus que já cabiam ficam como o CSS
+os pôs (o ajustarPop marca os que encostou com data-encosto e só desfaz
+esses).
 
 menu(id,items) (componentes.js:menu) é o ⋯ das ações de um registo;
 {danger:true} pinta a opção de vermelho, e só o que destrói a leva. O que
@@ -796,6 +802,12 @@ na folha a meio do regresso apanha-a onde ela está, e uma janela nova por
 cima a meio do gesto acaba-o. Sem movimento (continuidade.js:semMovimento)
 não segue o dedo: desvanece (.sheet.pronto) quando largar já fecha, e fecha
 sem animar.
+
+Uma janela com um botão só no rodapé, o «Fechar», veste-o de primário (a
+ficha sem «Editar», componentes.js:fichaRodape; as listas de anexos e de
+fotos, os saldos, o grupo, as tarefas de quem só lê): é a única coisa a
+fazer ali, e era azul em três janelas e branco em cinco. Ao lado de outro
+botão, o «Fechar» é secundário e a ação é que é primária.
 
 confirmModal(title,text,cb) (componentes.js:confirmModal) é para quando
 NÃO há como desfazer. O botão diz o verbo do título e veste-se de perigo
@@ -3334,7 +3346,12 @@ mudar de área é mudar de página.
 ### Deslizar entre os separadores de uma área
 No telemóvel (até 900px), os separadores de uma área são um carrossel:
 Imóveis, Grupos, Contratos, Pessoas, Visitas nas Casas; Movimentos, Planeados,
-Créditos no Dinheiro. Arrastar de lado na vista leva a página com o dedo, e
+Créditos no Dinheiro; Avaliação, Projeções, IRS · Anexo F na Análise
+(navegacao.js:AREAS — as portas do grupo «Análise» da gaveta, pela mesma
+ordem; com uma só à vista, não há fila nem área). Na Avaliação e nas
+Projeções os gráficos leem-se com o dedo (.chartbox[data-lido], no
+navegacao.js:SEP_NAO_ROUBA) e as tabelas que rolam de lado ficam com o
+arrasto: virar de separador é fora deles. Arrastar de lado na vista leva a página com o dedo, e
 largar depois de um quarto da largura, ou com um sacudir, acaba a viagem até
 ao separador vizinho (navegacao.js:sepArrastar, navegacao.js:sepArrastoFim).
 Largar antes disso devolve a página ao sítio, no --medio e na --curva-entra.
@@ -3422,7 +3439,7 @@ o gesto acaba (navegacao.js:sepArrastoMove).
 
 ### As abas da área, fora do #view
 As abas da área (Imóveis, Grupos, Contratos, Pessoas, Visitas; Movimentos,
-Planeados, Créditos) vivem na casa delas, por cima do `#view` e fora dele
+Planeados, Créditos; Avaliação, Projeções, IRS · Anexo F) vivem na casa delas, por cima do `#view` e fora dele
 (index.html:#abasArea), para ficarem paradas enquanto o painel desliza. Quem
 pinta continua a escrevê-las à cabeça da vista, como sempre
 (vistas.js:render, vistas.js:refrescarListasVivas e
@@ -5963,11 +5980,16 @@ e o subtítulo, o estado da sincronização, o sino, os filtros, a ação
 secundária e, na ponta direita, a principal. O título de um ecrã de uma área
 leva os dois nomes (navegacao.js:tituloDoEcraHtml) e a folha escolhe — o do
 separador no computador, o da área no telemóvel (estilos.css:#pageTitle, o
-.tit-area). O subtítulo, só no computador, diz o estado do ecrã onde há um
+.tit-area). O subtítulo diz o estado do ecrã onde há um
 (navegacao.js:subtituloDoEcra: na Visão geral, o período dos indicadores,
-«Ano de 2026 · até hoje, 17/10/2026»; nos Colaboradores, quantas pessoas
+«Ano de 2026 · até hoje, 17/10/2026»; nos Contratos, quantos estão em vigor,
+a acabar — o fim a menos de meio ano — e por começar,
+lista-contratos.js:resumoDosContratos; nos Colaboradores, quantas pessoas
 colaboram e quantos convites esperam,
-cloud/colaboradores.js:resumoDosColaboradores). Antes do sino, o «?»
+cloud/colaboradores.js:resumoDosColaboradores) e, nos outros, a descrição do
+separador. No computador fica por baixo do nome do separador; no telemóvel,
+por baixo do nome da área, numa linha só a 12,5px, e o que não cabe acaba em
+reticências (estilos.css: header.top .sub). Antes do sino, o «?»
 (index.html:#hdrAjuda, navegacao.js:pintarBotaoAjuda,
 navegacao.js:abrirAjuda) abre a apresentação do separador onde se está, a
 mesma que a Ajuda revê em «Apresentações» (cloud/apresentacao.js:aprRever:
@@ -6013,7 +6035,10 @@ há: «Pede atenção: N por ver» (notificacoes.js:notifSino).
 
 A barra de baixo tem quatro destinos, a um toque (navegacao.js:TABBAR,
 navegacao.js:buildTabbar): Início, Casas, Dinheiro e Agenda — duas portas e
-duas áreas (navegacao.js:AREAS). Uma área acende com qualquer dos seus
+duas áreas (navegacao.js:AREAS). A Análise também é uma área (com abas,
+carrossel, o nome «Análise» no cabeçalho do telemóvel e a área a lembrar o
+último separador), mas não é destino da barra: abre-se pela gaveta, e nos
+separadores dela nenhum destino da barra se acende. Uma área acende com qualquer dos seus
 separadores e lembra-se do último onde se esteve (navegacao.js:goBarra);
 some da barra só quando todas as portas dela estão escondidas
 (acessos.js:barraDeBaixo). A meio vai o + (ver «A fita da barra de baixo»). A

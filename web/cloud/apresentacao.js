@@ -977,7 +977,9 @@ function aprDaConta() {
    E duas peças sobrepostas — o formulário atrás, o resultado à frente:
      aprCena(aprPar(aprFolha('Novo contrato', campos), aprCartao(linha, { flutua: true })), { tom: 't1', arranjo: 'par' }) */
 
-// as abas das áreas, como navegacao.js:abasDaArea as escreve
+/* as abas das áreas, como navegacao.js:abasDaArea as escreve (as da Análise
+   leem-se da app, porque a do IRS some com o serviço dele:
+   apresentacao-analise.js:aprAAbasDaAnalise) */
 var APR_ABAS_CASAS = ['Imóveis', 'Grupos', 'Contratos', 'Pessoas', 'Visitas'];
 var APR_ABAS_DINHEIRO = ['Movimentos', 'Planeados', 'Créditos'];
 var APR_ABAS_PESSOAS = ['Inquilinos', 'Proprietários', 'Colaboradores'];

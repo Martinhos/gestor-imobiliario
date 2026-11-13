@@ -490,8 +490,11 @@ function outrasDoSeparador(tab){
   return ({recurring:['modelo']})[tab]||[];
 }
 /* Os destinos da barra de baixo que esta pessoa vê: um separador, se não
-   está escondido; uma área (Casas, Dinheiro — navegacao.js:AREAS), se
-   alguma das portas dela está à vista. Já não há substitutos: as áreas
+   está escondido; uma área (Casas, Dinheiro — navegacao.js:AREAS; a Análise
+   também é uma área, mas não é destino da barra), se alguma das portas dela
+   está à vista. As abas de dentro de cada área seguem a mesma regra
+   (navegacao.js:abasDaArea, areaComSeparadores): só as portas à vista, e
+   nenhuma fila quando só se vê uma. Já não há substitutos: as áreas
    juntam o que antes disputava os quatro lugares (visitas, contratos,
    inquilinos, planeados), e um destino sem nada à vista some.
    Recebe: ids — os destinos de origem (TABBAR); fora (opcional) — os ids escondidos (separadoresEscondidos).

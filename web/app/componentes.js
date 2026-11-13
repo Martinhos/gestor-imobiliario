@@ -134,6 +134,32 @@ function posicaoPop(botao, limite, quer, folga){
   };
 }
 
+/* Onde fica, na horizontal, um menu que o CSS encostou a um lado do botão.
+
+   O .menupop encosta-se à direita do botão (right:0) e cresce para a
+   esquerda: num botão do lado esquerdo do ecrã saía por lá fora — medido no
+   «Mover» da janela de um Erro sem ticket (KAN-121), que fica sozinho à
+   esquerda do rodapé: o menu de 200px começava em -30px a 384 e em -42px a
+   360. Quando não cabe onde o CSS o pôs, encosta-se ao outro lado do botão
+   (alinhado à esquerda dele); se nem assim couber, fica dentro do limite,
+   o mais perto possível de onde estava. Um menu mais largo do que o limite
+   começa na ponta da esquerda (ler o princípio das opções vale mais).
+
+   Recebe: botao — {left,right} do botão em px do ecrã; limite — {left,right}
+   do espaço utilizável; largura — a do menu (px, sem transform); esq — onde o
+   CSS pôs a esquerda do menu (px do ecrã); folga (opcional) — margem a deixar
+   nas pontas (10 por omissão).
+   Devolve: a esquerda nova (px do ecrã), ou null quando já cabe onde está. */
+function encostoPop(botao, limite, largura, esq, folga){
+  folga = folga == null ? 10 : folga;
+  const min = limite.left + folga, max = limite.right - folga - largura;
+  const cabe = (x) => x >= min - 0.5 && x <= max + 0.5;
+  if(cabe(esq))return null;
+  /* os dois encostos ao botão: à direita dele (o do CSS) e à esquerda */
+  for(const x of [botao.right - largura, botao.left])if(cabe(x))return x;
+  return max < min ? min : Math.min(Math.max(esq, min), max);
+}
+
 /* Mede o que rodeia o menu e aplica o que o posicaoPop decidir.
 
    Sem isto, um menu perto do fundo abria para baixo e ficava cortado pelo
@@ -153,28 +179,47 @@ function ajustarPop(p){
   if(!p)return;
   const btn=p.parentNode.querySelector('.selbtn,.iconbtn')||p.previousElementSibling;
   if(!btn)return;
-  /* repor antes de medir: uma medição feita sobre o ajuste anterior herda-o */
+  /* repor antes de medir: uma medição feita sobre o ajuste anterior herda-o
+     (o encosto de lado só se desfaz quando foi este a pô-lo: o data-encosto) */
   p.style.top='';p.style.bottom='';p.style.maxHeight='';
+  if(typeof p.hasAttribute==='function'&&p.hasAttribute('data-encosto')){p.style.left='';p.style.right='';p.style.width='';p.style.transformOrigin='';p.removeAttribute('data-encosto');}
   /* O espaço é o que TODOS os antepassados que cortam deixam ver, e não só o
      primeiro: um grupo de formulário que corta (o .sect de cantos redondos)
      pode estar meio rolado para fora do corpo do modal, e medir só por ele
      abria o menu para cima por cima do corpo (6px cortados no telemóvel
      deitado). */
-  let limite={top:0,bottom:window.innerHeight};
+  let limite={top:0,bottom:window.innerHeight,left:0,right:window.innerWidth};
   for(let a=p.parentElement;a&&a!==document.body;a=a.parentElement){
     const cs=getComputedStyle(a);
     if(/hidden|auto|scroll/.test(cs.overflow+cs.overflowX+cs.overflowY)){
       const r=a.getBoundingClientRect();
-      limite={top:Math.max(limite.top,r.top),bottom:Math.min(limite.bottom,r.bottom)};
+      limite={top:Math.max(limite.top,r.top),bottom:Math.min(limite.bottom,r.bottom),
+        left:Math.max(limite.left,r.left),right:Math.min(limite.right,r.right)};
     }
   }
   /* offsetHeight e não getBoundingClientRect().height: o menu entra com um
      scale(.96) (index.html:.selpop.on) e o rect vem afetado pelo transform —
      media-se 4% a menos e a decisão de virar para cima saía errada à tangente.
      O offsetHeight é a caixa de maquetização, que o transform não toca. */
-  const d=posicaoPop(btn.getBoundingClientRect(),limite,p.offsetHeight);
+  const rb=btn.getBoundingClientRect();
+  const d=posicaoPop(rb,limite,p.offsetHeight);
   if(d.lado==='cima'){p.style.top='auto';p.style.bottom='calc(100% + 5px)';}
   if(d.maxHeight)p.style.maxHeight=d.maxHeight+'px';
+  /* Na horizontal, pelo mesmo princípio (encostoPop). A esquerda vem do
+     offsetLeft (sem o scale da entrada) somado à caixa do pai posicionado;
+     um menu solto em position:fixed (o popAnchor dos filtros) não tem
+     offsetParent e fica com o que esse lhe der. */
+  const op=p.offsetParent;
+  if(!op)return;
+  const ro=op.getBoundingClientRect(),base=ro.left+op.clientLeft-op.scrollLeft;
+  const w=p.offsetWidth,esq=base+p.offsetLeft;
+  const x=encostoPop(rb,limite,w,esq);
+  if(x==null)return;
+  p.setAttribute('data-encosto','');
+  /* a largura fica presa: um .selpop com left e right a 0 tirava-a dos dois */
+  p.style.width=w+'px';p.style.right='auto';p.style.left=Math.round(x-base)+'px';
+  /* a entrada cresce a partir do botão, e não do canto onde o CSS a pôs */
+  p.style.transformOrigin=Math.round(Math.min(Math.max(rb.left+rb.width/2-x,0),w))+'px '+(d.lado==='cima'?'bottom':'top');
 }
 
 // Abre o dropdown de um sel() — ou fecha-o, se já estava aberto. Fecha os
@@ -975,11 +1020,13 @@ function ficha(linhas){
 /* O rodapé de uma ficha: fechar, e editar quando se pode.
 
    O «Editar» é primário porque é o que se quer a seguir a ler; e quando não
-   se pode editar não há botão nenhum a prometê-lo.
+   se pode editar não há botão nenhum a prometê-lo, e o «Fechar», sozinho,
+   passa a primário — o botão único de uma janela é azul em todas (decisão
+   do Martinho no KAN-22).
    Recebe: o descritor da ficha (o mesmo de abrirFicha).
    Devolve: o HTML do rodapé. */
 function fichaRodape(o){
-  return `<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>`+
+  return `<button type="button" class="btn${o.editar?'':' primary'}" data-toca="camada" data-click="closeModal()">Fechar</button>`+
     (o.editar?`<button type="button" class="btn primary" data-toca="camada" data-click="${o.editar.act}">${esc(o.editar.rotulo||'Editar')}</button>`:'');
 }
 
@@ -1141,8 +1188,8 @@ function closeModal(origem){
        por engano continua com um toque; sair é a escolha deliberada */
     openModal('Sair sem guardar?',
       `<div class="hint u-fs-14px">Tens alterações por guardar nesta janela. Se saíres agora, perdes estas alterações.</div>`,
-      `<button class="btn" data-click="_sairSemGuardar()">Sair sem guardar</button>
-       <button class="btn primary" data-click="closeModal()">Continuar a editar</button>`);
+      `<button class="btn" data-toca="camada" data-click="_sairSemGuardar()">Sair sem guardar</button>
+       <button class="btn primary" data-toca="camada" data-click="closeModal()">Continuar a editar</button>`);
     return;
   }
   const M=modalStack.pop();lockPage();if(!M)return;
@@ -1186,7 +1233,7 @@ const chk=id=>{const e=document.getElementById(id);return e?!!e.checked:false};
 function confirmModal(title,text,cb){
   const verbo=(/^(Apagar|Remover|Eliminar|Terminar)\b/.exec(title)||[])[1];
   openModal(title,`<div class="hint u-fs-14px">${text}</div>`,
-    `<button class="btn" data-click="closeModal()">Cancelar</button><button class="btn ${verbo?'danger':'primary'}" data-click="_ok()">${verbo||'Confirmar'}</button>`);
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn ${verbo?'danger':'primary'}" data-toca="dados" data-click="_ok()">${verbo||'Confirmar'}</button>`);
   _ok=()=>{closeModal();cb()};
 }
 /* Desfazer em vez de (ou além de) confirmar. A confirmação trava o engano
@@ -1297,7 +1344,7 @@ function pickModal(title,options,onPick,extra){
         <span class="u-fx-1 u-minw-0 u-ta-left"><b class="u-d-block u-fs-14px">${esc(o.label)}</b>
         ${o.sub?`<span class="small">${esc(o.sub)}</span>`:''}</span></button>`).join('')}</div>`
       :`<div class="hint">Não há nada para escolher.</div>`}
-    ${extra||''}</div>`,`<button class="btn" data-click="closeModal()">Voltar</button>`);
+    ${extra||''}</div>`,`<button class="btn" data-toca="camada" data-click="closeModal()">Voltar</button>`);
   _pick=i=>onPick(options[i]);
 }
 

@@ -112,6 +112,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-12 · A leitura da FINE sai do dev, e a política de privacidade di-la (KAN-14)
 - 2026-11-12 · A Declaração chega a produção
 - 2026-11-12 · A Declaração na montra, no quarto ecrã
+- 2026-11-13 · A Análise com abas, e a casca do telemóvel
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3907,3 +3908,20 @@ IMI que os Planeados mostram. O título e a descrição da montra ficam sem o IR
 com o guia na pesquisa. A guarda testes/landing.test.js:promessasDoIrs deixou de proibir o IRS e o
 Anexo F e passou a proibir o que a app não faz: declarar, entregar, submeter ou enviar por ti, a AT
 e o Modelo 2.
+
+## 2026-11-13 · A Análise com abas, e a casca do telemóvel
+
+A Avaliação, as Projeções e o IRS · Anexo F eram três ecrãs soltos no telemóvel (o ticket de QA do
+KAN-120: «deveriam estar organizados por abas como os outros grupos de menus»). A Análise passou a
+ser uma área (navegacao.js:AREAS), com as abas, o carrossel, o nome no cabeçalho e a memória do
+último separador das Casas e do Dinheiro. Continua fora da barra de baixo, que fica com quatro
+destinos (a decisão de 2026-10): abre-se pela gaveta. A aba do IRS leva o rótulo inteiro, porque as
+três cabem aos 360px.
+
+No KAN-22 o Martinho decidiu, sobre as maquetes, o subtítulo no telemóvel por baixo do nome da área
+(a opção A, no cabeçalho, e não por baixo das abas), com o estado dos Contratos («4 em vigor · 1 a
+acabar») no lugar da descrição; a faixa sem rede com «— sobem quando houver rede» (continua a só
+existir sem ligação); e, depois da auditoria dos rodapés, o «Fechar» sozinho azul em todas as
+janelas, quando a sugestão era o branco da ficha. O ecrã «Palavra-passe nova» fica com os botões
+dentro do cartão: é uma página de entrada, fora da app. O título da área no cabeçalho e os botões
+dos formulários no fundo ficam como estavam.

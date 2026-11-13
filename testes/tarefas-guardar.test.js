@@ -190,7 +190,7 @@ describe('o Guardar', () => {
     app.db.properties[0].tarefas = app.normTarefas(LISTA());
     app.tfAbrir('imovel', 'P1');
     const so = app.modalStack.at(-1);
-    assert.equal(so.f, '<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>');
+    assert.equal(so.f, '<button type="button" class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>', 'sozinho, o Fechar é azul');
     assert.doesNotMatch(so.b, /tf-nova|tfNovaTarefa/);
   });
 

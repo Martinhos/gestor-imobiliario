@@ -205,6 +205,25 @@ function ctSeloDoEstado(c){
   const d=c.end?pzDias(c.end):null;
   return {txt:'Em vigor'+(d!=null&&d>=0&&d<=180?(d===0?' · acaba hoje':d===1?' · falta 1 dia':' · faltam '+d+' dias'):''),cor:'in'};
 }
+/* O estado dos contratos numa linha, para o subtítulo do separador
+   (navegacao.js:subtituloDoEcra): «4 em vigor · 1 a acabar · 1 por começar».
+   «A acabar» são os em vigor com o fim a menos de meio ano, o mesmo prazo do
+   selo «faltam N dias» (ctSeloDoEstado). Só diz o que há (o pedido do
+   Martinho no KAN-22, a partir do canvas de 2026-10).
+   Devolve: o texto, ou '' sem nenhum contrato em vigor nem por começar. */
+function resumoDosContratos(){
+  let vigor=0,acabar=0,futuro=0;
+  (db.contracts||[]).forEach(c=>{
+    const e=ctEstado(c);
+    if(e==='futuro'){futuro++;return}
+    if(e!=='ativo')return;
+    vigor++;
+    const d=c.end?pzDias(c.end):null;
+    if(d!=null&&d>=0&&d<=180)acabar++;
+  });
+  if(!vigor&&!futuro)return '';
+  return [vigor?vigor+' em vigor':'',acabar?acabar+' a acabar':'',futuro?futuro+' por começar':''].filter(Boolean).join(' · ');
+}
 /* O período de um contrato numa linha curta, para o telemóvel: até quando,
    desde quando, quando começa ou quando terminou.
    Recebe: c — o contrato.

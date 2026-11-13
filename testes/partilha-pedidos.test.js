@@ -660,7 +660,7 @@ describe('remover e aceitar uma ligação', () => {
     const j = esp.abertas[0];
     assert.equal(j.t, 'Remover a ligação a Rui');
     assert.ok(j.b.includes('Deixas de partilhar 2 casas com Rui, e a casa que recebes deixa de aparecer. Os dados de cada um não são apagados.'), j.b);
-    assert.match(j.f, /<button class="btn danger" data-click="_ok\(\)">Remover<\/button>/);
+    assert.match(j.f, /<button class="btn danger" data-toca="dados" data-click="_ok\(\)">Remover<\/button>/);
     app._ok();
     await espera();
     assert.deepEqual(esp.api.map((x) => x.method + ' ' + x.path), ['DELETE /api/connections/K1']);

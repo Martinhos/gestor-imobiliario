@@ -116,8 +116,14 @@ describe('as frases', () => {
 });
 
 describe('a barra de baixo', () => {
-  // a barra de 2026-10: duas portas e duas áreas (navegacao.js:TABBAR, navegacao.js:AREAS)
+  // a barra de 2026-10: duas portas e duas áreas (navegacao.js:TABBAR, navegacao.js:AREAS);
+  // a Análise também é uma área (KAN-120), mas não é destino da barra
   const TB = ['dashboard', 'casas', 'dinheiro', 'calendar'];
+
+  test('a Análise é uma área sem lugar na barra: esconder as portas dela não mexe na barra', () => {
+    igual(app.barraDeBaixo(TB, ['reports', 'projections', 'fisco']), TB);
+    assert.ok(!TB.includes('analise') && app.AREAS.analise, 'controlo: a área existe e a barra não a tem');
+  });
 
   test('barraDeBaixo: quem nada esconde fica com a de sempre', () => {
     igual(app.barraDeBaixo(TB, []), TB);

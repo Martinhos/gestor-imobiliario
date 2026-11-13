@@ -345,7 +345,7 @@ CW.grupoModal = function (id) {
     { label: 'Apagar grupo', icon: 'trash', danger: true, toca: 'dados', risco: 'destroi', act: "CW.grupoApagar('" + jsq(id) + "')" },
   ]) : '';
   openModal(g.name || 'Grupo partilhado', corpoDoGrupo(g),
-    '<button class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>', m);
+    '<button class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>', m);
   CW._grupoJanela = { id: id, camada: modalTop() };
 };
 
