@@ -113,6 +113,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-12 · A Declaração chega a produção
 - 2026-11-12 · A Declaração na montra, no quarto ecrã
 - 2026-11-13 · A Análise com abas, e a casca do telemóvel
+- 2026-11-13 · A montra muda de foco: as rendas organizadas e o IRS preparado (KAN-123)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3925,3 +3926,19 @@ existir sem ligação); e, depois da auditoria dos rodapés, o «Fechar» sozinh
 janelas, quando a sugestão era o branco da ficha. O ecrã «Palavra-passe nova» fica com os botões
 dentro do cartão: é uma página de entrada, fora da app. O título da área no cabeçalho e os botões
 dos formulários no fundo ficam como estavam.
+
+## 2026-11-13 · A montra muda de foco: as rendas organizadas e o IRS preparado (KAN-123)
+
+Num ticket de QA, o Martinho pediu para passar o foco da montra de «Nenhuma renda te passa
+despercebida» para organizar as rendas e o portefólio, e preparar o IRS. Dos três títulos
+propostos escolheu o primeiro, com uma palavra dele: «As rendas organizadas e o IRS preparado.»
+O subtítulo diz o como: «Imóveis, contratos, rendas e despesas num só sítio. Cada pagamento fica
+planeado e, quando chega a altura, o Anexo F já está resumido.» Com a Declaração em produção, o
+IRS deixou de ser só o guia e passou a ser uma das razões fortes para usar a app.
+
+Muda também a decisão de 2026-11-12 sobre os metadados: a descrição e o og:title passam a levar o
+IRS (landing.js:DESCRICAO, landing.js:TITULO_PARTILHA), e o title fica «Rendorium — gestão de
+arrendamento para senhorios», para a pesquisa pelo IRS continuar a chegar ao guia. A imagem de
+partilha volta a tirar-se do topo novo. A guarda testes/landing.test.js:promessasDoIrs não muda:
+«preparado» e «resumido» dizem o que a app faz, e quem declara continua a ser a pessoa. A frase
+antiga fica nas boas-vindas da app, que são outra coisa.

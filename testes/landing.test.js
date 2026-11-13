@@ -312,7 +312,9 @@ describe('a página de entrada', () => {
      Contratos, Planeados, IRS · Anexo F) tem a sua secção, com o título e o telemóvel. */
   test('o valor primeiro, e cada ecrã na sua secção', () => {
     assert.equal((html.match(/<h1[ >]/g) || []).length, 1, 'um título só');
-    assert.match(html, /<p class="chapeu">Gestão de arrendamento para senhorios<\/p>\s*<h1>Nenhuma renda te passa despercebida\.<\/h1>/);
+    // o «o IRS» e o «Anexo F» não se partem ao fim da linha (&nbsp;)
+    assert.match(html, /<p class="chapeu">Gestão de arrendamento para senhorios<\/p>\s*<h1>As rendas organizadas e o&nbsp;IRS preparado\.<\/h1>/);
+    assert.match(html, /<p class="sub">Imóveis, contratos, rendas e despesas num só sítio\. Cada pagamento fica\s+planeado e, quando chega a altura, o Anexo&nbsp;F já está resumido\.<\/p>/);
     assert.match(html, /<h2>Do imóvel à renda, tudo ligado<\/h2>/);
     for (const id of ['imoveis', 'contratos', 'planeados', 'irs']) {
       const s = new RegExp('<section class="wrap ecra-seccao[^"]*" id="' + id + '" aria-labelledby="t-' + id +
@@ -342,8 +344,13 @@ describe('a página de entrada', () => {
       assert.match(cartao, /IRS/, 'o cartão ' + onde);
       assert.match((rodape.match(paraOGuia) || []).join(''), /IRS/, 'a ligação do rodapé ' + onde);
       assert.match(ecra, /A app resume; quem declara és tu/, 'o ecrã diz que a app resume ' + onde);
-      const resto = h.replace(cartao, '').replace(ecra, '').replace(paraOGuia, '');
-      assert.doesNotMatch(resto, /IRS|Anexo F/, 'o IRS fora do ecrã, do botão, do cartão e do rodapé ' + onde);
+      // desde 2026-11-13 (KAN-123) o hero e a descrição dizem o foco: as rendas e o IRS
+      const hero = /<section class="wrap hero"[\s\S]*?<\/section>/.exec(h)[0];
+      assert.match(hero, /<h1>As rendas organizadas e o&nbsp;IRS preparado\.<\/h1>/, 'o hero ' + onde);
+      const metas = /<meta (?:name="description"|property="og:(?:title|description)") content="[^"]*">/g;
+      const resto = h.replace(cartao, '').replace(ecra, '').replace(hero, '').replace(paraOGuia, '').replace(metas, '');
+      assert.doesNotMatch(resto, /IRS|Anexo F/, 'o IRS fora do hero, dos metadados, do ecrã, do botão, do cartão e do rodapé ' + onde);
+      assert.doesNotMatch(/<title>[^<]*<\/title>/.exec(h)[0], /IRS/, 'o título fica para o guia ' + onde);
       assert.deepEqual(promessasDoIrs(h), [], onde);
     }
   });
@@ -489,7 +496,9 @@ describe('a página de entrada', () => {
   });
 
   /* O que o Google mostra sem cortar: o título nos 60 caracteres e a
-     descrição nos 160, com os termos que um senhorio procura. */
+     descrição nos 160, com os termos que um senhorio procura. A descrição e
+     o og:title dizem o foco do hero (as rendas e o IRS); o título fica sem o
+     IRS, para não competir com o guia na pesquisa. */
   test('o título e a descrição cabem no que os motores mostram', () => {
     const titulo = /<title>([^<]+)<\/title>/.exec(html)[1];
     const desc = /<meta name="description" content="([^"]+)">/.exec(html)[1];
@@ -497,6 +506,8 @@ describe('a página de entrada', () => {
     assert.ok(desc.length >= 110 && desc.length <= 160, 'descrição com ' + desc.length);
     assert.match(titulo, /gestão de arrendamento/);
     assert.match(desc, /rendas em atraso/);
+    assert.match(desc, /IRS das rendas preparado/, 'a descrição diz o foco do hero');
+    assert.doesNotMatch(titulo, /IRS/, 'o título deixa o IRS para o guia');
     assert.match(html, new RegExp('<meta property="og:description" content="' + desc + '">'), 'e as redes dizem o mesmo');
   });
 

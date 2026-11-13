@@ -6,7 +6,7 @@
    Bricolage Grotesque nos títulos —: quem clica em «Abrir a app» não pode
    sentir que mudou de produto.
 
-   O hero diz o valor antes de tudo (nenhuma renda passa despercebida), e a
+   O hero diz o valor antes de tudo (as rendas organizadas e o IRS preparado), e a
    seguir cada ecrã que o entrega tem a sua secção: Imóveis, Contratos,
    Planeados. A página MOSTRA o produto, e já não com capturas: os telemóveis e
    o computador são maquetes desenhadas em HTML e CSS, com o mosaico da marca
@@ -323,15 +323,17 @@ const DADOS = [
 ];
 
 /* O que os motores de busca e as redes mostram. Com os termos que um senhorio
-   procura (gestão de arrendamento, controlo de rendas, rendas em atraso), e
-   sem o IRS: a pesquisa pelo IRS chega ao guia (guia-vista.js), que tem os
-   metadados dele. Na página, o IRS aparece no ecrã do Anexo F (a Declaração
-   existe em produção desde 2026-11-12) e nas ligações para o guia: o botão
-   do cabeçalho, o cartão e o rodapé. O título fica nos 60 caracteres e a descrição nos 160, o que o
-   Google mostra sem cortar. */
+   procura (gestão de arrendamento, rendas em atraso). A descrição e o
+   og:title dizem o foco do hero — as rendas organizadas e o IRS preparado —;
+   o título fica sem o IRS, para a pesquisa pelo IRS continuar a chegar ao
+   guia (guia-vista.js), que tem os metadados dele. Na página, o IRS aparece
+   no hero, no ecrã do Anexo F e nas ligações para o guia: o botão do
+   cabeçalho, o cartão e o rodapé. O título fica nos 60 caracteres e a
+   descrição nos 160, o que o Google mostra sem cortar. */
 const TITULO = 'Rendorium — gestão de arrendamento para senhorios';
-const DESCRICAO = 'App grátis para senhorios: imóveis, contratos e rendas num só sítio. ' +
-  'Controlo de rendas com avisos de rendas em atraso, IMI, condomínio e crédito.';
+const TITULO_PARTILHA = 'Rendorium — as rendas organizadas e o IRS preparado';
+const DESCRICAO = 'App grátis para senhorios: imóveis, contratos e rendas organizados, ' +
+  'com avisos de rendas em atraso, IMI e condomínio, e o IRS das rendas preparado.';
 
 // os traços dos dois ícones que não são de capacidade: o aviso e o visto
 const AVISO = 'M12 8v5M12 16.5v.5M10.3 3.8L2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z';
@@ -434,7 +436,7 @@ export function paginaLanding(op) {
   const volta = raiz ? '/' : '/montra';
   const hoje = new Date();
   const cabecaRaiz = raiz ? `<meta property="og:type" content="website">
-<meta property="og:title" content="Rendorium — nenhuma renda te passa despercebida">
+<meta property="og:title" content="${TITULO_PARTILHA}">
 <meta property="og:description" content="${DESCRICAO}">
 <meta property="og:url" content="https://rendorium.com">
 <meta property="og:image" content="https://rendorium.com${IMG}/partilha.webp">
@@ -474,9 +476,9 @@ ${escolha === 'sim' ? '<script src="/paginas/rasto-montra.js" defer></script>\n'
   <section class="wrap hero" id="inicio">
     <div class="hero-texto">
       <p class="chapeu">Gestão de arrendamento para senhorios</p>
-      <h1>Nenhuma renda te passa despercebida.</h1>
-      <p class="sub">Imóveis, contratos e rendas num só sítio. A Rendorium lembra-te cada
-      pagamento e avisa-te quando falta um.</p>
+      <h1>As rendas organizadas e o&nbsp;IRS preparado.</h1>
+      <p class="sub">Imóveis, contratos, rendas e despesas num só sítio. Cada pagamento fica
+      planeado e, quando chega a altura, o Anexo&nbsp;F já está resumido.</p>
       <div class="cta">
         <a class="btn primary" href="${APP}/?criar=1">Criar conta grátis</a>
         <a class="btn" href="${APP}">Já tenho conta</a>

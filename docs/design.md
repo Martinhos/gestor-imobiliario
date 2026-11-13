@@ -6073,7 +6073,7 @@ montra e os documentos pré-carregam-nas. Nada do Google Fonts.
 
 A montra (worker/src/landing.js:paginaLanding) diz o valor antes de tudo: o
 chapéu diz o que é («Gestão de arrendamento para senhorios»), o título diz a
-vantagem («Nenhuma renda te passa despercebida.»), e logo abaixo de «Do imóvel
+vantagem («As rendas organizadas e o IRS preparado.»), e logo abaixo de «Do imóvel
 à renda, tudo ligado» cada ecrã que a entrega tem a sua secção — Imóveis,
 Contratos, Planeados (landing.js:ECRAS) —, o texto de um lado e o telemóvel
 do outro, a alternar. Mostra o produto em maquetes de HTML e CSS — o
@@ -6090,10 +6090,12 @@ landing.js:PRESTACAO_MES, landing.js:CASAS): as rendas dos Imóveis somam o
 Planeados mostram. As alturas das barras são regras :nth-child geradas dos
 dados (landing.js:alturasDasBarras), porque a página não tem atributos de
 estilo, e o único JavaScript que leva é o do rasto, a quem o aceitou («O rasto
-das pessoas»). A montra só promete o que a produção tem: nada do IRS
-enquanto a Declaração só existir em dev. O título e a descrição
+das pessoas»). A montra só promete o que a produção tem, e nunca que a app
+declara ou entrega o IRS. O título e a descrição
 (landing.js:TITULO, landing.js:DESCRICAO) ficam nos 60 e nos 160 caracteres,
-com os termos que um senhorio procura. Das capturas antigas fica só a imagem de
+com os termos que um senhorio procura; a descrição e o og:title
+(landing.js:TITULO_PARTILHA) dizem o foco do hero, e o título fica sem o
+IRS, que a pesquisa pelo IRS é do guia. Das capturas antigas fica só a imagem de
 partilha (og:image), que as redes mostram sem correr CSS, e que o
 scripts/capturas.js tira. Os documentos legais e a entrada de teste
 (worker/src/legal-vista.js, worker/src/teste.js) são da mesma família.
