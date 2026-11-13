@@ -494,3 +494,15 @@ Agora mede também a esquerda (pelo offsetLeft, que o scale da entrada não
 toca) e o componentes.js:encostoPop decide. Um menu novo não precisa de CSS
 próprio para isto; um que o CSS já encoste à esquerda (a pílula com
 data-lado="esq") continua igual enquanto couber.
+
+## Um sítio novo para anexos tem de entrar em duas listas
+A arrumação do arranque (web/app/anexos.js:cleanFiles) apaga do IndexedDB
+tudo o que não está na lista do que deve existir
+(web/app/anexos.js:allFileMetas). Um registo que passe a guardar anexos e
+fique fora dessa lista perde os ficheiros deste aparelho no arranque
+seguinte, sem erro nenhum. A nuvem tem a sua lista: a casa a que o anexo
+sobe (cloud/anexos.js:casaDoAnexo), sem a qual ele fica solto e só quem o
+carregou o vê. Os movimentos entraram nas duas a 2026-11-13 (KAN-122). E
+quem troca o objeto de um formulário inteiro (planeados.js:applyTemplate,
+aplicar um modelo) guarda os anexos do que lá estava, ou eles saem do
+registo ao gravar.

@@ -504,13 +504,15 @@ function abrirSeletorFicheiros(id){
    <input type=file> escondido; onPick — nome de uma função global chamada quando
    se escolhem ficheiros (recebe o input e, se opts.arg existir, esse argumento);
    delFn — nome de uma função global que apaga pelo id (só corre depois da
-   confirmação); opts (opcional) — {photos,move,arg,addLabel,hint}: modo
+   confirmação); opts (opcional) — {photos,move,arg,addLabel,hint,accept}: modo
    fotografias com miniaturas, puxador de reordenação, argumento extra do onPick,
-   rótulo do botão de adicionar e nota por baixo.
+   rótulo do botão de adicionar, nota por baixo (HTML, já escapado) e os tipos
+   que o seletor oferece (o accept do input: 'image/*,application/pdf' nos
+   movimentos; as fotografias são sempre 'image/*').
    Devolve: string de HTML do bloco, pronta a inserir com innerHTML. */
 function fileBlock(label,list,inputId,onPick,delFn,opts){
   opts=opts||{};
-  const photos=opts.photos;
+  const photos=opts.photos,accept=photos?'image/*':(opts.accept||'');
   return `<div>${label?`<div class="flabel">${esc(label)}</div>`:''}
     ${list.length?(photos?
       `<div class="list u-g-8px">${list.map((f,i)=>`<div class="prow">
@@ -525,7 +527,7 @@ function fileBlock(label,list,inputId,onPick,delFn,opts){
             <div class="small">${kb(f.size)}${f.added?' · '+dPT(f.added):''}</div></div>
           <button type="button" class="btn sm danger u-minw-40px u-minh-40px" aria-label="Apagar o ficheiro" data-click="delFileConfirm('${jsq(delFn)}','${jsq(f.id)}','ficheiro')">${ic('trash',14)}</button>
         </div></div>`).join('')}</div>`):''}
-    <input type="file" id="${esc(inputId)}" multiple ${photos?'accept="image/*"':''} class="u-d-none" data-change="escolherFicheirosDoBloco(this,'${jsq(onPick)}','${jsq(opts.arg||'')}')">
+    <input type="file" id="${esc(inputId)}" multiple ${accept?`accept="${esc(accept)}"`:''} class="u-d-none" data-change="escolherFicheirosDoBloco(this,'${jsq(onPick)}','${jsq(opts.arg||'')}')">
     <button type="button" class="btn sm u-mt-9px" data-click="abrirSeletorFicheiros('${jsq(inputId)}')">${ic(photos?'photo':'clip',14)} ${opts.addLabel||(photos?'Adicionar fotos':'Adicionar ficheiro')}</button>
     ${opts.hint?`<div class="hint u-mt-8px">${opts.hint}</div>`:''}</div>`;
 }
@@ -1002,9 +1004,11 @@ const SEM_RODAPE='\u0000sem-rodape';
    Recebe: linhas — [{rotulo, valor, tipo}], com o valor já escrito e escapado
    por quem chama (é ele que sabe se é dinheiro, data ou nome). O tipo é
    'stat' (uma linha rótulo/valor, o normal), 'bloco' (o rótulo por cima e o
-   valor por baixo, para texto comprido ou várias linhas) ou 'nota' (só texto,
-   sem rótulo). Aceita nulos e falsos no meio, para quem monta a lista poder
-   escrever condições sem filtrar antes.
+   valor por baixo, para texto comprido ou várias linhas), 'lista' (o rótulo
+   por cima e, por baixo, linhas que se tocam — o valor é o contentor delas, com
+   as suas classes, sem o texto pequeno do bloco: os anexos de um movimento) ou
+   'nota' (só texto, sem rótulo). Aceita nulos e falsos no meio, para quem
+   monta a lista poder escrever condições sem filtrar antes.
    Devolve: o HTML do corpo da ficha. */
 function ficha(linhas){
   const html=(linhas||[]).filter(Boolean).map(function(l){
@@ -1012,6 +1016,7 @@ function ficha(linhas){
     if(!v)return '';
     if(l.tipo==='nota')return `<div class="hint">${v}</div>`;
     if(l.tipo==='bloco')return `<div><div class="flabel">${esc(l.rotulo||'')}</div><div class="small">${v}</div></div>`;
+    if(l.tipo==='lista')return `<div><div class="flabel">${esc(l.rotulo||'')}</div>${v}</div>`;
     return `<div class="stat"><span>${esc(l.rotulo||'')}</span><b>${v}</b></div>`;
   }).join('');
   return `<div class="form">${html}</div>`;

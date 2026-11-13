@@ -84,7 +84,11 @@ function descarregarBlob(blob,nome){
   a.href=_urlDescarga;a.download=nome;document.body.appendChild(a);a.click();a.remove();
 }
 // Os metadados de todos os anexos referidos nos dados gravados: contratos, fotos e
-// hipotecas dos imóveis, documentos de pessoas. É a lista do que deve existir em disco.
+// hipotecas dos imóveis, documentos de pessoas, e as faturas e recibos dos
+// movimentos (as partes de um lote referem os mesmos: entram uma vez, para o
+// subirPendentes não gastar os vinte de cada vez no mesmo ficheiro).
+// É a lista do que deve existir em disco: o que não está nela, o cleanFiles
+// deita fora no arranque.
 // Devolve: lista de metadados ({id,name,type,size,added}), um por anexo referido.
 function allFileMetas(){
   const out=[];
@@ -92,7 +96,24 @@ function allFileMetas(){
   db.properties.forEach(p=>{(p.photos||[]).forEach(f=>out.push(f));
     (p.loans||[]).forEach(l=>(l.files||[]).forEach(f=>out.push(f)))});
   db.owners.concat(db.tenants).forEach(p=>(p.files||[]).forEach(f=>out.push(f)));
+  const dosMovimentos=new Set();
+  (db.transactions||[]).forEach(t=>(t.files||[]).forEach(f=>{if(f&&!dosMovimentos.has(f.id)){dosMovimentos.add(f.id);out.push(f)}}));
   return out;
+}
+/* Os anexos de um registo que saiu (um movimento, um lote, os da seleção),
+   quando o Anular expira: saem deste aparelho e do servidor (o idbDel que a
+   nuvem embrulha), com a miniatura daqui — mas só os que já nenhum registo
+   refere (allFileMetas). Um id que outro registo ainda tem (uma cópia
+   reposta, um lote refeito entretanto) fica.
+   Recebe: lista — os metadados dos anexos do que saiu ({id}; repetidos contam uma vez).
+   Devolve: nada — os apagamentos seguem em fundo e falham calados. */
+function apagarAnexosSemRegisto(lista){
+  const vivos=new Set(allFileMetas().map(f=>f.id)),vistos=new Set();
+  (lista||[]).forEach(f=>{
+    const id=f&&f.id;if(!id||vivos.has(id)||vistos.has(id))return;
+    vistos.add(id);
+    idbDel(id).catch(()=>{});idbDel('tn_'+id).catch(()=>{});
+  });
 }
 // Apaga do IndexedDB os blobs que já nada refere, poupando os pendentes dos
 // formulários ainda abertos. Corre em fundo e falha em silêncio.
@@ -549,10 +570,13 @@ function downloadMeta(fid){
     descarregarBlob(blob,(meta&&meta.name)||'anexo');toast('Guardado.');
   }).catch(()=>toast('Não foi possível guardar o anexo.'));
 }
-// Os anexos ainda nos formulários abertos (contrato, imóvel, pessoa, hipotecas):
-// já têm blob guardado, mas os metadados ainda não chegaram a db.
+// Os anexos ainda nos formulários abertos (contrato, imóvel, pessoa, hipotecas,
+// movimento): já têm blob guardado, mas os metadados ainda não chegaram a db.
+// O do movimento lê-se com cuidado: o movimento.js é de um serviço, e com os
+// Movimentos desligados não está carregado.
 // Devolve: lista de metadados ({id,name,type,size,added}) desses anexos pendentes.
 function pendingMetas(){
-  return [].concat(cForm.files||[],pForm.photos||[],perForm.files||[],
+  const doMovimento=typeof tForm!=='undefined'&&tForm&&tForm.files||[];
+  return [].concat(cForm.files||[],pForm.photos||[],perForm.files||[],doMovimento,
     ...((pForm.loans||[]).map(l=>l.files||[])));
 }

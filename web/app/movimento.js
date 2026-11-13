@@ -393,8 +393,23 @@ function txFicha(id){
     !countsInTotals(t)?{tipo:'nota',valor:isPassivo(t)
       ?'Não entra nos totais nem no resultado: é dinheiro que se devolve — uma caução ou um empréstimo recebido.'
       :'Não entra nos totais nem no resultado.'}:null,
+    {tipo:'lista',rotulo:'Anexos',valor:txAnexosDaFicha(t)},
     String(t.notes||'').trim()?{tipo:'bloco',rotulo:'Comentários',valor:rich(t.notes)}:null,
   ]);
+}
+/* Os anexos na ficha de um movimento: uma linha por ficheiro, com o nome, e
+   tocar abre-o (componentes.js:openMeta — uma imagem numa janela, um PDF
+   descarrega), como a lista dos anexos do contrato (contrato.js:ctVerAnexos),
+   e pela mesma ordem do formulário. Numa parte de um lote são os do lote
+   (cada parte leva a mesma lista). Só com «Ver fotos e documentos» no imóvel:
+   o servidor não dava o ficheiro a mais ninguém, e o nome sem o ficheiro é
+   uma linha que rebenta ao toque. Juntar e remover é no «Editar».
+   Recebe: t — o movimento.
+   Devolve: o HTML da lista (.ct-lista-anexos), ou '' sem anexos (a ficha não mostra o bloco). */
+function txAnexosDaFicha(t){
+  const fs=pode(t.propertyId,'file.view')?(t.files||[]):[];
+  if(!fs.length)return '';
+  return `<div class="ct-lista-anexos mov-anexos-lista">${fs.map(f=>`<button type="button" class="ct-anexo" data-toca="camada" data-click="openMeta('${jsq(f.id)}')">${ic('clip',18)}<span>${esc(f.name||'ficheiro')}</span>${ic('chevR',16)}</button>`).join('')}</div>`;
 }
 /* O «Editar» da ficha de um movimento. A chamada ao txModal leva um objeto,
    como todas as outras, e um objeto literal fica fora da gramática das ações:
@@ -552,8 +567,78 @@ function txBody(){
     ${(!settle&&!credit&&ows.length>1)?splitSect(ows):''}
     ${credit&&ows.length>1?`<div class="hint">Dívidas a terceiros não entram nas contas entre proprietários: ficam com quem as recebe ou paga.</div>`:''}
     ${planeado&&servicoLigado('recurring')?recSect():''}
+    ${txAnexosSect(t)}
     ${richEditor('Comentários','t_notes',t.notes,'Opcional')}</div>`;
 }
+/* Os anexos do movimento, num grupo do formulário antes dos Comentários: a
+   fatura, o recibo, o comprovativo — imagens e PDF (o accept do input) —,
+   pelo bloco de ficheiros da casa (componentes.js:fileBlock), como os do
+   contrato. Em todos os tipos e nos divididos (o anexo vai com o movimento
+   inteiro: cada parte leva a mesma lista); nos modelos e nos planeados não —
+   uma fatura é de um movimento, e não de um molde (dados.js:TX_TPL_KEYS). Só
+   a quem pode juntar anexos onde o movimento fica (txPodeJuntarAnexos): sem
+   isso o servidor recusava a gravação inteira. A dica por baixo é a do
+   txDicaDosAnexos, num span com id, para a coluna do Anexo F a trocar sem
+   repintar (onIrsCol).
+   Recebe: t — o movimento do formulário (tForm).
+   Devolve: o HTML do grupo (texto), ou '' onde não há anexos. */
+function txAnexosSect(t){
+  if(txModo.modo==='rec'||txModo.modo==='tpl'||!txPodeJuntarAnexos(t))return '';
+  const fs=t.files||[];
+  return `<div class="sect mov-grp mov-anexos" id="t_anexos">
+    <div class="mov-grp-cab"><b>Anexos</b>${fs.length?`<span class="small">${fs.length===1?'1 ficheiro':fs.length+' ficheiros'}</span>`:''}</div>
+    ${fileBlock('',fs,'t_filein','txAddFiles','txDelFile',{accept:'image/*,application/pdf',hint:`<span id="t_anexosDica">${esc(txDicaDosAnexos(t))}</span>`})}</div>`;
+}
+/* Posso juntar anexos a este movimento? Num imóvel, com «Adicionar fotos e
+   documentos» nele (o dono e os comproprietários podem sempre); num grupo ou
+   em «Todos os imóveis», em cada um dos imóveis por onde se divide — cada
+   parte grava-se no seu, e o servidor recusa a de um imóvel onde não posso
+   (worker/src/files.js:regraDosAnexos); sem imóvel o movimento é meu.
+   Recebe: t — o movimento do formulário.
+   Devolve: true/false. */
+function txPodeJuntarAnexos(t){
+  if(t.propertyId)return pode(t.propertyId,'file.add');
+  if(t.groupId||t.todos)return txProps(t).every(p=>pode(p.id,'file.add'));
+  return true;
+}
+/* A dica do bloco dos anexos. Numa despesa que conta no Anexo F (a coluna
+   dela não é «Não dedutível», nem a categoria está fora dos totais:
+   irs.js:irsColunaDe), pede a fatura, que é o que as Finanças pedem para ver
+   a despesa; no resto, diz o que se junta. Só uma dica: sem avisos «A
+   tratar» nem selos na lista (decisão do Martinho, 2026-11-13).
+   Recebe: t — o movimento do formulário (com a categoria, a subcategoria e a irsCol).
+   Devolve: o texto da dica (por escapar). */
+function txDicaDosAnexos(t){
+  return t.kind==='expense'&&irsColunaDe(t).col!=='nao'
+    ?'Junta a fatura: é o que as Finanças pedem se quiserem ver esta despesa.'
+    :'Recibos, faturas ou comprovativos, em imagem ou PDF.';
+}
+/* Escolheram-se ficheiros no bloco dos anexos: o conteúdo vai para o
+   IndexedDB (anexos.js:takeFiles, que a nuvem também sobe) e os metadados
+   juntam-se ao tForm.files — como o contrato.js:ctAddFiles. Se, entretanto,
+   o formulário deu lugar a outro movimento, não se mexe no novo; a janela só
+   se repinta se o formulário estiver à vista (por cima pode estar a escolha
+   de uma etiqueta, que o repinta ao fechar).
+   Recebe: input — o <input type="file"> do bloco.
+   Devolve: a promessa que resolve depois de os juntar (para quem a quiser esperar). */
+function txAddFiles(input){
+  collectTx();
+  const alvo=tForm;
+  return takeFiles(input).then(ms=>{
+    if(!ms.length||tForm!==alvo)return;
+    tForm.files=(tForm.files||[]).concat(ms);
+    const b=modalBodyEl();
+    if(b&&typeof b.querySelector==='function'&&b.querySelector('.mov-form'))repaintTx();
+    toast(ms.length===1?'Anexo adicionado.':ms.length+' anexos adicionados.');
+  });
+}
+/* Remove um anexo do movimento e apaga logo o ficheiro (daqui e do
+   servidor), como o contrato.js:ctDelFile — a pergunta do
+   componentes.js:delFileConfirm já disse que não há como desfazer. Num
+   dividido, sai de todas as partes ao gravar.
+   Recebe: fid — o id do anexo.
+   Devolve: nada — repinta o formulário. */
+function txDelFile(fid){collectTx();tForm.files=(tForm.files||[]).filter(f=>f.id!==fid);idbDel(fid).catch(()=>{});repaintTx()}
 /* O tipo do movimento num segmentado, no cimo do formulário (o canvas):
    Receita, Despesa, Crédito, Dívida e Transferência. Mudar de tipo passa pelo
    setKind, como já passava trocar entre dívida recebida e paga; a dívida
@@ -637,8 +722,13 @@ function txFiscoSect(){
 }
 // Mudou a coluna do Anexo F escolhida à mão: guarda-a no tForm. Vazio é
 // «pela categoria», e o seletor já mostra o rótulo novo — não há que repintar.
-// Devolve: nada — atualiza tForm.irsCol.
-function onIrsCol(){collectTx();tForm.irsCol=val('t_irscol')||''}
+// Só a dica dos anexos muda com ela (txDicaDosAnexos): a fatura deixa de se
+// pedir numa despesa «Não dedutível», e volta a pedir-se ao contrário.
+// Devolve: nada — atualiza tForm.irsCol e o texto da dica.
+function onIrsCol(){
+  collectTx();tForm.irsCol=val('t_irscol')||'';
+  const d=document.getElementById('t_anexosDica');if(d)d.textContent=txDicaDosAnexos(tForm);
+}
 /* O exemplo de uma parte da divisão (entre proprietários ou entre imóveis),
    pelo modo: em branco a parte conta 0, e o exemplo mostra o que se escreve
    ali — partes, percentagem ou euros.
@@ -1205,8 +1295,9 @@ function applyLoan(t){
 }
 /* Apaga o movimento e, se era um pagamento de crédito, a hipoteca volta a derivar o
    capital em dívida sem ele (o capital dele volta) e a recorrência dela sincroniza-se.
-   O toast traz "Anular", que desfaz as duas coisas. Uma parte de um lote apaga o
-   lote inteiro (apagarLote).
+   O toast traz "Anular", que desfaz as duas coisas; os anexos dele só saem do
+   aparelho e do servidor quando o Anular expira (anexos.js:apagarAnexosSemRegisto),
+   como os de um contrato. Uma parte de um lote apaga o lote inteiro (apagarLote).
    Recebe: id — o id do movimento a apagar (string).
    Devolve: nada — grava e re-renderiza. */
 function delTx(id){
@@ -1227,7 +1318,7 @@ function delTx(id){
     /* volta a procurar a hipoteca: um sync entretanto pode ter trocado os objetos da db */
     const l2=copia.kind==='loan'&&copia.loanId?findLoan(prop(copia.propertyId),copia.loanId):null;
     if(l2){if(l2.capitalInicio==null)l2.capitalInicio=capital;acertarCapital(l2);if(servicoLigado('recurring'))syncLoanRec(prop(copia.propertyId),l2)}
-  });
+  },()=>apagarAnexosSemRegisto(copia.files));
 }
 
 /* ================= LOTES =================
@@ -1333,7 +1424,8 @@ function ehDeVariosImoveis(t){return !!t&&!t.propertyId&&(!!t.groupId||!!t.todos
    na mesma proporção, ao cêntimo, em vez de se repetir em cada imóvel (o que
    multiplicava o retido no Anexo F). Cada parte leva o resto do movimento tal
    e qual (tipo, descrição, data, categoria, etiquetas, notas, quem pagou, a
-   divisão entre donos, a coluna do Anexo F), sem contrato nem hipoteca — são
+   divisão entre donos, a coluna do Anexo F, os anexos — a mesma lista em
+   todas, porque a fatura é do movimento inteiro), sem contrato nem hipoteca — são
    de um imóvel, não de vários —, e o id parteId(id do movimento, imóvel).
    Com um imóvel só é um movimento normal nesse imóvel, com o id do movimento.
    Não mexe na base.
@@ -1390,7 +1482,8 @@ function registarMolde(t){return ehDeVariosImoveis(t)?partirMovimento(t):{partes
 /* Apaga um lote inteiro — as partes todas, de uma vez —, com «Anular» a
    repô-las todas. Só com o lote inteiro nesta base e cada parte ao meu
    alcance (recusaDoLote): apagar só as partes que vejo deixava os outros
-   imóveis com um pedaço de um movimento que já não existe.
+   imóveis com um pedaço de um movimento que já não existe. Os anexos (os
+   mesmos em todas as partes) saem quando o Anular expira, uma vez cada.
    Recebe: t — uma parte do lote.
    Devolve: nada — grava e redesenha (ou diz porque não apagou). */
 function apagarLote(t){
@@ -1403,7 +1496,7 @@ function apagarLote(t){
     /* repõe as partes todas — só as que um sync entretanto não trouxe de volta */
     const ja=new Set(db.transactions.map(x=>x.id));
     copias.forEach(c=>{if(!ja.has(c.id))db.transactions.push(c)});
-  });
+  },()=>apagarAnexosSemRegisto([].concat(...copias.map(c=>c.files||[]))));
 }
 /* Os movimentos de grupo do formato antigo — um registo só, sem imóvel, nos
    dados de quem o registou, dividido na hora pelos imóveis que o grupo

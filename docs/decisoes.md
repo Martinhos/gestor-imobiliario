@@ -114,6 +114,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-12 · A Declaração na montra, no quarto ecrã
 - 2026-11-13 · A Análise com abas, e a casca do telemóvel
 - 2026-11-13 · A montra muda de foco: as rendas organizadas e o IRS preparado (KAN-123)
+- 2026-11-13 · Os movimentos aceitam anexos: a fatura fica junto da despesa (KAN-122)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3942,3 +3943,39 @@ arrendamento para senhorios», para a pesquisa pelo IRS continuar a chegar ao gu
 partilha volta a tirar-se do topo novo. A guarda testes/landing.test.js:promessasDoIrs não muda:
 «preparado» e «resumido» dizem o que a app faz, e quem declara continua a ser a pessoa. A frase
 antiga fica nas boas-vindas da app, que são outra coisa.
+
+## 2026-11-13 · Os movimentos aceitam anexos: a fatura fica junto da despesa (KAN-122)
+
+O ticket de QA 209e937f: «Os movimentos devem poder aceitar ficheiros. Imagens ou PDF. É
+recomendado inserir uma fatura nas despesas dedutíveis.» A fatura de uma despesa dedutível é o que
+as Finanças pedem se quiserem ver a despesa, e o sítio dela é o próprio movimento. Os contratos, as
+fichas das pessoas e as hipotecas já aceitavam anexos; os movimentos não tinham onde os juntar.
+
+O Martinho respondeu a duas perguntas. A recomendação é só uma dica no formulário, numa despesa que
+entra no Anexo F: sem pontos «A tratar» no IRS nem selos na lista dos Movimentos. E os movimentos
+divididos por vários imóveis (um grupo, «Todos os imóveis») também aceitam anexos: o anexo vai com
+o movimento inteiro, quem o carregou vê-o sempre, e um comproprietário vê-o se partilhar o imóvel
+a que ficou preso.
+
+Ficou assim. O formulário tem o grupo «Anexos» antes dos Comentários, em todos os tipos, nos
+divididos e no confirmar de um planeado, com o bloco de ficheiros do contrato a aceitar imagens e
+PDF (movimento.js:txAnexosSect). A dica pede a fatura quando a coluna do Anexo F da despesa conta
+(movimento.js:txDicaDosAnexos), e é neutra no resto. Os modelos e os planeados não têm anexos: uma
+fatura é de um movimento, e não de um molde. A ficha lista os anexos, e tocar abre cada um
+(movimento.js:txAnexosDaFicha). Cada parte de um lote leva a mesma lista. O servidor não mudou: já
+prendia a uma casa os anexos que um registo refere (worker/src/files.js:linkFiles).
+
+Num dividido, o anexo fica preso à casa da última parte pela ordem dos imóveis, e não à da
+primeira, como se supôs ao começar. O servidor prende-o a cada parte que grava, e as partes sobem
+pela ordem dos imóveis (cloud/nucleo.js:exportEntities), por isso fica a última. O cliente diz a
+mesma casa ao subir o ficheiro (cloud/anexos.js:casaDoMovimento). Se dissesse a primeira, o
+reenvio de cada sessão mudava o anexo de casa, e a gravação seguinte do lote devolvia-o à última.
+Mediu-se contra o servidor de teste (testes/movimentos-anexos.test.js). Um movimento sem imóvel
+não tem casa: o anexo fica solto, e só quem o carregou o vê.
+
+Duas armadilhas tinham de ficar fechadas antes de se poder juntar um ficheiro. A arrumação do
+arranque apaga do aparelho o que não está na lista do que deve existir, e essa lista não conhecia
+os movimentos (web/app/anexos.js:allFileMetas). Aplicar um modelo a um movimento aberto trocava o
+movimento do formulário inteiro e largava-lhe os anexos (planeados.js:applyTemplate). Apagar um
+movimento, um lote ou os marcados na seleção leva os ficheiros quando o Anular expira, como num
+contrato, e só os que nenhum registo ainda refere (web/app/anexos.js:apagarAnexosSemRegisto).

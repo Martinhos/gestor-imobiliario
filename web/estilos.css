@@ -2996,6 +2996,19 @@ label.mov-interr{display:flex;align-items:center;gap:12px;min-height:44px;paddin
 .mov-form .tag{min-height:36px;border-color:transparent;background:var(--accent-soft);color:var(--accent-text)}
 .mov-form .tag button{color:var(--accent-text)}
 .mov-form .tagadd{min-height:36px}
+/* Os anexos do movimento (movimento.js:txAnexosSect): o bloco de ficheiros da
+   casa (componentes.js:fileBlock) num grupo do formulário. O nome de cada
+   ficheiro abre-o, e ocupa a linha toda até ao lixo. No dedo, 44px no
+   «Adicionar ficheiro», no lixo e no nome: o lixo traz os utilitários
+   u-minw-40px e u-minh-40px do fileBlock, e só um seletor com o #raiz#raiz
+   deles lhes ganha — aqui, e não no fileBlock, para os outros formulários
+   não mudarem. */
+#raiz#raiz .mov-anexos .card .u-cur-pointer{flex:1 1 auto}
+@media(pointer:coarse){
+  #raiz#raiz .mov-anexos .btn.sm{min-height:44px}
+  #raiz#raiz .mov-anexos .btn.sm.danger{min-width:44px}
+  #raiz#raiz .mov-anexos .card .u-cur-pointer{display:flex;flex-direction:column;justify-content:center;min-height:44px}
+}
 /* ===== fim: 1.3.5 ===== */
 /* ===== ajustes-v40b: 1.1 — as listas como os Movimentos ===== */
 /* (vistas.js:lfCabeca) A barra, os chips e o painel das listas são os dos

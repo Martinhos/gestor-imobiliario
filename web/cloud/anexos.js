@@ -42,8 +42,9 @@ function cabecalhosDaSessao() {
 }
 
 // a que casa pertence um anexo, procurando quem o refere: as fotos e as
-// hipotecas de um imóvel, os documentos de um contrato, e os de uma ficha de
-// inquilino presa a um imóvel (nucleo.js:casaDaFicha) ou a um contrato dele
+// hipotecas de um imóvel, os documentos de um contrato, a fatura de um
+// movimento (casaDoMovimento), e os de uma ficha de inquilino presa a um
+// imóvel (nucleo.js:casaDaFicha) ou a um contrato dele
 // Recebe: id — o id do anexo (o mesmo que o IndexedDB usa).
 // Devolve: o id da casa que o refere, ou null quando ninguém o refere.
 function casaDoAnexo(id) {
@@ -60,6 +61,8 @@ function casaDoAnexo(id) {
     return false;
   });
   if (casa) return casa;
+  casa = casaDoMovimento(tem);
+  if (casa) return casa;
   (db.tenants || []).some(function (t) {
     if (!tem(t.files)) return false;
     casa = (typeof casaDaFicha === 'function' && casaDaFicha(t)) || null;
@@ -72,6 +75,29 @@ function casaDoAnexo(id) {
   // uma ficha presa a um imóvel que já saiu (apagado: a ficha fica) sobe solta, como antes
   var viva = casa && (db.properties || []).some(function (p) { return p.id === casa; });
   return viva ? casa : null;
+}
+
+/* A casa de um anexo de um movimento: a do imóvel do movimento. Um movimento
+   sem imóvel não tem casa — vive nos registos de quem o registou —, e o
+   anexo sobe solto: só quem o carregou o vê. Num movimento dividido (um lote:
+   cada parte no seu imóvel, todas com a mesma lista de anexos) é a casa da
+   ÚLTIMA parte pela ordem dos imóveis: é por essa ordem que as partes sobem
+   (nucleo.js:exportEntities, nucleo.js:pushNow), e o servidor prende o anexo
+   a cada parte que grava (worker/src/files.js:linkFiles) — fica a da última.
+   Dizer outra fazia o PUT de cada sessão (subirPendentes, com ?casa=) mudá-lo
+   de casa, e a gravação seguinte do lote devolvê-lo. Um comproprietário vê-o
+   se partilhar essa casa (decisão do Martinho, 2026-11-13).
+   Recebe: tem — a função que diz se uma lista de anexos tem este.
+   Devolve: o id da casa (de um imóvel que está na base), ou null. */
+function casaDoMovimento(tem) {
+  var ordem = new Map();
+  (db.properties || []).forEach(function (p, i) { ordem.set(p.id, i); });
+  var casa = null;
+  (db.transactions || []).forEach(function (t) {
+    if (!t || !t.propertyId || !ordem.has(t.propertyId) || !tem(t.files)) return;
+    if (casa === null || ordem.get(t.propertyId) > ordem.get(casa)) casa = t.propertyId;
+  });
+  return casa;
 }
 
 /* Sobe um anexo para o servidor (PUT /api/files/:id), a indicar a casa a que pertence

@@ -27,6 +27,22 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 70,
+    data: '2026-11-13',
+    titulo: 'Anexos nos movimentos',
+    seccoes: [
+      {
+        titulo: 'Movimentos',
+        afeta: ['movimentos', 'anexos'],
+        itens: [
+          'Os movimentos passam a ter anexos: a fatura, o recibo ou o comprovativo, em imagem ou PDF. Adiciona-os no formulário do movimento, na secção «Anexos», antes dos Comentários.',
+          'Numa despesa que conta no Anexo F, o formulário lembra-te de juntar a fatura: é o que as Finanças pedem se quiserem ver a despesa.',
+          'Na ficha do movimento, os anexos ficam numa lista, e tocar abre cada um. Num movimento dividido por vários imóveis, o anexo vai com o movimento inteiro.',
+        ],
+      },
+    ],
+  },
+  {
     v: 69,
     data: '2026-11-13',
     titulo: 'A Análise com abas',

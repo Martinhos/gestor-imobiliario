@@ -1012,9 +1012,11 @@ function delTpl(id){
   confirmModal('Apagar modelo',`Apagar o modelo “${esc(x.name)}”?`,()=>{db.templates=db.templates.filter(y=>y.id!==id);save();closeAllModals();render();toast('Modelo apagado.')});
 }
 /* Despeja o tx do modelo no formulário aberto, preservando o que é da sessão
-   de edição (o id, a data e se é uma edição). O modo do formulário vive à
-   parte (movimento.js:txModo), e por isso não há marcas a enumerar para ele
-   não se trocar. Redesenha o modal.
+   de edição (o id, a data e se é uma edição) e os anexos do movimento (a
+   fatura é dele, e o modelo não os tem: sem os guardar, gravar deixava o
+   ficheiro sem registo, e a arrumação do arranque apagava-o). O modo do
+   formulário vive à parte (movimento.js:txModo), e por isso não há marcas a
+   enumerar para ele não se trocar. Redesenha o modal.
    Recebe: x — o modelo a aplicar (objeto com tx, p. ex. de db.templates).
    Devolve: nada — substitui tForm e redesenha o modal. */
 function applyTemplate(x){
@@ -1022,6 +1024,7 @@ function applyTemplate(x){
   /* o criado também fica: um movimento já guardado não salta para o topo do dia só por lhe aplicar um modelo */
   const keep={id:tForm.id,date:tForm.date,_edit:tForm._edit};
   if(tForm.criado)keep.criado=tForm.criado;
+  if(tForm.files)keep.files=tForm.files;
   tForm=normTx(Object.assign({},JSON.parse(JSON.stringify(x.tx))));Object.assign(tForm,keep);
   if(tForm.amount)tForm._aA=tForm.amount;
   repaintTx();toast('Modelo aplicado.');

@@ -415,6 +415,10 @@ function normLote(l){
    positivo, fica; um objeto sem id é um movimento novo e nasce com ele; os
    outros (os de antes do carimbo) ficam SEM o campo — nada de 0 nem de uma
    data inventada, que os fazia mudar e subir todos ao servidor.
+   files são os anexos do movimento (a fatura, o recibo), pelo normFile, como
+   os de um contrato; pela mesma razão do criado, só existe num movimento que
+   já os teve — um que nunca os teve não ganha o campo. Uma lista que ficou
+   vazia (removeram-se todos) fica vazia, para a fusão a três ver a remoção.
    Recebe: t — o movimento em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos do movimento preenchidos. */
 const normTx=t=>{const novo=!t||t.id==null||t.id==='';
@@ -438,6 +442,8 @@ const normTx=t=>{const novo=!t||t.id==null||t.id==='';
   if(o.psplit&&!o.psplit.mode)o.psplit=null;
   if(o.psplit){o.psplit={mode:o.psplit.mode,parts:chavesSeguras(o.psplit.parts)}}  // e estas por imóvel
   o.lote=o.propertyId&&deLote?normLote(o.lote):null;
+  /* sem id não é anexo de nada (e o normFile dava-lhe um novo a cada leitura) */
+  if(o.files!==undefined)o.files=Array.isArray(o.files)?o.files.filter(f=>f&&typeof f==='object'&&f.id!=null&&f.id!=='').map(normFile):[];
   return o};
 /* A ordem dos movimentos: pela data, e no mesmo dia pela hora a que foram
    adicionados (o criado do normTx) — assim, do mais recente para o mais

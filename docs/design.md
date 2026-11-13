@@ -2309,7 +2309,9 @@ Uma ficha mostra o que se sabe: uma linha sem valor não aparece, porque um
 rótulo com um traço à frente é ruído a fingir que é informação. As fichas do
 movimento, da hipoteca, do planeado e do modelo escrevem o corpo com
 componentes.js:ficha, que recebe linhas e deita fora as vazias, nas mesmas
-`.stat` que a app já usa em toda a parte (estilos.css:.stat). As que o canvas
+`.stat` que a app já usa em toda a parte (estilos.css:.stat); uma lista de
+linhas que se tocam — os anexos de um movimento — é o tipo 'lista', com o
+rótulo por cima e sem o texto pequeno do bloco. As que o canvas
 de 2026-10 redesenhou — o imóvel (imovel.js:propFicha), o contrato
 (contrato.js:ctFicha), a pessoa (pessoas.js:personFicha) e a visita
 (visitas.js:visFicha) — já não passam por ele e têm as peças do canvas:
@@ -2430,7 +2432,7 @@ pertence, só as imagens, pela ordem dele — a primeira é a capa
 miniaturas do componentes.js:fileBlock, que chamam `openMeta(id,true)`), a
 fila é a do formulário, com as fotos ainda por gravar e a ordem que lá
 estiver. Um imóvel com uma foto só, e os anexos de imagem que não são fotos
-de imóvel (contratos, pessoas, hipotecas), abrem sem carrossel: setas e «1
+de imóvel (contratos, pessoas, hipotecas, movimentos), abrem sem carrossel: setas e «1
 de 1» sem para onde ir eram ruído.
 
 As miniaturas em memória são sempre as de 220px (componentes.js:makeThumb),
@@ -2479,6 +2481,53 @@ src (o browser só larga a miniatura quando a inteira está pronta); se não
 existir, o palco diz «Esta foto não está neste aparelho.», como antes. Um imóvel
 com uma foto só e os anexos de imagem que não são fotos de imóvel continuam a
 abrir depois do blob (ver «Dúvidas»).
+
+Os movimentos também têm anexos: a fatura, o recibo, o comprovativo, em
+imagem ou PDF. Juntam-se no formulário, no grupo «Anexos» antes dos
+Comentários (movimento.js:txAnexosSect), com o bloco de ficheiros da casa e o
+accept do input em imagens e PDF (componentes.js:fileBlock, opts.accept); o
+«Adicionar ficheiro» e o lixo de cada um são os do contrato
+(movimento.js:txAddFiles, movimento.js:txDelFile). Está em todos os tipos e
+nos divididos, e no confirmar de um planeado; nos modelos e nos planeados não,
+porque uma fatura é de um movimento e não de um molde (dados.js:TX_TPL_KEYS
+não leva files, e aplicar um modelo a um movimento aberto guarda os anexos
+dele: planeados.js:applyTemplate). Só o vê quem pode juntar anexos onde o
+movimento fica, em cada imóvel de um dividido (movimento.js:txPodeJuntarAnexos):
+sem isso o servidor recusa a gravação inteira (worker/src/files.js:regraDosAnexos),
+e os anexos que lá estão ficam como estavam. A dica por baixo
+(movimento.js:txDicaDosAnexos) pede a fatura numa despesa que conta no Anexo F
+— a coluna dela não é «Não dedutível», nem a categoria está fora dos totais
+(irs.js:irsColunaDe): «Junta a fatura: é o que as Finanças pedem se quiserem
+ver esta despesa.» —, e no resto diz «Recibos, faturas ou comprovativos, em
+imagem ou PDF.». É só uma dica: nada de «A tratar» nem de selos na lista. A
+coluna escolhida à mão troca-a sem repintar (movimento.js:onIrsCol); a
+categoria repinta o formulário inteiro.
+
+Na ficha, «Anexos» é uma lista, uma linha por ficheiro com o clipe, o nome e a
+seta, e tocar abre-o — uma imagem numa janela, um PDF descarrega
+(movimento.js:txAnexosDaFicha, componentes.js:openMeta; o tipo 'lista' do
+componentes.js:ficha, com as linhas do contrato.js:ctVerAnexos). Só aparece com
+anexos e com «Ver fotos e documentos» no imóvel. Juntar e remover é no
+«Editar».
+
+Num dividido, o anexo vai com o movimento inteiro: cada parte do lote leva a
+mesma lista (movimento.js:partirMovimento), e editar o lote mantém-na igual em
+todas. Sobe para a casa do movimento (cloud/anexos.js:casaDoMovimento); num
+dividido, para a da última parte pela ordem dos imóveis, que é a casa a que o
+servidor o prende ao gravar o lote (worker/src/files.js:linkFiles prende-o a
+cada parte, pela ordem por que sobem: cloud/nucleo.js:exportEntities). Quem o
+carregou vê-o sempre; um comproprietário vê-o se partilhar essa casa. Um
+movimento sem imóvel não tem casa: o anexo fica solto, e só quem o carregou o
+vê.
+
+Os anexos dos movimentos estão na lista do que deve existir
+(web/app/anexos.js:allFileMetas): sem eles, a arrumação do arranque
+(web/app/anexos.js:cleanFiles) apagava-os do aparelho. Um anexo ainda por gravar abre-se
+do formulário (web/app/anexos.js:pendingMetas). Apagar um movimento, um lote ou os
+marcados na seleção leva os anexos só quando o Anular expira, e só os que já
+nenhum registo refere (web/app/anexos.js:apagarAnexosSemRegisto; movimento.js:delTx,
+movimento.js:apagarLote, cloud/selecao.js:CW.selApagar). Apagar um imóvel não
+os apaga um a um: as partes de um lote nos outros imóveis continuam a referi-los.
 
 O anel é CSS (estilos.css:.a-carregar::after, no bloco «fotos a carregar»): é a
 roda da espera da casa (estilos.css:.roda — o @keyframes roda, a --volta,
@@ -4817,7 +4866,9 @@ listas com ids juntam-se (nucleo.js:baseSemListas).
 
 Os anexos sobem à parte dos registos. Guardar um anexo no aparelho é também subi-lo
 (cloud/anexos.js: o idbPut embrulhado → subirAnexo), com a casa a que pertence quando já se
-sabe (cloud/anexos.js:casaDoAnexo); uma foto começa a subir mal é escolhida, ainda sem casa,
+sabe (cloud/anexos.js:casaDoAnexo — a de um movimento é a do imóvel dele, e num dividido a da
+última parte, a mesma a que o servidor o prende: cloud/anexos.js:casaDoMovimento); uma foto
+começa a subir mal é escolhida, ainda sem casa,
 com o nome do ficheiro. Se a gravação do registo chegar ao servidor antes de o upload acabar
 — acontece com quatro em cinco fotos —, o linkFiles dela não encontrou o anexo; quando o
 upload acaba, o cliente pede ao servidor para o prender ao registo da casa que já o refere
@@ -5755,8 +5806,14 @@ O formulário do movimento é a prancheta M-Novo movimento
 Bricolage, com o € dentro do campo, e os campos em grupos .sect — o que foi
 (o montante, a descrição, a data ao lado do imóvel, o resto do tipo e quem
 pagou), a classificação (a
-categoria, a coluna do Anexo F, as etiquetas em chips) e as divisões. O que
-se grava é o de sempre: os mesmos ids, lidos pelo movimento.js:collectTx.
+categoria, a coluna do Anexo F, as etiquetas em chips), as divisões e os
+anexos, logo antes dos Comentários (movimento.js:txAnexosSect: imagens e PDF,
+com a dica da fatura numa despesa que conta no Anexo F — a regra inteira
+está em «Tocar num registo é lê-lo», no parágrafo «Os movimentos também têm
+anexos»). O que se grava é o de sempre:
+os mesmos ids, lidos pelo movimento.js:collectTx; os anexos vivem no
+tForm.files, que o bloco escreve. No dedo, o «Adicionar ficheiro», o lixo e
+o nome de cada ficheiro medem 44px (estilos.css:.mov-anexos).
 Trocar de tipo no segmentado tira do formulário o que só o tipo antigo
 tinha, para nada se gravar escondido (movimento.js:limparDoTipo): a
 hipoteca e a distribuição, o contrato e o que o IRS pergunta a uma renda, a
@@ -5817,7 +5874,9 @@ que o faz chegar a quem partilha esse imóvel comigo, nos movimentos, nos
 totais e nas contas entre proprietários: guardado inteiro, sem imóvel, ficava
 nos meus registos, e num grupo partilhado os saldos de cada um discordavam.
 As partes levam o lote (o id, quantas são, o total, o alvo e a divisão), e o
-id de cada uma sai do lote e do imóvel, igual em qualquer aparelho.
+id de cada uma sai do lote e do imóvel, igual em qualquer aparelho. Os anexos
+vão com o movimento inteiro: cada parte leva a mesma lista, e o ficheiro sobe
+para a casa da última parte pela ordem dos imóveis (cloud/anexos.js:casaDoMovimento).
 
 Na lista, as partes de um lote que passam no filtro voltam a ser uma linha
 (lista-movimentos.js:linhasDaLista): sem filtro, o total e «dividido por N

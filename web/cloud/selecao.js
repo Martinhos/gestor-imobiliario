@@ -613,7 +613,8 @@ CW.selGravar = function () {
    (selSomaTexto), com o sinal do dinheiro: somava os valores sem sinal, e
    uma receita de 1 250 € com uma despesa de 55 € dava «+1 195,00 €» na barra
    e «1 305,00 €» na janela, no momento de apagar. O verbo é o da barra e o
-   do canvas: Apagar, do menu ao aviso.
+   do canvas: Apagar, do menu ao aviso. Os anexos dos que saíram só saem do
+   aparelho e do servidor quando o Anular expira (anexos.js:apagarAnexosSemRegisto).
    Devolve: nada — se for confirmado, grava e sai da seleção. */
 CW.selApagar = function () {
   if (!selN()) return;
@@ -630,6 +631,9 @@ CW.selApagar = function () {
       save(); buildNav(); CW.selSair();
       comDesfazer(agora.n + (agora.n === 1 ? ' movimento apagado.' : ' movimentos apagados.'), function () {
         db.transactions = (db.transactions || []).concat(copia);
+      }, function () {
+        // os anexos deles saem quando o Anular expira, como no apagar de um só (movimento.js:delTx)
+        apagarAnexosSemRegisto([].concat.apply([], copia.map(function (t) { return t.files || []; })));
       });
     });
 };
