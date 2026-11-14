@@ -1100,6 +1100,14 @@ input[type=checkbox],input[type=radio]{width:18px;height:18px;min-height:0;paddi
    «Começar a partir de hoje» numa linha inteira por cima de Cancelar e Registar */
 .sheet .foot:has(>.preencher-hoje){flex-wrap:wrap}
 .sheet .foot .btn.preencher-hoje{flex:1 1 100%}
+/* a lista dos valores da janela do preenchimento (cloud/painel.js:fillLista):
+   uma linha por período, o mês à esquerda e o valor à direita; com dezenas de
+   meses rola dentro de si, para o total e o aviso ficarem à vista */
+.fill-lista{display:flex;flex-direction:column;gap:6px;max-height:min(46vh,340px);max-height:min(46dvh,340px);overflow-y:auto;overscroll-behavior:contain;
+  border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.fill-lista .fill-linha{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0}
+.fill-lista .fill-linha span{font-size:14px;color:var(--ink)}
+.fill-lista .fill-linha input{width:120px;flex:0 0 120px;min-height:44px;text-align:right}
 .iconbtn{border:0;background:transparent;padding:7px;border-radius:10px;cursor:pointer;color:var(--muted);display:inline-flex;align-items:center;justify-content:center}
 @media(hover:hover) and (pointer:fine){.iconbtn:hover{background:var(--chip);color:var(--ink)}}
 /* A porta das opções de um registo, e é a mesma em toda a app: o kebab das

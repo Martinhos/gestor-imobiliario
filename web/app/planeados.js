@@ -99,6 +99,40 @@ function cursorDaRenda(c,next,minNext,from){
   if(c.end&&x>c.end)return '';     // já não há renda nenhuma a pedir
   return x;
 }
+/* O molde do movimento da renda de um contrato: receita, na categoria Rendas
+   (e Renda mensal) quando existem, com o imóvel e o contrato. É o tx do
+   planeado da renda (syncContractRec) e o do plano de um contrato terminado
+   (ctPlanoTerminado).
+   Recebe: c — o contrato.
+   Devolve: o molde (objeto). */
+function ctMoldeDaRenda(c){
+  const inc=catsIn(),cat='Rendas' in inc?'Rendas':'',sub=cat&&(inc[cat]||[]).indexOf('Renda mensal')>-1?'Renda mensal':'';
+  return {kind:'income',label:'Renda '+ctName(c),amount:c.rent,propertyId:c.propertyId,contractId:c.id,category:cat,sub,split:null};
+}
+/* Um contrato que já terminou não tem planeado de renda (syncContractRec só
+   os quer vivos), e por isso a janela do preenchimento não tinha por onde lhe
+   pegar: quem adiciona um contrato antigo, já acabado, ficava sem maneira de
+   registar as rendas dele de uma vez (KAN-132). Este é o plano que ele teria,
+   sem ir para db.recurring: o molde da renda, mensal, no dia do pagamento, do
+   início ao fim do contrato (ou até hoje, num terminado sem fim escrito).
+   Recebe: c — o contrato.
+   Devolve: o plano ({id, virtual, every, next, end, name, tx}), ou null quando
+   o contrato não terminou, não tem renda nem início, ou tem planeado. */
+function ctPlanoTerminado(c){
+  if(!c||ctEstado(c)!=='terminado'||!(c.rent>0)||!/^\d{4}-\d{2}-\d{2}$/.test(String(c.start||'')))return null;
+  if(ctRecOf(c))return null;
+  const from=Math.max(1,Math.min(31,c.payDay||1)),tx=ctMoldeDaRenda(c);
+  return {id:'ct-fim:'+c.id,virtual:true,every:'month',next:dayInMonth(Number(c.start.slice(0,4)),Number(c.start.slice(5,7))-1,from),
+    until:'',end:c.end||today(),name:tx.label,tx};
+}
+/* As rendas que faltam a um contrato terminado: as datas do plano dele
+   (ctPlanoTerminado) sem renda registada nesse mês (datasEmFalta).
+   Recebe: c — o contrato.
+   Devolve: array de datas AAAA-MM-DD; vazio quando não é o caso. */
+function ctRendasEmFalta(c){
+  const r=ctPlanoTerminado(c);
+  return r?datasEmFalta(r):[];
+}
 /* Mantém a recorrência automática da renda de um contrato: cria-a, atualiza-a
    ou remove-a conforme o contrato esteja ativo, com renda e com o automático
    ligado (autoRec). A janela payDay..payDayTo dá as datas; rendas antecipadas
@@ -118,8 +152,7 @@ function syncContractRec(c){
   const r=ctRecOf(c),want=ctVivo(c)&&c.rent>0&&c.autoRec!==false;
   if(!want){if(r)db.recurring=db.recurring.filter(x=>x.id!==r.id);return}
   const from=Math.max(1,Math.min(31,c.payDay||1)),to=Math.max(from,Math.min(31,c.payDayTo||from));
-  const inc=catsIn(),cat='Rendas' in inc?'Rendas':'',sub=cat&&(inc[cat]||[]).indexOf('Renda mensal')>-1?'Renda mensal':'';
-  const tx={kind:'income',label:'Renda '+ctName(c),amount:c.rent,propertyId:c.propertyId,contractId:c.id,category:cat,sub,split:null};
+  const tx=ctMoldeDaRenda(c);
   /* A primeira ocorrência nunca é antes do início do contrato — nem antes dos
      meses de renda antecipada, quando os há. Vale para os dois ramos abaixo:
      o que cria a recorrência e o que atualiza uma que já existe. Só o

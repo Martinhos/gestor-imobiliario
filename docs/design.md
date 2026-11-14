@@ -2646,11 +2646,16 @@ ficam por cima dela — a tabela da lista continua a juntá-los ao selo
 lista-contratos.js:ctPeriodo; ver «Um contrato tem três estados»). Os cartões
 dos prazos que já avisam — os mesmos do sino —, cada um com o título e a
 data, o selo do que falta, a frase do sino, Renovar e Terminar na oposição e
-no fim, e o ✕ que silencia (contrato.js:ctPrazosDoContrato,
+no fim, «Ver na ficha» no Modelo 2 e na comunicação de fevereiro — rola até ao
+cartão «Perante a AT», onde se resolvem (contrato.js:ctIrParaAt, suave ou de
+uma vez com o movimento reduzido) —, e o ✕ que silencia (contrato.js:ctPrazosDoContrato,
 contrato.js:ctPrazoDaFicha, prazos.js:pzSilencia). Os valores
 (contrato.js:ctValoresDaFicha): a renda, o imposto e a líquida em três
 números, o pagamento, a próxima renda, as rendas registadas e o aumento, com
-«Registar renda» e «Ver movimentos» (contrato.js:ctVerMovimentos) — todos
+«Registar renda» e «Ver movimentos» (contrato.js:ctVerMovimentos) e, num
+contrato terminado com rendas em falta (planeados.js:ctRendasEmFalta),
+«Registar as N rendas em falta», que abre a janela do preenchimento
+(cloud/painel.js:CW.fillContrato) — todos
 com cêntimos (formato.js:euro2), a caução incluída, como na folha do PDF. A
 renda planeada tem os três estados dos Planeados
 (contrato.js:ctRendaPlaneada): «Próxima renda … · planeada» antes do dia,
@@ -4239,8 +4244,17 @@ quanto e com que etiqueta. «Registar os N» abre a janela do preenchimento
 estimativa; «Agora não» guarda no aparelho quantos faltavam
 (planeados.js:recRetroAgoraNao; a chave gi_retro_agora_nao é
 planeados.js:RETRO_LS), e a faixa só volta a esse planeado se passarem a
-faltar mais. Gravar um contrato antigo abre a mesma janela sozinha, uma vez
-por planeado novo (cloud/painel.js:offerFill); os planeados dos dados de
+faltar mais. Nos planos que não são hipoteca, a janela lista cada período
+com o seu valor, já escrito com o do plano (cloud/painel.js:fillLista): muda-se
+o de um aumento ou de um mês diferente, e um vazio (ou 0) não se regista; o
+total acompanha (cloud/painel.js:CW.fillTotal) e, sem valor nenhum, o erro fica
+junto da lista. Um contrato que já terminou não tem planeado, mas tem o plano
+que teria (planeados.js:ctPlanoTerminado): a mesma janela abre-se para ele
+(cloud/painel.js:CW.fillContrato), sem «Começar a partir de hoje», e regista
+as rendas sem mexer em planeado nenhum. Gravar um contrato antigo abre a mesma janela sozinha, uma vez
+por planeado novo (cloud/painel.js:offerFill) — ou, num contrato adicionado já
+terminado, uma vez por contrato, com uma só renda em falta que seja
+(cloud/painel.js:contratoTerminadoNovo); os planeados dos dados de
 exemplo nascem conhecidos (cloud/painel.js:refreshKnown, a seguir ao
 arranque.js:seed), e não a abrem para rendas de contratos inventados.
 

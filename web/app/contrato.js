@@ -45,10 +45,11 @@ function ctFicha(id){
 /* Um cartão da ficha, com o título e, à direita dele, o que se passar (um
    selo); sem título é só o corpo.
    Recebe: titulo — o texto (por escapar; '' sem cabeçalho); corpo — o HTML;
-   extra (opcional) — o HTML à direita do título.
+   extra (opcional) — o HTML à direita do título; cls (opcional) — uma classe
+   a mais, para o cartão se encontrar (o da AT, ctIrParaAt).
    Devolve: o HTML do cartão. */
-function ctSecao(titulo,corpo,extra){
-  return `<div class="card ct-sec">${titulo?`<div class="ct-sec-cab"><h3>${esc(titulo)}</h3>${extra||''}</div>`:''}<div class="ct-sec-corpo">${corpo}</div></div>`;
+function ctSecao(titulo,corpo,extra,cls){
+  return `<div class="card ct-sec${cls?' '+cls:''}">${titulo?`<div class="ct-sec-cab"><h3>${esc(titulo)}</h3>${extra||''}</div>`:''}<div class="ct-sec-corpo">${corpo}</div></div>`;
 }
 /* Uma linha rótulo / valor de um cartão da ficha.
    Recebe: rot — o rótulo (por escapar); valor — o HTML do valor, já escapado.
@@ -145,6 +146,9 @@ function ctPrazoDaFicha(c,x){
   if((x.tipo==='oposicao'||x.tipo==='fim')&&ok&&c.end&&c.active!==false)
     acoes.push(`<button type="button" class="btn sm" data-toca="camada" data-click="ctRenovar('${id}')">Renovar</button>`,
       `<button type="button" class="btn sm" data-toca="camada" data-click="endContract('${id}')">Terminar</button>`);
+  /* o Modelo 2 e a comunicação de fevereiro resolvem-se no cartão «Perante a
+     AT», mais abaixo na ficha: o aviso leva lá (KAN-133) */
+  if(x.tipo==='modelo2'||x.tipo==='fev15')acoes.push(`<button type="button" class="btn sm" data-toca="nada" data-click="ctIrParaAt()">Ver na ficha</button>`);
   if(x.tipo==='recibos'&&x.abrir)acoes.push(`<button type="button" class="btn sm" data-toca="camada" data-click="${x.abrir}">Abrir a renda</button>`);
   acoes.push(`<button type="button" class="btn sm ghost so-icone ct-silenciar" aria-label="Silenciar este aviso" title="Silenciar até a data mudar" data-toca="dados" data-click="pzSilencia('${jsq(x.chave)}')">${ic('x',16)}</button>`);
   return `<div class="ct-prazo ct-prazo-${cor}">
@@ -183,7 +187,13 @@ function ctValoresDaFicha(c){
     c.increase!=null&&c.increase!==''?ctKv('Aumento anual',dec(c.increase)+'%'+(c.start?' · próximo a '+dPT(pzAniversario(c.start)):'')):''].join('');
   /* registar a renda é dos Movimentos: com o serviço desligado nesta conta o
      atalho não aparece */
+  /* um contrato terminado não tem planeado de renda: as rendas que lhe faltam
+     registam-se de uma vez pela janela do preenchimento da nuvem
+     (cloud/painel.js:CW.fillContrato; KAN-132) */
+  const emFalta=servicoLigado('transactions')&&pode(pid,'tx.add')&&typeof window!=='undefined'&&window.CW&&typeof window.CW.fillContrato==='function'
+    ?ctRendasEmFalta(c).length:0;
   const botoes=[servicoLigado('transactions')&&isActive(c)&&pode(pid,'tx.add')?`<button type="button" class="btn sm primary" data-toca="camada" data-click="ctRegistarRenda('${jsq(pid)}','${id}')">Registar renda</button>`:'',
+    emFalta?`<button type="button" class="btn sm primary" data-toca="camada" data-click="CW.fillContrato('${id}')">Registar ${emFalta===1?'a renda em falta':'as '+emFalta+' rendas em falta'}</button>`:'',
     movs.length?`<button type="button" class="btn sm" data-toca="camada" data-click="ctVerMovimentos('${id}')">Ver movimentos</button>`:''].join('');
   return `<div class="card ct-sec ct-valores">${tres}${kv}${botoes?`<div class="ct-botoes">${botoes}</div>`:''}</div>`;
 }
@@ -259,7 +269,24 @@ function ctAtDaFicha(c){
     comunicacao,
     !taxaReduzida&&c.rent>0&&!escrita&&irsDoAno.motivo==='moderada'?'Com a renda até '+euro(irsAno(YEAR).taxas.rendaModerada.limiteMensal)+' por mês, as rendas de '+YEAR+' pagam a taxa de '+dec(irsDoAno.taxa)+' % das rendas moderadas (EBF art. 45.º-C), em vez de '+dec(irsAno(YEAR).taxas.habitacional)+' %.':''
   ].filter(Boolean).map(t=>`<div class="ct-nota">${t}</div>`).join('');
-  return ctSecao('Perante a AT',corpo+notas,selo);
+  return ctSecao('Perante a AT',corpo+notas,selo,'ct-sec-at');
+}
+/* «Ver na ficha» dos avisos do Modelo 2 e da comunicação de fevereiro
+   (ctPrazoDaFicha): rola o corpo da janela até ao cartão «Perante a AT», que
+   é onde se diz o estado perante a AT e se marca a comunicação. Suave, ou de
+   uma vez com o movimento reduzido; o foco passa para o cartão sem rolar
+   outra vez, para o leitor de ecrã chegar ao mesmo sítio.
+   Devolve: nada — mexe no scroll e no foco. */
+function ctIrParaAt(){
+  const at=[].slice.call(document.querySelectorAll('.ct-sec-at')).pop();if(!at)return;
+  const corpo=at.closest('.body'),suave=!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const comportamento=suave?'smooth':'auto';
+  if(corpo){
+    const topo=at.getBoundingClientRect().top-corpo.getBoundingClientRect().top+corpo.scrollTop-12;
+    try{corpo.scrollTo({top:Math.max(0,topo),behavior:comportamento})}catch(e){corpo.scrollTop=Math.max(0,topo)}
+  }else try{at.scrollIntoView({block:'start',behavior:comportamento})}catch(e){}
+  at.setAttribute('tabindex','-1');
+  try{at.focus({preventScroll:true})}catch(e){}
 }
 /* O selo do cartão de cidadão de uma pessoa, quando já pede atenção: caducado
    a vermelho; a caducar dentro da antecedência dos prazos (prazos.js:

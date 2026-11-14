@@ -27,6 +27,22 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 71,
+    data: '2026-11-14',
+    titulo: 'Rendas antigas, mês a mês',
+    seccoes: [
+      {
+        titulo: 'Contratos',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'Ao adicionar um contrato que já terminou, a app propõe registar as rendas dele de uma vez, ao valor do contrato. Se ficar para depois, a ficha do contrato tem o botão «Registar as rendas em falta».',
+          'Na janela «Preencher períodos», cada mês tem o seu valor: muda o de um aumento ou de um mês diferente, e deixa vazio o que não foi pago. O total acompanha.',
+          'Na ficha do contrato, o aviso de comunicar o contrato à AT (e o da comunicação de fevereiro) tem «Ver na ficha», que te leva ao cartão «Perante a AT».',
+        ],
+      },
+    ],
+  },
+  {
     v: 70,
     data: '2026-11-13',
     titulo: 'Anexos nos movimentos',

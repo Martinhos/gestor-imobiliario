@@ -298,7 +298,73 @@ function planoQuem(r) {
 // Devolve: nada — abre o modal (ou avisa num toast que não há nada por preencher).
 CW.fillMissed = function (id) {
   var r = (db.recurring || []).find(function (x) { return x.id === id; });
-  if (!r) return;
+  if (r) fillAbrir(r);
+};
+
+// A mesma janela para um contrato que já terminou (KAN-132): o plano dele
+// é o de planeados.js:ctPlanoTerminado, que não vive em db.recurring. Sem
+// «Começar a partir de hoje» (não há planeado a mudar).
+// Recebe: cid — o id do contrato.
+// Devolve: nada — abre a janela (ou avisa num toast que não falta nenhuma renda).
+CW.fillContrato = function (cid) {
+  var r = ctPlanoTerminado(contract(cid));
+  if (!r || !datasEmFalta(r).length) return toast('Não há rendas por registar neste contrato.');
+  fillAbrir(r);
+};
+
+// O nome de uma data na lista dos valores: o mês e o ano nos planos mensais
+// («jan 2024»), a data inteira nos outros.
+// Recebe: d — a data AAAA-MM-DD; every — o período do plano.
+// Devolve: o texto.
+function fillRotulo(d, every) {
+  if (every !== 'month') return dPT(d);
+  return (MES[Number(String(d).slice(5, 7)) - 1] || '') + ' ' + String(d).slice(0, 4);
+}
+
+// A lista dos valores da janela do preenchimento (KAN-131): uma linha por
+// data, com o valor do plano já escrito e por mudar — um aumento, um mês
+// diferente; vazio ou 0, esse mês não se regista.
+// Recebe: dates — as datas em falta; val0 — o valor do plano; every — o período.
+// Devolve: o HTML da lista.
+function fillLista(dates, val0, every) {
+  var v = val0 ? String(val0).replace('.', ',') : '';
+  return '<div class="fill-lista" id="fill_lista" role="group" aria-label="Valor de cada período">' +
+    dates.map(function (d, i) {
+      var rot = fillRotulo(d, every);
+      return '<label class="fill-linha"><span>' + esc(rot) + '</span>' +
+        '<input id="fill_v_' + i + '" type="text" inputmode="decimal" class="num" value="' + esc(v) + '" placeholder="Ex: ' + esc(v || '450') + '"' +
+        ' aria-label="Valor de ' + esc(rot) + '" autocomplete="off" data-toca="rascunho" data-input="CW.fillTotal()"></label>';
+    }).join('') + '</div>';
+}
+
+// Os valores escritos na lista da janela, um por data, pela ordem das
+// linhas; sem a lista inteira no ecrã, o valor do plano em todas.
+// Recebe: n — quantas datas; val0 — o valor do plano.
+// Devolve: array de números (0 = esse período não se regista).
+function fillValores(n, val0) {
+  var els = [].slice.call(document.querySelectorAll('#fill_lista input'));
+  if (els.length !== n) { var out = []; for (var i = 0; i < n; i++) out.push(val0); return out; }
+  return els.map(function (el) { return Math.max(0, num(el.value)); });
+}
+
+// Refaz o total e a contagem da janela ao escrever um valor.
+// Devolve: nada — muda o texto do total e a contagem dos que se registam.
+CW.fillTotal = function () {
+  var n = document.querySelectorAll('#fill_lista input').length;
+  var vs = fillValores(n, 0), tot = 0, k = 0;
+  vs.forEach(function (v) { if (v > 0) { tot += v; k++; } });
+  var t = document.getElementById('fill_total');
+  if (t) t.textContent = euro2(Math.round(tot * 100) / 100);
+  var c = document.getElementById('fill_conta');
+  if (c) c.textContent = k === n ? '' : ' · ' + k + ' de ' + n;
+};
+
+// Monta e abre a janela do preenchimento de um plano (um planeado de
+// db.recurring, ou o plano virtual de um contrato terminado).
+// Recebe: r — o plano.
+// Devolve: nada — abre a janela (ou avisa num toast que não há nada por preencher).
+function fillAbrir(r) {
+  var id = r.id, virtual = !!r.virtual;
   var body, n;
   if ((r.tx || {}).loanId) {
     var lista = planoPrestacoesEmFalta(r);
@@ -328,25 +394,76 @@ CW.fillMissed = function (id) {
     body = '<div class="form">' +
       '<div class="hint">Vais registar <b>' + n + '</b> movimento' + (n === 1 ? '' : 's') +
       ' de <b>' + esc(r.name) + '</b>, de <b>' + dPT(dates[0]) + '</b> a <b>' + dPT(dates[n - 1]) + '</b>, ' +
-      'todos com o valor atual de <b>' + euro2(val0) + '</b> por ' + per + '.</div>' +
+      'com o valor ' + (virtual ? 'do contrato' : 'atual') + ', <b>' + euro2(val0) + '</b> por ' + per + '. Muda o valor de cada um se foi outro; vazio, esse não se regista.</div>' +
       planoQuem(r) +
       (compra ? '<div class="hint">O imóvel foi comprado a <b>' + compra + '</b>: antes disso não há nada a registar.</div>' : '') +
+      fillLista(dates, val0, r.every) +
       '<div class="hint u-bl-3px-solid-v-warn u-pl-10px">' +
-      '<b>Isto é uma estimativa.</b> O valor de cada período pode não corresponder ao que foi realmente pago: ' +
-      'não entra em conta com aumentos de renda, meses em falta, atrasos nem valores diferentes. ' +
-      'Confere e corrige depois o que não bater certo.</div>' +
+      '<b>Isto é uma estimativa.</b> Confere e corrige depois o que não bater certo: atrasos, aumentos ou meses por pagar.</div>' +
       '<div class="hint">Ficam marcados com a etiqueta <b>Estimativa</b> — procura por “estimativa” nos Movimentos para os veres todos.</div>' +
-      '<div class="stat u-mt-6px"><span>Total a registar</span><b>' + euro2(val0 * n) + '</b></div></div>';
+      '<div class="stat u-mt-6px"><span>Total a registar<span id="fill_conta"></span></span><b id="fill_total">' + euro2(Math.round(val0 * n * 100) / 100) + '</b></div></div>';
   }
   /* a outra resposta: não registar o que ficou para trás e começar hoje
      (CW.startFromToday), a quem pode recusar. Vai primeiro e numa linha só
      (estilos.css:.preencher-hoje): três botões lado a lado a 384px partiam o
-     rótulo em três linhas */
-  var hoje = podeEditar((r.tx || {}).propertyId, 'rec.add', r, 'confirmar') && recPodeComecarHoje(r);
+     rótulo em três linhas. Um contrato terminado não tem planeado a mudar. */
+  var hoje = !virtual && podeEditar((r.tx || {}).propertyId, 'rec.add', r, 'confirmar') && recPodeComecarHoje(r);
+  var registar = virtual ? 'CW.doFillContrato(\'' + jsq(r.tx.contractId) + '\')' : 'CW.doFillMissed(\'' + id + '\')';
   openModal('Preencher ' + n + ' ' + (n === 1 ? 'período' : 'períodos'), body,
     (hoje ? '<button class="btn preencher-hoje" data-toca="camada" data-click="CW.startFromToday(\'' + id + '\',1)">Começar a partir de hoje</button>' : '') +
     '<button class="btn" data-toca="camada" data-click="CW.fillNext()">Cancelar</button>' +
-    '<button class="btn primary" data-toca="dados" data-click="CW.doFillMissed(\'' + id + '\')">Registar estimativa</button>');
+    '<button class="btn primary" data-toca="dados" data-click="' + registar + '">Registar estimativa</button>');
+}
+
+/* Cria os movimentos de um plano que não é hipoteca, um por data, com o
+   valor escrito na lista da janela (fillValores; 0 salta a data) e a
+   etiqueta «Estimativa», partidos por imóvel quando o plano é de um grupo.
+   Recebe: r — o plano; dates — as datas em falta.
+   Devolve: quantos movimentos criou (número). */
+function fillCriar(r, dates) {
+  var val0 = Number(r.tx.amount) || 0, vs = fillValores(dates.length, val0), n = 0;
+  var tags = db.settings.tags || (db.settings.tags = []);
+  for (var i = 0; i < dates.length; i++) {
+    if (!(vs[i] > 0)) continue;
+    if (tags.indexOf('Estimativa') < 0) tags.push('Estimativa');
+    var t = recTx(r, dates[i]);
+    t.amount = Math.round(vs[i] * 100) / 100;
+    t.label = (t.label || r.name) + ' (estimativa)';
+    t.tags = (t.tags || []).concat(['Estimativa']);
+    if (t.kind === 'loan') applyLoan(t);
+    /* um planeado de grupo ou de «Todos os imóveis» entra partido por imóvel,
+       como no Confirmar (movimento.js:registarMolde); sem os Movimentos, ou se
+       não se partir, entra como sempre, e o arranque seguinte parte-o */
+    var reg = typeof registarMolde === 'function' ? registarMolde(t) : null;
+    (reg && reg.partes ? reg.partes : [t]).forEach(function (x) { db.transactions.push(x); });
+    n++;
+  }
+  return n;
+}
+
+// Sem nenhum valor na lista, a janela fica aberta com o erro junto dela.
+// Recebe: dates — as datas em falta; val0 — o valor do plano.
+// Devolve: true quando não há valor nenhum (e já disse o erro).
+function fillSemValores(dates, val0) {
+  if (fillValores(dates.length, val0).some(function (v) { return v > 0; })) return false;
+  falhaCampo('fill_v_0', 'Escreve o valor de pelo menos um período.');
+  return true;
+}
+
+// O «Registar estimativa» de um contrato terminado (CW.fillContrato): cria
+// as rendas com os valores da lista; não há planeado a empurrar.
+// Recebe: cid — o id do contrato.
+// Devolve: nada — grava, redesenha e diz quantas registou.
+CW.doFillContrato = function (cid) {
+  var c = contract(cid), r = ctPlanoTerminado(c);
+  if (!r) return closeModal();
+  if (!pode(c.propertyId, 'tx.add')) { closeModal(); return toast(motivoRecusa(c.propertyId, 'tx.add') || 'Não tens permissão para registar movimentos.'); }
+  var dates = datasEmFalta(r);
+  if (fillSemValores(dates, Number(r.tx.amount) || 0)) return;
+  var n = fillCriar(r, dates);
+  save(); buildNav(); render(); closeAllModals();
+  toast(n + ' renda' + (n === 1 ? '' : 's') + ' registada' + (n === 1 ? '' : 's') + ' por estimativa.');
+  CW.fillNext();
 };
 
 /* Cria de facto os movimentos em falta. Numa hipoteca entrega a lista
@@ -385,21 +502,10 @@ CW.doFillMissed = function (id) {
     CW.fillNext();
     return;
   }
-  var dates = datasEmFalta(r), n = 0;
-  var tags = db.settings.tags || (db.settings.tags = []);
-  if (tags.indexOf('Estimativa') < 0) tags.push('Estimativa');
-  for (var i = 0; i < dates.length; i++) {
-    var t = recTx(r, dates[i]);
-    t.label = (t.label || r.name) + ' (estimativa)';
-    t.tags = (t.tags || []).concat(['Estimativa']);
-    if (t.kind === 'loan') applyLoan(t);
-    /* um planeado de grupo ou de «Todos os imóveis» entra partido por imóvel,
-       como no Confirmar (movimento.js:registarMolde); sem os Movimentos, ou se
-       não se partir, entra como sempre, e o arranque seguinte parte-o */
-    var reg = typeof registarMolde === 'function' ? registarMolde(t) : null;
-    (reg && reg.partes ? reg.partes : [t]).forEach(function (x) { db.transactions.push(x); });
-    n++;
-  }
+  var dates = datasEmFalta(r);
+  if (fillSemValores(dates, Number(r.tx.amount) || 0)) return;
+  /* cada data com o valor escrito na lista da janela (KAN-131) */
+  var n = fillCriar(r, dates);
   // as ocorrências já vencidas ficam saldadas: empurra o plano para a frente.
   // O guarda é largo: o cursor de uma renda pode estar 600 meses atrás (sem
   // data de compra na casa), e parar aos 600 deixava-o um ou dois meses aquém
@@ -426,13 +532,15 @@ CW.fillNext = function () {
 
 // Quem acabou de ganhar recorrência: o contrato gravado (ficha, terminar,
 // reativar) fica em CW.lastSaved, para o offerFill o preferir entre vários
-// planos novos da mesma gravação.
+// planos novos da mesma gravação. Um contrato novo já terminado também: não
+// ganha planeado, e é ele o candidato (contratoTerminadoNovo).
 var _syncContractRec = syncContractRec;
 syncContractRec = function (c) {
   var antes = ctRecOf(c);
   _syncContractRec(c);
   var depois = ctRecOf(c);
-  if (depois && (!antes || antes.id !== depois.id)) CW.lastSaved = { contractId: c.id, propertyId: c.propertyId || null };
+  if ((depois && (!antes || antes.id !== depois.id)) || (!depois && !knownCts[c.id] && ctEstado(c) === 'terminado'))
+    CW.lastSaved = { contractId: c.id, propertyId: c.propertyId || null };
 };
 
 // Depois de gravar um contrato antigo, perguntar uma vez.
@@ -451,12 +559,28 @@ function markAsked(ids) {
 
 // Só se pergunta por planos acabados de criar: nada de abordar o
 // utilizador por causa de recorrências que já lá estavam.
-var knownRecs = null;
-// fotografa os planos que existem neste momento, para reconhecer os acabados de criar
-// Devolve: nada — refaz o mapa knownRecs em memória.
+var knownRecs = null, knownCts = {};
+// fotografa os planos e os contratos que existem neste momento, para
+// reconhecer os acabados de criar
+// Devolve: nada — refaz os mapas knownRecs e knownCts em memória.
 function refreshKnown() {
-  knownRecs = {};
+  knownRecs = {}; knownCts = {};
   (db.recurring || []).forEach(function (r) { knownRecs[r.id] = 1; });
+  (db.contracts || []).forEach(function (c) { knownCts[c.id] = 1; });
+}
+
+// Um contrato acabado de adicionar que já terminou e tem rendas em falta
+// (planeados.js:ctRendasEmFalta), por que ainda não se perguntou neste
+// aparelho — o candidato do offerFill quando não há planeado novo (KAN-132).
+// Recebe: seen — os ids já perguntados (asked()).
+// Devolve: o contrato, ou null.
+function contratoTerminadoNovo(seen) {
+  var ls = CW.lastSaved || {};
+  var cs = (db.contracts || []).filter(function (c) {
+    return !knownCts[c.id] && !c._atServidor && !c._author && seen.indexOf('ct:' + c.id) < 0 &&
+      pode(c.propertyId, 'tx.add') && ctRendasEmFalta(c).length >= 1;
+  });
+  return cs.filter(function (c) { return c.id === ls.contractId; })[0] || cs[0] || null;
 }
 
 /* Os dados de exemplo (arranque.js:seed) não são contratos antigos acabados
@@ -490,12 +614,19 @@ function offerFill() {
   if (knownRecs === null) return refreshKnown();
   var novos = (db.recurring || []).filter(function (r) { return !knownRecs[r.id] && !r._atServidor && !r._author; });
   if (modalStack.length) return;   // sem marcar como conhecidos: tenta no save seguinte
-  refreshKnown();
   var seen = asked();
+  /* um contrato adicionado já terminado não ganha planeado: pergunta-se por
+     ele (uma vez, pela chave ct:<id>), mesmo com uma só renda em falta — não
+     há outro caminho para as registar de uma vez */
+  var terminado = contratoTerminadoNovo(seen);
+  refreshKnown();
   var cand = novos.filter(function (r) {
     return !(r.tx || {}).loanId && seen.indexOf(r.id) < 0 && datasEmFalta(r).length >= 2;
   });
-  if (!cand.length) return;
+  if (!cand.length) {
+    if (terminado) { markAsked(['ct:' + terminado.id]); CW._fillQueue = []; CW.fillContrato(terminado.id); }
+    return;
+  }
   var ls = CW.lastSaved || {};
   var alvo = cand.filter(function (r) { return ls.contractId && r.tx.contractId === ls.contractId; })[0] ||
     cand.filter(function (r) { return ls.propertyId && r.tx.propertyId === ls.propertyId; })[0] || cand[0];

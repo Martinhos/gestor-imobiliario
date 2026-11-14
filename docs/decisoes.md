@@ -115,6 +115,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-13 · A Análise com abas, e a casca do telemóvel
 - 2026-11-13 · A montra muda de foco: as rendas organizadas e o IRS preparado (KAN-123)
 - 2026-11-13 · Os movimentos aceitam anexos: a fatura fica junto da despesa (KAN-122)
+- 2026-11-14 · As rendas antigas de um contrato terminado, e o valor de cada mês (KAN-131, KAN-132, KAN-133)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3979,3 +3980,22 @@ os movimentos (web/app/anexos.js:allFileMetas). Aplicar um modelo a um movimento
 movimento do formulário inteiro e largava-lhe os anexos (planeados.js:applyTemplate). Apagar um
 movimento, um lote ou os marcados na seleção leva os ficheiros quando o Anular expira, como num
 contrato, e só os que nenhum registo ainda refere (web/app/anexos.js:apagarAnexosSemRegisto).
+
+## 2026-11-14 · As rendas antigas de um contrato terminado, e o valor de cada mês (KAN-131, KAN-132, KAN-133)
+
+Três tickets de QA do Martinho na ficha de um contrato. Um contrato adicionado já terminado não
+tinha como registar as rendas dele de uma vez: a janela «Preencher N períodos» vive de um planeado,
+e um contrato terminado não ganha planeado (planeados.js:syncContractRec só os quer vivos). E a
+janela registava tudo ao valor atual, sem lugar para um aumento ou um mês diferente.
+
+O Martinho escolheu: a oferta abre sozinha ao adicionar um contrato já terminado, uma vez, e fica
+na ficha um botão enquanto faltarem rendas; e um valor por mês, numa lista, em vez de um campo para
+todos. O plano de um contrato terminado é o que ele teria, sem ir para db.recurring
+(planeados.js:ctPlanoTerminado): assim as mesmas datasEmFalta, jaRegistado e recTx servem, e não há
+planeado fantasma a sincronizar nem a aparecer nos Planeados. A oferta automática de um terminado
+basta com uma renda em falta, porque não há Confirmar que a registe. Um valor vazio deixa esse mês
+por registar: é o mês que não foi pago.
+
+O aviso do Modelo 2 dizia o que fazer mas não levava lá; ganhou «Ver na ficha», que rola até ao
+cartão «Perante a AT». O da comunicação de fevereiro também, porque o «Marcar como comunicada» vive
+no mesmo cartão. O da cessação não: o cartão não tem nada sobre ela.

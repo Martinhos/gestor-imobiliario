@@ -2077,7 +2077,7 @@ var ACOES_RASTO = {
   doInvBulk: 'Adicionar', togCtPhoto: 'Selecionar uma fotografia', allCtPhotos: 'Selecionar todas',
   delKey: 'Remover tipo de chave', delKeySelected: 'Remover selecionadas', addKey: 'Adicionar tipo de chave',
   addKeyBulk: 'Adicionar várias', doKeyBulk: 'Adicionar', delRenov: 'Remover renovação', addRenov: 'Adicionar renovação',
-  newTenantFromCt: 'Criar inquilino novo', pzSilencia: 'Silenciar o prazo',
+  newTenantFromCt: 'Criar inquilino novo', pzSilencia: 'Silenciar o prazo', ctIrParaAt: 'Ver na ficha (Perante a AT)',
   // pessoas
   personModal: 'Adicionar ou editar pessoa', personView: 'Abrir a pessoa', delPerson: 'Apagar a pessoa',
   abrirFicha: 'Abrir a ficha', settleModal: 'Acertar contas', doSettle: 'Registar pagamentos',
@@ -2097,7 +2097,7 @@ var ACOES_RASTO = {
   confirmRec: 'Rever', quickConfirmRec: 'Confirmar', skipRec: 'Silenciar', 'CW.rejectRec': 'Rejeitar o planeado',
   newTpl: 'Novo modelo', editTpl: 'Editar o modelo', tplView: 'Abrir o modelo', delTpl: 'Apagar o modelo',
   newFromTemplate: 'Usar o modelo', pendToggle: 'Mostrar ou esconder os pendentes', recRetroAgoraNao: 'Agora não',
-  'CW.fillMissed': 'Registar os em falta', 'CW.doFillMissed': 'Registar estimativa', 'CW.fillNext': 'Cancelar',
+  'CW.fillMissed': 'Registar os em falta', 'CW.fillContrato': 'Registar as rendas em falta', 'CW.doFillContrato': 'Registar estimativa', 'CW.doFillMissed': 'Registar estimativa', 'CW.fillNext': 'Cancelar',
   'CW.startFromToday': 'Começar a partir de hoje',
   // a confirmação do email (a faixa dos 7 dias e o ecrã depois deles)
   'CW.reenviarConfirmacao': 'Reenviar', 'CW.jaConfirmei': 'Já confirmei', 'CW.sairSemConfirmar': 'Sair', 'CW.pedirAjudaSemConfirmar': 'Pedir ajuda',
