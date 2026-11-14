@@ -159,6 +159,23 @@ function donoDoExemplo(){
 }
 
 /* ================= ARRANQUE ================= */
+/* Sem zoom na app, no telemóvel (pedido de 2026-11-14, decisão do Martinho:
+   «Não deve ser possível fazer zoom»). O viewport (index.html) tem
+   maximum-scale=1 e user-scalable=no: o Android respeita os dois, e o iOS
+   deixa de ampliar a página ao tocar num campo (os campos têm 15px, abaixo
+   dos 16 em que o Safari amplia). O duplo toque sai com o
+   html{touch-action:manipulation} (estilos.css). A pinça o Safari do iOS faz
+   na mesma, porque ignora o user-scalable=no: trava-se aqui, nos eventos de
+   gesto do WebKit, que só ele tem. Nada de touchmove não passivo no window:
+   atrasava o scroll em todos os aparelhos.
+   Recebe: alvo — o window (ou um objeto com addEventListener, nos testes).
+   Devolve: nada — pendura os ouvintes. */
+function travarZoom(alvo){
+  if(!alvo||typeof alvo.addEventListener!=='function')return;
+  const nao=ev=>{if(ev&&typeof ev.preventDefault==='function')ev.preventDefault()};
+  ['gesturestart','gesturechange','gestureend'].forEach(t=>alvo.addEventListener(t,nao,{passive:false}));
+}
+try{travarZoom(window)}catch(e){}
 /* O teclado de um menu de escolha vem primeiro (componentes.js:selTecla): as
    setas andam pelas opções, e o Escape com um menu aberto fecha o menu — não
    a janela que está por baixo dele. */

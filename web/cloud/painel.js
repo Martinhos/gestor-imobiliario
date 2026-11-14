@@ -301,15 +301,20 @@ CW.fillMissed = function (id) {
   if (r) fillAbrir(r);
 };
 
-// A mesma janela para um contrato que já terminou (KAN-132): o plano dele
-// é o de planeados.js:ctPlanoTerminado, que não vive em db.recurring. Sem
-// «Começar a partir de hoje» (não há planeado a mudar).
+// A mesma janela pelo botão da ficha de um contrato (contrato.js:ctValores).
+// Num que já terminou (KAN-132), o plano é o de planeados.js:ctPlanoTerminado,
+// que não vive em db.recurring, e a janela vem sem «Começar a partir de hoje»
+// (não há planeado a mudar). Num em vigor, é a do planeado da renda
+// (CW.fillMissed), desde o início do contrato (planeados.js:ctRendasPorRegistar).
 // Recebe: cid — o id do contrato.
 // Devolve: nada — abre a janela (ou avisa num toast que não falta nenhuma renda).
 CW.fillContrato = function (cid) {
-  var r = ctPlanoTerminado(contract(cid));
-  if (!r || !datasEmFalta(r).length) return toast('Não há rendas por registar neste contrato.');
-  fillAbrir(r);
+  var c = contract(cid);
+  var r = ctPlanoTerminado(c);
+  if (r && datasEmFalta(r).length) return fillAbrir(r);
+  var por = c ? ctRendasPorRegistar(c) : { recId: '' };
+  if (por.recId) return CW.fillMissed(por.recId);
+  toast('Não há rendas por registar neste contrato.');
 };
 
 // O nome de uma data na lista dos valores: o mês e o ano nos planos mensais

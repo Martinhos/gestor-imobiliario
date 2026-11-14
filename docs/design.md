@@ -2653,9 +2653,10 @@ contrato.js:ctPrazoDaFicha, prazos.js:pzSilencia). Os valores
 (contrato.js:ctValoresDaFicha): a renda, o imposto e a líquida em três
 números, o pagamento, a próxima renda, as rendas registadas e o aumento, com
 «Registar renda» e «Ver movimentos» (contrato.js:ctVerMovimentos) e, num
-contrato terminado com rendas em falta (planeados.js:ctRendasEmFalta),
-«Registar as N rendas em falta», que abre a janela do preenchimento
-(cloud/painel.js:CW.fillContrato) — todos
+contrato com rendas em falta desde o início (planeados.js:ctRendasPorRegistar:
+num terminado, qualquer uma; num em vigor, duas ou mais, porque uma só é a do
+mês, que o «Registar renda» trata), «Registar as N rendas em falta», que abre
+a janela do preenchimento (cloud/painel.js:CW.fillContrato) — todos
 com cêntimos (formato.js:euro2), a caução incluída, como na folha do PDF. A
 renda planeada tem os três estados dos Planeados
 (contrato.js:ctRendaPlaneada): «Próxima renda … · planeada» antes do dia,
@@ -4310,7 +4311,8 @@ total acompanha (cloud/painel.js:CW.fillTotal) e, sem valor nenhum, o erro fica
 junto da lista. Um contrato que já terminou não tem planeado, mas tem o plano
 que teria (planeados.js:ctPlanoTerminado): a mesma janela abre-se para ele
 (cloud/painel.js:CW.fillContrato), sem «Começar a partir de hoje», e regista
-as rendas sem mexer em planeado nenhum. Gravar um contrato antigo abre a mesma janela sozinha, uma vez
+as rendas sem mexer em planeado nenhum. O botão da ficha de um contrato em
+vigor abre a do planeado da renda (cloud/painel.js:CW.fillMissed). Gravar um contrato antigo abre a mesma janela sozinha, uma vez
 por planeado novo (cloud/painel.js:offerFill) — ou, num contrato adicionado já
 terminado, uma vez por contrato, com uma só renda em falta que seja
 (cloud/painel.js:contratoTerminadoNovo); os planeados dos dados de
@@ -7536,6 +7538,14 @@ os acentos (copias.js:download), e uma célula de texto que comece por =, +,
 como fórmula (copias.js:celulaCsv); os números vão tal e qual.
 
 ## Toque e acessibilidade
+A app não amplia no telemóvel: nem o zoom automático do iPhone ao tocar num
+campo, nem a pinça, nem o duplo toque. O viewport do index.html tem
+maximum-scale=1 e user-scalable=no, o html tem touch-action:manipulation
+(estilos.css), e a pinça do Safari do iOS, que ignora o user-scalable=no,
+trava-se nos eventos de gesto (arranque.js:travarZoom). As páginas públicas do
+worker (montra, guias, documentos legais) continuam a deixar ampliar. Os
+touch-action com pinch-zoom que há na app ficam inertes, e não se tiram.
+
 Em ecrã de dedo, nada abaixo do mínimo de toque, e só aí: no rato os
 tamanhos compactos continuam certos (estilos.css:@media(pointer:coarse)).
 44px os botões, os itens da gaveta e os cabeçalhos das dobras; 40 o

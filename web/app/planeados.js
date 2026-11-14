@@ -133,6 +133,24 @@ function ctRendasEmFalta(c){
   const r=ctPlanoTerminado(c);
   return r?datasEmFalta(r):[];
 }
+/* As rendas por registar de qualquer contrato, para o botão da ficha
+   (contrato.js:ctValores). Num terminado, as do plano dele (ctRendasEmFalta).
+   Num em vigor, as do planeado da renda desde o início do contrato
+   (datasEmFalta) — o planeado de um contrato novo arranca no mês corrente, e
+   até ao dia da renda nem há linha por confirmar em Planeados, por isso a
+   janela que abre ao adicioná-lo era o único caminho até elas (pedido de
+   2026-11-14). Só com duas ou mais, como no ⋯ da linha por confirmar: uma só é
+   a deste mês, que o «Registar renda» já trata.
+   Recebe: c — o contrato.
+   Devolve: {datas, recId} — as datas AAAA-MM-DD e o id do planeado (vazio num
+   terminado); datas vazio quando não há nada a mostrar. */
+function ctRendasPorRegistar(c){
+  const fim=ctRendasEmFalta(c);
+  if(fim.length)return {datas:fim,recId:''};
+  const r=c&&ctEstado(c)!=='terminado'&&servicoLigado('recurring')?ctRecOf(c):null;
+  const d=r&&!(r.tx||{}).loanId?datasEmFalta(r):[];
+  return d.length>=2?{datas:d,recId:r.id}:{datas:[],recId:''};
+}
 /* Mantém a recorrência automática da renda de um contrato: cria-a, atualiza-a
    ou remove-a conforme o contrato esteja ativo, com renda e com o automático
    ligado (autoRec). A janela payDay..payDayTo dá as datas; rendas antecipadas

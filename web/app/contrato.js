@@ -187,11 +187,12 @@ function ctValoresDaFicha(c){
     c.increase!=null&&c.increase!==''?ctKv('Aumento anual',dec(c.increase)+'%'+(c.start?' · próximo a '+dPT(pzAniversario(c.start)):'')):''].join('');
   /* registar a renda é dos Movimentos: com o serviço desligado nesta conta o
      atalho não aparece */
-  /* um contrato terminado não tem planeado de renda: as rendas que lhe faltam
-     registam-se de uma vez pela janela do preenchimento da nuvem
-     (cloud/painel.js:CW.fillContrato; KAN-132) */
+  /* as rendas que faltam desde o início do contrato — num terminado, que não
+     tem planeado (KAN-132), e num em vigor, cujo planeado só começa no mês em
+     que foi adicionado — registam-se de uma vez pela janela do preenchimento
+     da nuvem (planeados.js:ctRendasPorRegistar, cloud/painel.js:CW.fillContrato) */
   const emFalta=servicoLigado('transactions')&&pode(pid,'tx.add')&&typeof window!=='undefined'&&window.CW&&typeof window.CW.fillContrato==='function'
-    ?ctRendasEmFalta(c).length:0;
+    ?ctRendasPorRegistar(c).datas.length:0;
   const botoes=[servicoLigado('transactions')&&isActive(c)&&pode(pid,'tx.add')?`<button type="button" class="btn sm primary" data-toca="camada" data-click="ctRegistarRenda('${jsq(pid)}','${id}')">Registar renda</button>`:'',
     emFalta?`<button type="button" class="btn sm primary" data-toca="camada" data-click="CW.fillContrato('${id}')">Registar ${emFalta===1?'a renda em falta':'as '+emFalta+' rendas em falta'}</button>`:'',
     movs.length?`<button type="button" class="btn sm" data-toca="camada" data-click="ctVerMovimentos('${id}')">Ver movimentos</button>`:''].join('');

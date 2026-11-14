@@ -27,6 +27,27 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 73,
+    data: '2026-11-14',
+    titulo: 'Sem zoom no telemóvel e as rendas antigas na ficha',
+    seccoes: [
+      {
+        titulo: 'Telemóvel',
+        afeta: ['app'],
+        itens: [
+          'A app já não amplia no telemóvel: tocar num campo (na Ajuda ou em qualquer formulário) não faz zoom, e a pinça e o duplo toque também não.',
+        ],
+      },
+      {
+        titulo: 'Contratos',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'Num contrato em vigor que começou há meses, a ficha tem «Registar as N rendas em falta» no cartão dos valores enquanto faltarem rendas desde o início: abre a janela para as registar de uma vez, com o valor de cada mês.',
+        ],
+      },
+    ],
+  },
+  {
     v: 72,
     data: '2026-11-14',
     titulo: 'Secções dentro de secções',

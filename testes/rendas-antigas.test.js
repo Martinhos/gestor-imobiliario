@@ -121,3 +121,55 @@ describe('a janela do preenchimento (cloud/painel.js)', () => {
     } finally { repor(tudo); }
   });
 });
+
+/* Pedido de 2026-11-14 (c7e2f4e0): num contrato antigo ainda em vigor, a
+   janela que abre ao adicioná-lo era o único caminho até às rendas que lhe
+   faltam desde o início — o planeado arranca no mês corrente e, até ao dia
+   da renda, nem há linha por confirmar. A ficha tem o mesmo botão dos
+   terminados (planeados.js:ctRendasPorRegistar, cloud/painel.js:CW.fillContrato). */
+describe('as rendas antigas de um contrato em vigor', () => {
+  /* O contrato da base, mas em vigor desde 01/06/2026, pago ao dia 20, com o
+     planeado da renda criado (o dia 20 deste mês ainda não chegou).
+     Recebe: tudo — a app inteira. Devolve: {c, corpo} como a base. */
+  function emVigor(tudo) {
+    const b = base(tudo);
+    Object.assign(b.c, { start: '2026-06-01', end: '2028-05-31', payDay: 20 });
+    tudo.syncContractRec(b.c);
+    return b;
+  }
+
+  test('tem as cinco rendas de junho a outubro por registar, com o planeado', () => {
+    const tudo = carregarTudo({ hoje: HOJE });
+    try {
+      const { c } = emVigor(tudo);
+      const rec = tudo.ctRecOf(c);
+      assert.ok(rec, 'um contrato em vigor tem planeado');
+      const por = tudo.ctRendasPorRegistar(c);
+      assert.deepEqual([...por.datas], ['2026-06-20', '2026-07-20', '2026-08-20', '2026-09-20', '2026-10-20']);
+      assert.equal(por.recId, rec.id);
+    } finally { repor(tudo); }
+  });
+
+  test('o botão da ficha abre a janela do planeado e some depois de registar', () => {
+    const tudo = carregarTudo({ hoje: HOJE });
+    try {
+      const { c, corpo } = emVigor(tudo);
+      tudo.CW.fillContrato('C1');
+      assert.match(corpo(), /^Preencher 5 períodos\|/);
+      const rec = tudo.ctRecOf(c);
+      tudo.CW.doFillMissed(rec.id);
+      assert.equal(tudo.db.transactions.filter((t) => /estimativa/.test(t.label)).length, 5);
+      assert.equal(tudo.ctRendasPorRegistar(tudo.contract('C1')).datas.length, 0);
+    } finally { repor(tudo); }
+  });
+
+  test('uma só renda em falta é a deste mês, que o «Registar renda» trata: sem botão', () => {
+    const tudo = carregarTudo({ hoje: HOJE });
+    try {
+      const { c } = base(tudo);
+      Object.assign(c, { start: '2026-10-01', end: '2028-09-30', payDay: 20 });
+      tudo.syncContractRec(c);
+      assert.equal(tudo.ctRendasPorRegistar(c).datas.length, 0);
+    } finally { repor(tudo); }
+  });
+});
