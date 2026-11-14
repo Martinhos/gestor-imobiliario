@@ -38,6 +38,7 @@ var AVISOS = [
           'Ao adicionar um contrato que já terminou, a app propõe registar as rendas dele de uma vez, ao valor do contrato. Se ficar para depois, a ficha do contrato tem o botão «Registar as rendas em falta».',
           'Na janela «Preencher períodos», cada mês tem o seu valor: muda o de um aumento ou de um mês diferente, e deixa vazio o que não foi pago. O total acompanha.',
           'Na ficha do contrato, o aviso de comunicar o contrato à AT (e o da comunicação de fevereiro) tem «Ver na ficha», que te leva ao cartão «Perante a AT».',
+          'No formulário de uma renda, o recibo eletrónico emitido marca-se num interruptor maior, que se toca na linha inteira.',
         ],
       },
     ],

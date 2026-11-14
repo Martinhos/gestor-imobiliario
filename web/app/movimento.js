@@ -717,8 +717,18 @@ function txFiscoSect(){
       ${fixo?`<label>Mês a que respeita (opcional)<input id="t_periodo" type="month" value="${esc(t.periodo||'')}" placeholder="Ex: 2026-08"></label>`:''}
       <label>Retido na fonte (€)<input id="t_retencao" type="text" inputmode="decimal" value="${t.retencao?dec(t.retencao):''}" placeholder="Opcional" autocomplete="off"></label></div>
     <div class="hint u-mt-n6px">${fixo?'Mês em branco: o da data. ':''}Se o inquilino é uma empresa que retém IRS, escreve o que ficou retido: a renda bruta é o montante mais isto.</div>
-    ${fixo&&ctDeclarado(c)?`<label class="check"><input type="checkbox" id="t_recibo" ${t.recibo?'checked':''}> Recibo de renda eletrónico emitido</label>
-    <div class="hint u-mt-n4px">Emite-se no Portal das Finanças quando a renda entra; marcar aqui cala o aviso.</div>`:''}`;
+    ${fixo&&ctDeclarado(c)?txReciboLinha(!!t.recibo):''}`;
+}
+/* O recibo eletrónico da renda, no formulário: a linha de interruptor da
+   casa (a do formulário do contrato, contrato.js:ctInterruptor), num cartão
+   com borda que se toca inteiro. Era uma caixa de marcar pequena, perdida
+   entre as dicas (KAN-134). Ligado, a borda passa a cobalto: a cor da frente
+   é o que resiste ao escuro forçado do Samsung. O collectTx lê-a como sempre
+   (chk('t_recibo')).
+   Recebe: on — se o recibo já foi emitido.
+   Devolve: o HTML da linha. */
+function txReciboLinha(on){
+  return `<label class="ct-sw-linha mov-recibo"><span class="ct-sw-txt"><b>Recibo eletrónico emitido</b><span class="small">Emite-se no Portal das Finanças quando a renda entra; ligado, o aviso cala-se.</span></span><input type="checkbox" role="switch" class="ct-sw" id="t_recibo"${on?' checked':''}></label>`;
 }
 // Mudou a coluna do Anexo F escolhida à mão: guarda-a no tForm. Vazio é
 // «pela categoria», e o seletor já mostra o rótulo novo — não há que repintar.

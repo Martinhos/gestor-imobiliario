@@ -2569,11 +2569,16 @@ button.vg-item-abrir:active{background:var(--press)}
 label.ct-sw-linha{display:flex;align-items:center;gap:12px;min-height:44px;font-weight:400;cursor:pointer}
 .ct-sw-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .ct-sw-txt>b{font-weight:600}
-.ct-form input.ct-sw{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 46px;width:46px;height:28px;min-height:0;margin:0;padding:0;border:0;border-radius:999px;background:var(--line2);box-shadow:none;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
-.ct-form input.ct-sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--card);box-shadow:0 1px 2px rgba(16,24,40,.2);transition:transform var(--rapido) var(--curva)}
-.ct-form input.ct-sw:checked{background:var(--accent)}
-.ct-form input.ct-sw:checked::after{transform:translateX(18px)}
-.ct-form input.ct-sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ct-form input.ct-sw,.mov-form input.ct-sw{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 46px;width:46px;height:28px;min-height:0;margin:0;padding:0;border:0;border-radius:999px;background:var(--line2);box-shadow:none;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
+.ct-form input.ct-sw::after,.mov-form input.ct-sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--card);box-shadow:0 1px 2px rgba(16,24,40,.2);transition:transform var(--rapido) var(--curva)}
+.ct-form input.ct-sw:checked,.mov-form input.ct-sw:checked{background:var(--accent)}
+.ct-form input.ct-sw:checked::after,.mov-form input.ct-sw:checked::after{transform:translateX(18px)}
+.ct-form input.ct-sw:focus-visible,.mov-form input.ct-sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* o recibo eletrónico da renda no formulário do movimento
+   (movimento.js:txReciboLinha): um cartão com borda, que passa a cobalto
+   ligado — a cor da frente, que o escuro forçado do Samsung deixa ficar */
+label.ct-sw-linha.mov-recibo{border:1.5px solid var(--line2);border-radius:12px;padding:12px 14px;min-height:64px}
+label.ct-sw-linha.mov-recibo:has(input:checked){border-color:var(--accent)}
 .segm.ct-at-segm>button{padding:0 4px}
 .ct-contacto{display:flex;flex-direction:column;gap:12px;min-width:0}
 .ct-contacto+.ct-contacto{padding-top:16px;border-top:1px solid var(--line)}

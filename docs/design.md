@@ -3195,7 +3195,10 @@ renovação (irs.js:irsPeriodos), para o escalão de cada período ser o dele.
 Os avisos da AT calam-se quando a coisa está feita, e não só silenciados: a
 comunicação de fevereiro de cada ano marca-se na ficha
 (contrato.js:ctMarcarComunicada, irs.js:irsComunicado) e o prazo desse ano
-desaparece. A dispensa do recibo eletrónico troca os avisos de recibos pelo
+desaparece. O recibo eletrónico de uma renda marca-se no formulário dela,
+numa linha de interruptor que se toca inteira, num cartão com borda que passa
+a cobalto ligado (movimento.js:txReciboLinha) — só num contrato declarado, e
+nunca num modelo nem num planeado. A dispensa do recibo eletrónico troca os avisos de recibos pelo
 Modelo 44 (prazos.js:prazosDe), e o RSAA traz o envio ao IHRU até 15 de
 janeiro do ano seguinte à celebração.
 

@@ -292,8 +292,12 @@ describe('o formulário do movimento', () => {
     app.db.contracts[0].fisco.estado = 'declarado';
     app.tForm.recibo = true;
     html = app.txBody();
-    assert.match(html, /<input type="checkbox" id="t_recibo" checked> Recibo de renda eletrónico emitido/);
-    assert.match(html, /marcar aqui cala o aviso/);
+    // a linha de interruptor que se toca inteira, e não a caixa pequena (KAN-134)
+    assert.match(html, /<label class="ct-sw-linha mov-recibo"><span class="ct-sw-txt"><b>Recibo eletrónico emitido<\/b>/);
+    assert.match(html, /<input type="checkbox" role="switch" class="ct-sw" id="t_recibo" checked>/);
+    assert.match(html, /ligado, o aviso cala-se/);
+    app.tForm.recibo = false;
+    assert.match(app.txBody(), /class="ct-sw" id="t_recibo">/, 'por emitir: desligado');
     app.db.contracts[0].fisco.estado = 'naoDeclarado';
     assert.doesNotMatch(app.txBody(), /id="t_recibo"/, 'não declarado: sem recibo');
   });
