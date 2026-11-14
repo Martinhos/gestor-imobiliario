@@ -1799,10 +1799,17 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
 #raiz#raiz .tf-sem-menu{flex:0 0 32px}
 @media(pointer:coarse){#raiz#raiz .tf-sem-menu{flex-basis:44px}}
 #raiz#raiz .tf-chev{display:flex;flex:0 0 auto;color:var(--muted);transition:transform var(--medio) var(--curva)}
-#raiz#raiz .tf-recolhida .tf-chev{transform:rotate(-90deg)}
-#raiz#raiz .tf-recolhida .tf-itens{display:none}
+#raiz#raiz .tf-recolhida>.tf-cab .tf-chev{transform:rotate(-90deg)}
+#raiz#raiz .tf-recolhida>.tf-corpo,#raiz#raiz .tf-a-levar>.tf-corpo{display:none}
+/* As secções de dentro (tarefas.js:tfRamoHtml) vêm recuadas, com um fio à
+   esquerda que diz de quem são; o recuo deixa de crescer a partir do 4.º
+   nível, para a 390 px o nome continuar a caber. */
+#raiz#raiz .tf-filhas{margin-left:6px;padding-left:10px;border-left:1px solid var(--line)}
+#raiz#raiz .tf-seccao.tf-n4>.tf-corpo>.tf-filhas{margin-left:0;padding-left:0;border-left:0}
+#raiz#raiz .tf-cab>.tf-pega+.tf-dobra{margin-left:-4px}
 #raiz#raiz .tf-so-alvo{display:none}
 #raiz#raiz .tf-a-arrastar .tf-so-alvo{display:block}
+#raiz#raiz .tf-a-arrastar.tf-arr-sec .tf-so-alvo{display:none}
 @media(hover:hover) and (pointer:fine){#raiz#raiz button.tf-dobra:hover{background:var(--tint)}}
 #raiz#raiz button.tf-dobra:active{background:var(--press)}
 /* A pega de arrastar (tarefas.js:tfArrastar): à esquerda da caixa, com a
@@ -1820,7 +1827,9 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
 #raiz#raiz .tf-a-arrastar{-webkit-user-select:none;user-select:none}
 #raiz#raiz .tf-a-arrastar .tf-pega{cursor:grabbing}
 #raiz#raiz .tf-seccao.tf-alvo{background:var(--accent-soft);box-shadow:0 0 0 6px var(--accent-soft),0 0 0 8px var(--accent)}
-#raiz#raiz .tf-seccao.tf-alvo .tf-cab{border-bottom-color:transparent}
+#raiz#raiz .tf-seccao.tf-alvo>.tf-cab{border-bottom-color:transparent}
+#raiz#raiz .tf-seccao.tf-agarrada{position:relative;z-index:5;background:var(--card);box-shadow:var(--shadow)}
+#raiz#raiz .tf-seccao.tf-agarrada>.tf-cab{border-bottom-color:transparent}
 #raiz#raiz .tf-item.tf-agarrada{position:relative;z-index:5;background:var(--card);border-radius:12px;border-bottom-color:transparent;box-shadow:var(--shadow)}
 /* a tarefa agarrada flutua logo acima do dedo e a linha fica onde o dedo
    está; se uma tarefa alta se chegar a ela, a linha continua por cima */

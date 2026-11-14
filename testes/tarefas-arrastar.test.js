@@ -97,7 +97,7 @@ describe('o seletor da secção no formulário', () => {
     const nome = abertas[abertas.length - 1];
     assert.equal(nome.t, 'Nova secção');
     assert.match(nome.b, /Nome da secção <span class="req">\*<\/span>/);
-    assert.match(nome.b, /placeholder="Ex: Obras"/);
+    assert.match(nome.b, /placeholder="Ex: Obras\/Cozinha"/);
     el.pm_v.value = 'Chaves';
     app._pm();
     const nova = el.tf_sec.value;
@@ -168,7 +168,7 @@ describe('as secções recolhem-se', () => {
     assert.doesNotMatch(html, /tf-recolhida/);
     const cabs = [...html.matchAll(/<button type="button" class="tf-dobra" aria-expanded="(true|false)" aria-controls="(tfi_[^"]+)" data-toca="nada" data-click="tfDobrar\('([^']*)'\)">/g)];
     igual(cabs.map((m) => m[1] + ' ' + m[2] + ' ' + m[3]), ['true tfi__sem ', 'true tfi_S1 S1', 'true tfi_S2 S2']);
-    assert.match(html, /<div class="tf-itens" id="tfi_S1">/, 'o aria-controls aponta para as tarefas');
+    assert.match(html, /<div class="tf-corpo" id="tfi_S1"><div class="tf-itens">/, 'o aria-controls aponta para o corpo (as tarefas e as secções de dentro)');
     assert.match(html, /<b>Obras<\/b><span class="tf-conta">1 de 2<span class="imv-so-leitor"> cumpridas<\/span><\/span>/);
   });
 
@@ -178,10 +178,10 @@ describe('as secções recolhem-se', () => {
     app.tfDobrar('');
     assert.deepEqual(JSON.parse(app.localStorage.getItem('gi_tf_recolhidas')), { 'imovel:P1': ['S1', '__sem__'] });
     const html = app.tfLista();
-    assert.match(html, /<div class="tf-seccao tf-recolhida" data-sec="S1">/);
+    assert.match(html, /<div class="tf-seccao tf-n0 tf-recolhida" data-sec="S1">/);
     assert.match(html, /<div class="tf-seccao tf-recolhida" data-sec="">/);
     assert.match(html, /aria-expanded="false" aria-controls="tfi_S1"/);
-    assert.match(html, /<div class="tf-seccao" data-sec="S2">/);
+    assert.match(html, /<div class="tf-seccao tf-n0" data-sec="S2">/);
     assert.match(html, /Pintar a sala/, 'recolhida, a tarefa continua no HTML — quem a esconde é a folha');
     app.tfDobrar('S1');
     assert.deepEqual(JSON.parse(app.localStorage.getItem('gi_tf_recolhidas')), { 'imovel:P1': ['__sem__'] });
@@ -217,7 +217,7 @@ describe('as secções recolhem-se', () => {
     fechado.tfAbrir('imovel', 'P1');
     assert.doesNotMatch(fechado.tfLista(), /tf-recolhida/);
     fechado.tfDobrar('S2');
-    assert.match(fechado.tfLista(), /<div class="tf-seccao tf-recolhida" data-sec="S2">/, 'fica em memória');
+    assert.match(fechado.tfLista(), /<div class="tf-seccao tf-n0 tf-recolhida" data-sec="S2">/, 'fica em memória');
   });
 });
 

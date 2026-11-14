@@ -258,14 +258,31 @@ function normPerson(p){const o=Object.assign({id:uid(),name:'',phone:'',email:''
    secção ou a nenhuma (seccao vazia). Uma tarefa que aponte para uma secção que
    já não existe passa para «sem secção» em vez de desaparecer; feitaEm é o dia
    em que foi marcada como cumprida, e só fica numa tarefa cumprida; notas é o
-   texto livre da tarefa, aparado nas pontas ('' sem notas).
+   texto livre da tarefa, aparado nas pontas ('' sem notas). As secções fazem
+   uma árvore: pai é o id da secção onde está ('' no topo), e a ordem entre
+   irmãs é a do array; uma mãe que não existe, ou que fecha um ciclo, leva-a
+   para o topo.
    Recebe: t — a lista em bruto ({seccoes, itens}, parcial, ou nada).
-   Devolve: um objeto novo {seccoes:[{id,nome}], itens:[{id,nome,seccao,feita,feitaEm,notas}]}. */
+   Devolve: um objeto novo {seccoes:[{id,nome,pai}], itens:[{id,nome,seccao,feita,feitaEm,notas}]}. */
 function normTarefas(t){
   const o=t&&typeof t==='object'&&!Array.isArray(t)?t:{};
   const seccoes=(Array.isArray(o.seccoes)?o.seccoes:[]).filter(x=>x&&typeof x==='object')
-    .map(x=>({id:idSeguro(x.id||uid()),nome:String(x.nome||'').trim()}));
+    .map(x=>({id:idSeguro(x.id||uid()),nome:String(x.nome||'').trim(),pai:idSeguro(x.pai||'')}));
   const ids=seccoes.map(x=>x.id);
+  /* a mãe de uma secção tem de existir e não pode ser ela nem fechar um ciclo
+     (fusões a três de dois aparelhos podem cruzar dois «mover»): senão vai para o topo */
+  const porId=new Map(seccoes.map(s=>[s.id,s]));
+  seccoes.forEach(s=>{
+    if(!s.pai||!porId.has(s.pai)||s.pai===s.id){s.pai='';return}
+    // sobe pelas mães: voltar a ela é um ciclo (a primeira do ciclo pela ordem vai para o topo);
+    // um ciclo mais acima, que não passa por ela, desfaz-se quando chegar a vez de uma das que o fecham
+    const vistos=new Set([s.id]);
+    for(let p=porId.get(s.pai);p&&p.pai;p=porId.get(p.pai)){
+      if(p.pai===s.id){s.pai='';break}
+      if(vistos.has(p.pai))break;
+      vistos.add(p.id);
+    }
+  });
   const itens=(Array.isArray(o.itens)?o.itens:[]).filter(x=>x&&typeof x==='object')
     .map(x=>{const feita=!!x.feita,sec=idSeguro(x.seccao||'');
       return {id:idSeguro(x.id||uid()),nome:String(x.nome||'').trim(),seccao:ids.indexOf(sec)>-1?sec:'',

@@ -27,6 +27,23 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 72,
+    data: '2026-11-14',
+    titulo: 'Secções dentro de secções',
+    seccoes: [
+      {
+        titulo: 'Tarefas',
+        afeta: ['imoveis', 'contratos'],
+        itens: [
+          'As secções das tarefas funcionam como pastas: uma secção pode ter outras dentro, a qualquer profundidade, e a conta de cada uma soma tudo o que tem dentro.',
+          'Ao criar uma secção, escreve o caminho com «/» (por exemplo, «Obras/Cozinha/Elétrica»): as que faltam criam-se umas dentro das outras. No «Mudar o nome», mudar o caminho leva a secção, com o que tem dentro, para outro sítio.',
+          'Para mudar uma secção de sítio, arrasta-a pela pega do cabeçalho ou usa «Mover secção» no ⋯ dela.',
+          'A arrastar uma tarefa ou uma secção, para uns instantes por cima do nome de uma secção recolhida e ela abre-se.',
+        ],
+      },
+    ],
+  },
+  {
     v: 71,
     data: '2026-11-14',
     titulo: 'Rendas antigas, mês a mês',
@@ -1693,7 +1710,7 @@ var VERSAO = AVISOS[0].v;
 /* Versão mínima aceite. Subir isto obriga toda a gente a atualizar antes de
    continuar a usar a app — é para quando uma versão antiga passa a estar
    errada, não para empurrar novidades. */
-var VERSAO_MINIMA = 58;
+var VERSAO_MINIMA = 72;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { AVISOS: AVISOS, VERSAO: VERSAO, VERSAO_MINIMA: VERSAO_MINIMA, FUNCIONALIDADES: FUNCIONALIDADES };

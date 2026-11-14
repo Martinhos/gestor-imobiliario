@@ -62,7 +62,7 @@ describe('os dados', () => {
         { id: 'K2', nome: 'B', seccao: 'S1', feita: true, feitaEm: '2026-02-03' }, 'lixo'],
     });
     igual(t, {
-      seccoes: [{ id: 'S1', nome: 'Obras' }],
+      seccoes: [{ id: 'S1', nome: 'Obras', pai: '' }],
       itens: [{ id: 'K1', nome: 'A', seccao: '', feita: false, feitaEm: '', notas: '' },
         { id: 'K2', nome: 'B', seccao: 'S1', feita: true, feitaEm: '2026-02-03', notas: '' }],
     });

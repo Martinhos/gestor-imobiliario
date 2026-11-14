@@ -2126,7 +2126,7 @@ var ACOES_RASTO = {
   'CW.selLMudo': 'Mudar os selecionados', 'CW.selLTransferir': 'Transferir o controlo',
   // tarefas
   tfAbrir: 'Abrir as tarefas', tfFechar: 'Fechar', tfGuardar: 'Guardar', tfNovaTarefa: 'Adicionar tarefa',
-  tfLimparPesquisa: 'Limpar a pesquisa', tfDobrar: 'Abrir ou fechar uma secção', tfPegaClique: 'Arrastar a tarefa',
+  tfLimparPesquisa: 'Limpar a pesquisa', tfDobrar: 'Abrir ou fechar uma secção', tfPegaClique: 'Arrastar a tarefa', tfPegaSecClique: 'Arrastar a secção',
   tfDescartar: 'Descartar as tarefas por enviar',
   tfEditarTarefa: 'Editar a tarefa', tfRemoverTarefa: 'Remover a tarefa', tfNovaSeccao: 'Nova secção',
   tfRemoverSeccao: 'Remover a secção', tfMudarNomeSeccao: 'Mudar o nome da secção',

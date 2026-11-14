@@ -2760,8 +2760,9 @@ podes ver este registo» (componentes.js:lpShow) — uma decisão que já lá
 estava e que um «Ver» lá dentro tinha desfeito.
 
 ## As tarefas de um imóvel ou de um contrato
-Um imóvel e um contrato têm uma lista de tarefas, organizada em secções,
-onde se pesquisa pelo nome da tarefa, pelas notas dela, pela secção e pelas
+Um imóvel e um contrato têm uma lista de tarefas, organizada em secções —
+que são como pastas: uma secção pode ter outras dentro —, onde se pesquisa
+pelo nome da tarefa, pelas notas dela, pelo caminho da secção e pelas
 cumpridas ou por cumprir.
 
 A lista vive dentro do registo (`tarefas: {seccoes, itens}`,
@@ -2857,20 +2858,54 @@ componentes.js:comDesfazer, que grava ao anular; fechada a janela, o aviso
 sai do ecrã.
 
 O formulário de uma tarefa tem sempre o seletor da secção, mesmo sem
-secções: «Sem secção», as secções pela ordem, e no fim «+ Criar secção…»
+secções: «Sem secção», as secções pela ordem da árvore, cada uma pelo
+caminho («Obras / Cozinha»), e no fim «+ Criar secção…»
 (tarefas.js:tfOpcoesDoFormulario), como a categoria de um movimento
 (movimento.js:onCatChange). Escolher a última pede o nome
 (tarefas.js:tfSecMudou) e deixa a secção nova escolhida, sem tocar no nome
-que já se escreveu; um nome que já existe — sem olhar a acentos nem a
-maiúsculas — escolhe essa secção, com um aviso. A secção nova fica no
-formulário (tarefas.js:tfSecNovas) e entra no rascunho com a tarefa
-(tarefas.js:tfGuardarTarefa): cancelar a tarefa não deixa uma secção vazia
-para trás. O botão do formulário diz o que faz — «Adicionar» numa tarefa
+que já se escreveu. O nome pode ser um caminho com «/» («Obras/Cozinha»,
+o exemplo do campo): as secções que faltam criam-se umas dentro das outras
+(tarefas.js:tfResolverCaminho), e um caminho que já existe todo — sem olhar
+a acentos nem a maiúsculas — escolhe essa secção, com um aviso. As secções
+novas ficam no formulário (tarefas.js:tfSecNovas) e entram no rascunho com a
+tarefa (tarefas.js:tfGuardarTarefa): cancelar a tarefa não deixa secções
+vazias para trás. O botão do formulário diz o que faz — «Adicionar» numa tarefa
 nova, «Aplicar» numa que existe (tarefas.js:TF_BOTAO_NOVA,
 tarefas.js:TF_BOTAO_EDITAR) — e não «Guardar», porque ainda não grava nada.
 Cancelar o nome devolve o seletor à escolha de antes. Uma tarefa
 nova fica no fim da secção; editar e mudar de secção leva-a para o fim da
-nova. O «Adicionar secção» do ⋯ da janela continua lá.
+nova. O «Adicionar secção» do ⋯ da janela continua lá, e também aceita o
+caminho (tarefas.js:tfNovaSeccao): um caminho que já existe todo não cria
+nada e diz que já existe.
+
+As secções fazem uma árvore. Cada uma guarda a mãe (`pai`, '' no topo) e a
+ordem entre irmãs é a do array `seccoes` (dados.js:normTarefas, que manda
+para o topo uma secção cuja mãe não existe ou fecha um ciclo — duas fusões
+podem cruzar dois «mover»). O caminho escreve-se sempre a partir do topo
+(tarefas.js:tfPartes, tarefas.js:tfCaminhoTexto). Na lista
+(tarefas.js:tfRamoHtml), as de dentro vêm no corpo da mãe, a seguir às
+tarefas dela, recuadas e com um fio à esquerda (estilos.css:.tf-filhas); o
+recuo deixa de crescer a partir do 4.º nível, para o nome caber a 390 px. A
+conta do cabeçalho soma as tarefas da secção e as de todas as de dentro; uma
+mãe sem tarefas dela mas com secções dentro não diz «Sem tarefas nesta
+secção.». Com filtros, uma secção aparece se ela ou uma das de dentro tem
+tarefas à vista; o filtro de uma secção mostra também as de dentro
+(tarefas.js:tfRamo), e a pesquisa procura no caminho (quem procura «Obras»
+encontra as da Cozinha).
+
+O «Mudar o nome» do ⋯ de uma secção abre com o caminho inteiro
+(tarefas.js:tfMudarNomeSeccao): mudar a última parte muda o nome; mudar o
+resto leva a secção, com tudo o que tem dentro, para o sítio do caminho (as
+mães que faltam criam-se; sem mãe vai para o topo), para o fim das irmãs.
+Não pode ir para dentro dela própria nem de uma das de dentro, nem ficar
+com o caminho de outra secção — aí um aviso recusa e nada muda. O «Mover
+secção» do mesmo ⋯ (tarefas.js:tfMoverSeccao) escolhe «Dentro de» (o topo,
+ou uma secção que não seja ela nem uma das de dentro, tarefas.js:tfOpcoesDeMae)
+e a posição entre as irmãs, com o sítio de agora escolhido; a regra é uma
+função pura, como a das tarefas (tarefas.js:tfMoverSeccaoEm). Remover uma
+secção leva as de dentro e as tarefas de todas, e o aviso diz quantas
+(«Secção removida, com 1 subsecção e 4 tarefas.»); o Anular devolve tudo ao
+lugar.
 
 Cada tarefa pode ter notas: texto livre e opcional, no campo «Notas» do
 formulário, por baixo da secção (um textarea com o placeholder «Opcional»,
@@ -2894,7 +2929,9 @@ não da conta, como a gaveta: `gi_tf_recolhidas`, por registo e por secção
 existem; sem nada guardado — ou com o armazenamento fechado — está tudo
 aberto, e o toque vale em memória até recarregar. Recolhida, as tarefas
 continuam no HTML e é a folha que as esconde (estilos.css:.tf-recolhida): a
-pesquisa e o arrasto contam com elas.
+pesquisa e o arrasto contam com elas. Recolher uma mãe esconde o corpo todo,
+com as secções de dentro; as regras usam o combinador de filho, para a seta e
+o corpo de uma secção não seguirem os da mãe.
 
 As tarefas arrastam-se pela pega, à esquerda da caixa (tarefas.js:tfItemHtml,
 tarefas.js:tfArrastar), que só existe para quem pode alterar a lista
@@ -2918,7 +2955,26 @@ nenhuma está à vista (tarefas.js:tfSoltasAlvoHtml), e a lista rola o que ele
 empurrou para nada saltar debaixo do dedo. Perto das bordas, a lista rola
 sozinha (tarefas.js:tfArrastoRolagem). O Esc desfaz sem fechar a janela, e o
 pointercancel também. Largada numa secção recolhida, onde não se vê, um
-aviso diz para onde foi.
+aviso diz para onde foi. Numa árvore, cada secção conta com o que é dela —
+o cabeçalho e as tarefas dela, não as das de dentro, que contam por si
+(tarefas.js:tfArrastoAlvoTarefa) —, e ganha a mais perto do dedo.
+
+Com o alvo no nome de uma secção recolhida, parar 600 ms
+(tarefas.js:TF_ABRIR_MS) abre-a (tarefas.js:tfArrastoAbrir), como o toque
+no cabeçalho — fica aberta, e o aparelho lembra-se —, e o alvo volta a
+medir-se, já com as tarefas e as secções dela à vista. Mudar de alvo antes,
+largar ou desfazer cancela a espera. Vale para as tarefas e para as secções.
+
+As secções também se arrastam, pela pega à esquerda do cabeçalho
+(tarefas.js:tfArrastarSeccao), que só existe para quem pode alterar a
+lista. A secção levanta-se recolhida — só o cabeçalho flutua acima do dedo
+(estilos.css:.tf-a-levar) —: uma mãe com vinte tarefas a flutuar tapava a
+lista. O alvo (tarefas.js:tfArrastoAlvoSeccao): por cima do nome de outra
+secção, que não seja ela nem uma das de dentro, fica dentro dessa, em 1.º
+lugar, e ela acende; senão é a linha entre irmãs, ao nível da lista de
+secções mais funda à altura do dedo (as de dentro de uma secção, ou o topo),
+antes da primeira irmã cujo nome está abaixo do dedo. Tocada sem arrastar,
+ou ao teclado, a pega abre o «Mover secção» (tarefas.js:tfPegaSecClique).
 
 A ordem é a do array `itens`, e mais nada: não há campo novo
 (tarefas.js:tfMoverEm, uma função pura — a tarefa sai de onde está e entra a

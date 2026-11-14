@@ -116,6 +116,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-13 · A montra muda de foco: as rendas organizadas e o IRS preparado (KAN-123)
 - 2026-11-13 · Os movimentos aceitam anexos: a fatura fica junto da despesa (KAN-122)
 - 2026-11-14 · As rendas antigas de um contrato terminado, e o valor de cada mês (KAN-131, KAN-132, KAN-133)
+- 2026-11-14 · As secções das tarefas passam a ser pastas (KAN-136, KAN-135)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -3999,3 +4000,30 @@ por registar: é o mês que não foi pago.
 O aviso do Modelo 2 dizia o que fazer mas não levava lá; ganhou «Ver na ficha», que rola até ao
 cartão «Perante a AT». O da comunicação de fevereiro também, porque o «Marcar como comunicada» vive
 no mesmo cartão. O da cessação não: o cartão não tem nada sobre ela.
+
+## 2026-11-14 · As secções das tarefas passam a ser pastas (KAN-136, KAN-135)
+
+Dois tickets de QA do Martinho na janela das tarefas de um imóvel: as secções deviam ser como
+diretorias, umas dentro das outras, com o caminho escrito com «/»; e, a arrastar uma tarefa,
+parar uns instantes no nome de uma secção recolhida devia abri-la.
+
+O Martinho escolheu a árvore indentada (a subsecção dentro da mãe, recuada, com a sua seta), o
+caminho com «/» ao criar e ao mudar o nome, o «Mover secção» no ⋯ e também o arrasto pela pega do
+cabeçalho, e a conta da mãe a somar tudo o que tem dentro. Cada secção guarda só a mãe (pai) e a
+ordem entre irmãs continua a ser a do array: não há campo de caminho para manter certo quando uma
+secção muda de nome ou de sítio, e a fusão a três da casa funde o pai campo a campo, como o nome.
+Duas fusões podem cruzar dois «mover» e fechar um ciclo; o normTarefas desfaz-o na primeira
+secção do ciclo, que vai para o topo, em vez de a perder.
+
+O caminho é sempre a partir do topo, e o «Mudar o nome» abre com o caminho inteiro: assim tirar o
+prefixo leva a secção para o topo, e não há caminho relativo a adivinhar. Um caminho que já é de
+outra secção recusa, em vez de fundir duas secções sem se ver. Largar uma secção no nome de outra
+põe-na em 1.º lugar, como uma tarefa. A secção agarrada levanta-se recolhida: uma mãe com vinte
+tarefas a flutuar tapava a lista toda.
+
+A secção aberta por parar em cima fica aberta, como se se tivesse tocado no cabeçalho: largada lá
+dentro, a tarefa vê-se onde ficou, e fechar outra vez era voltar a esconder o que se acabou de
+mover. 600 ms chegam para não abrir as que se atravessam a caminho de outra.
+
+Uma versão antiga da app normaliza as secções sem o pai e achataria a árvore ao gravar a casa;
+por isso a versão mínima sobe para a desta mudança.

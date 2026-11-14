@@ -75,7 +75,8 @@ let tfSecNovas=[];
 /* a secção escolhida no formulário antes do «+ Criar secção…»: é a que volta
    ao seletor se o nome for cancelado */
 let tfSecAntes='';
-/* a tarefa que a janela «Mover tarefa» move (tfMoverTarefa): o id */
+/* o que a janela «Mover tarefa» ou «Mover secção» move (tfMoverTarefa,
+   tfMoverSeccao): o id da tarefa ou da secção */
 let tfMovendo='';
 /* As secções recolhidas ficam no aparelho e não na conta, como as da gaveta
    (navegacao.js:LS_GAVETA): {'imovel:P1':['S1','__sem__'],…}, por registo e
@@ -85,17 +86,24 @@ const LS_TF_RECOLHIDAS='gi_tf_recolhidas';
 /* o mapa das recolhidas, lido uma vez do aparelho e mantido em memória: um
    armazenamento que recusa não desfaz o toque até a página recarregar */
 let _tfRec=null;
-/* o arrasto em curso (tfArrastar), ou null: {tid, h — a pega, row — a linha,
+/* o arrasto em curso (tfArrastar, tfArrastarSeccao), ou null: {tipo —
+   'tarefa' ou 'seccao', tid — a tarefa, sid — a secção, h — a pega, row — a
+   linha (ou o elemento da secção),
    lista — o #tf_lista, rol — quem rola, y0 — onde o dedo pousou, y — onde
    está, topo0 — o topo da linha antes de mexer, alt — a altura dela,
    desloc — o translateY de agora, ativo — se já passou do limiar,
    cancelado — se o Esc o desfez, alvo — onde vai cair ({sid, depois, cab,
-   sec, antes}), chave — o alvo já pintado, vel — a velocidade da
-   auto-rolagem, raf} */
+   sec, antes}; de uma secção, {cab, pai, depois, sec | cont, antes}),
+   chave — o alvo já pintado, vel — a velocidade da auto-rolagem, raf,
+   abrir — o temporizador que abre a secção recolhida (TF_ABRIR_MS)} */
 let tfArr=null;
 /* quando acabou o último arrasto a sério (Date.now()): o clique que o browser
    dispara a seguir ao pointerup engole-se, senão largar abria o «Mover tarefa» */
 let tfArrFim=0;
+/* quanto tempo o dedo fica parado no nome de uma secção recolhida, a
+   arrastar, até ela abrir (tfArrastoMarcar): o bastante para não abrir as
+   que se atravessam, pouco para não parecer que não acontece nada */
+const TF_ABRIR_MS=600;
 /* Os rascunhos com alterações por guardar ficam no aparelho, por conta
    (acessos.js:meuId) e por registo: 'gi_tf_rascunhos:<conta>' →
    {'imovel:P1': {b, r, t}}, com b as tarefas do registo de onde o rascunho
@@ -331,12 +339,13 @@ function tfMenu(){
   if(!tfAlvo||!tfPodeAlterar(tfAlvo.tipo,tfAlvo.id))return '';
   return menu('tfJanela',[{label:'Adicionar secção',icon:'plus',toca:'camada',act:'tfNovaSeccao()'}]);
 }
-/* As opções do filtro das secções: todas, cada uma pelo nome e, quando há
+/* As opções do filtro das secções: todas, cada uma pelo caminho, pela ordem
+   da árvore (escolher uma mostra também as que tem dentro) e, quando há
    tarefas soltas e secções, «Sem secção».
    Recebe: t — as tarefas ({seccoes, itens}).
    Devolve: a lista de opções do sel() ([{v,label}]). */
 function tfOpcoesDeSeccao(t){
-  const o=[{v:'',label:'Todas as secções'}].concat(t.seccoes.map(s=>({v:s.id,label:s.nome||'Sem nome'})));
+  const o=[{v:'',label:'Todas as secções'}].concat(tfOpcoesArvore(t));
   if(t.seccoes.length&&t.itens.some(x=>!x.seccao))o.push({v:'__sem__',label:'Sem secção'});
   return o;
 }
@@ -358,42 +367,57 @@ function tfCorpo(){
   return `${barra}<div id="tf_rasc">${tfLinhaRascunhoHtml()}</div><div class="form">${filtros}<div id="tf_lista">${tfLista()}</div></div>`;
 }
 /* Esta tarefa passa a pesquisa e os filtros? A pesquisa procura no nome da
-   tarefa, nas notas dela e no nome da secção dela, sem distinguir acentos nem
-   maiúsculas.
-   Recebe: x — a tarefa; sec — a secção dela (ou null).
+   tarefa, nas notas dela e no caminho da secção dela («Obras / Cozinha»: quem
+   procura Obras encontra as da Cozinha), sem distinguir acentos nem
+   maiúsculas. O filtro de uma secção deixa passar as das que ela tem dentro.
+   Recebe: x — a tarefa; cam — o caminho da secção dela ('' sem secção);
+   ramo (opcional) — os ids que o filtro da secção deixa passar (tfRamo).
    Devolve: true se fica na lista. */
-function tfPassa(x,sec){
+function tfPassa(x,cam,ramo){
   const f=tfFiltro;
   if(f.estado==='por'&&x.feita)return false;
   if(f.estado==='feitas'&&!x.feita)return false;
   if(f.seccao==='__sem__'&&x.seccao)return false;
-  if(f.seccao&&f.seccao!=='__sem__'&&x.seccao!==f.seccao)return false;
+  if(f.seccao&&f.seccao!=='__sem__'&&(ramo||[f.seccao]).indexOf(x.seccao)<0)return false;
   const q=deacc(f.q).trim();
-  return !q||deacc(x.nome).indexOf(q)>-1||deacc(x.notas||'').indexOf(q)>-1||(!!sec&&deacc(sec.nome).indexOf(q)>-1);
+  return !q||deacc(x.nome).indexOf(q)>-1||deacc(x.notas||'').indexOf(q)>-1||(!!cam&&deacc(cam).indexOf(q)>-1);
 }
-/* A lista, secção a secção, com o que passa a pesquisa e os filtros. As
-   tarefas sem secção vêm primeiro; uma secção vazia só aparece sem filtros
-   (é onde se lhe adiciona a primeira tarefa). Com o rascunho diferente do
-   que se abriu, o resumo diz «Alterações por guardar» (tfPorGuardarHtml) e
-   as tarefas novas ou mudadas levam o selo «Por enviar».
+/* A lista, em árvore, com o que passa a pesquisa e os filtros. As tarefas
+   sem secção vêm primeiro, depois as secções do topo, cada uma com as
+   tarefas dela e, recuadas, as que tem dentro (tfRamoHtml). Uma secção vazia
+   só aparece sem filtros (é onde se lhe adiciona a primeira tarefa); com
+   filtros, aparece se ela ou uma das de dentro tem tarefas à vista. Com o
+   rascunho diferente do que se abriu, o resumo diz «Alterações por guardar»
+   (tfPorGuardarHtml) e as tarefas novas ou mudadas levam o selo «Por enviar».
    Devolve: o HTML da lista (com o resumo por cima). */
 function tfLista(){
   const r=tfAlvo&&tfRegisto(tfAlvo.tipo,tfAlvo.id);if(!r)return '';
   const t=tfTarefas(),ok=tfPodeAlterar(tfAlvo.tipo,tfAlvo.id);
   if(!t.itens.length&&!t.seccoes.length)return `<div class="hint">${ok?'Ainda não há tarefas. Adiciona a primeira; ao adicioná-la, escolhes a secção ou crias uma nova.':'Ainda não há tarefas.'}${tfPorGuardarHtml()}</div>`;
   const filtrado=!!(tfFiltro.q.trim()||tfFiltro.seccao||tfFiltro.estado);
-  const por=tfMudou()?tfPorEnviar(t,JSON.parse(tfOriginal)):[];
-  const grupos=[{s:null,itens:t.itens.filter(x=>!x.seccao)}].concat(t.seccoes.map(s=>({s:s,itens:t.itens.filter(x=>x.seccao===s.id)})));
-  let mostradas=0;
-  const html=grupos.map(g=>{
-    const vis=g.itens.filter(x=>tfPassa(x,g.s));mostradas+=vis.length;
-    if(!g.s&&!vis.length)return ok&&t.seccoes.length?tfSoltasAlvoHtml():'';
-    if(g.s&&!vis.length&&filtrado)return '';
-    return tfSeccaoHtml(g.s,g.itens,vis,ok,!!t.seccoes.length,por);
-  }).join('');
+  const ramo=tfFiltro.seccao&&tfFiltro.seccao!=='__sem__'?tfRamo(t,tfFiltro.seccao):null;
+  const c={t:t,ok:ok,filtrado:filtrado,ramo:ramo,por:tfMudou()?tfPorEnviar(t,JSON.parse(tfOriginal)):[],mostradas:0};
+  const soltas=t.itens.filter(x=>!x.seccao),vis=soltas.filter(x=>tfPassa(x,'',ramo));
+  c.mostradas+=vis.length;
+  const topo=!vis.length?(ok&&t.seccoes.length?tfSoltasAlvoHtml():''):tfSeccaoHtml(null,soltas,vis,ok,!!t.seccoes.length,c.por);
+  const html=topo+tfFilhas(t,'').map(s=>tfRamoHtml(s,0,c)).join('');
   const resumo=`<div class="hint">${esc(tfResumo(t))}${tfPorGuardarHtml()}</div>`;
-  if(!mostradas&&filtrado)return resumo+`<div class="hint">Nenhuma tarefa corresponde à pesquisa e aos filtros.</div>`;
+  if(!c.mostradas&&filtrado)return resumo+`<div class="hint">Nenhuma tarefa corresponde à pesquisa e aos filtros.</div>`;
   return resumo+html;
+}
+/* Uma secção da árvore e tudo o que tem dentro: as tarefas dela que passam
+   os filtros e, por baixo, as secções filhas, cada uma pelo mesmo caminho. A
+   conta do cabeçalho soma as tarefas dela e as de todas as de dentro.
+   Recebe: s — a secção; nivel — a profundidade (0 no topo); c — o contexto
+   da lista ({t, ok, filtrado, ramo, por, mostradas}; mostradas vai somando).
+   Devolve: o HTML da secção, ou '' quando os filtros a deixam vazia. */
+function tfRamoHtml(s,nivel,c){
+  const t=c.t,cam=tfCaminhoTexto(t,s.id),dela=t.itens.filter(x=>x.seccao===s.id);
+  const vis=dela.filter(x=>tfPassa(x,cam,c.ramo));c.mostradas+=vis.length;
+  const filhas=tfFilhas(t,s.id),fh=filhas.map(f=>tfRamoHtml(f,nivel+1,c)).join('');
+  if(!vis.length&&!fh&&c.filtrado)return '';
+  const ids=tfRamo(t,s.id),todas=t.itens.filter(x=>ids.indexOf(x.seccao)>-1);
+  return tfSeccaoHtml(s,todas,vis,c.ok,true,c.por,{filhas:fh,nivel:nivel,temFilhas:!!filhas.length});
 }
 /* O aviso de que o rascunho ainda não foi guardado, no fim do resumo: a cor
    da frente (o --accent-text) distingue-o também com o Samsung a escurecer a
@@ -427,30 +451,39 @@ function tfQuando(t,agora){
   if(dia(d)===dia(vespera))return 'ontem às '+hora;
   return 'a '+d.getDate()+'/'+(d.getMonth()+1)+' às '+hora;
 }
-/* Uma secção da lista: o cabeçalho e as tarefas visíveis. O cabeçalho é um
-   botão que recolhe e abre a secção (tfDobrar) — a seta, o nome e quantas
-   estão cumpridas — e, ao lado, o ⋯ dela. Recolhida, as tarefas continuam
-   no HTML e é a folha que as esconde (estilos.css:.tf-recolhida): a
-   pesquisa e o arrasto contam com elas.
+/* Uma secção da lista: o cabeçalho e, no corpo, as tarefas visíveis e as
+   secções de dentro (recuadas). O cabeçalho tem a pega de arrastar a secção
+   (só a quem pode; tfArrastarSeccao), o botão que recolhe e abre a secção
+   (tfDobrar) — a seta, o nome e quantas estão cumpridas — e, ao lado, o ⋯
+   dela. Recolhida, o corpo continua no HTML e é a folha que o esconde
+   (estilos.css:.tf-recolhida): a pesquisa e o arrasto contam com ele.
    Recebe: s — a secção (null para as tarefas sem secção); todas — as tarefas
    dela; vis — as que passam os filtros; ok — se quem vê pode alterar;
    comSeccoes — se a lista tem secções (sem nenhuma, as soltas não levam
-   cabeçalho); por (opcional) — os ids das tarefas por enviar (tfPorEnviar).
+   cabeçalho); por (opcional) — os ids das tarefas por enviar (tfPorEnviar);
+   o (opcional) — {filhas: o HTML das secções de dentro, nivel: a
+   profundidade, temFilhas: se tem secções dentro (aí, sem tarefas dela, não
+   diz «Sem tarefas nesta secção.»)}.
    Devolve: o HTML da secção. */
-function tfSeccaoHtml(s,todas,vis,ok,comSeccoes,por){
-  const sid=s?s.id:'',feitas=todas.filter(x=>x.feita).length;
+function tfSeccaoHtml(s,todas,vis,ok,comSeccoes,por,o){
+  o=o||{};
+  const sid=s?s.id:'',feitas=todas.filter(x=>x.feita).length,nome=esc(s?(s.nome||'Sem nome'):'Sem secção');
   const m=s&&ok?menu('tfs_'+s.id,[
     {label:'Adicionar tarefa',icon:'plus',toca:'camada',act:`tfNovaTarefa('${jsq(s.id)}')`},
     {label:'Mudar o nome',icon:'pen',toca:'camada',act:`tfMudarNomeSeccao('${jsq(s.id)}')`},
+    {label:'Mover secção',icon:'grip',toca:'camada',act:`tfMoverSeccao('${jsq(s.id)}')`},
     {label:'Remover secção',icon:'trash',danger:true,toca:'rascunho',act:`tfRemoverSeccao('${jsq(s.id)}')`}]):'';
   const comCab=!!(s||comSeccoes),fechada=comCab&&tfRecolhida(sid),idItens='tfi_'+(sid||'_sem');
   const conta=todas.length?feitas+' de '+todas.length+'<span class="imv-so-leitor"> cumpridas</span>':'';
   // sem ⋯ (as soltas, a quem pode), um espaço do mesmo tamanho alinha a conta com as das secções
   const fim=m||(ok?'<span class="tf-sem-menu" aria-hidden="true"></span>':'');
-  const cab=comCab?`<div class="tf-cab" data-sec="${esc(sid)}"><button type="button" class="tf-dobra" aria-expanded="${!fechada}" aria-controls="${idItens}" data-toca="nada" data-click="tfDobrar('${jsq(sid)}')"><span class="tf-chev" aria-hidden="true">${ic('chevD',16)}</span><b>${esc(s?(s.nome||'Sem nome'):'Sem secção')}</b><span class="tf-conta">${conta}</span></button>${fim}</div>`:'';
+  const pega=s&&ok?`<button type="button" class="tf-pega" aria-label="Mover a secção: ${nome}" data-toca="camada" data-pointerdown="tfArrastarSeccao(event,this)" data-click="tfPegaSecClique('${jsq(s.id)}')">${ic('grip',16)}</button>`:'';
+  const cab=comCab?`<div class="tf-cab" data-sec="${esc(sid)}">${pega}<button type="button" class="tf-dobra" aria-expanded="${!fechada}" aria-controls="${idItens}" data-toca="nada" data-click="tfDobrar('${jsq(sid)}')"><span class="tf-chev" aria-hidden="true">${ic('chevD',16)}</span><b>${nome}</b><span class="tf-conta">${conta}</span></button>${fim}</div>`:'';
   const itens=vis.map(x=>tfItemHtml(x,ok,!!por&&por.indexOf(x.id)>-1)).join('')
-    ||(s?`<div class="hint">Sem tarefas nesta secção.</div>`:'');
-  return `<div class="tf-seccao${fechada?' tf-recolhida':''}" data-sec="${esc(sid)}">${cab}<div class="tf-itens" id="${idItens}">${itens}</div></div>`;
+    ||(s&&!o.temFilhas?`<div class="hint">Sem tarefas nesta secção.</div>`:'');
+  const filhas=o.filhas?`<div class="tf-filhas">${o.filhas}</div>`:'';
+  const nivel=s?' tf-n'+Math.min(4,o.nivel||0):'';
+  return `<div class="tf-seccao${nivel}${fechada?' tf-recolhida':''}" data-sec="${esc(sid)}">${cab}<div class="tf-corpo" id="${idItens}"><div class="tf-itens">${itens}</div>${filhas}</div></div>`;
 }
 /* O lugar das tarefas sem secção quando nenhuma está à vista: só aparece
    durante um arrasto (estilos.css:.tf-a-arrastar .tf-so-alvo), para se poder
@@ -615,12 +648,13 @@ function tfFormTarefa(x,sid){
   if(!x)setTimeout(()=>{const e=document.getElementById('tf_nome');if(e)try{e.focus()}catch(z){}},50);
 }
 /* As opções do seletor da secção no formulário: «Sem secção», as secções
-   (as do rascunho e as criadas neste formulário) e, no fim, «+ Criar secção…».
+   (as do rascunho e as criadas neste formulário), cada uma pelo caminho e
+   pela ordem da árvore, e, no fim, «+ Criar secção…».
    Recebe: t — as tarefas ({seccoes, itens}).
    Devolve: a lista de opções do sel() ([{v,label}]). */
 function tfOpcoesDoFormulario(t){
   return [{v:'',label:'Sem secção'}]
-    .concat(t.seccoes.concat(tfSecNovas).map(s=>({v:s.id,label:s.nome||'Sem nome'})))
+    .concat(tfOpcoesArvore({seccoes:t.seccoes.concat(tfSecNovas),itens:[]}))
     .concat([{v:'__new__',label:'+ Criar secção…'}]);
 }
 /* O seletor da secção do formulário.
@@ -638,24 +672,26 @@ function tfRepintarSelSeccao(v){
 }
 /* Mudou a secção no formulário. O «+ Criar secção…» pede o nome (como a
    categoria de um movimento, movimento.js:onCatChange) e deixa a secção nova
-   escolhida; um nome que já existe escolhe essa. A secção nova fica no
-   formulário e entra no rascunho com a tarefa (tfGuardarTarefa): cancelar a
-   tarefa não deixa uma secção vazia para trás, e o que se escreveu não se perde.
+   escolhida. O nome pode ser um caminho, a partir do topo («Obras/Cozinha»):
+   as secções que faltam criam-se, umas dentro das outras (tfResolverCaminho),
+   e um caminho que já existe todo escolhe essa secção. As secções novas ficam
+   no formulário e entram no rascunho com a tarefa (tfGuardarTarefa): cancelar
+   a tarefa não deixa secções vazias para trás, e o que se escreveu não se perde.
    Devolve: nada — muda o seletor ou abre o nome. */
 function tfSecMudou(){
   const v=val('tf_sec');
   if(v!=='__new__'){tfSecAntes=v;return}
   tfRepintarSelSeccao(tfSecAntes);   // um Cancelar no nome não deixa «+ Criar secção…» escolhido
   promptModal('Nova secção','Nome da secção','',nm=>{
-    const t=tfTarefas();
-    const ja=t.seccoes.concat(tfSecNovas).find(s=>deacc(s.nome).trim()===deacc(nm).trim());
-    const s=ja||{id:uid(),nome:nm};
-    if(!ja)tfSecNovas.push(s);
-    tfSecAntes=s.id;tfRepintarSelSeccao(s.id);
+    const t=tfTarefas(),partes=tfPartes(nm);
+    if(!partes.length)return;
+    const todas=t.seccoes.concat(tfSecNovas),r=tfResolverCaminho(todas,partes);
+    r.novas.forEach(s=>tfSecNovas.push(s));
+    tfSecAntes=r.id;tfRepintarSelSeccao(r.id);
     const L=modalTop();if(L)L.tocado=true;   // há trabalho por guardar: o X pergunta antes de o deitar fora
     const b=document.getElementById('selb_tf_sec');if(b)try{b.focus()}catch(e){}
-    if(ja)toast('A secção «'+(ja.nome||'Sem nome')+'» já existe: fica escolhida.');
-  },'Obras',TF_BOTAO_NOVA);
+    if(r.ja)toast('A secção «'+tfCaminhoTexto({seccoes:todas},r.id)+'» já existe: fica escolhida.');
+  },'Obras/Cozinha',TF_BOTAO_NOVA);
 }
 /* Enter no nome da tarefa guarda, como no promptModal.
    Recebe: ev — o evento do teclado.
@@ -677,7 +713,7 @@ function tfGuardarTarefa(){
   const notas=document.getElementById('tf_notas')?val('tf_notas').trim():null;
   closeModal();
   const ok=tfMudar(t=>{
-    novas.forEach(s=>{if(!t.seccoes.some(y=>y.id===s.id))t.seccoes.push({id:s.id,nome:s.nome})});
+    novas.forEach(s=>{if(!t.seccoes.some(y=>y.id===s.id))t.seccoes.push({id:s.id,nome:s.nome,pai:s.pai||''})});
     const x=id?t.itens.find(i=>i.id===id):null;
     if(!x){t.itens.push({id:nid,nome:nome,seccao:sec,feita:false,feitaEm:'',notas:notas||''});return}
     x.nome=nome;
@@ -702,40 +738,71 @@ function tfRemoverTarefa(tid){
     c.itens.splice(Math.min(i,c.itens.length),0,x);
   });
 }
-/* O nome de uma secção nova, e a secção no fim da lista (no rascunho).
+/* O nome de uma secção nova, e a secção no fim das irmãs (no rascunho). O
+   nome pode ser um caminho a partir do topo («Obras/Cozinha»): as que faltam
+   criam-se, umas dentro das outras (tfResolverCaminho); um caminho que já
+   existe todo não cria nada e diz que já existe.
    Devolve: nada — abre a janela do nome. */
 function tfNovaSeccao(){
   if(!tfAlvo||!tfRascunho)return;
   const recusa=tfRecusa(tfAlvo.tipo,tfAlvo.id);if(recusa)return toast(recusa);
   promptModal('Nova secção','Nome da secção','',v=>{
-    const sid=uid();
-    if(tfMudar(t=>{t.seccoes.push({id:sid,nome:v})},true))tfMostrar('.tf-seccao[data-sec="'+sid+'"]');
-  },'Obras',TF_BOTAO_NOVA);
+    const partes=tfPartes(v);if(!partes.length)return;
+    const r=tfResolverCaminho(tfTarefas().seccoes,partes);
+    if(r.ja){tfMostrar('.tf-seccao[data-sec="'+r.id+'"]');return toast('A secção «'+tfCaminhoTexto(tfTarefas(),r.id)+'» já existe.')}
+    if(tfMudar(t=>{r.novas.forEach(s=>t.seccoes.push(Object.assign({},s)))},true))tfMostrar('.tf-seccao[data-sec="'+r.id+'"]');
+  },'Obras/Cozinha',TF_BOTAO_NOVA);
 }
-/* Muda o nome de uma secção (no rascunho).
+/* Muda o nome de uma secção (no rascunho). A janela abre com o caminho
+   inteiro («Obras/Cozinha»): mudar só a última parte muda o nome; mudar o
+   resto leva a secção, com tudo o que tem dentro, para o sítio do caminho —
+   as mães que faltam criam-se, e sem mãe («Cozinha») vai para o topo, para o
+   fim das irmãs. Não pode ir para dentro dela própria nem de uma das que tem
+   dentro, nem ficar com o caminho de outra secção: aí recusa com um aviso.
    Recebe: sid — o id da secção.
    Devolve: nada — abre a janela do nome. */
 function tfMudarNomeSeccao(sid){
   if(!tfAlvo||!tfRascunho)return;
-  const s=tfTarefas().seccoes.find(x=>x.id===sid);if(!s)return;
+  const t0=tfTarefas(),s=t0.seccoes.find(x=>x.id===sid);if(!s)return;
   const recusa=tfRecusa(tfAlvo.tipo,tfAlvo.id);if(recusa)return toast(recusa);
-  promptModal('Mudar o nome da secção','Nome da secção',s.nome,v=>{
-    tfMudar(t=>{const y=t.seccoes.find(x=>x.id===sid);if(y)y.nome=v},true);
-  },'Obras',TF_BOTAO_EDITAR);
+  promptModal('Mudar o nome da secção','Nome da secção',tfCaminhoTexto(t0,sid,true),v=>{
+    const t=tfTarefas(),partes=tfPartes(v);if(!partes.length)return;
+    const nome=partes.pop(),ramo=tfRamo(t,sid);
+    // as mães procuram-se sem a própria secção e as de dentro: um caminho que passe por elas é recusado
+    const r=tfResolverCaminho(t.seccoes.filter(x=>ramo.indexOf(x.id)<0),partes);
+    const porDentro=partes.length&&tfResolverCaminho(t.seccoes,partes).id;
+    if(porDentro&&ramo.indexOf(porDentro)>-1)return toast('Uma secção não pode ficar dentro dela própria.');
+    const outra=t.seccoes.find(x=>x.id!==sid&&(x.pai||'')===r.id&&!r.novas.length&&deacc(x.nome).trim()===deacc(nome).trim());
+    if(outra)return toast('Já existe a secção «'+tfCaminhoTexto(t,outra.id)+'».');
+    tfMudar(c=>{
+      r.novas.forEach(n=>c.seccoes.push(Object.assign({},n)));
+      if((s.pai||'')!==r.id)tfAplicar(c,tfMoverSeccaoEm(c,sid,r.id,tfUltimaIrma(c,r.id,sid)));
+      const y=c.seccoes.find(x=>x.id===sid);if(y)y.nome=nome;
+    },true);
+  },'Obras/Cozinha',TF_BOTAO_EDITAR);
 }
-/* Remove uma secção e as tarefas dela do rascunho, com Anular (tfAvisoRemocao).
+/* A última secção dentro de uma mãe (ou no topo), sem contar com uma.
+   Recebe: t — as tarefas; pai — a mãe ('' para o topo); excepto — o id a não contar.
+   Devolve: o id da última, ou '' sem nenhuma. */
+function tfUltimaIrma(t,pai,excepto){
+  const l=tfFilhas(t,pai).filter(s=>s.id!==excepto);
+  return l.length?l[l.length-1].id:'';
+}
+/* Remove uma secção, as que tem dentro e as tarefas de todas do rascunho,
+   com Anular (tfAvisoRemocao), que devolve tudo ao lugar onde estava.
    Recebe: sid — o id da secção.
    Devolve: nada. */
 function tfRemoverSeccao(sid){
-  const t=tfTarefas(),k=t.seccoes.findIndex(x=>x.id===sid);
-  if(k<0)return;
-  const s=Object.assign({},t.seccoes[k]);
-  const levadas=t.itens.map((x,i)=>({i:i,x:Object.assign({},x)})).filter(o=>o.x.seccao===sid);
-  const n=levadas.length;
-  if(tfFiltro.seccao===sid)tfFiltro.seccao='';
-  if(!tfMudar(c=>{c.seccoes=c.seccoes.filter(x=>x.id!==sid);c.itens=c.itens.filter(i=>i.seccao!==sid)},true))return;
-  tfAvisoRemocao(n?'Secção removida, com '+n+(n===1?' tarefa.':' tarefas.'):'Secção removida.',c=>{
-    if(!c.seccoes.some(x=>x.id===s.id))c.seccoes.splice(Math.min(k,c.seccoes.length),0,s);
+  const t=tfTarefas(),ramo=tfRamo(t,sid);
+  if(!ramo.length)return;
+  const secs=t.seccoes.map((s,i)=>({i:i,s:Object.assign({},s)})).filter(o=>ramo.indexOf(o.s.id)>-1);
+  const levadas=t.itens.map((x,i)=>({i:i,x:Object.assign({},x)})).filter(o=>ramo.indexOf(o.x.seccao)>-1);
+  const n=levadas.length,ns=secs.length-1;
+  if(ramo.indexOf(tfFiltro.seccao)>-1)tfFiltro.seccao='';
+  if(!tfMudar(c=>{c.seccoes=c.seccoes.filter(x=>ramo.indexOf(x.id)<0);c.itens=c.itens.filter(i=>ramo.indexOf(i.seccao)<0)},true))return;
+  const partes=[ns?ns+(ns===1?' subsecção':' subsecções'):'',n?n+(n===1?' tarefa':' tarefas'):''].filter(Boolean);
+  tfAvisoRemocao(partes.length?'Secção removida, com '+partes.join(' e ')+'.':'Secção removida.',c=>{
+    secs.forEach(o=>{if(!c.seccoes.some(x=>x.id===o.s.id))c.seccoes.splice(Math.min(o.i,c.seccoes.length),0,o.s)});
     levadas.forEach(o=>{if(!c.itens.some(y=>y.id===o.x.id))c.itens.splice(Math.min(o.i,c.itens.length),0,o.x)});
   });
 }
@@ -927,6 +994,103 @@ function tfDobrar(sid){
   const b=sec.querySelector('.tf-dobra');if(b)b.setAttribute('aria-expanded',String(!fechar));
 }
 
+/* ---- a árvore das secções ----
+   As secções são como pastas: cada uma tem a mãe (pai, '' no topo) e a ordem
+   entre irmãs é a do array seccoes (dados.js:normTarefas garante que não há
+   ciclos nem mães que não existem). O caminho escreve-se com «/» e é sempre a
+   partir do topo: «Obras/Cozinha» é a Cozinha que está dentro de Obras. */
+
+/* As secções que estão logo dentro de outra (ou no topo), pela ordem.
+   Recebe: t — as tarefas ({seccoes}); pai — o id da mãe ('' para o topo).
+   Devolve: a lista das secções filhas. */
+function tfFilhas(t,pai){return t.seccoes.filter(s=>(s.pai||'')===(pai||''))}
+/* Todas as secções pela ordem da árvore (cada mãe seguida das filhas dela,
+   em profundidade), com o nível de cada uma.
+   Recebe: t — as tarefas ({seccoes}).
+   Devolve: [{s, nivel}], com nivel 0 no topo. */
+function tfArvore(t){
+  const out=[],vai=(pai,n)=>tfFilhas(t,pai).forEach(s=>{out.push({s:s,nivel:n});vai(s.id,n+1)});
+  vai('',0);
+  return out;
+}
+/* Uma secção e todas as que tem dentro, a qualquer profundidade.
+   Recebe: t — as tarefas ({seccoes}); sid — o id da secção.
+   Devolve: a lista dos ids, a começar pelo dela ([] se não existe). */
+function tfRamo(t,sid){
+  if(!sid||!t.seccoes.some(s=>s.id===sid))return [];
+  const out=[sid];
+  for(let i=0;i<out.length;i++)tfFilhas(t,out[i]).forEach(s=>out.push(s.id));
+  return out;
+}
+/* Os nomes do caminho até uma secção, do topo para ela.
+   Recebe: t — as tarefas ({seccoes}); sid — o id da secção.
+   Devolve: a lista dos nomes ([] sem secção). */
+function tfCaminho(t,sid){
+  const out=[],vistos=new Set();
+  for(let s=t.seccoes.find(x=>x.id===sid);s&&!vistos.has(s.id);s=t.seccoes.find(x=>x.id===s.pai)){
+    vistos.add(s.id);out.unshift(s.nome||'Sem nome');
+  }
+  return out;
+}
+/* O caminho de uma secção para ler: «Obras / Cozinha» (os rótulos dos
+   seletores); para escrever, «Obras/Cozinha» (o que o «Mudar o nome» abre).
+   Recebe: t — as tarefas; sid — o id da secção; escrever (opcional) — true
+   para a forma sem espaços.
+   Devolve: o texto ('' sem secção). */
+function tfCaminhoTexto(t,sid,escrever){return tfCaminho(t,sid).join(escrever?'/':' / ')}
+/* As partes de um caminho escrito: separadas por «/», aparadas, e sem as
+   vazias («Obras//Cozinha/» é Obras e Cozinha).
+   Recebe: v — o texto escrito.
+   Devolve: a lista dos nomes. */
+function tfPartes(v){return String(v||'').split('/').map(x=>x.trim()).filter(Boolean)}
+/* Resolve um caminho a partir do topo: cada parte é a irmã com o mesmo nome
+   (sem olhar a acentos nem a maiúsculas) dentro da anterior, e a que falta
+   cria-se. Não mexe na lista que recebe.
+   Recebe: seccoes — as secções onde procurar; partes — os nomes (tfPartes).
+   Devolve: {id — a última secção do caminho ('' sem partes), novas — as
+   secções a criar, pela ordem ([{id,nome,pai}]), ja — true se já existia toda}. */
+function tfResolverCaminho(seccoes,partes){
+  const todas=seccoes.slice(),novas=[];
+  let pai='';
+  partes.forEach(nm=>{
+    let s=todas.find(x=>(x.pai||'')===pai&&deacc(x.nome).trim()===deacc(nm).trim());
+    if(!s){s={id:uid(),nome:nm,pai:pai};todas.push(s);novas.push(s)}
+    pai=s.id;
+  });
+  return {id:pai,novas:novas,ja:!!partes.length&&!novas.length};
+}
+/* As opções das secções para um seletor: cada uma pelo caminho, pela ordem
+   da árvore.
+   Recebe: t — as tarefas; fora (opcional) — ids a deixar de fora.
+   Devolve: [{v,label}]. */
+function tfOpcoesArvore(t,fora){
+  return tfArvore(t).filter(o=>!fora||fora.indexOf(o.s.id)<0).map(o=>({v:o.s.id,label:tfCaminhoTexto(t,o.s.id)}));
+}
+/* Move uma secção (com tudo o que tem dentro) para dentro de outra, ou para
+   o topo, e para uma posição entre as irmãs: logo a seguir à irmã `depois`,
+   ou antes da primeira com `depois` vazio. Não pode ir para dentro dela
+   própria nem de uma das que tem dentro: aí nada muda. Um `depois` que não é
+   irmã no destino põe-na no fim. Não mexe na lista que recebe.
+   Recebe: t — as tarefas; sid — a secção a mover; pai — a mãe de destino
+   ('' para o topo; uma que não existe vale ''); depois — a irmã que fica antes.
+   Devolve: as tarefas novas ({seccoes, itens}), com cópias. */
+function tfMoverSeccaoEm(t,sid,pai,depois){
+  const seccoes=t.seccoes.map(s=>Object.assign({},s)),itens=t.itens.map(x=>Object.assign({},x));
+  const k=seccoes.findIndex(s=>s.id===sid);
+  pai=pai&&seccoes.some(s=>s.id===pai)?pai:'';
+  if(k<0||tfRamo(t,sid).indexOf(pai)>-1||(depois&&depois===sid))return {seccoes:seccoes,itens:itens};
+  const s=seccoes.splice(k,1)[0];s.pai=pai;
+  const irmas=seccoes.filter(x=>(x.pai||'')===pai);
+  let j;
+  if(!depois)j=irmas.length?seccoes.indexOf(irmas[0]):seccoes.length;
+  else{
+    const d=irmas.find(x=>x.id===depois),ultima=irmas[irmas.length-1];
+    j=d?seccoes.indexOf(d)+1:ultima?seccoes.indexOf(ultima)+1:seccoes.length;
+  }
+  seccoes.splice(j,0,s);
+  return {seccoes:seccoes,itens:itens};
+}
+
 /* ---- mover: a regra, e o «Mover tarefa» do teclado ---- */
 
 /* Move uma tarefa para uma secção e uma posição. A ordem é a do array itens:
@@ -1010,7 +1174,7 @@ function tfMoverTarefa(tid){
   const recusa=tfRecusa(tfAlvo.tipo,tfAlvo.id);if(recusa)return toast(recusa);
   const t=tfTarefas(),x=t.itens.find(i=>i.id===tid);if(!x)return;
   tfMovendo=tid;
-  const secs=[{v:'',label:'Sem secção'}].concat(t.seccoes.map(s=>({v:s.id,label:s.nome||'Sem nome'})));
+  const secs=[{v:'',label:'Sem secção'}].concat(tfOpcoesArvore(t));
   openModal('Mover tarefa',`<div class="form">
     <div class="hint">${esc(x.nome||'Sem nome')}</div>
     <label>Secção${sel('tf_msec',x.seccao,secs,'tfMoverSecMudou','rascunho')}</label>
@@ -1039,6 +1203,77 @@ function tfGuardarMover(){
   const pega=linha&&linha.querySelector('.tf-pega');if(pega)try{pega.focus()}catch(e){}
 }
 
+/* ---- o «Mover secção» (o ⋯ da secção, e a pega dela ao toque ou ao teclado) ---- */
+
+/* As mães para onde uma secção pode ir: o topo e todas as secções que não
+   são ela nem estão dentro dela, cada uma pelo caminho.
+   Recebe: t — as tarefas; sid — a secção a mover.
+   Devolve: [{v,label}] do sel(). */
+function tfOpcoesDeMae(t,sid){return [{v:'',label:'No topo'}].concat(tfOpcoesArvore(t,tfRamo(t,sid)))}
+/* As posições entre as irmãs de destino: em primeiro lugar, ou depois de cada uma.
+   Recebe: t — as tarefas; sid — a secção a mover; pai — a mãe de destino.
+   Devolve: [{v,label}] do sel(), com v = o «depois». */
+function tfOpcoesDePosicaoSec(t,sid,pai){
+  return [{v:'',label:'Em primeiro lugar'}].concat(tfFilhas(t,pai).filter(s=>s.id!==sid)
+    .map(s=>({v:s.id,label:'Depois de «'+(s.nome||'Sem nome')+'»'})));
+}
+/* A irmã que vem antes desta secção.
+   Recebe: t — as tarefas; sid — o id da secção.
+   Devolve: o id, ou '' se é a primeira. */
+function tfIrmaAntes(t,sid){
+  const s=t.seccoes.find(x=>x.id===sid);if(!s)return '';
+  const l=tfFilhas(t,s.pai),k=l.indexOf(s);
+  return k>0?l[k-1].id:'';
+}
+/* O toque (ou o Enter) na pega de uma secção: logo a seguir a um arrasto
+   engole-se; senão abre o «Mover secção».
+   Recebe: sid — o id da secção.
+   Devolve: nada. */
+function tfPegaSecClique(sid){
+  if(tfArr||Date.now()-tfArrFim<700)return;
+  tfMoverSeccao(sid);
+}
+/* A janela «Mover secção»: «Dentro de» (o topo, ou outra secção que não seja
+   ela nem uma das que tem dentro) e a posição entre as irmãs, com o sítio de
+   agora escolhido. O botão diz «Mover»: muda o rascunho, e só o «Guardar» da
+   janela grava. Leva com ela tudo o que tem dentro.
+   Recebe: sid — o id da secção.
+   Devolve: nada — abre a janela por cima da lista. */
+function tfMoverSeccao(sid){
+  if(!tfAlvo)return;
+  const recusa=tfRecusa(tfAlvo.tipo,tfAlvo.id);if(recusa)return toast(recusa);
+  const t=tfTarefas(),s=t.seccoes.find(x=>x.id===sid);if(!s)return;
+  tfMovendo=sid;
+  openModal('Mover secção',`<div class="form">
+    <div class="hint">${esc(tfCaminhoTexto(t,sid))}</div>
+    <label>Dentro de${sel('tf_smae',s.pai||'',tfOpcoesDeMae(t,sid),'tfMoverMaeMudou','rascunho')}</label>
+    <label>Posição${sel('tf_spos',tfIrmaAntes(t,sid),tfOpcoesDePosicaoSec(t,sid,s.pai||''),'','rascunho')}</label>
+  </div>`,`<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button type="button" class="btn primary" data-toca="rascunho" data-click="onSave&&onSave()">Mover</button>`);
+  onSave=tfGuardarMoverSeccao;
+}
+/* Mudou o «Dentro de» no «Mover secção»: as posições passam a ser as das
+   irmãs dessa mãe, com o fim escolhido (ou o lugar de agora, de volta à mãe dela).
+   Devolve: nada. */
+function tfMoverMaeMudou(){
+  const t=tfTarefas(),s=t.seccoes.find(x=>x.id===tfMovendo);if(!s)return;
+  const pai=val('tf_smae'),d=pai===(s.pai||'')?tfIrmaAntes(t,s.id):tfUltimaIrma(t,pai,s.id);
+  const w=document.getElementById('sel_tf_spos');
+  if(w)w.outerHTML=sel('tf_spos',d,tfOpcoesDePosicaoSec(t,s.id,pai),'','rascunho');
+  const i=document.getElementById('tf_spos');if(i)i.value=d;
+}
+/* Aplica o «Mover secção» ao rascunho e volta à lista, com a secção à vista
+   e o foco na pega dela.
+   Devolve: nada. */
+function tfGuardarMoverSeccao(){
+  const sid=tfMovendo,pai=val('tf_smae'),depois=val('tf_spos');
+  closeModal();
+  if(!tfMudar(t=>tfAplicar(t,tfMoverSeccaoEm(t,sid,pai,depois)),true))return;
+  tfMostrar('.tf-seccao[data-sec="'+sid+'"]');
+  const lista=document.getElementById('tf_lista');
+  const sec=lista&&[].slice.call(lista.querySelectorAll('.tf-seccao')).find(x=>x.getAttribute('data-sec')===sid);
+  const pega=sec&&sec.querySelector('.tf-pega');if(pega)try{pega.focus()}catch(e){}
+}
+
 /* ---- arrastar ----
    A pega (tfItemHtml) é a única coisa com touch-action:none: arrastar no
    resto da linha continua a rolar a lista. O dedo pousa, e a partir de 5px
@@ -1051,13 +1286,27 @@ function tfGuardarMover(){
 /* Pousou o dedo (ou o rato) na pega: fica à escuta do resto do gesto.
    Recebe: e — o PointerEvent do pointerdown; h — a pega.
    Devolve: nada — liga os ouvintes do documento. */
-function tfArrastar(e,h){
+function tfArrastar(e,h){tfArrastoLigar(e,h,'.tf-item')}
+/* Pousou o dedo (ou o rato) na pega de uma secção: o mesmo gesto, com a
+   secção inteira — que se levanta recolhida, só o cabeçalho a flutuar — no
+   lugar da tarefa.
+   Recebe: e — o PointerEvent do pointerdown; h — a pega do cabeçalho.
+   Devolve: nada — liga os ouvintes do documento. */
+function tfArrastarSeccao(e,h){tfArrastoLigar(e,h,'.tf-seccao')}
+/* O começo dos dois arrastos: guarda o estado (tfArr) e fica à escuta do
+   resto do gesto no documento.
+   Recebe: e — o PointerEvent; h — a pega; qual — '.tf-item' (uma tarefa) ou
+   '.tf-seccao' (uma secção).
+   Devolve: nada. */
+function tfArrastoLigar(e,h,qual){
   if(tfArr||(e.button!=null&&e.button>0)||e.isPrimary===false)return;
-  const row=h.closest('.tf-item'),lista=document.getElementById('tf_lista');
+  const row=h.closest(qual),lista=document.getElementById('tf_lista');
   if(!row||!lista||!tfAlvo||!tfPodeAlterar(tfAlvo.tipo,tfAlvo.id))return;
   e.preventDefault();
-  tfArr={tid:row.getAttribute('data-id'),h:h,row:row,lista:lista,rol:tfRolante(lista),y0:e.clientY,y:e.clientY,
-    topo0:0,desloc:0,ativo:false,cancelado:false,alvo:null,chave:'',vel:0,raf:0};
+  const sec=qual==='.tf-seccao';
+  tfArr={tipo:sec?'seccao':'tarefa',tid:sec?'':row.getAttribute('data-id'),sid:sec?row.getAttribute('data-sec'):'',
+    h:h,row:row,lista:lista,rol:tfRolante(lista),y0:e.clientY,y:e.clientY,
+    topo0:0,desloc:0,ativo:false,cancelado:false,alvo:null,chave:'',vel:0,raf:0,abrir:0};
   try{h.setPointerCapture(e.pointerId)}catch(x){}
   document.addEventListener('pointermove',tfArrastoMove);
   document.addEventListener('pointerup',tfArrastoFim);
@@ -1092,9 +1341,11 @@ function tfArrastoMove(e){
    Devolve: nada. */
 function tfArrastoComecar(){
   const a=tfArr;a.ativo=true;
+  if(a.tipo==='seccao')a.row.classList.add('tf-a-levar');   // a secção levanta-se recolhida: só o cabeçalho flutua
   const r0=a.row.getBoundingClientRect();a.topo0=r0.top;a.alt=r0.height;
   a.row.classList.add('tf-agarrada');
   a.lista.classList.add('tf-a-arrastar');
+  if(a.tipo==='seccao')a.lista.classList.add('tf-arr-sec');   // as secções não vão para «Sem secção»: o lugar das soltas não aparece
   const agora=a.row.getBoundingClientRect().top;
   if(a.rol&&agora!==a.topo0)a.rol.scrollTop+=agora-a.topo0;
 }
@@ -1110,40 +1361,114 @@ function tfArrastoPintar(){
   a.row.style.transform='translateY('+a.desloc+'px)';
   tfArrastoMarcar(tfArrastoAlvo(a.y));
 }
-/* Onde vai cair a tarefa com o dedo à altura y: a secção mais perto; por
-   cima do cabeçalho dela, recolhida ou sem outras tarefas, é o 1.º lugar
-   (cab); senão, o intervalo entre as linhas pelo meio de cada uma.
+/* As tarefas que são mesmo desta secção (e não das que tem dentro), sem a agarrada.
+   Recebe: s — o elemento da secção; fora — a linha a não contar.
+   Devolve: a lista das linhas. */
+function tfLinhasDe(s,fora){
+  return [].slice.call(s.querySelectorAll('.tf-item')).filter(x=>x!==fora&&(!x.closest||x.closest('.tf-seccao')===s));
+}
+/* Onde vai cair o que se arrasta com o dedo à altura y: uma tarefa
+   (tfArrastoAlvoTarefa) ou uma secção (tfArrastoAlvoSeccao).
+   Recebe: y — a altura do dedo (clientY).
+   Devolve: o alvo, ou null. */
+function tfArrastoAlvo(y){return tfArr&&tfArr.tipo==='seccao'?tfArrastoAlvoSeccao(y):tfArrastoAlvoTarefa(y)}
+/* Onde vai cair a tarefa com o dedo à altura y. Cada secção à vista conta
+   com o que é dela — o cabeçalho e as tarefas dela, não as das secções de
+   dentro, que contam por si —, e ganha a mais perto (a mais funda, numa
+   árvore, porque as de dentro vêm a seguir às tarefas da mãe). Por cima do
+   cabeçalho, recolhida ou sem outras tarefas, é o 1.º lugar (cab); senão, o
+   intervalo entre as linhas pelo meio de cada uma.
    Recebe: y — a altura do dedo (clientY).
    Devolve: {sid, depois, cab, sec, antes} — antes é a linha que fica a seguir
    à linha indicativa (null no fim) —, ou null sem secções à vista. */
-function tfArrastoAlvo(y){
+function tfArrastoAlvoTarefa(y){
   const a=tfArr;
   const secs=[].slice.call(a.lista.querySelectorAll('.tf-seccao')).filter(s=>s.getClientRects().length);
-  let s=null,dist=Infinity;
-  secs.forEach(x=>{const r=x.getBoundingClientRect(),d=y<r.top?r.top-y:y>r.bottom?y-r.bottom:0;if(d<dist){dist=d;s=x}});
+  let s=null,dist=Infinity,linhas=[];
+  secs.forEach(x=>{
+    const cab=x.querySelector('.tf-cab'),rec=x.classList.contains('tf-recolhida');
+    const ls=rec?[]:tfLinhasDe(x,a.row),r=(cab||x).getBoundingClientRect();
+    const fim=ls.length?Math.max(r.bottom,ls[ls.length-1].getBoundingClientRect().bottom):cab?r.bottom:x.getBoundingClientRect().bottom;
+    const d=y<r.top?r.top-y:y>fim?y-fim:0;
+    if(d<dist){dist=d;s=x;linhas=ls}
+  });
   if(!s)return null;
   const sid=s.getAttribute('data-sec')||'',cab=s.querySelector('.tf-cab'),rc=cab&&cab.getBoundingClientRect();
-  const linhas=[].slice.call(s.querySelectorAll('.tf-item')).filter(x=>x!==a.row);
   if((rc&&y>=rc.top&&y<=rc.bottom)||s.classList.contains('tf-recolhida')||!linhas.length)return {sid:sid,depois:'',cab:true,sec:s,antes:null};
   let antes=null,depois='';
   for(const x of linhas){const r=x.getBoundingClientRect();if(y<r.top+r.height/2){antes=x;break}depois=x.getAttribute('data-id')||''}
   return {sid:sid,depois:depois,cab:false,sec:s,antes:antes};
 }
-/* Pinta o alvo: a secção acesa, ou a linha entre as duas tarefas. Só mexe no
-   DOM quando o alvo muda.
+/* Onde vai cair a secção agarrada com o dedo à altura y. Por cima do nome
+   de outra secção (que não seja ela nem uma das de dentro dela), fica dentro
+   dessa, em 1.º lugar, e ela acende (cab). Senão é uma linha entre irmãs: o
+   nível é o da lista de secções mais funda que está à altura do dedo (as
+   filhas de uma secção, ou o topo), e a linha fica antes da primeira irmã
+   cujo nome está abaixo do dedo (ou no fim).
+   Recebe: y — a altura do dedo (clientY).
+   Devolve: {cab:true, pai, depois:'', sec} ou {cab:false, pai, depois, cont,
+   antes} — cont é a lista onde a linha entra, antes o elemento que fica a
+   seguir a ela (null no fim) —, ou null sem para onde ir. */
+function tfArrastoAlvoSeccao(y){
+  const a=tfArr,D=a.row,dentro=x=>x===D||(!!D.contains&&D.contains(x));
+  const secs=[].slice.call(a.lista.querySelectorAll('.tf-seccao')).filter(s=>s.getAttribute('data-sec')&&!dentro(s)&&s.getClientRects().length);
+  for(const s of secs){
+    const cab=s.querySelector('.tf-cab'),r=cab&&cab.getBoundingClientRect();
+    if(r&&y>=r.top&&y<=r.bottom)return {cab:true,pai:s.getAttribute('data-sec'),depois:'',sec:s};
+  }
+  let cont=a.lista,pai='';
+  [].slice.call(a.lista.querySelectorAll('.tf-filhas')).forEach(f=>{
+    if(dentro(f)||!f.getClientRects().length)return;
+    const r=f.getBoundingClientRect();
+    if(y>=r.top&&y<=r.bottom){const dona=f.closest&&f.closest('.tf-seccao');cont=f;pai=dona?dona.getAttribute('data-sec')||'':''}
+  });
+  const irmas=secs.filter(s=>s.parentElement===cont);
+  if(!irmas.length&&cont===a.lista&&!secs.length)return null;
+  let antes=null,depois='';
+  for(const s of irmas){
+    const cab=s.querySelector('.tf-cab'),r=(cab||s).getBoundingClientRect();
+    if(y<r.top+r.height/2){antes=s;break}
+    depois=s.getAttribute('data-sec')||'';
+  }
+  return {cab:false,pai:pai,depois:depois,cont:cont,antes:antes};
+}
+/* Pinta o alvo: a secção acesa, ou a linha entre as duas tarefas (ou entre
+   duas secções). Só mexe no DOM quando o alvo muda. Com o alvo no cabeçalho
+   de uma secção recolhida, conta 600 ms: se o dedo ainda lá estiver, a
+   secção abre (tfArrastoAbrir), para se poder largar lá dentro onde se quer.
    Recebe: alvo — o de tfArrastoAlvo, ou null para limpar.
    Devolve: nada. */
 function tfArrastoMarcar(alvo){
   const a=tfArr;if(!a)return;
-  const chave=alvo?(alvo.cab?'c':'l')+'|'+alvo.sid+'|'+alvo.depois:'';
+  const chave=!alvo?'':a.tipo==='seccao'?(alvo.cab?'c':'l')+'|'+alvo.pai+'|'+alvo.depois:(alvo.cab?'c':'l')+'|'+alvo.sid+'|'+alvo.depois;
   a.alvo=alvo;if(chave===a.chave)return;a.chave=chave;
+  if(a.abrir){clearTimeout(a.abrir);a.abrir=0}
   [].slice.call(a.lista.querySelectorAll('.tf-alvo')).forEach(x=>x.classList.remove('tf-alvo'));
   const velha=a.lista.querySelector('.tf-linha');if(velha)velha.remove();
   if(!alvo)return;
-  if(alvo.cab){alvo.sec.classList.add('tf-alvo');return}
+  if(alvo.cab){
+    alvo.sec.classList.add('tf-alvo');
+    if(alvo.sec.classList.contains('tf-recolhida'))a.abrir=setTimeout(()=>tfArrastoAbrir(a,chave,alvo.sec),TF_ABRIR_MS);
+    return;
+  }
   const linha=document.createElement('div');linha.className='tf-linha';linha.setAttribute('aria-hidden','true');
-  const itens=alvo.sec.querySelector('.tf-itens');if(!itens)return;
-  if(alvo.antes)itens.insertBefore(linha,alvo.antes);else itens.appendChild(linha);
+  const onde=a.tipo==='seccao'?alvo.cont:alvo.sec.querySelector('.tf-itens');if(!onde)return;
+  if(alvo.antes)onde.insertBefore(linha,alvo.antes);else onde.appendChild(linha);
+}
+/* Passados os 600 ms com o dedo parado no nome de uma secção recolhida: abre-a
+   como o toque no cabeçalho (fica aberta, e o aparelho lembra-se — tfDobrar)
+   e volta a medir o alvo, agora com as tarefas e as secções dela à vista. Se
+   o arrasto acabou ou o alvo mudou entretanto, não faz nada.
+   Recebe: a — o estado do arrasto que pediu; chave — o alvo de então; sec —
+   o elemento da secção.
+   Devolve: nada. */
+function tfArrastoAbrir(a,chave,sec){
+  if(a!==tfArr)return;
+  a.abrir=0;
+  if(!a.ativo||a.cancelado||a.chave!==chave||!sec.classList.contains('tf-recolhida'))return;
+  tfDobrar(sec.getAttribute('data-sec')||'');
+  a.chave='';   // o mesmo alvo, agora aberto: volta a pintar-se
+  tfArrastoPintar();
 }
 /* Perto da borda de cima ou de baixo da lista, ela rola sozinha, mais
    depressa quanto mais perto.
@@ -1174,14 +1499,15 @@ function tfArrastoPasso(){
    Devolve: nada. */
 function tfArrastoDesfazer(a){
   if(a.raf){cancelAnimationFrame(a.raf);a.raf=0}
+  if(a.abrir){clearTimeout(a.abrir);a.abrir=0}
   a.vel=0;
   if(!a.ativo)return;
   a.ativo=false;
   const antes=a.row.getBoundingClientRect().top-a.desloc;
-  a.row.style.transform='';a.row.classList.remove('tf-agarrada');a.desloc=0;
+  a.row.style.transform='';a.row.classList.remove('tf-agarrada');a.row.classList.remove('tf-a-levar');a.desloc=0;
   [].slice.call(a.lista.querySelectorAll('.tf-alvo')).forEach(x=>x.classList.remove('tf-alvo'));
   const linha=a.lista.querySelector('.tf-linha');if(linha)linha.remove();
-  a.lista.classList.remove('tf-a-arrastar');
+  a.lista.classList.remove('tf-a-arrastar');a.lista.classList.remove('tf-arr-sec');
   const agora=a.row.getBoundingClientRect().top;
   if(a.rol&&a.row.isConnected&&agora!==antes)a.rol.scrollTop+=agora-antes;
 }
@@ -1201,15 +1527,22 @@ function tfArrastoSoltar(){
 function tfArrastoFim(){
   const a=tfArr;if(!a)return;
   const arrastou=a.ativo||a.cancelado,alvo=a.cancelado?null:a.alvo,ligada=a.row.isConnected;
-  const recolhida=!!(alvo&&alvo.sec.classList.contains('tf-recolhida'));
+  const recolhida=!!(alvo&&alvo.sec&&alvo.sec.classList.contains('tf-recolhida'));
   tfArrastoDesfazer(a);tfArrastoSoltar();
   if(!arrastou)return;
   tfArrFim=Date.now();
   if(!alvo||!ligada||!tfAlvo)return;
   const t=tfTarefas();
+  if(a.tipo==='seccao'){
+    const n=tfMoverSeccaoEm(t,a.sid,alvo.pai,alvo.depois),forma=l=>l.seccoes.map(s=>s.id+'|'+(s.pai||'')).join(',');
+    if(forma(n)===forma(t))return;
+    if(!tfMudar(c=>tfAplicar(c,tfMoverSeccaoEm(c,a.sid,alvo.pai,alvo.depois)),true))return;
+    if(recolhida){const m=t.seccoes.find(x=>x.id===alvo.pai);toast('Secção movida para dentro de «'+(m?tfCaminhoTexto(t,m.id):'')+'».')}
+    return;
+  }
   if(tfMesmaOrdem(t,tfMoverEm(t,a.tid,alvo.sid,alvo.depois)))return;
   if(!tfMudar(c=>tfAplicar(c,tfMoverEm(c,a.tid,alvo.sid,alvo.depois))))return;
-  if(recolhida){const s=t.seccoes.find(x=>x.id===alvo.sid);toast('Tarefa movida para «'+(s?(s.nome||'Sem nome'):'Sem secção')+'».')}
+  if(recolhida){const s=t.seccoes.find(x=>x.id===alvo.sid);toast('Tarefa movida para «'+(s?tfCaminhoTexto(t,s.id):'Sem secção')+'».')}
 }
 /* O pointercancel (o browser tomou o gesto) desfaz o arrasto, sem mover nada.
    Devolve: nada. */
