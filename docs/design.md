@@ -721,7 +721,11 @@ janela de cima); o rodapé por omissão é Cancelar + Guardar
 (componentes.js:setModal). Fechar por um caminho de abandono (véu, X,
 Escape, voltar, arrastar a folha para baixo) com alterações por guardar pergunta «Sair sem guardar?»
 (componentes.js:closeModal); Guardar e Cancelar fecham sem perguntar,
-porque são decisões e não acidentes. A exceção é a janela das tarefas, onde o
+porque são decisões e não acidentes. Enquanto uma janela ainda sai do ecrã, a
+de baixo já é a de cima, com o X no mesmo sítio: até ao fim da saída, os
+cliques de um dedo ou de um rato engolem-se (componentes.js:cliqueASair), para
+um toque repetido no X não fechar as de baixo nem abrir a pergunta da que está
+por baixo de todas. O teclado e o «voltar» continuam, que são deliberados. A exceção é a janela das tarefas, onde o
 Cancelar encosta ao Guardar e deitava fora uma tarde de tarefas: com
 alterações, pergunta (tarefas.js:tfFechar). Só conta como mexido o que vier de um
 dedo ou de um teclado a sério (o isTrusted em componentes.js:openModal): a
@@ -6714,10 +6718,13 @@ quadro, sem tabela nova. A janela do item pede-os à parte, só para ele
 mais antigo para o mais recente, com quem, quando e o texto com as mudanças
 de linha (cloud/qa.js:qaHtmlComentarios); por baixo, o campo «Comentário»,
 obrigatório, com o erro junto dele, e «Comentar» (cloud/qa.js:qaHtmlComentar).
-Comentar um ticket de QA passa-o a Auto Tests, de qualquer coluna: é o sinal
-de que há o que responder. Num Erro sem ticket o comentário é o do kanban: em
-Human Tests devolve-o a Auto Tests (recusar é comentar o que está mal), e
-noutra coluna fica onde está (cloud/qa.js:qaColunaDepoisDoComentario). Como o
+Comentar um ticket de QA passa-o a A fazer, a fila de quem programa: é o sinal
+de que há o que responder. Auto Tests só o marca quem pega no ticket, por isso
+um ticket que já está na fila (A fazer ou Auto Tests) fica onde está
+(worker/src/lib/kanban.js:colunaDoComentarioQa). Num Erro sem ticket o
+comentário é o do kanban: em Human Tests devolve-o a A fazer (recusar é
+comentar o que está mal), e noutra coluna fica onde está
+(cloud/qa.js:qaColunaDepoisDoComentario). Como o
 «Mover», é logo no ecrã — o comentário aparece «a enviar…», o campo
 esvazia-se e o item muda de coluna, quando muda — e, se o servidor
 recusar, o ticket volta à coluna de antes, o texto volta ao campo e o erro
@@ -6789,7 +6796,7 @@ menos tempo.
 Um comentário entra por POST /api/qa/:id/comentarios {texto}, na conta e no
 back office (worker/src/rotas/qa.js:comentarTicket): aparado, de 1 a 4000
 caracteres, travado aos 60 por hora por pessoa. Numa transação só, o ticket
-passa a Auto Tests, o cartão nasce se o ticket ainda não o tinha e vai com
+passa a A fazer (fica, se já está na fila), o cartão nasce se o ticket ainda não o tinha e vai com
 ele, com a linha «coluna» do histórico assinada por quem comentou, e o
 comentário fica no cartão (worker/src/lib/kanban.js:passosDoComentarioQa).
 Quem assina é a pessoa do Discord quando a há — a da sessão de equipa, ou a
@@ -6968,13 +6975,13 @@ Em Human Tests decide-se: ou se aceita, ou se recusa a explicar o que está
 mal. Um cartão aberto em Human Tests tem no fundo do painel uma barra fixa,
 sempre à vista enquanto o corpo rola, no computador e na folha do telemóvel
 (worker/src/equipa-kanban.js:kbDecidirHtml): a frase «Para recusar, comenta o
-que está mal: o cartão volta a Auto Tests.», o Comentar, que leva à caixa do
+que está mal: o cartão volta a A fazer.», o Comentar, que leva à caixa do
 comentário, e o Aceitar, o botão primário, que põe o cartão no topo de
 Concluído pelo caminho do «Mover para…», com o Anular no aviso
 (worker/src/equipa-kanban.js:kbAceitar). A barra é filha do painel que rola,
 por baixo do corpo: no fim do scroll fica depois do histórico, sem o tapar.
 Recusar é comentar: o comentário de uma pessoa num cartão em Human Tests
-leva-o ao topo de Auto Tests, a fila do Claude, no mesmo lote, com a linha
+leva-o ao topo de A fazer, a fila de quem programa, no mesmo lote, com a linha
 «coluna» do histórico assinada por quem comentou
 (worker/src/lib/kanban.js:colunaDepoisDoComentario), e o aviso diz que o
 cartão voltou. Noutra coluna o comentário não move nada, e o do Claude

@@ -303,25 +303,37 @@ function passosDoQa(ev, origem, estado, coluna, agora, autor) {
   return passos;
 }
 
+/* Para onde vai um ticket de QA quando alguém comenta nele (pedido do
+   Martinho, 2026-11-15, KAN-140: «em vez de auto tests deve ir para A
+   Fazer»): para A fazer, a fila de quem programa — Auto Tests só o marca o
+   Claude, quando pega nele (qa.mjs comecar). Um ticket que já está na fila
+   (A fazer ou Auto Tests) fica onde está: o comentário entra como por
+   responder, e quem já pegou nele não o perde.
+   Recebe: status — a coluna do ticket agora.
+   Devolve: o id da coluna depois do comentário. */
+export function colunaDoComentarioQa(status) {
+  return status === QA_NOVO || status === QA_EM_CURSO ? status : QA_NOVO;
+}
+
 /* Os passos de um comentário num ticket de QA (pedido do Martinho,
-   2026-11-11: «se tiverem comentários, passam para auto tests e resolves o
-   comentário»), numa transação só: o ticket passa a Auto Tests
-   (ticketQaNaColuna, de qualquer coluna), o cartão nasce se o ticket ainda
+   2026-11-11, e a coluna desde 2026-11-15, KAN-140), numa transação só: o
+   ticket passa a A fazer (colunaDoComentarioQa: fica, se já está na fila;
+   ticketQaNaColuna), o cartão nasce se o ticket ainda
    não o tinha e vai com ele (passosDaSincronizacao, com a linha «coluna» do
    histórico assinada por quem comentou), o comentário fica no cartão, e o
    cartão sobe na «Última alteração». Os comentários do ticket SÃO os do
    cartão (kanban_comentarios): não há outra tabela. Correm-no a rota da app
    e do back office (rotas/qa.js:comentarTicket) e o comentar do kanban num
    cartão de QA (rotas/kanban.js:comentar).
-   Recebe: c — {ticket: {id, body, severity}, autor: {id, nome}, texto (já
+   Recebe: c — {ticket: {id, body, severity, status}, autor: {id, nome}, texto (já
    aparado), uuid (o id do comentário), cartaoUuid (o id do cartão, se for
    preciso criá-lo), agora (ms)}.
    Devolve: a lista de {sql, params}. */
 export function passosDoComentarioQa(c) {
-  const t = c.ticket, agora = Number(c.agora) || 0;
-  return [ticketQaNaColuna(t.id, QA_EM_CURSO, agora)].concat(
+  const t = c.ticket, agora = Number(c.agora) || 0, para = colunaDoComentarioQa(t.status);
+  return [ticketQaNaColuna(t.id, para, agora)].concat(
     passosDaSincronizacao({
-      tipo: 'qa', id: t.id, estado: QA_EM_CURSO, agora, autor: c.autor,
+      tipo: 'qa', id: t.id, estado: para, agora, autor: c.autor,
       novo: Object.assign({ uuid: c.cartaoUuid }, cartaoDoTicketQa(t)),
       comentario: { uuid: c.uuid, texto: c.texto },
     }),
@@ -433,23 +445,24 @@ export function passosDoCartaoNaColuna(cartaoId, coluna, autor, agora) {
 const NAO_PESSOAS = ['claude', AUTOMATICO.id];
 
 /* Para onde vai um cartão quando alguém comenta nele (pedido do Martinho,
-   2026-11-12, KAN-116): em Human Tests decide-se, e recusar é comentar o que
-   está mal — o comentário de uma pessoa devolve o cartão a Auto Tests, a fila
-   do Claude. Fica onde está um cartão noutra coluna, o de um pedido (a coluna
-   segue o pedido, decide-se nos Pedidos) e o comentário do Claude ou da
-   sincronização (a nota do resolver é escrita com o cartão já em Human Tests).
-   O cartão de um ticket de QA com o ticket vivo não passa por aqui: vai a
-   Auto Tests de qualquer coluna (passosDoComentarioQa).
+   2026-11-12, KAN-116, e a coluna desde 2026-11-15, KAN-140): em Human Tests
+   decide-se, e recusar é comentar o que está mal — o comentário de uma
+   pessoa devolve o cartão a A fazer, a fila de quem programa (Auto Tests só
+   o marca o Claude, quando pega nele). Fica onde está um cartão noutra
+   coluna, o de um pedido (a coluna segue o pedido, decide-se nos Pedidos) e
+   o comentário do Claude ou da sincronização (a nota do resolver é escrita
+   com o cartão já em Human Tests). O cartão de um ticket de QA com o ticket
+   vivo não passa por aqui (passosDoComentarioQa).
    Recebe: k — o cartão ({coluna_id, origem_tipo}); autorId — o id de quem comenta.
    Devolve: o id da coluna depois do comentário. */
 export function colunaDepoisDoComentario(k, autorId) {
   const col = k && k.coluna_id;
   if (col !== QA_RESOLVIDO || k.origem_tipo === 'pedido' || NAO_PESSOAS.indexOf(String(autorId)) > -1) return col;
-  return QA_EM_CURSO;
+  return QA_NOVO;
 }
 
 /* Os passos de um comentário num cartão que não é de um ticket de QA vivo,
-   numa transação só: o comentário fica no cartão e, se ele volta a Auto Tests
+   numa transação só: o comentário fica no cartão e, se ele volta a A fazer
    (colunaDepoisDoComentario), vai para o topo dela como o mover com o índice
    0 (um passo acima do primeiro, ou 0 na coluna vazia), com o concluido_at
    limpo (posto, se o master a marcou de fim) e a linha «coluna» no histórico assinada por quem comentou; noutro

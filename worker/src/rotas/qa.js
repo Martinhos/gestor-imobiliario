@@ -25,8 +25,8 @@ import { catsDe } from '../lib/papeis.js';
 // as duas vivem em lib/imagens.js (o kanban também as usa); ficam exportadas daqui para quem já as lia cá
 export { lerAte, tipoDaImagem };
 import {
-  cartaoDoTicketQa, ticketQaNaColuna, eIdDeColuna, passosDoComentarioQa, passosDoComentario, colunaDepoisDoComentario,
-  cartaoSaiComOTicket, cartaoVoltaComOTicket, passosDoCartaoNaColuna, chaveDe, QA_NOVO, QA_EM_CURSO,
+  cartaoDoTicketQa, ticketQaNaColuna, eIdDeColuna, passosDoComentarioQa, colunaDoComentarioQa, passosDoComentario, colunaDepoisDoComentario,
+  cartaoSaiComOTicket, cartaoVoltaComOTicket, passosDoCartaoNaColuna, chaveDe, QA_NOVO,
 } from '../lib/kanban.js';
 
 // A chave de um cartão nas rotas da pílula: KAN-N, sempre com o prefixo (um id de ticket nunca tem esta forma).
@@ -70,7 +70,7 @@ function naoExiste() {
    para o Anular); POST …/repor desfaz a remoção; POST …/reabrir volta a pôr
    o ticket em A fazer; POST …/mover {coluna} passa-o a outra coluna do
    kanban; PUT e GET …/imagem gravam e servem a captura; POST …/comentarios
-   {texto} comenta (e devolve o ticket a Auto Tests) e GET …/comentarios
+   {texto} comenta (e devolve o ticket a A fazer) e GET …/comentarios
    lê os comentários do ticket.
    O :id é o de um ticket ou a chave de um cartão Erro (KAN-N): a de um
    cartão com o ticket vivo vale o mesmo que o id dele; a de um Erro sem
@@ -407,7 +407,7 @@ async function moverCartao(env, k, coluna, quem) {
 
 /* POST /api/qa/KAN-N/comentarios {texto} num Erro sem ticket: o comentário
    do kanban (lib/kanban.js:passosDoComentario) — fica no cartão e, em Human
-   Tests, devolve-o a Auto Tests (recusar é comentar o que está mal); noutra
+   Tests, devolve-o a A fazer (recusar é comentar o que está mal); noutra
    coluna fica onde está. O texto e o travão são os do comentário de um
    ticket (comentarTicket).
    Recebe: env; request — com o corpo {texto}; k — o cartão; quem — {id, nome}.
@@ -640,8 +640,9 @@ function comentarioParaFora(c, eu) {
 /* POST /api/qa/:id/comentarios {texto}: um comentário de quem testa no
    ticket. Fica no cartão do ticket no kanban (os comentários do ticket são
    os do cartão; o cartão nasce se o ticket ainda não o tinha) e o ticket, com
-   o cartão, passa a Auto Tests de qualquer coluna, numa transação só
-   (lib/kanban.js:passosDoComentarioQa): é o sinal de que há o que responder,
+   o cartão, passa a A fazer (fica, se já está em A fazer ou em Auto Tests),
+   numa transação só (lib/kanban.js:passosDoComentarioQa,
+   lib/kanban.js:colunaDoComentarioQa): é o sinal de que há o que responder,
    e quem programa responde ao resolver (scripts/qa.mjs resolver, cuja nota
    entra como comentário). O texto é aparado, com as mudanças de linha, e tem
    de 1 a 4000 caracteres. Trava aos 60 por hora por pessoa. Com o cartão
@@ -649,12 +650,12 @@ function comentarioParaFora(c, eu) {
    onde está.
    Recebe: env — o ambiente do worker (D1 em env.DB); request — o pedido, com
    o corpo {texto}; id — o id do ticket; quem — {id, nome} (autorDoComentario).
-   Devolve: promessa da Response — 201 {ok, coluna (Auto Tests), comentario}, 404 sem o
+   Devolve: promessa da Response — 201 {ok, coluna (a do ticket depois), comentario}, 404 sem o
    ticket, 429 com o travão, 400 sem texto ou com texto longo de mais, 409
    com o cartão removido. */
 async function comentarTicket(env, request, id, quem) {
   const q = await env.DB.prepare(
-    `SELECT q.id, q.body, q.severity,
+    `SELECT q.id, q.body, q.severity, q.status,
             (SELECT COUNT(*) FROM kanban_cartoes k WHERE k.origem_tipo = 'qa' AND k.origem_id = q.id) AS cartoes,
             (SELECT COUNT(*) FROM kanban_cartoes k WHERE k.origem_tipo = 'qa' AND k.origem_id = q.id AND k.removed_at IS NULL) AS vivos
        FROM qa_tickets q WHERE q.id = ? AND q.removed_at IS NULL`
@@ -670,11 +671,11 @@ async function comentarTicket(env, request, id, quem) {
   if (q.cartoes > 0 && !q.vivos) return err(409, 'O cartão deste ticket foi removido do kanban. Repõe-o lá para poderes comentar.');
   const uuid = crypto.randomUUID(), agora = now();
   const passos = passosDoComentarioQa({
-    ticket: { id: q.id, body: q.body, severity: q.severity }, autor: quem, texto, uuid, cartaoUuid: crypto.randomUUID(), agora,
+    ticket: { id: q.id, body: q.body, severity: q.severity, status: q.status }, autor: quem, texto, uuid, cartaoUuid: crypto.randomUUID(), agora,
   });
   await env.DB.batch(passos.map((p) => env.DB.prepare(p.sql).bind(...p.params)));
   return json({
-    ok: true, coluna: QA_EM_CURSO,
+    ok: true, coluna: colunaDoComentarioQa(q.status),
     comentario: comentarioParaFora({ id: uuid, autor_id: quem.id, autor_nome: quem.nome, texto, created_at: agora, updated_at: agora }, quem.id),
   }, 201);
 }

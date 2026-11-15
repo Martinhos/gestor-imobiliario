@@ -20,7 +20,7 @@
    resolved_at está posto, e o ticket reabre-se. Em Human Tests quem testa
    decide (Aceitar, Recusar, Adiar) em vez de mover. Qualquer ticket leva
    comentários, que são os do cartão dele no kanban; comentar devolve-o a
-   Auto Tests, para quem programa responder (a nota do resolver é a
+   A fazer, para quem programa responder (a nota do resolver é a
    resposta).
 
    A lista é uma vista do kanban (pedido do Martinho, 2026-11-12, KAN-115):
@@ -1582,17 +1582,18 @@ function qaHtmlTopo(t) {
    enquanto não chegaram, a falha com «Tentar de novo», o vazio, ou a lista
    (quem, quando e o texto com as mudanças de linha; o que está a ir para o
    servidor diz «a enviar…»). Por baixo, o que comentar faz
-   (qaColunaDepoisDoComentario): num ticket fora de Auto Tests, passa-o para
-   lá; num cartão sem ticket, só em Human Tests (como no kanban).
+   (qaColunaDepoisDoComentario): num ticket fora da fila (A fazer e Auto
+   Tests), passa-o a A fazer; num cartão sem ticket, só em Human Tests (como
+   no kanban).
    Recebe: L — a camada do item (null antes de abrir: à espera); t — o item.
    Devolve: o HTML (texto). */
 function qaHtmlComentarios(L, t) {
   var coms = L ? L.qaComs : null, prov = L && L.qaProvisorio ? [L.qaProvisorio] : [];
-  var depois = t ? qaColunaDepoisDoComentario(t) : QA_COL_EM_CURSO;
-  var dica = !t || t.status === QA_COL_EM_CURSO
+  var depois = t ? qaColunaDepoisDoComentario(t) : QA_COL_NOVO;
+  var dica = !t || t.status === QA_COL_EM_CURSO || (qaTemTicket(t) && t.status === QA_COL_NOVO)
     ? '<p class="hint qa-coms-dica">Quem programa responde aqui, ao resolver.</p>'
-    : depois === QA_COL_EM_CURSO
-      ? '<p class="hint qa-coms-dica">Comentar passa o ' + (qaTemTicket(t) ? 'ticket' : 'cartão') + ' a Auto Tests, para quem programa responder.</p>'
+    : depois !== t.status
+      ? '<p class="hint qa-coms-dica">Comentar passa o ' + (qaTemTicket(t) ? 'ticket' : 'cartão') + ' a A fazer, para quem programa responder.</p>'
       : '<p class="hint qa-coms-dica">O comentário fica no cartão do kanban.</p>';
   if (coms === 'falhou') {
     return '<div class="qa-coms-falhou"><span class="small">Não deu para carregar os comentários.</span>' +
@@ -1695,7 +1696,7 @@ function qaBotaoComentar(ocupado) {
    comentário é obrigatório (o erro junto ao campo, componentes.js:falhaCampo)
    e até 4000 caracteres. Otimista, como o mover (qaColunaNoEcra): o
    comentário aparece logo na lista, «a enviar…», o campo esvazia-se e o
-   ticket passa a Auto Tests na lista, no número da pílula e no selo; com a
+   ticket passa a A fazer (fora da fila) na lista, no número da pílula e no selo; com a
    resposta, o comentário fica o do servidor e a lista pede-se outra vez.
    Falhando, tudo volta a como estava — o ticket à coluna de antes, o texto
    ao campo — e o erro diz porquê, junto ao campo. Um pedido de cada vez por
@@ -1744,16 +1745,18 @@ function qaComentar() {
   });
 }
 
-/* Para onde vai um item quando se comenta nele, como o servidor faz: um
-   ticket de QA vai a Auto Tests de qualquer coluna
-   (lib/kanban.js:passosDoComentarioQa); um cartão sem ticket só sai de Human
-   Tests, para Auto Tests — recusar é comentar o que está mal — e noutra
-   coluna fica (lib/kanban.js:colunaDepoisDoComentario).
+/* Para onde vai um item quando se comenta nele, como o servidor faz (pedido
+   do Martinho, 2026-11-15, KAN-140: para A fazer, não para Auto Tests): um
+   ticket de QA vai a A fazer de qualquer coluna, menos se já está na fila
+   (A fazer ou Auto Tests), onde fica (lib/kanban.js:colunaDoComentarioQa);
+   um cartão sem ticket só sai de Human Tests, para A fazer — recusar é
+   comentar o que está mal — e noutra coluna fica
+   (lib/kanban.js:colunaDepoisDoComentario).
    Recebe: t — o item ({status, ticket}).
    Devolve: o id da coluna depois do comentário. */
 function qaColunaDepoisDoComentario(t) {
-  if (qaTemTicket(t)) return QA_COL_EM_CURSO;
-  return t.status === QA_COL_RESOLVIDO ? QA_COL_EM_CURSO : t.status;
+  if (qaTemTicket(t)) return t.status === QA_COL_NOVO || t.status === QA_COL_EM_CURSO ? t.status : QA_COL_NOVO;
+  return t.status === QA_COL_RESOLVIDO ? QA_COL_NOVO : t.status;
 }
 
 /* A cor do selo de uma coluna: Auto Tests no roxo do QA ('loan'), Human

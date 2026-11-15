@@ -1111,6 +1111,7 @@ window.addEventListener('popstate',()=>{
    corre quando ela sai, com a origem do fecho ('' sem ela). */
 function openModal(title,body,foot,menuHtml){
   closePops();
+  _saidaAte=0;                     // a janela nova é a que se vê: os toques são para ela
   const top=modalTop();if(top)demote(top.el);
   const el=modalLayer();document.body.appendChild(el);
   const L={el,title,onSave:null,gatilho:document.activeElement,tocado:false};modalStack.push(L);lockPage();pushHist();
@@ -1153,6 +1154,30 @@ function setModal(title,body,foot,menuHtml){
    (Sob automação, navigator.webdriver salta a pergunta: o percurso de
    testes não tem dedos mal postos.) */
 let _forcaFecho=false;
+/* Enquanto uma janela ainda sai do ecrã (fecharComSaida), a de baixo já é a
+   de cima e o X dela está no mesmo sítio: um segundo toque impaciente no X
+   fechava-a também, e um terceiro abria o «Sair sem guardar?» da que estava
+   por baixo de todas, com a primeira ainda à vista (KAN-140). Até ao fim da
+   saída, os cliques de um dedo ou de um rato engolem-se (o ouvinte no fim do
+   ficheiro); o teclado e o «voltar» continuam, que são gestos deliberados. */
+let _saidaAte=0;
+/* Até quando se engolem os toques depois de uma janela fechar: o tempo da
+   saída desenhada (o --medio e a folga do fecharComSaida); sem movimento,
+   a janela sai logo e nada se engole.
+   Recebe: agora — ms.
+   Devolve: ms (agora, sem movimento). */
+function saidaAte(agora){
+  if(typeof semMovimento==='function'&&semMovimento())return agora;
+  return agora+(typeof msDoToken==='function'?msDoToken('--medio',200):200)+120;
+}
+/* O clique chega a meio da saída de uma janela? Então não é para o que ficou
+   por baixo: engole-se. Sob automação (navigator.webdriver) não — o percurso
+   de testes fecha e toca logo a seguir, de propósito.
+   Recebe: e — o evento do clique; agora — ms.
+   Devolve: true se o clique se engole. */
+function cliqueASair(e,agora){
+  return !!e&&e.isTrusted===true&&agora<_saidaAte&&!navigator.webdriver;
+}
 /* Tira uma janela do ecrã com a saída desenhada (index.html:.modal.sai).
    Troca .open por .sai — as consultas a .modal.open deixam de a ver no
    mesmo instante — e remove o nó quando a animação acabar. Os ids saem já:
@@ -1205,6 +1230,7 @@ function closeModal(origem){
      poupados (anexos.js:esquecerPendentes) */
   if(!modalStack.length)esquecerPendentes();
   fecharComSaida(M.el);
+  _saidaAte=saidaAte(Date.now());   // os toques a meio da saída não chegam ao que fica por baixo
   avisoAcimaDoRodape();            // sem rodapé por baixo, o aviso volta ao sítio
   avisoQuandoAssentar();
   const top=modalTop();
@@ -1972,3 +1998,5 @@ document.addEventListener('click',e=>{
   const engole=Date.now()<_folhaEngole;_folhaEngole=0;
   if(engole){e.stopPropagation();e.preventDefault()}
 },true);
+// o toque que chega enquanto uma janela ainda sai do ecrã não carrega na de baixo (cliqueASair)
+document.addEventListener('click',e=>{if(cliqueASair(e,Date.now())){e.stopPropagation();e.preventDefault()}},true);

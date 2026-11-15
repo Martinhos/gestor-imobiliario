@@ -27,7 +27,7 @@
 // (KAN-N), a descrição inteira, a gravidade, quem e quando, o contexto do ecrã
 // e se tem imagem, e os comentários por responder: os de pessoas no cartão do
 // ticket depois da última resposta do Claude (porResponder) — quem testa
-// comenta na pílula ou no kanban, o ticket volta a Auto Tests, e a nota do
+// comenta na pílula ou no kanban, o ticket volta a A fazer, e a nota do
 // resolver, que entra como comentário, é a resposta. Um ticket com um status
 // que não se conhece não se perde: aparece (com --todos) com o próprio
 // status. Um ticket cujo cartão foi removido no kanban não aparece: saem

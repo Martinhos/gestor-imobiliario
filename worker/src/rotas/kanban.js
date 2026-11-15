@@ -32,7 +32,7 @@
 import { json, err, body, badId, now, CSP_ANEXO } from '../lib/http.js';
 import { auditar } from '../lib/auditoria.js';
 import { PAPEIS, comoLista, catsDe } from '../lib/papeis.js';
-import { PREFIXO, TIPOS, PRIORIDADES, AUTOMATICO, QA_EM_CURSO, chaveDe, numeroDaChave, passosDaSincronizacao, passosDoComentarioQa, passosDoComentario, colunaDepoisDoComentario, ticketSaiComOCartao, ticketVoltaComOCartao } from '../lib/kanban.js';
+import { PREFIXO, TIPOS, PRIORIDADES, AUTOMATICO, chaveDe, numeroDaChave, passosDaSincronizacao, passosDoComentarioQa, colunaDoComentarioQa, passosDoComentario, colunaDepoisDoComentario, ticketSaiComOCartao, ticketVoltaComOCartao } from '../lib/kanban.js';
 import { lerAte, tipoDoFicheiro, TIPOS_DOS_ANEXOS, FRASE_DOS_TIPOS, nomePorOmissao, comExtensao, disposicaoDeDescarga } from '../lib/imagens.js';
 
 // O começo de todos os caminhos daqui.
@@ -972,11 +972,11 @@ function textoDoComentario(v) {
 
 /* POST /api/equipa/kanban/cartoes/:chave/comentarios: um comentário novo da sessão.
    O cartão de um ticket de QA que ainda existe faz como o comentário na
-   pílula (rotas/qa.js:comentarTicket): o ticket e o cartão passam a Auto
-   Tests, de qualquer coluna, no mesmo lote que o comentário
+   pílula (rotas/qa.js:comentarTicket): o ticket e o cartão passam a A
+   fazer (ficam, se já estão na fila), no mesmo lote que o comentário
    (lib/kanban.js:passosDoComentarioQa) — um comentário é o que há para
    responder. Nos outros, o comentário de uma pessoa num cartão em Human
-   Tests devolve-o ao topo de Auto Tests (recusar é comentar o que está mal),
+   Tests devolve-o ao topo de A fazer (recusar é comentar o que está mal),
    menos o de um pedido; noutra coluna fica onde está
    (lib/kanban.js:passosDoComentario).
    Recebe: env; request — o corpo {texto*}; eu — a sessão; chave — a do cartão.
@@ -988,14 +988,14 @@ async function comentar(env, request, eu, chave) {
   if (!(await auditar(env, eu, 'kanban.comentar', chaveDe(k.numero), cortar(texto, 120)))) return semRasto();
   const id = crypto.randomUUID(), agora = now(), autor = quem(eu);
   const q = k.origem_tipo === 'qa' && k.origem_id
-    ? await env.DB.prepare('SELECT id, body, severity FROM qa_tickets WHERE id = ? AND removed_at IS NULL').bind(k.origem_id).first()
+    ? await env.DB.prepare('SELECT id, body, severity, status FROM qa_tickets WHERE id = ? AND removed_at IS NULL').bind(k.origem_id).first()
     : null;
   if (q) {
-    const passos = passosDoComentarioQa({ ticket: { id: q.id, body: q.body, severity: q.severity }, autor, texto, uuid: id, cartaoUuid: crypto.randomUUID(), agora });
+    const passos = passosDoComentarioQa({ ticket: { id: q.id, body: q.body, severity: q.severity, status: q.status }, autor, texto, uuid: id, cartaoUuid: crypto.randomUUID(), agora });
     await env.DB.batch(passos.map((p) => env.DB.prepare(p.sql).bind(...p.params)));
     return json({
       comentario: comentarioParaFora({ id, autor_id: autor.id, autor_nome: autor.nome, texto, created_at: agora, updated_at: agora }, autor.id),
-      coluna_id: QA_EM_CURSO,
+      coluna_id: colunaDoComentarioQa(q.status),
     });
   }
   const passos = passosDoComentario({ cartao: { id: k.id, coluna_id: k.coluna_id, origem_tipo: k.origem_tipo }, autor, texto, uuid: id, agora });

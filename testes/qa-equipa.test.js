@@ -123,26 +123,27 @@ describe('as rotas do QA no back office', () => {
     assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM qa_tickets').first()).n, 0);
   });
 
-  test('comentar no back office: o autor é a pessoa da equipa pelo Discord, o mesmo do kanban, e o ticket vai a Auto Tests (KAN-107)', async () => {
+  test('comentar no back office: o autor é a pessoa da equipa pelo Discord, o mesmo do kanban, e o ticket vai a A fazer (KAN-107, KAN-140)', async () => {
     const env = ambiente();
     const { id } = await criar(env, DEV, { body: 'x' });
     await env.DB.prepare("UPDATE kanban_cartoes SET coluna_id = 'human-tests', updated_at = 5 WHERE origem_tipo = 'qa' AND origem_id = ?").bind(id).run();
+    await env.DB.prepare("UPDATE qa_tickets SET status = 'human-tests' WHERE id = ?").bind(id).run();
     const r = await corpoDe(await chamar(env, SUPORTE, 'POST', '/api/equipa/qa/' + id + '/comentarios', { texto: 'Não ficou bem.' }));
     assert.equal(r.status, 201);
     assert.deepEqual(r.comentario.autor, { id: 's1', nome: 'Sofia' }, 'o id do Discord, como os comentários do kanban');
-    assert.equal((await listar(env, DEV))[0].status, 'auto-tests');
+    assert.equal((await listar(env, DEV))[0].status, 'a-fazer');
     const lidos = await corpoDe(await chamar(env, SUPORTE, 'GET', '/api/equipa/qa/' + id + '/comentarios'));
     assert.deepEqual(lidos.comentarios.map((c) => [c.texto, c.meu]), [['Não ficou bem.', true]]);
     // no kanban é o mesmo comentário, e é dela: muda-o lá
     const k = await env.DB.prepare("SELECT numero FROM kanban_cartoes WHERE origem_tipo = 'qa' AND origem_id = ?").bind(id).first();
     const cartao = await corpoDe(await chamar(env, SUPORTE, 'GET', '/api/equipa/kanban/cartoes/KAN-' + k.numero));
     assert.deepEqual(cartao.comentarios.map((c) => [c.texto, c.meu]), [['Não ficou bem.', true]]);
-    assert.equal(cartao.cartao.coluna_id, 'auto-tests');
+    assert.equal(cartao.cartao.coluna_id, 'a-fazer');
     const mudado = await corpoDe(await chamar(env, SUPORTE, 'PATCH', '/api/equipa/kanban/comentarios/' + r.comentario.id, { texto: 'Não ficou bem no escuro.' }));
     assert.equal(mudado.comentario.texto, 'Não ficou bem no escuro.');
   });
 
-  test('comentar no kanban um cartão de QA passa o ticket a Auto Tests, de qualquer coluna; um cartão sem ticket fica onde está (KAN-107)', async () => {
+  test('comentar no kanban um cartão de QA passa o ticket a A fazer, de fora da fila; um cartão sem ticket fica onde está (KAN-107, KAN-140)', async () => {
     const env = ambiente();
     const ana = await conta(env, 'Ana');
     const { id } = await resp(pedir(env, ana, '/api/qa', 'POST', { body: 'O botão some' }));
@@ -153,13 +154,13 @@ describe('as rotas do QA no back office', () => {
       assert.equal((await resp(pedir(env, ana, '/api/qa'))).tickets[0].status, col, 'o ticket foi com o cartão');
       const r = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/comentarios', { texto: 'Falta o caso ' + col }));
       assert.equal(r.status, 200);
-      assert.equal(r.coluna_id, 'auto-tests');
+      assert.equal(r.coluna_id, 'a-fazer');
       assert.deepEqual(r.comentario.autor, { id: 'd1', nome: 'Dina' });
       const t = (await resp(pedir(env, ana, '/api/qa'))).tickets[0];
-      assert.equal(t.status, 'auto-tests', 'de ' + col);
+      assert.equal(t.status, 'a-fazer', 'de ' + col);
       assert.equal(t.resolved_at, null);
       const h = await env.DB.prepare("SELECT antes, depois, autor_id FROM kanban_historico WHERE cartao_id = ? AND campo = 'coluna' ORDER BY id DESC LIMIT 1").bind(k.id).first();
-      assert.deepEqual({ ...h }, { antes: col, depois: 'auto-tests', autor_id: 'd1' });
+      assert.deepEqual({ ...h }, { antes: col, depois: 'a-fazer', autor_id: 'd1' });
     }
     // a app lê os mesmos comentários
     const lidos = (await resp(pedir(env, ana, '/api/qa/' + id + '/comentarios'))).comentarios;

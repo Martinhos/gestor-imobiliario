@@ -118,6 +118,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-14 · As rendas antigas de um contrato terminado, e o valor de cada mês (KAN-131, KAN-132, KAN-133)
 - 2026-11-14 · As secções das tarefas passam a ser pastas (KAN-136, KAN-135)
 - 2026-11-14 · Sem zoom na app, e as rendas antigas de um contrato em vigor (pedidos)
+- 2026-11-15 · Comentar devolve a A fazer, e um toque a meio da saída de uma janela não carrega na de baixo (KAN-140)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4054,3 +4055,23 @@ há. Os terminados já tinham o botão «Registar as N rendas em falta» na fich
 haver o mesmo nos em vigor, a abrir a janela do planeado (com o «Começar a partir de hoje» a quem o
 pode). Num em vigor só com duas ou mais: uma só é a renda do mês, que o «Registar renda» do mesmo
 cartão já regista.
+
+## 2026-11-15 · Comentar devolve a A fazer, e um toque a meio da saída de uma janela não carrega na de baixo (KAN-140)
+O Martinho, num ticket de QA: «Quando comentei um ticket e voltou para auto tests (em vez de auto tests
+deve ir para A Fazer) quis fechar o modal e pergunta-me se quero fechar e diz que vou perder coisas
+guardadas.» São duas coisas.
+
+A primeira muda as regras de 2026-11-11 (KAN-107) e de 2026-11-12 (KAN-116). Auto Tests é a marca de
+quem pegou no cartão (o comecar do qa.mjs e do kanban.mjs); um comentário não é pegar, é pedir. Por
+isso comentar um ticket de QA leva-o a A fazer (lib/kanban.js:colunaDoComentarioQa), e o comentário de
+uma pessoa num cartão em Human Tests também (lib/kanban.js:colunaDepoisDoComentario) — perguntado, o
+Martinho escolheu as duas. Um ticket que já está na fila (A fazer ou Auto Tests) fica onde está: quem
+já pegou nele não o perde, e o comentário aparece como por responder.
+
+A segunda: com a janela das Tarefas por guardar por baixo da pílula, o X do ticket abria o «Sair sem
+guardar?» com o ticket ainda à vista. Reproduzido com três toques seguidos no X (.unlazy/qa-modal-por-
+baixo/reproduzir.mjs): enquanto o ticket sai do ecrã (200 ms), a lista já é a de cima e o X dela está
+no mesmo sítio, por isso o segundo toque fechava a lista e o terceiro chegava às Tarefas. Até ao fim
+da saída, os cliques de um dedo ou de um rato engolem-se (componentes.js:cliqueASair); o teclado, o
+«voltar» e a automação passam. Vale para todas as janelas, não só as do QA: a cascata era a mesma em
+qualquer pilha.

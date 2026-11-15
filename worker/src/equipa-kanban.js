@@ -72,8 +72,8 @@ var kbRascQuadro = null;
 var KB_TIPOS = ['epico', 'historia', 'tarefa', 'subtarefa', 'erro'];
 var KB_NOMES_TIPOS = { epico: 'Épico', historia: 'História', tarefa: 'Tarefa', subtarefa: 'Subtarefa', erro: 'Erro' };
 var KB_PRIORIDADES = { 1: 'Mais alta', 2: 'Alta', 3: 'Média', 4: 'Baixa', 5: 'Mais baixa' };
-// Human Tests decide-se: Aceitar leva a Concluído; comentar (recusar) devolve a Auto Tests. As três são colunas fixas.
-var KB_A_DECIDIR = 'human-tests', KB_ACEITE = 'concluido', KB_RECUSADO = 'auto-tests';
+// Human Tests decide-se: Aceitar leva a Concluído; comentar (recusar) devolve a A fazer (KAN-140). As três são colunas fixas.
+var KB_A_DECIDIR = 'human-tests', KB_ACEITE = 'concluido', KB_RECUSADO = 'a-fazer';
 var KB_LIGACOES ={ bloqueia: 'Bloqueia', bloqueado: 'É bloqueado por', relaciona: 'Relaciona-se com' };
 var KB_FILTROS = { tipo: 'tipo', etiqueta: 'etiqueta', responsavel: 'responsável', prioridade: 'prioridade', pai: 'épico' };
 // os estados de um pedido e as marcas de um ticket de QA, como a origem os diz (lib/kanban.js); o estado de
@@ -653,7 +653,7 @@ function kbPainelHtml(d, entra) {
 }
 /* A barra de decidir de um cartão em Human Tests (KAN-117): o Aceitar, que o
    leva a Concluído, e a frase de como se recusa — comentando o que está mal,
-   o que o devolve a Auto Tests (o servidor move-o: rotas/kanban.js:comentar) —
+   o que o devolve a A fazer (o servidor move-o: rotas/kanban.js:comentar) —
    com o Comentar, que leva à caixa. Vive fora do corpo, filha do painel que
    rola, fixa no fundo (sticky): está sempre à vista e, no fim do scroll, fica
    por baixo do último conteúdo em vez de o tapar. Um cartão que vem de um

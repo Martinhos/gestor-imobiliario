@@ -274,12 +274,12 @@ describe('o SQL, corrido contra o esquema verdadeiro', () => {
 
   test('os comentários por responder no listar: os de pessoas depois da nota do resolver, no texto e no --json (KAN-107)', () => {
     const db = base();
-    // quem testa comenta (a regra das rotas, em texto): o ticket e o cartão vão a Auto Tests
+    // quem testa comenta (a regra das rotas, em texto): o ticket e o cartão vão a A fazer (KAN-140)
     const comenta = (uuid, texto, agora, autor) => db.exec(passosDoComentarioQa({
       ticket: { id: 't-novo', body: 'novo', severity: 'bloqueia' }, autor: autor || { id: '4242', nome: 'Martinho' }, texto, uuid, cartaoUuid: 'c-' + uuid, agora,
     }).map(sqlEmTexto).join(';\n'));
     comenta('m1', 'Antes da resolução', 1000);
-    assert.equal(um(db, 't-novo').status, 'auto-tests');
+    assert.equal(um(db, 't-novo').status, 'a-fazer');
     // o resolver: a nota é o comentário do Claude, e o ticket vai a Human Tests
     db.exec(sqlNaColuna('t-novo', 'human-tests', 2000, 'Corrigido.'));
     db.exec(sqlDoCartao({ id: 't-novo', estado: 'human-tests', agora: 2000, comentario: { uuid: 'r1', texto: 'Corrigido.' } }));
@@ -288,7 +288,7 @@ describe('o SQL, corrido contra o esquema verdadeiro', () => {
     // nem a sincronização nem um removido contam
     db.exec("INSERT INTO kanban_comentarios (id, cartao_id, autor_id, autor_nome, texto, created_at, updated_at) SELECT 'a1', id, 'automatico', 'Sincronização', 'auto', 3200, 3200 FROM kanban_cartoes WHERE origem_id = 't-novo'");
     db.exec("INSERT INTO kanban_comentarios (id, cartao_id, autor_id, autor_nome, texto, created_at, updated_at, removed_at) SELECT 'x1', id, '4242', 'Martinho', 'apagado', 3300, 3300, 3400 FROM kanban_cartoes WHERE origem_id = 't-novo'");
-    assert.equal(um(db, 't-novo').status, 'auto-tests', 'comentar depois da resolução devolve-o a Auto Tests');
+    assert.equal(um(db, 't-novo').status, 'a-fazer', 'comentar depois da resolução devolve-o a A fazer');
     const linhas = db.prepare(sqlComentarios(false)).all();
     assert.deepEqual(linhas.map((l) => l.id), ['m1', 'r1', 'm2', 'm3', 'a1']);
     const tickets = juntarComentarios(db.prepare(sqlListar(false)).all().map(ticketDaLinha), linhas);
@@ -299,7 +299,7 @@ describe('o SQL, corrido contra o esquema verdadeiro', () => {
     ]);
     assert.ok(tickets.filter((x) => x.id !== 't-novo').every((x) => Array.isArray(x.comentariosPorResponder) && !x.comentariosPorResponder.length), 'os outros, vazia');
     const texto = textoDaLista(tickets, {});
-    assert.match(texto, /^== t-novo · BLOQUEIA · Auto Tests · KAN-\d+ · 2 comentários por responder$/m);
+    assert.match(texto, /^== t-novo · BLOQUEIA · A fazer · KAN-\d+ · 2 comentários por responder$/m);
     assert.match(texto, /^Comentários por responder \(2\) — a nota do resolver é a resposta:\n {2}- Martinho, 01\/01\/1970, 01:00:\n {4}Ainda falha\n {4}no escuro\n {2}- Dina, 01\/01\/1970, 01:00:\n {4}E no claro$/m);
     assert.doesNotMatch(texto, /Antes da resolução|auto$|apagado/m, 'o respondido, o automático e o removido não aparecem');
     // o --json leva-os na forma de juntarComentarios (o JSON.stringify do cmdListar)

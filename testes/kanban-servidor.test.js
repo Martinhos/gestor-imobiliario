@@ -14,7 +14,7 @@ import { chamar, corpoDe, MASTER, SUPORTE, DEV, ADMIN, COMERCIAL, SEM_CARGO } fr
 import { rotasEquipaApi } from '../worker/src/equipa-api.js';
 import { sincronizarKanban } from '../worker/src/rotas/kanban.js';
 import { CSP_ANEXO } from '../worker/src/lib/http.js';
-import { cartaoDoPedido, colunaDepoisDoComentario } from '../worker/src/lib/kanban.js';
+import { cartaoDoPedido, colunaDepoisDoComentario, colunaDoComentarioQa } from '../worker/src/lib/kanban.js';
 
 const K = '/api/equipa/kanban';
 // uma imagem PNG de 1×1, a mesma dos testes do QA
@@ -560,39 +560,39 @@ describe('os comentários', () => {
 });
 
 /* KAN-116: em Human Tests o Martinho aceita ou recusa, e recusar é comentar
-   o que está mal — o comentário de uma pessoa devolve o cartão a Auto Tests,
-   a fila do Claude. Os cartões de um pedido seguem o pedido, e o Claude
+   o que está mal — o comentário de uma pessoa devolve o cartão a A fazer
+   (KAN-140; antes ia a Auto Tests, que só o Claude marca). Os cartões de um pedido seguem o pedido, e o Claude
    comenta sem mexer na coluna. */
-describe('um comentário em Human Tests devolve o cartão a Auto Tests', () => {
+describe('um comentário em Human Tests devolve o cartão a A fazer', () => {
   // o Claude como o scripts/kanban.mjs o assina (autor id «claude»), se algum dia passar pela rota
   const CLAUDE = { discordId: 'claude', nome: 'Claude', papel: 'dev', papeis: ['dev'] };
   const comentar = (env, eu, chave, texto) => ir(env, eu, 'POST', K + '/cartoes/' + chave + '/comentarios', { texto });
   const linhasColuna = (env, id) => todas(env, "SELECT antes, depois, autor_id, autor_nome FROM kanban_historico WHERE cartao_id = ? AND campo = 'coluna' ORDER BY id", id);
 
-  test('de uma pessoa leva o cartão ao topo de Auto Tests, com a linha «coluna» assinada por ela', async () => {
+  test('de uma pessoa leva o cartão ao topo de A fazer, com a linha «coluna» assinada por ela', async () => {
     const env = ambiente();
-    const ja = await novoCartao(env, MASTER, { coluna_id: 'auto-tests' });
+    const ja = await novoCartao(env, MASTER, { coluna_id: 'a-fazer' });
     const c = await novoCartao(env, MASTER, { coluna_id: 'human-tests', titulo: 'O aviso no Samsung' });
     const r = await comentar(env, DEV, c.chave, 'No Samsung o aviso ainda não aparece.');
     assert.equal(r.status, 200);
-    assert.equal(r.coluna_id, 'auto-tests', 'a resposta diz a coluna nova');
+    assert.equal(r.coluna_id, 'a-fazer', 'a resposta diz a coluna nova');
     assert.equal(r.comentario.texto, 'No Samsung o aviso ainda não aparece.');
-    assert.deepEqual(await ordemDe(env, 'auto-tests'), [c.chave, ja.chave], 'no topo de Auto Tests');
+    assert.deepEqual(await ordemDe(env, 'a-fazer'), [c.chave, ja.chave], 'no topo de A fazer');
     assert.deepEqual(await ordemDe(env, 'human-tests'), []);
     const k = uma(env, 'SELECT coluna_id, concluido_at, updated_at FROM kanban_cartoes WHERE id = ?', c.id);
-    assert.deepEqual([k.coluna_id, k.concluido_at, k.updated_at], ['auto-tests', null, r.comentario.created_at]);
-    assert.deepEqual(linhasColuna(env, c.id), [{ antes: 'human-tests', depois: 'auto-tests', autor_id: 'd1', autor_nome: 'Dina' }]);
+    assert.deepEqual([k.coluna_id, k.concluido_at, k.updated_at], ['a-fazer', null, r.comentario.created_at]);
+    assert.deepEqual(linhasColuna(env, c.id), [{ antes: 'human-tests', depois: 'a-fazer', autor_id: 'd1', autor_nome: 'Dina' }]);
     assert.deepEqual(todas(env, 'SELECT texto, autor_id FROM kanban_comentarios WHERE cartao_id = ?', c.id),
       [{ texto: 'No Samsung o aviso ainda não aparece.', autor_id: 'd1' }]);
-    // já em Auto Tests: o comentário seguinte não mexe em nada
+    // já em A fazer: o comentário seguinte não mexe em nada
     const r2 = await comentar(env, SUPORTE, c.chave, 'E no Chrome também.');
-    assert.equal(r2.coluna_id, 'auto-tests');
+    assert.equal(r2.coluna_id, 'a-fazer');
     assert.equal(linhasColuna(env, c.id).length, 1);
     assert.deepEqual((await rastoKanban(env)).filter((x) => x.startsWith('kanban.comentar')), ['kanban.comentar ' + c.chave, 'kanban.comentar ' + c.chave]);
     // numa coluna vazia, o lugar é o 0, como o mover para o topo
     const v = await novoCartao(env, MASTER, { coluna_id: 'human-tests' });
-    await ir(env, DEV, 'POST', K + '/cartoes/' + ja.chave + '/mover', { coluna_id: 'a-fazer' });
-    await ir(env, DEV, 'POST', K + '/cartoes/' + c.chave + '/mover', { coluna_id: 'a-fazer' });
+    await ir(env, DEV, 'POST', K + '/cartoes/' + ja.chave + '/mover', { coluna_id: 'auto-tests' });
+    await ir(env, DEV, 'POST', K + '/cartoes/' + c.chave + '/mover', { coluna_id: 'auto-tests' });
     await comentar(env, DEV, v.chave, 'Falta o texto.');
     assert.equal(uma(env, 'SELECT posicao FROM kanban_cartoes WHERE id = ?', v.id).posicao, 0);
   });
@@ -627,30 +627,38 @@ describe('um comentário em Human Tests devolve o cartão a Auto Tests', () => {
     assert.deepEqual(uma(env, 'SELECT * FROM tickets WHERE id = ?', pid), pedidoAntes);
   });
 
-  test('num cartão de QA continua como antes: ticket e cartão a Auto Tests, de qualquer coluna', async () => {
+  test('num cartão de QA: ticket e cartão a A fazer de fora da fila; na fila ficam (KAN-140)', async () => {
     const env = ambiente();
-    for (const col of ['a-fazer', 'human-tests', 'concluido']) {
+    for (const [col, para] of [['a-fazer', 'a-fazer'], ['auto-tests', 'auto-tests'], ['human-tests', 'a-fazer'], ['concluido', 'a-fazer']]) {
       const { id } = await ir(env, DEV, 'POST', '/api/equipa/qa', { body: 'O botão não responde em ' + col, severity: 'incomoda' });
       const k = cartaoDaOrigem(env, 'qa', id);
       if (col !== 'a-fazer') await ir(env, DEV, 'POST', K + '/cartoes/KAN-' + k.numero + '/mover', { coluna_id: col });
+      const linhasAntes = linhasColuna(env, k.id).length;
       const r = await comentar(env, SUPORTE, 'KAN-' + k.numero, 'Ainda falha.');
-      assert.equal(r.coluna_id, 'auto-tests', col);
-      assert.equal(cartaoDaOrigem(env, 'qa', id).coluna_id, 'auto-tests', col + ': o cartão');
-      assert.equal(uma(env, 'SELECT status FROM qa_tickets WHERE id = ?', id).status, 'auto-tests', col + ': o ticket');
-      const ult = linhasColuna(env, k.id).pop();
-      assert.deepEqual([ult.antes, ult.depois, ult.autor_id], [col, 'auto-tests', 's1'], col + ': a linha assinada por quem comentou');
+      assert.equal(r.coluna_id, para, col);
+      assert.equal(cartaoDaOrigem(env, 'qa', id).coluna_id, para, col + ': o cartão');
+      assert.equal(uma(env, 'SELECT status FROM qa_tickets WHERE id = ?', id).status, para, col + ': o ticket');
+      if (para !== col) {
+        const ult = linhasColuna(env, k.id).pop();
+        assert.deepEqual([ult.antes, ult.depois, ult.autor_id], [col, para, 's1'], col + ': a linha assinada por quem comentou');
+      } else {
+        assert.equal(linhasColuna(env, k.id).length, linhasAntes, col + ': na fila, sem linha «coluna»');
+      }
       assert.equal(todas(env, 'SELECT id FROM kanban_comentarios WHERE cartao_id = ?', k.id).length, 1, col + ': o comentário uma vez');
     }
   });
 
   test('a regra pura: só pessoas, só Human Tests, nunca pedidos', () => {
     const k = (coluna_id, origem_tipo) => ({ coluna_id, origem_tipo: origem_tipo || null });
-    assert.equal(colunaDepoisDoComentario(k('human-tests'), 'd1'), 'auto-tests');
-    assert.equal(colunaDepoisDoComentario(k('human-tests', 'qa'), 'd1'), 'auto-tests');
+    assert.equal(colunaDepoisDoComentario(k('human-tests'), 'd1'), 'a-fazer');
+    assert.equal(colunaDepoisDoComentario(k('human-tests', 'qa'), 'd1'), 'a-fazer');
     assert.equal(colunaDepoisDoComentario(k('human-tests', 'pedido'), 'd1'), 'human-tests');
     assert.equal(colunaDepoisDoComentario(k('human-tests'), 'claude'), 'human-tests');
     assert.equal(colunaDepoisDoComentario(k('human-tests'), 'automatico'), 'human-tests');
     for (const col of ['a-fazer', 'auto-tests', 'concluido', 'para-depois', 'uma-nova']) assert.equal(colunaDepoisDoComentario(k(col), 'd1'), col);
+    // um ticket de QA: A fazer de fora da fila; na fila (A fazer, Auto Tests) fica (KAN-140)
+    assert.deepEqual(['a-fazer', 'auto-tests', 'human-tests', 'concluido', 'para-depois', 'uma-nova'].map(colunaDoComentarioQa),
+      ['a-fazer', 'auto-tests', 'a-fazer', 'a-fazer', 'a-fazer', 'a-fazer']);
   });
 });
 

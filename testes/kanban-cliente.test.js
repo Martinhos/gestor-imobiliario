@@ -330,7 +330,7 @@ describe('o Aceitar em Human Tests', () => {
   const detalhe = (cartao, origem) => ({ cartao: Object.assign({ chave: 'KAN-80', tipo: 'tarefa', titulo: 'O aviso', coluna_id: 'human-tests', prioridade: 3, etiquetas: [] }, cartao),
     subtarefas: [], comentarios: [], historico: [{ at: 1, autor: { nome: 'Claude' }, campo: 'coluna', antes: 'auto-tests', depois: 'human-tests' }],
     ligacoes: [], anexos: [], origem: origem || null });
-  const FRASE = /Para recusar, comenta o que está mal: o cartão volta a Auto Tests\./;
+  const FRASE = /Para recusar, comenta o que está mal: o cartão volta a A fazer\./;
 
   test('a barra do Aceitar e a frase só num cartão em Human Tests que não vem de um pedido', () => {
     const ctx = novo();

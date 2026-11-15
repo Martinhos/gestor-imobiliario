@@ -708,29 +708,30 @@ describe('os comentários de um ticket', () => {
     return r ? { ...r } : null;
   };
 
-  test('comentar grava no cartão com o autor, com as mudanças de linha, e passa ticket e cartão a Auto Tests de qualquer coluna (KAN-107)', async () => {
+  test('comentar grava no cartão com o autor, com as mudanças de linha, e passa ticket e cartão a A fazer de fora da fila; na fila ficam (KAN-107, KAN-140)', async () => {
     const env = ambiente();
     const a = await conta(env, 'Ana');
     const b = await conta(env, 'Bruno');
     const id = (await criar(env, a, { body: 'O filtro some' })).id;
-    for (const col of ['human-tests', 'concluido', 'para-depois', 'a-fazer']) {
+    for (const [col, para] of [['human-tests', 'a-fazer'], ['concluido', 'a-fazer'], ['para-depois', 'a-fazer'], ['auto-tests', 'auto-tests']]) {
       assert.equal((await resp(pedir(env, a, '/api/qa/' + id + '/mover', 'POST', { coluna: col }))).status, 200);
       await mexer(env, id, { resolution: 'tentei x' });
       const r = await comentar(env, b, id, '  Continua a falhar\r\nno escuro.  ');
       assert.equal(r.status, 201, col);
-      assert.equal(r.coluna, 'auto-tests');
+      assert.equal(r.coluna, para, col);
       const q = await daBase(env, id);
-      assert.equal(q.status, 'auto-tests', 'de ' + col + ' para Auto Tests');
+      assert.equal(q.status, para, 'de ' + col + ' para ' + para);
       assert.equal(q.resolved_at, null);
       assert.equal(q.resolution, 'tentei x', 'a resolução fica (a anterior)');
       const k = await cartaoDe(env, id);
-      assert.equal(k.coluna_id, 'auto-tests');
-      assert.equal(k.origem_estado, 'auto-tests');
+      assert.equal(k.coluna_id, para);
+      assert.equal(k.origem_estado, para);
       const h = await env.DB.prepare("SELECT antes, depois, autor_id, autor_nome FROM kanban_historico WHERE cartao_id = ? AND campo = 'coluna' ORDER BY id DESC LIMIT 1").bind(k.id).first();
-      assert.deepEqual({ ...h }, { antes: col, depois: 'auto-tests', autor_id: b.id, autor_nome: 'Bruno' }, 'a linha do histórico é de quem comentou');
+      if (para !== col) assert.deepEqual({ ...h }, { antes: col, depois: para, autor_id: b.id, autor_nome: 'Bruno' }, 'a linha do histórico é de quem comentou');
+      else assert.deepEqual([h.antes, h.depois], ['a-fazer', col], 'na fila, o comentário não deixa linha: a última é a do mover');
     }
     const r = await comentar(env, b, id, 'De novo');
-    assert.equal(r.status, 201, 'já em Auto Tests, comenta na mesma');
+    assert.equal(r.status, 201, 'na fila, comenta na mesma');
     assert.deepEqual([r.status, r.comentario.texto, r.comentario.autor, r.comentario.meu], [201, 'De novo', { id: b.id, nome: 'Bruno' }, true]);
     const k = await cartaoDe(env, id);
     const linhas = (await env.DB.prepare('SELECT autor_id, autor_nome, texto FROM kanban_comentarios WHERE cartao_id = ? ORDER BY created_at, rowid').bind(k.id).all()).results;
@@ -749,7 +750,7 @@ describe('os comentários de um ticket', () => {
     assert.equal('comentarios' in (await listar(env, a))[0], false);
   });
 
-  test('um ticket sem cartão (de antes do kanban) ganha-o em Auto Tests, com o comentário; sem nenhum, a leitura é vazia (KAN-107)', async () => {
+  test('um ticket sem cartão (de antes do kanban) ganha-o em A fazer, com o comentário; sem nenhum, a leitura é vazia (KAN-107)', async () => {
     const env = ambiente();
     const a = await conta(env, 'Ana');
     const id = (await criar(env, a, { body: 'antigo', severity: 'bloqueia' })).id;
@@ -758,8 +759,8 @@ describe('os comentários de um ticket', () => {
     assert.deepEqual((await comentarios(env, a, id)).comentarios, []);
     assert.equal((await comentar(env, a, id, 'Voltou a acontecer')).status, 201);
     const k = await cartaoDe(env, id);
-    assert.equal(k.coluna_id, 'auto-tests');
-    assert.equal((await daBase(env, id)).status, 'auto-tests');
+    assert.equal(k.coluna_id, 'a-fazer');
+    assert.equal((await daBase(env, id)).status, 'a-fazer');
     assert.deepEqual((await comentarios(env, a, id)).comentarios.map((c) => c.texto), ['Voltou a acontecer']);
     assert.equal((await listar(env, a))[0].cartao, 'KAN-' + k.numero);
   });
@@ -788,7 +789,7 @@ describe('os comentários de um ticket', () => {
     assert.equal(longo.status, 400);
     assert.match(longo.error, /passa dos 4000 caracteres/);
     assert.equal((await comentar(env, a, id, '  ' + 'y'.repeat(4000) + '  ')).status, 201, 'os 4000 depois de aparar cabem');
-    assert.equal((await daBase(env, id)).status, 'auto-tests');
+    assert.equal((await daBase(env, id)).status, 'a-fazer', 'em A fazer, fica');
     assert.equal((await comentar(env, a, 'nao-existe', 'x')).status, 404);
     assert.equal((await comentarios(env, a, 'nao-existe')).status, 404);
     assert.equal((await comentar(env, a, 'a%27b', 'x')).status, 404, 'um id sem forma de id');
@@ -893,10 +894,10 @@ describe('a pílula é a vista dos Erros do kanban (KAN-115)', () => {
     const hist = await env.DB.prepare("SELECT antes, depois, autor_id FROM kanban_historico WHERE cartao_id = ? AND campo = 'coluna'").bind(k).all();
     assert.deepEqual(hist.results.map((h) => ({ ...h })), [{ antes: 'a-fazer', depois: 'human-tests', autor_id: a.id }]);
     assert.equal((await listar(env, a))[0].status, 'human-tests');
-    // comentar em Human Tests: volta a Auto Tests, como no kanban
+    // comentar em Human Tests: volta a A fazer, como no kanban (KAN-140)
     r = await resp(pedir(env, a, '/api/qa/KAN-520/comentarios', 'POST', { texto: 'Ainda falha' }));
-    assert.equal(r.coluna, 'auto-tests');
-    assert.equal((await lido(env, 520)).coluna_id, 'auto-tests');
+    assert.equal(r.coluna, 'a-fazer');
+    assert.equal((await lido(env, 520)).coluna_id, 'a-fazer');
     // Aceitar: Concluído, com o concluido_at; reabrir: A fazer, sem ele
     assert.equal((await resp(pedir(env, a, '/api/qa/KAN-520/mover', 'POST', { coluna: 'concluido' }))).status, 200);
     let l = await lido(env, 520);
@@ -931,7 +932,7 @@ describe('a pílula é a vista dos Erros do kanban (KAN-115)', () => {
     assert.equal((await resp(pedir(env, a, '/api/qa/' + chave + '/mover', 'POST', { coluna: 'human-tests' }))).status, 200);
     assert.equal((await daBase(env, id)).status, 'human-tests', 'pela chave, o ticket moveu-se (e o cartão com ele)');
     const com = await resp(pedir(env, a, '/api/qa/' + chave + '/comentarios', 'POST', { texto: 'x' }));
-    assert.equal(com.coluna, 'auto-tests', 'e comenta como um ticket');
+    assert.equal(com.coluna, 'a-fazer', 'e comenta como um ticket');
   });
 
   test('remover na pílula leva o cartão; o Anular repõe os dois; passadas 24 h não volta nenhum', async () => {
