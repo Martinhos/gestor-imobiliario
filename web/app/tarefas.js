@@ -95,7 +95,9 @@ let _tfRec=null;
    cancelado — se o Esc o desfez, alvo — onde vai cair ({sid, depois, cab,
    sec, antes}; de uma secção, {cab, pai, depois, sec | cont, antes}),
    chave — o alvo já pintado, vel — a velocidade da auto-rolagem, raf,
-   abrir — o temporizador que abre a secção recolhida (TF_ABRIR_MS)} */
+   abrir — o temporizador que abre a secção recolhida (TF_ABRIR_MS),
+   abertas — as secções que este arrasto abriu, para as fechar outra vez se
+   a largada acabar fora delas (tfArrastoFechar)} */
 let tfArr=null;
 /* quando acabou o último arrasto a sério (Date.now()): o clique que o browser
    dispara a seguir ao pointerup engole-se, senão largar abria o «Mover tarefa» */
@@ -1306,7 +1308,7 @@ function tfArrastoLigar(e,h,qual){
   const sec=qual==='.tf-seccao';
   tfArr={tipo:sec?'seccao':'tarefa',tid:sec?'':row.getAttribute('data-id'),sid:sec?row.getAttribute('data-sec'):'',
     h:h,row:row,lista:lista,rol:tfRolante(lista),y0:e.clientY,y:e.clientY,
-    topo0:0,desloc:0,ativo:false,cancelado:false,alvo:null,chave:'',vel:0,raf:0,abrir:0};
+    topo0:0,desloc:0,ativo:false,cancelado:false,alvo:null,chave:'',vel:0,raf:0,abrir:0,abertas:[]};
   try{h.setPointerCapture(e.pointerId)}catch(x){}
   document.addEventListener('pointermove',tfArrastoMove);
   document.addEventListener('pointerup',tfArrastoFim);
@@ -1456,9 +1458,10 @@ function tfArrastoMarcar(alvo){
   if(alvo.antes)onde.insertBefore(linha,alvo.antes);else onde.appendChild(linha);
 }
 /* Passados os 600 ms com o dedo parado no nome de uma secção recolhida: abre-a
-   como o toque no cabeçalho (fica aberta, e o aparelho lembra-se — tfDobrar)
-   e volta a medir o alvo, agora com as tarefas e as secções dela à vista. Se
-   o arrasto acabou ou o alvo mudou entretanto, não faz nada.
+   como o toque no cabeçalho (tfDobrar) e volta a medir o alvo, agora com as
+   tarefas e as secções dela à vista. O arrasto lembra-se de que a abriu: se
+   a largada acabar fora dela, volta a fechar (tfArrastoFechar). Se o arrasto
+   acabou ou o alvo mudou entretanto, não faz nada.
    Recebe: a — o estado do arrasto que pediu; chave — o alvo de então; sec —
    o elemento da secção.
    Devolve: nada. */
@@ -1466,9 +1469,30 @@ function tfArrastoAbrir(a,chave,sec){
   if(a!==tfArr)return;
   a.abrir=0;
   if(!a.ativo||a.cancelado||a.chave!==chave||!sec.classList.contains('tf-recolhida'))return;
-  tfDobrar(sec.getAttribute('data-sec')||'');
+  const sid=sec.getAttribute('data-sec')||'';
+  tfDobrar(sid);
+  if(!a.abertas)a.abertas=[];
+  if(a.abertas.indexOf(sid)<0)a.abertas.push(sid);
   a.chave='';   // o mesmo alvo, agora aberto: volta a pintar-se
   tfArrastoPintar();
+}
+/* No fim do gesto, volta a fechar as secções que o arrasto abriu e onde o
+   que se levava não ficou: fica aberta só a secção onde caiu e as mães dela
+   (lá dentro vê-se o que se largou). Sem alvo — o Esc, o pointercancel, uma
+   largada fora da lista — fecham todas as que abriu. As que já estavam
+   abertas antes do arrasto não se tocam.
+   Recebe: a — o estado do arrasto; alvo — onde caiu (de tfArrastoAlvo), ou
+   null.
+   Devolve: nada — grava no aparelho e muda o ecrã (tfDobrar). */
+function tfArrastoFechar(a,alvo){
+  const abertas=(a&&a.abertas)||[];if(!abertas.length)return;
+  a.abertas=[];
+  const t=tfAlvo?tfTarefas():null;
+  const onde=!alvo?null:a.tipo==='seccao'?(alvo.pai||''):(alvo.sid||'');
+  abertas.forEach(sid=>{
+    const contem=onde!=null&&(sid===onde||(!!t&&!!sid&&tfRamo(t,sid).indexOf(onde)>-1));
+    if(!contem&&!tfRecolhida(sid))tfDobrar(sid);
+  });
 }
 /* Perto da borda de cima ou de baixo da lista, ela rola sozinha, mais
    depressa quanto mais perto.
@@ -1531,6 +1555,7 @@ function tfArrastoFim(){
   tfArrastoDesfazer(a);tfArrastoSoltar();
   if(!arrastou)return;
   tfArrFim=Date.now();
+  tfArrastoFechar(a,ligada?alvo:null);   // antes do tfMudar, que repinta a lista a partir do aparelho
   if(!alvo||!ligada||!tfAlvo)return;
   const t=tfTarefas();
   if(a.tipo==='seccao'){
@@ -1544,12 +1569,14 @@ function tfArrastoFim(){
   if(!tfMudar(c=>tfAplicar(c,tfMoverEm(c,a.tid,alvo.sid,alvo.depois))))return;
   if(recolhida){const s=t.seccoes.find(x=>x.id===alvo.sid);toast('Tarefa movida para «'+(s?tfCaminhoTexto(t,s.id):'Sem secção')+'».')}
 }
-/* O pointercancel (o browser tomou o gesto) desfaz o arrasto, sem mover nada.
+/* O pointercancel (o browser tomou o gesto) desfaz o arrasto, sem mover nada,
+   e fecha as secções que ele abriu.
    Devolve: nada. */
 function tfArrastoCancelar(){
   const a=tfArr;if(!a)return;
   if(a.ativo)tfArrFim=Date.now();
   tfArrastoDesfazer(a);tfArrastoSoltar();
+  tfArrastoFechar(a,null);
 }
 /* O Esc a meio de um arrasto desfaz-o e não fecha a janela (é apanhado antes
    do ouvinte do arranque.js). O resto do gesto fica à escuta até o dedo sair,

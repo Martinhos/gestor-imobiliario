@@ -27,6 +27,20 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 74,
+    data: '2026-11-15',
+    titulo: 'A secção que abriu ao arrastar volta a fechar',
+    seccoes: [
+      {
+        titulo: 'Tarefas',
+        afeta: ['imoveis', 'contratos'],
+        itens: [
+          'A arrastar uma tarefa, a secção recolhida que abre quando paras em cima dela volta a fechar se acabares por largar a tarefa noutro sítio.',
+        ],
+      },
+    ],
+  },
+  {
     v: 73,
     data: '2026-11-14',
     titulo: 'Sem zoom no telemóvel e as rendas antigas na ficha',

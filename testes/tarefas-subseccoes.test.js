@@ -423,4 +423,77 @@ describe('a secção recolhida abre ao parar em cima dela, a arrastar (KAN-135)'
     app.tfArrastoMarcar({ sid: 'S1', depois: '', cab: true, sec: s1, antes: null });
     assert.equal(pedidos.length, 0);
   });
+
+  /* A K4 agarrada, com a secção sec aberta pelo arrasto (600 ms no nome dela),
+     pronta para largar.
+     Recebe: el — os elementos de ecra('K4'); sec — o elemento a abrir.
+     Devolve: o estado do arrasto (app.tfArr). */
+  function abertaPeloArrasto(sec) {
+    const a = app.tfArr;
+    a.row.style = {};
+    a.row.isConnected = true;
+    a.lista.classList = { add() {}, remove() {} };
+    a.lista.querySelector = () => null;
+    Object.assign(a, { tid: 'K4', sid: '', h: {}, ativo: true, cancelado: false, desloc: 0, raf: 0, abrir: 0, chave: '', abertas: [] });
+    const { pedidos } = relogio();
+    app.tfArrastoPintar = () => {};
+    app.tfArrastoMarcar({ sid: sec.getAttribute('data-sec'), depois: '', cab: true, sec, antes: null });
+    pedidos[0].fn();
+    return a;
+  }
+  const recolhidas = () => app.tfRecolhidasDe({ tipo: 'imovel', id: 'P1' });
+  const secDe = (tid) => app.tfRascunho.itens.find((t) => t.id === tid).seccao;
+
+  test('largar noutra secção volta a fechar a que o arrasto abriu; a que já estava aberta fica', () => {
+    abrir();
+    app.tfDobrar('S2');
+    const { s1, s2 } = ecra('K4');
+    const a = abertaPeloArrasto(s2);
+    igual(recolhidas(), [], 'abriu a meio do arrasto');
+    a.alvo = { sid: 'S1', depois: '', cab: true, sec: s1, antes: null };
+    app.tfArrastoFim();
+    assert.equal(secDe('K4'), 'S1');
+    igual(recolhidas(), ['S2'], 'Documentos volta a fechar; Obras, aberta antes, continua aberta');
+  });
+
+  test('largar dentro dela, ou de uma das de dentro, deixa-a aberta', () => {
+    abrir();
+    app.tfDobrar('S2');
+    let el = ecra('K4');
+    let a = abertaPeloArrasto(el.s2);
+    a.alvo = { sid: 'S2', depois: 'K3', cab: false, sec: el.s2, antes: null };
+    app.tfArrastoFim();
+    assert.equal(secDe('K4'), 'S2');
+    igual(recolhidas(), [], 'caiu em Documentos: fica aberta');
+
+    abrir();
+    app.tfDobrar('S1');
+    el = ecra('K4');
+    el.s1.classList.add('tf-recolhida');
+    a = abertaPeloArrasto(el.s1);
+    a.alvo = { sid: 'S3', depois: '', cab: true, sec: el.s3, antes: null };
+    app.tfArrastoFim();
+    assert.equal(secDe('K4'), 'S3');
+    igual(recolhidas(), [], 'caiu na Cozinha, dentro de Obras: Obras fica aberta');
+  });
+
+  test('o Esc e o pointercancel fecham as que o arrasto abriu', () => {
+    abrir();
+    app.tfDobrar('S2');
+    let el = ecra('K4');
+    let a = abertaPeloArrasto(el.s2);
+    a.alvo = { sid: 'S2', depois: '', cab: true, sec: el.s2, antes: null };
+    app.tfArrastoTecla({ key: 'Escape', preventDefault() {}, stopPropagation() {} });
+    app.tfArrastoFim();
+    assert.equal(secDe('K4'), '', 'o Esc não move');
+    igual(recolhidas(), ['S2']);
+
+    abrir();
+    app.tfDobrar('S2');
+    el = ecra('K4');
+    a = abertaPeloArrasto(el.s2);
+    app.tfArrastoCancelar();
+    igual(recolhidas(), ['S2']);
+    assert.equal(app.tfArr, null);
+  });
 });

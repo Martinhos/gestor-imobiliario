@@ -119,6 +119,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-14 · As secções das tarefas passam a ser pastas (KAN-136, KAN-135)
 - 2026-11-14 · Sem zoom na app, e as rendas antigas de um contrato em vigor (pedidos)
 - 2026-11-15 · Comentar devolve a A fazer, e um toque a meio da saída de uma janela não carrega na de baixo (KAN-140)
+- 2026-11-15 · A secção aberta pelo arrasto volta a fechar se nada lá cair (KAN-135)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4075,3 +4076,12 @@ no mesmo sítio, por isso o segundo toque fechava a lista e o terceiro chegava �
 da saída, os cliques de um dedo ou de um rato engolem-se (componentes.js:cliqueASair); o teclado, o
 «voltar» e a automação passam. Vale para todas as janelas, não só as do QA: a cascata era a mesma em
 qualquer pilha.
+
+## 2026-11-15 · A secção aberta pelo arrasto volta a fechar se nada lá cair (KAN-135)
+
+O Martinho reabriu o KAN-135: a secção recolhida que abre ao parar em cima dela, a arrastar, ficava
+aberta mesmo quando a tarefa acabava largada noutro sítio. Agora o arrasto lembra-se das secções que
+abriu e, no fim do gesto, fecha as que não contêm o sítio onde caiu; a secção onde se largou (e as
+mães dela) fica aberta, porque lá dentro vê-se o que se acabou de mover. Fecha-se no fim e não ao
+sair do nome a meio do arrasto: fechar a meio encolhia a lista debaixo do dedo e mudava o alvo. O Esc
+e o pointercancel fecham todas as que o arrasto abriu; as que já estavam abertas não se tocam.

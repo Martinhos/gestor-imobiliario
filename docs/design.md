@@ -2966,9 +2966,14 @@ o cabeçalho e as tarefas dela, não as das de dentro, que contam por si
 
 Com o alvo no nome de uma secção recolhida, parar 600 ms
 (tarefas.js:TF_ABRIR_MS) abre-a (tarefas.js:tfArrastoAbrir), como o toque
-no cabeçalho — fica aberta, e o aparelho lembra-se —, e o alvo volta a
-medir-se, já com as tarefas e as secções dela à vista. Mudar de alvo antes,
-largar ou desfazer cancela a espera. Vale para as tarefas e para as secções.
+no cabeçalho, e o alvo volta a medir-se, já com as tarefas e as secções dela
+à vista. Mudar de alvo antes, largar ou desfazer cancela a espera. No fim do
+gesto, as secções que o arrasto abriu e onde nada caiu voltam a fechar
+(tarefas.js:tfArrastoFechar): fica aberta a secção onde se largou e as mães
+dela; o Esc e o pointercancel fecham todas as que abriu. Fecha-se só no fim,
+e não ao sair do nome a meio, para a lista não mexer debaixo do dedo; as que
+já estavam abertas antes do arrasto não se tocam. Vale para as tarefas e
+para as secções.
 
 As secções também se arrastam, pela pega à esquerda do cabeçalho
 (tarefas.js:tfArrastarSeccao), que só existe para quem pode alterar a
