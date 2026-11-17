@@ -22,6 +22,7 @@
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { carregarApp, limpar, repor } from './arnes.js';
 
 const app = carregarApp({ hoje: '2026-11-17' });
@@ -398,5 +399,12 @@ describe('D71 · o AIMI da demonstração', () => {
     const antes = app.fiscoSetSituacao;
     app.fiscoSetSituacao = undefined;
     try { assert.doesNotThrow(() => app.fiscoAimiMudou({ value: '10' }, 2026, 'total')); } finally { app.fiscoSetSituacao = antes; }
+  });
+});
+
+describe('os selos com uma frase cabem no telemóvel', () => {
+  test('um selo dentro de um campo do cartão parte em linhas, e não empurra a página para o lado a 375 px', () => {
+    const css = readFileSync(new URL('../web/estilos.css', import.meta.url), 'utf8');
+    assert.match(css, /\.fis-campo dd \.badge\{white-space:normal;max-width:100%;text-align:left\}/);
   });
 });

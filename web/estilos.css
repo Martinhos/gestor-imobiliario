@@ -3739,6 +3739,10 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .fis-campo dd{flex:0 1 auto;min-width:0;margin:0;text-align:right;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .fis-campo dd .badge{margin-left:4px;vertical-align:1px}
 .fis-campo dd>.badge:first-child{margin-left:0}
+/* um selo com uma frase («por comunicar · até 15/02/2027», «campo do modelo
+   novo por conhecer») parte em linhas: o .badge é de uma linha só, e a 375px
+   empurrava a página para o lado (fisco-quadros.js:fiscoContratoHtml) */
+.fis-campo dd .badge{white-space:normal;max-width:100%;text-align:left}
 .fis-ctc-total{background:var(--chip);border-color:var(--chip)}
 .fis-ctc-total .fis-campo{border-top-color:var(--line2)}
 @media(pointer:coarse){
