@@ -977,8 +977,8 @@ function textoDoComentario(v) {
    (lib/kanban.js:passosDoComentarioQa) — um comentário é o que há para
    responder. Nos outros, o comentário de uma pessoa num cartão em Human
    Tests devolve-o ao topo de A fazer (recusar é comentar o que está mal),
-   menos o de um pedido; noutra coluna fica onde está
-   (lib/kanban.js:passosDoComentario).
+   também o de um pedido desde 2026-11-16 (KAN-137), sem mexer no pedido;
+   noutra coluna fica onde está (lib/kanban.js:passosDoComentario).
    Recebe: env; request — o corpo {texto*}; eu — a sessão; chave — a do cartão.
    Devolve: promessa da Response {comentario, coluna_id (a do cartão depois)}, 404 ou a recusa. */
 async function comentar(env, request, eu, chave) {

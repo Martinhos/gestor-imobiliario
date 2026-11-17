@@ -454,6 +454,8 @@ function planoAntesDaCompra(r){
    mês — pela mesma regra do rendaJaLancada (só renda, e pelo mês a que
    respeita: uma caução não é a renda do mês de início); numa hipoteca, um
    pagamento dela; sem eles, um movimento do mesmo imóvel com a mesma descrição.
+   Fora dos contratos o mês é também o do periodo, quando o há (o mês previsto
+   que o confirmar guarda, recPeriodo), e senão o da data.
    Recebe: r — o plano recorrente; d — a data AAAA-MM-DD cujo mês se verifica.
    Devolve: true/false — se nesse mês o plano já tem o seu movimento. */
 function jaRegistado(r,d){
@@ -463,7 +465,7 @@ function jaRegistado(r,d){
   const alvo=r.tx.groupId?'g:'+r.tx.groupId:(r.tx.todos?'todos':'');
   return (db.transactions||[]).some(t=>{
     if(r.tx.contractId)return t.contractId===r.tx.contractId&&ehRenda(t)&&mesDaRenda(t)===mo;
-    if(String(t.date||'').indexOf(mo)!==0)return false;
+    if(mesDaRenda(t)!==mo)return false;
     if(r.tx.loanId)return t.loanId===r.tx.loanId;
     if(alvo&&t.lote&&t.lote.alvo===alvo)return t.label===r.tx.label;
     return t.propertyId===r.tx.propertyId&&t.label===r.tx.label;
@@ -700,7 +702,23 @@ function recTx(r,date){
   if(t.kind==='loan')t.loanId=recLoanId(r);
   return t;
 }
-/* confirmar sem abrir: cria o movimento na data prevista e passa à seguinte
+/* O mês a que respeita o movimento que confirmar um planeado regista: o da
+   data prevista (r.next). Confirmar regista o dinheiro no dia de hoje, e a
+   renda de outubro confirmada a 15 de novembro continua a ser a de outubro —
+   para o cursor (rendaJaLancada, mesDaRenda) e para o IRS (fisco.js, os anos
+   anteriores, só nas rendas). Vale para todos os planeados: a despesa ou a
+   prestação de setembro confirmada em novembro é a de setembro para o
+   jaRegistado, senão o «Preencher N em falta» dava novembro por registado.
+   Recebe: r — a recorrência a confirmar.
+   Devolve: 'AAAA-MM' (texto), ou '' sem data prevista. */
+function recPeriodo(r){
+  return /^\d{4}-\d{2}/.test(String((r&&r.next)||''))?String(r.next).slice(0,7):'';
+}
+/* Confirmar sem abrir: cria o movimento com a data de hoje (o dia em que o
+   dinheiro se regista, e não a data prevista, que num planeado em atraso já
+   passou; ticket de QA e8ec9555) e passa à seguinte. A renda de um contrato
+   leva o mês previsto em periodo (recPeriodo). O «Preencher N em falta»
+   (cloud/painel.js:fillCriar) não é confirmar: fica com a data de cada mês.
    Recebe: id — o id da recorrência a confirmar.
    Devolve: nada — regista o movimento, grava e redesenha. */
 function quickConfirmRec(id){
@@ -722,7 +740,8 @@ function quickConfirmRec(id){
   /* um planeado de um grupo ou de «Todos os imóveis» entra partido por imóvel,
      como pelo formulário (movimento.js:registarMolde); o que não se parte
      (um grupo sem imóveis) não avança o planeado */
-  const reg=registarMolde(recTx(r));if(reg.erro)return toast(reg.erro);
+  const mol=recTx(r,today()),periodo=recPeriodo(r);if(periodo)mol.periodo=periodo;
+  const reg=registarMolde(mol);if(reg.erro)return toast(reg.erro);
   reg.partes.forEach(t=>{if(t.kind==='loan')applyLoan(t);db.transactions.push(t)});
   /* o movimento nasce aqui: o «Ver» abre a ficha dele (de vários imóveis, a primeira parte, que a ficha lê como o lote) */
   const nid=reg.partes[0].id;
@@ -751,14 +770,18 @@ function recusaConfirmar(r){
   if((r&&r.tx||{}).kind==='loan')return motivoCredito(hid);
   return '';
 }
-/* abrir para rever antes de confirmar
+/* Abrir para rever antes de confirmar. A data começa no dia de hoje, como no
+   Confirmar (quickConfirmRec), e continua editável; a renda de um contrato
+   traz o mês previsto no «Mês a que respeita» (recPeriodo) — sem ele, o
+   formulário tirava-o da data de hoje (movimento.js:prefill).
    Recebe: id — o id da recorrência a confirmar.
    Devolve: nada — abre o formulário do movimento em modo de confirmação. */
 function confirmRec(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   const recusa=recusaConfirmar(r);if(recusa)return toast(recusa);
-  txModal({kind:r.tx.kind,propId:r.tx.propertyId,ctId:r.tx.contractId,
-    preset:Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:r.next,label:r.tx.label||r.name}),modo:'confirmar',recId:id});
+  const preset=Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:today(),label:r.tx.label||r.name});
+  const periodo=recPeriodo(r);if(periodo)preset.periodo=periodo;
+  txModal({kind:r.tx.kind,propId:r.tx.propertyId,ctId:r.tx.contractId,preset,modo:'confirmar',recId:id});
 }
 /* Onde fica o movimento de um molde (um planeado ou um modelo), na ficha e no
    cartão: o imóvel; o grupo; «Todos os imóveis» num molde de todos os imóveis

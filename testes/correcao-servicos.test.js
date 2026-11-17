@@ -103,7 +103,8 @@ describe('a renda do mês e a caução', () => {
     app.quickConfirmRec('R1');
     const rendas = app.db.transactions.filter((t) => t.id !== 'CAU');
     assert.equal(rendas.length, 1, 'confirmar regista a renda de setembro em vez de saltar');
-    assert.equal(rendas[0].date, '2026-09-05');
+    assert.equal(rendas[0].date, app.today(), 'no dia em que se confirma (KAN-141)');
+    assert.equal(rendas[0].periodo, '2026-09', 'e é a renda de setembro');
     assert.equal(app.rendaJaLancada(c, '2026-09-20'), true, 'e a renda a sério, essa, conta');
   });
 

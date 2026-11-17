@@ -449,15 +449,21 @@ const NAO_PESSOAS = ['claude', AUTOMATICO.id];
    decide-se, e recusar é comentar o que está mal — o comentário de uma
    pessoa devolve o cartão a A fazer, a fila de quem programa (Auto Tests só
    o marca o Claude, quando pega nele). Fica onde está um cartão noutra
-   coluna, o de um pedido (a coluna segue o pedido, decide-se nos Pedidos) e
-   o comentário do Claude ou da sincronização (a nota do resolver é escrita
-   com o cartão já em Human Tests). O cartão de um ticket de QA com o ticket
-   vivo não passa por aqui (passosDoComentarioQa).
+   coluna e o comentário do Claude ou da sincronização (a nota do resolver é
+   escrita com o cartão já em Human Tests). O cartão de um pedido entra na
+   regra desde 2026-11-16 (KAN-137: «Este ticket não passou para a fazer
+   quando comentei. Porquê?»): ficava de fora porque a coluna dele seguia o
+   pedido, mas desde 2026-11-15 o cartão de um pedido da produção vai a
+   Human Tests à mão com a correção no dev, e testa-se no quadro como os
+   outros. O pedido não muda (decide-se nos Pedidos), e a sincronização só
+   volta a mover o cartão quando o estado do pedido mudar
+   (passosDaSincronizacao). O cartão de um ticket de QA com o ticket vivo
+   não passa por aqui (passosDoComentarioQa).
    Recebe: k — o cartão ({coluna_id, origem_tipo}); autorId — o id de quem comenta.
    Devolve: o id da coluna depois do comentário. */
 export function colunaDepoisDoComentario(k, autorId) {
   const col = k && k.coluna_id;
-  if (col !== QA_RESOLVIDO || k.origem_tipo === 'pedido' || NAO_PESSOAS.indexOf(String(autorId)) > -1) return col;
+  if (col !== QA_RESOLVIDO || NAO_PESSOAS.indexOf(String(autorId)) > -1) return col;
   return QA_NOVO;
 }
 

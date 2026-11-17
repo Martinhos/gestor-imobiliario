@@ -2661,7 +2661,13 @@ contrato com rendas em falta desde o início (planeados.js:ctRendasPorRegistar:
 num terminado, qualquer uma; num em vigor, duas ou mais, porque uma só é a do
 mês, que o «Registar renda» trata), «Registar as N rendas em falta», que abre
 a janela do preenchimento (cloud/painel.js:CW.fillContrato) — todos
-com cêntimos (formato.js:euro2), a caução incluída, como na folha do PDF. A
+com cêntimos (formato.js:euro2), a caução incluída, como na folha do PDF. Os
+botões dos valores partem a linha entre eles e nunca por dentro
+(estilos.css:.ct-botoes): cada um parte da largura do que diz, numa linha só,
+e cresce para encher; quando não cabem lado a lado, desce e fica com a linha
+inteira, como as decisões do QA (.qa-decisoes). No telemóvel ficam um por
+linha. Em partes iguais, o das rendas em falta partia-se em quatro linhas a
+384px. A
 renda planeada tem os três estados dos Planeados
 (contrato.js:ctRendaPlaneada): «Próxima renda … · planeada» antes do dia,
 «· por confirmar» com a janela do pagamento aberta e, com ela fechada
@@ -3633,6 +3639,17 @@ e não contam. E conta pelo mês a que respeita, não pelo dia em que entrou
 (planeados.js:mesDaRenda) — a renda de setembro paga a 3 de outubro é de
 setembro. Contar qualquer movimento do contrato fazia a caução do primeiro dia
 passar pela renda do primeiro mês, e o mês saltava sem ninguém o confirmar.
+
+Confirmar regista o dinheiro **no dia em que se confirma**, e não na data
+prevista: o «Confirmar» cria o movimento com a data de hoje
+(planeados.js:quickConfirmRec), e o «Rever» abre o formulário com ela, que se
+pode mudar (planeados.js:confirmRec). Vale para todos os planeados — a renda,
+a despesa, a prestação. O mês previsto vai no «Mês a que respeita»
+(planeados.js:recPeriodo): a renda de outubro confirmada a 15 de novembro é a
+de outubro, e o cursor não salta um mês; numa despesa ou numa prestação é o
+que o planeados.js:jaRegistado lê, e o «Preencher N em falta» continua a pedir
+novembro. O «Preencher N em falta» não é confirmar: são estimativas de meses
+passados e ficam com a data de cada mês (cloud/painel.js:fillCriar).
 
 Chegou a empurrar só para a frente, com medo de ressuscitar confirmações. Era
 um medo mal posto: uma confirmação não é um estado do planeado, é um
@@ -6990,10 +7007,14 @@ leva-o ao topo de A fazer, a fila de quem programa, no mesmo lote, com a linha
 «coluna» do histórico assinada por quem comentou
 (worker/src/lib/kanban.js:colunaDepoisDoComentario), e o aviso diz que o
 cartão voltou. Noutra coluna o comentário não move nada, e o do Claude
-também não: a nota dele fica com o cartão já em Human Tests. Os cartões dos
-pedidos ficam de fora das duas regras: não têm a barra, e comentar não os
-move, porque a coluna deles segue o pedido, que se decide nos Pedidos. Num
-cartão por decidir, o exemplo da caixa é o de uma recusa.
+também não: a nota dele fica com o cartão já em Human Tests. As duas regras
+valem para todos os cartões, também os dos pedidos (KAN-137 e KAN-138,
+2026-11-16): o cartão de um pedido da produção vai a Human Tests à mão quando
+a correção está no dev, e testa-se no quadro como os outros. Aceitar e
+comentar só mexem no cartão; o pedido decide-se e fecha-se nos Pedidos,
+depois do promove, e a sincronização só volta a mover o cartão quando o
+estado do pedido muda, nunca para fora de Concluído. Num cartão por decidir,
+o exemplo da caixa é o de uma recusa.
 
 As janelas do kanban (as escolhas, os formulários, o ⋯, as colunas) têm o
 cabeçalho, o corpo que rola sozinho e o pé com os botões sempre à vista
@@ -7073,9 +7094,11 @@ se move sozinho quando o estado da origem muda, e mover um cartão à mão nunca
 mexe no ticket; um cartão em Concluído só sai de lá sozinho se o ticket
 reabrir. Os cartões dos tickets de QA são a exceção: estão sempre na coluna
 do ticket, nos dois sentidos (a migração 0029), e um comentário num deles,
-no quadro ou na pílula, passa ticket e cartão a Auto Tests, de qualquer
-coluna (worker/src/rotas/kanban.js:comentar); os outros cartões só voltam a
-Auto Tests a partir de Human Tests (acima). Os pedidos da produção vivem noutra base: o scripts/kanban.mjs
+no quadro ou na pílula, passa ticket e cartão a A fazer, de qualquer coluna
+menos da fila (A fazer e Auto Tests, onde ficam)
+(worker/src/rotas/kanban.js:comentar, worker/src/lib/kanban.js:colunaDoComentarioQa);
+os outros cartões, os dos pedidos incluídos, só voltam a A fazer a partir de
+Human Tests (acima). Os pedidos da produção vivem noutra base: o scripts/kanban.mjs
 sincronizar lê-os, só com SELECT, e leva-os ao kanban do dev; no cartão, a
 origem diz «Pedido da produção» e liga ao back office da produção. Os ganchos
 correm também na produção, onde não há kanban, e aí não fazem nada; uma falha
@@ -7554,8 +7577,15 @@ A app não amplia no telemóvel: nem o zoom automático do iPhone ao tocar num
 campo, nem a pinça, nem o duplo toque. O viewport do index.html tem
 maximum-scale=1 e user-scalable=no, o html tem touch-action:manipulation
 (estilos.css), e a pinça do Safari do iOS, que ignora o user-scalable=no,
-trava-se nos eventos de gesto (arranque.js:travarZoom). As páginas públicas do
-worker (montra, guias, documentos legais) continuam a deixar ampliar. Os
+trava-se nos eventos de gesto (arranque.js:travarZoom). O back office é igual
+(KAN-137, 2026-11-16): as páginas do /equipa, a de entrada incluída
+(worker/src/equipa-vista.js:pagina), e a Documentação (docs-vista.js) têm o
+mesmo viewport, o CSS_EQUIPA e o CSS_DOCS o mesmo touch-action no html, e o
+guião de cada uma trava a pinça do iOS (equipa-guiao.js:travarZoom e o do
+GUIAO_DOCS). Os campos ficam com o tamanho que têm, como na app: é o
+maximum-scale=1 que tira o zoom automático do iPhone, não os 16px. As páginas
+públicas do worker (montra, guias, documentos legais) continuam a deixar
+ampliar. Os
 touch-action com pinch-zoom que há na app ficam inertes, e não se tiram.
 
 Em ecrã de dedo, nada abaixo do mínimo de toque, e só aí: no rato os

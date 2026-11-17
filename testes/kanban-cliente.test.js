@@ -317,7 +317,8 @@ describe('o cartão aberto', () => {
 
 /* KAN-117 e KAN-116: num cartão em Human Tests decide-se — o Aceitar fixo no
    fundo do painel leva-o a Concluído; recusar é comentar o que está mal, e o
-   comentário devolve-o a Auto Tests (o servidor move; o aviso diz-o). */
+   comentário devolve-o a A fazer (KAN-140; o servidor move; o aviso diz-o). Desde 2026-11-16
+   (KAN-138) também nos cartões de pedidos. */
 describe('o Aceitar em Human Tests', () => {
   const COLUNAS = [{ id: 'a-fazer', nome: 'A fazer', fim: false }, { id: 'auto-tests', nome: 'Auto Tests', fim: false },
     { id: 'human-tests', nome: 'Human Tests', fim: false }, { id: 'concluido', nome: 'Concluído', fim: true }, { id: 'para-depois', nome: 'Para depois', fim: false }];
@@ -332,7 +333,7 @@ describe('o Aceitar em Human Tests', () => {
     ligacoes: [], anexos: [], origem: origem || null });
   const FRASE = /Para recusar, comenta o que está mal: o cartão volta a A fazer\./;
 
-  test('a barra do Aceitar e a frase só num cartão em Human Tests que não vem de um pedido', () => {
+  test('a barra do Aceitar e a frase em todos os cartões em Human Tests, também nos de pedidos (KAN-138)', () => {
     const ctx = novo();
     const h = ctx.kbPainelHtml(detalhe({}), false);
     assert.match(h, /<div class="kb-p-decidir"/);
@@ -345,10 +346,16 @@ describe('o Aceitar em Human Tests', () => {
     assert.match(h, /placeholder="Ex: No Samsung o aviso ainda não aparece\."/, 'o exemplo de recusa na caixa');
     // um ticket de QA em Human Tests também se aceita (o ticket vai com o cartão)
     assert.match(ctx.kbPainelHtml(detalhe({}, { tipo: 'qa', id: 'q1', estado: 'human-tests', resumo: 'x' }), false), /data-acao="kbAceitar"/);
-    // um pedido decide-se nos Pedidos: nem barra nem frase
-    const pedido = ctx.kbPainelHtml(detalhe({}, { tipo: 'pedido', id: 'p1', estado: 'proposta', existe: true }), false);
-    assert.doesNotMatch(pedido, /kb-p-decidir|kbAceitar|Para recusar/);
-    assert.doesNotMatch(ctx.kbPainelHtml(detalhe({ origem: { tipo: 'pedido', id: 'p1' } }), false), /kbAceitar/, 'a origem do cartão do quadro também conta');
+    // o cartão de um pedido também (KAN-138: «Todos os tickets deve ter a opção de aceitar»), o da produção incluído
+    for (const origem of [{ tipo: 'pedido', id: 'p1', estado: 'proposta', existe: true }, { tipo: 'pedido', id: 'p2', estado: 'resolucao', existe: false }]) {
+      const pedido = ctx.kbPainelHtml(detalhe({}, origem), false);
+      assert.match(pedido, /<button type="button" class="btn primary kb-p-aceitar" data-acao="kbAceitar" data-arg="KAN-80">/, origem.id + ': o Aceitar');
+      assert.match(pedido, FRASE, origem.id + ': a frase de como se recusa');
+      assert.match(pedido, /data-acao="kbIrComentar"/, origem.id + ': o Comentar');
+    }
+    assert.match(ctx.kbPainelHtml(detalhe({ origem: { tipo: 'pedido', id: 'p1' } }), false), /data-acao="kbAceitar"/, 'com a origem no cartão do quadro também');
+    assert.doesNotMatch(ctx.kbPainelHtml(detalhe({ coluna_id: 'auto-tests' }, { tipo: 'pedido', id: 'p1', estado: 'resolucao' }), false), /kbAceitar/,
+      'um pedido fora de Human Tests não tem a barra');
     for (const col of ['a-fazer', 'auto-tests', 'concluido', 'para-depois']) {
       const fora = ctx.kbPainelHtml(detalhe({ coluna_id: col }), false);
       assert.doesNotMatch(fora, /kb-p-decidir|kbAceitar|Para recusar/, col);

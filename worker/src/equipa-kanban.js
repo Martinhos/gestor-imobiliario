@@ -638,7 +638,7 @@ function kbPainelCabHtml(c, chave) {
    Recebe: d — a resposta do GET do cartão; entra — true para a entrada animada.
    Devolve: o HTML. */
 function kbPainelHtml(d, entra) {
-  var c = d.cartao || {}, chave = c.chave, decidir = kbDecidirHtml(c, d.origem);
+  var c = d.cartao || {}, chave = c.chave, decidir = kbDecidirHtml(c);
   var acoes = '<div class="kb-p-acoes"><button type="button" class="btn sm"' + comAcao('kbMoverPara', [chave]) + '>' + ic('kbMover', 'i-sm') + 'Mover para…</button>' +
     '<button type="button" class="btn sm"' + comAcao('kbCopiar', [chave]) + '>' + ic('kbCopiar', 'i-sm') + 'Copiar a ligação</button></div>';
   return '<section class="kb-painel card' + (entra ? ' kb-entra' : '') + '" aria-labelledby="kbPainelTit">' + kbPainelCabHtml(c, chave) +
@@ -656,13 +656,16 @@ function kbPainelHtml(d, entra) {
    o que o devolve a A fazer (o servidor move-o: rotas/kanban.js:comentar) —
    com o Comentar, que leva à caixa. Vive fora do corpo, filha do painel que
    rola, fixa no fundo (sticky): está sempre à vista e, no fim do scroll, fica
-   por baixo do último conteúdo em vez de o tapar. Um cartão que vem de um
-   pedido não a tem: decide-se nos Pedidos, e a coluna segue o pedido.
-   Recebe: c — o cartão do detalhe; origem — a origem do detalhe (ou null).
-   Devolve: o HTML ('' fora de Human Tests ou num cartão de um pedido). */
-function kbDecidirHtml(c, origem) {
-  var o = origem || (c && c.origem);
-  if (!c || !c.chave || c.coluna_id !== KB_A_DECIDIR || (o && o.tipo === 'pedido')) return '';
+   por baixo do último conteúdo em vez de o tapar. Todos os cartões em Human
+   Tests a têm, também os de pedidos desde 2026-11-16 (KAN-138: «Todos os
+   tickets deve ter a opção de aceitar que passa para concluído»): o cartão
+   de um pedido da produção chega a Human Tests à mão com a correção no dev
+   e testa-se no quadro como os outros. Aceitar só mexe no cartão; o pedido
+   fecha-se nos Pedidos, depois do promove.
+   Recebe: c — o cartão do detalhe.
+   Devolve: o HTML ('' fora de Human Tests). */
+function kbDecidirHtml(c) {
+  if (!c || !c.chave || c.coluna_id !== KB_A_DECIDIR) return '';
   return '<div class="kb-p-decidir" role="group" aria-label="Decidir ' + esc(c.chave) + '">' +
     '<p class="sub kb-p-decidir-txt">Para recusar, comenta o que está mal: o cartão volta a ' + esc(kbNomeColuna(KB_RECUSADO)) + '.</p>' +
     '<div class="kb-p-decidir-bt"><button type="button" class="btn kb-p-comentar"' + comAcao('kbIrComentar') + '>' + ic('kbComentario', 'i-sm') + 'Comentar</button>' +

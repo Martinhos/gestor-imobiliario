@@ -120,6 +120,8 @@ confere que cada uma aponta para código que existe.
 - 2026-11-14 · Sem zoom na app, e as rendas antigas de um contrato em vigor (pedidos)
 - 2026-11-15 · Comentar devolve a A fazer, e um toque a meio da saída de uma janela não carrega na de baixo (KAN-140)
 - 2026-11-15 · A secção aberta pelo arrasto volta a fechar se nada lá cair (KAN-135)
+- 2026-11-16 · Os cartões dos pedidos entram nas regras de Human Tests, e o back office sem zoom (KAN-137, KAN-138)
+- 2026-11-16 · Confirmar um planeado regista o movimento no dia em que se confirma (KAN-141)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4085,3 +4087,43 @@ abriu e, no fim do gesto, fecha as que não contêm o sítio onde caiu; a secç�
 mães dela) fica aberta, porque lá dentro vê-se o que se acabou de mover. Fecha-se no fim e não ao
 sair do nome a meio do arrasto: fechar a meio encolhia a lista debaixo do dedo e mudava o alvo. O Esc
 e o pointercancel fecham todas as que o arrasto abriu; as que já estavam abertas não se tocam.
+
+## 2026-11-16 · Os cartões dos pedidos entram nas regras de Human Tests, e o back office sem zoom (KAN-137, KAN-138)
+O KAN-140 fez o comentário de uma pessoa num cartão em Human Tests devolvê-lo a A fazer, e o KAN-117 pôs
+no cartão aberto a barra com o Aceitar e o Comentar. As duas regras deixavam de fora os cartões de
+pedidos, porque «a coluna deles segue o pedido, que se decide nos Pedidos». Desde 2026-11-15, porém, o
+cartão de um pedido da produção vai a Human Tests à mão quando a correção está no dev, e o Martinho
+testa-o no quadro como os outros. Comentou o KAN-137 e o cartão ficou em Human Tests: «Este ticket não
+passou para a fazer quando comentei. Porquê?». No KAN-138: «Todos os tickets deve ter a opção de
+aceitar que passa para concluído».
+
+A exceção sai (lib/kanban.js:colunaDepoisDoComentario, equipa-kanban.js:kbDecidirHtml). Aceitar e
+comentar só mexem no cartão: o pedido decide-se, responde-se e fecha-se nos Pedidos, depois do
+promove. A sincronização só mexe num cartão de pedido quando o estado do pedido muda, e nunca o tira
+de Concluído a não ser quando o pedido reabre: um cartão aceite fica em Concluído quando, depois do
+promove, o pedido ganha a resposta proposta ou fecha (preso em testes/kanban-servidor.test.js).
+
+E «O backoffice deve ser igual»: as páginas do /equipa (equipa-vista.js:pagina) e a Documentação
+(docs-vista.js) têm o viewport da app (maximum-scale=1,user-scalable=no), o touch-action:manipulation
+no html e a pinça do iOS travada no guião (equipa-guiao.js:travarZoom). Os campos ficam com o tamanho
+que têm, como na app: é o maximum-scale=1 que tira ao iPhone o zoom ao tocar num campo. O ecrã de
+entrada sem sessão não carrega guião, e lá só a pinça do iOS fica por travar.
+
+## 2026-11-16 · Confirmar um planeado regista o movimento no dia em que se confirma (KAN-141)
+O movimento que nasce de confirmar um planeado tinha a data prevista (r.next). Num planeado em atraso
+essa data já passou: a renda de outubro confirmada a 15 de novembro ficava com 1 de outubro, como se o
+dinheiro tivesse entrado nesse dia. O Martinho pediu (ticket de QA e8ec9555) que tenha a data do dia em
+que se confirma, para todos os planeados. Perguntado, escolheu também que o «Rever» abra com a data de
+hoje (editável) e que o «Preencher N em falta» mantenha a data de cada mês, porque são estimativas de
+meses passados lançadas de uma vez.
+
+O mês previsto vai no periodo (o «Mês a que respeita», planeados.js:recPeriodo). Sem ele, a data de hoje
+fazia da renda de outubro a de novembro: o rendaJaLancada via novembro lançado e o cursor saltava-o.
+Numa despesa ou numa prestação o problema era o mesmo pelo jaRegistado, que lia o mês da data: a
+despesa de setembro confirmada em novembro dava novembro por registado, e o «Preencher N em falta»
+deixava de o pedir. Por isso todos os confirmados guardam o mês previsto, e o jaRegistado lê o periodo
+antes da data. O IRS só o lê nas rendas (fisco.js, os anos anteriores do Anexo F), onde uma renda de
+dezembro confirmada em janeiro entra no ano em que o dinheiro entrou, marcada como de um ano anterior.
+
+Rejeitado: exceções para a prestação e a despesa (o pedido é para todos os planeados), e pôr o periodo
+dentro do recTx (o fillCriar partilha-o e passa a data de cada mês).

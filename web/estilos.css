@@ -2493,8 +2493,14 @@ button.vg-item-abrir:active{background:var(--press)}
 .ct-tres b.disp{font-size:19px;line-height:1.25;font-variant-numeric:tabular-nums;white-space:nowrap}
 .ct-tres .small+b+.small{font-size:11.5px}
 .ct-sem-renda{margin:0;padding:14px}
-.ct-botoes{display:flex;gap:8px;padding:12px 14px 14px;border-top:1px solid var(--line)}
-.ct-botoes>.btn{flex:1 1 0}
+/* Os botões dos valores (Registar renda, Registar as N rendas em falta, Ver
+   movimentos) partem a linha entre eles, nunca por dentro: cada um parte da
+   largura do que diz e cresce para encher; quando não cabem lado a lado,
+   desce e fica com a linha inteira, como as decisões do QA (.qa-decisoes).
+   Em partes iguais (flex:1 1 0) o das rendas em falta ficava com 95px a 384
+   e partia-se em quatro linhas (KAN-142). */
+.ct-botoes{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px 14px;border-top:1px solid var(--line)}
+.ct-botoes>.btn{flex:1 0 auto;white-space:nowrap}
 .ct-pessoa{display:flex;align-items:center;gap:12px;padding:8px 14px 12px}
 .ct-pessoa+.ct-pessoa{padding-top:12px;border-top:1px solid var(--line)}
 .avatar.ct-av{width:40px;height:40px;flex:0 0 40px;font-size:14px}

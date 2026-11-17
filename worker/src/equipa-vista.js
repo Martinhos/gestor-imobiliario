@@ -46,12 +46,17 @@ const ICONE_FECHAR = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><pat
    titulo — o título da janela (string, aparece como "titulo · Rendorium Equipa");
    comQa (opcional) — true no back office do dev: junta o CSS do kanban (logo a
    seguir ao estilos.css) e o da pílula do QA.
+   Sem zoom no telemóvel, como a app (KAN-137, 2026-11-16: «O backoffice deve
+   ser igual»): o maximum-scale=1 tira ao iPhone o zoom automático ao tocar
+   num campo, o user-scalable=no tira a pinça no Android; o duplo toque sai
+   com o html{touch-action:manipulation} do CSS_EQUIPA, e a pinça do iOS,
+   que ignora o user-scalable, com o equipa-guiao.js:travarZoom.
    Devolve: string com o documento HTML completo, pronta a ir numa Response. */
 function pagina(corpo, titulo, comQa) {
   return `<!doctype html>
 <html lang="pt-PT"><head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#161A23">
 <meta name="robots" content="noindex,nofollow">
@@ -114,7 +119,9 @@ export const CSS_EQUIPA = `/* As letras da app, servidas de /fonts/ (a CSP só d
    :active de cada botão, e o foco que o toque deixava sai depois da ação
    (equipa-guiao.js:largarFocoDoToque) */
 *{-webkit-tap-highlight-color:transparent}
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* sem zoom de duplo toque, como a app (KAN-137; equipa-guiao.js:travarZoom):
+   qualquer touch-action que não seja auto tira-o, e o manipulation deixa o resto */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulation}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--letra);font-size:15px;line-height:1.45;
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 h1,h2,h3{font-family:var(--letra-titulo);font-weight:650;letter-spacing:-.015em;margin:0;line-height:1.2}

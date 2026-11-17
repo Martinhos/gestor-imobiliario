@@ -561,8 +561,8 @@ describe('os comentários', () => {
 
 /* KAN-116: em Human Tests o Martinho aceita ou recusa, e recusar é comentar
    o que está mal — o comentário de uma pessoa devolve o cartão a A fazer
-   (KAN-140; antes ia a Auto Tests, que só o Claude marca). Os cartões de um pedido seguem o pedido, e o Claude
-   comenta sem mexer na coluna. */
+   (KAN-140; antes ia a Auto Tests, que só o Claude marca). Desde 2026-11-16 (KAN-137) também o cartão de
+   um pedido: o comentário devolve-o sem mexer no pedido. O Claude comenta sem mexer na coluna. */
 describe('um comentário em Human Tests devolve o cartão a A fazer', () => {
   // o Claude como o scripts/kanban.mjs o assina (autor id «claude»), se algum dia passar pela rota
   const CLAUDE = { discordId: 'claude', nome: 'Claude', papel: 'dev', papeis: ['dev'] };
@@ -597,7 +597,7 @@ describe('um comentário em Human Tests devolve o cartão a A fazer', () => {
     assert.equal(uma(env, 'SELECT posicao FROM kanban_cartoes WHERE id = ?', v.id).posicao, 0);
   });
 
-  test('noutra coluna, do Claude ou num cartão de um pedido, o comentário não move', async () => {
+  test('noutra coluna ou do Claude, o comentário não move; o cartão de um pedido volta a A fazer sem mexer no pedido (KAN-137)', async () => {
     const env = ambiente();
     for (const col of ['a-fazer', 'auto-tests', 'concluido', 'para-depois']) {
       const c = await novoCartao(env, MASTER, { coluna_id: col });
@@ -614,17 +614,60 @@ describe('um comentário em Human Tests devolve o cartão a A fazer', () => {
     assert.equal(rc.coluna_id, 'human-tests');
     assert.equal(uma(env, 'SELECT coluna_id FROM kanban_cartoes WHERE id = ?', doClaude.id).coluna_id, 'human-tests');
     assert.deepEqual(linhasColuna(env, doClaude.id), []);
-    // o cartão de um pedido segue o pedido: em Human Tests, comentar não o move nem mexe no pedido
+    // o cartão de um pedido em Human Tests também volta a A fazer (KAN-137), e o pedido fica como estava
     const pid = await novoPedido(env, await novaConta(env));
     await ir(env, SUPORTE, 'POST', '/api/equipa/pedidos/' + pid + '/aceitar');
     await ir(env, SUPORTE, 'POST', '/api/equipa/pedidos/' + pid + '/fechar');
     const k = cartaoDaOrigem(env, 'pedido', pid);
     assert.equal(k.coluna_id, 'human-tests');
     const pedidoAntes = uma(env, 'SELECT * FROM tickets WHERE id = ?', pid);
-    const rp = await comentar(env, SUPORTE, 'KAN-' + k.numero, 'Falei com a pessoa.');
-    assert.equal(rp.coluna_id, 'human-tests');
-    assert.equal(cartaoDaOrigem(env, 'pedido', pid).coluna_id, 'human-tests');
-    assert.deepEqual(uma(env, 'SELECT * FROM tickets WHERE id = ?', pid), pedidoAntes);
+    const rp = await comentar(env, MASTER, 'KAN-' + k.numero, 'O back office deve ser igual.');
+    assert.equal(rp.coluna_id, 'a-fazer', 'a resposta diz a coluna nova');
+    assert.equal(cartaoDaOrigem(env, 'pedido', pid).coluna_id, 'a-fazer');
+    assert.deepEqual(linhasColuna(env, k.id).pop(), { antes: 'human-tests', depois: 'a-fazer', autor_id: MASTER.discordId, autor_nome: MASTER.nome },
+      'a linha «coluna» assinada por quem comentou');
+    assert.deepEqual(uma(env, 'SELECT * FROM tickets WHERE id = ?', pid), pedidoAntes, 'o pedido não muda');
+    // e o Claude, num cartão de um pedido em Human Tests, também não o devolve
+    await ir(env, DEV, 'POST', K + '/cartoes/KAN-' + k.numero + '/mover', { coluna_id: 'human-tests' });
+    assert.equal((await comentar(env, CLAUDE, 'KAN-' + k.numero, 'Feito no dev.')).coluna_id, 'human-tests');
+  });
+
+  /* KAN-137/KAN-138, como aconteceu: o cartão de um pedido da produção (sem
+     o ticket nesta base, trazido pelo kanban.mjs sincronizar) vai a Human
+     Tests à mão com o pedido ainda em resolução; o comentário devolve-o a A
+     fazer, e o Aceitar leva-o a Concluído. A sincronização seguinte não
+     desfaz nenhum dos dois: com o mesmo estado não mexe, e depois do promove
+     (a resposta proposta, o pedido fechado) não tira o cartão de Concluído. */
+  test('o comentário e o Aceitar num cartão de um pedido da produção ficam, sincronize-se o que se sincronizar', async () => {
+    const env = ambiente();
+    const t = { id: 'e9a0e3a6-0000-4000-8000-000000000137', subject: 'Bloquear zoom do tlm', body: 'O iPhone amplia.' };
+    const sinc = (estado, extra) => sincronizarKanban(env, Object.assign({ tipo: 'pedido', id: t.id, estado, agora: Date.now() }, extra));
+    assert.equal(await sinc('resolucao', { novo: Object.assign({ uuid: crypto.randomUUID() }, cartaoDoPedido(t)) }), true);
+    const k = cartaoDaOrigem(env, 'pedido', t.id);
+    const chave = 'KAN-' + k.numero;
+    assert.deepEqual([k.coluna_id, k.origem_estado], ['auto-tests', 'resolucao']);
+    // o Claude leva-o a Human Tests à mão, com o CI verde no dev
+    assert.equal((await ir(env, DEV, 'POST', K + '/cartoes/' + chave + '/mover', { coluna_id: 'human-tests' })).status, 200);
+    // o Martinho comenta: volta a A fazer
+    assert.equal((await comentar(env, MASTER, chave, 'Este ticket não passou para a fazer quando comentei. Porquê?')).coluna_id, 'a-fazer');
+    // o mesmo estado outra vez: nada se mexe
+    await sinc('resolucao');
+    assert.deepEqual([cartaoDaOrigem(env, 'pedido', t.id).coluna_id, cartaoDaOrigem(env, 'pedido', t.id).origem_estado], ['a-fazer', 'resolucao']);
+    // de novo em Human Tests, e o Aceitar (o mover para o topo de Concluído)
+    await ir(env, DEV, 'POST', K + '/cartoes/' + chave + '/mover', { coluna_id: 'human-tests' });
+    assert.equal((await ir(env, MASTER, 'POST', K + '/cartoes/' + chave + '/mover', { coluna_id: 'concluido', indice: 0 })).status, 200);
+    const aceite = cartaoDaOrigem(env, 'pedido', t.id);
+    assert.equal(aceite.coluna_id, 'concluido');
+    assert.ok(aceite.concluido_at);
+    const linhas = historicoDe(env, k.id).length;
+    // depois do promove: a resposta proposta e o pedido fechado não o tiram de Concluído
+    for (const estado of ['resolucao', 'proposta', 'concluido']) {
+      await sinc(estado);
+      const depois = cartaoDaOrigem(env, 'pedido', t.id);
+      assert.deepEqual([depois.coluna_id, depois.concluido_at], ['concluido', aceite.concluido_at], estado + ': fica em Concluído');
+    }
+    assert.equal(cartaoDaOrigem(env, 'pedido', t.id).origem_estado, 'concluido', 'o estado visto acompanha');
+    assert.equal(historicoDe(env, k.id).length, linhas, 'sem linhas de coluna novas');
   });
 
   test('num cartão de QA: ticket e cartão a A fazer de fora da fila; na fila ficam (KAN-140)', async () => {
@@ -648,11 +691,13 @@ describe('um comentário em Human Tests devolve o cartão a A fazer', () => {
     }
   });
 
-  test('a regra pura: só pessoas, só Human Tests, nunca pedidos', () => {
+  test('a regra pura: só pessoas, só Human Tests, os pedidos também (KAN-137)', () => {
     const k = (coluna_id, origem_tipo) => ({ coluna_id, origem_tipo: origem_tipo || null });
     assert.equal(colunaDepoisDoComentario(k('human-tests'), 'd1'), 'a-fazer');
     assert.equal(colunaDepoisDoComentario(k('human-tests', 'qa'), 'd1'), 'a-fazer');
-    assert.equal(colunaDepoisDoComentario(k('human-tests', 'pedido'), 'd1'), 'human-tests');
+    assert.equal(colunaDepoisDoComentario(k('human-tests', 'pedido'), 'd1'), 'a-fazer');
+    assert.equal(colunaDepoisDoComentario(k('human-tests', 'pedido'), 'claude'), 'human-tests');
+    for (const col of ['a-fazer', 'auto-tests', 'concluido']) assert.equal(colunaDepoisDoComentario(k(col, 'pedido'), 'd1'), col);
     assert.equal(colunaDepoisDoComentario(k('human-tests'), 'claude'), 'human-tests');
     assert.equal(colunaDepoisDoComentario(k('human-tests'), 'automatico'), 'human-tests');
     for (const col of ['a-fazer', 'auto-tests', 'concluido', 'para-depois', 'uma-nova']) assert.equal(colunaDepoisDoComentario(k(col), 'd1'), col);

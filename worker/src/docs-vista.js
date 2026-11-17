@@ -129,7 +129,7 @@ function montarPagina() {
   const svg = (d) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
 
   const html = `<!doctype html><html lang="pt-PT"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="color-scheme" content="light dark"><meta name="theme-color" content="#161A23"><title>Documentação · Rendorium Equipa</title>
 <link rel="stylesheet" href="/equipa/docs.css">
 </head><body>
@@ -207,7 +207,8 @@ export const CSS_DOCS = `/* As letras da app, servidas de /fonts/ (a CSP só dei
   --line:#253049;--line2:#33405C;--accent:#7C9BFF;--accent-soft:#1E2A4D;--accent-text:#B5C6FF;
   --warn-soft:#352A12;--shadow:0 24px 60px rgba(0,0,0,.6)}}
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* sem zoom de duplo toque, como a app e o back office (KAN-137; GUIAO_DOCS:travarZoom) */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulation}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--letra);font-size:15px;line-height:1.55;
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -403,4 +404,18 @@ export const GUIAO_DOCS = String.raw`(function () {
 
   ativa((location.hash || '').slice(1) || 'cmd', false);
 })();
+
+/* Sem zoom no telemóvel, como a app e o resto do back office (KAN-137,
+   2026-11-16; equipa-guiao.js:travarZoom): o viewport tira o zoom dos
+   campos e a pinça no Android, o html{touch-action:manipulation} do CSS_DOCS
+   o duplo toque, e aqui trava-se a pinça do Safari do iOS, que ignora o
+   user-scalable=no, nos eventos de gesto do WebKit.
+   Recebe: alvo — o window (ou um objeto com addEventListener, nos testes).
+   Devolve: nada — pendura os ouvintes. */
+function travarZoom(alvo) {
+  if (!alvo || typeof alvo.addEventListener !== 'function') return;
+  var nao = function (ev) { if (ev && typeof ev.preventDefault === 'function') ev.preventDefault(); };
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (t) { alvo.addEventListener(t, nao, { passive: false }); });
+}
+try { travarZoom(window); } catch (e) { /* travar o zoom é um cuidado: nunca parte a página */ }
 `;

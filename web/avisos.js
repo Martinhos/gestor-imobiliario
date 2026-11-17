@@ -27,6 +27,28 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 75,
+    data: '2026-11-17',
+    titulo: 'Confirmar regista o movimento no dia de hoje',
+    seccoes: [
+      {
+        titulo: 'Planeados',
+        afeta: ['movimentos'],
+        itens: [
+          'Confirmar um planeado regista o movimento com a data do dia em que confirmas, e não com a data prevista. No «Rever» a data começa no dia de hoje e podes mudá-la.',
+          'Um planeado confirmado depois do mês continua a ser desse mês: a renda de outubro confirmada em novembro fica com outubro no «Mês a que respeita».',
+        ],
+      },
+      {
+        titulo: 'Contratos',
+        afeta: ['contratos'],
+        itens: [
+          'Na ficha de um contrato, os botões de registar as rendas já não se partem em várias linhas no telemóvel: quando não cabem lado a lado, cada um fica com a linha inteira.',
+        ],
+      },
+    ],
+  },
+  {
     v: 74,
     data: '2026-11-15',
     titulo: 'A secção que abriu ao arrastar volta a fechar',

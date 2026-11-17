@@ -477,14 +477,16 @@ describe('planeados e modelos: o molde guarda o grupo, e parte-se ao registar', 
     app.collectTx = () => {};
     app.onSave();
     assert.equal(toasts.pop().m, 'Movimento confirmado.');
-    igual(app.db.transactions.map((t) => [t.propertyId, t.amount, t.date]), [['A', 30, '2026-09-01'], ['B', 30, '2026-09-01'], ['C', 30, '2026-09-01']]);
+    igual(app.db.transactions.map((t) => [t.propertyId, t.amount, t.date]), [['A', 30, '2026-09-06'], ['B', 30, '2026-09-06'], ['C', 30, '2026-09-06']],
+      'no dia em que se confirma (KAN-141)');
     assert.equal(app.db.recurring[0].next, '2026-10-01', 'o planeado avançou');
     assert.equal(app.db.recurring[0].tx.groupId, 'G', 'e continua um molde do grupo');
     // sem abrir: o mesmo
     app.db.recurring[0].next = '2026-09-02';
     app.quickConfirmRec('R1');
-    const segundo = app.db.transactions.filter((t) => t.date === '2026-09-02');
+    const segundo = app.db.transactions.slice(3);
     assert.equal(segundo.length, 3);
+    assert.ok(segundo.every((t) => t.date === '2026-09-06'), 'também no dia em que se confirma');
     assert.ok(segundo.every((t) => t.lote && t.lote.alvo === 'g:G' && t.lote.n === 3));
     assert.equal(app.db.recurring[0].next, '2026-10-02');
     assert.ok(app.jaRegistado(app.db.recurring[0], '2026-09-15'), 'o mês já tem o movimento dele');
