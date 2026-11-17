@@ -16,7 +16,7 @@ const ler = (rel) => readFileSync(new URL(rel, RAIZ), 'utf8').replace(/\r\n/g, '
 const existe = (rel) => existsSync(new URL(rel, RAIZ));
 const copia = (x) => JSON.parse(JSON.stringify(x));
 /* os domínios que saíram do antigo auxiliares.js, pela ordem do index.html */
-const DOMINIOS = ['formato', 'espera', 'registos', 'tipos', 'irs', 'saldos', 'ambito', 'icones', 'tema'];
+const DOMINIOS = ['formato', 'espera', 'registos', 'tipos', 'irs', 'irs-papeis', 'saldos', 'ambito', 'icones', 'tema'];
 
 /* Os .js de uma pasta de web/, com o caminho relativo à raiz.
    Recebe: pasta — 'web/app' ou 'web/cloud' (ou 'web', que junta as duas e os da raiz).
@@ -74,7 +74,7 @@ describe('o antigo auxiliares.js, partido por domínio', () => {
     assert.match(ler('web/app/componentes.js'), /^function toast\(m,op\)/m, 'o aviso vive com os outros componentes');
     assert.match(ler('web/app/saldos.js'), /^function balancesDetail\(pid\)/m, 'a janela dos saldos vive com as contas');
     assert.match(ler('web/app/ambito.js'), /^let ownerFilter='',dashProp='';/m, 'o estado do filtro vive à parte das funções puras');
-    assert.match(ler('web/app/irs.js'), /^function irsColunaDe\(t\)/m);
+    assert.match(ler('web/app/irs-papeis.js'), /^function irsColunaDe\(t\)/m);
     assert.equal(app.euro2(1250.5), '1 250,50 €');
     assert.equal(app.dPT('2028-03-15'), '15/03/2028');
   });

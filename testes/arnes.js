@@ -16,13 +16,13 @@ const WEB = path.join(AQUI, '..', 'web');
 
 // Ordem igual à do index.html. O arranque fica de fora: só liga a interface.
 export const MODULOS = [
-  'eventos', 'estilos-calculados', 'dados', 'anexos', 'formato', 'espera', 'registos', 'tipos', 'irs', 'saldos', 'ambito', 'icones', 'tema',
+  'eventos', 'estilos-calculados', 'dados', 'anexos', 'formato', 'espera', 'registos', 'tipos', 'irs', 'irs-papeis', 'saldos', 'ambito', 'icones', 'tema',
   'lista', 'continuidade', 'graficos', 'credito', 'componentes',
   'metricas', 'navegacao', 'servicos', 'acessos', 'vistas',
   'painel-geral', 'lista-imoveis', 'lista-contratos', 'lista-pessoas', 'lista-colaboradores', 'lista-movimentos', 'projecoes',
   'imovel', 'fine', 'pessoas', 'contrato', 'tarefas',
   'planeados', 'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'visitas', 'calendario', 'movimento', 'creditos', 'splitwise', 'contrato-pdf',
-  'avaliacao', 'fisco', 'fisco-pdf', 'definicoes', 'copias',
+  'avaliacao', 'fisco-titulares', 'fisco-resumo', 'fisco-avisos', 'fisco-quadros', 'fisco', 'fisco-exportar', 'fisco-pdf', 'definicoes', 'copias',
 ];
 
 /* O catálogo dos serviços, lido do próprio ficheiro do cliente
@@ -42,7 +42,7 @@ const DE_SERVICOS = new Set(SERVICOS_FICHEIROS.flatMap((s) => s.ficheiros)
    caía na base sem ninguém o dizer — e o que era base (os prazos, o sino, o
    Splitwise, as contas das hipotecas) só estava escrito na negativa. A mesma
    lista vive no web/sw.js (BASE, com o arranque, que aqui não carrega). */
-export const BASE = ['eventos', 'estilos-calculados', 'dados', 'anexos', 'formato', 'espera', 'registos', 'tipos', 'irs', 'saldos', 'ambito', 'icones', 'tema',
+export const BASE = ['eventos', 'estilos-calculados', 'dados', 'anexos', 'formato', 'espera', 'registos', 'tipos', 'irs', 'irs-papeis', 'saldos', 'ambito', 'icones', 'tema',
   'lista', 'continuidade', 'graficos', 'credito', 'componentes', 'metricas', 'navegacao', 'servicos', 'acessos', 'vistas',
   'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'splitwise', 'definicoes', 'copias'];
 

@@ -571,7 +571,7 @@ function cartaoDasEtiquetas(){
 /* O que o artigo 41.º do CIRS deixa deduzir, em três linhas (o canvas):
    dedutível, não dedutível e o que depende, com o que a lei pede de cada
    gasto. É a regra por omissão: a coluna escolhida na ficha de uma despesa
-   manda sobre a da categoria (irs.js:irsColunaDe).
+   manda sobre a da categoria (irs-papeis.js:irsColunaDe).
    Recebe: nada.
    Devolve: o HTML (texto) do cartão. */
 function cartaoDoArt41(){

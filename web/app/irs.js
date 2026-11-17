@@ -12,7 +12,10 @@
    códigos do Anexo F, o que mudou e o guia de preenchimento vivem numa
    versão por ano dos rendimentos — um ficheiro cada, irs-2025.js,
    irs-2026.js… —, que se regista com registarAnoIrs. Aqui fica o motor que
-   as lê. Um ano sem versão usa a mais recente antes dele, e diz-se. */
+   as lê. Um ano sem versão usa a mais recente antes dele, e diz-se.
+
+   A coluna do Anexo F de um gasto, o que é uma renda e o NIF vivem no
+   irs-papeis.js, logo a seguir (carregado depois deste). */
 
 /* as versões registadas, pelo ano dos rendimentos (registarAnoIrs) */
 const IRS_ANOS={};
@@ -222,40 +225,6 @@ const netRent=(c,ano)=>c.rent*(1-taxRateOf(c,ano)/100);
    Devolve: euros (número). */
 const netRentOf=p=>sum(activeContracts(p.id).map(c=>netRent(c)));
 
-/* o mapa categoria → coluna do Anexo F em vigor: o das definições, ou o de origem
-   Devolve: o mapa (objeto {'Categoria' ou 'Categoria / Sub': id de IRS_COLUNAS}). */
-const irsMapa=()=>(db.settings&&db.settings.irsMapa)||IRS_MAPA0;
-/* A coluna do Anexo F onde um movimento cai, e porquê. Só as despesas têm coluna: uma
-   prestação, uma dívida ou um acerto nunca são dedutíveis (os juros são gastos financeiros);
-   uma despesa fora dos totais (categoria excluída nas definições) também não. Depois manda
-   o que foi escolhido no próprio movimento, depois a subcategoria, depois a categoria; o que
-   não tem regra cai em «outros» e a origem di-lo, para o resumo o apontar.
-   Recebe: t — o movimento.
-   Devolve: {col, origem} — col é um id de IRS_COLUNAS; origem é 'tipo', 'excluido',
-   'movimento', 'sub', 'categoria' ou 'omissao'. */
-function irsColunaDe(t){
-  if(!t||t.kind!=='expense')return {col:'nao',origem:'tipo'};
-  if(!countsInTotals(t))return {col:'nao',origem:'excluido'};
-  if(t.irsCol&&IRS_COLUNAS.some(c=>c[0]===t.irsCol))return {col:t.irsCol,origem:'movimento'};
-  const m=irsMapa(),cat=String(t.category||'').trim(),sub=String(t.sub||'').trim();
-  if(cat&&sub&&m[cat+' / '+sub])return {col:m[cat+' / '+sub],origem:'sub'};
-  if(cat&&m[cat])return {col:m[cat],origem:'categoria'};
-  return {col:'outros',origem:'omissao'};
-}
-/* o rótulo de uma coluna do Anexo F
-   Recebe: col — o id (de IRS_COLUNAS).
-   Devolve: o rótulo (string), ou '' se não existir. */
-const irsColunaNome=col=>{const c=IRS_COLUNAS.find(x=>x[0]===col);return c?c[1]:''};
-/* É uma renda para o IRS? Uma receita que conta nos totais, da categoria «Rendas» — ou sem
-   categoria mas presa a um contrato. A caução e os empréstimos ficam de fora (isPassivo), e
-   um reembolso ou um subsídio não são rendas.
-   Recebe: t — o movimento.
-   Devolve: true se é renda. */
-const ehRenda=t=>!!t&&t.kind==='income'&&countsInTotals(t)&&(t.category==='Rendas'||(!t.category&&!!t.contractId));
-/* a renda ilíquida de um movimento: o que entrou mais o que o inquilino reteve na fonte
-   Recebe: t — o movimento.
-   Devolve: o valor bruto em euros (número). */
-const rendaBruta=t=>(Number(t.amount)||0)+(Number(t.retencao)||0);
 /* o bloco fiscal de um contrato, sempre completo (um contrato que ainda não passou pelo
    normContract não o tem)
    Recebe: c — o contrato (aguenta null).
@@ -273,18 +242,6 @@ const ctNaoDeclarado=c=>fiscoDe(c).estado==='naoDeclarado';
    Recebe: c — o contrato.
    Devolve: true se o estado fiscal está por indicar. */
 const ctFiscoPorIndicar=c=>!fiscoDe(c).estado;
-/* O NIF tem dígito de controlo (mod 11) e um primeiro dígito com sentido: um erro de dedo
-   fica à vista antes de ir para o contrato em PDF ou para o Anexo F.
-   Recebe: nif — o NIF como foi escrito (string ou número; espaços são ignorados).
-   Devolve: null se está vazio; true se é válido; false se não é. */
-function nifValido(nif){
-  const s=String(nif==null?'':nif).replace(/\s/g,'');
-  if(!s)return null;
-  if(!/^\d{9}$/.test(s)||'12356789'.indexOf(s[0])<0)return false;
-  let soma=0;for(let i=0;i<8;i++)soma+=Number(s[i])*(9-i);
-  const r=soma%11,dc=r<2?0:11-r;
-  return dc===Number(s[8]);
-}
 /* O último dia do mês seguinte ao de uma data — o prazo do Modelo 2 («até ao fim do mês
    seguinte» ao início, à alteração ou à cessação). Em hora local, sem toISOString.
    Recebe: iso — a data 'AAAA-MM-DD' (aguenta vazio).
@@ -308,3 +265,7 @@ function irsDiaMes(iso){
    Recebe: c — o contrato; ano (opcional) — o ano dos rendimentos.
    Devolve: o código (string). */
 const naturezaIrs=(c,ano)=>{const n=irsAno(ano).naturezas;return fiscoDe(c).finalidade==='nh'?n.naoHabitacional:n.habitacional};
+/* O aviso de responsabilidade da Declaração, o texto aprovado: o que a app faz e
+   o que não faz. O PDF escreve-o hoje; as outras saídas (a página, o texto, o
+   CSV e o guia) hão de escrevê-lo à letra, a partir daqui. */
+const IRS_AVISO='A app resume; quem declara és tu, no Portal das Finanças. Confirma cada valor antes de entregar: o imposto aqui é uma estimativa.';

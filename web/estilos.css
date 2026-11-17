@@ -3677,7 +3677,7 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .fis-pz .small{display:block}
 .fis-pz .badge{flex:0 0 auto}
 @media(max-width:520px){.fis-pz.tap{margin:0 -14px;padding:10px 14px}}
-/* o começo do cartão de um quadro (fisco.js:fiscoQuadroResumoHtml): onde se
+/* o começo do cartão de um quadro (fisco-quadros.js:fiscoQuadroResumoHtml): onde se
    preenche, e os contratos desse quadro em linhas — o contrato à esquerda, as
    rendas e o imposto à direita —, sem tabela a rolar de lado; o total no fim */
 .fis-onde{margin:0 0 6px;font-size:14.5px}

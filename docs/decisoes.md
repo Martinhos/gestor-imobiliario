@@ -3475,7 +3475,7 @@ numa coluna, lia-se como um cartão que falava dos dois quadros, e o Martinho
 ficou «sem perceber onde preencher» (ticket de QA 5cbde185). Das três saídas
 (um cartão por quadro, o resumo em duas tabelas, ou só mudar o texto) escolheu
 um cartão por quadro: o resumo misto saiu, e cada quadro abre com onde se
-preenche e os contratos dele (fisco.js:fiscoQuadroResumoHtml), em linhas e não
+preenche e os contratos dele (fisco-quadros.js:fiscoQuadroResumoHtml), em linhas e não
 numa tabela, para não voltar a rolar de lado no telemóvel. O PDF já ia por
 quadro e não mudou.
 
@@ -3813,7 +3813,7 @@ na conversa: «Só eu, sem seletor», com a conjunta a juntar o B. O seletor dav
 outro proprietário, ou a de todos «por inteiro», e nenhuma das duas é a que alguém entrega: o
 Anexo F é por titular (CIRS art. 19.º), e num imóvel a meias cada um declara a sua quota.
 
-Ficou assim. A Declaração é a de quem tem a sessão (fisco.js:fiscoTitulares): só os imóveis onde
+Ficou assim. A Declaração é a de quem tem a sessão (fisco-titulares.js:fiscoTitulares): só os imóveis onde
 essa conta tem quota, e as rendas, as retenções, os gastos, as obras dos 24 meses e o AIMI pela
 quota-parte dela. A resposta à segunda pergunta é a quota-parte, e não o total. Em tributação
 conjunta entra também a parte do proprietário marcado como B na «A tua situação fiscal» (o

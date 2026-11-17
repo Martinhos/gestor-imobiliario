@@ -47,9 +47,13 @@ describe('o catálogo', () => {
   });
 
   test('cada serviço regista-se no fim do seu ficheiro principal', () => {
+    /* o principal é o que tem o registarServico: o primeiro, salvo na Declaração,
+       que se partiu em sete (titulares, resumo, avisos e quadros vêm antes da vista) */
     for (const s of SERVICOS_FICHEIROS) {
-      const src = ler('web/' + s.ficheiros[0]);
-      assert.match(src, new RegExp("registarServico\\(\\{\\s*id:\\s*'" + s.id + "'"), s.id + ' regista-se em ' + s.ficheiros[0]);
+      const re = new RegExp("registarServico\\(\\{\\s*id:\\s*'" + s.id + "'");
+      const onde = s.ficheiros.filter((f) => re.test(ler('web/' + f)));
+      assert.equal(onde.length, 1, s.id + ' regista-se em exatamente um ficheiro (' + onde.join(', ') + ')');
+      if (s.id !== 'fisco') assert.equal(onde[0], s.ficheiros[0], s.id + ' regista-se no primeiro ficheiro');
     }
   });
 

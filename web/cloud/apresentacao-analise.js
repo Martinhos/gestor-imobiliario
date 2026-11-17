@@ -161,7 +161,7 @@ function aprAProjecao() {
   return { anos: anos, fimQuarto3: fim };
 }
 
-/* O ano dos rendimentos que a página do IRS mostraria (fisco.js:fiscoAnoAtual
+/* O ano dos rendimentos que a página do IRS mostraria (fisco-resumo.js:fiscoAnoAtual
    sem a escolha da pessoa): o corrente — o do exemplo, que tem os meses dele.
    Devolve: o ano (número). */
 function aprAFiscoAno() { return Number(today().slice(0, 4)); }
@@ -942,7 +942,7 @@ function aprAFiscoBarra(alvo) {
 /* A imagem do resumo: o ecrã do IRS · Anexo F com a barra das ações
    (aprAFiscoBarra), e o começo do cartão do quadro 4.1 — onde se preenche e
    um contrato por linha, com as rendas e o imposto estimado
-   (fisco.js:fiscoQuadroResumoHtml). Um cartão por quadro, como a página: o
+   (fisco-quadros.js:fiscoQuadroResumoHtml). Um cartão por quadro, como a página: o
    4.2 tem o seu.
    Devolve: o HTML da imagem. */
 function aprAFiscoResumo() {

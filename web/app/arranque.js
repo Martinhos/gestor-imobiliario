@@ -1,7 +1,7 @@
 /* ================= EXEMPLO =================
    Os dados de exemplo contam também a história do IRS: os imóveis trazem o que
    o Anexo F pede (distrito, código da freguesia, tipo, tipologia, VPT, data de
-   aquisição), os NIFs passam o dígito de controlo (irs.js:nifValido —
+   aquisição), os NIFs passam o dígito de controlo (irs-papeis.js:nifValido —
    são inventados, nunca de pessoas reais), quatro contratos estão declarados
    com o número que a AT lhes deu e um fica por indicar (é ele que faz aparecer
    o prazo do Modelo 2); nenhum é «não declarado», porque essa é uma escolha
@@ -70,7 +70,7 @@ function seed(){
      duração (irs-AAAA.js:taxas.duracao) manda-o para o quadro 4.2 do Anexo F,
      com o 4.2A das datas; os outros, sem termo, ficam no 4.1. Começa depois
      do c4, para a pintura e a caldeira continuarem a ser obras antes do
-     arrendamento do quarto 3 (fisco.js:fiscoObra24De); e a renda fica dentro
+     arrendamento do quarto 3 (fisco-resumo.js:fiscoObra24De); e a renda fica dentro
      do limite do concelho (o 4.2C), que o senhorio já indicou */
   const c5=normContract({propertyId:p2,roomId:q4.id,tenantIds:[t6.id],rent:380,deposit:380,payDay:15,
     start:`${YEAR}-07-15`,end:`${YEAR+10}-07-14`,tenantEmail:t6.email,tenantPhone:t6.phone,

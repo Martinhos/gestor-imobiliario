@@ -1449,7 +1449,7 @@ filtros comuns, e a frase de quem é a declaração — não há titular a escol
 só lá que se escolhe o ano: a barra do IRS (estilos.css:.ana-barra) tem só as
 ações da página e não o repete. Por isso o ponto do funil conta o ano, quando
 foi escolhido e não é o automático (fisco.js:fiscoAnaN,
-fisco.js:fiscoAnoAuto): sem o ano à vista na barra, o ponto diz que a página
+fisco-resumo.js:fiscoAnoAuto): sem o ano à vista na barra, o ponto diz que a página
 está noutro.
 
 A janela das opções (vistas.js:anaOpcoes) tem as linhas das Definições ›
@@ -1484,7 +1484,7 @@ como os cartões: cada serviço carrega sozinho.
 
 Um cartão da Análise tem o título na letra dos títulos, a 18px (16 no
 telemóvel), com o subtítulo ao lado (estilos.css:.ana-cartao;
-avaliacao.js:avaCartao, projecoes.js:prjCartao, fisco.js:fisCartao — três
+avaliacao.js:avaCartao, projecoes.js:prjCartao, fisco-quadros.js:fisCartao — três
 cópias, porque cada serviço carrega sozinho). As tabelas da Análise têm o
 cabeçalho em maiúsculas pequenas, rolam dentro da caixa e, as que começam
 pelo nome, prendem a primeira coluna ao rolar (estilos.css:.ana-fixa); a
@@ -2501,7 +2501,7 @@ sem isso o servidor recusa a gravação inteira (worker/src/files.js:regraDosAne
 e os anexos que lá estão ficam como estavam. A dica por baixo
 (movimento.js:txDicaDosAnexos) pede a fatura numa despesa que conta no Anexo F
 — a coluna dela não é «Não dedutível», nem a categoria está fora dos totais
-(irs.js:irsColunaDe): «Junta a fatura: é o que as Finanças pedem se quiserem
+(irs-papeis.js:irsColunaDe): «Junta a fatura: é o que as Finanças pedem se quiserem
 ver esta despesa.» —, e no resto diz «Recibos, faturas ou comprovativos, em
 imagem ou PDF.». É só uma dica: nada de «A tratar» nem de selos na lista. A
 coluna escolhida à mão troca-a sem repintar (movimento.js:onIrsCol); a
@@ -3106,7 +3106,7 @@ duas — sem selo vermelho, sem aviso, sem «devias» (contrato.js:ctBody). Um
 selo ali não mudava a escolha de ninguém; só afastava quem a fez. O que a
 escolha muda é o que a app faz com o contrato: um não declarado sai do
 resumo do Anexo F e fica listado à parte, com as suas rendas e em linguagem
-neutra, «fora da declaração» (fisco.js:resumoFiscal, a lista `fora`), e não
+neutra, «fora da declaração» (fisco-resumo.js:resumoFiscal, a lista `fora`), e não
 gera nenhum prazo da AT — nem Modelo 2, nem recibos, nem 15 de fevereiro
 (prazos.js:prazosDe). Lembrar a alguém um prazo que decidiu não cumprir não
 é ajudar: é insistir.
@@ -3118,7 +3118,7 @@ a preencher (fisco.js:vFisco). Nunca se inventa um código nem um número: o
 que não está nos dados não está na página. E o que é conta da app vem dito
 como tal: os gastos de um imóvel com vários contratos repartem-se pelas
 linhas na proporção das rendas de cada uma — contando também as rendas que
-ficam fora do quadro, cuja parte não entra (fisco.js:fiscoReparte) —, e o
+ficam fora do quadro, cuja parte não entra (fisco-resumo.js:fiscoReparte) —, e o
 imposto à cabeça é a estimativa sem englobamento; a página chama a cada uma
 estimativa, porque é. Quem declara é a pessoa, no Portal das Finanças; a app
 poupa-lhe a soma e a procura, não a assinatura.
@@ -3137,17 +3137,17 @@ PDF), cada uma com o ícone e uma linha do que leva. Não há partilha do resumo
 em texto: o CSV e o PDF já levam os números. A app não tem guia
 próprio nem faixa das regras do ano: o prazo, o que mudou e os passos vivem
 no guia. Um ano sem versão própria das regras, ou com uma provisória, di-lo
-em «A tratar antes de entregar» (fisco.js:fiscoAvisos). Depois, os cinco
+em «A tratar antes de entregar» (fisco-avisos.js:fiscoAvisos). Depois, os cinco
 números do ano, com as retenções na fonte à cabeça e o imposto estimado no
 cartão azul-noite (fisco.js:fiscoKpis); a grelha «A tratar antes de
 entregar», «A tua situação fiscal» e «Prazos da AT»; e um cartão por
 quadro, o 4.1 e o 4.2, com tudo o que é desse quadro lá dentro e nada do
-outro (fisco.js:fiscoQuadroCard): o título diz o quadro e o que lá vai
+outro (fisco-quadros.js:fiscoQuadroCard): o título diz o quadro e o que lá vai
 («Quadro 4.1 · sem redução pela duração»); abre com onde se preenche e o
 resumo dos contratos dele, um por linha, com as rendas, o imposto estimado e
-o que falta, e o total do quadro (fisco.js:fiscoQuadroResumoHtml); e depois
+o que falta, e o total do quadro (fisco-quadros.js:fiscoQuadroResumoHtml); e depois
 os campos, num cartão por contrato, campo → valor pela ordem do impresso, sem
-rolar de lado (fisco.js:fiscoContratoHtml, fisco.js:fiscoCamposDe), com um
+rolar de lado (fisco-quadros.js:fiscoContratoHtml, fisco-quadros.js:fiscoCamposDe), com um
 cartão do total no fim. Nenhum cartão fala dos dois quadros ao mesmo tempo:
 uma tabela só, com o quadro numa coluna, não dizia onde se preenchia cada
 contrato. O PDF leva os mesmos
@@ -3155,14 +3155,14 @@ campos e os mesmos números. Não há simulação do englobamento: comparar com
 os escalões pedia os outros rendimentos do agregado e não se lia; o guia
 explica a escolha, e o imposto à cabeça diz «sem englobamento». «Fora da
 declaração» diz-se também quando não há nada fora
-(fisco.js:fisNadaForaCard). O NIF formatado nunca parte entre linhas (o
+(fisco-quadros.js:fisNadaForaCard). O NIF formatado nunca parte entre linhas (o
 .u-ws-nowrap; o fmtNIF continua com espaços normais).
 
 «A tratar antes de entregar» (fisco.js:fiscoObrigacoesCard) é numerado, e
 cada aviso leva o selo do seu nível — vermelho o que falta à AT, âmbar o que
 convém tratar, cinzento o que só se diz — e um botão que diz o sítio que
 abre (fisco.js:fiscoRotuloDoAviso). O nível vem do resumo
-(fisco.js:fiscoAvisos, o campo `nivel`), e os números do resumo não mudam
+(fisco-avisos.js:fiscoAvisos, o campo `nivel`), e os números do resumo não mudam
 com ele. Os prazos da AT
 estão na própria página (fisco.js:fisPrazosCard): os de prazos.js:prazosAtivos
 do Modelo 2, da cessação, dos recibos, da entrega, de fevereiro, do IHRU e do
@@ -3172,11 +3172,11 @@ cinzento), e nada antes de o estado chegar (espera.js:sabemosOEstado).
 
 Os números seguem a regra de caixa da lei. Uma renda conta no ano em que se
 recebe, mesmo que respeite a outro, e a parte de anos anteriores fica
-apontada para o quadro 8 (fisco.js:fiscoAnosAnterioresCard). Um gasto conta
+apontada para o quadro 8 (fisco-quadros.js:fiscoAnosAnterioresCard). Um gasto conta
 no ano em que se pagou, e só se o imóvel tinha um contrato em vigor nesse
 dia — o condomínio de um mês com a casa vazia não é gasto de arrendamento;
 o IMI e o selo contam no ano em que o imóvel deu rendas
-(fisco.js:FISCO_SEM_PERIODO). A coluna escolhida à mão na despesa passa por
+(fisco-resumo.js:FISCO_SEM_PERIODO). A coluna escolhida à mão na despesa passa por
 cima disto: a pessoa decidiu, e a página diz quantos gastos ficaram de fora
 para ela poder decidir.
 
@@ -3186,12 +3186,12 @@ categorias, por categoria ou por «categoria / subcategoria», e repõe-se num
 toque (definicoes.js:vCats, definicoes.js:tabelaDeCategorias). A escolha
 feita no próprio movimento manda sobre a regra, a subcategoria manda sobre a
 categoria, e o que não tem regra cai em «outros gastos» com a origem à vista
-(irs.js:irsColunaDe) — para o resumo poder dizer «isto foi por
+(irs-papeis.js:irsColunaDe) — para o resumo poder dizer «isto foi por
 omissão» em vez de o esconder num total.
 
 As obras feitas nos 24 meses antes de um contrato, com a casa vazia, entram
 na linha dele no primeiro ano em que ele tem rendas, e só nesse
-(fisco.js:resumoFiscal): o ano do início pode não ter renda nenhuma, e a obra
+(fisco-resumo.js:resumoFiscal): o ano do início pode não ter renda nenhuma, e a obra
 não pode ficar em ano nenhum nem em dois.
 
 O contrato em PDF segue a mesma regra de não inventar. Uma frase sem o dado de
@@ -3291,10 +3291,10 @@ servidor, e uma base antiga ganha-o completo (dados.js:normIrsDefs) — sempre
 um objeto novo, nunca o do blank, que a nuvem copia por referência.
 
 - De quem é. A declaração é sempre a de quem tem a sessão, sem seletor de
-  proprietário (fisco.js:fiscoTitulares): só os imóveis onde essa conta tem
+  proprietário (fisco-titulares.js:fiscoTitulares): só os imóveis onde essa conta tem
   quota, e as rendas, as retenções, os gastos, as obras dos 24 meses e o
   AIMI pela quota-parte dela — o Anexo F é por titular (CIRS art. 19.º).
-  Sem sessão é a do único proprietário (fisco.js:fiscoEu); com vários, os
+  Sem sessão é a do único proprietário (fisco-titulares.js:fiscoEu); com vários, os
   valores vão por inteiro e «A tratar antes de entregar» di-lo. Um
   movimento sem imóvel é da conta que o registou: conta por inteiro para
   quem o recebeu ou pagou, se é titular da declaração, e sem «pago por»
@@ -3305,9 +3305,9 @@ um objeto novo, nunca o do blank, que a nuvem copia por referência.
   parte de quem está marcado como B, o cônjuge: um imóvel dos dois dá duas
   linhas, uma por titular, cada uma com a sua quota-parte, e o contrato
   conta uma vez nos avisos e nos totais de contratos
-  (fisco.js:fiscoTitularDe, fisco.js:fiscoNContratos). Os subtítulos dizem
+  (fisco-titulares.js:fiscoTitularDe, fisco-resumo.js:fiscoNContratos). Os subtítulos dizem
   a parte quando não é inteira — «a tua quota-parte», «a tua parte e a do
-  titular B» — e nunca o nome de um filtro (fisco.js:fiscoParte). A lista do
+  titular B» — e nunca o nome de um filtro (fisco-resumo.js:fiscoParte). A lista do
   A/B tem os donos de todos os imóveis com rendas no ano, quem declara à
   cabeça com « (eu)», para o cônjuge com um imóvel só dele poder ser
   marcado (fisco.js:fiscoDonosDoAno).
@@ -3315,20 +3315,20 @@ um objeto novo, nunca o do blank, que a nuvem copia por referência.
   instruções do 6D pedem o campo do 4.1 onde o imóvel foi identificado, com
   imposto zero; as rendas contam nas rendas e nos gastos do quadro, mas não no
   líquido nem no imposto — vão a `totais.isentos`, que o englobamento usa só
-  para a taxa (fisco.js:fiscoIsentosCard).
+  para a taxa (fisco-quadros.js:fiscoIsentosCard).
 - AIMI (9). Nunca é gasto. A página soma o AIMI pago no ano e estima a parte
   que abate ao imposto: a do VPT dos prédios com rendas sobre o VPT de todos
-  os urbanos, até ao imposto das rendas (fisco.js:fiscoAimi). Sem o VPT de um
+  os urbanos, até ao imposto das rendas (fisco-titulares.js:fiscoAimi). Sem o VPT de um
   prédio, não estima — diz qual falta.
 - 4.2A, 4.2B e 4.2C. Contrato a contrato, a comunicação de fevereiro
   (comunicada a dd/mm/aaaa, ou por comunicar); os contratos com a descida do
   n.º 24, com as duas rendas; e a resposta do 4.2C só quando todos os
   contratos celebrados desde 2024 estão confirmados dentro do limite
-  (fisco.js:fiscoReducoesHtml).
+  (fisco-quadros.js:fiscoReducoesHtml).
 - Modelo 44. Com a dispensa dos recibos ligada, as rendas sem recibo deixam
   de ser falta e «A tratar antes de entregar» ganha a linha do Modelo 44,
   com o prazo (fim de fevereiro desde as rendas de 2025;
-  fisco.js:fiscoPrazoModelo44).
+  fisco-resumo.js:fiscoPrazoModelo44).
 
 ## Segurar não é selecionar
 Um toque longo é um dedo parado sobre texto, e é isso que o browser espera
@@ -3634,7 +3634,7 @@ para antes da compra da casa: o chão do cursor é o primeiro dia de pagamento
 desde a data de compra (planeados.js:primeiraDesdeACompra), mesmo num contrato
 com o início mais antigo; ver «A data de compra é o chão das datas da casa».
 
-Renda é o que é renda (irs.js:ehRenda): a caução e os empréstimos são passivo
+Renda é o que é renda (irs-papeis.js:ehRenda): a caução e os empréstimos são passivo
 e não contam. E conta pelo mês a que respeita, não pelo dia em que entrou
 (planeados.js:mesDaRenda) — a renda de setembro paga a 3 de outubro é de
 setembro. Contar qualquer movimento do contrato fazia a caução do primeiro dia
@@ -5117,10 +5117,10 @@ As páginas:
   para goSet('irs')), e os textos que ensinam o caminho para as etiquetas e
   para a coluna do Anexo F de uma categoria dizem «Definições → Categorias,
   etiquetas e IRS» (movimento.js:addTxTag, cloud/selecao.js:CW.selEditar,
-  fisco.js:fiscoAvisos, fisco.js:fiscoKpis).
+  fisco-avisos.js:fiscoAvisos, fisco.js:fiscoKpis).
 - «Importar e cópias» (definicoes.js:vImport, D-DefDados): a cópia de
   segurança e a exportação lado a lado — os Movimentos e, com a Declaração
-  ligada, o Anexo F do ano (fisco.js:fiscoCsv), os dois só com o que é meu —;
+  ligada, o Anexo F do ano (fisco-exportar.js:fiscoCsv), os dois só com o que é meu —;
   o Splitwise, com o ficheiro escolhido ou colado (o imóvel, a quota-parte e
   a pré-visualização ficam na janela seguinte, splitwise.js:swMapModal) e
   «Anular a última importação (N movimentos, dd/mm/aaaa)»
@@ -6127,7 +6127,7 @@ cima da vista, nem nos filtros das listas, das análises ou dos filtros
 comuns. Os valores são por inteiro, e quem procura um proprietário
 encontra-o pela pesquisa (a dos Imóveis procura os donos) ou escolhe o
 imóvel. Nem o IRS · Anexo F tem titular a escolher: a declaração é a de
-quem tem a sessão (fisco.js:fiscoTitulares). Por isso nada na app escreve o
+quem tem a sessão (fisco-titulares.js:fiscoTitulares). Por isso nada na app escreve o
 ownerFilter a não ser para o pôr a '' (testes/sem-filtro-de-dono.test.js
 confere-o), e não há valor de antes que filtre um ecrã às escondidas.
 Um filtro comum guardado com proprietário aplica o resto e ignora essa

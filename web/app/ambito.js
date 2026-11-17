@@ -8,7 +8,7 @@
    «Proprietário em foco» da gaveta, a faixa do âmbito no topo, o campo
    «Proprietário» dos filtros das listas, das análises e dos filtros comuns),
    e o titular do IRS · Anexo F também — a Declaração é sempre a de quem tem
-   a sessão (fisco.js:fiscoTitulares). Nada na app escreve o ownerFilter a
+   a sessão (fisco-titulares.js:fiscoTitulares). Nada na app escreve o ownerFilter a
    não ser para o pôr a '' (testes/sem-filtro-de-dono.test.js confere-o), e
    por isso já não há o que largar ao mudar de ecrã. A canalização ficou
    inteira — visiveis, scope, inScope, e a quota do saldos.js:sh, do

@@ -62,13 +62,13 @@ const GUARDA = SEM_CACHE.indexOf(hn) < 0 && !DEV_WD;
    nos comentários de dentro: o scripts/chegada.js lê-a pelo texto. */
 const APP = [
   // a base
-  'eventos', 'estilos-calculados', 'dados', 'anexos', 'formato', 'espera', 'registos', 'tipos', 'irs', 'saldos', 'ambito', 'icones', 'tema',
+  'eventos', 'estilos-calculados', 'dados', 'anexos', 'formato', 'espera', 'registos', 'tipos', 'irs', 'irs-papeis', 'saldos', 'ambito', 'icones', 'tema',
   'lista', 'continuidade', 'graficos', 'credito', 'componentes', 'metricas', 'navegacao', 'servicos', 'acessos', 'vistas',
   'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'splitwise', 'definicoes', 'copias', 'arranque',
   // os serviços
   'painel-geral', 'lista-imoveis', 'lista-contratos', 'lista-pessoas', 'lista-colaboradores',
   'lista-movimentos', 'projecoes', 'imovel', 'fine', 'pessoas', 'contrato', 'tarefas', 'planeados', 'visitas', 'calendario', 'movimento',
-  'creditos', 'contrato-pdf', 'avaliacao', 'fisco', 'fisco-pdf',
+  'creditos', 'contrato-pdf', 'avaliacao', 'fisco-titulares', 'fisco-resumo', 'fisco-avisos', 'fisco-quadros', 'fisco', 'fisco-exportar', 'fisco-pdf',
 ].map((n) => '/app/' + n + '.js');
 const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'grupos', 'ajuda', 'painel',
   'filtros', 'entrada', 'novidades', 'selecao', 'selecao-listas', 'guia',

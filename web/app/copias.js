@@ -102,7 +102,7 @@ function celulaCsv(x){
    põe-na o download, e as células passam pelo celulaCsv. No fim vai o que o IRS
    pede: o mês a que a renda respeita, a retenção na fonte, se o recibo
    eletrónico foi emitido (só nas rendas), a coluna do Anexo F (só nas despesas,
-   pela mesma regra do resumo: irs.js:irsColunaDe), e o estado fiscal e o
+   pela mesma regra do resumo: irs-papeis.js:irsColunaDe), e o estado fiscal e o
    número na AT do contrato a que o movimento está preso.
    Devolve: nada — dispara a descarga do CSV. */
 function downloadCsv(){

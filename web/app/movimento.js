@@ -603,7 +603,7 @@ function txPodeJuntarAnexos(t){
 }
 /* A dica do bloco dos anexos. Numa despesa que conta no Anexo F (a coluna
    dela não é «Não dedutível», nem a categoria está fora dos totais:
-   irs.js:irsColunaDe), pede a fatura, que é o que as Finanças pedem para ver
+   irs-papeis.js:irsColunaDe), pede a fatura, que é o que as Finanças pedem para ver
    a despesa; no resto, diz o que se junta. Só uma dica: sem avisos «A
    tratar» nem selos na lista (decisão do Martinho, 2026-11-13).
    Recebe: t — o movimento do formulário (com a categoria, a subcategoria e a irsCol).
