@@ -115,6 +115,9 @@ describe('o contrato num imóvel por quartos', () => {
     el('c_prop').value = 'P1';
     el('c_rent').value = '400';
     el('c_room').value = '';
+    // o que o formulário traz escrito: o início (obrigatório) e o «Contrato em vigor» ligado
+    el('c_start').value = app.today();
+    el('c_active').checked = true;
     app.onSave();
     assert.deepEqual(vistos, [['c_roomEsc', 'A casa inteira não se escolhe enquanto houver um quarto arrendado sem data de fim: escolhe um quarto.']]);
     assert.equal(gravou, 0);
@@ -152,8 +155,12 @@ describe('o contrato num imóvel por quartos', () => {
     const el = (id) => app.document.getElementById(id);
     el('c_prop').value = 'P1';
     el('c_rent').value = '900';
+    // o que o formulário traz escrito: o início gravado e o «Contrato em vigor» ligado
+    el('c_start').value = app.cForm.start;
+    el('c_active').checked = true;
     app.onSave();
     assert.equal(gravou, 1);
+    assert.equal(app.cForm.active, true);
   });
 
   test('editar o contrato de um quarto: o quarto dele escolhido, mesmo com outro contrato no mesmo quarto; sem a frase do contrato novo', () => {

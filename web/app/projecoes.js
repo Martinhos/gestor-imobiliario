@@ -35,7 +35,9 @@ function mesesEmVigor(c,ano){
   return Math.max(0,ate-de);
 }
 /* Os números da projeção, sem HTML: por ano do horizonte (s.years), as rendas
-   dos contratos ativos com o aumento anual de cada um, o IRS sobre elas à taxa
+   dos contratos ativos com o aumento anual de cada um, o IRS sobre elas — a
+   renda bruta, sem abater os gastos dedutíveis, e o cabeçalho di-lo
+   (projDespesasTxt, D100) — à taxa
    de cada contrato no ano da coluna (irs.js:taxRateOf, com as regras da versão
    desse ano — a mesma da «renda líquida de impostos»; conta no ano das rendas,
    embora se pague no seguinte), as despesas previstas
@@ -94,7 +96,8 @@ function projNomesCats(l){
 }
 /* O que o cabeçalho das Projeções diz das despesas e do IRS: quanto entra por ano,
    de quantos planeados e de que categorias, e de onde vêm (a ficha de cada imóvel e
-   os Planeados); o IRS à taxa de cada contrato e quando se paga; o que ficou de fora
+   os Planeados); o IRS à taxa de cada contrato, sobre a renda bruta — os gastos
+   dedutíveis baixam-no e aqui não se descontam (D100) —, e quando se paga; o que ficou de fora
    por ter sido pago de uma vez; e a porta para os Planeados — só com esse serviço
    ligado nesta conta.
    Sem nenhum planeado de despesa as contas fazem-se com zero e as despesas
@@ -107,7 +110,9 @@ function projDespesasTxt(base){
   const dentro=base.n>0
     ?`Despesas previstas: <b>${euro(base.op)}/ano</b> — ${base.n} planeado${base.n===1?'':'s'} de despesa (${esc(projNomesCats(base.porCat))}): o IMI, o condomínio e o seguro da ficha de cada imóvel e os que marcaste nos Planeados; crescem com a inflação. `
     :'';
-  const irs='IRS sobre as rendas à taxa de cada contrato, contado no ano das rendas — a declaração entrega-se de abril a junho e paga-se até 31 de agosto do ano seguinte.';
+  /* sobre a renda bruta: os gastos que se deduzem não se descontam aqui, e o
+     imposto a sério é menor (D100) */
+  const irs='IRS sobre as rendas brutas, à taxa de cada contrato: o IMI, o condomínio e as obras baixam-no na declaração, e aqui não se descontam. Conta no ano das rendas — a declaração entrega-se de abril a junho e paga-se até 31 de agosto do ano seguinte.';
   /* o «ainda» só faz sentido depois das despesas previstas */
   const fora=base.fora>0?` Em ${base.foraAno} gastaste${base.n>0?' ainda':''} <b>${euro(base.fora)}</b> em despesas de uma vez (${esc(projNomesCats(base.foraPorCat))}), que não se projetam.`:'';
   const porta=base.n>0&&servicoLigado('recurring')?`<button type="button" class="btn sm" data-toca="ecra" data-click="go('recurring')">Ver planeados</button>`:'';
@@ -235,12 +240,12 @@ function prjFluxos(rows,anos){
   return prjCartao(comCf?'Entradas, saídas e cashflow por ano':'Entradas e saídas por ano','rendas para cima; IRS, despesas e prestações para baixo',g+cf,'prj-fluxos');
 }
 /* A tabela «Ano a ano» (a prancheta): uma coluna por contrato, as rendas, o
-   IRS, as despesas, as prestações, o cashflow e — com créditos em uso — a
-   dívida no fim de cada ano.
+   IRS (sobre a renda bruta, D100), as despesas, as prestações, o cashflow e —
+   com créditos em uso — a dívida no fim de cada ano.
    Recebe: rows, act, debtY — o que projRows devolve; comDivida — há créditos em uso.
    Devolve: o HTML do cartão (string). */
 function prjTabela(rows,act,debtY,comDivida){
-  return prjCartao('Ano a ano','uma coluna por contrato · IRS contado no ano das rendas',`<div class="tablewrap"><table class="table ana-fixa prj-tabela"><thead><tr>
+  return prjCartao('Ano a ano','uma coluna por contrato · IRS sobre a renda bruta, no ano das rendas',`<div class="tablewrap"><table class="table ana-fixa prj-tabela"><thead><tr>
     <th>Ano</th>${act.map(c=>`<th>${esc(ctName(c))}</th>`).join('')}<th>Rendas</th><th>IRS</th><th>Despesas</th><th>Prestações</th><th>Cashflow</th>${comDivida?'<th>Dívida no fim</th>':''}</tr></thead><tbody>
     ${rows.map((r,i)=>`<tr><td><b>${r.yr}</b></td>${r.per.map(v=>`<td>${v?euro(v):'—'}</td>`).join('')}
       <td class="pos"><b>${euro(r.rent)}</b></td><td>${euro(r.irs)}</td><td>${euro(r.exp)}</td><td>${euro(r.loan)}</td>

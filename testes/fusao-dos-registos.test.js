@@ -335,7 +335,9 @@ describe('o cliente', () => {
   });
 
   test('a base de cada registo refaz-se a cada estado e muda com cada envio aceite; o envio leva só o que mudou', async () => {
-    const { env, A } = await partilhada();
+    // um contrato já com as comunicações migradas (o que esta versão escreve):
+    // o de antes leva a migração na primeira alteração (sync-comunicacoes.test.js)
+    const { env, A } = await partilhada({ fisco: { comunicacoesV: 2 } });
     const cA = cliente(env, A);
     await ler(cA);
     const k = 'r:H1:contract:C1';
@@ -351,7 +353,8 @@ describe('o cliente', () => {
   });
 
   test('a base de um registo por enviar fica no aparelho e volta ao recarregar, pela normalização desta versão', async () => {
-    const { env, A } = await partilhada();
+    // já com as comunicações migradas, como o teste de cima
+    const { env, A } = await partilhada({ fisco: { comunicacoesV: 2 } });
     const cA = cliente(env, A);
     await ler(cA);
     cA.__semRede = true;

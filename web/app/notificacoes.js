@@ -735,9 +735,15 @@ function atencaoCorpo(){
      (prazos.js:pzQuando — «Falta 1 dia», «É hoje», «Passou há 3 dias») e
      com a mesma cor (prazos.js:pzSelo). Sem «abrir» (o serviço que o abria
      está desligado nesta conta) a linha não se apresenta como tocável — um
-     toque que só fecha a janela é um beco —, como no prazos.js:prazosCard */
+     toque que só fecha a janela é um beco —, como no prazos.js:prazosCard. Um
+     aviso sem data diz «Sem prazo», a cinzento (pzQuando, pzSelo). Um prazo que
+     se resolve no próprio aviso (a `acao` de prazos.js:prazosDe — «Marcar como
+     enviado», «Marcar como comunicada») não é uma linha-botão (um botão não
+     leva outro dentro): leva os botões por baixo, como os por confirmar — o da
+     ação, que fecha esta janela antes de abrir a do dia, e o «Ver» */
   const prazo=p=>{
     const dentro=`<div class="atencao-txt"><p class="title">${esc(p.titulo)}</p>${p.sub?'<p class="small">'+esc(p.sub)+'</p>':''}</div><span class="badge ${pzSelo(p)}">${pzQuando(p)}</span>`;
+    if(p.acao)return `<div class="atencao-linha">${dentro}<div class="chips-fila atencao-acoes"><button type="button" class="btn sm primary" data-toca="camada" aria-label="${esc(p.acaoTexto)}: ${esc(p.titulo)}" data-click="closeModal();${p.acao}">${esc(p.acaoTexto)}</button>${p.abrir?`<button type="button" class="btn sm" data-toca="camada" data-click="closeModal();${p.abrir}">Ver</button>`:''}</div></div>`;
     return p.abrir?`<button type="button" class="atencao-linha tap" data-toca="camada" data-click="closeModal();${p.abrir}">${dentro}</button>`:`<div class="atencao-linha">${dentro}</div>`;
   };
   /* uma linha da atividade: as iniciais de quem, o que fez e quando; leva ao

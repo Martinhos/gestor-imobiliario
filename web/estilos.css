@@ -1883,6 +1883,9 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
 /* a ação no canto da cabeça de um cartão: depois da .vg-ligacao, que lhe
    apagava a margem da esquerda */
 .vg-cab-acao{margin-left:auto;align-self:center}
+/* o «Marcar como …» de um prazo da AT, ao lado do ✕ (prazos.js:prazosCard) */
+.vg-feito{flex:0 0 auto;white-space:nowrap}
+@media(pointer:coarse){.btn.sm.vg-feito{min-height:44px}}
 /* uma ligação no canto lê-se na linha de base do título, como no canvas
    («Portefólio» · «Avaliação»): ao centro, com os 44px do dedo, descia 11px; a
    margem negativa deixa o alvo inteiro sem engrossar a cabeça */
@@ -3673,6 +3676,10 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .fis-sit-nota{padding:0 16px 14px}
 .fis-sit-lbl{margin:0;padding:12px 16px 2px;border-top:1px solid var(--line)}
 .fis-sit-lbl+.fis-linha{border-top:0}
+/* a escolha do cônjuge e da letra (fisco.js:fiscoSituacaoCard); os botões
+   de um prazo da AT com «feito», por baixo do texto (fisco.js:fisPrazosCard) */
+.fis-sit-campo{padding-top:6px}
+.fis-pz-acoes{margin-top:8px}
 /* a linha de um interruptor é o rótulo dele: toca-se inteira */
 .fis-linha-toque{font-size:inherit;font-weight:400;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
 @media(hover:hover) and (pointer:fine){.fis-linha-toque:hover{background:var(--tint)}}
@@ -3895,6 +3902,17 @@ button.def-cat-abre:active{background:var(--press)}
 /* as opções da coluna do Anexo F partem em linhas em vez de se cortarem:
    «Obras antes do arrendamento (24 meses)» tem a regra no nome */
 .def-cat-col .selopt span{white-space:normal;overflow:visible;text-overflow:clip}
+/* a coluna «a confirmar» a âmbar (pela cor da letra: o escuro forçado do
+   Samsung só deixa a da frente); o AIMI fixo, sem seletor (definicoes.js:colunaDoAimi);
+   a nota de uma categoria que o IRS lê por baixo da linha (definicoes.js:notaDaCategoria) */
+.def-cat-col.confirmar .selbtn span{color:var(--warn)}
+.def-cat-fixa{display:flex;flex-wrap:wrap;align-items:center;gap:0 4px;min-height:36px;padding:0 10px;font-size:13.5px}
+.def-cat-nota{margin:0;padding:0 14px 10px 52px;color:var(--muted)}
+/* as categorias que a Declaração não reconhece (definicoes.js:cartaoDasCategoriasDoIrs) */
+.def-irs-id{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.def-irs-id-txt{min-width:0}
+/* a nota «O IRS usa esta categoria…» no fim do ⋯ (definicoes.js:menuDaCategoria) */
+.menupop .def-menu-nota{margin:0;padding:8px 12px;max-width:260px;color:var(--muted);white-space:normal}
 /* A linha parte-se em duas quando a TABELA é estreita, e não o ecrã: dos
    901px para cima a navegação lateral das Definições come 274px, e a 920px a
    tabela ficava com 360 (os nomes com 0px e os títulos uns por cima dos
@@ -3915,6 +3933,7 @@ button.def-cat-abre:active{background:var(--press)}
     .def-so-tel{display:inline}
     .def-sub .def-cat-nome{padding-left:16px}
     .def-cat-col .selpop{right:auto;width:max-content;min-width:100%;max-width:calc(100cqi - 24px)}
+    .def-cat-nota{padding:0 8px 10px 12px}
   }
   @container defcat (min-width:760px){
     .def-cat-col .selpop{right:auto;width:max-content;min-width:100%;max-width:340px}
@@ -3932,6 +3951,7 @@ button.def-cat-abre:active{background:var(--press)}
     .def-cat-menu{grid-area:menu}
     .def-so-tel{display:inline}
     .def-sub .def-cat-nome{padding-left:16px}
+    .def-cat-nota{padding:0 8px 10px 12px}
   }
 }
 /* «Repor as colunas do Anexo F» numa linha só dela, por baixo da nota: no

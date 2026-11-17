@@ -120,11 +120,11 @@ describe('pedir para transferir o controlo', () => {
   });
 
   test('o ⋯ da ficha tem «Transferir o controlo» antes do «Apagar imóvel», só no que criei e tem comproprietários', () => {
-    assert.deepEqual([...app.imvMenuDaFicha('H1')].map((x) => x.label), ['Transferir o controlo', 'Apagar imóvel']);
+    assert.deepEqual([...app.imvMenuDaFicha('H1')].map((x) => x.label), ['Transferir o controlo', 'Marcar como vendido', 'Apagar imóvel']);
     assert.equal(app.imvMenuDaFicha('H1')[0].act, "imvTransferir('H1')");
     assert.ok(!app.imvMenuDaFicha('H1')[0].danger, 'transferir o controlo não destrói: não é vermelho');
-    assert.deepEqual([...app.imvMenuDaFicha('H7')].map((x) => x.label), ['Apagar imóvel'], 'sem comproprietários, não há a quem passar');
-    assert.deepEqual([...app.imvMenuDaFicha('H2')].map((x) => x.label), ['Apagar imóvel'], 'num que não criei, só o sair');
+    assert.deepEqual([...app.imvMenuDaFicha('H7')].map((x) => x.label), ['Marcar como vendido', 'Apagar imóvel'], 'sem comproprietários, não há a quem passar');
+    assert.deepEqual([...app.imvMenuDaFicha('H2')].map((x) => x.label), ['Marcar como vendido', 'Apagar imóvel'], 'num que não criei, só o sair (e a venda, que é de todos os donos)');
     let ficha = null;
     app.abrirFicha = (o) => { ficha = o; return {}; };
     app.propView('H1');
@@ -134,7 +134,7 @@ describe('pedir para transferir o controlo', () => {
   test('sem o campo transfers no estado (um servidor de antes), sem sessão ou com um pedido pendente, não há «Transferir o controlo»', () => {
     delete app.CW.state.transfers;
     assert.equal(app.imvPossoTransferir('H1'), false, 'o servidor não sabe: levava a um 404');
-    assert.deepEqual([...app.imvMenuDaFicha('H1')].map((x) => x.label), ['Apagar imóvel']);
+    assert.deepEqual([...app.imvMenuDaFicha('H1')].map((x) => x.label), ['Marcar como vendido', 'Apagar imóvel']);
     app.CW.state.transfers = { incoming: [], outgoing: [{ lote: 'LT', to: { id: 'BRUNO', name: 'Bruno' }, houses: [{ id: 'H1', name: 'T2 Benfica' }], at: 1 }] };
     assert.equal(app.imvPossoTransferir('H1'), false, 'um pendente por casa');
     assert.equal(app.imvPossoTransferir('H6'), true);

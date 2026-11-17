@@ -115,9 +115,14 @@ CW.editProfile = function () {
 donosDoFormulario = function () { return CW.user ? cwOwnersBlock() : ''; };
 
 /* HTML da secção "Proprietários e quota-parte" do formulário do imóvel, na versão
-   com contas: quotas atuais e, se houver proposta pendente, as novas percentagens
-   com os botões de confirmar/rejeitar (ou cancelar, para quem já confirmou); sem
-   proposta, o botão de propor. Com um só dono, apenas explica como partilhar.
+   com contas: quotas atuais (da casa toda, com os donos fora da app a abater)
+   e, se houver proposta pendente, as novas — com os de fora e o dia em que
+   começam, se ela os traz (imovel.js:imvQuotasDaProposta) — e os botões de
+   confirmar/rejeitar (ou cancelar, para quem já confirmou); sem proposta, o
+   botão de propor. Com um só dono, diz o que se sabe dos donos fora da app
+   (por confirmar, «não há outros», ou quem e com que quota) e abre a mesma
+   janela para os indicar (imovel.js:imvQuotasSoTeu, D08), e explica como
+   partilhar.
    Lê o imóvel "vivo" da base, não o rascunho do formulário. É um grupo do
    formulário (.sect, como os outros), com o título no cabeçalho.
    Devolve: o HTML (texto) da secção, pronto a entrar no corpo do formulário. */
@@ -145,18 +150,14 @@ function cwOwnersBlock() {
       '. <a href="#" class="u-c-v-accent" data-toca="ecra" data-click="event.preventDefault();cwGerirColaboradores()">Gerir</a></div>'
     : '';
   if (parts.length < 2) {
-    return grupo('Proprietários', '<div class="hint">Este imóvel é só teu (100%). ' +
-      'Para o teres em compropriedade, partilha-o com outro utilizador em <b>Pessoas → Proprietários</b>.</div>' + colabHtml);
+    // os donos fora da app e a janela das quotas são dos Imóveis (imovel.js:imvQuotasSoTeu)
+    return grupo('Proprietários', '<div class="hint">Este imóvel é só teu na app.</div>' +
+      (servicoLigado('properties') ? imvQuotasSoTeu(live, myId) : '') +
+      '<div class="hint">Para o teres em compropriedade com outra conta, partilha-o com outro utilizador em <b>Pessoas → Proprietários</b>.</div>' + colabHtml);
   }
-  var shares = sharesOf(live);
   var prp = (CW.state.proposals || []).filter(function (x) { return x.houseId === p.id; })[0];
-  var rows = parts.map(function (u) {
-    var o = owner(u) || { name: u };
-    var cur = pct(shares[u] || 0, 0);
-    var nxt = prp ? dec(Math.round((Number(prp.shares[u]) || 0) * 100) / 100) + '%' : '';
-    return '<div class="stat"><span>' + esc(o.name) + (u === myId ? ' (tu)' : '') + '</span>' +
-      '<b class="num">' + cur + (prp ? ' <span class="u-c-v-warn">→ ' + nxt + '</span>' : '') + '</b></div>';
-  }).join('');
+  // as quotas de agora e as da proposta, com os de fora e o dia (imovel.js:imvQuotasDaProposta)
+  var rows = servicoLigado('properties') ? imvQuotasDaProposta(live, parts, prp, myId) : '';
   var foot;
   if (prp) {
     var meOk = prp.approvals.indexOf(myId) > -1;
@@ -219,57 +220,27 @@ function refreshPropModal(hid) {
    todos os comproprietários confirmarem. É o único sítio que fala com a rota
    da proposta — a ficha do imóvel (CW.proposeShares) e o modal das partilhas
    (partilha.js:CW.sharesModal) passam por aqui.
-   Recebe: hid — o id da casa; shares — {userId: percentagem}, a somar 100.
+   Recebe: hid — o id da casa; shares — {userId: percentagem}, a somar 100;
+   extra (opcional) — {fora, desde}: os comproprietários fora da app (null,
+   [] ou [{id?, nome, quota}], só quando mudam) e o primeiro dia das quotas
+   novas ('AAAA-MM-DD', só quando a mudança tem data) — worker/src/rotas/casas.js:propostaDoCorpo.
    Devolve: a promessa da API (POST /api/houses/:hid/proposal). */
-function enviarProposta(hid, shares) {
-  return api('POST', '/api/houses/' + hid + '/proposal', { shares: shares });
+function enviarProposta(hid, shares, extra) {
+  var corpo = { shares: shares };
+  if (extra && extra.fora !== undefined) corpo.fora = extra.fora;
+  if (extra && extra.desde) corpo.desde = extra.desde;
+  return api('POST', '/api/houses/' + hid + '/proposal', corpo);
 }
 
-/* modal para propor nova divisão de quotas da casa hid: valida que as percentagens
-   somam 100 e envia a proposta para a API — só entra em vigor quando todos os
-   comproprietários confirmarem. Uma divisão igual à atual não gera proposta.
-   fromShare ajusta o texto para o caso de a casa ter acabado de ser partilhada;
-   no fim segue para a próxima proposta em fila (nextShareProposal).
+/* A janela das quotas da casa hid (D08, D29, D93): é dos Imóveis
+   (imovel.js:imvPropostaAbrir — as percentagens da casa toda, os donos fora
+   da app e desde quando valem); daqui só sai pela rota (enviarProposta).
+   Sem os Imóveis nesta conta, segue para a próxima proposta em fila.
    Recebe: hid — o id da casa; fromShare (opcional) — verdadeiro quando a casa
    acabou de ser partilhada (muda o texto do modal).
    Devolve: nada — abre o modal; o envio à API acontece no Guardar. */
 CW.proposeShares = function (hid, fromShare) {
-  var live = (db.properties || []).find(function (x) { return x.id === hid; });
-  if (!live) return nextShareProposal();
-  var parts = live.ownerIds || [];
-  if (parts.length < 2) return nextShareProposal();
-  var cur = sharesOf(live);
-  var intro = fromShare
-    ? 'Acabaste de partilhar <b>' + esc(live.name || 'esta casa') + '</b> — indica a divisão de quotas entre os comproprietários. Fica em partes iguais enquanto os outros não confirmarem a tua proposta.'
-    : 'Define a percentagem de cada comproprietário. A nova divisão só entra em vigor depois de todos confirmarem.';
-  var body = '<div class="form"><div class="hint">' + intro + '</div>' +
-    parts.map(function (u) {
-      var o = owner(u) || { name: u };
-      return '<label>' + esc(o.name) + (CW.user && u === CW.user.id ? ' (tu)' : '') + ' (%)' +
-        '<input id="cw_pp_' + u + '" type="text" inputmode="decimal" value="' + dec(Math.round((cur[u] || 0) * 1000) / 10) + '" autocomplete="off"></label>';
-    }).join('') + '</div>';
-  openModal(fromShare ? 'Divisão de quotas · ' + (live.name || '') : 'Propor nova divisão', body);
-  onSave = function () {
-    var shares = {}, total = 0;
-    for (var i = 0; i < parts.length; i++) {
-      var v = numTaxa(val('cw_pp_' + parts[i]));   // é uma percentagem: «33,333» são 33,333, não 33 333
-      if (!isFinite(v) || v < 0) return toast('Percentagens inválidas.');
-      shares[parts[i]] = v;
-      total += v;
-    }
-    if (Math.abs(total - 100) > 0.5) return toast('As percentagens têm de somar 100 (agora somam ' + dec(Math.round(total * 100) / 100) + ').');
-    // igual à divisão atual: não há nada para os outros confirmarem
-    var unchanged = parts.every(function (u) { return Math.abs(shares[u] - (cur[u] || 0) * 100) < 0.1; });
-    if (unchanged) {
-      closeModal();
-      toast('A divisão fica como está.');
-      return nextShareProposal();
-    }
-    enviarProposta(hid, shares)
-      .then(function () { closeModal(); toast('Proposta enviada — falta a confirmação dos outros comproprietários.'); return pullNow(true); })
-      .then(function () { refreshPropModal(hid); nextShareProposal(); })
-      .catch(function (e) { toast(e.message); });
-  };
+  return servicoLigado('properties') ? imvPropostaAbrir(hid, fromShare) : nextShareProposal();
 };
 
 /* responde à proposta de divisão pendente da casa hid: com accept confirma (e avisa

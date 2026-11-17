@@ -229,7 +229,8 @@ describe('D77 · o n.º do campo e «por esta ordem»', () => {
 
   test('o campo à cabeça dos campos da linha, e no 4.2A e no 4.2B', () => {
     const r = comCampos();
-    const l = Object.assign(linhaDe(r, 'L1'), { bonus: true, rendaAnterior: 700, contratoAnterior: { id: 'X', nome: 'Antes', numero: '999' } });
+    // o 4.2B mostra-se pelo facto do n.º 24 (elegivel24), e não pela descida da taxa (D36, KAN-127)
+    const l = Object.assign(linhaDe(r, 'L1'), { bonus: true, elegivel24: true, rendaAnterior: 700, contratoAnterior: { id: 'X', nome: 'Antes', numero: '999' } });
     const cs = app.fiscoCamposDe(r, l);
     assert.deepEqual(j([cs[0].grupo, cs[0].campo, cs[0].valor]), ['', 'Campo', '4501']);
     assert.equal(campo(cs, 'Quadro 4.2A', 'Campo do quadro 4.2').valor, '4501');
@@ -273,7 +274,8 @@ describe('D84 · o 8B com o prazo das substituições', () => {
   test('de ponta a ponta: uma renda de novembro de 2024 paga em 2026', () => {
     mov({ kind: 'income', category: 'Rendas', amount: 1000, contractId: 'C1', recibo: true, periodo: '2024-11', date: ANO + '-02-20' });
     const r = app.resumoFiscal(ANO, '');
-    assert.deepEqual(j(linhaDe(r, 'C1').anosAnteriores), [{ ano: 2024, valor: 1000 }]);
+    // o ano e o valor; o resumo dá também as retenções de cada ano (D55, KAN-127)
+    assert.deepEqual(j(linhaDe(r, 'C1').anosAnteriores).map((a) => ({ ano: a.ano, valor: a.valor })), [{ ano: 2024, valor: 1000 }]);
     assert.match(app.vFisco(), /até 30\/07\/2027, 30 dias depois do fim do prazo da entrega/);
   });
 });

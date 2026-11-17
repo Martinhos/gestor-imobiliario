@@ -209,10 +209,10 @@ describe('as marcas de migração das definições sobem à nuvem uma vez', () =
     await novo.app.pushNow();
     // o velho mudou o crescimento sem rede, e a leitura dele já tem dois minutos
     velho.app.db.settings.growth = 3;
-    velho.app.definicoesLidasEm = Date.now() - 2 * 60000;
+    velho.app.migracoesLidasEm = Date.now() - 2 * 60000;
     await velho.app.pushNow();
     assert.equal(opsDasDefinicoes(velho.esp).length, 0, 'as definições esperam pela leitura seguinte');
-    assert.equal(velho.app.definicoesPorLer, true, 'e o ciclo lê já');
+    assert.equal(velho.app.migracoesPorLer, true, 'e o ciclo lê já');
     assert.equal((await definicoesNoServidor(env, A)).irsMapa['Seguros'], 'outros');
     // a leitura seguinte: a escolha do outro aparelho fica, e o crescimento daqui também
     await ler(velho.app, env, A);
@@ -247,12 +247,12 @@ describe('as marcas de migração das definições sobem à nuvem uma vez', () =
     const { env, A } = await contaAntiga();
     const { app, esp } = aparelho(env, A);
     await ler(app, env, A);
-    app.definicoesLidasEm = Date.now() - 2 * 60000;
+    app.migracoesLidasEm = Date.now() - 2 * 60000;
     await app.pushNow();
     assert.equal(opsDasDefinicoes(esp).length, 0);
     app.estadoIgual();
     app.clearTimeout(app.pushTimer);
-    assert.equal(app.definicoesPorLer, false);
+    assert.equal(app.migracoesPorLer, false);
     await app.pushNow();
     assert.equal(opsDasDefinicoes(esp).length, 1, 'o servidor não mudou desde a base: ela volta a valer');
   });

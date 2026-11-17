@@ -227,7 +227,7 @@ describe('o contrato', () => {
     app.db.contracts = [app.normContract({ id: 'C1', propertyId: 'P1', rent: 500, tenantIds: ['I1'], start: '2026-01-01', end: '2035-12-31' })];
     app.ctModal('C1');
     const html = abertas[0].b;
-    conferir('contrato de dez anos', html, { obrigatorios: ['c_rent'],
+    conferir('contrato de dez anos', html, { obrigatorios: ['c_rent', 'c_start'],
       exemplos: { c_name: true, c_tax: EX + '10', c_inc: EX + '2,5', c_iban: true, c_omail: true, c_ophone: true, c_tmail: true, c_tphone: true },
       deixados: ['invn_', 'invq_', 'keyn_', 'keyq_', 'fn_'] });
     assert.match(html, /Em branco: <b id="c_taxVazio">10 %<\/b>, a estimativa para \d{4}\./);
@@ -266,11 +266,28 @@ describe('o contrato', () => {
     assert.match(abertas[1].b, /<textarea id="invbulk"[^>]*placeholder="Ex: Sofá; 1; novo&#10;/);
     app.addKeyBulk();
     assert.match(abertas[2].b, /<textarea id="keybulk"[^>]*placeholder="Ex: Chave de casa; 2&#10;/);
-    // a declaração de um contrato que acaba: o motivo é um exemplo, e a lista passa para a dica
-    app.cForm.fisco.estado = 'declarado'; app.cForm.end = '2030-01-01';
-    const f = app.fiscoSect();
-    assert.equal(ph(f, 'c_fces'), EX + 'Fim do prazo');
-    assert.match(f, /fim do prazo, acordo, denúncia…<\/div>/);
+    // um contrato terminado: o dia em que acabou e o motivo (uma escolha da versão,
+    // sem exemplo nem asterisco no formulário); o texto livre antigo já não se pede
+    app.cForm.fisco.estado = 'declarado'; app.cForm.end = '2030-01-01'; app.cForm.active = false;
+    assert.doesNotMatch(app.fiscoSect(), /id="c_fces"/);
+    const corpo = app.ctBody();
+    conferir('contrato terminado', corpo, { obrigatorios: ['c_rent', 'c_start'],
+      exemplos: { c_name: true, c_tax: true, c_inc: true, c_iban: true, c_omail: true, c_ophone: true, c_tmail: true, c_tphone: true, c_fnum: true },
+      deixados: ['invn_', 'invq_', 'keyn_', 'keyq_', 'fn_'] });
+    assert.match(corpo, /<label>Acabou a<input id="c_cesData" type="date"/);
+    assert.match(corpo, /<label>Motivo<div class="sel" id="sel_c_cesMot">/);
+  });
+
+  test('a folha do «Terminar contrato»: o dia e o motivo são obrigatórios num declarado e levam o asterisco', () => {
+    const abertas = base();
+    app.db.contracts = [app.normContract({ id: 'C1', propertyId: 'P1', rent: 500, tenantIds: ['I1'], start: '2024-01-01', end: '2028-12-31',
+      fisco: { estado: 'declarado', finalidade: 'hp' } })];
+    app.endContract('C1');
+    const f = abertas[abertas.length - 1];
+    assert.equal(f.t, 'Terminar contrato');
+    conferir('terminar', f.b, { obrigatorios: ['c_cesData'] });
+    assert.match(f.b, /Motivo <span class="req">\*<\/span><div class="sel"/);
+    assert.match(f.f, /class="btn danger"[^>]*>Terminar</, 'o verbo, a vermelho');
   });
 });
 
@@ -306,7 +323,8 @@ describe('o formulário do contrato no desenho do canvas (M-NovoContrato)', () =
   });
 
   test('a frase do prazo diz quanto dura e até quando se avisa o inquilino', () => {
-    assert.equal(app.ctFraseDoPrazo({ start: '2026-11-01', end: '2027-10-31' }), '1 ano. Para não renovar, avisa o inquilino até 03/07/2027 (120 dias) — a app lembra-te antes, nos prazos.');
+    // um ano de habitação (ou por indicar): 120 dias, e a primeira renovação só deixa a oposição valer aos três anos (prazos.js:pzOposicao)
+    assert.equal(app.ctFraseDoPrazo({ start: '2026-11-01', end: '2027-10-31' }), '1 ano. Para não renovar, avisa o inquilino até 03/07/2027 (120 dias) — a app lembra-te antes, nos prazos. Na primeira renovação, a oposição só produz efeitos a 01/11/2029.');
     assert.equal(app.ctFraseDoPrazo({ start: '2026-01-01', end: '2026-06-30' }).slice(0, 9), '6 meses. ');
     assert.match(app.ctFraseDoPrazo({ start: '2026-01-01', end: '' }), /^Sem data de fim/);
     assert.equal(app.ctFraseDoPrazo({ start: '2026-05-01', end: '2026-01-01' }), '', 'com as datas trocadas é o erro do campo que fala');

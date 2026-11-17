@@ -224,7 +224,8 @@ describe('um contrato que ainda não começou', () => {
     // três meses confirmados: são movimentos, com registo próprio
     const rd = app.render, bn = app.buildNav, sv = app.save, ts = app.toast;
     app.render = () => {}; app.buildNav = () => {}; app.save = () => {}; app.toast = () => {};
-    for (let i = 0; i < 3; i++) app.quickConfirmRec(app.ctRecOf(c).id);
+    // rendas do ano passado: o Confirmar pergunta o dia em que entraram (o ano do IRS), e aqui já vem dito
+    for (let i = 0; i < 3; i++) app.quickConfirmRec(app.ctRecOf(c).id, app.today());
     app.render = rd; app.buildNav = bn; app.save = sv; app.toast = ts;
     assert.equal(app.db.transactions.length, 3);
     assert.equal(cursor(), (ano - 1) + '-04-05');

@@ -150,20 +150,23 @@ describe('os prazos da AT', () => {
     assert.ok(!app.prazosDe('2025-04-01').find((p) => p.tipo === 'modelo2'), 'sem início não há data-limite');
   });
 
-  test('a cessação só num contrato declarado cujo fim já passou', () => {
-    monta({ fisco: { estado: 'declarado' }, end: '2026-06-30' });
-    const c = app.prazosDe('2026-07-05').find((p) => p.tipo === 'cessacao');
-    assert.ok(c, 'fim passado: avisa');
-    assert.equal(c.alvo, '2026-07-31', 'o fim do mês seguinte ao fim');
-    assert.match(c.sub, /até 31\/07\/2026/i);
-    assert.match(c.sub, /Modelo 2 também serve para a cessação/);
-    assert.match(c.sub, /15 de fevereiro/);
-    assert.equal(c.abrir, "ctView('C1')");
-    assert.ok(!app.prazosDe('2026-06-20').find((p) => p.tipo === 'cessacao'), 'antes do fim não há cessação a comunicar');
-    monta({ end: '2026-06-30' });                    // por indicar
-    assert.ok(!app.prazosDe('2026-07-05').find((p) => p.tipo === 'cessacao'), 'por indicar: não se sabe se a AT o conhece');
+  test('a cessação só num contrato declarado que acabou mesmo, pelo dia em que acabou', () => {
     monta({ fisco: { estado: 'declarado' }, end: '2026-06-30', active: false });
-    assert.ok(app.prazosDe('2026-07-05').find((p) => p.tipo === 'cessacao'), 'terminado à mão, com fim: avisa na mesma');
+    const c = app.prazosDe('2026-07-05').find((p) => p.tipo === 'cessacao');
+    assert.ok(c, 'terminado à mão, com o termo passado: avisa');
+    assert.equal(c.alvo, '2026-07-31', 'o fim do mês seguinte ao da cessação');
+    assert.match(c.sub, /até 31\/07\/2026/i);
+    assert.match(c.sub, /acabou a 30\/06\/2026/);
+    assert.match(c.sub, /Modelo 2 também serve para a cessação/);
+    assert.equal(c.abrir, "ctView('C1')");
+    monta({ fisco: { estado: 'declarado' }, end: '2026-06-30' });
+    assert.ok(!app.prazosDe('2026-07-05').find((p) => p.tipo === 'cessacao'), 'ativo com o termo passado: renovou-se, não cessou');
+    monta({ fisco: { estado: 'declarado', cessacao: { data: '2026-05-10', motivo: '02' } }, end: '2027-02-28', active: false });
+    assert.equal(app.prazosDe('2026-06-01').find((p) => p.tipo === 'cessacao').alvo, '2026-06-30', 'com o dia da cessação, conta dele e não do termo');
+    monta({ fisco: { estado: 'declarado' }, end: '2027-02-28', active: false });
+    assert.ok(!app.prazosDe('2026-07-05').find((p) => p.tipo === 'cessacao'), 'terminado sem o dia e com o termo à frente: não se sabe quando acabou');
+    monta({ end: '2026-06-30', active: false });     // por indicar
+    assert.ok(!app.prazosDe('2026-07-05').find((p) => p.tipo === 'cessacao'), 'por indicar: não se sabe se a AT o conhece');
   });
 
   test('o recibo por emitir é de uma renda de contrato declarado sem recibo, dos últimos três meses', () => {
@@ -171,8 +174,8 @@ describe('os prazos da AT', () => {
     renda('R1', '2026-08-05');
     const r = app.prazosDe('2026-09-12').find((p) => p.tipo === 'recibos');
     assert.ok(r, 'renda de agosto sem recibo');
-    assert.equal(r.alvo, '2026-09-30', 'o fim do mês seguinte à renda');
-    assert.equal(r.dias, 18);
+    assert.equal(r.alvo, '2026-08-05', 'o recibo passa-se quando se recebe: o alvo é o dia da renda');
+    assert.equal(r.dias, -38);
     assert.match(r.titulo, /Recibo de renda por emitir — Ana · T2/);
     assert.match(r.sub, /Renda de agosto de 2026 recebida a 05\/08\/2026/);
     assert.match(r.sub, /marca-o no movimento/);
@@ -193,8 +196,11 @@ describe('os prazos da AT', () => {
     assert.ok(!app.prazosDe('2026-09-12').find((p) => p.tipo === 'recibos'), 'uma renda de maio já não entra em setembro');
     assert.ok(app.prazosDe('2026-06-20').find((p) => p.tipo === 'recibos'), 'mas entrava em junho: o hoje fingido manda');
     monta({ fisco: { estado: 'declarado' } });
-    renda('R3', '2026-08-05', { sub: 'Caução' });
-    assert.ok(!app.prazosDe('2026-09-12').find((p) => p.tipo === 'recibos'), 'a caução não é renda');
+    renda('R3', '2026-08-05', { sub: 'Indemnização' });
+    assert.ok(!app.prazosDe('2026-09-12').find((p) => p.tipo === 'recibos'), 'a indemnização não leva recibo de renda');
+    monta({ fisco: { estado: 'declarado' } });
+    renda('R5', '2026-08-05', { sub: 'Caução' });
+    assert.ok(app.prazosDe('2026-09-12').find((p) => p.tipo === 'recibos'), 'a caução sim: a AT trata-a como renda do ano em que se recebe');
     monta({ fisco: { estado: 'declarado' } });
     renda('R4', '2026-08-05', { contractId: null });
     assert.ok(!app.prazosDe('2026-09-12').find((p) => p.tipo === 'recibos'), 'sem contrato não se sabe de que contrato é o recibo');
@@ -233,7 +239,7 @@ describe('os prazos da AT', () => {
     assert.ok(!app.prazosDe('2026-04-01').find((p) => p.tipo === 'irs'));
   });
 
-  test('o 15 de fevereiro só num contrato declarado com taxa reduzida e rendas no ano anterior', () => {
+  test('o 15 de fevereiro só num contrato declarado com redução pela duração, no ano seguinte ao início do período', () => {
     // seis anos: irsRate 15 %, abaixo dos 25
     monta({ fisco: { estado: 'declarado' }, start: '2025-03-01', end: '2031-02-28' });
     assert.ok(app.irsRate(app.db.contracts[0]) < 25, 'a taxa é reduzida');
@@ -244,7 +250,8 @@ describe('os prazos da AT', () => {
     assert.equal(f.dias, 36);
     assert.match(f.titulo, /duração do contrato.*Ana · T2/);
     assert.match(f.sub, /até 15\/02\/2026/i);
-    assert.match(f.sub, /perde-se a redução/);
+    assert.match(f.sub, /comunica-se uma vez, até 15\/02 do ano seguinte ao início do contrato ou de cada renovação/);
+    assert.doesNotMatch(f.sub, /perde-se a redução/);
     assert.equal(f.abrir, "ctView('C1')");
     assert.ok(!app.prazosDe('2025-12-20').find((p) => p.tipo === 'fev15'), 'a 57 dias ainda não');
     assert.ok(app.prazosDe('2026-03-01').find((p) => p.tipo === 'fev15'), 'passado o dia continua, até se comunicar');
@@ -255,7 +262,7 @@ describe('os prazos da AT', () => {
     renda('R1', '2025-06-05');
     assert.ok(!app.prazosDe('2026-01-10').find((p) => p.tipo === 'fev15'), 'por indicar: não');
     monta({ fisco: { estado: 'declarado' }, start: '2025-03-01', end: '2031-02-28' });
-    assert.ok(!app.prazosDe('2026-01-10').find((p) => p.tipo === 'fev15'), 'sem rendas em 2025 não há redução a pedir');
+    assert.ok(app.prazosDe('2026-01-10').find((p) => p.tipo === 'fev15'), 'sem rendas em 2025 também: a comunicação é do período, não das rendas');
   });
 
   test('um contrato não declarado não gera prazo nenhum da AT, aconteça o que acontecer', () => {
@@ -267,9 +274,9 @@ describe('os prazos da AT', () => {
     assert.equal(daAT(app.prazosDe('2026-01-10')).length, 0, 'nem 15 de fevereiro');
   });
 
-  test('o aumento de um contrato declarado lembra o Modelo 2; o de um por indicar não', () => {
+  test('o aumento de um contrato declarado diz o que se comunica (só o combinado, pelo Modelo 2); o de um por indicar não', () => {
     monta({ increase: 2.5, fisco: { estado: 'declarado' } });
-    assert.match(app.prazosDe('2027-01-20').find((p) => p.tipo === 'aumento').sub, /comunica a nova renda à AT \(Modelo 2\)/);
+    assert.match(app.prazosDe('2027-01-20').find((p) => p.tipo === 'aumento').sub, /atualização pelo coeficiente legal não se comunica à AT.*aumento combinado com o inquilino comunica-se pelo Modelo 2/);
     monta({ increase: 2.5 });
     assert.doesNotMatch(app.prazosDe('2027-01-20').find((p) => p.tipo === 'aumento').sub, /Modelo 2/);
   });

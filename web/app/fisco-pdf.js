@@ -116,11 +116,17 @@ function fiscoPdfTitulo(pdf,titulo,sub,codigo,junto){
 function fiscoPdfNota(pdf,s){pdf.text(fiscoPdfTxt(s),{size:8.5,cor:PDF_COR.secundario,after:6})}
 /* O bloco de um contrato num quadro, pela ordem do impresso: o campo da
    linha (4001…, 4501…), o n.º do contrato na AT, o início (só no 4.1: no 4.2
-   a data de início é do 4.2A, D102), a taxa e porquê, o imóvel (freguesia,
+   a data de início é do 4.2A, D102), a taxa da lei do ano e porquê — a de
+   cada período quando muda no ano (fiscoExpTaxa, D41, D15), nenhuma sem
+   regras do ano (D50) —, a escrita no contrato quando é outra, como nota
+   (D17), o campo do modelo novo por conhecer (D49), o imóvel (freguesia,
    tipo, artigo, fração), os inquilinos com o NIF português ou o país
-   (fiscoIdInquilino), o titular, a natureza, as rendas ilíquidas, as
+   (fiscoIdInquilino), o titular, a natureza («07 (assumida)» sem a
+   finalidade, D16), as rendas ilíquidas, as
    retenções e cada coluna de gastos; as três colunas das obras dos 24 meses
-   quando as há; no 4.2 o 4.2A e, com a descida do n.º 24, o 4.2B, cada um com
+   quando as há; no 4.2 o 4.2A (a comunicação pelo período, Sim só até ao
+   prazo dele: fiscoExpComunicacao, D01, D35) e o 4.2B sempre que o contrato
+   o tem (fiscoExpElegivel24, D36), cada um com
    o campo do 4.2 a que se liga; e por fim a quota-parte, a estimativa da app
    (que não vai ao quadro: o imposto nunca negativo, e o resultado negativo,
    que abate às outras linhas do titular, quando as rendas não chegam) e o que falta.
@@ -128,13 +134,19 @@ function fiscoPdfNota(pdf,s){pdf.text(fiscoPdfTxt(s),{size:8.5,cor:PDF_COR.secun
    true no quadro 4.2; medir (opcional) — true só diz a altura do cartão.
    Devolve: nada — escreve o cartão do contrato e desce; com medir, a altura. */
 function fiscoPdfLinha(pdf,r,l,red,medir){
-  const v=r.versao,nat=v.naturezas||{},campos=[],F=(c,x,o)=>campos.push([c,x,o]);
-  const MOTIVO={nh:'não habitacional',duracao:'redução pela duração',moderada:'renda moderada',base:'taxa base'};
+  const v=r.versao,nat=v.naturezas||{},campos=[],F=(c,x,o)=>campos.push([c,x,o]),sem=fiscoExpSemRegras(r),bon=(v.taxas||{}).bonusRendaMenor||{};
+  const MOTIVO={nh:'não habitacional',duracao:'redução pela duração',moderada:'renda moderada',base:'taxa base',semRenovacao:'depois do termo, sem renovação registada'};
+  const AVISO={bold:true,cor:PDF_COR.cobaltoTexto};
   if(l.campo)F('Campo',l.campo,{bold:true});
   F('N.º do contrato na AT',l.atNumero||(l.estado==='declarado'?'falta':'—'));
   if(!red)F('Início do contrato',dPT(l.inicio)||'—');
+  /* a taxa da lei do ano, a de cada período quando muda no ano (D41, D15);
+     a escrita no contrato é só uma nota (D17); sem regras do ano, nenhuma (D50) */
+  const tx=l.isencao?null:fiscoExpTaxa(r,l),escr=sem||l.isencao||typeof fiscoTaxaEscritaOutra!=='function'?null:fiscoTaxaEscritaOutra(l),pc=fiscoExpPorConhecer(r,l);
   F('Taxa',l.isencao?'isento · quadro '+(l.isencao.quadro||'6D')+(l.isencao.codigo?' · código '+l.isencao.codigo:'')
-    :dec(l.taxa)+' % · '+(l.taxaEscrita?'escrita no contrato':(MOTIVO[l.motivoTaxa]||'—')));
+    :sem||tx.partes.length>1||(tx.partes[0]&&tx.partes[0].semRenovacao)?tx.texto:tx.texto+' · '+(MOTIVO[l.motivoTaxa]||'—'),sem?AVISO:undefined);
+  if(escr!=null)F('Taxa escrita no contrato',dec(escr)+' % · não é a da lei de '+r.ano+': na declaração conta a de '+dec(l.taxa)+' %',{cor:PDF_COR.secundario});
+  if(pc)F(pc.campo,pc.valor,AVISO);
   F('Imóvel',l.imovel||'—');
   F('Freguesia (código)',l.freguesiaCodigo||'falta');
   F('Tipo de prédio',l.tipoPredio||'falta');
@@ -144,7 +156,10 @@ function fiscoPdfLinha(pdf,r,l,red,medir){
   l.inquilinos.forEach((t,i)=>{const id=fiscoIdInquilino(t);
     F(l.inquilinos.length>1?'Inquilino '+(i+1):'Inquilino',t.nome+' · '+(id.valido?'NIF '+fmtNIF(id.nif):id.texto))});
   F('Titular',l.titular==='A/B'?'A/B (o imóvel é dos dois: uma linha por titular, cada uma com a sua quota-parte)':(l.titular||'A'));
-  F('Natureza',l.natureza+(l.natureza===nat.habitacional?' · arrendamento habitacional':l.natureza===nat.naoHabitacional?' · arrendamento não habitacional':''));
+  /* sem finalidade, a 07 é assumida e di-lo (D16) */
+  const nTxt=l.natureza===nat.habitacional?' · arrendamento habitacional':l.natureza===nat.naoHabitacional?' · arrendamento não habitacional':'';
+  if(l.naturezaAssumida&&l.natureza)F('Natureza',l.natureza+' (assumida)'+nTxt+' · falta a finalidade do contrato',AVISO);
+  else F('Natureza',l.natureza+nTxt);
   F('Rendas ilíquidas',fiscoPdfEuro(l.rendas));
   F('Retenções na fonte',fiscoPdfEuro(l.retencoes));
   r.colunas.forEach(k=>F(fiscoColRotulo(k),fiscoPdfEuro(l.gastos[k])));
@@ -155,23 +170,32 @@ function fiscoPdfLinha(pdf,r,l,red,medir){
     F('Obras 24 meses · valor',fiscoPdfEuro(l.obras24.valor));
   }
   if(red){
-    const D=v.quadros.datas;
+    const D=v.quadros.datas,com=fiscoExpComunicacao(r,l);
     if(l.campo)F(D+' · campo do quadro 4.2',l.campo);
-    F(D+' · comunicação',l.comunicado==null?'—':l.comunicado?'Sim (comunicada a '+dPT(l.comunicado)+')':'Não (por comunicar)');
+    /* a resposta pelo período em que as rendas assentam (D01): comunicada até
+       ao prazo dele é Sim; depois, ou por fazer com o prazo passado, Não (D35) */
+    F(D+' · comunicação',!com?'—':com.resposta==='sim'?'Sim (comunicada a '+dPT(com.data)+')'
+      :com.foraDePrazo?'Não (comunicada fora do prazo, a '+dPT(com.data)+(com.prazo?'; o prazo era '+dPT(com.prazo):'')+')'
+      :com.resposta==='nao'?'Não (por comunicar; o prazo acabou a '+dPT(com.prazo)+')'
+      :'Por comunicar'+(com.prazo?' (até '+dPT(com.prazo)+'; sem ela, é Não)':''),com&&com.resposta!=='sim'?AVISO:undefined);
     F(D+' · início',dPT(l.datas.inicio)||'—');
     F(D+' · termo',dPT(l.datas.fim)||'—');
     F(D+' · última renovação',l.datas.renovacaoInicio?dPT(l.datas.renovacaoInicio)+' a '+(dPT(l.datas.renovacaoFim)||'—'):'—');
-    if(l.bonus){
+    /* o 4.2B sempre que o contrato o tem, mesmo que a estimativa não desça a
+       taxa (D36, D37); a renda é a de hoje, a que a app comparou (Q2) */
+    if(fiscoExpElegivel24(r,l)){
       const a=l.contratoAnterior;
       if(l.campo)F('4.2B · campo do quadro 4.2',l.campo);
-      F('4.2B · renda deste contrato',fiscoPdfEuro(l.renda)+' por mês');
+      F('4.2B · renda deste contrato',fiscoPdfEuro(l.renda)+' por mês · a de hoje no contrato');
       F('4.2B · contrato anterior',a&&a.numero?'n.º '+a.numero:a?a.nome+' · falta o n.º na AT':'falta');
       F('4.2B · renda anterior',l.rendaAnterior?fiscoPdfEuro(l.rendaAnterior)+' por mês':'falta');
+      if(!l.bonus)F('4.2B · taxa','a estimativa não desce abaixo de '+dec(bon.minimo||5)+' % (leitura prudente); a AT pode aplicar os '+dec(bon.pontos||5)+' pontos',{cor:PDF_COR.secundario});
     }
   }
   if(l.quota<1)F('Quota-parte',dec(r2(l.quota*100))+' %');
   const pre=fiscoPrejuizoLinha(l);
-  F('Estimativa da app','líquido '+fiscoPdfEuro(l.liquido)+' · imposto estimado '+fiscoPdfEuro(fiscoImpostoLinha(l))+' (não vai ao quadro)',{cor:PDF_COR.secundario});
+  F('Estimativa da app',sem?'líquido '+fiscoPdfEuro(l.liquido)+' · sem taxa nem imposto: a app não tem as regras de '+r.ano
+    :'líquido '+fiscoPdfEuro(l.liquido)+' · imposto estimado '+fiscoPdfEuro(fiscoImpostoLinha(l))+' (não vai ao quadro)',{cor:PDF_COR.secundario});
   if(pre)F('Resultado negativo',fiscoPdfEuro(pre)+' · abate às rendas das outras linhas do mesmo titular, e o que sobrar é prejuízo a reportar',{cor:PDF_COR.secundario});
   if(l.faltas.length){const f=l.faltas.join(', ');F('Falta',f.charAt(0).toUpperCase()+f.slice(1)+'.',{bold:true,cor:PDF_COR.cobaltoTexto})}
   /* em conjunta, as duas linhas de um contrato dos dois cônjuges distinguem-se pela letra no título */
@@ -200,7 +224,8 @@ function fiscoPdfQuadro(pdf,r,q){
   if(ob)F('Obras dos 24 meses',fiscoPdfEuro(ob));
   fiscoPdfCartao(pdf,'Total do quadro '+q,tot,{fundo:PDF_COR.cobaltoSuave,corTitulo:PDF_COR.cobaltoTexto});
   if(!red)return;
-  if(v.prazos&&v.prazos.comunicacaoDuracao){pdf.gap(4);fiscoPdfNota(pdf,'No '+v.quadros.datas+', «Sim» na comunicação é a duração e as renovações comunicadas no Portal até '+dPT(v.prazos.comunicacaoDuracao)+' (Portaria 110/2019); sem ela arriscas a redução.')}
+  /* a comunicação é uma por período, não uma por ano (D01) */
+  pdf.gap(4);fiscoPdfNota(pdf,'No '+v.quadros.datas+', «Sim» na comunicação quer dizer que a duração do contrato, ou da renovação em que estas rendas assentam, foi comunicada no Portal até '+(v.prazos&&v.prazos.comunicacaoDuracao?irsDiaMes(v.prazos.comunicacaoDuracao):'15 de fevereiro')+' do ano seguinte ao início dela (Portaria 110/2019). Comunica-se uma vez por período, e não todos os anos; feita depois do prazo, a resposta é «Não».');
   const L23=(v.taxas&&v.taxas.limiteRendaAlta)||{desde:'2024-01-01'};
   const n23=ls.filter(l=>l.celebracao&&l.celebracao>=L23.desde);
   if(!n23.length)return;
@@ -208,7 +233,59 @@ function fiscoPdfQuadro(pdf,r,q){
   pdf.gap(4);
   fiscoPdfCartao(pdf,'Quadro 4.2C · limite das rendas (n.º 23)',[['Celebrados desde '+dPT(L23.desde),listaE(n23.map(l=>l.nome))],
     ['Resposta',por.length?'falta confirmar na ficha do contrato: '+listaE(por.map(l=>l.nome)):'Sim (01)',{bold:true}]],{fundo:PDF_COR.cobaltoSuave,corTitulo:PDF_COR.cobaltoTexto});
-  fiscoPdfNota(pdf,'O 4.2C pergunta se nenhum destes contratos passa 150 % dos limites de renda por tipologia e concelho (Portaria 176/2019). Um que passe não tem redução e vai ao 4.1.');
+  /* os limites são os que a versão do ano escreve, com as datas (D78) */
+  const lim=fiscoExpLimites23(r);
+  fiscoPdfNota(pdf,'O 4.2C pergunta se nenhum destes contratos passa '+dec(L23.percentagem||150)+' % dos limites de renda'+(lim?' ('+lim+')':' por tipologia e concelho')+'. Um que passe não tem redução e vai ao 4.1.');
+}
+/* Um quadro das isenções (6D, 6F ou 6H, D18): um cartão por contrato isento
+   com o campo do 4.1 onde ficou, o n.º do contrato, o programa ou a isenção
+   (com a lei, quando não tem código) e o código, só no quadro que o tem; o
+   líquido isento do quadro; e a nota do que se indica nele.
+   Recebe: pdf — o escritor; r — o resumo; q — o quadro ('6D', '6F', '6H');
+   ls — as linhas isentas desse quadro; varios — true quando o ano tem mais do
+   que um quadro de isenções (o líquido isento passa a ser o das linhas dele).
+   Devolve: nada — escreve o quadro e desce. */
+function fiscoPdfIsentos(pdf,r,q,ls,varios){
+  const v=r.versao,E=fiscoPdfEuro,comCodigo=ls.some(l=>{const is=(v.isencoes||[]).find(x=>x&&x.id===l.isencao.id);return !(is&&is.semCodigo)});
+  fiscoPdfTitulo(pdf,'Quadro '+q+' · rendimentos isentos',fiscoN(fiscoNContratos(ls),'contrato isento','contratos isentos')+' · ficam também na linha do 4.1',q);
+  ls.forEach(l=>{
+    const is=(v.isencoes||[]).find(x=>x&&x.id===l.isencao.id),pc=fiscoExpPorConhecer(r,l),campos=[];
+    campos.push(['Campo do quadro 4.1',l.campo||'—']);
+    campos.push(['N.º do contrato na AT',l.atNumero||'falta']);
+    campos.push([comCodigo?'Programa':'Isenção',(l.isencao.nome||l.isencao.curto||'—')+(!comCodigo&&is&&is.lei?' · '+is.lei:'')]);
+    if(!(is&&is.semCodigo))campos.push(['Código',l.isencao.codigo||(pc?pc.valor:'por conhecer'),pc?{bold:true,cor:PDF_COR.cobaltoTexto}:undefined]);
+    campos.push(['Rendas ilíquidas',E(l.rendas)]);
+    fiscoPdfCartao(pdf,l.nome+(l.imovel?' · '+l.imovel:'')+(r.variosTitulares?' · titular '+l.titular:''),campos);
+  });
+  fiscoPdfCartao(pdf,'',[['Rendimento líquido isento',E(varios?r2(sum(ls.map(l=>Number(l.liquido)||0))):r.totais.isentos.liquido),{bold:true}]],{fundo:PDF_COR.cobaltoSuave});
+  fiscoPdfNota(pdf,comCodigo?'No '+q+' indicas o campo do 4.1 onde ficaram, o n.º do contrato e o código do programa. Não pagam imposto e ficam fora do imposto estimado.'
+    :'No '+q+' indicas só o campo do 4.1 onde ficaram (este quadro não tem código). Não pagam imposto e ficam fora do imposto estimado.');
+}
+/* O quadro 10 (D09): os contratos de habitação permanente com redução pela
+   duração, ou isentos dos programas, que acabaram no ano, um cartão cada,
+   com o regime fiscal, o n.º do contrato, o ano de início do benefício, a
+   data e o motivo da cessação (os textos das tabelas da versão,
+   fiscoExpQuadro10); com o motivo 01, a regularização do n.º 20 do art.
+   72.º, com a diferença estimada sem juros (D10); e a nota do que o quadro
+   pede. Sem contratos que acabaram, não escreve.
+   Recebe: pdf — o escritor; r — o resumo (resumoFiscal).
+   Devolve: nada — escreve o quadro e desce. */
+function fiscoPdfQuadro10(pdf,r){
+  const xs=fiscoExpQuadro10(r);if(!xs.length)return;
+  const Q=r.versao.quadros||{},q=Q.cessados||'10',sem=fiscoExpSemRegras(r),FALTA={bold:true,cor:PDF_COR.cobaltoTexto};
+  fiscoPdfTitulo(pdf,'Quadro '+q+' · contratos que acabaram',fiscoN(xs.length,'contrato','contratos')+' com redução pela duração ou isenção que acabaram em '+r.ano,q);
+  xs.forEach(x=>{
+    const cs=[];
+    cs.push(['Regime fiscal',x.regime?x.regime+(x.regimeTexto?' · '+x.regimeTexto:''):'falta',x.regime?undefined:FALTA]);
+    cs.push(['N.º do contrato na AT',x.numero||'falta',x.numero?undefined:FALTA]);
+    cs.push(['Ano de início do benefício',x.anoInicioBeneficio||'falta',x.anoInicioBeneficio?undefined:FALTA]);
+    cs.push(['Data da cessação',dPT(x.data)||'—']);
+    cs.push(['Motivo da cessação',x.motivo?x.motivo+(x.motivoCurto?' · '+x.motivoCurto:''):'falta: escolhe-o na ficha do contrato',x.motivo?undefined:FALTA]);
+    if(x.regularizacao&&!sem)cs.push(['Regularização (art. 72.º n.º 20)',fiscoExpRegularizacaoTexto(r,x.regularizacao),FALTA]);
+    else if(x.regulariza)cs.push(['Regularização (art. 72.º n.º 20)','o período em que o contrato acabou passa à taxa da duração efetivamente decorrida, e a diferença acresce ao imposto de '+r.ano+', com juros compensatórios',FALTA]);
+    fiscoPdfCartao(pdf,x.nome+(x.imovel?' · '+x.imovel:''),cs);
+  });
+  fiscoPdfNota(pdf,'O quadro '+q+' pede todos os contratos de habitação permanente com redução da taxa pela duração, ou isentos de um programa de arrendamento acessível, que acabaram em '+r.ano+', seja qual for o motivo. A app não calcula os juros compensatórios.');
 }
 /* O documento inteiro, a partir do resumo: o cabeçalho (IRS · Anexo F, o ano
    dos rendimentos e o prazo da entrega, quem declara na quota-parte — com o
@@ -216,11 +293,15 @@ function fiscoPdfQuadro(pdf,r,q){
    inteiro, a data, e a linha das regras com o ano, oficiais ou provisórias,
    a data da revisão e a versão da app — fisco-exportar.js:fiscoRegrasTexto,
    D105), o aviso das regras quando o ano não tem versão própria ou ela é
-   provisória, os totais do ano (os números à cabeça da página; o imposto
-   nunca negativo, o prejuízo a reportar de cada titular com a condição do
-   reporte, D72/D97, e o imposto depois do AIMI quando ele abate, D99), os
-   quadros 4.1 e 4.2, o 6D, o quadro 8 com o prazo das substituições (D84), o
-   quadro 9, as rendas sem contrato e as dos contratos não declarados com o
+   provisória (sem regras do ano, sem taxa nem imposto, D50), os totais do
+   ano (os números à cabeça da página; o imposto
+   nunca negativo, o abate dos prejuízos de anos anteriores e o imposto
+   depois dele (rev. 6, Q10), o prejuízo a reportar de cada titular com a
+   condição do reporte, D72/D97, o imposto depois do AIMI quando ele abate,
+   D99, e a regularização do quadro 10, D10), os
+   quadros 4.1 e 4.2, os das isenções (6D, 6F, 6H, D18), o quadro 8 com o
+   prazo das substituições e as retenções de cada ano (D84, D55), o
+   quadro 9, o 10 (D09), as rendas sem contrato e as dos contratos não declarados com o
    valor (D34), o que há a tratar e o IRS_AVISO no fim.
    Recebe: r — o resumo (resumoFiscal); nomeTit — o nome de quem declara (''
    por inteiro); hoje — a data 'AAAA-MM-DD'.
@@ -236,50 +317,60 @@ function fiscoPdfDocumento(r,nomeTit,hoje){
     :r.titulares.length>1?'Titulares: '+fiscoQuemDeclara(r)+', cada um na sua quota-parte':'Titular: '+(nomeTit||'—')+', na quota-parte'),{size:10.5,after:2});
   pdf.text(fiscoPdfTxt('Feito a '+dPT(hoje)+', com o que a app tem registado.'),{size:9,cor:C.secundario,after:2});
   pdf.text(fiscoPdfTxt(fiscoRegrasTexto(r)+'.'),{size:9,cor:C.secundario,after:8});
-  const regras=!v.exato?'Ainda não há versão das regras de '+r.ano+': usam-se as de '+v.ano+(v.pedido>v.ano?', com as datas passadas para '+r.ano+' — as taxas e os quadros podem ter mudado.':', a mais antiga que a app tem.')
-    :v.modelo&&!v.modelo.oficial?'Regras de '+v.ano+' em versão provisória: o Anexo F deste ano ainda não foi aprovado.':'';
+  const sem=fiscoExpSemRegras(r);
+  const regras=sem?'A app não tem as regras de '+r.ano+': as taxas, os quadros e os códigos podem ser outros. Não uses estes números para a declaração desse ano — por isso a taxa e o imposto estimado não aparecem.'
+    :!v.exato?'Ainda não há versão das regras de '+r.ano+': usam-se as de '+v.ano+(v.pedido>v.ano?', com as datas passadas para '+r.ano+' — as taxas e os quadros podem ter mudado.':', a mais antiga que a app tem.')
+    :v.modelo&&!v.modelo.oficial?'Regras de '+v.ano+' em versão provisória: o Anexo F deste ano ainda não foi aprovado.'+(v.revisto?' Revistas a '+dPT(v.revisto)+'.':''):'';
   if(regras)pdf.caixa(fiscoPdfTxt(regras),{size:9.5,cor:C.cobaltoTexto,fundo:C.cobaltoSuave,after:8});
 
-  /* o imposto nunca é negativo; com o AIMI a abater (quadro 9), o que fica é o
-     imposto depois dele, e é desse que se tiram as retenções */
-  const a=r.aimi,imposto=Math.max(0,r2(Number(T.imposto)||0)),abate=a&&a.abate>0?r2(Math.min(a.abate,imposto)):0;
-  const g=r2(sum(r.colunas.map(k=>T.gastos[k]))+T.obras24),aPagar=r2(imposto-abate-T.retencoes);
+  /* o imposto nunca é negativo; abatem-lhe, por esta ordem, os prejuízos de
+     anos anteriores (rev. 6, Q10) e o AIMI (quadro 9), soma-se a
+     regularização do quadro 10 (estimativa sem juros, D10), e é do que fica
+     que se tiram as retenções (fiscoExpImpostos, os números do KPI) */
+  const a=r.aimi,I=fiscoExpImpostos(r),rep=I.reporte;
+  const g=r2(sum(r.colunas.map(k=>T.gastos[k]))+T.obras24),aPagar=I.aPagar;
   fiscoPdfTitulo(pdf,'Totais de '+r.ano,fiscoN(fiscoNContratos(r.linhas),'contrato','contratos')+' nos quadros 4.1 e 4.2');
   F('Rendas ilíquidas',E(T.rendas),{bold:true});
   F('Retenções na fonte',E(T.retencoes),{bold:true});
   F('Gastos dedutíveis',E(g)+(T.obras24?' (com '+E(T.obras24)+' de obras dos 24 meses)':''),{bold:true});
-  F('Rendimento líquido',E(T.liquido)+(T.isentos.n?' (sem os '+E(T.isentos.liquido)+' isentos do 6D)':''),{bold:true});
-  F('Imposto estimado',E(imposto)+' · sem englobamento',{bold:true});
-  if(abate)F('Depois do AIMI (quadro '+(Q.aimi||'9')+')',E(r2(imposto-abate))+' · abate '+E(abate)+' (estimativa)',{bold:true});
+  const isQ=fiscoExpIsentos(r);
+  F('Rendimento líquido',E(T.liquido)+(T.isentos.n?' (sem os '+E(T.isentos.liquido)+' isentos do '+listaE(isQ.map(x=>x.quadro))+')':''),{bold:true});
+  if(sem)F('Imposto estimado','por conhecer: a app não tem as regras de '+r.ano,{bold:true,cor:C.cobaltoTexto});
+  else{
+    F('Imposto estimado',E(I.imposto)+' · sem englobamento',{bold:true});
+    if(rep){
+      if(rep.porTitular.some(t=>t.letra))rep.porTitular.forEach(t=>F('Prejuízos de anos anteriores'+(t.letra?' · titular '+t.letra:''),'abatem '+E(t.usado)+' ao líquido',{bold:true}));
+      else F('Prejuízos de anos anteriores','abatem '+E(rep.usado)+' ao líquido',{bold:true});
+      F('Depois dos prejuízos de anos anteriores',E(rep.depois)+' · o imposto desce '+E(rep.imposto)+' (estimativa)',{bold:true});
+    }
+    if(I.abate)F('Depois do AIMI (quadro '+(Q.aimi||'9')+')',E(I.final)+' · abate '+E(I.abate)+' (estimativa)',{bold:true});
+  }
   fiscoPrejuizos(r).forEach(p=>F('Prejuízo a reportar'+(p.letra?' · titular '+p.letra:''),E(p.valor),{bold:true}));
-  if(T.retencoes)F('Depois das retenções',aPagar>=0?'falta pagar '+E(aPagar):'a receber '+E(-aPagar));
+  /* a regularização acresce ao imposto do ano da cessação (art. 72.º n.º
+     20): soma-se antes das retenções, como no KPI da página (D10) */
+  if(I.regularizacao&&!sem)F('Com a regularização do quadro '+(Q.cessados||'10'),E(I.comRegularizacao)+' · +'+E(I.regularizacao)+' (estimativa, sem os juros compensatórios)',{bold:true,cor:C.cobaltoTexto});
+  if(T.retencoes&&!sem)F('Depois das retenções',aPagar>=0?'falta pagar '+E(aPagar):'a receber '+E(-aPagar));
   cartao('',{fundo:C.cobaltoSuave});
+  if(rep&&!sem)fiscoPdfNota(pdf,fiscoExpReporteTexto(r));
   if(fiscoPrejuizos(r).length)fiscoPdfNota(pdf,'As rendas não chegaram para os gastos. '+FISCO_PREJUIZO_NOTA);
   fiscoPdfNota(pdf,'Rendas ilíquidas: o que entrou mais o que o inquilino reteve na fonte. Os gastos de um imóvel com mais do que um contrato no ano repartem-se pelas linhas na proporção das rendas de cada uma (estimativa); o rateio por VPT ou por área fica para quem preenche.');
 
   fiscoPdfQuadro(pdf,r,Q.semReducao);
   fiscoPdfQuadro(pdf,r,Q.comReducao);
 
-  const is=r.linhas.filter(l=>l.isencao);
-  if(is.length){
-    fiscoPdfTitulo(pdf,'Quadro 6D · rendimentos isentos',fiscoN(fiscoNContratos(is),'contrato isento','contratos isentos')+' · ficam também na linha do 4.1','6D');
-    is.forEach(l=>{
-      F('Campo do quadro 4.1',l.campo||'—');
-      F('N.º do contrato na AT',l.atNumero||'falta');
-      F('Programa',l.isencao.nome||l.isencao.curto||'—');
-      F('Código',l.isencao.codigo||'por conhecer');
-      F('Rendas ilíquidas',E(l.rendas));
-      cartao(l.nome+(l.imovel?' · '+l.imovel:'')+(r.variosTitulares?' · titular '+l.titular:''));
-    });
-    F('Rendimento líquido isento',E(T.isentos.liquido),{bold:true});
-    cartao('',{fundo:C.cobaltoSuave});
-    fiscoPdfNota(pdf,'No 6D indicas o campo do 4.1 onde ficaram, o n.º do contrato e o código do programa. Não pagam imposto e ficam fora do imposto estimado.');
-  }
+  /* os isentos, um quadro por isenção: o 6D com o código do programa, o 6F e
+     o 6H só com o campo do 4.1 (D18) */
+  isQ.forEach(x=>fiscoPdfIsentos(pdf,r,x.quadro,x.linhas,isQ.length>1));
 
   const ant=r.linhas.filter(l=>l.anosAnteriores.length);
   if(ant.length){
     fiscoPdfTitulo(pdf,'Quadro '+Q.anosAnteriores+' · rendas de anos anteriores','recebidas em '+r.ano+' · já estão nas rendas de cada linha',Q.anosAnteriores);
-    ant.forEach(l=>l.anosAnteriores.forEach(x=>F(l.nome+(r.variosTitulares?' · titular '+l.titular:'')+' · de '+x.ano,E(x.valor)+' · quadro '+l.quadro+(l.campo?', campo '+l.campo:''))));
+    /* uma linha por ano a que as rendas respeitam, com as retenções dele (D55) */
+    ant.forEach(l=>l.anosAnteriores.forEach(x=>{
+      const t=l.nome+(r.variosTitulares?' · titular '+l.titular:'')+' · de '+x.ano;
+      F(t,E(x.valor)+' · quadro '+l.quadro+(l.campo?', campo '+l.campo:''));
+      if(Number(x.retencoes)>0)F(t+' · retenções',E(x.retencoes));
+    }));
     cartao('');
     fiscoPdfNota(pdf,fiscoQuadro8Texto(r));
   }
@@ -288,12 +379,21 @@ function fiscoPdfDocumento(r,nomeTit,hoje){
     fiscoPdfTitulo(pdf,'Quadro '+(Q.aimi||'9')+' · AIMI','adicional ao IMI pago em '+r.ano+' · '+fiscoN(a.n,'pagamento','pagamentos'),Q.aimi||'9');
     a.predios.forEach(p=>{const cs=r.linhas.filter(l=>l.propertyId===p.propertyId&&l.campo).map(l=>l.campo);
       F(p.imovel+(cs.length?' · campo '+listaE(cs):'')+' · VPT',p.vpt?E(p.vpt):'falta')});
-    F('9101 · AIMI liquidado',E(a.total),{bold:true});
-    F('9102 · VPT dos prédios urbanos',a.semVpt.length?'falta o VPT de '+listaE(a.semVpt):E(a.vptTotal),{bold:true});
-    F('Parte que abate (estimativa)',a.abate==null?'—':E(a.abate),{bold:true});
+    /* o 9101 e o 9102 são os da demonstração de liquidação; sem eles, os
+       campos dizem de onde vêm, sem valor (D71); o AIMI conta inteiro para
+       quem o pagou (D32) */
+    const q9=fiscoExpQuadro9(r),DEM={bold:true,cor:C.cobaltoTexto};
+    F('9101 · AIMI liquidado',q9.textos.c9101,q9.c9101!=null?{bold:true}:DEM);
+    F('9102 · valor tributável',q9.textos.c9102,q9.c9102!=null?{bold:true}:DEM);
+    F('AIMI pago (o que a app tem)',E(a.total));
+    F('VPT dos prédios urbanos (estimativa)',a.semVpt.length?'falta o VPT de '+listaE(a.semVpt):E(a.vptTotal));
+    q9.excluidos.forEach(x=>F('Fora do quadro 9 · '+x.imovel,x.porque||'—',{cor:C.secundario}));
+    F('Parte que abate (estimativa)',a.abate==null||sem?'—':E(I.abate),{bold:true});
     cartao('');
     fiscoPdfNota(pdf,'O AIMI não é gasto das rendas: abate ao imposto na proporção do VPT dos prédios que deram rendas. A app limita o abate ao imposto estimado das rendas; a lei fala da coleta à taxa de 28 % (CIMI art. 135.º-I) — a AT faz a conta. Os valores certos estão na demonstração de liquidação do AIMI.');
   }
+
+  fiscoPdfQuadro10(pdf,r);
 
   /* as rendas que não estão em nenhuma linha dos quadros, com o valor: as sem
      contrato ligado declaram-se na mesma (D34); as dos contratos marcados como

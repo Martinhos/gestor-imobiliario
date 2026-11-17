@@ -483,7 +483,9 @@ describe('as Projeções', () => {
     mov({ amount: 400, category: 'Impostos', sub: 'IMI' });
     const h = app.vProjections();
     assert.match(h, /Despesas previstas: <b>1\s156\s€\/ano<\/b> — 4 planeados de despesa \(Condomínio, Impostos e Seguros\): o IMI, o condomínio e o seguro da ficha de cada imóvel e os que marcaste nos Planeados; crescem com a inflação\./);
-    assert.match(h, /IRS sobre as rendas à taxa de cada contrato, contado no ano das rendas — a declaração entrega-se de abril a junho e paga-se até 31 de agosto do ano seguinte\./);
+    /* o IRS é sobre a renda bruta, e a página di-lo: os gastos que se deduzem baixam-no (D100) */
+    assert.match(h, /IRS sobre as rendas brutas, à taxa de cada contrato: o IMI, o condomínio e as obras baixam-no na declaração, e aqui não se descontam\. Conta no ano das rendas — a declaração entrega-se de abril a junho e paga-se até 31 de agosto do ano seguinte\./);
+    assert.match(h, /IRS sobre a renda bruta, no ano das rendas/, 'e a tabela ano a ano também');
     assert.match(h, new RegExp('Em ' + (ANO - 1) + ' gastaste ainda <b>8\\s000\\s€</b> em despesas de uma vez \\(Obras e benfeitorias\\), que não se projetam\\.'));
     assert.match(h, /data-click="go\('recurring'\)">Ver planeados/);
     assert.doesNotMatch(h, /goSet\('repete'\)|Escolher as que se repetem|Despesas recorrentes/);

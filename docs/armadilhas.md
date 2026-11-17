@@ -357,8 +357,12 @@ e desfazia o que a pessoa escolheu depois. Uma marca nova entra em
 nucleo.js:MIGRACOES_DAS_DEFINICOES com os campos que muda: a base fica sem a
 migração (nucleo.js:definicoesDaBase), a fusão ao ler usa-a migrada, e uma
 base por migrar que já não é fresca espera pela leitura seguinte. O mesmo
-vale para qualquer migração com marca dentro de um registo
-(c.fisco.comunicacoesV ainda não o faz).
+vale para uma migração com marca dentro de um registo: a das comunicações de
+um contrato (c.fisco.comunicacoesV) deixa a base do contrato com as
+comunicações de antes da migração (nucleo.js:comunicacoesPorMigrar),
+guardada no aparelho, e a fusão ao ler usa-a migrada
+(nucleo.js:contratoMigrado). Essa não sobe logo: vai com a primeira
+alteração do contrato.
 
 ## O bloco da fusão vive em dois ficheiros
 O `// <fusao>` … `// </fusao>` de worker/src/lib/permissoes.js e o de

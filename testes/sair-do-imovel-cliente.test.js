@@ -125,14 +125,17 @@ describe('o «Apagar imóvel» de quem não criou o imóvel', () => {
     assert.deepEqual(esp.api, [], 'sem o sim, nada vai ao servidor');
   });
 
-  test('a frase do comproprietário: a quota e para quem vai, os saldos e o IRS pelas quotas novas, e quem tem de voltar a partilhar', () => {
+  test('a frase do comproprietário: a quota e para quem vai, as de antes guardadas, os saldos pelas novas, a casa fora da minha Declaração, e quem tem de voltar a partilhar', () => {
     esp.naoConfirma = true;
     app.delProp('H2');
     const q = esp.confirmados[0];
     assert.equal(q.t, 'Apagar «Partilhada»');
     assert.match(q.txt, /^Sais da compropriedade de <b>Partilhada<\/b>: as tuas permissões são retiradas e ele sai da tua lista\./);
     assert.match(q.txt, / A tua quota \(30%\) é dividida por Rui e Ana na proporção das quotas deles\. /);
-    assert.match(q.txt, /Os saldos e o IRS do imóvel passam a contar com as quotas novas, também nos movimentos já registados\. O que registaste fica\./);
+    // as quotas têm data (D29): as de antes ficam no histórico, e o IRS dos outros conta com elas
+    assert.match(q.txt, /As quotas de antes ficam guardadas até ontem: o IRS dos outros conta com elas nos dias em que eras dono, e os saldos passam a contar com as novas, também nos movimentos já registados\./);
+    assert.match(q.txt, /O imóvel deixa de entrar na tua Declaração do IRS, também nos anos em que foste dono\. O que registaste fica\./,
+      'sem movimentos dele nos anos por entregar, não há PDF a oferecer');
     assert.match(q.txt, /Não se desfaz: para voltares, Rui tem de voltar a partilhá-lo contigo\.$/);
     // só com o Rui e sem quotas escritas: metade, e passa para ele
     app.delProp('H5');

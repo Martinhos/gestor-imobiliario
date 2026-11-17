@@ -29,11 +29,15 @@ function dashBarVazia(){
    imóvel no âmbito: um proprietário com quem só tenho uma ligação dava uma
    vista vazia, que o vDashboard larga — uma porta para lado nenhum. Sem
    ninguém assim, não há secção, e «Os meus» também não. As Projeções e a
-   Avaliação escolhem do anaOpcoesImovel, sem proprietários.
+   Avaliação escolhem do anaOpcoesImovel, sem proprietários. Os imóveis
+   vendidos antes do primeiro mês dos gráficos (os últimos 12) ficam de fora,
+   menos o que está em foco (D33).
    Recebe: nada.
    Devolve: array de {v, label} (com os {div:true} antes dos grupos e dos proprietários). */
 function dashOpcoesImovel(){
-  const ops=anaOpcoesImovel();
+  const h=today();let y=Number(h.slice(0,4)),m=Number(h.slice(5,7))-11;
+  if(m<1){m+=12;y--}
+  const ops=anaOpcoesImovel(dashProp,y+'-'+String(m).padStart(2,'0')+'-01');
   const outros=(servicoLigado('owners')?donosComPartilha():[]).filter(o=>pidProps('g:o:'+o.id).length);
   if(!outros.length)return ops;
   const meus=pidProps('g:o:'+DONO_EU).length?[{v:'g:o:'+DONO_EU,label:'Os meus'}]:[];
@@ -162,8 +166,12 @@ function vDashboard(){
   const amortizacoes=am.map((v,i)=>v>0.005?'Em '+rjAno.ler[i]+': amortização de '+euro2(v):'').filter(Boolean);
   /* por imóvel: o cashflow (verde o que dá, laranja o que custa) e o que o
      explica quando ele é baixo — uma amortização deste ano, o uso próprio */
+  /* um vendido antes deste ano só entra se ainda mexeu nas contas do ano (D33) */
   const porImovel=m.props.map(p=>{const mp=metrics(YEAR,p.id,{share:true});
-    return {label:p.name,value:mp.cf,color:mp.cf<0?COR_SERIE.despesa:COR_SERIE.receita,am:mp.amort,nome:p.name,proprio:p.use==='proprio'}}).sort((a,b)=>b.value-a.value);
+    return {label:p.name,value:mp.cf,color:mp.cf<0?COR_SERIE.despesa:COR_SERIE.receita,am:mp.amort,nome:p.name,proprio:p.use==='proprio',
+      antes:imovelVendido(p,(YEAR-1)+'-12-31')}}).filter(x=>!x.antes||Math.abs(x.value)>0.005||x.am>0.005).sort((a,b)=>b.value-a.value);
+  /* o Portefólio é o de hoje: sem os vendidos */
+  const pm=dashSemVendidos(m);
   const notasImovel=porImovel.filter(x=>x.am>0.005).slice(0,2).map(x=>x.nome+' amortizou '+euro(x.am)+' este ano.')
     .concat(porImovel.filter(x=>x.proprio).slice(0,2).map(x=>x.nome+' é de uso próprio.'));
   const act=db.contracts.filter(c=>isActive(c)&&inScope(c.propertyId)&&(!pid||pidProps(pid).some(p=>p.id===c.propertyId)));
@@ -192,17 +200,17 @@ function vDashboard(){
      dívida, património) ficam ao euro, como no canvas */
   const amortizado=m.amort?`<div class="vg-kpi-extra num">+${euro2(m.amort)} amortizados</div>`:'';
   const portItens=[
-    {rot:'Imóveis · contratos ativos',val:m.props.length+' · '+act.length,so:'estreito'},
-    {rot:'Imóveis',val:m.props.length,so:'largo'},
+    {rot:'Imóveis · contratos ativos',val:pm.props.length+' · '+act.length,so:'estreito'},
+    {rot:'Imóveis',val:pm.props.length,so:'largo'},
     {rot:'Contratos ativos',val:act.length,so:'largo'},
     {rot:'Renda contratada',val:euro2(sum(act.map(c=>c.rent)))+'<span class="small">/mês</span>'},
     {rot:'Renda líquida de impostos (estim.)',val:euro2(sum(act.map(c=>netRent(c))))+'<span class="small">/mês</span>',so:'largo'},
-    {rot:'Valor de mercado',val:euro(m.value)},
-    {rot:'Valor de aquisição',val:euro(m.purchase),so:'largo'},
-    {rot:'Em dívida',val:euro(m.debt)},
-    {rot:'Património líquido',val:euro(m.value-m.debt)},
-    {rot:'Possíveis mais-valias',val:euro(m.gain),cls:m.gain<0?'neg':'',so:'largo',
-      nota:m.gainOut?m.gainOut+(m.gainOut===1?' imóvel sem valor de aquisição':' imóveis sem valor de aquisição'):''}];
+    {rot:'Valor de mercado',val:euro(pm.value)},
+    {rot:'Valor de aquisição',val:euro(pm.purchase),so:'largo'},
+    {rot:'Em dívida',val:euro(pm.debt)},
+    {rot:'Património líquido',val:euro(pm.value-pm.debt)},
+    {rot:'Possíveis mais-valias',val:euro(pm.gain),cls:pm.gain<0?'neg':'',so:'largo',
+      nota:pm.gainOut?pm.gainOut+(pm.gainOut===1?' imóvel sem valor de aquisição':' imóveis sem valor de aquisição'):''}];
   const avaliacao=servicoLigado('reports')?`<button type="button" class="vg-ligacao vg-cab-acao" data-toca="ecra" data-click="go('reports')">Avaliação</button>`:'';
   return podes+proximasVisitasColab()+dashBar()+colabHint+pedeAtencao()+`<div class="grid" role="group" aria-label="Indicadores de ${YEAR}">
     ${kpi('Receita',euro2(m.income),'','O que entrou este ano. Cauções e empréstimos não contam.',WHY.receita,E('income'),null,kp('',COR_SERIE.receita))}
@@ -221,6 +229,20 @@ function vDashboard(){
     ${vgCard(pid?esc(dpName):'Portefólio','',portefolioHtml(portItens)+
       `<p class="small vg-nota vg-so-largo">Mais-valias em bruto: mercado menos aquisição. Ao vender, o que é tributado desconta ainda o IMT e o selo da compra, as obras dos últimos 12 anos e as despesas da venda, e aplica o coeficiente de desvalorização da moeda.</p>`,{acao:avaliacao})}
     ${contasCard(pid)}</div>`;
+}
+/* As métricas do Portefólio sem os imóveis vendidos até hoje
+   (dados.js:imovelVendido, D33): o número de imóveis, o valor de mercado, o
+   de aquisição, a dívida e as mais-valias, pesados como o metrics() os pesa
+   (saldos.js:sh, a quota do proprietário filtrado). As receitas, as despesas
+   e o cashflow do ano ficam: são do que aconteceu. Sem vendidos, as mesmas.
+   Recebe: m — as métricas do ano (metricas.js:metrics, com {share:true}).
+   Devolve: as métricas, com props, value, purchase, debt, gain e gainOut sem os vendidos. */
+function dashSemVendidos(m){
+  const ps=(m.props||[]).filter(p=>!imovelVendido(p));
+  if(ps.length===(m.props||[]).length)return m;
+  const gp=ps.filter(p=>p.value>0&&p.purchase>0);
+  return Object.assign({},m,{props:ps,value:sum(ps.map(p=>p.value*sh(p))),purchase:sum(ps.map(p=>p.purchase*sh(p))),
+    debt:sum(ps.map(p=>debtOf(p)*sh(p))),gain:sum(gp.map(p=>(p.value-p.purchase)*sh(p))),gainOut:ps.length-gp.length});
 }
 /* «Percorre com o dedo para ler cada mês.» — a dica do canvas do telemóvel por
    baixo das entradas e saídas; só se vê num ecrã de dedo (estilos.css:.vg-dedo) */
@@ -324,10 +346,12 @@ function atividadeCard(ativ){
    antes do primeiro movimento — os imóveis, o valor de mercado, o de
    aquisição, a dívida e o património líquido. Os contratos ativos, a renda
    contratada, as mais-valias e a nota fiscal ficam de fora: sem movimentos
-   são zeros e frases sobre zeros. Sem imóveis em foco não há cartão nenhum.
+   são zeros e frases sobre zeros. Sem imóveis em foco (os vendidos não
+   contam: dashSemVendidos) não há cartão nenhum.
    Recebe: m — as métricas do ano (metrics).
    Devolve: string HTML do cartão, ou vazia sem imóveis. */
 function portefolioInicial(m){
+  m=dashSemVendidos(m);
   if(!m.props.length)return '';
   /* o cartão genérico (vistas.js:card), e não o vgCard: a jornada é da folha
      dos primeiros passos e o teste dela lê o título como sempre foi; o corpo é

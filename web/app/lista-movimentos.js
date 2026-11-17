@@ -333,9 +333,12 @@ const TX_FILTRO_TIPOS=[['','Todos'],['income','Receitas'],['expense','Despesas']
    Devolve: o texto. */
 const txNMov=n=>n+(n===1?' movimento':' movimentos');
 /* As opções do filtro do imóvel: todos, sem imóvel, os do âmbito e os grupos.
+   Um imóvel vendido continua no filtro — os movimentos dele ficam, e contam
+   na Declaração dos anos em que foi meu —, mas diz que foi vendido (D33).
    Devolve: array de {v, label} para o sel(). */
 function txOpcoesImovel(){
-  return [{v:'',label:'Todos os imóveis'},{v:'__none__',label:'Sem imóvel atribuído'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
+  return [{v:'',label:'Todos os imóveis'},{v:'__none__',label:'Sem imóvel atribuído'}]
+    .concat(scope().map(p=>({v:p.id,label:p.name+(imovelVendido(p)?' · vendido':'')}))).concat(gdiv(gOpts('prop')));
 }
 /* As opções do filtro da categoria, na árvore do tipo filtrado (as dívidas
    usam a das despesas).

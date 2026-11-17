@@ -70,9 +70,11 @@ function primeiraDesdeACompra(id,dia){
    início antes — um contrato «desde 1870» numa casa comprada em 2020 pedia
    600 rendas em atraso (ticket de QA a3a6d2d4).
    Recebe: c — o contrato; next — o cursor atual; minNext — a primeira
-   ocorrência que o contrato permite; from — o dia de pagamento.
+   ocorrência que o contrato permite; from — o dia de pagamento; semFim
+   (opcional) — true para não parar no fim do contrato (o que continua depois
+   do termo, ctRendaDepoisDoTermo).
    Devolve: a data do cursor, ou '' se já passou do fim do contrato. */
-function cursorDaRenda(c,next,minNext,from){
+function cursorDaRenda(c,next,minNext,from,semFim){
   const passo=(iso,n)=>{const d=new Date(iso+'T00:00:00');let y=d.getFullYear(),m=d.getMonth()+n;
     y+=Math.floor(m/12);m=((m%12)+12)%12;return dayInMonth(y,m,from)};
   const chao=primeiraDesdeACompra((c||{}).propertyId,from);
@@ -96,8 +98,28 @@ function cursorDaRenda(c,next,minNext,from){
     if(rendaJaLancada(c,ant))break;
     x=ant;
   }
-  if(c.end&&x>c.end)return '';     // já não há renda nenhuma a pedir
+  if(!semFim&&c.end&&x>c.end)return '';     // já não há renda nenhuma a pedir
   return x;
+}
+/* O contrato continua depois do termo? Um contrato com prazo certo
+   renova-se sozinho no termo (Código Civil, art. 1096.º), e muita gente
+   continua a registar as rendas sem carregar em «Renovar…». Com o termo (o
+   c.end com as renovações registadas, irs.js:irsFimEfetivo) já passado, sem
+   «Terminar contrato» (active a false, ou o dia da cessação,
+   irs.js:irsCessacao) e com uma renda de um mês depois do termo (mesDaRenda:
+   a do último mês paga com atraso não conta), o planeado da renda fica e
+   continua a pedir as seguintes. Apagá-lo calava as rendas que a pessoa
+   continua a receber, e que se declaram (D15); a Declaração diz o resto
+   (fisco-avisos.js).
+   Recebe: c — o contrato.
+   Devolve: true ou false. */
+function ctRendaDepoisDoTermo(c){
+  if(!c||c.active===false)return false;
+  const fim=String(irsFimEfetivo(c)||'');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fim)||fim>=today())return false;
+  if(irsCessacao(c).data)return false;
+  const mes=fim.slice(0,7);
+  return (db.transactions||[]).some(t=>t.contractId===c.id&&ehRenda(t)&&mesDaRenda(t)>mes);
 }
 /* O molde do movimento da renda de um contrato: receita, na categoria Rendas
    (e Renda mensal) quando existem, com o imóvel e o contrato. É o tx do
@@ -136,7 +158,8 @@ function ctRendasEmFalta(c){
 /* As rendas por registar de qualquer contrato, para o botão da ficha
    (contrato.js:ctValores). Num terminado, as do plano dele (ctRendasEmFalta).
    Num em vigor, as do planeado da renda desde o início do contrato
-   (datasEmFalta) — o planeado de um contrato novo arranca no mês corrente, e
+   (datasEmFalta), e também no que continua depois do termo
+   (ctRendaDepoisDoTermo), que guarda o planeado — o planeado de um contrato novo arranca no mês corrente, e
    até ao dia da renda nem há linha por confirmar em Planeados, por isso a
    janela que abre ao adicioná-lo era o único caminho até elas (pedido de
    2026-11-14). Só com duas ou mais, como no ⋯ da linha por confirmar: uma só é
@@ -147,7 +170,7 @@ function ctRendasEmFalta(c){
 function ctRendasPorRegistar(c){
   const fim=ctRendasEmFalta(c);
   if(fim.length)return {datas:fim,recId:''};
-  const r=c&&ctEstado(c)!=='terminado'&&servicoLigado('recurring')?ctRecOf(c):null;
+  const r=c&&(ctEstado(c)!=='terminado'||ctRendaDepoisDoTermo(c))&&servicoLigado('recurring')?ctRecOf(c):null;
   const d=r&&!(r.tx||{}).loanId?datasEmFalta(r):[];
   return d.length>=2?{datas:d,recId:r.id}:{datas:[],recId:''};
 }
@@ -167,7 +190,10 @@ function syncContractRec(c){
      seguinte — e com ela a divisão entre proprietários e a categoria que a
      pessoa lhe tinha dado. O cálculo do «next», logo abaixo, já nunca marca
      nada antes do início. */
-  const r=ctRecOf(c),want=ctVivo(c)&&c.rent>0&&c.autoRec!==false;
+  /* nem o que continua depois do termo (ctRendaDepoisDoTermo): esse fica,
+     sem fim, até alguém o renovar ou terminar (D15) */
+  const depois=ctRendaDepoisDoTermo(c),fimDoPlano=depois?'':(c.end||'');
+  const r=ctRecOf(c),want=(ctVivo(c)||depois)&&c.rent>0&&c.autoRec!==false;
   if(!want){if(r)db.recurring=db.recurring.filter(x=>x.id!==r.id);return}
   const from=Math.max(1,Math.min(31,c.payDay||1)),to=Math.max(from,Math.min(31,c.payDayTo||from));
   const tx=ctMoldeDaRenda(c);
@@ -186,7 +212,11 @@ function syncContractRec(c){
     if(!(c.advance>0)&&c.start>dayInMonth(y2,m2,to)){m2++;if(m2>11){m2=0;y2++}}
     minNext=dayInMonth(y2,m2,from);
   }
-  if(r){aplicaPlanoNaRec(r,tx,tx.label);r.end=c.end||'';
+  if(r){
+    /* com retenção na fonte, o montante é o que entra (recRendaComRetencao) */
+    const v=recRendaComRetencao(r,c);tx.amount=v.amount;
+    aplicaPlanoNaRec(r,tx,tx.label);r.end=fimDoPlano;
+    if(v.retencao!==(Number(r.tx.retencao)||0))r.tx.retencao=v.retencao;
     /* se os dias da janela mudarem no contrato, a janela acompanha (mantendo o mês em curso) */
     if(r.next){const d=new Date(r.next+'T00:00:00');r.next=dayInMonth(d.getFullYear(),d.getMonth(),from);r.until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
     /* O cursor acompanha o contrato nos DOIS sentidos, e nunca passa por cima
@@ -199,7 +229,7 @@ function syncContractRec(c){
        desse mês: sem isto, o arranque seguinte voltava a pedir os meses
        largados de propósito. */
     const desde=recDesde(r),chaoRec=desde?dayInMonth(Number(desde.slice(0,4)),Number(desde.slice(5,7))-1,from):'';
-    const x=cursorDaRenda(c,r.next,chaoRec&&(!minNext||minNext<chaoRec)?chaoRec:minNext,from);
+    const x=cursorDaRenda(c,r.next,chaoRec&&(!minNext||minNext<chaoRec)?chaoRec:minNext,from,depois);
     if(!x){db.recurring=db.recurring.filter(y=>y.id!==r.id);return}
     if(x!==r.next){const d=new Date(x+'T00:00:00');r.next=x;r.until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
     return}
@@ -207,11 +237,31 @@ function syncContractRec(c){
   const t=new Date(today()+'T00:00:00');let y=t.getFullYear(),m=t.getMonth();
   if(today()>dayInMonth(y,m,to)){m++;if(m>11){m=0;y++}}
   let next=dayInMonth(y,m,from),until=to>from?dayInMonth(y,m,to):'';
-  const x0=cursorDaRenda(c,next,minNext,from);
+  const x0=cursorDaRenda(c,next,minNext,from,depois);
   if(!x0)return;                   // um contrato que já acabou não estreia planeado nenhum
   if(x0!==next){const d=new Date(x0+'T00:00:00');next=x0;until=to>from?dayInMonth(d.getFullYear(),d.getMonth(),to):''}
   db.recurring=db.recurring||[];
-  db.recurring.push(normRec({auto:true,name:tx.label,autoName:tx.label,every:'month',next,until,end:c.end||'',tx}));
+  db.recurring.push(normRec({auto:true,name:tx.label,autoName:tx.label,every:'month',next,until,end:fimDoPlano,tx}));
+}
+/* O montante e a retenção do planeado da renda de um contrato (D23). A renda
+   do contrato (c.rent) é a renda bruta, e o movimento guarda o que entrou: com
+   retenção na fonte no planeado, o montante é a renda menos a retenção
+   (irs-papeis.js:rendaBruta soma-as de volta). Era sempre a renda inteira, e
+   a retenção por cima: 1 000 € de renda com 250 € retidos davam 1 250 € de
+   renda ilíquida no Anexo F. Quando a renda do contrato muda, a retenção
+   acompanha-a na mesma proporção (é uma taxa da renda: 25 %). Um planeado com
+   o montante ainda igual à renda inteira (o que a app lá punha) fica com a
+   retenção que tem, e o montante passa a ser a renda menos ela.
+   Recebe: r — o planeado da renda (null quando ainda não existe); c — o contrato.
+   Devolve: {amount, retencao} — em euros, ao cêntimo; retencao 0 sem retenção. */
+function recRendaComRetencao(r,c){
+  const renda=r2(Number((c||{}).rent)||0),t=(r&&r.tx)||{};
+  let ret=r2(Number(t.retencao)||0);
+  if(!(ret>0)||!(renda>0))return {amount:renda,retencao:ret>0?ret:0};
+  const a=r2(Number(t.amount)||0),bruto=r2(a+ret),difere=(x,y)=>Math.abs(x-y)>0.005;
+  if(difere(bruto,renda)&&difere(a,renda)&&bruto>0)ret=r2(ret*renda/bruto);
+  ret=Math.min(ret,renda);
+  return {amount:r2(renda-ret),retencao:ret};
 }
 /* Varre as recorrências automáticas de contratos: apaga as órfãs (o contrato
    já não existe) e sincroniza cada contrato com syncContractRec. Uma
@@ -481,7 +531,7 @@ function planoPrestacoesEmFalta(r){
   if(!x||r.tx.kind!=='loan'||r.tx.payType==='amortizacao')return [];
   const lista=loanPrestacoesEmFalta(x.l,db.transactions,today(),r.next||''),chao=recDesde(r);
   /* as de antes do «Começar a partir de hoje» ficam por registar */
-  return chao?lista.filter(p=>p.date>=chao):lista;
+  return lista.filter(p=>(!chao||p.date>=chao)&&!recDepoisDaVenda(r,p.date));
 }
 /* As datas do plano que já passaram sem movimento registado, da origem
    (início do contrato ou da hipoteca) até hoje, respeitando o fim do plano.
@@ -515,18 +565,49 @@ function datasEmFalta(r){
     d=seg;
     if(r.end&&d>r.end)break;
   }
-  return datas.filter(x=>!jaRegistado(r,x));
+  return datas.filter(x=>!jaRegistado(r,x)&&!recDepoisDaVenda(r,x));
 }
-/* recorrências vencidas (a data prevista já passou ou é hoje)
+/* O dia em que foi vendido o imóvel de um planeado (p.vendido, que o «Marcar
+   como vendido» escreve; dados.js:imovelVendido), também quando a venda está
+   marcada para um dia que ainda não chegou.
+   Recebe: r — o planeado (ou o molde, {tx}).
+   Devolve: 'AAAA-MM-DD', ou '' sem imóvel, sem venda ou com a venda desfeita. */
+function recVendidoEm(r){
+  const pid=((r||{}).tx||{}).propertyId;if(!pid)return '';
+  const p=(db.properties||[]).find(x=>x&&x.id===pid);
+  const v=p&&typeof p.vendido==='string'?p.vendido:'';
+  return /^\d{4}-\d{2}-\d{2}$/.test(v)?v:'';
+}
+/* Esta ocorrência do planeado é de depois da venda do imóvel (D33)? Depois
+   do dia da venda a casa já não é minha: o IMI, o condomínio, o seguro, a
+   renda e o resto desse imóvel deixam de pedir confirmação (Pede atenção,
+   Planeados, agenda, preenchimento), e as de antes continuam. Não se apaga
+   nada: é a data que corta, e o «Desfazer venda» devolve-as.
+   Recebe: r — o planeado; d — a data 'AAAA-MM-DD' da ocorrência.
+   Devolve: true quando a casa já estava vendida nesse dia. */
+function recDepoisDaVenda(r,d){
+  const v=recVendidoEm(r);
+  return !!v&&/^\d{4}-\d{2}-\d{2}$/.test(String(d||''))&&String(d)>v;
+}
+/* O planeado está por confirmar? A data prevista já passou ou é hoje, e não
+   é de depois da venda do imóvel (recDepoisDaVenda).
+   Recebe: r — o planeado.
+   Devolve: true ou false. */
+function recPorConfirmar(r){
+  return !!(r&&r.next&&r.next<=today()&&!recDepoisDaVenda(r,r.next));
+}
+/* recorrências vencidas (a data prevista já passou ou é hoje), sem as de
+   depois da venda do imóvel (recPorConfirmar)
    Devolve: a lista dessas recorrências (array de objetos de db.recurring). */
-function recPending(){const t=today();return (db.recurring||[]).filter(r=>r.next&&r.next<=t)}
+function recPending(){return (db.recurring||[]).filter(recPorConfirmar)}
 /* silenciada: continua por confirmar em Planeados, mas não avisa nem conta no menu
    Devolve: as vencidas que não estão silenciadas (array de objetos de db.recurring). */
 function recActive(){return recPending().filter(r=>!r.muted)}
-/* em atraso: passou o último dia da janela sem confirmação
+/* em atraso: passou o último dia da janela sem confirmação (e não é de
+   depois da venda do imóvel)
    Recebe: r — o planeado.
    Devolve: true se está em atraso. */
-const recIsLate=r=>!!(r.next&&r.next<=today()&&(r.until||r.next)<today());
+const recIsLate=r=>!!(recPorConfirmar(r)&&(r.until||r.next)<today());
 // as vencidas que ainda avisam e cuja janela já fechou — alimenta os alertas de atraso
 // Devolve: essas recorrências em atraso (array de objetos de db.recurring).
 function recLate(){return recActive().filter(recIsLate)}
@@ -719,11 +800,18 @@ function recPeriodo(r){
    passou; ticket de QA e8ec9555) e passa à seguinte. A renda de um contrato
    leva o mês previsto em periodo (recPeriodo). O «Preencher N em falta»
    (cloud/painel.js:fillCriar) não é confirmar: fica com a data de cada mês.
-   Recebe: id — o id da recorrência a confirmar.
-   Devolve: nada — regista o movimento, grava e redesenha. */
-function quickConfirmRec(id){
+   Numa renda cujo dia previsto é de outro ano que hoje (recPedeODia), não
+   regista: pergunta primeiro o dia em que entrou (recPerguntarDia), porque a
+   renda conta no IRS do ano em que se recebe (D22, decisão do Martinho).
+   Recebe: id — o id da recorrência a confirmar; dia (opcional) — o dia
+   AAAA-MM-DD em que o dinheiro entrou, já perguntado (recConfirmarNoDia);
+   sem ele, hoje.
+   Devolve: nada — regista o movimento, grava e redesenha (ou abre a pergunta). */
+function quickConfirmRec(id,dia){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
+  dia=/^\d{4}-\d{2}-\d{2}$/.test(String(dia||''))?String(dia):'';
   const recusa=recusaConfirmar(r);if(recusa)return toast(recusa);
+  if(recDepoisDaVenda(r,r.next))return toast('O imóvel foi vendido a '+dPT(recVendidoEm(r))+': o planeado já não pede nada depois disso.');
   /* sem saber a que hipoteca abate, o movimento saía sem crédito: abre-se para escolher */
   if(recSemCredito(r))return toast('Sem crédito associado — abre o planeado para escolher a hipoteca.');
   /* a mesma frase do formulário: confirmar depressa não pode aceitar o que o Guardar recusa */
@@ -737,15 +825,68 @@ function quickConfirmRec(id){
     const mes=r.next;recAdvance(r);save();buildNav();render();
     return toast('Já havia a renda deste contrato de '+mesPt(mes)+' — o planeado saltou para o seguinte.');
   }
+  /* a renda de dezembro confirmada em janeiro: o ano do IRS é o do dia em que
+     entrou, e esse pergunta-se. Abre depois de quem chamou acabar: o «Pede
+     atenção» refaz a janela dele a seguir ao Confirmar (notificacoes.js), e a
+     pergunta tem de ficar por cima */
+  if(!dia&&recPedeODia(r)){setTimeout(()=>recPerguntarDia(id),0);return}
   /* um planeado de um grupo ou de «Todos os imóveis» entra partido por imóvel,
      como pelo formulário (movimento.js:registarMolde); o que não se parte
      (um grupo sem imóveis) não avança o planeado */
-  const mol=recTx(r,today()),periodo=recPeriodo(r);if(periodo)mol.periodo=periodo;
+  const mol=recTx(r,dia||today()),periodo=recPeriodo(r);if(periodo)mol.periodo=periodo;
   const reg=registarMolde(mol);if(reg.erro)return toast(reg.erro);
   reg.partes.forEach(t=>{if(t.kind==='loan')applyLoan(t);db.transactions.push(t)});
   /* o movimento nasce aqui: o «Ver» abre a ficha dele (de vários imóveis, a primeira parte, que a ficha lê como o lote) */
   const nid=reg.partes[0].id;
   recAdvance(r);save();buildNav();render();avisoComVer('Movimento confirmado.','transactions',()=>chamarServico('transactions','txView',nid));
+}
+/* O «Confirmar» de uma renda pergunta o dia em que entrou? Só numa renda (o
+   papel da Declaração, irs-papeis.js:irsReceitaDe: a renda e a caução, que
+   contam no ano em que se recebem) cujo dia previsto (r.next) é de outro ano
+   que hoje: a de dezembro confirmada em janeiro entrou em dezembro ou em
+   janeiro, e cada um é a Declaração de um ano diferente. No mesmo ano a data
+   de hoje serve (o ano do IRS é o mesmo). As prestações e as despesas não
+   perguntam (decisão do Martinho, D22).
+   Recebe: r — o planeado.
+   Devolve: true ou false. */
+function recPedeODia(r){
+  const t=(r&&r.tx)||{},n=String((r&&r.next)||'');
+  if(t.kind!=='income'||!/^\d{4}-\d{2}-\d{2}$/.test(n)||n.slice(0,4)===today().slice(0,4))return false;
+  const papel=irsReceitaDe(Object.assign({},t,{date:n})).papel;
+  return papel==='renda'||papel==='caucao';
+}
+/* A pergunta do dia em que a renda entrou (recPedeODia): uma folha só com o
+   dia, por preencher — é ele que decide o ano da Declaração, e um valor já
+   escrito confirmava-se sem ninguém o ler. O mês a que respeita fica o
+   previsto (recPeriodo).
+   Recebe: id — o id do planeado.
+   Devolve: nada — abre a folha. */
+function recPerguntarDia(id){
+  const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
+  openModal('Em que dia entrou?',
+    `<div class="form"><div class="hint u-fs-14px"><b>${esc(r.name)}</b>, prevista para ${dPT(r.next)}, conta no IRS do ano em que a recebeste, e não no do mês a que respeita. Indica o dia em que entrou.</div>
+    <label>Dia em que entrou <span class="req">*</span><input id="rec_dia" type="date" value="" max="${today()}"></label>
+    <div class="hint u-mt-n6px">O mês a que respeita fica o da renda prevista, ${esc(mesPt(r.next))}.</div></div>`,
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button>`+
+    `<button class="btn primary" data-toca="dados" data-click="recConfirmarNoDia('${jsq(id)}')">Confirmar</button>`);
+}
+/* O «Confirmar» da pergunta do dia (recPerguntarDia): o dia é obrigatório,
+   não passa de hoje nem fica antes da compra da casa (a regra do formulário
+   do movimento); fecha a folha e confirma com esse dia (quickConfirmRec). O
+   «Pede atenção» de baixo refaz-se, como depois do Confirmar dele: a linha
+   com o mês já confirmado confirmava outro ao segundo toque.
+   Recebe: id — o id do planeado.
+   Devolve: nada — confirma, ou diz o erro junto ao campo. */
+function recConfirmarNoDia(id){
+  const dia=String(val('rec_dia')||'');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(dia))return falhaCampo('rec_dia','Indica o dia em que a renda entrou.');
+  if(dia>today())return falhaCampo('rec_dia','O dia em que entrou não pode ser depois de hoje.');
+  const r=(db.recurring||[]).find(x=>x.id===id),compra=r?compraDaCasa((r.tx||{}).propertyId):'';
+  if(compra&&dia<compra)return falhaCampo('rec_dia','O imóvel foi comprado a '+dPT(compra)+': uma receita não pode ser de antes.');
+  closeModal();
+  quickConfirmRec(id,dia);
+  const top=modalTop();
+  if(top&&top.title==='Pede atenção')notifModal(_atencaoFiltro);
 }
 // Silencia ou reativa a recorrência: silenciada fica em Planeados à espera de
 // confirmação, mas sem avisos nem contagem no menu. Grava e redesenha.
@@ -779,6 +920,7 @@ function recusaConfirmar(r){
 function confirmRec(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   const recusa=recusaConfirmar(r);if(recusa)return toast(recusa);
+  if(recDepoisDaVenda(r,r.next))return toast('O imóvel foi vendido a '+dPT(recVendidoEm(r))+': o planeado já não pede nada depois disso.');
   const preset=Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:today(),label:r.tx.label||r.name});
   const periodo=recPeriodo(r);if(periodo)preset.periodo=periodo;
   txModal({kind:r.tx.kind,propId:r.tx.propertyId,ctId:r.tx.contractId,preset,modo:'confirmar',recId:id});
@@ -796,6 +938,21 @@ function imovelDoMolde(t){
   if(t.groupId){const g=grp(t.groupId);return g?g.name:'Grupo que não está nesta conta'}
   return t.todos||t.kind==='settle'?'Todos os imóveis':'Sem imóvel';
 }
+/* O que o IRS faz ao seguro da ficha do imóvel, para a ficha do planeado
+   (D06). O campo «Seguro» da ficha cria um planeado em Seguros › Multirriscos,
+   e o multirriscos não é gasto do Anexo F (a AT, proc. 1115/2017: é
+   facultativo). Diz-se pela coluna que a despesa teria
+   (irs-papeis.js:irsColunaDe), com a nota da regra (dados.js:IRS_MAPA_NOTAS): quem mudou a
+   categoria do planeado para uma que deduz não lê que não deduz.
+   Recebe: t — o tx do planeado.
+   Devolve: o texto (com um espaço à frente), ou '' fora do seguro da ficha ou
+   quando a despesa entra no Anexo F. */
+function recSeguroNoIrs(t){
+  if(!t||t.propRec!=='seguro')return '';
+  if(irsColunaDe(Object.assign({},t,{kind:'expense'})).col!=='nao')return '';
+  const k=[t.category,t.sub].filter(Boolean).join(' / '),nota=Object.prototype.hasOwnProperty.call(IRS_MAPA_NOTAS,k)?IRS_MAPA_NOTAS[k]:'';
+  return ' Não entra no Anexo F do IRS: este seguro não é um gasto que se deduza das rendas.'+(nota?' '+esc(nota):'');
+}
 /* O corpo da ficha de um movimento planeado.
 
    «O que é isto que me estão a pedir para confirmar, de quanto, de onde vem,
@@ -808,13 +965,13 @@ function recFicha(id){
   const t=r.tx||{};
   const vem=r.auto?(t.loanId?'Prestação da hipoteca '+esc(loanName(((anyLoan(t.loanId)||{}).l)||null))
     :(t.contractId&&contract(t.contractId)?'Renda do contrato '+esc(ctName(contract(t.contractId)))
-    :(t.propRec?({imi:'IMI',condominio:'Condomínio',seguro:'Seguro'})[t.propRec]+' do imóvel '+esc(propName(t.propertyId))+' — o valor vive na ficha do imóvel; apagar este planeado remove-o de lá.':''))):'';
+    :(t.propRec?({imi:'IMI',condominio:'Condomínio',seguro:'Seguro'})[t.propRec]+' do imóvel '+esc(propName(t.propertyId))+' — o valor vive na ficha do imóvel; apagar este planeado remove-o de lá.'+recSeguroNoIrs(t):''))):'';
   return ficha([
     {tipo:'nota',valor:esc(motivoRecusa(t.propertyId,'rec.add',r))},
     t.amount?{rotulo:'Montante',valor:euro2(t.amount)}:null,
     {rotulo:'Quando',valor:dPT(r.next||'')+(r.until&&r.until!==r.next?' a '+dPT(r.until):'')+(r.every?' · '+esc(EVERY[r.every]||r.every):'')},
     {rotulo:'Estado',valor:(recIsLate(r)?'<span class="perigo">Em atraso</span> desde '+dPT(r.until||r.next||'')
-      :(r.next&&r.next<=today()?'Por confirmar':'Em dia'))+(r.muted?' · silenciada':'')},
+      :(recPorConfirmar(r)?'Por confirmar':(recDepoisDaVenda(r,r.next)?'Imóvel vendido a '+dPT(recVendidoEm(r)):'Em dia')))+(r.muted?' · silenciada':'')},
     {rotulo:'Tipo',valor:esc((KIND[t.kind]||{}).short||'')},
     /* um planeado pode estar num grupo de imóveis, ou em «Todos», em vez de num imóvel */
     {rotulo:'Imóvel',valor:esc(imovelDoMolde(t))},
@@ -836,7 +993,7 @@ function recFicha(id){
 function recView(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   const hid=(r.tx||{}).propertyId;
-  const podeConf=r.next&&r.next<=today()&&!recusaConfirmar(r)&&!recSemCredito(r)&&!recCreditoPago(r);
+  const podeConf=recPorConfirmar(r)&&!recusaConfirmar(r)&&!recSemCredito(r)&&!recCreditoPago(r);
   const podeEd=podeEditar(hid,'rec.add',r);
   abrirFicha({
     titulo:()=>{const x=(db.recurring||[]).find(y=>y.id===id);return x?x.name:'Planeado'},
@@ -1394,7 +1551,7 @@ function recChip(v){
    Recebe: r — o planeado.
    Devolve: o HTML da linha (texto). */
 function recLinha(r){
-  const t=r.tx||{},pend=r.next&&r.next<=today(),onde=imovelDoMolde(t);
+  const t=r.tx||{},pend=recPorConfirmar(r),onde=imovelDoMolde(t);
   return `<div class="plan-linha tap" data-lp="rec:${esc(r.id)}" data-fk="recl:${esc(r.id)}" data-toca="camada" data-click="recView('${jsq(r.id)}')">
     <div class="plan-txt">
       <p class="title">${esc(r.name)}</p>
@@ -1446,7 +1603,7 @@ function vRecurring(){
   const base=r=>((!s.k||r.tx.kind===s.k)&&recNoImovel(r.tx,s.p)&&hit(r.name,r.tx));
   /* um planeado está num estado? (o filtro e as contagens do chip) */
   const noEstado=(r,st)=>{
-    if(st==='pend')return !!(r.next&&r.next<=today()&&!r.muted);
+    if(st==='pend')return !!(recPorConfirmar(r)&&!r.muted);
     if(st==='ok')return !!(r.next&&r.next>today());
     if(st==='muted')return !!r.muted;
     if(st==='auto')return !!r.auto;
@@ -1522,7 +1679,7 @@ function recCracha(){
 function lpPlaneado(a){
   const id=a[1],r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   const hid=(r.tx||{}).propertyId,conf=podeEditar(hid,'rec.add',r,'confirmar'),edita=podeEditar(hid,'rec.add',r),opts=[];
-  if(r.next&&r.next<=today()&&!recusaConfirmar(r))opts.push({label:'Confirmar',icon:'check',act:()=>quickConfirmRec(id)});
+  if(recPorConfirmar(r)&&!recusaConfirmar(r))opts.push({label:'Confirmar',icon:'check',act:()=>quickConfirmRec(id)});
   if(conf)opts.push({label:r.muted?'Reativar avisos':'Silenciar',icon:'clock',act:()=>skipRec(id)});
   lpExtrasDe('rec',a).forEach(o=>opts.push(o));
   if(edita)opts.push({label:'Editar',icon:'pen',act:()=>editRec(id)},{label:'Apagar',icon:'trash',act:()=>delRec(id)});

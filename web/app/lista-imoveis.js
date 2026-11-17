@@ -16,7 +16,9 @@
    cartão já não tem o ⋮. Os cartões dividem-se pela origem — os meus
    imóveis, os partilhados comigo, aqueles em que colaboro
    (vistas.js:listaPorOrigem) —, e com imóveis de duas origens há o chip
-   «Origem» (vistas.js:lfOrigem).
+   «Origem» (vistas.js:lfOrigem). Os vendidos (dados.js:imovelVendido, D33)
+   saem da lista do dia a dia; com algum, o chip «Vendidos · N»
+   (imvCampoVendidos) mostra só eles.
    Devolve: string com o HTML completo da vista. */
 function vProperties(){
   const K='lprops',s=lf(K);
@@ -25,6 +27,8 @@ function vProperties(){
   /* a origem (os meus, partilhados comigo, em que colaboro): o filtro e as secções (vistas.js:lfOrigem, vistas.js:listaPorOrigem) */
   const deOrigem=p=>origemDaCasa(p.id),org=lfOrigem(K,visiveis(),deOrigem);
   const passaSt=p=>!(s.st&&vEstado)||propStatus(p).key===s.st;
+  /* os vendidos só com o filtro deles; os outros só sem ele */
+  const passaVd=p=>s.vd==='v'?imovelVendido(p):!imovelVendido(p);
   const todos=visiveis().filter(p=>{
     if(s.md){if(p.use!=='investimento')return false;if((p.rentalMode||'inteiro')!==s.md)return false}
     /* a pesquisa encontra também quem lá mora, onde se pode ver os contratos */
@@ -34,13 +38,15 @@ function vProperties(){
   });
   /* cada campo conta o que passa os OUTROS filtros: o estado conta com a origem, a origem com o estado */
   const resto=org.filtra(todos);
-  let list=resto.filter(passaSt);
+  let list=resto.filter(p=>passaSt(p)&&passaVd(p));
+  const nVend=resto.filter(p=>passaSt(p)&&imovelVendido(p)).length;
   /* sem imóveis nenhuns não há o que pesquisar nem filtrar: fica o vazio com o seu botão */
   const head=(!db.properties.length?'':lfCabeca(K,{nome:['imóvel','imóveis'],dos:'dos imóveis',n:list.length,
-      campos:[vEstado?imvCampoEstado(resto):null,
+      campos:[vEstado?imvCampoEstado(resto.filter(passaVd)):null,
         {chave:'md',nome:'Arrendamento',curto:'Todos',rapido:'largo',
           opcoes:[{v:'',label:'Todos os arrendamentos'},{v:'inteiro',label:'Imóvel inteiro'},{v:'quartos',label:'Por quartos'}]},
-        org.campo(todos.filter(passaSt),ORIGEM_IMOVEIS.rot)],
+        org.campo(todos.filter(p=>passaSt(p)&&passaVd(p)),ORIGEM_IMOVEIS.rot),
+        imvCampoVendidos(nVend,s.vd)],
       /* a renda e a yield são dos Contratos, a dívida dos Créditos: sem eles, ordenar por elas não ordenava nada */
       ordem:{opcoes:[{v:'nome',label:'Nome'},{v:'valor',label:'Valor'}].concat(vEstado?[{v:'renda',label:'Renda'},{v:'yield',label:'Yield'}]:[])
         .concat(servicoLigado('credits')?[{v:'divida',label:'Dívida'}]:[])}}))
@@ -49,6 +55,8 @@ function vProperties(){
   if(!list.length){
     const espera=esperaDoServidor();if(espera)return head+espera;
     if(lfCount(K))return head+vazioFiltro();
+    /* só há vendidos: a lista do dia a dia fica vazia, e diz onde eles estão */
+    if(nVend)return head+`<div class="empty"><b>Só há imóveis vendidos</b>${nVend===1?'O vendido está':'Os vendidos estão'} no filtro «Vendidos».${saida(nVend===1?'Ver o vendido':'Ver os vendidos',"lfMudar('lprops','vd','v')",'vista')}</div>`;
     return head+`<div class="empty"><b>Sem imóveis</b>Adiciona o primeiro para começares a acompanhar o investimento.${saida('Adicionar imóvel','propModal()','camada')}</div>`;
   }
   const dividas=dividasEntreDonos(list);   /* uma passagem pelos movimentos por pintura, e não seis por cartão */
@@ -60,6 +68,16 @@ function vProperties(){
    (vistas.js:listaPorOrigem) e as escolhas do filtro «Origem» (vistas.js:lfOrigem). */
 const ORIGEM_IMOVEIS={titulos:{meu:'Os meus imóveis',partilhado:'Partilhados comigo',colaboro:'Em que colaboro'},
   rot:{todos:'Todos',meu:'Os meus',partilhado:'Partilhados comigo',colaboro:'Em que colaboro'}};
+/* O campo dos vendidos (D33): o chip «Vendidos · N», só quando há algum
+   (ou o filtro está ligado); ligado, a lista mostra só os vendidos.
+   Recebe: n — quantos vendidos passam os outros filtros; v — o valor do
+   filtro ('' ou 'v').
+   Devolve: o campo {chave, nome, opcoes, curto, rapido, rotulo}, ou null. */
+function imvCampoVendidos(n,v){
+  if(!n&&v!=='v')return null;
+  return {chave:'vd',nome:'Vendidos · '+n,curto:'Sem os vendidos',rapido:true,rotulo:()=>'Vendidos · '+n,
+    opcoes:[{v:'',label:'Sem os vendidos'},{v:'v',label:'Vendidos',n:n}]};
+}
 /* Os estados do filtro rápido: o valor do filtro (o «st» do lf('lprops')), o
    rótulo curto e o do seletor. */
 const ESTADOS_RAPIDOS=[['','Todos','Todos os estados'],['arrendado','Arrendados','Arrendados'],['parcial','Parciais','Parcialmente arrendados'],
@@ -163,13 +181,14 @@ function imvSeloPendentes(rs){
    cada selo pede a sua permissão; o que o servidor não mandou não se inventa.
    O estado, a renda e os contratos são dos Contratos, a dívida dos Créditos e
    os por confirmar dos Planeados: com o serviço desligado nesta conta, o
-   cartão não os mostra (servicos.js:servicoLigado).
+   cartão não os mostra (servicos.js:servicoLigado). Um vendido diz o dia da
+   venda no lugar do estado (imovel.js:imvSeloVenda).
    Recebe: p — o imóvel; divida — o que está por acertar entre os donos
    (dividasEntreDonos); pend — os planeados por confirmar dele.
    Devolve: o HTML do cartão. */
 function imvCartao(p,divida,pend){
   const vCt=pode(p.id,'contract.view')&&servicoLigado('contracts'),vRep=pode(p.id,'report.view'),vLoan=pode(p.id,'loan.view')&&servicoLigado('credits'),vFile=pode(p.id,'file.view');
-  const st=vCt?propStatus(p):null;
+  const st=vCt&&!imovelVendido(p)?propStatus(p):null;
   /* um imóvel já prometido tem de o dizer: sem isto o cartão mostra «Vago»,
      sem renda e sem inquilino, e quem olha para a lista pode anunciá-lo ou
      arrendá-lo outra vez */
@@ -186,7 +205,7 @@ function imvCartao(p,divida,pend){
       <div class="row-between imv-topo">
         <div><div class="title imv-nome">${esc(p.name)}${seloCargo(p)}</div>
           <div class="small imv-morada">${esc(p.address||'Sem morada')}</div></div>
-        ${st?`<span class="badge ${imvCorDoEstado(st.key)}">${esc(st.label)}</span>`:''}
+        ${st?`<span class="badge ${imvCorDoEstado(st.key)}">${esc(st.label)}</span>`:imvSeloVenda(p)}
       </div>
       ${imvNumeros(p,{vCt,vRep,vLoan})}
       ${selos?`<div class="imv-selos">${selos}</div>`:''}

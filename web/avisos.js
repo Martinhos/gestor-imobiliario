@@ -27,6 +27,61 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 78,
+    data: '2026-11-17',
+    titulo: 'Contratos, prazos e Declaração: o que a AT pede',
+    seccoes: [
+      {
+        titulo: 'Os contratos',
+        afeta: ['contratos'],
+        itens: [
+          'Terminar um contrato pergunta o dia em que acabou e o motivo, e o fim do contrato fica o do prazo: a Declaração usa-os para o quadro 10 e para a taxa. Reativar já não apaga o fim, e com o prazo passado oferece renovar.',
+          'A comunicação da duração às Finanças marca-se uma vez por contrato e por renovação, com o dia em que a fizeste. O início do contrato passa a ser obrigatório.',
+          'Com um inquilino empresa num contrato de habitação, o contrato pergunta se identifica quem lá mora e proíbe a sublocação, que é o que a AT pede para ser habitação.',
+        ],
+      },
+      {
+        titulo: 'Os prazos da AT',
+        afeta: ['contratos'],
+        itens: [
+          'Os prazos seguem a lei: a comunicação da duração pede-se uma vez por contrato e por renovação, a cessação só quando o contrato acabou mesmo, o recibo (também o da caução) no dia em que recebes, e a oposição à renovação com a antecedência do período. O envio ao IHRU e a comunicação de fevereiro marcam-se no próprio aviso.',
+        ],
+      },
+      {
+        titulo: 'As rendas e os planeados',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'Confirmar uma renda de dezembro em janeiro pergunta o dia em que entrou: a renda conta no IRS do ano em que a recebes. Com retenção na fonte, a renda planeada guarda o que entra, e a retenção acompanha a renda.',
+          'Uma renda registada pelo + já vem ligada ao contrato e à categoria Rendas, com o mês a que respeita; numa renda em atraso o mês é obrigatório. Na ficha de um inquilino empresa podes confirmar que ele não retém.',
+        ],
+      },
+      {
+        titulo: 'Os imóveis',
+        afeta: ['imoveis', 'partilha'],
+        itens: [
+          'Na ficha do imóvel podes dizer quem mais é dono fora da app e a quota de cada um, e cada mudança das quotas fica com o dia em que começa: a Declaração usa a quota de cada dia.',
+          'Um imóvel vendido marca-se no ⋯ da ficha: sai das listas e os planeados dele param no dia da venda, e as rendas ficam na Declaração dos anos em que foi teu.',
+        ],
+      },
+      {
+        titulo: 'As categorias',
+        afeta: ['app'],
+        itens: [
+          'Mudar o nome a uma categoria que o IRS lê (as Rendas, o IMI, as Devoluções…) já não a tira da Declaração, e essas categorias já não se removem por engano. As colunas do Anexo F ganham «A confirmar em cada despesa», e as Projeções dizem que o IRS é sobre as rendas brutas.',
+        ],
+      },
+      {
+        titulo: 'A Declaração',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'A tua situação fiscal é de cada ano: ligar a tributação conjunta em 2026 já não muda 2025. Na conjunta escolhes o cônjuge e a tua letra no Rosto.',
+          'Um ano com uma renovação a meio reparte as rendas pelas taxas de cada período; os contratos que acabaram vão ao quadro 10, com a regularização quando acabaram antes do prazo; e o imposto estimado já abate os prejuízos de anos anteriores.',
+          'O AIMI conta inteiro para quem o pagou, sem lojas nem rústicos no quadro 9, e «A tratar» aponta os meses sem renda registada, a comunicação por fazer e os contratos terminados sem o dia em que acabaram. O PDF e o CSV dizem o mesmo que a página.',
+        ],
+      },
+    ],
+  },
+  {
     v: 77,
     data: '2026-11-17',
     titulo: 'A Declaração revista: taxas, avisos e exportação',
@@ -1828,7 +1883,7 @@ var VERSAO = AVISOS[0].v;
 /* Versão mínima aceite. Subir isto obriga toda a gente a atualizar antes de
    continuar a usar a app — é para quando uma versão antiga passa a estar
    errada, não para empurrar novidades. */
-var VERSAO_MINIMA = 77;
+var VERSAO_MINIMA = 78;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { AVISOS: AVISOS, VERSAO: VERSAO, VERSAO_MINIMA: VERSAO_MINIMA, FUNCIONALIDADES: FUNCIONALIDADES };

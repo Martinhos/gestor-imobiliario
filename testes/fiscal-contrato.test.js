@@ -95,14 +95,17 @@ describe('o formulário do contrato: a secção Fisco', () => {
     assert.doesNotMatch(dobra, /id="c_fces"/, 'sem fim nem inatividade não há cessação');
   });
 
-  test('o motivo da cessação só quando o contrato tem fim ou está inativo', () => {
+  test('o dia em que acabou e o motivo só num contrato terminado, em qualquer estado perante a AT; o texto livre antigo já não se pede', () => {
     const base = { propertyId: 'P1', tenantIds: ['T1'], rent: 800, fisco: { estado: 'declarado' } };
     app.cForm = app.normContract(Object.assign({ end: (ANO + 1) + '-06-30' }, base));
-    assert.match(dobraFisco(app.ctBody()), /id="c_fces"/);
-    app.cForm = app.normContract(Object.assign({ active: false }, base));
-    assert.match(dobraFisco(app.ctBody()), /id="c_fces"/);
-    app.cForm = app.normContract(Object.assign({}, base, { fisco: { estado: 'naoDeclarado' }, end: (ANO + 1) + '-06-30' }));
-    assert.doesNotMatch(dobraFisco(app.ctBody()), /id="c_fces"/, 'só no declarado');
+    assert.doesNotMatch(dobraFisco(app.ctBody()), /id="c_cesData"|id="c_fces"/, 'em vigor, mesmo com fim, não há cessação');
+    app.cForm = app.normContract(Object.assign({}, base, { active: false, fisco: { estado: 'declarado', cessacao: { data: (ANO - 1) + '-05-31', motivo: '02' } } }));
+    const d = dobraFisco(app.ctBody());
+    assert.match(d, new RegExp('<label>Acabou a<input id="c_cesData" type="date" value="' + (ANO - 1) + '-05-31"'));
+    assert.match(d, /<input type="hidden" id="c_cesMot" value="02">/);
+    assert.doesNotMatch(d, /id="c_fces"/);
+    app.cForm = app.normContract(Object.assign({}, base, { active: false, fisco: { estado: 'naoDeclarado' } }));
+    assert.match(dobraFisco(app.ctBody()), /id="c_cesData"/, 'também no não declarado: o dia em que acabou é do contrato');
   });
 
   test('não declarado: nenhum campo, uma frase neutra, sem cor de aviso', () => {
@@ -172,7 +175,7 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
     app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800,
       fisco: { estado: 'declarado', renovacoes: [{ id: 'R1' }] } });
     desfazerDom = domCom({ c_fnum: ' 1234567 ', c_ffin: 'hp', c_fcel: '2024-03-01', c_fren: '1',
-      c_rini_R1: '2025-03-01', c_rfim_R1: '2026-02-28', c_fces: 'fim do prazo', c_rent: '800', c_active: true });
+      c_rini_R1: '2025-03-01', c_rfim_R1: '2026-02-28', c_fces: 'fim do prazo', c_cesData: '2026-01-31', c_cesMot: '02', c_rent: '800', c_active: true });
     app.collectCt();
     const f = app.cForm.fisco;
     assert.equal(f.estado, 'declarado', 'o estado não vem de um campo: só dos botões');
@@ -181,8 +184,14 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
     assert.equal(f.celebracao, '2024-03-01');
     assert.equal(f.renovavel, true);
     igual(f.renovacoes, [{ id: 'R1', inicio: '2025-03-01', fim: '2026-02-28' }]);
-    assert.equal(f.cessacaoMotivo, 'fim do prazo');
+    assert.equal(f.cessacaoMotivo, '', 'o texto livre antigo do motivo já não se escreve');
+    igual(f.cessacao, { data: '', motivo: '' }, 'em vigor, a cessação não se lê');
     assert.equal(app.cForm.rent, 800, 'o resto do formulário continua a ser lido');
+    // terminado: o dia em que acabou e o motivo leem-se
+    desfazerDom(); desfazerDom = domCom({ c_rent: '800', c_cesData: '2026-01-31', c_cesMot: '02' });
+    app.collectCt();
+    assert.equal(app.cForm.active, false);
+    igual(app.cForm.fisco.cessacao, { data: '2026-01-31', motivo: '02' });
   });
 
   test('collectCt: «Não» é false, «Não sei» é null, e o que não é válido cai', () => {
@@ -343,10 +352,12 @@ describe('o formulário do movimento', () => {
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Manutenção e reparações', sub: 'Pragas' });
     assert.match(app.txBody(), /Pela categoria: Conservação e manutenção/);
     // a regra que depende do caso, e a omissão, dizem «A confirmar» — e não «Pela categoria: » vazio
+    // (o texto exato é do movimento.js: «a confirmar — escolhe a coluna», desde a vaga 2)
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Outros' });
-    assert.match(app.txBody(), /Pela categoria: A confirmar</);
+    assert.match(app.txBody(), /Pela categoria: [Aa] confirmar\b/);
+    assert.doesNotMatch(app.txBody(), /Pela categoria: </);
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Categoria da Ana' });
-    assert.match(app.txBody(), /Pela categoria: A confirmar</);
+    assert.match(app.txBody(), /Pela categoria: [Aa] confirmar\b/);
     // com uma coluna escolhida à mão, a primeira opção continua a dizer a regra — e a escolha fica marcada
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Impostos', sub: 'IMI', irsCol: 'obras24' });
     html = app.txBody();
@@ -357,9 +368,9 @@ describe('o formulário do movimento', () => {
     assert.doesNotMatch(app.txBody(), /id="t_irscol"/);
   });
 
-  test('prefill sugere o mês da renda a partir da data, só num movimento novo com contrato', () => {
+  test('prefill: o mês da renda só se sugere a partir do planeado dela (movimento.js:txSugereMesDaRenda), nunca da data, e nunca por cima do escrito', () => {
     const novo = (extra) => { app.tForm = app.normTx(Object.assign({ kind: 'income', propertyId: 'P1', contractId: 'C1', date: ANO + '-09-05' }, extra || {})); app.tForm._edit = false; app.prefill(); return app.tForm; };
-    assert.equal(novo().periodo, ANO + '-09');
+    assert.equal(novo().periodo, '', 'sem planeado da renda vencido fica em branco, que é o da data');
     assert.equal(novo({ periodo: ANO + '-08' }).periodo, ANO + '-08', 'um mês já escrito fica');
     assert.equal(novo({ contractId: null }).periodo, '', 'sem contrato não se adivinha');
     assert.equal(novo({ kind: 'expense' }).periodo, '');
@@ -415,7 +426,7 @@ describe('o formulário do movimento', () => {
       app.tForm = app.normTx({ kind: 'income', propertyId: 'P1', category: 'Rendas' });
       desfazerDom(); desfazerDom = domCom({ t_label: 'Renda', t_amount: '800', t_sub: 'Renda mensal' });
       app.onSubChange();
-      assert.equal(pintado, 1, 'numa receita nada depende da subcategoria');
+      assert.equal(pintado, 2, 'numa receita também: a «Renda em atraso» pede o mês (movimento.js:onSubChange)');
     } finally { app.repaintTx = original; }
   });
 });

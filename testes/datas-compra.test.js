@@ -74,6 +74,7 @@ describe('o início do contrato', () => {
     el('c_rent').value = '400';
     el('c_start').value = inicio;
     el('c_end').value = '';
+    el('c_active').checked = true;   // o «Contrato em vigor» nasce ligado num contrato novo
     app.onSave();
     return gravou;
   }
@@ -113,6 +114,7 @@ describe('o início do contrato', () => {
     app.ctGravar = () => { gravou++; };
     app.ctModal('C1');
     el('c_prop').value = 'P1'; el('c_rent').value = '550'; el('c_start').value = '1870-01-01'; el('c_end').value = '';
+    el('c_active').checked = true;   // o contrato continua em vigor
     app.onSave();
     assert.equal(gravou, 1, 'a renda mudou, o início não');
     assert.deepEqual(erros, []);

@@ -148,8 +148,8 @@ function loadBases() {
   var lidas = {};
   try { lidas = JSON.parse(localStorage.getItem(baseKey()) || '{}') || {}; } catch (e) { lidas = {}; }
   bases = {}; basesPorEnviar = {};
-  // uma base das definições por migrar guardada é de uma leitura antiga: espera pela próxima (pushNow)
-  definicoesLidasEm = 0; definicoesPorLer = false;
+  // uma base por migrar guardada (das definições, de um contrato) é de uma leitura antiga: espera pela próxima (pushNow)
+  migracoesLidasEm = 0; migracoesPorLer = false;
   Object.keys(lidas).forEach(function (id) {
     try {
       if (!lidas[id] || typeof lidas[id] !== 'object') return;
@@ -173,13 +173,15 @@ function loadBases() {
    pela normalização do tipo (normalizarDaChave) e sem as chaves de trabalho
    (strip; numa casa, também sem os donos e as quotas; nas definições, sem o
    tema, que é do aparelho, e sem as migrações que o servidor ainda não
-   tinha: definicoesDaBase).
+   tinha: definicoesDaBase; num contrato, com as comunicações por migrar
+   quando o servidor as tinha assim: contratoDaBase).
    Recebe: id — a chave da base (o id de uma casa, ou a chave do retrato de
    um registo); v — o objeto.
    Devolve: o objeto na forma local, ou null quando o tipo não se conhece. */
 function baseNaFormaLocal(id, v) {
   if (id.indexOf(':') < 0) return stripHouse(normProp(v));
   if (parseKey(id).kind === 'settings') return definicoesDaBase(v);
+  if (parseKey(id).kind === 'contract') return contratoDaBase(v);
   var n = normalizarDaChave(parseKey(id), v);
   return n ? strip(n) : null;
 }
@@ -277,16 +279,89 @@ function definicoesMigradas(b) {
   return s;
 }
 
-/* Quando o applyState deu às definições uma base sem as migrações do
-   servidor (definicoesDaBase), em ms; 0 sem nenhuma, ou numa página nova.
-   Essa base é o que o servidor tinha NESSA leitura: um envio muito depois
-   (o aparelho ficou sem rede, ou a app fechou e voltou a abrir) podia levar
-   a migração por cima de uma escolha feita entretanto noutro aparelho que
-   já tinha migrado — e a fusão do servidor não distingue «outros» por
-   migrar de «outros» escolhido. Passado DEFINICOES_FRESCAS_MS, as
-   definições esperam pela leitura seguinte, que refaz a base (pushNow). */
-var definicoesLidasEm = 0;
-var DEFINICOES_FRESCAS_MS = 60000;
+/* A migração das comunicações de um contrato (web/app/dados.js:
+   migrarComunicacoes, a marca fisco.comunicacoesV) que o servidor ainda não
+   tem: a marca do contrato como está (cru) abaixo da do mesmo depois do
+   normContract (migrado). Como as das definições, corre em cada leitura e
+   não sobe sozinha: a base da fusão era a forma local já migrada, e o envio
+   nunca levava a marca nem as chaves novas — desmarcar ou mudar a data de
+   uma comunicação migrada voltava atrás na leitura seguinte. Ver
+   comunicacoesPorMigrar.
+   Recebe: cru — o contrato como o servidor o tem (ou uma base); migrado — o
+   mesmo pelo normContract (ou o que este aparelho tem).
+   Devolve: true quando cru ainda não tem a migração que migrado tem. */
+function contratoAbaixo(cru, migrado) {
+  var f = function (c) { return fusaoObjeto(c) && fusaoObjeto(c.fisco) ? c.fisco : {}; };
+  return marcaDe(f(cru).comunicacoesV) < marcaDe(f(migrado).comunicacoesV);
+}
+
+/* Um contrato na forma local com as comunicações como o servidor as tem,
+   quando ele ainda não tem a migração (contratoAbaixo): fisco.comunicacoes
+   pela normalização mas sem migrar, e fisco.comunicacoesV a dele (sem ela,
+   se ele não a tem). É a base da fusão desse contrato: o retrato fica o da
+   forma migrada, e por isso nada sobe enquanto o contrato não mudar — cada
+   aparelho migra igual ao ler —, mas o primeiro envio dele (uma alteração
+   qualquer, de quem tem permissão) vê o bloco fiscal mudado (baseParcial) e
+   leva a migração com a marca, uma vez. Os outros campos ficam como estão.
+   Recebe: forma — o contrato na forma local (migrado, sem as chaves de
+   trabalho); cru — o mesmo contrato como o servidor o tem.
+   Devolve: a própria forma quando o servidor já tem a migração; senão, uma
+   cópia. */
+function comunicacoesPorMigrar(forma, cru) {
+  if (!fusaoObjeto(forma) || !fusaoObjeto(forma.fisco) || !contratoAbaixo(cru, forma)) return forma;
+  var out = JSON.parse(JSON.stringify(forma));
+  var fc = fusaoObjeto(cru) && fusaoObjeto(cru.fisco) ? cru.fisco : {};
+  out.fisco.comunicacoes = normFisco(fc).comunicacoes;
+  if (fc.comunicacoesV === undefined) delete out.fisco.comunicacoesV;
+  else out.fisco.comunicacoesV = JSON.parse(JSON.stringify(fc.comunicacoesV));
+  return out;
+}
+
+/* Um contrato como a base dele (sem as chaves de trabalho), pela
+   normalização desta versão e com as comunicações por migrar quando ainda o
+   estão (comunicacoesPorMigrar). Idempotente: a base que isto dá, guardada e
+   lida outra vez (loadBases), dá a mesma.
+   Recebe: v — o contrato como o servidor o tem (ou uma base guardada).
+   Devolve: um objeto novo. */
+function contratoDaBase(v) {
+  var cru = fusaoObjeto(v) ? v : {};
+  return comunicacoesPorMigrar(strip(normContract(cru)), cru);
+}
+
+/* A base de um contrato como o normContract a deixa (migrada), quando estava
+   por migrar: é a base da fusão ao ler (fundirRegistoLocal). O que este
+   aparelho tem e o que o servidor manda já vêm migrados; com a base por
+   migrar, a migração contava como «mudei aqui» e desfazia o que outro
+   aparelho escolheu depois de migrar.
+   Recebe: b — a base do contrato.
+   Devolve: b, ou um objeto novo migrado. */
+function contratoMigrado(b) {
+  if (!fusaoObjeto(b)) return b;
+  var m = strip(normContract(b));
+  return contratoAbaixo(b, m) ? m : b;
+}
+
+/* Uma base de um contrato com as comunicações por migrar
+   (comunicacoesPorMigrar): guarda-se no aparelho (saveBases).
+   Recebe: id — a chave da base; b — a base.
+   Devolve: true ou false. */
+function basePorMigrar(id, b) {
+  if (id.indexOf(':') < 0 || !fusaoObjeto(b) || parseKey(id).kind !== 'contract') return false;
+  return contratoAbaixo(b, strip(normContract(b)));
+}
+
+/* Quando o applyState deu uma base sem as migrações do servidor (às
+   definições, definicoesDaBase; a um contrato, comunicacoesPorMigrar), em
+   ms; 0 sem nenhuma, ou numa página nova. Essa base é o que o servidor
+   tinha NESSA leitura: um envio muito depois (o aparelho ficou sem rede, ou
+   a app fechou e voltou a abrir) podia levar a migração por cima de uma
+   escolha feita entretanto noutro aparelho que já tinha migrado — e a fusão
+   do servidor não distingue «outros» por migrar de «outros» escolhido, nem
+   a comunicação por migrar da que outro aparelho desmarcou. Passado
+   MIGRACOES_FRESCAS_MS, as definições e os contratos com a base por migrar
+   esperam pela leitura seguinte, que refaz a base (pushNow). */
+var migracoesLidasEm = 0;
+var MIGRACOES_FRESCAS_MS = 60000;
 
 /* As definições da conta como o servidor as tem, no estado (o u:settings:main
    de userRecords; o rebuildDb lê as mesmas).
@@ -296,7 +371,7 @@ function definicoesDoEstado(st) {
   var r = ((st && st.userRecords) || []).filter(function (x) { return x && x.kind === 'settings'; }).pop();
   return r && fusaoObjeto(r.data) ? r.data : null;
 }
-var definicoesPorLer = false;   // o pushNow deixou as definições à espera de uma leitura (syncCycle lê já)
+var migracoesPorLer = false;   // o pushNow deixou uma base por migrar à espera de uma leitura (syncCycle lê já)
 
 /* A chave da base de uma entidade: o id da casa, ou a chave do retrato.
    Recebe: k — a chave do retrato ('h:…', 'r:…', 'u:…').
@@ -306,14 +381,19 @@ function chaveDaBase(k) {
 }
 
 // Guarda as bases no aparelho, como o saveSnap guarda o retrato (sem sessão
-// não grava; uma recusa do localStorage diz-se uma vez): as das casas e as
-// dos registos por enviar (basesPorEnviar). Sem a base de um registo, o
-// envio seguinte dele é o de sem base: junta, não remove.
+// não grava; uma recusa do localStorage diz-se uma vez): as das casas, as
+// dos registos por enviar (basesPorEnviar) e as dos contratos por migrar
+// (basePorMigrar). Sem a base de um registo, o envio seguinte dele é o de
+// sem base: junta, não remove; a de um registo igual ao retrato tira-se do
+// próprio registo ao carregar (loadBases) — num contrato por migrar, essa
+// sairia migrada, e a alteração seguinte não levava a migração.
 // Devolve: nada — grava bases no localStorage.
 function saveBases() {
   if (!CW.user) return;
   var guardar = {};
-  Object.keys(bases).forEach(function (id) { if (id.indexOf(':') < 0 || basesPorEnviar[id]) guardar[id] = bases[id]; });
+  Object.keys(bases).forEach(function (id) {
+    if (id.indexOf(':') < 0 || basesPorEnviar[id] || basePorMigrar(id, bases[id])) guardar[id] = bases[id];
+  });
   try { localStorage.setItem(baseKey(), JSON.stringify(guardar)); } catch (e) {
     if (saveBases._avisado) return;
     saveBases._avisado = 1;
@@ -1034,14 +1114,16 @@ function pushNow() {
        que a traz: subia sem base, com os campos de uma cópia que pode ser
        velha por cima dos do servidor */
     if (!b && (k in snap) && !sabeOServidor) return;
-    /* as definições com uma base por migrar (definicoesDaBase) de uma
-       leitura que já não é fresca: a migração podia ir por cima do que
-       outro aparelho escolheu entretanto. Esperam pela leitura seguinte
-       (syncCycle lê já), que refaz a base — e a base fica no aparelho,
-       para a fusão dessa leitura (reporPendentes) */
-    if (b && k === 'u:settings:main' && definicoesAbaixo(b, op.data).length
-      && !(definicoesLidasEm && Date.now() - definicoesLidasEm <= DEFINICOES_FRESCAS_MS)) {
-      basesPorEnviar[k] = 1; definicoesPorLer = true;
+    /* as definições ou um contrato com uma base por migrar
+       (definicoesDaBase, comunicacoesPorMigrar) de uma leitura que já não
+       é fresca: a migração podia ir por cima do que outro aparelho
+       escolheu entretanto. Esperam pela leitura seguinte (syncCycle lê
+       já), que refaz a base — e a base fica no aparelho, para a fusão
+       dessa leitura (reporPendentes) */
+    var porMigrar = b && (k === 'u:settings:main' ? definicoesAbaixo(b, op.data).length > 0
+      : op.kind === 'contract' && contratoAbaixo(b, op.data));
+    if (porMigrar && !(migracoesLidasEm && Date.now() - migracoesLidasEm <= MIGRACOES_FRESCAS_MS)) {
+      basesPorEnviar[k] = 1; migracoesPorLer = true;
       return;
     }
     if (b) {
@@ -1787,8 +1869,9 @@ function fundirCasaLocal(local, servidor, base) {
    fundido com o que o servidor acabou de mandar e com a base deste aparelho,
    como a casa (fundirCasaLocal): passa pela normalização do tipo, e as
    marcas são do servidor. Nas definições o tema fica de fora (é do
-   aparelho), e a base entra migrada (definicoesMigradas), como o local e o
-   do servidor já vêm. Um tipo que esta versão não conhece fica como está aqui.
+   aparelho), e a base entra migrada (definicoesMigradas; num contrato,
+   contratoMigrado), como o local e o do servidor já vêm. Um tipo que esta
+   versão não conhece fica como está aqui.
    Recebe: pk — o resultado de parseKey; local — o objeto deste aparelho;
    servidor — o da base refeita; base — a base que este aparelho tinha
    (forma local), ou undefined.
@@ -1796,6 +1879,7 @@ function fundirCasaLocal(local, servidor, base) {
 function fundirRegistoLocal(pk, local, servidor, base) {
   var l = strip(local), s = strip(servidor);
   if (pk.kind === 'settings') { delete l.theme; delete s.theme; if (base) base = definicoesMigradas(base); }
+  if (pk.kind === 'contract' && base) base = contratoMigrado(base);
   var f = normalizarDaChave(pk, fundirTres(base || baseSemListas(l), l, s));
   return fundidoComServidor(f || local, servidor);
 }
@@ -1943,15 +2027,28 @@ function applyState(st, selo, resumoSt) {
   });
   // as definições que o servidor ainda não tem migradas: a base é a dele sem
   // as migrações, e o envio seguinte leva-as, uma vez (definicoesDaBase)
-  definicoesLidasEm = 0; definicoesPorLer = false;
+  migracoesLidasEm = 0; migracoesPorLer = false;
   var defsDoServidor = definicoesDoEstado(st);
   if (defsDoServidor && bases['u:settings:main'] && definicoesAbaixo(defsDoServidor, db.settings).length) {
     var baseDefs = definicoesDaBase(defsDoServidor);
     bases['u:settings:main'] = baseDefs;
     snap['u:settings:main'] = resumoDeTexto(JSON.stringify(baseDefs));
     basesPorEnviar['u:settings:main'] = 1;
-    definicoesLidasEm = Date.now();
+    migracoesLidasEm = Date.now();
   }
+  // os contratos que o servidor ainda não tem migrados: a base fica com as
+  // comunicações de antes da migração (comunicacoesPorMigrar), e o retrato
+  // com a forma migrada — nada sobe enquanto o contrato não mudar, e a
+  // primeira alteração leva a migração com ela
+  (st.records || []).forEach(function (r) {
+    if (!r || r.kind !== 'contract') return;
+    var kc = 'r:' + r.houseId + ':contract:' + r.id;
+    if (!bases[kc]) return;
+    var bc = comunicacoesPorMigrar(bases[kc], r.data);
+    if (bc === bases[kc]) return;
+    bases[kc] = bc;
+    migracoesLidasEm = Date.now();
+  });
   // o que o servidor tem e o cliente decidiu deixar de exportar fica marcado
   // para o próximo push apagar; o que ele não sabe ler, e o que não sobe por
   // falta de permissão num imóvel de colaboração (é do dono), não
@@ -2023,14 +2120,15 @@ function pedirEstado(condicional) {
 // O servidor está como estava no último estado aplicado: não há nada para
 // refazer nem para repintar. Se esta leitura era uma tentativa de ligar (a
 // última conversa tinha falhado por falta de rede), o «A ligar» acaba em
-// «Guardado» — e vê-se se há por enviar. As definições à espera de uma
-// leitura (definicoesPorLer) têm-na: o servidor não mudou desde a base que
-// o último estado lhes deu, e ela volta a valer.
+// «Guardado» — e vê-se se há por enviar. As bases por migrar à espera de
+// uma leitura (migracoesPorLer: as definições, um contrato) têm-na: o
+// servidor não mudou desde a base que o último estado lhes deu, e ela volta
+// a valer.
 // Devolve: nada.
 function estadoIgual() {
-  if (definicoesPorLer) {
-    definicoesPorLer = false;
-    if (definicoesLidasEm) { definicoesLidasEm = Date.now(); schedulePush(); }
+  if (migracoesPorLer) {
+    migracoesPorLer = false;
+    if (migracoesLidasEm) { migracoesLidasEm = Date.now(); schedulePush(); }
   }
   if (!ligou()) return;
   setSyncBadge('ok');
@@ -2080,8 +2178,9 @@ function intervaloDeLeitura(agora) {
 // de uma hora parada é de meia hora, e o selo ficava vermelho esse tempo todo
 // com a rede já de volta —, salvo se o envio deste ciclo já tentou. Com o
 // separador escondido só envia: ninguém está a ver, e voltar à frente lê.
-// As definições que o envio deixou à espera de uma leitura (definicoesPorLer)
-// leem-se já, sem esperar pelo intervalo.
+// As bases por migrar que o envio deixou à espera de uma leitura
+// (migracoesPorLer: as definições, um contrato) leem-se já, sem esperar pelo
+// intervalo.
 // Devolve: nada — dispara o push (e talvez o pull) e segue.
 function syncCycle() {
   if (!CW.user) return;
@@ -2092,7 +2191,7 @@ function syncCycle() {
   pushNow().then(function () {
     if (document.hidden || modalStack.length || aEscreverNumCampo()) return;
     var ler = semLigacao ? ultimaTentativa < desde : Date.now() - lastPull > intervaloDeLeitura();
-    if (ler || definicoesPorLer) pullNow();
+    if (ler || migracoesPorLer) pullNow();
   });
 }
 

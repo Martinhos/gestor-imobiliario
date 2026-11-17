@@ -677,7 +677,9 @@ function selLSaidaFrase(ps) {
    só com os meus ou só com os de outros, «Apagar 1 imóvel e sair de 2» com
    os dois; a frase diz o que vai junto com os meus (selLVaoJunto), o que
    sair dos outros faz (imovel.js:imvFraseSaida com um, selLSaidaFrase com
-   vários) e, com os dois, que o Anular só repõe os meus.
+   vários) e, com os dois, que o Anular só repõe os meus. Com rendas de um ano
+   por entregar nos meus, diz quanto sai da Declaração e propõe marcá-los
+   vendidos (imovel.js:imvAvisoDeApagarVarios), como o apagar de um.
    Recebe: meus, outros — os imóveis (objetos de db.properties) que criei e
    os que não criei; nc, nt — quantos contratos e movimentos vão com os meus.
    Devolve: {titulo, frase} (texto; a frase é HTML, com os nomes escapados). */
@@ -689,6 +691,9 @@ function selLImoveisFrase(meus, outros, nc, nt) {
   if (m) {
     partes.push(!mix ? selLVaoJunto(nc, nt)
       : (m === 1 ? 'O teu <b>' + esc(meus[0].name || 'Sem nome') + '</b> é apagado.' : 'Os ' + m + ' teus são apagados.') + ' ' + selLVaoJunto(nc, nt));
+    // as rendas de um ano por entregar saem da Declaração: diz-se quanto, e propõe-se o vendido (D33)
+    var aviso = servicoLigado('properties') ? imvAvisoDeApagarVarios(meus, 'CW.selLSair();') : '';
+    if (aviso) partes.push(aviso);
   }
   if (o) partes.push(o === 1 && typeof imvFraseSaida === 'function' ? imvFraseSaida(outros[0]) : selLSaidaFrase(outros));
   var frase = partes.join(' ');

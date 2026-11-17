@@ -110,21 +110,21 @@ describe('a comunicação de fevereiro marcada', () => {
     assert.ok(!app.prazosDe('2027-01-10').some((p) => p.tipo === 'fev15'), 'a do período conta nos anos seguintes');
   });
 
-  test('a ficha diz o ano em causa e marca e desmarca pelo caminho de gravar', () => {
+  test('a ficha diz o período em causa e marca e desmarca pelo caminho de gravar', () => {
     const o = semEcra();
     let html = app.ctFicha('C1');
-    assert.match(html, /Duração e renovações de 2025 por comunicar no Portal das Finanças: o prazo era 15\/02\/2026\./);
-    assert.match(html, /ctComunicadaPergunta\('C1',2025\)/, 'marcar pergunta o dia');
+    assert.match(html, /A duração do contrato está por comunicar no Portal das Finanças: o prazo era 15\/02\/2026\./);
+    assert.match(html, /ctComunicadaPergunta\('C1',2025\)/, 'marcar pergunta o dia, pela chave do período (o ano do início)');
     assert.match(html, />Marcar como comunicada</);
     app.ctComunicadaPergunta('C1', 2025);
-    assert.deepEqual(o.abertas, ['Comunicação de 2025']);
+    assert.deepEqual(o.abertas, ['Comunicação da duração']);
     domCom({ c_comdia: '2026-02-10' });
     app.ctMarcarComunicada('C1', 2025, 1);
     assert.equal(app.irsComunicado(app.contract('C1'), 2025), '2026-02-10', 'marcada com o dia que a pessoa disse');
-    assert.match(o.avisos.join(' '), /Comunicação de 2025 marcada como feita\./);
+    assert.match(o.avisos.join(' '), /Comunicação marcada como feita\./);
     html = app.ctFicha('C1');
-    assert.doesNotMatch(html, /Duração e renovações de 2026 por comunicar/, 'a comunicação do período serve o ano corrente: não se pede outra');
-    assert.match(html, /comunicadas no Portal das Finanças a 10\/02\/2026\./);
+    assert.doesNotMatch(html, /por comunicar/, 'a comunicação do período serve o ano corrente: não se pede outra');
+    assert.match(html, /A duração do contrato foi comunicada no Portal das Finanças a 10\/02\/2026\./);
     app.ctMarcarComunicada('C1', 2025, 0);
     assert.equal(app.irsComunicado(app.contract('C1'), 2025), '');
     domCom({ c_comdia: '2026-12-01' });
@@ -134,17 +134,18 @@ describe('a comunicação de fevereiro marcada', () => {
     assert.ok(!/\d{4}-\d{2}-\d{2}/.test(app.ctFicha('C1').replace(/data-[a-z]+="[^"]*"/g, '')), 'nenhuma data ISO no ecrã');
   });
 
-  test('antes do prazo, a marcada fica à vista com «Desmarcar»', () => {
+  test('a marcada fica à vista com «Desmarcar», em todos os anos do período', () => {
     app.db.contracts[0].fisco.comunicacoes = { 2025: '2026-01-05' };
     assert.equal(app.ctAnoComunicacao(app.contract('C1'), '2026-02-01'), 2025);
-    assert.equal(app.ctAnoComunicacao(app.contract('C1'), '2026-03-01'), 2026);
+    assert.equal(app.ctAnoComunicacao(app.contract('C1'), '2026-03-01'), 2025, 'o período é o mesmo: não há a de 2026');
+    assert.match(app.ctFicha('C1'), /ctMarcarComunicada\('C1',2025,0\)">Desmarcar</);
     const c = ct({ start: '2025-01-01', end: '2026-12-31' });
     assert.equal(app.ctAnoComunicacao(c, '2026-02-01'), null, 'dois anos: sem redução, nada a comunicar');
   });
 
   test('um ano em que o contrato não existia não tem nada a comunicar', () => {
     const novo = ct({ start: '2026-03-01', end: '2031-02-28' });
-    assert.equal(app.ctAnoComunicacao(novo, '2026-10-08'), 2026, 'começou em 2026: é o de 2026, e não o de 2025');
+    assert.equal(app.ctAnoComunicacao(novo, '2026-10-08'), 2026, 'começou em 2026: é a do período de 2026, e não o de 2025');
     const acabou = ct({ start: '2015-01-01', end: '2024-12-31', fisco: { estado: 'declarado', finalidade: 'hp', renovacoes: [{ inicio: '2020-01-01', fim: '2024-12-31' }] } });
     assert.equal(app.ctAnoComunicacao(acabou, '2026-10-08'), null, 'acabou em 2024');
   });
@@ -286,7 +287,11 @@ describe('as isenções (quadros 6D, 6F e 6H)', () => {
     assert.equal(p.alvo, '2027-01-15');
     assert.match(p.sub, /Até 15\/01\/2027/);
     assert.match(p.titulo, /Enviar o contrato ao IHRU \(RSAA\)/);
-    assert.ok(!app.prazosDe('2027-01-20').some((x) => x.tipo === 'rsaa'), 'passado o dia não há o que fazer');
+    // passado o dia fica, para quem o enviou a tempo marcar o dia; marcado, cala-se (D46)
+    assert.ok(app.prazosDe('2027-01-20').some((x) => x.tipo === 'rsaa'), 'passado o dia fica até se marcar o envio');
+    app.db.contracts[0].fisco.ihru = '2027-01-10';
+    assert.ok(!app.prazosDe('2027-01-20').some((x) => x.tipo === 'rsaa'), 'com o dia do envio marcado, cala-se');
+    app.db.contracts[0].fisco.ihru = '';
     app.db.contracts[0].fisco.estado = '';
     assert.ok(app.prazosDe('2026-12-10').some((x) => x.tipo === 'rsaa'), 'por indicar também');
     app.db.contracts[0].fisco.estado = 'naoDeclarado';

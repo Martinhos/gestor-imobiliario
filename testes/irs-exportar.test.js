@@ -204,7 +204,8 @@ describe('o CSV do Anexo F', () => {
     const c = lerCsv(conteudo);
     // as colunas que já existiam ficam no mesmo sítio
     assert.deepEqual(c.cab.slice(0, 16), ['ano', 'declarado', 'contrato', 'n_at', 'inicio', 'imovel', 'freguesia', 'tipo_predio', 'artigo', 'fracao', 'natureza', 'inquilinos', 'nif_ou_pais', 'quota_pct', 'rendas_iliquidas', 'retencoes']);
-    assert.deepEqual(c.cab.slice(-6), ['campo', 'prejuizo', 'nif', 'pais', 'renda_4_2b', 'n_at_anterior_4_2b'], 'as novas no fim');
+    assert.deepEqual(c.cab.slice(38, 44), ['campo', 'prejuizo', 'nif', 'pais', 'renda_4_2b', 'n_at_anterior_4_2b'], 'as da vaga 1 ficam no sítio delas');
+    assert.equal(c.cab.indexOf('comunicacao_4_2a_resposta'), 44, 'as novas sempre no fim, depois destas');
     assert.ok(conteudo.includes('"6147,00"'), 'as rendas: 12 × 512,25');
     assert.ok(conteudo.includes('"40,10"'), 'o condomínio');
     assert.equal(c.raw(0, 'freguesia'), '="040810"');

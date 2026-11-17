@@ -227,15 +227,18 @@ function txOwnerFrac(t,oid){
    Devolve: o texto ('em partes iguais', 'por ajuste'…); '' sem divisão escolhida. */
 const splitLabel=t=>({equal:'em partes iguais',pct:'por quotas a definir',percent:'por percentagem',amount:'por valor',adjust:'por ajuste'})[(t.split||{}).mode]||'';
 /* Os imóveis de «Todos os imóveis» numa data: os meus (dono ou comproprietário)
-   onde posso adicionar movimentos, e que já eram meus nessa data — comprados
-   até ela, ou sem data de compra. Os de colaboração ficam de fora: um
-   movimento de todos os imóveis é das minhas contas, não das de outro dono.
-   Sem data (um planeado ou um modelo, que só têm data ao registar), todos.
+   onde posso adicionar movimentos, e que ainda eram meus nessa data —
+   comprados até ela (ou sem data de compra) e não vendidos antes dela (no
+   dia da venda ainda contam; D33, dados.js:imovelVendido). Os de colaboração
+   ficam de fora: um movimento de todos os imóveis é das minhas contas, não
+   das de outro dono. Sem data (um planeado ou um modelo, que só têm data ao
+   registar), todos menos os já vendidos até hoje.
    Recebe: data (opcional) — 'AAAA-MM-DD'.
    Devolve: os imóveis (array de objetos de db.properties), pela ordem da base. */
 function imoveisDeTodos(data){
   const d=String(data||'');
-  return (db.properties||[]).filter(p=>souDono(p.id)&&pode(p.id,'tx.add')&&(!d||!p.purchaseDate||p.purchaseDate<=d));
+  return (db.properties||[]).filter(p=>souDono(p.id)&&pode(p.id,'tx.add')&&(!d||!p.purchaseDate||p.purchaseDate<=d)
+    &&(d?!(p.vendido&&p.vendido<d):!imovelVendido(p)));
 }
 /* imóveis abrangidos por um movimento (o próprio, os do grupo, ou os de
    «Todos os imóveis» à data dele — imoveisDeTodos)

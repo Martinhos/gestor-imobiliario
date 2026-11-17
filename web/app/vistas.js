@@ -97,10 +97,17 @@ function vazioFiltro(){return `<div class="empty"><b>Nada neste filtro</b><div c
 /* As opções do seletor de imóvel de uma análise: todos, cada imóvel do âmbito
    e, depois de uma linha, os grupos de imóveis ('g:ID'). O painel da visão
    geral e o chip «Imóvel» das Projeções e da Avaliação escolhem do mesmo.
-   Recebe: nada.
+   Um imóvel vendido antes do início do período (dados.js:imovelVendido, D33)
+   fica de fora, a menos que seja o escolhido.
+   Recebe: escolhido (opcional) — o id em foco, que fica sempre; inicio
+   (opcional) — 'AAAA-MM-DD', o primeiro dia do período (por omissão, 1 de
+   janeiro do ano corrente).
    Devolve: array de {v, label} (e o {div:true} antes dos grupos). */
-function anaOpcoesImovel(){
-  return [{v:'',label:'Todos os imóveis'}].concat(scope().map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
+function anaOpcoesImovel(escolhido,inicio){
+  /* um vendido antes do período não tem o que mostrar nele (D33); o escolhido fica sempre */
+  const ini=/^\d{4}-\d{2}-\d{2}$/.test(String(inicio||''))?String(inicio):YEAR+'-01-01';
+  const ps=scope().filter(p=>p.id===escolhido||!(p.vendido&&p.vendido<ini));
+  return [{v:'',label:'Todos os imóveis'}].concat(ps.map(p=>({v:p.id,label:p.name}))).concat(gdiv(gOpts('prop')));
 }
 /* O painel de análise da visão geral (painel-geral.js:dashBar): o filtro
    comum, quando os há (definicoes.js:fcSelector — ali aplica o imóvel), e o
@@ -112,7 +119,7 @@ function anaOpcoesImovel(){
    escolhido; onchange — o nome da função a chamar ao mudar.
    Devolve: o HTML do painel, já embrulhado pelo anaPanel. */
 function anaPanelPadrao(selId,valor,onchange){
-  return anaPanel(`<div class="u-w-100pc">${sel(selId,valor,anaOpcoesImovel(),onchange,'vista')}</div>`,true);
+  return anaPanel(`<div class="u-w-100pc">${sel(selId,valor,anaOpcoesImovel(valor),onchange,'vista')}</div>`,true);
 }
 /* A fila de chips de uma análise sem painel (as Projeções e a Avaliação), no
    sítio onde as listas têm a barra dos filtros (vistas.js:lfCabeca): só os
@@ -133,10 +140,11 @@ function anaPanelPadrao(selId,valor,onchange){
    em foco; '' para todos), aplicar (o nome da função de topo que lê o
    seletor e repinta), limpar (a ação do ×, em texto), dos (o fim do nome da
    fila para o leitor de ecrã, ex.: 'da projeção'), acoes (opcional) — o HTML
-   das ações da página}.
+   das ações da página, inicio (opcional) — o primeiro dia do período, para o
+   seletor deixar de fora os vendidos antes dele (anaOpcoesImovel)}.
    Devolve: o HTML da fila (texto), ou só o das ações, ou ''. */
 function anaChips(o){
-  const v=String(o.valor||''),id=String(o.id),ops=anaOpcoesImovel();
+  const v=String(o.valor||''),id=String(o.id),ops=anaOpcoesImovel(v,o.inicio);
   const chips=!v&&!scope().length?'':(()=>{
     const op=v?ops.find(x=>!x.div&&String(x.v)===v):null;
     const rot=v?(op?String(op.label):propName(v)):'',diz=v?rot:'Imóvel';
@@ -953,7 +961,7 @@ const WHY={
   rendaHoje:'Soma das rendas anuais dos contratos ativos, aos valores de hoje.',
   rendaFim:'A mesma soma no último ano do horizonte, já com os aumentos anuais aplicados.',
   totalPeriodo:'Soma de todas as rendas do período projetado.',
-  cashflowFim:'Rendas projetadas menos o IRS sobre elas, as despesas previstas e as prestações desse ano. As despesas são os planeados de despesa — o IMI, o condomínio e o seguro da ficha de cada imóvel e os que marcaste nos Planeados — levados ao ano e a crescer com a inflação; obras e reparações pagas de uma vez não se projetam. O IRS é a renda à taxa de cada contrato, contado no ano das rendas embora se pague no ano seguinte.'
+  cashflowFim:'Rendas projetadas menos o IRS sobre elas, as despesas previstas e as prestações desse ano. As despesas são os planeados de despesa — o IMI, o condomínio e o seguro da ficha de cada imóvel e os que marcaste nos Planeados — levados ao ano e a crescer com a inflação; obras e reparações pagas de uma vez não se projetam. IRS sobre as rendas brutas, à taxa de cada contrato: o IMI, o condomínio e as obras baixam-no na declaração, e aqui não se descontam. Conta no ano das rendas, embora se pague no ano seguinte.'
 };
 // cartão genérico das vistas: título, subtítulo opcional e corpo em HTML
 // Recebe: t — o título; s — o subtítulo (vazio para não aparecer); b — o corpo, em HTML.

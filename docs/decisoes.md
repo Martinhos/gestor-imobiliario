@@ -124,6 +124,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-16 · Confirmar um planeado regista o movimento no dia em que se confirma (KAN-141)
 - 2026-11-17 · A pinça trava-se no próprio toque: o Samsung Internet passa por cima do viewport (KAN-137)
 - 2026-11-17 · A vaga 1 da auditoria ao IRS: dados, motor, versões, termos, guia e a Declaração (KAN-126)
+- 2026-11-17 · A vaga 2 da auditoria ao IRS: o fim dos contratos, os prazos da AT, a situação de cada ano e o reporte (KAN-127)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4210,3 +4211,114 @@ dos formulários novos (esses são das vagas 2 a 4). As decisões que ficam:
 
 Por decidir (vaga 2): quem envia a migração das comunicações (c.fisco.comunicacoesV) de um contrato partilhado, que
 hoje não sobe à nuvem; e remover uma categoria com id.
+
+## 2026-11-17 · A vaga 2 da auditoria ao IRS: o fim dos contratos, os prazos da AT, a situação de cada ano e o reporte (KAN-127)
+A vaga 2 corrige os defeitos que pediam os formulários e os ecrãs: o contrato, os prazos, os planeados, os
+movimentos, os inquilinos, o imóvel, as Definições, os titulares, o resumo, os avisos, a situação do ano e a
+exportação. As duas perguntas que a vaga 1 deixou «por decidir» decidiu-as o Martinho a 2026-11-17, com a
+recomendação:
+
+- **As categorias que o IRS lê não se removem** (as de dados.js:CATS_DO_IRS com id, e as subcategorias com id): o
+  «Remover» não aparece nelas, e uma nota diz «O IRS usa esta categoria: podes mudar-lhe o nome»
+  (definicoes.js:menuDaCategoria, definicoes.js:catDoIrs). Removida, a Declaração perdia as rendas ou o IMI sem
+  aviso; com outro nome continua a reconhecê-las, porque o id segue o nome (definicoes.js:moverEscolhas). Rejeitado:
+  remover com a confirmação a dizer o que o IRS deixa de reconhecer.
+- **A migração das comunicações de um contrato sobe com a primeira alteração dele** (nucleo.js:comunicacoesPorMigrar):
+  a base de um contrato que o servidor ainda não tem migrado fica com as comunicações de antes da migração, e o
+  primeiro envio dele — só quando muda — leva as chaves novas e a marca. Sem isto, desmarcar ou mudar a data de uma
+  comunicação migrada voltava atrás na leitura seguinte. Rejeitado: subir logo a seguir à leitura, como as
+  definições, que escrevia em todos os contratos antigos de todas as contas, com autor, data e linhas de histórico
+  que ninguém fez, quando cada aparelho já migra igual ao ler (dados.js:migrarComunicacoes é determinística e
+  idempotente). Fica o limite das definições: um aparelho que leu antes de outro desmarcar e altera o mesmo contrato
+  dentro de um minuto ainda repõe a comunicação.
+
+O porquê do resto:
+
+- **O termo e o dia em que acabou são duas datas** (D02/D39): o «Terminar» grava fisco.cessacao e nunca o c.end
+  (contrato.js:ctTerminar). A alternativa, c.end = o mais cedo dos dois, mudava o escalão da redução dos anos já
+  entregues. Pela mesma razão o «Reativar» deixou de apagar o fim (D14): limpa a cessação, e com o termo passado é
+  uma renovação. O motivo é o código do impresso (D09), porque é o que o quadro 10 pede e o que decide a
+  regularização do n.º 20; é obrigatório só num contrato declarado. Os contratos terminados à moda antiga, sem o
+  dia, não se migram (não se distinguem de um fim escrito): a Declaração pede-lhes o dia
+  (fisco-avisos.js:fiscoAvSemCessacao).
+- **A regularização do n.º 20** (D10) segue a lei: a taxa da duração efetivamente decorrida, só no período em que o
+  contrato acabou, estimada sem os juros compensatórios, e acresce à falta a pagar do ano da cessação, na página e
+  nas exportações (fisco-resumo.js:fiscoRegularizacoes, fisco.js:fiscoRegularizacao).
+- **A comunicação da duração é por período, e não por ano** (D01/D12/D35; Portaria 110/2019, FAQ 5936): só assim o
+  aviso da Declaração pode existir sem acender em todos os contratos a partir do 2.º ano. A janela de marcar deixou
+  de propor o dia do prazo: passava por um dia que a pessoa sabia e respondia SIM no 4.2A a uma comunicação fora de
+  prazo. Um período que acabou antes do ano anterior já não avisa (não pesa em nenhuma declaração por entregar), para
+  quem regista contratos antigos não ver uma fila de prazos de 2020.
+- **Os prazos da AT pela lei** (D02/D44/D45/D46/D82/D83/D85/D91): a cessação comunica-se quando acontece (CIS art.
+  60.º), e um contrato ativo com o termo passado renovou-se (CC art. 1096.º); a oposição segue o art. 1097.º n.os 1
+  e 3, pela duração do período; o recibo é de quitação e passa-se no dia em que se recebe (CIRS art. 115.º); a
+  atualização legal da renda não se comunica (FAQ 5005); o Modelo 2 só existe desde 1/4/2015; a caução pede recibo
+  (OC 20256, a decisão D03); a dispensa e o Modelo 44 são de cada ano. O aviso do IHRU fica depois do prazo, porque
+  é o único sítio onde se grava o dia do envio. As chaves dos recibos mudaram de forma: um recibo silenciado antes
+  volta uma vez.
+- **Confirmar uma renda de outro ano pergunta o dia em que entrou** (D22): a renda conta no ano em que se recebe, e o
+  KAN-141 (2026-11-16) pôs a data de hoje em todos os confirmados — certa no mesmo ano, mas a renda de dezembro
+  confirmada a 5 de janeiro pode ter entrado a 30 de dezembro. Só nas rendas (planeados.js:recPedeODia). Rejeitado:
+  abrir o formulário inteiro do movimento (a data vinha escrita com a de hoje e o Guardar confirmava-a sem a ler, e o
+  «Pede atenção» abria por cima dele), e um dia já escrito na folha, pela mesma razão. O «Rever» continua a abrir o
+  formulário com a data de hoje.
+- **O mês a que respeita vem do planeado, e não da data** (D54; movimento.js:txSugereMesDaRenda): a renda de dezembro
+  paga em janeiro saía como a de janeiro e perdia o quadro 8. Risco aceite: um planeado deixado por confirmar há
+  meses faz cada renda à mão sugerir esse mês; a dica diz de onde veio. A sugestão do contrato e da categoria
+  desfaz-se com o montante mudado (D05): uma caução escrita à mão não pode ficar Renda mensal, que marcava o mês do
+  planeado como pago.
+- **O planeado da renda guarda o que entra** (D23; planeados.js:recRendaComRetencao): a retenção acompanha a renda na
+  mesma proporção porque é uma taxa da renda; um montante igual à renda inteira, com a retenção por cima, contava-a
+  duas vezes.
+- **Um contrato com rendas depois do termo continua** (D15): renovou-se sozinho (CC art. 1096.º), e o planeado da
+  renda fica sem fim; o resumo dá-lhe a taxa base nesses meses e conta os gastos (fisco-resumo.js:fiscoFimDaVida),
+  em vez de cortar no termo. O planeado só volta quando há uma renda registada depois do termo; manter o de todos
+  os contratos ativos com o termo passado seria outra decisão.
+- **Os donos fora da app e as quotas escrevem-se em % da casa toda** (D08/D29/D93): é o que está na escritura; o
+  servidor continua a guardar as quotas entre as contas (os Saldos não mudam) e a conversão faz-se na janela.
+  Confirmar os de fora pela primeira vez não pede dia (vale para trás): o irmão que herdou a meias não entrou na casa
+  no dia em que alguém o escreveu. As quotas já não se normalizam em silêncio: 25/25/25 sem a quarta herdeira
+  recusa-se.
+- **A maior quota do ano decide se a casa entra** (D29; fisco-titulares.js:fiscoQuotaNoAno): quem vendeu a quota em
+  julho declara as rendas de janeiro a junho. Por inteiro, sem saber quem declara, a parte dos de fora não entra.
+- **O imóvel vendido** (D33): os «anos por entregar» são o corrente e o anterior até 30 de junho (as declarações de
+  substituição de anos mais antigos não avisam); num vendido o «Novo contrato» sai da ficha e o «Registar despesa»
+  fica, porque o IMI do ano da venda chega depois. Os planeados param no dia da venda sem se apagar nada, para o
+  «Desfazer venda» os devolver; o condutor estendeu o corte à grelha da agenda (calendario.js:calPlaneados).
+- **Em conjunta entra o cônjuge escolhido, não a letra** (D30): «todos os de letra diferente da minha» punha na
+  conjunta os irmãos e os sócios com casas partilhadas, porque a letra por omissão é A. As letras são a posição no
+  Rosto. Quem usou o contorno de antes (eu B e o cônjuge B, nos campos de topo) perde o cônjuge até o escolher; a
+  falta «conjunta sem o cônjuge escolhido» di-lo.
+- **A situação grava-se por ano** (D91/D111): é a do último dia do ano (CIRS art. 13.º) e a conjunta opta-se ano a
+  ano (art. 59.º); os campos de topo ficam só como o ano de omissão, porque reescrevê-los refazia as declarações já
+  entregues. Saíram o fiscoSetIrs e o fiscoSetTitular, que gravavam no topo, para o
+  fisco.js:fiscoSetSituacao; o cartão chama-se «A tua
+  situação fiscal em AAAA», e uma situação herdada diz de que ano vem.
+- **O AIMI é pessoal** (D32; CIMI art. 135.º-C): multiplicá-lo pela quota de um imóvel dava metade ao que pagou e
+  metade ao que não pagou. **A afetação decide o quadro 9, e não a finalidade do contrato** (D71): é a classificação
+  da matriz que o CIMI art. 135.º-B n.º 2 usa; uma loja sem afetação escrita fica, e diz-se.
+- **O prejuízo dos anos anteriores abate ao imposto estimado** (Q10/D73, a decisão do Martinho de 2026-11-17): com
+  o que a app sabe, titular a titular, seis anos para trás (CIRS art. 55.º n.º 1 b)), com um aviso do que pode faltar
+  — imóveis fora da app, anos sem registos, os 36 meses do n.º 8, que só se sabem depois. Os totais dos quadros não
+  mudam; o KPI, a falta a pagar e as exportações usam o imposto depois do abate. Substitui a linha «só informação»
+  do plano.
+- **O que não se sabe, diz-se, e não se decide** (D12/D47): a app não tira a redução por um 4.2C em «Não sei» nem
+  muda a natureza de um inquilino empresa; aponta o que falta. A pergunta do inquilino empresa
+  (fisco.empresaHabitacao) era da vaga 3 e veio para esta (contrato.js:ctEmpresaVisivel, contrato.js:ctResponderEmpresa):
+  sem ela, a falta acendia e não havia onde a calar. O selo da compra calava o aviso do selo do contrato (D27).
+- **As exportações dizem o mesmo que a página**: o reducao_4_2b do CSV passou a dizer «o 4.2B preenche-se» (era «a
+  taxa desceu», que escondia o 4.2B dos contratos já no mínimo — D36); a descida fica no taxa_desceu_4_2b. As
+  colunas novas vão sempre depois das antigas. O CSV do Anexo F das Definições é o da Declaração (D75): o
+  exportarSoMeu tirava o imóvel do cônjuge partilhado como colaboração, e o CSV ficava com menos linhas do que a
+  página.
+- **As Projeções explicam, não recalculam** (D100): a projeção não sabe repartir os gastos dedutíveis pelos contratos
+  e pelas taxas, por isso o texto diz que o IRS é sobre a renda bruta. Escolher o vazio numa categoria com regra de
+  origem grava «a confirmar» (D61): apagar a chave fazia a regra de origem voltar no fillCats seguinte.
+- **A versão mínima sobe para 78** (web/avisos.js:VERSAO_MINIMA): o «Terminar» da v77 ainda escrevia por cima do fim
+  do contrato (c.end), o que esta vaga proíbe; uma app velha a gravar um contrato estragava o escalão.
+
+Ficam INCERTOS, ditos no código e nos handbacks: a consequência exata de comunicar fora do prazo (a app diz «pode»),
+o «outros fins» fora do quadro 9, o 9102 da demonstração antes ou depois da dedução, o NIF do senhorio do quadro 5
+só português, os prejuízos de 2022 e antes com a mesma janela, e o recibo devido no dia (a lei não lhe dá prazo).
+
+Ficou decidido o que a entrada da vaga 1 deixava «por decidir (vaga 2)»: as duas decisões acima.

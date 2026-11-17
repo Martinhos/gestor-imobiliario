@@ -69,11 +69,11 @@ describe('«Opcional» nos formulários', () => {
     }
   });
 
-  test('contrato: só a renda é obrigatória; nome, imposto e aumento mostram o que vale em branco; IBAN e contactos guardam o formato', () => {
+  test('contrato: a renda e o início são obrigatórios; nome, imposto e aumento mostram o que vale em branco; IBAN e contactos guardam o formato', () => {
     const abertas = base();
     app.ctModal();
     const cs = conferir('contrato', abertas[0].b, {
-      obrigatorios: ['c_rent'],
+      obrigatorios: ['c_rent', 'c_start'],
       exemplos: { c_name: true, c_tax: true, c_inc: true, c_iban: true,
         c_omail: true, c_ophone: true, c_tmail: true, c_tphone: true },
       deixados: ['invn_', 'invq_', 'keyn_', 'keyq_', 'fn_'],
@@ -81,12 +81,16 @@ describe('«Opcional» nos formulários', () => {
     for (const id of ['c_day', 'c_dayTo', 'c_dep', 'c_adv', 'c_notes']) assert.equal(cs.find((c) => c.id === id).placeholder, 'Opcional', id);
     assert.match(cs.find((c) => c.id === 'c_tax').rotulo, /\(%, opcional\)/, 'a unidade e o opcional no mesmo parêntesis');
     assert.match(abertas[0].b, /Renda mensal \(€\) <span class="req">\*<\/span>/);
-    // a secção da declaração, num contrato declarado que já acabou
-    app.cForm.fisco.estado = 'declarado'; app.cForm.end = '2030-01-01';
-    conferir('contrato · declaração', app.fiscoSect(), {
+    assert.match(abertas[0].b, /Início <span class="req">\*<\/span><input id="c_start"/);
+    // a secção da declaração, num contrato declarado que já acabou: o motivo da
+    // cessação deixou de ser texto livre (é o do quadro 10, ao terminar)
+    app.cForm.fisco.estado = 'declarado'; app.cForm.end = '2030-01-01'; app.cForm.active = false;
+    const fisc = app.fiscoSect();
+    conferir('contrato · declaração', fisc, {
       obrigatorios: [],
-      exemplos: { c_fnum: true, c_fces: true },
+      exemplos: { c_fnum: true },
     });
+    assert.doesNotMatch(fisc, /id="c_fces"/);
   });
 
   test('movimento: descrição e montante são obrigatórios; o credor de uma dívida guarda os exemplos; a retenção diz «Opcional»', () => {

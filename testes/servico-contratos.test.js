@@ -283,7 +283,8 @@ describe('o desenho de 2026-10: a lista, a ficha e a folha do PDF', () => {
     assert.match(h, /<div class="ct-periodo"><span>[^<]+<\/span><span class="small">faltam 140 dias<\/span>/);
     igual(app.ctSeloDoEstado(c), { txt: 'Em vigor · faltam 140 dias', cor: 'in' }, 'a tabela da lista continua a juntá-los ao selo');
     assert.match(h, /<div class="ct-barra" role="progressbar"[^>]*aria-valuenow="50"[^>]*><span class="ct-barra-feita" data-largura="50"><\/span><\/div>/, 'metade do prazo, pela largura dos dados');
-    assert.match(h, /<div class="ct-prazo ct-prazo-amber">[\s\S]*?Oposição à renovação até[\s\S]*?ctRenovar\('C1'\)[\s\S]*?endContract\('C1'\)[\s\S]*?pzSilencia\('oposicao:C1:/, 'a oposição com Renovar, Terminar e o silenciar');
+    // a cor do cartão é a do prazo (prazos.js:pzSelo, com a antecedência do período): aqui conta o que ele oferece
+    assert.match(h, /<div class="ct-prazo ct-prazo-\w+">[\s\S]*?Oposição à renovação até[\s\S]*?ctRenovar\('C1'\)[\s\S]*?endContract\('C1'\)[\s\S]*?pzSilencia\('oposicao:C1:/, 'a oposição com Renovar, Terminar e o silenciar');
     assert.match(h, /<h3>Perante a AT<\/h3><span class="badge">Por indicar<\/span>/);
     assert.match(h, /<h3>Inquilino<\/h3>/);
     assert.match(h, /data-click="ctVerAnexos\('C1','inv'\)"><span class="small">Inventário<\/span><b>1 artigo<\/b>/);
@@ -497,21 +498,28 @@ describe('desligado: com os outros serviços desligados, os contratos e as visit
     const app = carregarApp();
     elementos(app);
     semear(app, { owners: true });
-    janelasFalsas(app, 'paintThumbs', 'save');
+    const abertas = janelasFalsas(app, 'paintThumbs', 'save', 'comDesfazer');
     app.confirmModal = (t, m, f) => f();
     app.syncContractRec(app.db.contracts[0]);
     assert.equal(app.db.recurring.length, 1);
-    // controlo positivo: com os planeados ligados, terminar apaga a renda planeada
+    // o «Terminar» abre a folha do dia e do motivo, e só ela termina
     app.endContract('C1');
+    assert.equal(abertas[abertas.length - 1].t, 'Terminar contrato');
+    assert.equal(app.db.contracts[0].active, true, 'abrir a folha não termina');
+    // controlo positivo: com os planeados ligados, terminar apaga a renda planeada, e o fim fica
+    const fim = app.db.contracts[0].end, dia = app.today();
+    assert.equal(app.ctTerminar('C1', dia, ''), '');
     assert.equal(app.db.contracts[0].active, false);
+    assert.equal(app.db.contracts[0].end, fim, 'o termo não muda');
     assert.equal(app.db.recurring.length, 0, 'a renda planeada saiu com o contrato');
     app.reactivateContract('C1');
     assert.equal(app.db.contracts[0].active, true);
+    assert.equal(app.db.contracts[0].end, fim, 'reativar não apaga o termo');
     assert.equal(app.db.recurring.length, 1, 'e voltou');
     // desligados: o contrato termina e reativa-se na mesma, e db.recurring fica como estava
     app.definirServicosDesligados(['transactions', 'recurring']);
     const antes = JSON.stringify(app.db.recurring);
-    app.endContract('C1');
+    app.ctTerminar('C1', dia, '');
     assert.equal(app.db.contracts[0].active, false);
     assert.equal(JSON.stringify(app.db.recurring), antes, 'não se toca no que é dos Planeados');
     app.reactivateContract('C1');

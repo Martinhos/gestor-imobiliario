@@ -253,7 +253,9 @@ describe('a vista, o texto e o CSV', () => {
     /* uma linha por prédio ou fração, não por contrato (D69), e por esta ordem (D77): folha 2.1.11 */
     assert.match(html, /<p class="fis-onde">Preenche no <b>quadro 4\.1<\/b> do Anexo F, <b>por esta ordem<\/b>: uma linha por prédio ou fração de cada contrato, com a renda que lhe cabe\./);
     const r = app.resumoFiscal(ANO, '');
-    assert.ok(html.includes('<span class="small">imposto estimado ' + app.euro2(r.totais.imposto) + '</span>'), 'com um quadro só, o imposto do total do quadro é o dos cartões');
+    /* 2024 é antes da primeira versão das regras (D50): a taxa e o imposto escondem-se */
+    assert.equal(r.semRegrasDoAno, true);
+    assert.ok(!html.includes('<span class="small">imposto estimado ' + app.euro2(r.totais.imposto) + '</span>'), 'sem as regras do ano, o total do quadro não mostra o imposto');
     /* as obrigações, a situação e os prazos numa grelha; os quadros numa
        pilha com intervalo, e a coluna encolhe para a tabela do resumo rolar */
     const grelha = html.indexOf('class="fis-grelha"'), pilha = html.indexOf('class="fiscoPilha u-d-grid u-gtc-minmax-0-1fr u-g-14px"');
@@ -347,7 +349,8 @@ describe('a vista, o texto e o CSV', () => {
     assert.match(linhas[1], /;"0,00";"120,00";"300,00";"0,00";"0,00";"0,00";"200,00";"2023-07-01";"2";"";/);
     // as colunas novas vão no fim: quadro, taxa, líquido (12 500 − 420 − 200), imposto a 25 %, anos anteriores, termo, renovação,
     // as do titular, do 6D, do 4.2A e do 4.2B, e o n.º do campo (D77) e o prejuízo (D98)
-    assert.match(linhas[1], /;="4\.1";"25";"11880,00";"2970,00";"";"";"";"A";"";"";"";"";="4001";"0,00";/);
+    // 2024 é antes da primeira versão das regras (D50): a taxa e o imposto vão vazios
+    assert.match(linhas[1], /;="4\.1";"";"11880,00";"";"";"";"";"A";"";"";"";"";="4001";"0,00";/);
     assert.match(linhas[2], /^"2024";"nao";"Benfica";"";"2023-06-01";"T1 Benfica"/);
     assert.match(linhas[2], /"1200,00";"0,00"/);
     assert.ok(linhas.slice(3).every((l) => /^"2024";"(a tratar|regras|aviso)/.test(l)), 'depois dos contratos, só as linhas de «A tratar», das regras e do aviso');

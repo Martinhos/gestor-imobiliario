@@ -40,7 +40,10 @@ function ultimaImportacao(){
    dados. Com sessão iniciada, apagar aqui apagava também na conta e nos
    outros aparelhos: o cartão diz porquê e dá as duas saídas certas (terminar
    a sessão, apagar a conta) em vez do botão. As cópias e as exportações levam
-   só o que é teu (exportarSoMeu).
+   só o que é teu (exportarSoMeu) — salvo o CSV do Anexo F, que é o da
+   Declaração: o resumoFiscal já escolhe os imóveis dos titulares, e o
+   exportarSoMeu tirava-lhe o imóvel do cônjuge partilhado como colaboração
+   (D75). Por baixo dele, o que fica por tratar na Declaração (notaDoCsvDoAnexo, D34).
    Recebe: nada.
    Devolve: o HTML (texto) da subpágina, sem o Voltar. */
 function vImport(){
@@ -57,8 +60,9 @@ function vImport(){
   const exportar=`<section class="card def-bloco"><h3>Exportar</h3>
     <p class="small">CSV que abre no Excel com os acentos certos.</p>
     <div class="def-botoes"><button class="btn" data-toca="nada" data-click="exportarSoMeu(downloadCsv)">Movimentos (CSV)</button>
-      ${anexo?`<button class="btn" data-toca="nada" data-click="exportarSoMeu(fiscoCsv)">Anexo F${esc(ano)} (CSV)</button>`:''}</div>
-    ${fora?'<p class="small">Imóveis onde só colaboras ficam de fora da cópia e da exportação.</p>':''}</section>`;
+      ${anexo?`<button class="btn" data-toca="nada" data-click="fiscoCsv()">Anexo F${esc(ano)} (CSV)</button>`:''}</div>
+    ${anexo?notaDoCsvDoAnexo():''}
+    ${fora?`<p class="small">Imóveis onde só colaboras ficam de fora da cópia e do CSV dos movimentos${anexo?'; o do Anexo F é o mesmo da Declaração, com os imóveis de quem declara contigo':''}.</p>`:''}</section>`;
   const splitwise=`<section class="card def-bloco"><div class="def-bloco-cab"><h3>Importar do Splitwise</h3>
       ${ult?`<button class="btn sm ghost" data-toca="dados" data-risco="destroi" data-click="undoImport()">Anular a última importação (${ult.n} ${ult.n===1?'movimento':'movimentos'}${ult.data?', '+ult.data:''})</button>`:''}</div>
     <p class="small">No Splitwise: abre o grupo → <b>Export as spreadsheet</b> → guarda o CSV. A seguir escolhes o imóvel e a tua quota-parte, e vês as despesas antes de as importar.</p>
@@ -77,6 +81,22 @@ function vImport(){
   return `<div class="def-par">${copia}${exportar}</div>${splitwise}${apagar}`;
 }
 
+/* A nota do CSV do Anexo F no cartão Exportar: o CSV leva no fim os pontos de
+   «A tratar antes de entregar», mas quem trabalha pelo CSV não os vê como na
+   Declaração — a nota diz quantos há no ano e leva lá (D34). Conta como o
+   cartão da Declaração (fisco.js:fiscoObrigacoesCard): sem os «só se diz».
+   Um resumo que rebente não tira a página: fica a nota sem o número.
+   Recebe: nada (o ano é o da Declaração, fiscoAnoAtual, o mesmo do CSV).
+   Devolve: o HTML (texto) da nota com o botão. */
+function notaDoCsvDoAnexo(){
+  let n=-1,ano='';
+  try{if(servicoLigado('fisco')&&typeof resumoFiscal==='function'&&typeof fiscoAnoAtual==='function'){ano=String(fiscoAnoAtual());const r=resumoFiscal(Number(ano));n=(r.avisos||[]).filter(a=>a&&a.nivel!=='info').length}}catch(e){n=-1}
+  const txt=n>0
+    ?`O CSV leva no fim ${n===1?'o ponto':'os '+n+' pontos'} de «A tratar antes de entregar» de ${esc(ano)}. Trata-${n===1?'o':'os'} na Declaração antes de entregares.`
+    :`O CSV leva no fim o que a Declaração tem em «A tratar antes de entregar». Vê-a antes de entregares.`;
+  return `<p class="small">${txt}</p>
+    <div class="def-botoes"><button type="button" class="btn sm" data-toca="ecra" data-click="go('fisco')">${n>0?'Ver o que falta tratar':'Abrir a Declaração'}</button></div>`;
+}
 /* Corre uma exportação (cópia de segurança, CSV) sobre a base só com o que é
    meu: os imóveis onde colaboro e os registos deles ficam de fora. As funções
    de copias.js leem a db global no momento da chamada, por isso troca-se a
@@ -493,16 +513,225 @@ function mudarNomeCategoria(tk,k){
 }
 /* A coluna do Anexo F de uma categoria ou subcategoria, na tabela: o menu de
    escolha (sel) com o nome dito ao leitor de ecrã, e a cor que diz o que é —
-   laranja no «Não dedutível», apagada na subcategoria que segue a categoria.
-   Os menus chamam o setIrsMapa sem argumentos, que os lê pela posição
-   (irsMapaChaves).
+   laranja no «Não dedutível», âmbar no «A confirmar» (escolhido, ou a omissão
+   de uma categoria sem regra, D61), apagada na subcategoria que segue a
+   categoria. Os menus chamam o setIrsMapa sem argumentos, que os lê pela
+   posição (irsMapaChaves).
    Recebe: m — o mapa (irsMapa()); chaves — irsMapaChaves(); chave — 'Categoria'
    ou 'Categoria / Sub'; nome — o que se lê; opts — as opções do menu; sub —
    true numa subcategoria.
    Devolve: o HTML (texto). */
 function colunaDoAnexo(m,chaves,chave,nome,opts,sub){
-  const v=m[chave]||'',cl=v==='nao'?' nao':(!v&&sub?' herda':'');
+  const v=m[chave]||'',cl=v==='nao'?' nao':v==='confirmar'||(!v&&!sub)?' confirmar':(!v&&sub?' herda':'');
   return `<label class="def-cat-col${cl}"><span class="def-oculto">Coluna no Anexo F de ${esc(nome)}</span>${sel('irsm_'+chaves.indexOf(chave),v,opts,'setIrsMapa','dados')}</label>`;
+}
+/* Uma categoria (ou subcategoria) que o IRS lê, pelo id em settings.catIds
+   (dados.js:catIrsId): essas não se removem — decisão do Martinho, 2026-11-17
+   (contrato rev. 6 §6.6.1) —, só se lhes muda o nome. Uma subcategoria da pessoa
+   dentro de uma do IRS (sem id) remove-se.
+   Recebe: tk — a árvore; cat — a categoria; sub — a subcategoria ('' para a categoria).
+   Devolve: true quando tem id. */
+function catDoIrs(tk,cat,sub){return !!(sub?catIrsId(tk,cat,sub):catIrsId(tk,cat))}
+/* A frase de uma categoria do IRS no lugar do «Remover»: no ⋯ e no aviso do
+   delCat/delSub chamados com uma delas.
+   Recebe: sub — true numa subcategoria.
+   Devolve: o texto. */
+const notaNaoRemove=sub=>'O IRS usa esta '+(sub?'subcategoria':'categoria')+': podes mudar-lhe o nome.';
+/* O ⋯ de uma linha da tabela das categorias: as ações e, no fim, o «Apagar» —
+   ou, numa categoria do IRS, a nota de que não se remove (notaNaoRemove), sem
+   ação, por baixo das ações (componentes.js:menu só desenha botões; a nota
+   entra no fim do .menupop).
+   Recebe: id — o id do menu; itens — as ações; apagar — o item do «Apagar»;
+   doIrs — a linha é de uma categoria do IRS (catDoIrs); a nota diz
+   «subcategoria» quando o item é o delSub.
+   Devolve: o HTML (texto) do menu. */
+function menuDaCategoria(id,itens,apagar,doIrs){
+  if(!doIrs)return menu(id,itens.concat([apagar]));
+  const h=menu(id,itens),fim=h.lastIndexOf('</div></span>');
+  const nota=`<p class="small def-menu-nota">${esc(notaNaoRemove(/^delSub\(/.test(apagar.act)))}</p>`;
+  return fim<0?h:h.slice(0,fim)+nota+h.slice(fim);
+}
+/* A coluna do AIMI (Impostos › AIMI, pelo id), fixa: o AIMI não é gasto, abate
+   ao imposto no quadro 9, e o irs-papeis.js:irsColunaDe ignora a escolha do
+   movimento e do mapa (D66). Um menu aqui mentia — escolher «Outros gastos»
+   não mudava nada.
+   Recebe: nada.
+   Devolve: o HTML (texto) da célula. */
+function colunaDoAimi(){
+  return `<span class="def-cat-col def-cat-fixa"><span class="neg">Não dedutível</span> <span class="small">· vai ao quadro 9</span></span>`;
+}
+/* O que o «Fora dos totais» faz a uma categoria no Anexo F. Tira-a dos totais e
+   dos gráficos e, quase sempre, também da Declaração; diz só o que o resumo faz
+   hoje (fisco-resumo.js conta os gastos pelo irs-papeis.js:irsColunaDe): o IMI e
+   o imposto do selo (IRS_DESPESAS_SEMPRE) e a devolução da caução (a categoria
+   das Devoluções, pelo id) continuam a contar. Nas receitas nada: as Rendas fora
+   dos totais ainda saem do resumo (ehRenda, pelo countsInTotals) até ele as ler
+   pelo irsReceitaDe (vaga 3, 2.3.2) — aí o catsIn volta a dizer 'tudo' nas
+   Rendas. A devolução de renda ainda não se abate (o resumo não lê o
+   irsDevolucaoDeRenda), e por isso também não se diz.
+   Recebe: tk — a árvore; cat — a categoria; sub (opcional) — a subcategoria.
+   Devolve: 'tudo' (continua a declarar-se), 'parte' (a categoria dos Impostos
+   ou das Devoluções: só algumas subcategorias continuam) ou '' (sai do Anexo F). */
+function defForaDeclara(tk,cat,sub){
+  if(tk!=='cats')return '';
+  const cid=catIrsId(tk,cat);
+  const sempre=(typeof IRS_DESPESAS_SEMPRE!=='undefined'?IRS_DESPESAS_SEMPRE:['impostos/imi','impostos/imposto-do-selo']).concat(['devolucoes/caucao']);
+  if(sub)return sempre.indexOf(catIrsId(tk,cat,sub))>-1?'tudo':'';
+  return cid==='impostos'||cid==='devolucoes'?'parte':'';
+}
+/* A nota de uma linha da tabela das categorias, por baixo dela: o que o «Fora
+   dos totais» ligado deixa no Anexo F (defForaDeclara) e a nota da regra de
+   origem da coluna (dados.js:IRS_MAPA_NOTAS — a quota extraordinária, o
+   multirriscos, a caldeira; D24, D25, D07).
+   Recebe: tk — a árvore; cat — a categoria; sub — a subcategoria ('' na da
+   categoria); fora — o «Fora dos totais» está ligado nela (ou na categoria).
+   Devolve: o HTML (texto) da nota, ou '' sem nada a dizer. */
+function notaDaCategoria(tk,cat,sub,fora){
+  const ps=[];
+  const dec=fora?defForaDeclara(tk,cat,sub):'';
+  if(dec==='tudo')ps.push('Sai dos totais e dos gráficos, mas continua a declarar-se no Anexo F.');
+  else if(dec==='parte'){
+    const ds=((db.settings[tk]||{})[cat]||[]).filter(sb=>defForaDeclara(tk,cat,sb)==='tudo');
+    ps.push('Sai dos totais e dos gráficos'+(ds.length?'; no Anexo F, '+listaE(ds.map(sb=>'«'+sb+'»'))+(ds.length===1?' continua':' continuam')+' a declarar-se.':'.'));
+  }
+  const chave=sub?cat+' / '+sub:cat;
+  if(tk==='cats'&&typeof IRS_MAPA_NOTAS!=='undefined'&&Object.prototype.hasOwnProperty.call(IRS_MAPA_NOTAS,chave))ps.push(IRS_MAPA_NOTAS[chave]);
+  return ps.length?`<p class="small def-cat-nota">${esc(ps.join(' '))}</p>`:'';
+}
+/* De cada categoria do IRS ao nome dela com o artigo, para as perguntas «Esta
+   categoria é a das Rendas?» (catIrsPerguntar). Pelo id das categorias (dados.js:
+   CATS_DO_IRS); as subcategorias dizem-se pelo nome de origem. */
+const CAT_IRS_ARTIGO={rendas:'das',reembolsos:'dos',impostos:'dos',devolucoes:'das'};
+/* O nome de origem de um id do IRS e o da categoria de origem dele, pela árvore
+   (dados.js:CATS_IRS_ORIGEM). Uma chave pode ter « / » dentro do nome da
+   subcategoria (Caldeira / AVAC): parte-se pela categoria de origem, não pelo texto.
+   Recebe: tk — a árvore; id — o id (de CATS_DO_IRS).
+   Devolve: {cat, sub} — os nomes de origem (sub '' num id de categoria) —, ou null. */
+function origemDoIdIrs(tk,id){
+  const ori=CATS_IRS_ORIGEM[tk]||{},k=Object.keys(ori).find(x=>ori[x]===id);
+  if(!k)return null;
+  const pai=id.split('/')[0],kp=Object.keys(ori).find(x=>ori[x]===pai)||k;
+  return id.indexOf('/')<0?{cat:k,sub:''}:{cat:kp,sub:k.slice(kp.length+3)};
+}
+/* As categorias que o IRS lê e que a app não encontra nesta conta: a migração
+   (dados.js:fillCats, catsV=2) só deu o id a quem ainda tinha o nome de origem,
+   e uma categoria renomeada antes ficou sem ele (rev. 5 §5.1, D19). De cada id
+   em falta, as candidatas a serem ela: as categorias sem id com um nome que não
+   é de origem (ou com o próprio nome de origem dele) — numa subcategoria, as da
+   categoria que já tem o id do pai. Fortes (forte:true) as que têm
+   subcategorias com os nomes de origem dele (uma «Arrendamento» com «Renda
+   mensal» e «Caução»), ou o nome de origem dele.
+   Recebe: nada (lê db.settings).
+   Devolve: array de {tk, id, nome (o de origem), cat (a categoria atual onde a
+   subcategoria vive; '' num id de categoria), candidatos:[{cat, sub, comuns:[nomes], forte}]}. */
+function catIdsEmFalta(){
+  const st=db.settings||{},out=[];
+  ['catsIn','cats'].forEach(tk=>{
+    const arv=st[tk]||{},m=(st.catIds&&st.catIds[tk])||{},tem=new Set(Object.values(m));
+    const arv0=tk==='cats'?CATS0:CATS_IN0;
+    CATS_DO_IRS.forEach(id=>{
+      const o=origemDoIdIrs(tk,id);if(!o||tem.has(id))return;
+      if(!o.sub){
+        const subs0=Object.keys(CATS_IRS_ORIGEM[tk]).filter(k=>k.indexOf(o.cat+' / ')===0).map(k=>k.slice(o.cat.length+3));
+        const cands=Object.keys(arv).filter(c=>!catIrsId(tk,c)&&(c===o.cat||!Object.prototype.hasOwnProperty.call(arv0,c))).map(c=>{
+          const comuns=(arv[c]||[]).filter(sb=>subs0.indexOf(sb)>-1);
+          return {cat:c,sub:'',comuns,forte:c===o.cat||comuns.length>0};
+        });
+        out.push({tk,id,nome:o.cat,cat:'',candidatos:cands});
+        return;
+      }
+      const pai=Object.keys(m).find(k=>m[k]===id.split('/')[0]);
+      if(!pai||!Object.prototype.hasOwnProperty.call(arv,pai))return;
+      const subs0=arv0[o.cat]||[];
+      const cands=(arv[pai]||[]).filter(sb=>!catIrsId(tk,pai,sb)&&(sb===o.sub||subs0.indexOf(sb)<0))
+        .map(sb=>({cat:pai,sub:sb,comuns:[],forte:sb===o.sub}));
+      out.push({tk,id,nome:o.sub,cat:pai,candidatos:cands});
+    });
+  });
+  return out.filter(e=>e.candidatos.length);
+}
+/* O cartão das categorias que a Declaração não reconhece (catIdsEmFalta), à
+   cabeça da página das categorias, com as duas árvores: uma linha por categoria
+   em falta, com «Escolher» (catIrsEscolher). Um id de categoria só aparece com
+   uma candidata forte — sem nenhuma, quem removeu de propósito as Devoluções
+   ao inquilino via o cartão para sempre; as fracas ficam no ⋯ de cada linha
+   (catIrsPerguntar).
+   Recebe: nada.
+   Devolve: o HTML (texto) do cartão, ou '' sem nada em falta. */
+function cartaoDasCategoriasDoIrs(){
+  const fs=catIdsEmFalta().filter(e=>e.cat||e.candidatos.some(c=>c.forte));
+  if(!fs.length)return '';
+  const linha=e=>`<div class="def-irs-id"><span class="def-irs-id-txt"><b>${esc(e.nome)}</b> <span class="small">${e.cat?'em '+esc(e.cat):e.tk==='catsIn'?'nas receitas':'nos pagamentos'}</span></span>
+    <button type="button" class="btn sm" data-toca="camada" data-click="catIrsEscolher('${jsq(e.tk)}','${jsq(e.id)}')">Escolher</button></div>`;
+  return `<section class="card def-bloco def-irs-ids"><h3>${fs.length===1?'Uma categoria que a Declaração não reconhece':fs.length+' categorias que a Declaração não reconhece'}</h3>
+    <p class="small">A Declaração reconhece as categorias que o IRS lê mesmo com outro nome, mas ${fs.length===1?'esta não a encontrou':'estas não as encontrou'} com o nome de origem. Se ${fs.length===1?'lhe mudaste':'lhes mudaste'} o nome, diz qual é; se ${fs.length===1?'a removeste':'as removeste'}, não precisas de fazer nada.</p>
+    ${fs.map(linha).join('')}</section>`;
+}
+/* «Escolher» de uma categoria do IRS em falta: as candidatas (catIdsEmFalta),
+   as fortes primeiro, cada uma com as subcategorias de origem que tem; escolher
+   uma dá-lhe o id (catIrsDar).
+   Recebe: tk — a árvore; id — o id em falta.
+   Devolve: nada — abre a lista. */
+function catIrsEscolher(tk,id){
+  const e=catIdsEmFalta().find(x=>x.tk===tk&&x.id===id);
+  if(!e)return toast('A Declaração já reconhece esta categoria.');
+  /* no pickModal o «sub» é a linha pequena; a subcategoria vai em «subcat» */
+  const ops=e.candidatos.slice().sort((a,b)=>(b.forte?1:0)-(a.forte?1:0)).map(c=>({label:c.sub||c.cat,icon:'tag',cat:c.cat,subcat:c.sub,
+    sub:c.comuns.length?'Tem '+listaE(c.comuns.map(x=>'«'+x+'»')):''}));
+  const titulo=e.cat?'Qual é a subcategoria «'+e.nome+'»?':'Qual é a categoria '+(CAT_IRS_ARTIGO[id]||'de')+' '+e.nome+'?';
+  pickModal(titulo,ops,o=>{closeModal();catIrsDar(tk,id,o.cat,o.subcat)},
+    `<p class="hint">${e.cat?'A Declaração passa a reconhecê-la mesmo com outro nome.':'A Declaração passa a reconhecê-la mesmo com outro nome, e as subcategorias dela com o nome de origem também.'}</p>`);
+}
+/* A pergunta do ⋯ de uma categoria sem id, quando falta uma do IRS: «Esta
+   categoria é a das Rendas?». Confirmar dá-lhe o id (catIrsDar).
+   Recebe: tk — a árvore; id — o id em falta; cat — a categoria; sub — a
+   subcategoria ('' numa categoria).
+   Devolve: nada — abre a confirmação. */
+function catIrsPerguntar(tk,id,cat,sub){
+  const o=origemDoIdIrs(tk,id);if(!o)return;
+  const titulo=sub?'Esta é a subcategoria «'+o.sub+'»?':'Esta categoria é a '+(CAT_IRS_ARTIGO[id]||'de')+' '+o.cat+'?';
+  confirmModal(titulo,`A Declaração passa a ler «${esc(sub||cat)}» como ${sub?'a subcategoria «'+esc(o.sub)+'», mesmo com outro nome.':'a categoria '+(CAT_IRS_ARTIGO[id]||'de')+' '+esc(o.cat)+', mesmo com outro nome, e as subcategorias dela com o nome de origem também.'}`,
+    ()=>catIrsDar(tk,id,cat,sub));
+}
+/* Dá a uma categoria (ou subcategoria) o identificador fixo de uma categoria do
+   IRS que a conta perdeu (settings.catIds, rev. 5 §5.1, D19). Recusa o que não
+   bate: um id que não é desta árvore, um id de subcategoria numa categoria (e o
+   contrário), uma subcategoria fora da categoria com o id do pai, uma chave que
+   já tem outro id. O id sai de qualquer outra chave que o tivesse. Numa
+   categoria, as subcategorias dela com o nome de origem (Caução, IMI…) levam o
+   id delas, se nenhuma outra chave o tem.
+   Recebe: tk — a árvore; id — o id (de CATS_DO_IRS); cat — a categoria; sub — a
+   subcategoria ('' para a categoria).
+   Devolve: true se gravou, false se recusou. */
+function catIrsDar(tk,id,cat,sub){
+  const st=db.settings,o=origemDoIdIrs(tk,id),arv=st&&st[tk];
+  if(!o||!arv||!Object.prototype.hasOwnProperty.call(arv,cat)||!!sub!==!!o.sub)return false;
+  if(sub&&((arv[cat]||[]).indexOf(sub)<0||catIrsId(tk,cat)!==id.split('/')[0]))return false;
+  const ids=st.catIds=st.catIds&&typeof st.catIds==='object'?st.catIds:{cats:{},catsIn:{}};
+  const m=ids[tk]=ids[tk]&&typeof ids[tk]==='object'?ids[tk]:{};
+  const k=sub?cat+' / '+sub:cat;
+  if(m[k]&&m[k]!==id)return false;
+  const poe=(chave,v)=>{Object.keys(m).forEach(x=>{if(m[x]===v&&x!==chave)delete m[x]});m[chave]=v};
+  poe(k,id);
+  if(!sub)Object.keys(CATS_IRS_ORIGEM[tk]).forEach(ko=>{
+    const v=CATS_IRS_ORIGEM[tk][ko];if(v.indexOf(id+'/')!==0)return;
+    const sb=ko.slice(o.cat.length+3),ks=cat+' / '+sb;
+    if((arv[cat]||[]).indexOf(sb)>-1&&!m[ks]&&Object.values(m).indexOf(v)<0)m[ks]=v;
+  });
+  st.catIds=normCatIds(ids,st);
+  save();render();
+  toast('A Declaração já reconhece «'+(sub||cat)+'» como '+(sub?'a subcategoria «'+o.sub+'»':'a categoria '+(CAT_IRS_ARTIGO[id]||'de')+' '+o.cat)+'.');
+  return true;
+}
+/* As perguntas «Esta categoria é a das Rendas?» do ⋯ de uma linha: uma por
+   categoria do IRS em falta de que ela é candidata (catIdsEmFalta).
+   Recebe: falta — o catIdsEmFalta() da pintura; tk — a árvore; cat — a
+   categoria; sub — a subcategoria ('' numa categoria).
+   Devolve: array de itens do menu ({label, icon, toca, act}). */
+function itensDoIdIrs(falta,tk,cat,sub){
+  return falta.filter(e=>e.tk===tk&&e.candidatos.some(c=>c.cat===cat&&c.sub===sub)).map(e=>({
+    label:sub?'É a subcategoria «'+e.nome+'»':'É a categoria '+(CAT_IRS_ARTIGO[e.id]||'de')+' '+e.nome,icon:'recibo',toca:'camada',
+    act:`catIrsPerguntar('${jsq(tk)}','${jsq(e.id)}','${jsq(cat)}','${jsq(sub)}')`}));
 }
 /* A tabela de uma árvore de categorias (o canvas, D-DefCategorias): por
    categoria, a seta das subcategorias, o nome, quantos movimentos a usam, a
@@ -511,13 +740,21 @@ function colunaDoAnexo(m,chaves,chave,nome,opts,sub){
    recolhidas, com o mesmo. Uma subcategoria de uma categoria fora dos totais
    fica fora com ela: o interruptor dela aparece ligado e parado. No telemóvel
    cada linha parte-se em duas, com os rótulos à vista.
+   A coluna oferece «A confirmar em cada despesa», e a omissão de uma
+   categoria sem regra é «A confirmar (por omissão)» — na dúvida a app não
+   deduz (D61). O AIMI tem a coluna fixa (colunaDoAimi, D66). Por baixo de
+   uma linha, a nota dela (notaDaCategoria): as regras de origem que pedem
+   explicação, e o que o «Fora dos totais» deixa no Anexo F nas categorias que
+   o IRS lê (D19). O ⋯ de uma categoria sem id pergunta se é uma das do IRS
+   que a conta perdeu (itensDoIdIrs); o de uma com id não tem «Apagar», e diz
+   que se lhe pode mudar o nome (menuDaCategoria).
    Recebe: tk — 'cats' ou 'catsIn'.
    Devolve: o HTML (texto) do cartão. */
 function tabelaDeCategorias(tk){
   const cs=db.settings[tk]||{},txs=treeTx(tk),irs=tk==='cats',ex=db.settings.exclude||{};
-  const m=irs?irsMapa():{},chaves=irs?irsMapaChaves():[];
-  const cols=IRS_COLUNAS.map(([v,label])=>({v,label}));
-  const optCat=[{v:'',label:'Outros gastos (por omissão)'}].concat(cols),optSub=[{v:'',label:'Como a categoria'}].concat(cols);
+  const m=irs?irsMapa():{},chaves=irs?irsMapaChaves():[],falta=catIdsEmFalta();
+  const cols=IRS_MAPA_VALORES.map(([v,label])=>({v,label}));
+  const optCat=[{v:'',label:'A confirmar (por omissão)'}].concat(cols),optSub=[{v:'',label:'Como a categoria'}].concat(cols);
   /* o interruptor vai num <label> com o rótulo: o toque no rótulo chega ao
      botão (é ele o controlo do label), e a área de toque cresce para lá dos
      28px do interruptor */
@@ -532,20 +769,23 @@ function tabelaDeCategorias(tk){
       <span class="def-cat-n">${n}<span class="def-so-tel"> ${n===1?'movimento':'movimentos'}</span></span>
       ${irs?colunaDoAnexo(m,chaves,k,k,optCat,false):''}
       ${fora(k,offCat,`toggleExc(${qs})`,false)}
-      <span class="def-cat-menu">${menu('dc_'+tk+'_'+i,[
+      <span class="def-cat-menu">${menuDaCategoria('dc_'+tk+'_'+i,[
         {label:'Mudar o nome…',icon:'pen',toca:'camada',act:`mudarNomeCategoria(${qs})`},
-        {label:'Nova subcategoria',icon:'plus',toca:'camada',act:`addSub(${qs})`},
-        {label:'Apagar categoria',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delCat(${qs})`}])}</span></div>`;
+        {label:'Nova subcategoria',icon:'plus',toca:'camada',act:`addSub(${qs})`}].concat(itensDoIdIrs(falta,tk,k,'')),
+        {label:'Apagar categoria',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delCat(${qs})`},catDoIrs(tk,k,''))}</span></div>`+notaDaCategoria(tk,k,'',offCat);
     const filhos=subs.map((sb,j)=>{
-      const qsb=`${qs},'${jsq(sb)}'`,nsb=txs.filter(t=>t.category===k&&t.sub===sb).length;
+      const qsb=`${qs},'${jsq(sb)}'`,nsb=txs.filter(t=>t.category===k&&t.sub===sb).length,offSub=offCat||!!ex[excKey(tk,k,sb)];
+      const col=!irs?'':catIrsId(tk,k,sb)==='impostos/aimi'?colunaDoAimi():colunaDoAnexo(m,chaves,k+' / '+sb,k+' › '+sb,optSub,true);
       return `<div class="def-cat def-sub">
         <span class="def-cat-nome"><span>${esc(sb)}</span></span>
         <span class="def-cat-n">${nsb}<span class="def-so-tel"> ${nsb===1?'movimento':'movimentos'}</span></span>
-        ${irs?colunaDoAnexo(m,chaves,k+' / '+sb,k+' › '+sb,optSub,true):''}
-        ${fora(k+' › '+sb,offCat||!!ex[excKey(tk,k,sb)],`toggleExc(${qsb})`,offCat)}
-        <span class="def-cat-menu">${menu('ds_'+tk+'_'+i+'_'+j,[
-          {label:'Mudar o nome…',icon:'pen',toca:'camada',act:`renameSub(${qsb})`},
-          {label:'Apagar subcategoria',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delSub(${qsb})`}])}</span></div>`;
+        ${col}
+        ${fora(k+' › '+sb,offSub,`toggleExc(${qsb})`,offCat)}
+        <span class="def-cat-menu">${menuDaCategoria('ds_'+tk+'_'+i+'_'+j,[
+          {label:'Mudar o nome…',icon:'pen',toca:'camada',act:`renameSub(${qsb})`}].concat(itensDoIdIrs(falta,tk,k,sb)),
+          {label:'Apagar subcategoria',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delSub(${qsb})`},catDoIrs(tk,k,sb))}</span></div>`+
+        /* fora com a categoria, a nota da categoria já diz o que fica no Anexo F */
+        notaDaCategoria(tk,k,sb,offCat?false:offSub);
     }).join('');
     return cab+(subs.length?`<div class="def-subs" id="defsub_${tk}_${i}"${aberta?'':' hidden'}>${filhos}</div>`:'');
   }).join('');
@@ -569,17 +809,23 @@ function cartaoDasEtiquetas(){
     <p class="small">Marcas livres, para cruzares com qualquer categoria.${tg.indexOf('Recorrente')>-1?' «Recorrente» marca uma despesa como já prevista pelos planeados: não conta como despesa de uma vez nas projeções.':''}</p></section>`;
 }
 /* O que o artigo 41.º do CIRS deixa deduzir, em três linhas (o canvas):
-   dedutível, não dedutível e o que depende, com o que a lei pede de cada
-   gasto. É a regra por omissão: a coluna escolhida na ficha de uma despesa
-   manda sobre a da categoria (irs-papeis.js:irsColunaDe).
+   dedutível, não dedutível e o que se confirma em cada despesa, com o que a
+   lei pede de cada gasto — o mesmo que o guia de declarar as rendas e as
+   regras de origem (dados.js:IRS_MAPA0) dizem (D07, D24–D27, D60): o
+   multirriscos facultativo, os eletrodomésticos (reparar também), o fundo de
+   reserva, o IMT e o selo da compra, os registos e a avaliação não se deduzem;
+   os consumos, os honorários, a caldeira e a quota extraordinária dependem do
+   caso. É a regra por omissão: a coluna escolhida na ficha de uma despesa
+   manda sobre a da categoria (irs-papeis.js:irsColunaDe), e o que fica «a
+   confirmar» não conta até a pessoa a escolher.
    Recebe: nada.
    Devolve: o HTML (texto) do cartão. */
 function cartaoDoArt41(){
   return `<section class="card def-bloco def-art41"><h3>O que o art. 41.º do CIRS deixa deduzir</h3>
-    <p><b class="pos">Dedutível:</b> conservação e manutenção, condomínio, IMI, imposto do selo do contrato, taxas autárquicas, seguro de renda, comissão da imobiliária, certificado energético.</p>
-    <p><b class="neg">Não dedutível:</b> juros e outros gastos do crédito, depreciações, mobiliário, eletrodomésticos, decoração, o Adicional ao IMI (abate ao imposto, no quadro 9) e beneficiações — uma cozinha nova, uma remodelação que acrescenta valor.</p>
-    <p><b class="amber">Depende:</b> o seguro multirriscos facultativo e a água, a luz e o gás pagos por ti — na dúvida, segundo a AT.</p>
-    <p class="small">Conta o que pagaste enquanto o imóvel esteve arrendado, com fatura com o teu NIF e a identificação do imóvel. A coluna escolhida na ficha de uma despesa manda sobre a da categoria; a página do IRS · Anexo F diz quais caíram em «Outros gastos» só por omissão.</p></section>`;
+    <p><b class="pos">Dedutível:</b> conservação e manutenção, as quotas do condomínio, IMI, imposto do selo do contrato, taxas autárquicas, seguro de renda, comissão da imobiliária, certificado energético.</p>
+    <p><b class="neg">Não dedutível:</b> juros e outros gastos do crédito, depreciações, mobiliário, eletrodomésticos — comprar, trocar ou reparar, o esquentador incluído —, decoração, o seguro multirriscos facultativo, o fundo comum de reserva enquanto o condomínio não o gastar numa obra, o IMT e o imposto do selo da compra, os registos e a avaliação, o Adicional ao IMI (abate ao imposto, no quadro 9) e beneficiações — uma cozinha nova, uma remodelação que acrescenta valor.</p>
+    <p><b class="amber">A confirmar em cada despesa:</b> a água, a luz, o gás e a Internet (só se o contrato os incluir na renda e a Modelo 2 o disser), os honorários de advogado e de contabilista, a caldeira (a inspeção e a manutenção da instalação deduzem-se; reparar ou trocar o aparelho não), a quota extraordinária para obras (em Conservação e manutenção, no ano em que o condomínio paga a obra) e o que não tem regra.</p>
+    <p class="small">Conta o que pagaste enquanto o imóvel esteve arrendado, com fatura com o teu NIF e a identificação do imóvel. A coluna escolhida na ficha de uma despesa manda sobre a da categoria. O que está a confirmar não conta em coluna nenhuma até a escolheres na ficha da despesa: a Declaração lista essas despesas em «A tratar antes de entregar».</p></section>`;
 }
 /* A página «Categorias, etiquetas e IRS» (o canvas de 2026-10,
    D-DefCategorias): as duas árvores num segmentado — Pagamentos e Receitas,
@@ -587,6 +833,9 @@ function cartaoDoArt41(){
    (na árvore à vista); a tabela (tabelaDeCategorias), com a coluna do Anexo F
    nos pagamentos; e, lado a lado, as etiquetas e o que o artigo 41.º deixa
    deduzir. Eram três páginas: os tipos de movimento, o IRS e as etiquetas.
+   À cabeça, só quando há, as categorias do IRS que a Declaração não
+   reconhece (cartaoDasCategoriasDoIrs, D19); a nota de baixo diz o que o
+   «Fora dos totais» faz no Anexo F.
    Recebe: forcar (opcional) — 'cats' ou 'catsIn', a árvore a mostrar (o
    'irs' abre nos pagamentos); sem ele, a que estava à vista.
    Devolve: o HTML (texto) da página, sem o Voltar. */
@@ -597,8 +846,9 @@ function vCats(forcar){
     <div class="segm def-abas" role="group" aria-label="Árvore de categorias">${aba('cats','Pagamentos')}${aba('catsIn','Receitas')}</div>
     <span class="def-cab-acoes"><button class="btn ghost" data-toca="dados" data-risco="destroi" data-click="resetCats()">Repor as de origem</button>
     <button class="btn primary" data-toca="camada" data-click="addCat('${jsq(tk)}')">${ic('plus',18)} Nova categoria</button></span></div>
+  ${cartaoDasCategoriasDoIrs()}
   ${tabelaDeCategorias(tk)}
-  <p class="hint def-nota">O número é quantos movimentos usam a categoria. Apagar uma categoria não apaga movimentos — ficam sem categoria. «Fora dos totais» deixa-os na lista, mas não somam.</p>
+  <p class="hint def-nota">O número é quantos movimentos usam a categoria. Apagar uma categoria não apaga movimentos — ficam sem categoria. Mudar o nome a uma categoria não muda o que a Declaração faz com ela. «Fora dos totais» tira-os do Anexo F${tk==='cats'?' — salvo o IMI, o imposto do selo do contrato e a devolução da caução, que continuam a declarar-se —':''} e deixa-os na lista, mas não somam.</p>
   ${tk==='cats'?`<div class="def-repor"><button type="button" class="def-ligacao" data-toca="dados" data-risco="destroi" data-click="resetIrsMapa()">Repor as colunas do Anexo F</button></div>`:''}
   <div class="def-par">${cartaoDasEtiquetas()}${cartaoDoArt41()}</div>`;
 }
@@ -890,16 +1140,23 @@ function moverChaves(o,pares){
   pares.forEach(([a,n])=>{if(!Object.prototype.hasOwnProperty.call(o,a))return;if(n!=null)o[n]=o[a];delete o[a]});
 }
 /* Leva as escolhas de categorias e subcategorias para os nomes novos, ou tira-as, em
-   cada objeto de escolhas pela chave dele. O Anexo F só existe na árvore dos
-   pagamentos.
+   cada objeto de escolhas pela chave dele: as exclusões dos totais, o identificador
+   fixo das categorias que o IRS lê (settings.catIds, nas duas árvores — o id segue o
+   nome novo, e a Declaração continua a reconhecê-las; rev. 5 §5.1, D19) e a coluna do
+   Anexo F, que só existe na árvore dos pagamentos. O id só se move (não se tira).
    Recebe: tk — a árvore ('cats' ou 'catsIn'); pares — array de [de, para], cada um
    [categoria] ou [categoria, sub], com para null para tirar.
-   Devolve: nada — muda db.settings.exclude e .irsMapa. */
+   Devolve: nada — muda db.settings.exclude, .catIds[tk] e .irsMapa. */
 function moverEscolhas(tk,pares){
   const st=db.settings,com=f=>pares.map(([a,n])=>[f(a[0],a[1]),n?f(n[0],n[1]):null]);
+  const chave=(c,sb)=>c+(sb?' / '+sb:'');
   moverChaves(st.exclude,com((c,sb)=>excKey(tk,c,sb)));
+  /* o id só se move no mudar o nome: as categorias com id não se removem
+     (catDoIrs; decisão do Martinho, contrato rev. 6 §6.6.1), e uma chave órfã
+     sai no fillCats seguinte (dados.js:normCatIds) */
+  if(st.catIds&&typeof st.catIds==='object')moverChaves(st.catIds[tk],com(chave).filter(([,n])=>n!=null));
   if(tk!=='cats')return;
-  moverChaves(st.irsMapa,com((c,sb)=>c+(sb?' / '+sb:'')));
+  moverChaves(st.irsMapa,com(chave));
 }
 /* Os pares de moverEscolhas para uma categoria inteira: ela e cada subcategoria dela.
    Recebe: tk — a árvore; cat — a categoria; nova — o nome novo, ou null para tirar.
@@ -908,7 +1165,8 @@ const paresDaCategoria=(tk,cat,nova)=>[[[cat],nova==null?null:[nova]]]
   .concat(((db.settings[tk]||{})[cat]||[]).map(sb=>[[cat,sb],nova==null?null:[nova,sb]]));
 /* Renomeia uma categoria mantendo a ordem (reconstrói o objeto) e atualiza os
    movimentos dessa árvore que a usavam e as escolhas guardadas por nome (fora dos
-   totais, coluna do Anexo F). Nome vazio ou igual só repinta; o nome de
+   totais, coluna do Anexo F, e o id das categorias que o IRS lê, que segue o nome
+   novo — D19). Nome vazio ou igual só repinta; o nome de
    outra categoria que já existe não se aceita — fundia as duas e perdia as subcategorias.
    Recebe: tk — a árvore: 'cats' ou 'catsIn'; oldName — o nome atual;
    newName — o nome novo, tal como vem do campo (é-lhe feito trim).
@@ -927,10 +1185,12 @@ function renameCat(tk,oldName,newName){
 // Apaga a categoria depois de confirmar com o impacto: os movimentos que a
 // usavam ficam sem categoria nem subcategoria (não se apagam), e as escolhas
 // dela (fora dos totais, coluna do Anexo F) saem com ela. A frase diz quantos,
-// no singular ou no plural.
+// no singular ou no plural. Uma categoria que o IRS lê (com id, catDoIrs) não
+// se remove: diz porquê e não faz nada (o ⋯ dela já não tem o «Apagar»).
 // Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria.
 // Devolve: nada — abre a confirmação; só ao confirmar apaga e grava.
 function delCat(tk,k){
+  if(catDoIrs(tk,k,''))return toast(notaNaoRemove(false));
   const used=treeTx(tk).filter(t=>t.category===k).length;
   confirmModal('Apagar categoria',`Apagar “${esc(k)}”?${used?` ${used===1?'1 movimento fica':used+' movimentos ficam'} sem categoria.`:''}`,()=>{
     moverEscolhas(tk,paresDaCategoria(tk,k,null));
@@ -946,8 +1206,8 @@ function addSub(tk,k){promptModal('Nova subcategoria','Nome da subcategoria',nul
   const cs=db.settings[tk]||(db.settings[tk]={}),l=cs[k]||(cs[k]=[]);
   if(l.indexOf(v)<0)l.push(v);save();render();toast('Subcategoria criada.')},'Canalização')}
 /* Muda o nome de uma subcategoria via prompt: atualiza a lista, os movimentos
-   que a usavam e leva as escolhas dela (fora dos totais, coluna do Anexo F)
-   para o nome novo. O nome de outra subcategoria da mesma categoria
+   que a usavam e leva as escolhas dela (fora dos totais, coluna do Anexo F, o
+   id do IRS — D19) para o nome novo. O nome de outra subcategoria da mesma categoria
    não se aceita: ficavam duas iguais.
    Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria;
    old — o nome atual da subcategoria.
@@ -965,11 +1225,13 @@ function renameSub(tk,k,old){
 }
 // Apaga a subcategoria depois de confirmar com o impacto: sai da lista, dos
 // movimentos que a usavam (ficam só sem subcategoria) e das escolhas guardadas.
-// A frase diz quantos, no singular ou no plural.
+// A frase diz quantos, no singular ou no plural. Uma subcategoria que o IRS lê
+// (com id, catDoIrs) não se remove: diz porquê e não faz nada.
 // Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria;
 // sb — o nome da subcategoria.
 // Devolve: nada — abre a confirmação; só ao confirmar apaga e grava.
 function delSub(tk,k,sb){
+  if(catDoIrs(tk,k,sb))return toast(notaNaoRemove(true));
   /* apagar categoria e etiqueta confirmam com o impacto; a subcategoria
      executava logo — a mesma ação, na mesma página, ora protegia ora não */
   const usados=treeTx(tk).filter(t=>t.category===k&&t.sub===sb).length;
@@ -981,11 +1243,15 @@ function delSub(tk,k,sb){
   });
 }
 // Repõe as duas árvores nas listas de origem, após confirmação; os movimentos
-// mantêm o texto de categoria que já tinham.
+// mantêm o texto de categoria que já tinham. As categorias que o IRS lê voltam
+// com o identificador de origem (dados.js:catIdsDeOrigem): sem ele, as Rendas
+// repostas ficavam sem id, e a Declaração deixava de as reconhecer (D19).
 // Devolve: nada — abre a confirmação; só ao confirmar repõe e grava.
 function resetCats(){
   confirmModal('Repor categorias','Volta às listas de origem (receitas e pagamentos). As categorias que criaste desaparecem; os movimentos mantêm o texto.',()=>{
-    db.settings.cats=JSON.parse(JSON.stringify(CATS0));db.settings.catsIn=JSON.parse(JSON.stringify(CATS_IN0));save();render();toast('Categorias repostas.');
+    db.settings.cats=JSON.parse(JSON.stringify(CATS0));db.settings.catsIn=JSON.parse(JSON.stringify(CATS_IN0));
+    db.settings.catIds=catIdsDeOrigem(db.settings.cats,db.settings.catsIn);
+    save();render();toast('Categorias repostas.');
   });
 }
 /* ===== IRS e dedução ===== */
@@ -997,20 +1263,25 @@ function resetCats(){
    Devolve: a lista de chaves (array de strings), pela ordem das categorias de pagamentos. */
 const irsMapaChaves=()=>{const cs=cats(),l=[];Object.keys(cs).forEach(k=>{l.push(k);(cs[k]||[]).forEach(sb=>l.push(k+' / '+sb))});return l};
 /* Grava a coluna do Anexo F de uma categoria ou subcategoria no mapa das
-   definições. Vazio apaga a regra: a categoria volta a «Outros gastos», a
-   subcategoria volta a seguir a categoria. Sem argumentos — é assim que os
+   definições. Vazio apaga a regra: a categoria fica a confirmar em cada despesa
+   (irs-papeis.js:irsColunaDe, origem 'omissao'), a subcategoria volta a seguir a
+   categoria. Aceita as colunas do Anexo F e 'confirmar' (IRS_MAPA_VALORES, D61):
+   «A confirmar em cada despesa» é uma escolha, e não só a omissão. Sem argumentos — é assim que os
    menus da subpágina chamam, porque o sel chama o onchange pelo nome e sem
    dizer qual foi (componentes.js:selPick) — lê todos os menus pela posição
    (irsMapaChaves) e grava o que mudou, como imovel.js:liveLoanAll faz com as
    hipotecas. Só toca nos menus que existem no ecrã: fora da subpágina não
    apaga nada.
    Recebe: chave (opcional) — 'Categoria' ou 'Categoria / Sub'; col (opcional)
-   — o id da coluna (de IRS_COLUNAS), ou '' para apagar a regra.
+   — o id da coluna (de IRS_MAPA_VALORES), ou '' para apagar a regra.
    Devolve: nada — grava em db.settings.irsMapa e redesenha. */
 function setIrsMapa(chave,col){
   db.settings.irsMapa=db.settings.irsMapa||JSON.parse(JSON.stringify(IRS_MAPA0));
-  const m=db.settings.irsMapa,valida=v=>!v||IRS_COLUNAS.some(c=>c[0]===v);
-  const poe=(k,v)=>{if(v)m[k]=v;else delete m[k]};
+  const m=db.settings.irsMapa,valida=v=>!v||IRS_MAPA_VALORES.some(c=>c[0]===v);
+  /* o vazio de uma categoria com regra de origem grava-se 'confirmar' (o mesmo que a
+     omissão): apagada, a regra de origem voltava no fillCats seguinte */
+  const deOrigem=k=>Object.prototype.hasOwnProperty.call(cats(),k)&&Object.prototype.hasOwnProperty.call(IRS_MAPA0,k);
+  const poe=(k,v)=>{if(v)m[k]=v;else if(deOrigem(k))m[k]='confirmar';else delete m[k]};
   if(chave!==undefined){if(!valida(col))return;poe(chave,col||'')}
   else irsMapaChaves().forEach((k,i)=>{
     const e=document.getElementById('irsm_'+i);if(!e)return;

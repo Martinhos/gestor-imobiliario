@@ -286,7 +286,9 @@ describe('os quadros em cartões', () => {
     assert.equal(valorDe(c, 'País do inquilino'), 'Espanha');
     assert.match(c, /<dt>País do inquilino<span class="small">Vera<\/span><\/dt>/);
     assert.match(c, /<p class="lbl fis-ctc-grupo">Quadro 4\.2A<\/p>/);
-    assert.equal(valorDe(c, 'Comunicação'), '<span class="badge amber">por comunicar</span>');
+    // a comunicação é do período de 2024, com o prazo a 15/02/2025, já passado a 15/03/2026 (D01, D35, KAN-127)
+    assert.equal(valorDe(c, 'Comunicação'), '<span class="badge amber">por comunicar · o prazo acabou a 15/02/2025 — no 4.2A é NÃO</span>');
+    assert.match(c, /<dt>Comunicação<span class="small">do período desde 01\/03\/2024<\/span><\/dt>/);
     assert.equal(valorDe(c, 'Início'), '01/03/2024');
     assert.equal(valorDe(c, 'Termo'), '28/02/2034');
     assert.equal(valorDe(c, 'Última renovação'), '—');

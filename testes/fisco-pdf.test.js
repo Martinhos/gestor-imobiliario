@@ -61,7 +61,7 @@ beforeEach(() => {
     app.normContract({ id: 'C1', name: 'Arroios', propertyId: 'v1', tenantIds: ['t1'], rent: 1000, start: '2020-01-01', active: true,
       fisco: { estado: 'declarado', numero: '111', finalidade: 'hp' } }),
     app.normContract({ id: 'L1', name: 'Benfica longo', propertyId: 'v2', tenantIds: ['t2'], rent: 900, start: '2024-03-01', end: '2034-02-28', active: true,
-      fisco: { estado: 'declarado', numero: '333', finalidade: 'hp', celebracao: '2024-02-15', comunicacoes: { 2025: '2026-02-10' }, rendaAnterior: 1000, rendaAcimaDoLimite: false } }),
+      fisco: { estado: 'declarado', numero: '333', finalidade: 'hp', celebracao: '2024-02-15', comunicacoes: { 2024: '2025-02-10' }, rendaAnterior: 1000, rendaAcimaDoLimite: false } }),
   );
   rendas('C1', 1000, 'v1', 250);
   rendas('L1', 900, 'v2');
@@ -114,7 +114,7 @@ describe('o PDF do Anexo F', () => {
     // o 4.2, com o 4.2A, o 4.2B, o 4.2C e a falta do artigo
     const q42 = junto.slice(junto.indexOf('Quadro 4.2 ·'));
     for (const s of ['Benfica longo · T1 Benfica', '333', '10 800,00 €', '0,00 €', '1 200,00 €', 'falta',
-      'Sim (comunicada a 10/02/2026)', '01/03/2024', '28/02/2034', '900,00 € por mês', '1 000,00 € por mês',
+      'Sim (comunicada a 10/02/2025)', '01/03/2024', '28/02/2034', '900,00 € por mês · a de hoje no contrato', '1 000,00 € por mês',
       'Total do quadro 4.2', 'Sim (01)', 'Artigo matricial.']) {
       assert.ok(q42.split('\n').includes(s), 'no 4.2: ' + s);
     }

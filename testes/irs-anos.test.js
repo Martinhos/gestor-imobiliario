@@ -278,7 +278,7 @@ describe('o resumo do Anexo F', () => {
     renda('r3', 'c1', '2025-03-01', 500, { periodo: '2025-03' });
     const r = app.resumoFiscal(2025, '');
     perto(r.linhas[0].rendas, 1500, 1e-9);
-    igualA(r.linhas[0].anosAnteriores, [{ ano: 2023, valor: 500 }, { ano: 2024, valor: 500 }]);
+    igualA(r.linhas[0].anosAnteriores, [{ ano: 2023, valor: 500, retencoes: 0 }, { ano: 2024, valor: 500, retencoes: 0 }]);
     perto(r.totais.anosAnteriores, 1000, 1e-9);
     app.fiscoAno = '2025';
     assert.match(app.vFisco(), /Rendas de anos anteriores[\s\S]*respeitam a 2024/);

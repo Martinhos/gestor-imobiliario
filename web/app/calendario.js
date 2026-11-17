@@ -99,8 +99,9 @@ function calPlaneados(de,ate){
   (db.recurring||[]).forEach(r=>{
     if(!r.next||r.muted)return;
     let d=r.next,n=0;
-    // o «Até» do planeado (r.end) também fecha a série: depois dele já não se repete
-    while(d&&d<=ate&&n<40&&!(r.end&&d>r.end)){
+    // o «Até» do planeado (r.end) também fecha a série: depois dele já não se repete;
+    // e a venda do imóvel também (planeados.js:recDepoisDaVenda)
+    while(d&&d<=ate&&n<40&&!(r.end&&d>r.end)&&!recDepoisDaVenda(r,d)){
       if(d>=de)out.push({date:d,rec:r});
       if(r.every==='once')break;
       d=nextDate(d,r.every);n++;

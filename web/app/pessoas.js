@@ -159,8 +159,10 @@ function pesLinhasDaPessoa(p,kind){
   const contactos=(tel?pesKv('Telemóvel',esc(fmtPhone(tel)),'tel:'+fmtPhone(tel).replace(/\s+/g,'')):'')+
     (mail?pesKv('Email',esc(mail),/@/.test(mail)?'mailto:'+mail:''):'');
   /* um NIF que não bate certo diz-se aqui, ao lado do número: é onde se lê
-     antes de ir para o contrato em PDF ou para o Anexo F */
-  const nif=p.nif?esc(fmtNIF(p.nif))+(nifValido(p.nif)===false?'<span class="pes-mau">não bate certo</span>':''):'';
+     antes de ir para o contrato em PDF ou para o Anexo F. Um número
+     estrangeiro com o país não é um erro: não vai ao Anexo F, vai o país (D59) */
+  const nif=p.nif?esc(fmtNIF(p.nif))+(pesNumeroEstrangeiro(p.nif,p.pais)?'<span class="small">número estrangeiro: no Anexo F conta o país</span>'
+    :nifValido(p.nif)===false?'<span class="pes-mau">não bate certo</span>':''):'';
   /* o número e a validade são campos à parte no formulário: a validade
      gravada lê-se aqui mesmo sem o número (o selo do topo só a diz nos dias
      de aviso) */
@@ -169,9 +171,52 @@ function pesLinhasDaPessoa(p,kind){
     pesKv('Data de nascimento',p.birth?dPT(p.birth):'')+pesKv('Estado civil',esc(pesEstadoCivil(p)))+
     pesKv('Nacionalidade',p.nationality&&p.nationality!=='Portuguesa'?esc(p.nationality):'')+
     pesKv('País',esc(p.pais||''))+
-    (kind==='tenant'&&p.retem?pesKv('Retenção na fonte','retém IRS ao pagar a renda'):'')+
+    (kind==='tenant'?pesKv('Retenção na fonte',pesRetencaoTexto(p)):'')+
     pesKv('Morada fiscal',esc(String(p.taxAddress||'').trim()).replace(/\n/g,'<br>'));
   return {contactos,ident};
+}
+/* O que a ficha de um inquilino diz da retenção na fonte: que retém, quando a
+   ficha o diz; num NIF de empresa ou de outra entidade que não uma pessoa
+   (irs-papeis.js:nifColetivo — um sinal, não o critério da lei), que está por
+   confirmar, ou que se confirmou que não retém (retemVisto, D58). Num NIF de
+   pessoa, nada.
+   Recebe: p — o inquilino.
+   Devolve: o texto da linha (sem HTML), ou ''. */
+function pesRetencaoTexto(p){
+  if(!p)return '';
+  if(p.retem)return 'retém IRS ao pagar a renda';
+  if(!nifColetivo(p.nif))return '';
+  return p.retemVisto?'confirmaste que não retém':'por confirmar: uma empresa com contabilidade organizada retém IRS ao pagar a renda';
+}
+/* O «Confirmei: não retém» na ficha de um inquilino empresa (D58): só num NIF
+   coletivo que a ficha não diz que retém nem já se confirmou, e a quem pode
+   alterar a ficha. Uma linha da casa (.pes-mais), com 52px de alvo.
+   Recebe: p — o inquilino.
+   Devolve: o HTML do botão, ou ''. */
+function pesNaoRetemBotao(p){
+  if(!p||p.retem||p.retemVisto||!nifColetivo(p.nif)||!podeEditarInquilino(p))return '';
+  return `<button type="button" class="pes-mais" data-toca="dados" data-click="pesNaoRetem('${jsq(p.id)}')">${ic('check',20)} Confirmei: não retém</button>`;
+}
+/* Toque no «Confirmei: não retém»: grava retemVisto na ficha do inquilino, que
+   cala na Declaração o aviso do inquilino empresa sem retenção (D58), com
+   «Anular». A permissão volta a ver-se no momento de gravar.
+   Recebe: id — o id do inquilino.
+   Devolve: nada — grava e repinta (a ficha aberta repinta-se sozinha). */
+function pesNaoRetem(id){
+  const p=(db.tenants||[]).find(x=>x.id===id);if(!p)return;
+  const recusa=motivoRecusa(casaDoInquilino(p),'tenant.add',p);if(recusa)return toast(recusa);
+  p.retemVisto=true;save();render();
+  comDesfazer('Fica registado que este inquilino não retém.',()=>{const x=(db.tenants||[]).find(y=>y.id===id);if(x)x.retemVisto=false});
+}
+/* O número escrito no NIF é de outro país? Com o país preenchido e um número
+   que nem tem a forma de um NIF português (nove algarismos), não é um erro de
+   dedo: não vai na coluna do NIF do Anexo F, onde conta o país (D59). Um NIF
+   de nove algarismos que não bate certo continua a ser um erro a conferir.
+   Recebe: nif — o número escrito; pais — o país de residência.
+   Devolve: true ou false. */
+function pesNumeroEstrangeiro(nif,pais){
+  const s=String(nif==null?'':nif).replace(/\s/g,'');
+  return !!s&&!!String(pais||'').trim()&&!/^\d{9}$/.test(s);
 }
 /* Uma linha de contrato na ficha de um inquilino: onde, desde e até quando,
    a renda e — num contrato em vigor — o estado da renda. Toca para abrir o
@@ -203,7 +248,8 @@ function personFicha(kind,id){
 }
 /* A ficha de um inquilino (o canvas M-Inquilino): o avatar com o selo do
    contrato, as ações rápidas, onde mora (e onde vai morar, e onde morou), os
-   contactos que tocam, a identificação, os documentos e as notas.
+   contactos que tocam, a identificação (com o «Confirmei: não retém» de um
+   inquilino empresa, pesNaoRetemBotao), os documentos e as notas.
 
    A guarda é a do cargo no imóvel do inquilino, e diz-se ANTES de tudo:
    pode(null,perm) devolve sempre true, e numa ficha só minha não há casa.
@@ -246,7 +292,7 @@ function pesFichaInquilino(p){
     ${pesCartao('Mora em',s.ativos.map(c=>pesLinhaContrato(c,'ativo')).join(''))}
     ${pesCartao('Vai morar em',s.futuros.map(c=>pesLinhaContrato(c,'futuro')).join(''))}
     ${pesCartao('Contactos',L.contactos)}
-    ${pesCartao('Identificação',L.ident)}
+    ${pesCartao('Identificação',L.ident+(ver?pesNaoRetemBotao(p):''))}
     ${pesCartao('Documentos',docs,fs.length?`<span class="small num">${fs.length}</span>`:'')}
     ${pesCartao('Notas',notas)}
     ${pesCartao('Contratos anteriores',s.findos.map(c=>pesLinhaContrato(c,'findo')).join(''))}
@@ -457,12 +503,13 @@ function personBody(){
     <div class="row">
       <label>N.º do Cartão de Cidadão (opcional)<input id="pe_cc" value="${esc(t.cc)}" placeholder="Ex: 12345678 9 ZX4" autocomplete="off"></label>
       <label>Validade do CC<input id="pe_ccv" type="date" value="${t.ccValid||''}"></label></div>
-    <label>NIF<input id="pe_nif" value="${esc(t.nif)}" placeholder="Opcional" inputmode="numeric" data-input="pessoaNifHint()" autocomplete="off"></label>
-    <div class="hint u-mt-n4px" id="pe_nifHint"${pessoaNifHint(t.nif)?'':' hidden'}>${esc(pessoaNifHint(t.nif))}</div>
-    <label>País (opcional; só sem NIF português)<input id="pe_pais" value="${esc(t.pais)}" placeholder="Ex: Espanha" autocomplete="off"></label>
+    <label>NIF<input id="pe_nif" value="${esc(t.nif)}" placeholder="Opcional" inputmode="numeric" data-input="pessoaNifEscrito()" autocomplete="off"></label>
+    <div class="hint u-mt-n4px" id="pe_nifHint"${pessoaNifHint(t.nif,t.pais)?'':' hidden'}>${esc(pessoaNifHint(t.nif,t.pais))}</div>
+    <label>País (opcional; só sem NIF português)<input id="pe_pais" value="${esc(t.pais)}" placeholder="Ex: Espanha" data-input="pessoaNifEscrito()" autocomplete="off"></label>
     <div class="hint u-mt-n4px">Sem NIF português, o Anexo F identifica a pessoa pelo país.</div>
     ${perKind==='tenant'?`<label class="check"><input type="checkbox" id="pe_retem" ${t.retem?'checked':''}> Retém IRS na fonte</label>
-    <div class="hint u-mt-n4px">Uma empresa com contabilidade organizada retém IRS ao pagar a renda. A retenção regista-se em cada renda; aqui fica só o aviso.</div>`:''}
+    <div id="pe_retemVistoL"${pessoaPedeRetemVisto(t.nif,t.retemVisto)?'':' hidden'}><label class="check"><input type="checkbox" id="pe_retemVisto" ${t.retemVisto?'checked':''}> Confirmei que não retém</label></div>
+    <div class="hint u-mt-n4px">Uma empresa com contabilidade organizada retém IRS ao pagar a renda. A retenção regista-se em cada renda; aqui fica só o aviso. Se confirmaste que não retém, a Declaração deixa de o perguntar.</div>`:''}
     <label>Morada fiscal (opcional)<textarea id="pe_addr" class="u-minh-66px" placeholder="Ex: Rua das Flores 12, 1200-195 Lisboa">${esc(t.taxAddress)}</textarea></label>
     <div class="hint">A morada com rua, número, código postal e localidade. Estes dados identificam as partes no contrato em PDF; o NIF e o país entram no resumo do Anexo F.</div>`,
       {icon:'contract',summary:[t.nif?'NIF '+esc(fmtNIF(t.nif)):'',t.cc?'CC':''].filter(Boolean).join(' · ')||'para o contrato'})}
@@ -474,17 +521,40 @@ function personBody(){
 }
 /* A dica por baixo do NIF: avisa quando o dígito de controlo não bate certo — um
    erro de dedo apanhado antes de ir para o contrato em PDF ou para o Anexo F.
-   Vazio não se julga: pode não haver NIF, ou a pessoa ser de fora. Serve nos dois
-   momentos: ao montar o formulário (com o NIF, devolve o texto) e a cada tecla no
-   campo (sem argumento: lê o campo e reescreve a dica no ecrã).
-   Recebe: nif (opcional) — o NIF a avaliar; sem ele, lê o campo pe_nif.
+   Vazio não se julga: pode não haver NIF, ou a pessoa ser de fora. Com o país
+   preenchido, um número que não é um NIF português não vai na coluna do NIF do
+   Anexo F, onde conta o país (D59): um que nem tem a forma de um
+   (pesNumeroEstrangeiro) di-lo só; um de nove algarismos que não bate certo
+   pode ser os dois, e diz os dois. Serve nos dois momentos: ao montar o
+   formulário (com o NIF, devolve o texto) e a cada tecla no NIF ou no país (sem
+   argumento: lê os campos e reescreve a dica no ecrã).
+   Recebe: nif (opcional) — o NIF a avaliar; sem ele, lê os campos pe_nif e
+   pe_pais; pais (opcional) — o país de residência, com o nif.
    Devolve: o texto da dica, ou '' quando não há nada a dizer. */
-function pessoaNifHint(nif){
-  const txt=nifValido(nif===undefined?val('pe_nif'):nif)===false?'Este NIF não bate certo: confere os dígitos.':'';
+function pessoaNifHint(nif,pais){
+  const ler=nif===undefined,n=ler?val('pe_nif'):nif,ps=String((ler?val('pe_pais'):pais)||'').trim();
+  const fora='Um número estrangeiro não vai na coluna do NIF: no Anexo F, conta o país.';
+  const txt=pesNumeroEstrangeiro(n,ps)?fora
+    :nifValido(n)===false?'Este NIF não bate certo: confere os dígitos.'+(ps?' '+fora:''):'';
   /* vazia, a dica esconde-se: um div sem nada ainda abria o gap do formulário */
-  if(nif===undefined){const e=document.getElementById('pe_nifHint');if(e){e.textContent=txt;e.hidden=!txt}}
+  if(ler){const e=document.getElementById('pe_nifHint');if(e){e.textContent=txt;e.hidden=!txt}}
   return txt;
 }
+/* Escreveu-se no NIF ou no país: refaz a dica do NIF (pessoaNifHint) e mostra
+   ou esconde o «Confirmei que não retém», que só faz sentido num NIF de
+   empresa (pessoaPedeRetemVisto).
+   Devolve: nada — mexe na dica e na caixa, no ecrã. */
+function pessoaNifEscrito(){
+  pessoaNifHint();
+  const l=document.getElementById('pe_retemVistoL');
+  if(l)l.hidden=!pessoaPedeRetemVisto(val('pe_nif'),chk('pe_retemVisto'));
+}
+/* O «Confirmei que não retém» aparece no formulário de um inquilino? Num NIF
+   coletivo (irs-papeis.js:nifColetivo), e sempre que já está marcado — para se
+   poder desmarcar.
+   Recebe: nif — o NIF escrito; visto — se já está marcado.
+   Devolve: true ou false. */
+function pessoaPedeRetemVisto(nif,visto){return !!visto||nifColetivo(nif)}
 // Copia os campos do modal para perForm. Chamar antes de repintar ou de
 // mexer nos documentos, senão perde-se o que o utilizador escreveu.
 // Devolve: nada — só atualiza o objeto perForm.
@@ -495,6 +565,9 @@ function collectPerson(){
   t.birth=val('pe_birth');t.cc=val('pe_cc');t.ccValid=val('pe_ccv');
   t.nif=val('pe_nif');t.taxAddress=val('pe_addr');t.pais=val('pe_pais');
   if(document.getElementById('pe_retem'))t.retem=chk('pe_retem');   /* só o inquilino tem a caixa; num proprietário fica o que estava */
+  /* «confirmei que não retém» (D58): só num NIF coletivo, e nunca com o «retém» ligado */
+  if(document.getElementById('pe_retemVisto'))t.retemVisto=chk('pe_retemVisto');
+  t.retemVisto=t.retemVisto===true&&!t.retem&&nifColetivo(t.nif);
   if(document.getElementById('pe_notes'))t.notes=val('pe_notes');
   (t.files||[]).forEach(f=>{const e=document.getElementById('fn_'+f.id);if(e)f.name=e.value});
 }

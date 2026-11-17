@@ -151,6 +151,8 @@ vTransactions = function () {
 // sem criar movimento nenhum (um "once" desaparece de vez). Numa renda de
 // contrato fixa o chão na nova data (planeados.js:recRecusadaFixa), para o
 // arranque seguinte não a puxar de volta ao mês recusado. Grava e re-renderiza.
+// Numa renda, a confirmação lembra que recusar não a tira do IRS
+// (rendaAindaSeDeclara).
 // Recebe: id — o id (string) do plano recorrente cuja ocorrência se recusa.
 // Devolve: nada — abre o modal de confirmação; só ao confirmar é que grava e redesenha.
 CW.rejectRec = function (id) {
@@ -159,7 +161,8 @@ CW.rejectRec = function (id) {
   var once = r.every === 'once';
   confirmModal('Recusar movimento',
     'Salta “' + esc(r.name) + '” desta vez: não cria nenhum movimento' +
-    (once ? ' e, como só acontecia uma vez, deixa de ser pedido.' : ' e passa à data seguinte. O plano continua ativo.'),
+    (once ? ' e, como só acontecia uma vez, deixa de ser pedido.' : ' e passa à data seguinte. O plano continua ativo.') +
+    rendaAindaSeDeclara(r, 1),
     function () {
       recAdvance(r);
       recRecusadaFixa(r);
@@ -167,6 +170,22 @@ CW.rejectRec = function (id) {
       toast(once ? 'Movimento recusado.' : 'Recusado — segue para a próxima data.');
     });
 };
+
+// Recusar uma renda, ou largá-la com o «Começar a partir de hoje», só mexe no
+// planeado: se o dinheiro entrou, a renda declara-se na mesma, e a Declaração
+// só conta as que estão registadas (D04). Uma renda é o que a Declaração lê
+// como tal (irs-papeis.js:irsReceitaDe); a caução e as outras receitas não
+// têm planeado que se recuse assim.
+// Recebe: r — o planeado; n — quantas rendas ficam por registar (1 ou mais).
+// Devolve: a frase (texto, com um espaço à frente), ou '' quando não é uma renda.
+function rendaAindaSeDeclara(r, n) {
+  var t = (r && r.tx) || {};
+  if (t.kind !== 'income') return '';
+  var papel = irsReceitaDe(Object.assign({}, t, { date: r.next || '' })).papel;
+  if (papel !== 'renda') return '';
+  return n === 1 ? ' Se recebeste esta renda, continua a declarar-se no IRS: sem a registar, a Declaração não a conta.'
+    : ' Se recebeste estas rendas, continuam a declarar-se no IRS: sem as registar, a Declaração não as conta.';
+}
 
 /* ---------------- começar um planeado a partir de hoje ----------------
    Um planeado que «começou» numa data passada (o contrato, a hipoteca, um
@@ -178,7 +197,8 @@ CW.rejectRec = function (id) {
    nenhum. Ticket de QA e0450533. */
 
 // O texto da confirmação: quantas datas ficam por registar, de quando a
-// quando, e para onde passa o planeado — ou que termina e é removido.
+// quando, e para onde passa o planeado — ou que termina e é removido. Numa
+// renda, que largá-las não as tira do IRS (rendaAindaSeDeclara).
 // Recebe: r — o planeado; s — o resumo do planeados.js:recComecarHojeResumo.
 // Devolve: HTML (string) para o corpo da confirmação.
 function comecarHojeFrase(r, s) {
@@ -189,7 +209,8 @@ function comecarHojeFrase(r, s) {
     (s.fim ? 'Como não há mais nenhuma data a partir de hoje, o planeado termina e é removido.'
       : 'O próximo fica a <b>' + dPT(s.next) + '</b>.') +
     ((r.tx || {}).loanId ? ' O capital em dívida da hipoteca não muda.' : '') +
-    (r.muted && !s.fim ? ' Os avisos voltam a ficar ligados.' : '');
+    (r.muted && !s.fim ? ' Os avisos voltam a ficar ligados.' : '') +
+    rendaAindaSeDeclara(r, n);
 }
 
 // Começar a partir de hoje: confirma, larga as datas em falta, passa o
@@ -423,6 +444,7 @@ function fillAbrir(r) {
 /* Cria os movimentos de um plano que não é hipoteca, um por data, com o
    valor escrito na lista da janela (fillValores; 0 salta a data) e a
    etiqueta «Estimativa», partidos por imóvel quando o plano é de um grupo.
+   A renda de um contrato leva o mês da data em periodo.
    Recebe: r — o plano; dates — as datas em falta.
    Devolve: quantos movimentos criou (número). */
 function fillCriar(r, dates) {
@@ -432,6 +454,9 @@ function fillCriar(r, dates) {
     if (!(vs[i] > 0)) continue;
     if (tags.indexOf('Estimativa') < 0) tags.push('Estimativa');
     var t = recTx(r, dates[i]);
+    /* a renda guarda o mês a que respeita, como a que se confirma (D88): é o
+       mês da própria data, e fica escrito se a data mudar depois */
+    if (t.kind === 'income' && t.contractId) t.periodo = String(dates[i]).slice(0, 7);
     t.amount = Math.round(vs[i] * 100) / 100;
     t.label = (t.label || r.name) + ' (estimativa)';
     t.tags = (t.tags || []).concat(['Estimativa']);
@@ -492,7 +517,7 @@ CW.doFillMissed = function (id) {
     var n2 = 0, live2 = r, guard2 = 0;
     var tags2 = db.settings.tags || (db.settings.tags = []);
     while (live2 && live2.next && live2.next <= today() && guard2++ < 600) {
-      if (!jaRegistado(live2, live2.next)) {
+      if (!jaRegistado(live2, live2.next) && !recDepoisDaVenda(live2, live2.next)) {
         var t2 = recTx(live2, live2.next);
         t2.label = (t2.label || live2.name) + ' (estimativa)';
         t2.tags = (t2.tags || []).concat(['Estimativa']);

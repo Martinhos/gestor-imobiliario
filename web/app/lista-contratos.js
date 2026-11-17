@@ -35,8 +35,9 @@ function pintarRendasDosGrupos(){
 const CT_ESTADOS_RAPIDOS=[['','Todos'],['on','Em vigor'],['fut','Por começar'],['off','Terminados']];
 /* Os tipos de prazo (prazos.js:prazosDe) cuja chave traz o id do contrato
    logo a seguir ao tipo («oposicao:<id>:<data>»). Os recibos trazem o id do
-   movimento, e chegam ao contrato por ele. */
-const CT_PRAZOS_DO_CONTRATO=['oposicao','fim','aumento','modelo2','cessacao','fev15','rsaa'];
+   movimento, e chegam ao contrato por ele. O «elementos» é o registo dos
+   elementos mínimos de um contrato de antes do Modelo 2 («elementos:<id>»). */
+const CT_PRAZOS_DO_CONTRATO=['oposicao','fim','aumento','modelo2','cessacao','fev15','rsaa','elementos'];
 /* Contratos agrupados por imóvel, como as pranchetas M-Contratos e
    D-Contratos: por cima, os filtros dos Movimentos (vistas.js:lfCabeca,
    montados pelo ctChipsHtml) — a pesquisa sempre à vista com o funil do
@@ -154,7 +155,9 @@ function ctContextoDaLista(){
 function ctDiaMes(iso){return dPT(iso).slice(0,5)}
 /* O selo curto de um prazo do contrato, como o canvas os escreve na lista
    («Oposição até 31/10», «Cessação por comunicar»). A frase inteira (o
-   porquê e o como) está na ficha e no «Pede atenção».
+   porquê e o como) está na ficha e no «Pede atenção». O de fevereiro diz o
+   que se comunica pelo evento do prazo (a duração, a renovação, a cessação);
+   o registo dos elementos mínimos não tem data.
    Recebe: p — o prazo (prazos.js:prazosDe).
    Devolve: o texto (por escapar). */
 function ctTextoDoPrazo(p){
@@ -165,7 +168,11 @@ function ctTextoDoPrazo(p){
     case 'aumento':return 'Aviso do aumento até '+dm;
     case 'modelo2':return passou?'Modelo 2 em atraso':'Modelo 2 até '+dm;
     case 'cessacao':return 'Cessação por comunicar';
-    case 'fev15':return passou?'Duração por comunicar':'Comunicar a duração até '+dm;
+    case 'elementos':return 'Registar no Portal';
+    case 'fev15':
+      if(p.evento==='cessacao')return passou?'Cessação por comunicar':'Comunicar a cessação até '+dm;
+      if(p.evento==='renovacao')return passou?'Renovação por comunicar':'Comunicar a renovação até '+dm;
+      return passou?'Duração por comunicar':'Comunicar a duração até '+dm;
     case 'rsaa':return 'Enviar ao IHRU até '+dm;
     case 'recibos':return 'Recibo por emitir';
   }
@@ -406,8 +413,13 @@ function lpContrato(a){
      entra logo a seguir a Editar, antes do PDF — a ordem de sempre */
   lpExtrasDe('ct',a).forEach(o=>opts.push(o));
   opts.push({label:'Gerar contrato em PDF',icon:'down',act:()=>ctPdfJanela(id)});
-  if(ok)opts.push(ctEstado(c)!=='terminado'?{label:'Terminar contrato',icon:'x',act:()=>endContract(id)}:{label:'Reativar contrato',icon:'check',act:()=>reactivateContract(id)},
-    {label:'Apagar contrato',icon:'trash',act:()=>delContract(id)});
+  /* Terminar ou Reativar pela mesma regra do menu da ficha
+     (contrato.js:ctTerminarOuReativar): um em vigor com o termo passado
+     termina-se (ou renova-se), e não se «reativa»; um por começar não se termina */
+  if(ok){
+    ctTerminarOuReativar(c).forEach(x=>opts.push({label:x.label,icon:x.icon,act:x.fn}));
+    opts.push({label:'Apagar contrato',icon:'trash',act:()=>delContract(id)});
+  }
   return lpShow(ctName(c),opts);
 }
 /* O que os Contratos acrescentam ao menu de toque longo de um IMÓVEL (data-lp
