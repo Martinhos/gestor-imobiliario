@@ -123,6 +123,14 @@ describe('o CSV leva o que o IRS pede', () => {
     assert.match(guardado.mime, /^text\/csv/);
   });
 
+  /* A vírgula decimal e os códigos como ="…" são só do CSV do Anexo F (D74,
+     fisco-exportar.js:fiscoCsvTexto): o dos movimentos não muda de formato,
+     para quem já tem uma folha montada sobre ele. */
+  test('os valores dos movimentos continuam com ponto decimal, e nenhuma célula é um ="…"', () => {
+    rows.forEach((r, i) => assert.match(r[col('valor')], /^-?\d+(\.\d+)?$/, 'linha ' + (i + 1)));
+    assert.ok(linhas.every((l) => !l.includes(';="')), 'sem códigos à maneira do Anexo F');
+  });
+
   test('o cabeçalho acaba nas seis colunas do IRS, e cada linha tem as mesmas colunas', () => {
     assert.deepEqual(cab.slice(-6), ['mes_renda', 'retencao', 'recibo', 'coluna_irs', 'contrato_fisco', 'contrato_at']);
     assert.equal(rows.length, db.transactions.length, 'uma linha por movimento — nenhum comentário parte uma linha');

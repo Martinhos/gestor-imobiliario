@@ -27,6 +27,53 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 77,
+    data: '2026-11-17',
+    titulo: 'A Declaração revista: taxas, avisos e exportação',
+    seccoes: [
+      {
+        titulo: 'Os termos',
+        afeta: ['conta'],
+        itens: [
+          'Os Termos têm uma cláusula nova sobre o IRS: a Declaração, o PDF, o CSV e o guia ajudam-te a preencher o Anexo F, mas quem declara és tu, e o imposto é uma estimativa. Vais ver os termos novos para aceitar.',
+        ],
+      },
+      {
+        titulo: 'As taxas',
+        afeta: ['contratos'],
+        itens: [
+          'Na Declaração, a taxa de cada contrato é a da lei do ano; a que escreveste no contrato aparece ao lado quando é outra.',
+          'Cada renovação conta a partir da taxa da anterior, como faz a AT, e um ano com uma renovação a meio fica com as duas taxas. A comunicação da duração faz-se uma vez por contrato e por renovação, e já não se pede todos os anos.',
+          'O limite dos 2 300 € das rendas moderadas mede-se com as rendas do ano, e não com a renda de hoje. As regras de 2025 e 2026 foram revistas: o quadro 10 com os códigos oficiais, os limites do arrendamento acessível da Portaria 454/2026/1, e a redução de 5 pontos por renda mais baixa também nos contratos de outubro a dezembro de 2023.',
+        ],
+      },
+      {
+        titulo: 'O resumo e os avisos',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'O imposto estimado faz-se titular a titular: a perda de um titular já não baixa o imposto do outro, e nenhuma linha mostra imposto negativo — aparece o prejuízo a reportar, com a condição dos 36 meses.',
+          'As despesas sem regra e as que dependem do caso (os seguros, a água e a luz, os honorários, «Outros») só contam depois de escolheres a coluna do Anexo F, e a Declaração lista-as uma a uma. O AIMI nunca entra nos gastos.',
+          'A Declaração avisa mais: contratos sem finalidade ou sem data de início, rendas depois do fim do contrato sem renovação, retenções que não batem com a renda, meses com duas rendas, rendas antecipadas por registar e rendas sem contrato, com o valor, porque também se declaram.',
+          'Cada linha dos quadros traz o número do campo do Anexo F (4001, 4501…) para preencheres por esta ordem, e no fim da página há o aviso de que quem declara és tu, ao lado do CSV e do PDF.',
+        ],
+      },
+      {
+        titulo: 'O CSV',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'O CSV do Anexo F passa a ter vírgula decimal e duas casas (6147,00), e os códigos (freguesia, natureza, campo) saem com os zeros à esquerda. Se já tinhas uma folha montada sobre ele, confere as fórmulas: as colunas antigas estão no mesmo sítio, e há colunas e linhas novas no fim.',
+        ],
+      },
+      {
+        titulo: 'O guia',
+        afeta: ['app'],
+        itens: [
+          'O guia do IRS das rendas está mais completo: a caução, as rendas isentas e os quadros onde se declaram, a dedução da renda da casa nova (quadro 4.4), o prazo das declarações de substituição e quem entrega o Modelo 44.',
+        ],
+      },
+    ],
+  },
+  {
     v: 76,
     data: '2026-11-17',
     titulo: 'Sem zoom também no browser do telemóvel',
@@ -1781,7 +1828,7 @@ var VERSAO = AVISOS[0].v;
 /* Versão mínima aceite. Subir isto obriga toda a gente a atualizar antes de
    continuar a usar a app — é para quando uma versão antiga passa a estar
    errada, não para empurrar novidades. */
-var VERSAO_MINIMA = 72;
+var VERSAO_MINIMA = 77;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { AVISOS: AVISOS, VERSAO: VERSAO, VERSAO_MINIMA: VERSAO_MINIMA, FUNCIONALIDADES: FUNCIONALIDADES };

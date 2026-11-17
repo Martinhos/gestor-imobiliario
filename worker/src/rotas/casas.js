@@ -6,6 +6,7 @@ import {
   participantsOf, acessoACasa, redistribuirQuotas, avisoDeSaida,
   gravarCasa, comCasaFresca, casaMudou, FRASE_CASA_MUDOU,
   convitesSemCasa, SAIU_DA_CASA,
+  aplicarQuotas, acertarQuotas, validarFora, diaValido, diaEmLisboa, estadoDasQuotas, fecharQuotasHoje,
 } from '../lib/acesso.js';
 import { normalizarPerms } from '../lib/permissoes.js';
 import { servicosDesligados, casaDesligada, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
@@ -75,7 +76,10 @@ async function sairComoColaborador(env, me, houseId, ownerId, houseName) {
    só esperava pelo sim dele passa logo a seguir (passarSeTodosAceitaram). A quota dele vai para os que ficam, na proporção das deles
    (redistribuirQuotas), ownerIds fica com os que ficam, a proposta pendente
    apaga-se (já não bate com os participantes), e cada um dos que ficam
-   recebe um aviso 'casa.sair'. Os saldos e o IRS seguem as quotas novas.
+   recebe um aviso 'casa.sair'. Os saldos seguem as quotas novas; o IRS
+   segue-as a partir de hoje — as de antes vão para o quotasHist da casa até
+   ontem (acesso.js:fecharQuotasHoje), e a Declaração de cada um continua
+   com elas nos dias em que valiam (D29).
    Uma casa com o JSON estragado não se reescreve (perdia-se o resto dela):
    a pessoa sai na mesma, e as quotas ficam por acertar numa proposta.
    Duas saídas ao mesmo tempo (ou uma gravação da ficha a meio) não se
@@ -117,8 +121,10 @@ async function sairDaCasaUmaVez(env, me, houseId, ownerId) {
   const data = casa.data;
   const quotas = data ? redistribuirQuotas(data.ownerShares, me.id, ficam) : null;
   if (data) {
+    const antes = estadoDasQuotas(data, parts);
     if (quotas) data.ownerShares = quotas; else delete data.ownerShares;
     data.ownerIds = ficam;
+    fecharQuotasHoje(data, antes, ficam);
   }
   const t = now();
   const stmts = [
@@ -150,12 +156,75 @@ async function sairDaCasaUmaVez(env, me, houseId, ownerId) {
   return { quotas, porGrupo: !!porGrupo };
 }
 
+/* O corpo de uma proposta de divisão, validado: { shares, fora?, desde? }.
+   - shares: as percentagens entre as contas (só participantes), acertadas a
+     somar 100 (acesso.js:acertarQuotas, D93). Com um dono só pode faltar, e
+     é { eu: 100 }.
+   - fora (opcional, D08): os comproprietários sem conta [{id?, nome, quota}]
+     em % da casa inteira, [] para «não há outros», null para «por
+     confirmar»; sem ele, ficam os que a casa tem (acesso.js:validarFora).
+   - desde (opcional, D29): 'AAAA-MM-DD', o primeiro dia das quotas novas,
+     hoje ou antes (em Lisboa); sem ele, o dia em que a proposta se aplica
+     (e os de fora por confirmar passam a confirmados também para trás:
+     acesso.js:aplicarQuotas).
+   Recebe: b — o corpo lido; parts — os participantes; eu — quem propõe.
+   Devolve: { quotas, fora, desde } (fora undefined sem mudança, desde null
+   sem data) ou { erro } com a frase do 400. */
+function propostaDoCorpo(b, parts, eu) {
+  if (!b || typeof b !== 'object') return { erro: 'Corpo inválido — envia { shares: { utilizador: percentagem } }.' };
+  let shares = b.shares && typeof b.shares === 'object' && !Array.isArray(b.shares) ? b.shares : null;
+  if (!shares && b.shares === undefined && parts.length < 2) shares = { [eu]: 100 };
+  if (!shares) return { erro: 'Corpo inválido — envia { shares: { utilizador: percentagem } }.' };
+  const keys = Object.keys(shares);
+  if (!keys.length || keys.some((k) => !parts.includes(k))) {
+    return { erro: 'A divisão só pode incluir os comproprietários da casa.' };
+  }
+  const q = acertarQuotas(shares);
+  if (q.erro) return q;
+  let fora;
+  if (b.fora !== undefined) {
+    const f = validarFora(b.fora, () => crypto.randomUUID());
+    if (f.erro) return f;
+    fora = f.fora;
+  }
+  let desde = null;
+  if (b.desde !== undefined && b.desde !== null && b.desde !== '') {
+    desde = diaValido(b.desde);
+    if (!desde) return { erro: 'A data em que as quotas mudam não é válida.' };
+    if (desde > diaEmLisboa()) return { erro: 'A data em que as quotas mudam não pode ser depois de hoje.' };
+  }
+  return { quotas: q.quotas, fora, desde };
+}
+
+/* Uma passagem do «aplica-se já» de uma casa com um dono só (a rota
+   repete-a quando outra escrita passou à frente): lê a casa, aplica as
+   quotas com o período que acaba (acesso.js:aplicarQuotas) e grava por cima
+   da revisão lida. Uma proposta pendente de quando havia mais donos cai.
+   Recebe: env — o ambiente do worker; houseId — a casa; parts — os
+   participantes (um só); p — a proposta validada (propostaDoCorpo).
+   Devolve: promessa de null, ou da frase do 409 quando a casa não se lê. */
+async function quotasDeUmDonoUmaVez(env, houseId, parts, p) {
+  const casa = await lerCasa(env, houseId);
+  // uma casa com o JSON estragado não se reescreve (perdia-se o resto dela)
+  if (!casa.data) return 'Este imóvel está ilegível — as quotas não se podem gravar.';
+  aplicarQuotas(casa.data, parts, p.quotas, p.fora, p.desde);
+  await env.DB.batch([
+    gravarCasa(env, houseId, casa.rev, { data: JSON.stringify(casa.data) }, now()),
+    env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(houseId),
+  ]);
+  return null;
+}
+
 /* Uma passagem do aceitar de uma proposta de divisão (a rota repete-a
    quando outra escrita passou à frente): relê a proposta e os participantes,
    junta a minha aprovação e, com todos, aplica as quotas à casa. Duas
    aprovações ao mesmo tempo não se perdem: a aprovação só se grava se a
    proposta ainda estiver como se leu, e a casa por cima da revisão lida
    (acesso.js:gravarCasa) — senão, a recusa 'casa-mudou' faz repetir.
+   Ao aplicar, as quotas novas valem a partir do desde da proposta (o dia em
+   que se aplicam, se não o tiver), os de fora mudam se a proposta os trouxer,
+   e o estado de antes vai para o quotasHist até à véspera
+   (acesso.js:aplicarQuotas).
    Recebe: env — o ambiente do worker; me — quem aprova (da sessão);
    houseId — a casa.
    Devolve: promessa da Response { ok, applied }, o 404 sem proposta ou o
@@ -165,9 +234,14 @@ async function aceitarPropostaUmaVez(env, me, houseId) {
   const row = await env.DB.prepare('SELECT * FROM share_proposals WHERE house_id = ?').bind(houseId).first();
   if (!row) return err(404, 'Não há nenhuma proposta pendente para esta casa.');
   // uma proposta com JSON estragado não se aplica nem derruba a rota: pede-se outra
-  let aprovadas = null, quotas = null;
-  try { aprovadas = JSON.parse(row.approvals); quotas = JSON.parse(row.shares); } catch (e) {}
-  if (!Array.isArray(aprovadas) || !quotas || typeof quotas !== 'object') {
+  let aprovadas = null, quotas = null, fora;
+  try {
+    aprovadas = JSON.parse(row.approvals);
+    quotas = JSON.parse(row.shares);
+    fora = row.fora == null ? undefined : JSON.parse(row.fora);
+  } catch (e) { quotas = null; }
+  if (!Array.isArray(aprovadas) || !quotas || typeof quotas !== 'object'
+    || (fora !== undefined && fora !== null && !Array.isArray(fora))) {
     return err(409, 'Esta proposta está ilegível — faz uma nova.');
   }
   const approvals = new Set(aprovadas);
@@ -175,8 +249,7 @@ async function aceitarPropostaUmaVez(env, me, houseId) {
   if (parts.every((u) => approvals.has(u))) {
     const casa = await lerCasa(env, houseId);
     const data = casa.data || {};
-    data.ownerShares = quotas;
-    data.ownerIds = parts;
+    aplicarQuotas(data, parts, quotas, fora, diaValido(row.desde) || null);
     await env.DB.batch([
       gravarCasa(env, houseId, casa.rev, { data: JSON.stringify(data) }, now()),
       env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ? AND created_at = ?').bind(houseId, row.created_at),
@@ -232,7 +305,8 @@ function respostaREST(op, r) {
 }
 
 /* Rotas das casas e do que vive dentro delas: criar/atualizar e apagar uma
-   casa, propor e confirmar a divisão de quotas entre comproprietários, e os
+   casa, propor e confirmar a divisão de quotas entre comproprietários (com a
+   data em que mudam e os comproprietários sem conta), e os
    put/del de registos da casa e de dados globais do utilizador. Cada escrita
    é uma operação do /api/sync (operacaoREST), escrita pela mesma aplicarOp
    (lib/escritas.js) e travada pelo mesmo contador: o serviço desligado, o
@@ -303,28 +377,26 @@ export async function rotasCasas(c) {
     if (!parts || !parts.includes(me.id)) return err(403, 'Sem acesso a esta casa.');
 
     if (seg.length === 4) {
-      if (parts.length < 2) return err(400, 'A casa não está partilhada — és o único proprietário.');
-      const b = await body(request);
-      const shares = b && typeof b.shares === 'object' && b.shares ? b.shares : null;
-      if (!shares) return err(400, 'Corpo inválido — envia { shares: { utilizador: percentagem } }.');
-      const keys = Object.keys(shares);
-      if (!keys.length || keys.some((k) => !parts.includes(k))) {
-        return err(400, 'A divisão só pode incluir os comproprietários da casa.');
+      const p = propostaDoCorpo(await body(request), parts, me.id);
+      if (p.erro) return err(400, p.erro);
+      // um dono só (o «Só eu», ou a quota dos de fora — D08): não há a quem
+      // pedir o sim, aplica-se já
+      if (parts.length < 2) {
+        let erro;
+        try { erro = await comCasaFresca(() => quotasDeUmDonoUmaVez(env, houseId, parts, p)); }
+        catch (e) { if (casaMudou(e)) return err(409, FRASE_CASA_MUDOU); throw e; }
+        if (erro) return err(409, erro);
+        return json({ ok: true, applied: true }, 201);
       }
-      let total = 0;
-      for (const k of keys) {
-        const v = Number(shares[k]);
-        if (!isFinite(v) || v < 0) return err(400, 'Percentagens inválidas.');
-        total += v;
-      }
-      if (Math.abs(total - 100) > 0.5) return err(400, 'As percentagens têm de somar 100.');
       await env.DB.prepare(
-        `INSERT INTO share_proposals (house_id, proposed_by, shares, approvals, created_at)
-         VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO share_proposals (house_id, proposed_by, shares, approvals, created_at, fora, desde)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (house_id) DO UPDATE SET proposed_by = excluded.proposed_by,
-           shares = excluded.shares, approvals = excluded.approvals, created_at = excluded.created_at`
+           shares = excluded.shares, approvals = excluded.approvals, created_at = excluded.created_at,
+           fora = excluded.fora, desde = excluded.desde`
       )
-        .bind(houseId, me.id, JSON.stringify(shares), JSON.stringify([me.id]), now())
+        .bind(houseId, me.id, JSON.stringify(p.quotas), JSON.stringify([me.id]), now(),
+          p.fora === undefined ? null : JSON.stringify(p.fora), p.desde)
         .run();
       return json({ ok: true, applied: false }, 201);
     }

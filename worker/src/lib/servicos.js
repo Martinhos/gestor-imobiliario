@@ -25,7 +25,8 @@ export const SERVICOS = [
   { id: 'credits', nome: 'Créditos', requer: ['properties'], kinds: [], userKinds: [], casa: false, colab: false },
   { id: 'projections', nome: 'Projeções', requer: [], kinds: [], userKinds: [], casa: false, colab: false },
   { id: 'reports', nome: 'Avaliação', requer: [], kinds: [], userKinds: [], casa: false, colab: false },
-  { id: 'fisco', nome: 'Declaração', requer: [], kinds: [], userKinds: [], casa: false, colab: false },
+  // a Declaração requer os Contratos e os Movimentos (D57): sem eles não há quadro
+  { id: 'fisco', nome: 'Declaração', requer: ['contracts', 'transactions'], kinds: [], userKinds: [], casa: false, colab: false },
 ];
 const POR_ID = new Map(SERVICOS.map((s) => [s.id, s]));
 

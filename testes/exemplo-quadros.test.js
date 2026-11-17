@@ -69,9 +69,12 @@ describe('o exemplo tem contratos no quadro 4.1 e no quadro 4.2', () => {
   test('o contrato novo não estraga o que os outros mostravam', () => {
     // o selo do contrato novo está nos gastos: nenhum aviso de selo esquecido
     assert.ok(!r.avisos.some((a) => /imposto do selo nos gastos/.test(a.texto)), 'sem aviso do selo');
-    // a pintura e a caldeira continuam a ser obras antes do arrendamento do quarto 3
+    // a pintura continua a ser obra antes do arrendamento do quarto 3; a reparação da caldeira
+    // passou a «a confirmar» (D24: reparar o aparelho não é conservação certa) e fica à parte
     const q3 = r.linhas.find((x) => x.nome.includes('Quarto 3'));
     assert.ok(q3 && q3.obras24.valor > 0, 'as obras dos 24 meses continuam no quarto 3');
+    assert.ok(r.aConfirmar.some((a) => /caldeira/i.test(a.nome)), 'a caldeira a confirmar');
+    assert.match(texto(app.fiscoQuadroCard(r, Q.semReducao)), /\d+ despesas? a confirmar não conta/, 'e o cartão do 4.1 di-lo');
     // o prazo do Modelo 2 do c4 e o dos recibos do T2 continuam
     assert.ok(r.avisos.some((a) => /por indicar se foi declarado/.test(a.texto)), 'o contrato por indicar');
     assert.ok(r.avisos.some((a) => /1 renda de \d{4} sem recibo/.test(a.texto)), 'uma renda só sem recibo, a do T2');

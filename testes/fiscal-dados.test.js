@@ -48,8 +48,11 @@ describe('a pessoa guarda o país e a retenção', () => {
 describe('o bloco fiscal do contrato', () => {
   test('um contrato antigo ganha o bloco vazio: por indicar', () => {
     const c = app.normContract({ id: 'C', rent: 500 });
+    // os campos da vaga 1 do IRS (dados.js:normFisco) nascem na omissão; sem comunicações, a marca já fica a 2
     igual(c.fisco, { estado: '', numero: '', finalidade: '', celebracao: '', renovavel: null, renovacoes: [], cessacaoMotivo: '',
-      comunicacoes: {}, rendaAcimaDoLimite: null, rendaAnterior: 0, isencao: '' });
+      cessacao: { data: '', motivo: '' }, comunicacoes: {}, comunicacoesV: 2, rendaAcimaDoLimite: null, rendaAnterior: 0, isencao: '',
+      ihru: '', nrau3536: null, alRegistado2022: null, empresaHabitacao: null, consumosIncluidos: false, obrasSemOutroUso: null,
+      extrasMensais: 0, atualizacao2023: '' });
     assert.ok(app.ctFiscoPorIndicar(c));
     assert.ok(!app.ctDeclarado(c));
     assert.ok(!app.ctNaoDeclarado(c));
@@ -147,7 +150,8 @@ describe('o mapa categoria → coluna do Anexo F', () => {
     assert.equal(m['Condomínio'], 'condominio');
     assert.equal(m['Manutenção e reparações'], 'conservacao');
     assert.equal(m['Obras e benfeitorias / Cozinha'], 'nao', 'beneficiação não é conservação');
-    Object.values(m).forEach((col) => assert.ok(app.IRS_COLUNAS.some((c) => c[0] === col), col + ' é uma coluna que existe'));
+    // o mapa aceita também o 'confirmar' (IRS_MAPA_VALORES); o irsCol de um movimento não
+    Object.values(m).forEach((col) => assert.ok(app.IRS_MAPA_VALORES.some((c) => c[0] === col), col + ' é uma coluna que existe'));
   });
 
   test('a coluna de um movimento: tipo, exclusão, escolha própria, subcategoria, categoria, omissão', () => {
@@ -157,8 +161,9 @@ describe('o mapa categoria → coluna do Anexo F', () => {
     igual(d(app.normTx({ kind: 'expense', category: 'Impostos', sub: 'IMI' })), { col: 'imi', origem: 'sub' });
     igual(d(app.normTx({ kind: 'expense', category: 'Condomínio', sub: 'Quota mensal' })), { col: 'condominio', origem: 'categoria' });
     igual(d(app.normTx({ kind: 'expense', category: 'Mobiliário e equipamento' })), { col: 'nao', origem: 'categoria' });
-    igual(d(app.normTx({ kind: 'expense', category: 'Categoria da Ana' })), { col: 'outros', origem: 'omissao' });
-    igual(d(app.normTx({ kind: 'expense', category: '' })), { col: 'outros', origem: 'omissao' });
+    // sem regra, a despesa fica a confirmar e não conta: na dúvida a app não deduz (D61)
+    igual(d(app.normTx({ kind: 'expense', category: 'Categoria da Ana' })), { col: 'confirmar', origem: 'omissao' });
+    igual(d(app.normTx({ kind: 'expense', category: '' })), { col: 'confirmar', origem: 'omissao' });
     igual(d(app.normTx({ kind: 'expense', category: 'Mobiliário e equipamento', irsCol: 'obras24' })), { col: 'obras24', origem: 'movimento' });
     app.db.settings.exclude[app.excKey('cats', 'Condomínio')] = true;
     igual(d(app.normTx({ kind: 'expense', category: 'Condomínio' })), { col: 'nao', origem: 'excluido' }, 'fora dos totais é fora do IRS');
@@ -170,6 +175,8 @@ describe('o mapa categoria → coluna do Anexo F', () => {
     assert.equal(app.irsColunaNome('imi'), 'IMI');
     assert.equal(app.irsColunaNome('obras24'), 'Obras antes do arrendamento (24 meses)');
     assert.equal(app.irsColunaNome('x'), '');
+    // a coluna do mapa que depende do caso tem nome: o formulário dizia «Pela categoria: » vazio
+    assert.equal(app.irsColunaNome('confirmar'), 'A confirmar');
   });
 });
 
@@ -193,7 +200,9 @@ describe('o NIF', () => {
     assert.equal(app.nifValido('123456789'), true, 'o exemplo clássico bate certo');
     assert.equal(app.nifValido(' 123 456 789 '), true, 'espaços não contam');
     assert.equal(app.nifValido('123456780'), false, 'dígito de controlo errado');
-    assert.equal(app.nifValido('023456789'), false, 'nenhum NIF começa por 0 ou 4');
+    assert.equal(app.nifValido('023456789'), false, 'nenhum NIF começa por 0');
+    assert.equal(app.nifValido('400000008'), false, 'o 4 só com o 5 a seguir (o dígito de controlo bate certo)');
+    assert.equal(app.nifValido('450000001'), true, 'o 45 é dos não residentes (DL 14/2013, D59)');
     assert.equal(app.nifValido('12345678'), false, 'faltam dígitos');
     assert.equal(app.nifValido('210000007'), true);
     assert.equal(app.nifValido(123456789), true, 'aceita número');

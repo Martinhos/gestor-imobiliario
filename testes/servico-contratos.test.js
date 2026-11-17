@@ -544,7 +544,7 @@ describe('desligado: com os outros serviços desligados, os contratos e as visit
     assert.ok(menuDe(app, app.lpVisita, ['vis', 'V1']).includes('Converter em inquilino'));
     // desligados
     app.definirServicosDesligados(['tenants']);
-    igual(app.servicosDesligados(), ['contracts', 'tenants'], 'os contratos requerem os inquilinos');
+    igual(app.servicosDesligados(), ['contracts', 'tenants', 'fisco'], 'os contratos requerem os inquilinos, e a Declaração os contratos (D57)');
     assert.ok(app.servicoLigado('visits'));
     app.tab = 'visits';
     app.render();

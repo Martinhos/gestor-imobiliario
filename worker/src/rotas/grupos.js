@@ -65,6 +65,7 @@ import { json, err, body, now, badId, clientIp, idsDeCasas } from '../lib/http.j
 import { rateLimit } from '../lib/limites.js';
 import { servicosDesligados, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
 import { passarSeTodosAceitaram } from './casas.js';
+import { donosAntes, fecharQuotasDeQuemSaiu } from './conexoes.js';
 
 /* As casas de um grupo, agora (para os pedidos de transferir o controlo que
    esperavam por quem as perde: casas.js:passarSeTodosAceitaram).
@@ -450,6 +451,7 @@ export async function rotasGrupos(c) {
   if (seg.length === 3 && method === 'DELETE') {
     if (!g || g.deleted || g.owner_id !== me.id) return err(404, ERRO_GRUPO);
     const perdidas = await idsDasCasasDoGrupo(env, id);
+    const donos = await donosAntes(env, perdidas);
     await env.DB.batch([
       env.DB.prepare('UPDATE shared_groups SET deleted = 1, updated_at = ? WHERE id = ?').bind(now(), id),
       env.DB.prepare('DELETE FROM shared_group_members WHERE group_id = ?').bind(id),
@@ -458,7 +460,9 @@ export async function rotasGrupos(c) {
       env.DB.prepare('DELETE FROM shared_group_requests WHERE group_id = ?').bind(id),
     ]);
     await auditar(env, eu, 'grupo.apagar', id, g.name);
-    // quem via casas só por este grupo deixou de ser comproprietário delas
+    // quem via casas só por este grupo deixou de ser comproprietário delas:
+    // o período das quotas fecha, e os pedidos de passar o controlo acertam-se
+    await fecharQuotasDeQuemSaiu(env, donos);
     await passarSeTodosAceitaram(env, perdidas);
     return json({ ok: true });
   }
@@ -628,6 +632,9 @@ export async function rotasGrupos(c) {
       await env.DB.prepare('SELECT house_id, added_at FROM shared_group_houses WHERE group_id = ? AND added_by = ?')
         .bind(id, me.id).all()
     ).results.map((r) => [r.house_id, r.added_at]));
+    // os donos das que saem, para o período das quotas fechar onde alguém as perde
+    const saem = [...antes.keys()].filter((h) => !houseIds.includes(h));
+    const donos = await donosAntes(env, saem);
     const t = now();
     const stmts = [env.DB.prepare('DELETE FROM shared_group_houses WHERE group_id = ? AND added_by = ?').bind(id, me.id)];
     for (const h of houseIds) {
@@ -645,7 +652,8 @@ export async function rotasGrupos(c) {
     }
     await env.DB.batch(stmts);
     await auditar(env, eu, 'grupo.imoveis', id, houseIds.join(','));
-    await passarSeTodosAceitaram(env, [...antes.keys()].filter((h) => !houseIds.includes(h)));
+    await fecharQuotasDeQuemSaiu(env, donos);
+    await passarSeTodosAceitaram(env, saem);
     return json({ ok: true });
   }
 
@@ -663,8 +671,10 @@ export async function rotasGrupos(c) {
     // de todo), quem a pôs
     const donoDaCasa = (row.owner_id || row.added_by) === me.id;
     if (!dono && !donoDaCasa) return err(403, 'Só o dono do grupo ou o dono do imóvel o podem remover.');
+    const donos = await donosAntes(env, [hid]);
     await env.DB.prepare('DELETE FROM shared_group_houses WHERE group_id = ? AND house_id = ?').bind(id, hid).run();
     await auditar(env, eu, 'grupo.remover-imovel', id, hid);
+    await fecharQuotasDeQuemSaiu(env, donos);
     await passarSeTodosAceitaram(env, [hid]);
     return json({ ok: true });
   }
@@ -680,12 +690,15 @@ export async function rotasGrupos(c) {
     if (!sair && !(await souMembro(env, id, uid))) return err(404, 'Essa pessoa não está no grupo.');
     // sair ou ser removido leva as casas que essa pessoa pôs
     const perdidas = await idsDasCasasDoGrupo(env, id);
+    const donos = await donosAntes(env, perdidas);
     await env.DB.batch([
       env.DB.prepare('DELETE FROM shared_group_members WHERE group_id = ? AND user_id = ?').bind(id, uid),
       env.DB.prepare('DELETE FROM shared_group_houses WHERE group_id = ? AND added_by = ?').bind(id, uid),
     ]);
     if (sair) await auditar(env, eu, 'grupo.sair', id, g.owner_id);
     else await auditar(env, eu, 'grupo.remover', uid, id);
+    // quem sai perde as casas do grupo, e os outros as que ele pôs: o período das quotas fecha
+    await fecharQuotasDeQuemSaiu(env, donos);
     await passarSeTodosAceitaram(env, perdidas);
     return json({ ok: true });
   }

@@ -14,10 +14,17 @@ function ownersOfProp(p){return (p.ownerIds||[]).filter(id=>owner(id))}
 /* quota-parte de cada proprietário (fração). Sem percentagens definidas: partes iguais.
    Recebe: p — o imóvel (objeto; aguenta null).
    Devolve: objeto {idDoDono: fração 0–1}; vazio se o imóvel não tiver donos com ficha. */
-function sharesOf(p){
-  const os=ownersOfProp(p||{}),out={};if(!os.length)return out;
-  const raw=(p&&p.ownerShares)||{};
-  const has=o=>raw[o]!==undefined&&raw[o]!==null&&raw[o]!==''&&isFinite(Number(raw[o]))&&Number(raw[o])>=0;
+function sharesOf(p){return quotasEntre(ownersOfProp(p||{}),(p&&p.ownerShares)||{})}
+/* As frações de uma lista de donos pelas percentagens escritas: a regra do
+   sharesOf, sem olhar para as fichas (um dono que já saiu ou apagou a conta
+   continua a contar num período antigo das quotas). O servidor tem a mesma
+   (worker/src/lib/acesso.js:fracoesDasQuotas).
+   Recebe: os — os ids dos donos (array); raw — o ownerShares ({id: percentagem}).
+   Devolve: objeto {idDoDono: fração 0–1}; vazio sem donos. */
+function quotasEntre(os,raw){
+  const out={};if(!os.length)return out;
+  raw=raw&&typeof raw==='object'?raw:{};
+  const has=o=>Object.prototype.hasOwnProperty.call(raw,o)&&raw[o]!==undefined&&raw[o]!==null&&raw[o]!==''&&isFinite(Number(raw[o]))&&Number(raw[o])>=0;
   const given=os.filter(has),blank=os.filter(o=>!has(o));
   if(!given.length){os.forEach(o=>{out[o]=1/os.length});return out}
   const sumG=sum(given.map(o=>Number(raw[o])));
@@ -26,6 +33,121 @@ function sharesOf(p){
   if(!(tot>0)){os.forEach(o=>{out[o]=0});return out}
   os.forEach(o=>{out[o]=has(o)?Number(raw[o])/tot:(blank.length?rest/blank.length/tot:0)});
   return out;
+}
+/* ---------- As quotas com data e os comproprietários sem conta (D08, D29) ----------
+   A quota de cada um muda com uma data. O que valia antes de cada mudança está
+   em p.quotasHist — [{ate:'AAAA-MM-DD', ownerIds, ownerShares, fora}], o que
+   valia até esse dia, inclusive —, e o de hoje é o ownerIds/ownerShares/
+   comproprietariosFora do imóvel. Na nuvem só o servidor os escreve (a
+   proposta, sair, uma conta apagada: worker/src/lib/acesso.js:aplicarQuotas);
+   sem nuvem, o formulário do imóvel com quotasFecharPeriodo. O ownerShares é
+   relativo entre as contas, como nos Saldos (o sharesOf não muda); os de fora
+   (comproprietariosFora: null por confirmar, [] não há outros, ou
+   [{id, nome, quota}] com a quota em % da casa inteira) abatem à casa toda:
+   a quota fiscal de cada conta é ownerShares × (100 − soma dos de fora)/100. */
+/* Os comproprietários sem conta de um estado, limpos: só os que têm nome e
+   quota entre 0 e 100.
+   Recebe: v — o fora guardado (null, [] ou a lista).
+   Devolve: null (por confirmar) ou a lista [{id, nome, quota}]. */
+function quotasForaLimpos(v){
+  if(!Array.isArray(v))return null;
+  return v.filter(f=>f&&typeof f.nome==='string'&&f.nome.trim()&&isFinite(Number(f.quota))&&Number(f.quota)>0&&Number(f.quota)<100)
+    .map(f=>({id:typeof f.id==='string'?f.id:'',nome:f.nome,quota:Number(f.quota)}));
+}
+/* Os períodos guardados de um imóvel, válidos e por ordem da data em que acabam.
+   Recebe: p — o imóvel (aguenta null).
+   Devolve: array de {ate, ownerIds, ownerShares, fora} (cópias rasas). */
+function quotasPeriodos(p){
+  return ((p&&Array.isArray(p.quotasHist))?p.quotasHist:[])
+    .filter(e=>e&&typeof e==='object'&&/^\d{4}-\d{2}-\d{2}$/.test(String(e.ate||'')))
+    .map(e=>Object.assign({},e)).sort((a,b)=>a.ate<b.ate?-1:a.ate>b.ate?1:0);
+}
+/* O estado das quotas em vigor numa data: o primeiro período guardado que
+   acaba nesse dia ou depois; sem nenhum (ou sem data), o de hoje.
+   Recebe: p — o imóvel; data — 'AAAA-MM-DD' (vazio ou outra coisa: o de hoje).
+   Devolve: {ownerIds, ownerShares, fora, atual} — atual true quando é o de hoje. */
+function quotasEstadoNaData(p,data){
+  const d=/^\d{4}-\d{2}-\d{2}/.test(String(data||''))?String(data).slice(0,10):'';
+  const e=d?quotasPeriodos(p).find(x=>x.ate>=d):null;
+  if(e)return {ownerIds:Array.isArray(e.ownerIds)?e.ownerIds:[],ownerShares:e.ownerShares||{},fora:quotasForaLimpos(e.fora),atual:false};
+  return {ownerIds:(p&&p.ownerIds)||[],ownerShares:(p&&p.ownerShares)||{},fora:quotasForaLimpos(p&&p.comproprietariosFora),atual:true};
+}
+/* A quota fiscal de cada dono com conta numa data: a fração da casa inteira,
+   com as quotas em vigor nesse dia e os de fora abatidos (CIRS art. 19.º).
+   Hoje — ou sem histórico — são as do sharesOf (as dos Saldos) vezes o que os
+   de fora deixam; num período antigo, as desse período, sem olhar para as
+   fichas (quem saiu continua a contar nos dias em que era dono).
+   Recebe: p — o imóvel (aguenta null); data — 'AAAA-MM-DD' do movimento (vazio: hoje).
+   Devolve: objeto {idDoDono: fração 0–1 da casa inteira}; vazio sem donos. */
+function quotasFiscais(p,data){
+  if(!p)return {};
+  const e=quotasEstadoNaData(p,data);
+  const base=e.atual?sharesOf(p):quotasEntre([...new Set(e.ownerIds.filter(x=>typeof x==='string'&&x))],e.ownerShares);
+  const fator=Math.max(0,100-Math.min(100,sum((e.fora||[]).map(f=>f.quota))))/100,out={};
+  Object.keys(base).forEach(o=>{out[o]=base[o]*fator});
+  return out;
+}
+/* Os comproprietários sem conta numa data, com a quota em % da casa inteira.
+   Recebe: p — o imóvel (aguenta null); data — 'AAAA-MM-DD' (vazio: hoje).
+   Devolve: array de {nome, quota} — vazio quando não há, e também quando
+   está por confirmar (quotasForaConfirmados diz qual dos dois). */
+function quotasForaNaData(p,data){
+  if(!p)return [];
+  return (quotasEstadoNaData(p,data).fora||[]).map(f=>({nome:f.nome,quota:f.quota}));
+}
+/* Os comproprietários sem conta numa data estão confirmados — a pessoa disse
+   quem são, ou que não há outros (o «Só eu»).
+   Recebe: p — o imóvel (aguenta null); data — 'AAAA-MM-DD' (vazio: hoje).
+   Devolve: true/false (false quando estão por confirmar). */
+function quotasForaConfirmados(p,data){
+  return !!p&&quotasEstadoNaData(p,data).fora!==null;
+}
+/* Os dias de um ano em que as quotas fiscais de algum dono mudaram (o
+   primeiro dia das novas). Só os que partem o ano: uma mudança a 1 de janeiro
+   vale o ano inteiro, e não entra; um período guardado igual ao seguinte
+   também não.
+   Recebe: p — o imóvel (aguenta null); ano — o ano dos rendimentos (número ou texto).
+   Devolve: array de 'AAAA-MM-DD', por ordem. */
+function quotasMudaramNoAno(p,ano){
+  const a=String(ano),out=[];
+  if(!p||!/^\d{4}$/.test(a))return out;
+  const igual=(x,y)=>{const k=[...new Set([...Object.keys(x),...Object.keys(y)])];return k.every(o=>Math.abs((x[o]||0)-(y[o]||0))<1e-9)};
+  quotasPeriodos(p).forEach(e=>{
+    const dia=addDays(e.ate,1);
+    if(dia.slice(0,4)!==a||dia===a+'-01-01'||out.includes(dia))return;
+    if(!igual(quotasFiscais(p,e.ate),quotasFiscais(p,dia)))out.push(dia);
+  });
+  return out.sort();
+}
+/* Fecha o período das quotas que acaba antes de desde, sem nuvem (na nuvem é
+   o servidor: worker/src/lib/acesso.js:quotasComHistorico, a mesma regra):
+   se desde vem depois do último período guardado, o estado antes entra no
+   fim com ate = a véspera de desde; se cai dentro de um período guardado (uma
+   correção, ou uma mudança com efeitos para trás), esse período acaba na
+   véspera e os seguintes saem. Dois períodos seguidos iguais juntam-se.
+   Chama-se com o estado de antes de gravar as quotas novas no imóvel.
+   Recebe: p — o imóvel (alterado: p.quotasHist); antes — o estado que acaba,
+   {ownerIds, ownerShares, fora} (ou um imóvel, com o comproprietariosFora);
+   desde — 'AAAA-MM-DD', o primeiro dia das quotas novas.
+   Devolve: o p.quotasHist novo. */
+function quotasFecharPeriodo(p,antes,desde){
+  const lista=quotasPeriodos(p);
+  const valido=/^\d{4}-\d{2}-\d{2}$/.test(String(desde||''));
+  const ate=valido?addDays(desde,-1):'';
+  if(!p||!ate){if(p)p.quotasHist=lista;return lista}
+  const a=antes||{},fora=a.fora!==undefined?a.fora:a.comproprietariosFora;
+  const ids=[...new Set((Array.isArray(a.ownerIds)?a.ownerIds:[]).filter(x=>typeof x==='string'&&x))],sh={};
+  ids.forEach(o=>{const v=(a.ownerShares||{})[o];if(v!==undefined&&v!==null&&v!==''&&isFinite(Number(v))&&Number(v)>=0)sh[o]=Number(v)});
+  const i=lista.findIndex(e=>e.ate>=ate);
+  let out;
+  if(i===-1)out=lista.concat([{ate,ownerIds:ids,ownerShares:sh,fora:quotasForaLimpos(fora)}]);
+  else{out=lista.slice(0,i+1);out[i].ate=ate}
+  /* dois seguidos iguais: o primeiro sai (o segundo cobre os dois períodos) */
+  const fiscal=e=>{const q=quotasEntre([...new Set((e.ownerIds||[]).filter(x=>typeof x==='string'&&x))],e.ownerShares),
+    f=quotasForaLimpos(e.fora)||[],k=Math.max(0,100-sum(f.map(x=>x.quota)))/100;
+    return JSON.stringify(Object.keys(q).sort().map(o=>[o,Math.round(q[o]*k*1e9)]).filter(x=>x[1]))+'|'+f.map(x=>x.nome.trim()+'|'+Math.round(x.quota*100)).sort().join(';')};
+  p.quotasHist=out.filter((e,k)=>k===out.length-1||fiscal(e)!==fiscal(out[k+1]));
+  return p.quotasHist;
 }
 // quota-parte (fração 0–1) do proprietário oid no imóvel p; 0 se não for dono.
 // Recebe: p — o imóvel (objeto); oid — o id do proprietário.

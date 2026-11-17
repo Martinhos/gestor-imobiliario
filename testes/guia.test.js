@@ -12,7 +12,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { paginaGuia, seccoesDoGuia, CSS_GUIA, CAMINHO_GUIA, H1 } from '../worker/src/guia-vista.js';
+import { paginaGuia, seccoesDoGuia, CSS_GUIA, CAMINHO_GUIA, H1, GUIA_REVISTO, dataPorExtenso } from '../worker/src/guia-vista.js';
 import { CSS_LANDING } from '../worker/src/landing.js';
 
 const html = await paginaGuia({ raiz: true }).text();
@@ -112,7 +112,8 @@ describe('o guia «Declarar as rendas»', () => {
       'e-balcão',
       'No Anexo F da declaração Modelo 3',
       'o mais seguro é não a deduzir até teres uma resposta escrita da AT',
-      '9 de novembro de 2026',
+      // a ficha diz a data da última verificação, por extenso (a de GUIA_REVISTO)
+      'Verificado a ' + dataPorExtenso(GUIA_REVISTO),
       'sem teres escolhido as regras da categoria B',
     ]) assert.ok(t.includes(frase), 'falta: ' + frase);
   });
@@ -156,7 +157,8 @@ describe('o guia «Declarar as rendas»', () => {
     for (const frase of ['rendimentos prediais, da categoria F do IRS', 'a Modelo 3, com o Anexo F',
       'de 1 de abril a 30 de junho do ano seguinte ao das rendas', 'de 1 de abril a 30 de junho de 2027 (artigo 60.º, n.º 1)',
       '25 % nas rendas de arrendamento habitacional (artigo 72.º, n.º 2)', '28 % nas outras rendas prediais',
-      '10 % nas rendas de 2026 a 2029', '2 300 € no continente', 'artigo 45.º-C do Estatuto dos Benefícios Fiscais',
+      '10 % nas rendas de 2026 a 2029', '2,5 vezes o valor da retribuição mínima mensal prevista para 2026',
+      '(2 300 €, com a retribuição de 920 € do Decreto-Lei n.º 139/2025)', 'artigo 45.º-C do Estatuto dos Benefícios Fiscais',
       'menos 20 pontos percentuais',
       '(artigo 72.º, n.º 23)', '(artigo 72.º, n.º 20)', 'até 15 de fevereiro do ano seguinte', 'podes optar por englobar',
       '(artigo 22.º, n.º 5)']) assert.ok(t1.includes(frase), '1, falta: ' + frase);
@@ -200,10 +202,10 @@ describe('o guia «Declarar as rendas»', () => {
     const p3 = /<section class="bloco" id="como-preencher"[\s\S]*?\n {2}<\/section>/.exec(html)[0];
     const t3 = texto(p3);
     const grupos = [...p3.matchAll(/<div class="grupo">\s*<h3>([^<]+)<\/h3>/g)].map((m) => m[1]);
-    assert.deepEqual(grupos, ['Linha a linha', 'O quadro de cada contrato', 'Os outros quadros', 'Se os gastos passarem as rendas',
-      'Depois de entregares', 'O que mudou em 2025'], 'os grupos da parte 3, pela ordem');
+    assert.deepEqual(grupos, ['Linha a linha', 'A caução', 'O quadro de cada contrato', 'Os outros quadros',
+      'Se os gastos passarem as rendas', 'Depois de entregares', 'O que mudou em 2025'], 'os grupos da parte 3, pela ordem');
     for (const frase of [
-      'O B só se usa quando és casado ou unido de facto e optam pela tributação conjunta',
+      'O B só existe quando és casado ou unido de facto e optam pela tributação conjunta',
       'Quadro 8: as rendas de anos anteriores', 'no 8A, se englobares', '(artigo 74.º, n.º 1)',
       'até ao quinto ano anterior ao do pagamento (artigo 74.º, n.º 3)',
       'Quadro 9: o Adicional ao IMI (AIMI)', 'Não entra nos gastos da linha, mas abate-se ao imposto',
@@ -237,8 +239,9 @@ describe('o guia «Declarar as rendas»', () => {
   test('as fontes apontam só para domínios oficiais', () => {
     const fontes = /<ul class="fontes">([\s\S]*?)<\/ul>/.exec(html)[1];
     const urls = [...fontes.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
-    assert.equal((fontes.match(/<li>/g) || []).length, 22 + 9, 'as vinte e duas das partes 1 a 3 e as nove das deduções');
-    assert.equal(urls.length, 31, 'todas com o endereço confirmado');
+    // as oito de 2026-11-17 (auditoria ao IRS): a 454/2026/1, o DL 68/2019, os EBF 71.º-A, 74.º-A e 46.º-A, o CIRS 59.º, o OC 20256 e a 98-A/2015
+    assert.equal((fontes.match(/<li>/g) || []).length, 22 + 8 + 9, 'as trinta das partes 1 a 3 e as nove das deduções');
+    assert.equal(urls.length, 39, 'todas com o endereço confirmado');
     assert.equal(new Set(urls).size, urls.length, 'nenhuma repetida');
     for (const u of urls) {
       assert.match(u, /^https:\/\/(?:info\.portaldasfinancas\.gov\.pt|irs\.portaldasfinancas\.gov\.pt|diariodarepublica\.pt)\//, u);
@@ -337,7 +340,8 @@ describe('o guia «Declarar as rendas»', () => {
     assert.equal(a.inLanguage, 'pt-PT');
     assert.equal(a.url, url);
     assert.equal(a.mainEntityOfPage, url);
-    assert.equal(a.dateModified, '2026-11-09', 'a data fixa da revisão');
+    assert.equal(a.dateModified, GUIA_REVISTO, 'a data da última verificação');
+    assert.equal(a.datePublished, '2026-11-09', 'e a de publicação, que não muda com as revisões');
     assert.deepEqual([a.publisher['@type'], a.publisher.name], ['Organization', 'Rendorium']);
     assert.match(a.publisher.logo.url, /^https:\/\/rendorium\.com\/icon-512\.png$/);
     assert.doesNotMatch(previa, /ld\+json/, 'a pré-visualização não se apresenta como a original');

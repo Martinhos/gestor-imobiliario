@@ -356,10 +356,14 @@ describe('a Política de Privacidade do rasto', () => {
   });
 
   test('a versão dos documentos subiu junta nos dois lados', () => {
-    // 2026-11-12: a leitura da FINE pelo Workers AI saiu do dev (KAN-14)
-    assert.equal(L.version, '2026-11-12');
+    /* 2026-11-12: a leitura da FINE pelo Workers AI saiu do dev (KAN-14); a
+       versão volta a subir com cada mudança dos documentos (a 2026-11-17, a
+       cláusula do IRS, KAN-126): aqui guarda-se que não desce dessa e que o
+       cliente, o servidor e a data escrita na política andam juntos. */
+    assert.ok(L.version >= '2026-11-12', L.version);
     assert.equal(TERMS_VERSION, L.version, 'a que o servidor compara');
-    assert.match(texto, /Em vigor desde 12\/11\/2026/);
+    const [a, m, d] = L.version.split('-');
+    assert.ok(texto.includes('Em vigor desde ' + d + '/' + m + '/' + a), 'a política diz a data da versão');
   });
 
   test('a leitura da FINE pelo Workers AI está na política: só a pedido, nada guardado além do anexo, e a Cloudflare a fazê-la', () => {

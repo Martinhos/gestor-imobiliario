@@ -328,7 +328,7 @@ function txFicha(id){
   const renda=t.kind==='income',recibo=renda&&ehRenda(t)&&ctDeclarado(ct);
   const col=t.kind==='expense'?irsColunaDe(t):null;
   const origem=col?({movimento:'escolhida neste movimento',sub:'pela subcategoria',categoria:'pela categoria',
-    omissao:'sem regra, cai em Outros',excluido:'não conta: categoria fora dos totais'}[col.origem]||''):'';
+    omissao:'sem regra: escolhe a coluna',lei:'fixo por lei: vai ao quadro 9',excluido:'não conta: categoria fora dos totais'}[col.origem]||''):'';
   return ficha([
     {tipo:'nota',valor:esc(lote?recusaDoLote(t):motivoRecusa(t.propertyId,'tx.add',t))},
     /* a cor do valor é a da lista (txTomDoTipo): a prestação roxa, a dívida em

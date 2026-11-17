@@ -22,7 +22,7 @@
 window.LEGAL = (function () {
   'use strict';
 
-  var VERSION = '2026-11-12';
+  var VERSION = '2026-11-17';
   var OPERADOR = 'Martinho Fé Santos';
   var MORADA = '';                       // apartado, escritório virtual ou sede
   var NIF = '';                          // obrigatório quando houver cobrança
@@ -81,6 +81,18 @@ window.LEGAL = (function () {
       'por advogado, que podem não refletir a legislação em vigor nem a tua situação concreta. Deves ' +
       'submetê-las a revisão profissional antes de as assinar. Não assumimos responsabilidade pelo ' +
       'conteúdo, validade ou consequências dos documentos gerados.') +
+    /* A cláusula do IRS (2026-11-17, auditoria ao IRS): o texto que o Martinho
+       aprovou, palavra por palavra. Não se reescreve sem ele, e mudá-lo sobe a
+       versão dos dois lados; o testes/irs-termos-aviso.test.js confere-o à
+       letra. O aviso curto da Declaração (irs.js:IRS_AVISO) diz o mesmo. */
+    p('O resumo do IRS (a Declaração, o PDF, o CSV, o texto copiado e o guia) é um <b>apoio ao ' +
+      'preenchimento</b>: faz-se com o que registas na aplicação e com as regras fiscais tal como as ' +
+      'entendemos à data, que podem estar desatualizadas ou ser provisórias enquanto não sai o modelo ' +
+      'oficial do ano. O imposto mostrado é uma estimativa. Não é aconselhamento fiscal nem substitui um ' +
+      'contabilista certificado.') +
+    p('A declaração é tua: confirmas cada valor no Portal das Finanças antes de a entregar, e és tu o ' +
+      'responsável pelo que declaras. Não assumimos responsabilidade por imposto em falta, coimas, juros ' +
+      'ou correções que resultem de uma declaração, mesmo que preenchida a partir da aplicação.') +
 
     h('3. Fase experimental (demonstração)') +
     p('A aplicação encontra-se em <b>fase experimental</b>: é uma versão de demonstração, disponibilizada ' +

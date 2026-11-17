@@ -59,9 +59,38 @@ describe('as versões por ano dos rendimentos', () => {
       assert.ok(v.modelo.texto.length > 40);
       assert.equal(v.taxas.habitacional, 25); assert.equal(v.taxas.naoHabitacional, 28);
       igualA(v.colunas, ['conservacao', 'condominio', 'imi', 'selo', 'taxas', 'outros']);
-      igualA(v.naturezas, { habitacional: '07', naoHabitacional: '06' });
+      igualA(v.naturezas, { habitacional: '07', naoHabitacional: '06', indemnizacao: '05', outras: '02' });
       assert.ok(v.novidades.length >= 1 && v.passos.length >= 5);
       v.passos.forEach((p) => assert.ok(p.titulo && p.texto.length > 20));
+      v.passos.forEach((p) => assert.doesNotMatch(p.texto, /\b(?:19|20)\d{2}\b/, 'os passos não escrevem anos: ' + p.titulo));
+    }
+  });
+
+  test('cada versão tem os campos da auditoria (KAN-126), com a forma que o motor e a página leem', () => {
+    for (const a of ANOS) {
+      const v = copia(app.irsAno(a));
+      // uma cópia acabada de sair do guião ainda não foi revista: revisto '' e ias null
+      assert.match(v.revisto, /^(\d{4}-\d{2}-\d{2})?$/, 'a data da última revisão');
+      if (v.revisto) assert.ok(typeof v.ias === 'number' && v.ias > 400 && v.ias < 1000, 'o IAS do ano');
+      else assert.ok(v.ias === null && v.modelo.oficial === false, 'sem revisão, o IAS fica por confirmar e o modelo provisório');
+      for (const k of ['quadro10', 'quadro5', 'colunasNomes', 'naturezasTexto']) assert.ok(v[k] && typeof v[k] === 'object', k);
+      assert.ok(v.quadro10.regimes.length === 10 && v.quadro10.motivos.length === 12);
+      v.quadro10.regimes.forEach((x) => assert.ok(/^\d{2}$/.test(x.codigo) && x.texto && (x.n || x.isencao), 'regime ' + x.codigo));
+      v.quadro10.motivos.forEach((x) => assert.ok(/^\d{2}$/.test(x.codigo) && x.texto && x.curto && x.para && x.quem, 'motivo ' + x.codigo));
+      v.colunas.forEach((k) => assert.ok(v.colunasNomes.apos[k], 'o nome do impresso de ' + k));
+      assert.equal(v.quadros.mudanca100km, '4.4'); assert.equal(v.quadros.sublocacao, '5'); assert.equal(v.quadros.cessados, '10');
+      const L = v.taxas.limiteRendaAlta;
+      assert.ok(Array.isArray(L.portaria) && L.portaria.length >= 1 && L.portaria[0].desde === L.desde);
+      L.portaria.forEach((p) => assert.ok(p.portaria && p.valoresDa && p.texto && /^\d{4}-\d{2}-\d{2}$/.test(p.desde) && (p.ate === '' || /^\d{4}-\d{2}-\d{2}$/.test(p.ate))));
+      v.taxas.duracao.forEach((r) => r.escaloes.forEach((e) => assert.ok([2, 3, 4, 5].includes(e.n), 'n do escalão')));
+      const isens = v.isencoes;
+      assert.ok(['paa', 'pma', 'pmae', 'prerau', 'al'].every((id) => isens.some((x) => x.id === id)));
+      isens.forEach((x) => {
+        if (x.finalidade) assert.ok(Array.isArray(x.finalidade) && x.finalidade.every((f) => ['hp', 'hnp', 'nh'].includes(f)), x.id);
+        for (const k of ['desde', 'celebradoAte']) if (x[k] != null) assert.match(x[k], /^\d{4}-\d{2}-\d{2}$/, x.id + '.' + k);
+        if (x.ateAno != null) assert.ok(Number.isInteger(x.ateAno), x.id);
+        if (x.pede != null) assert.ok(['nrau3536', 'alRegistado2022'].includes(x.pede), x.id);
+      });
     }
   });
 
@@ -94,10 +123,14 @@ describe('as taxas de cada ano', () => {
     assert.equal(r('2024-03-15', '2034-03-14'), 10);
     assert.equal(r('2024-01-01', '2043-12-31'), 5);
     assert.equal(r('2024-01-01', '2028-12-31', [{ inicio: '2029-01-01', fim: '2033-12-31' }]), 15, 'a renovação ainda não começou em 2025');
-    const longo = ct({ start: '2014-01-01', end: '2018-12-31', fisco: { finalidade: 'hp', renovacoes: [
-      { inicio: '2024-01-01', fim: '2028-12-31' }, { inicio: '2029-01-01', fim: '2033-12-31' }, { inicio: '2034-01-01', fim: '2038-12-31' },
-      { inicio: '2039-01-01', fim: '2043-12-31' }, { inicio: '2044-01-01', fim: '2048-12-31' }, { inicio: '2049-01-01', fim: '2053-12-31' }] } });
-    assert.equal(app.irsRate(longo, 2025), 13);
+    // renovações seguidas, como as do «Renovar…» (desde a 2.1.1 o c.end vai com a última, e o
+    // período inicial acaba na véspera da primeira); 2 500 € para os 10 % das rendas moderadas
+    // (2026 a 2029) não esconderem a duração
+    const longo = ct({ rent: 2500, start: '2023-11-01', end: '2028-10-31', fisco: { finalidade: 'hp', renovacoes: [
+      { inicio: '2028-11-01', fim: '2033-10-31' }, { inicio: '2033-11-01', fim: '2038-10-31' }, { inicio: '2038-11-01', fim: '2043-10-31' },
+      { inicio: '2043-11-01', fim: '2048-10-31' }, { inicio: '2048-11-01', fim: '2053-10-31' }] } });
+    assert.equal(app.irsRate(longo, 2025), 15, 'o contrato inicial');
+    assert.equal(app.irsRate(longo, 2029), 13, 'a primeira renovação igual: −2');
     assert.equal(app.irsRate(longo, 2050), 5, 'nunca abaixo do mínimo');
     const curtaDepois = ct({ rent: 2500, start: '2024-01-01', end: '2028-12-31', fisco: { finalidade: 'hp', renovacoes: [{ inicio: '2029-01-01', fim: '2030-12-31' }] } });
     assert.equal(app.irsRate(curtaDepois, 2029), 25, 'uma renovação de dois anos não tem redução (e acima de 2 300 € não há os 10 %)');
@@ -361,6 +394,9 @@ describe('o guião do ano novo (scripts/nova-versao-irs.js)', () => {
       assert.match(txt, /modelo:\{oficial:false,/);
       assert.match(txt, new RegExp('Ainda sem novidades confirmadas para ' + novo));
       assert.doesNotMatch(txt, new RegExp("ano:" + ult + ","));
+      assert.match(txt, /\brevisto:'',/, 'ninguém reviu a cópia');
+      assert.match(txt, /\bias:null,/, 'o IAS é do ano: fica por confirmar');
+      assert.equal((txt.match(/celebradoAte:'\d{4}-\d{2}-\d{2}'/g) || []).join(), (readFileSync(new URL('web/app/irs-' + ult + '.js', RAIZ), 'utf8').match(/celebradoAte:'\d{4}-\d{2}-\d{2}'/g) || []).join(), 'as datas da lei copiam-se como estão');
       const ok = (rel, re, n) => assert.equal((readFileSync(join(tmp, rel), 'utf8').match(re) || []).length, n, rel);
       ok('web/index.html', new RegExp('<script src="app/irs-' + ult + '\\.js"></script>\\r?\\n<script src="app/irs-' + novo + '\\.js"></script>', 'g'), 1);
       ok('web/sw.js', new RegExp("'irs-" + novo + "'", 'g'), 1);
@@ -373,6 +409,8 @@ describe('o guião do ano novo (scripts/nova-versao-irs.js)', () => {
       runInNewContext('function registarAnoIrs(v){versoes.push(v)}\n' + txt, ctx);
       assert.equal(ctx.versoes[0].ano, novo);
       assert.equal(ctx.versoes[0].passos.length, copia(app.irsAno(ult)).passos.length, 'os passos vêm iguais, com os marcadores');
+      assert.equal(ctx.versoes[0].revisto, ''); assert.equal(ctx.versoes[0].ias, null);
+      assert.deepEqual(copia(ctx.versoes[0].quadro10), copia(app.irsAno(ult)).quadro10, 'as tabelas do quadro 10 vêm iguais até alguém as confirmar');
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

@@ -96,7 +96,8 @@ describe('o estado com serviços desligados', () => {
     await desligar(env, D, 'properties');
     const st = await estado(env, D);
     assert.equal(st.status, 200);
-    assert.deepEqual(st.servicos.desligados, ['properties', 'contracts', 'visits', 'colaboradores', 'credits']);
+    // a Declaração cai com os Contratos (D57)
+    assert.deepEqual(st.servicos.desligados, ['properties', 'contracts', 'visits', 'colaboradores', 'credits', 'fisco']);
     assert.deepEqual(st.houses, []);
     assert.deepEqual(st.records, []);
     assert.deepEqual(st.roles, []);
@@ -118,7 +119,7 @@ describe('o estado com serviços desligados', () => {
     const { env, D } = await armar();
     await desligar(env, D, 'transactions');
     const st = await estado(env, D);
-    assert.deepEqual(st.servicos.desligados, ['transactions', 'recurring']);
+    assert.deepEqual(st.servicos.desligados, ['transactions', 'recurring', 'fisco'], 'a Declaração requer os Movimentos (D57)');
     assert.deepEqual(kinds(st.records), ['contract', 'tenant', 'visit']);
     assert.deepEqual(kinds(st.userRecords), ['profile', 'settings']);
     assert.deepEqual(st.houses.map((h) => h.id).sort(), ['H1', 'H2']);
@@ -156,7 +157,7 @@ describe('o estado com serviços desligados', () => {
     assert.deepEqual(kinds(antes.records), ['contract', 'rec', 'tenant', 'tx'], 'o contabilista vê estes quatro');
     await desligar(env, C, 'transactions');
     const st = await estado(env, C);
-    assert.deepEqual(st.servicos.desligados, ['transactions', 'recurring']);
+    assert.deepEqual(st.servicos.desligados, ['transactions', 'recurring', 'fisco']);
     assert.deepEqual(kinds(st.records), ['contract', 'tenant']);
     assert.equal(st.houses.length, 1, 'a casa de colaboração continua a vir');
     assert.ok(st.houses[0].collab, 'com o cargo');
@@ -167,7 +168,7 @@ describe('o estado com serviços desligados', () => {
     await env.DB.prepare('INSERT INTO user_services (user_id, service, enabled, updated_at, updated_by) VALUES (?, ?, 0, 1, ?)')
       .bind(D.id, 'contracts', '').run();
     const st = await estado(env, D);
-    assert.deepEqual(st.servicos.desligados, ['contracts']);
+    assert.deepEqual(st.servicos.desligados, ['contracts', 'fisco'], 'o fecho ao ler: a Declaração cai com os Contratos (D57)');
     assert.deepEqual(kinds(st.records), ['rec', 'tenant', 'tx', 'visit']);
     assert.equal(st.houses.length, 2);
   });

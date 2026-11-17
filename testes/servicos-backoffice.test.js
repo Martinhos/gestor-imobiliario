@@ -30,7 +30,7 @@ const listar = async (env, eu, id) => corpoDe(await chamar(env, eu, 'GET', rota(
 const mudar = (env, eu, id, servico, ligado) => chamar(env, eu, 'PUT', rota(id, servico), { ligado });
 const desligados = (lista) => lista.filter((s) => !s.ligado).map((s) => s.id);
 
-const SEM_IMOVEIS = ['properties', 'contracts', 'visits', 'colaboradores', 'credits'];
+const SEM_IMOVEIS = ['properties', 'contracts', 'visits', 'colaboradores', 'credits', 'fisco'];
 
 /* -------------------------------- rotas -------------------------------- */
 
@@ -49,7 +49,7 @@ describe('as rotas dos serviços', () => {
     assert.equal(r.servicos.find((s) => s.id === 'properties').nome, 'Imóveis');
   });
 
-  test('rotas: PUT desligar grava e devolve o fecho — sem Imóveis caem Contratos, Visitas, Colaboradores e Créditos', async () => {
+  test('rotas: PUT desligar grava e devolve o fecho — sem Imóveis caem Contratos, Visitas, Colaboradores, Créditos e a Declaração', async () => {
     const env = ambiente();
     const id = await novaConta(env);
     const r = await corpoDe(await mudar(env, SUPORTE, id, 'properties', false));
@@ -60,7 +60,7 @@ describe('as rotas dos serviços', () => {
     const linhas = (await env.DB.prepare(
       'SELECT service, enabled, updated_by FROM user_services WHERE user_id = ? ORDER BY service'
     ).bind(id).all()).results;
-    assert.equal(linhas.length, 5, 'o fecho está escrito, linha a linha');
+    assert.equal(linhas.length, 6, 'o fecho está escrito, linha a linha');
     for (const l of linhas) { assert.equal(l.enabled, 0); assert.equal(l.updated_by, 's1', 'quem mexeu fica na linha'); }
     const depois = await listar(env, SUPORTE, id);
     assert.deepEqual(desligados(depois.servicos), SEM_IMOVEIS, 'o GET concorda com o PUT');
@@ -85,9 +85,9 @@ describe('as rotas dos serviços', () => {
     let r = await corpoDe(await mudar(env, MASTER, id, 'properties', true));
     assert.equal(r.status, 200);
     assert.ok(r.servicos.find((s) => s.id === 'properties').ligado);
-    assert.deepEqual(desligados(r.servicos), ['contracts', 'visits', 'colaboradores', 'credits'],
+    assert.deepEqual(desligados(r.servicos), ['contracts', 'visits', 'colaboradores', 'credits', 'fisco'],
       'os dependentes ficam desligados de propósito — o suporte liga-os um a um');
-    for (const s of ['contracts', 'visits', 'colaboradores', 'credits']) {
+    for (const s of ['contracts', 'visits', 'colaboradores', 'credits', 'fisco']) {
       r = await corpoDe(await mudar(env, MASTER, id, s, true));
       assert.equal(r.status, 200, s);
     }

@@ -123,6 +123,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-16 · Os cartões dos pedidos entram nas regras de Human Tests, e o back office sem zoom (KAN-137, KAN-138)
 - 2026-11-16 · Confirmar um planeado regista o movimento no dia em que se confirma (KAN-141)
 - 2026-11-17 · A pinça trava-se no próprio toque: o Samsung Internet passa por cima do viewport (KAN-137)
+- 2026-11-17 · A vaga 1 da auditoria ao IRS: dados, motor, versões, termos, guia e a Declaração (KAN-126)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4151,3 +4152,61 @@ fazer zoom»; no iOS e na APK, onde há, não se paga.
 Rejeitado: o touch-action:none no html (travava também a rolagem da página) e pendurar o ouvinte só
 quando o segundo dedo pousa (o browser decide se um toque espera pela página quando o primeiro dedo
 pousa, e um ouvinte novo a meio já não conta).
+
+## 2026-11-17 · A vaga 1 da auditoria ao IRS: dados, motor, versões, termos, guia e a Declaração (KAN-126)
+A auditoria de 2026-11-13 (KAN-124) achou 125 defeitos confirmados no IRS da app. A vaga 1 corrige os que não precisam
+dos formulários novos (esses são das vagas 2 a 4). As decisões que ficam:
+
+- **Os termos** têm a cláusula do IRS que o Martinho aprovou, palavra por palavra, no §2 a seguir às minutas: o resumo
+  é um apoio ao preenchimento, o imposto é uma estimativa, quem declara é a pessoa. A versão dos documentos passa de
+  2026-11-12 a 2026-11-17 nos dois lados (legal.js:VERSION, http.js:TERMS_VERSION): toda a gente aceita de novo depois
+  do promove. O aviso curto (irs.js:IRS_AVISO) vai em todas as saídas da Declaração e no guia.
+- **A Declaração requer os Contratos e os Movimentos** (D57): sem eles o quadro ficava vazio e as rendas iam a «sem
+  contrato». Uma conta que os tenha desligados perde a Declaração no promove.
+- **Na Declaração a taxa é a da lei do ano** (Q9/D17, art. 72.º); a escrita no contrato fica como nota e aviso, e
+  continua a mandar fora da Declaração (as projeções, a renda líquida).
+- **As renovações dos dois regimes contam-se pelo OC 20217/2020** (Q1/D40): cada uma a partir da taxa do período
+  anterior, com o limite global de 10 pontos, nunca pior do que a do seu escalão e nunca acima da anterior. Substitui
+  a leitura «renovações de igual duração» de 2026-10-08. Uma renovação que vem de um período sem redução (2019 a 23 %
+  renovado por 5 anos; 3 anos a 25 % renovado por 5) fica com a taxa do escalão da renovação, 15 % (o Martinho, a
+  2026-11-17: «15 %, o do escalão»). O bónus do n.º 24 não entra na cadeia.
+- **O n.º 24 do art. 72.º vale desde 7/10/2023** (Lei 56/2023), e não desde 1/1/2024 — corrige a de 2026-10-12.
+- **A dispensa dos recibos usa o IAS do ano das rendas** (o folheto do Modelo 44 e a FAQ 5929; a FAQ 5937 diz o do ano
+  da dispensa — fica INCERTO, com o limite mais baixo).
+- **As categorias que o IRS lê têm um identificador fixo** (Q6/D19): o nome muda à vontade. Uma categoria renomeada
+  antes da migração fica sem id, porque não se adivinha.
+- **Na dúvida, a app não deduz**: o que não tem regra, e o que depende do caso (os seguros, a água e luz, a caldeira,
+  os serviços profissionais, «Outros»), fica «a confirmar» e só conta depois de a pessoa escolher a coluna. O AIMI
+  nunca é gasto (D66).
+- **O papel das receitas**: «Reembolsos › Condomínio» sem contrato abate ao gasto do condomínio, sem aviso (Q7: «não
+  faz sentido ser o inquilino a pagar renda sendo que é um reembolso do condomínio»); com contrato é renda. O «Fora
+  dos totais» só se ignora dentro das Rendas: fora delas, uma receita excluída fica fora. Nas despesas, o IMI, o selo
+  e as Devoluções ao inquilino contam mesmo fora dos totais.
+- **O imposto estimado é titular a titular** (CIRS art. 55.º): a perda de um titular nunca abate às rendas do outro,
+  e nenhuma linha tem imposto negativo. A falta a pagar do KPI e do PDF já conta com o abate estimado do AIMI.
+- **A regularização do n.º 20** (D10, vaga 2) segue a lei: a taxa da duração efetivamente decorrida do período em que
+  o contrato acabou (irs.js:irsTaxaDecorrida), e não «taxa base menos a da linha», que o plano dizia.
+- **As quotas com data**: uma proposta leva os comproprietários sem conta e o dia em que muda (migração 0030); o dia
+  é o de Lisboa; a soma acerta-se na última quota (0,05 pontos por percentagem); com um dono só aplica-se logo. Uma
+  data para trás corta os períodos seguintes (é o que deixa corrigir uma data errada); sem data, confirmar os de fora
+  vale também para trás, nos períodos por confirmar; passar de «por confirmar» a «não há outros» não abre período; na
+  purga, a quota de quem apaga a conta sai, com histórico. Sair, apagar a conta, deixar de partilhar e tirar a casa
+  de um grupo fecham o período, e a proposta pendente cai. Substitui o «Quotas por data ficam para outra vez» de
+  2026-10-22.
+- **As migrações das definições sobem uma vez à nuvem** (nucleo.js:definicoesDaBase): sem isso, a escolha de
+  propósito de uma pessoa numa chave migrada voltava a «a confirmar» na leitura seguinte. Uma conta sem as marcas no
+  servidor envia as definições uma vez, mesmo sem nenhum valor mudado.
+- **As isenções do 6H (rendas antigas) e do 6F (ex-alojamento local)** estão nas versões, mas o formulário do contrato
+  só as oferece quando chegarem as perguntas que as confirmam, na vaga 3 (o Martinho, 2026-11-17: «Esconder até à
+  vaga 3»).
+- **O guia** segue a AT na caução (OC 20256) e diz as rendas isentas, os quadros 4.4/5/6D/6F/6H, o prazo do 8B, a quem
+  é o Modelo 44 e os limites do n.º 23 desde a Portaria 454/2026/1; a montra estima à taxa do ano; sem ressalva no
+  hero (Q8). Ficam para o Martinho rever antes do promove: o texto novo do guia, as regiões autónomas no limite dos
+  2 300 € (D109) e se um contrato de 2024 a agosto de 2026 se mede, nas rendas de 2026, pela tabela antiga ou pela
+  nova (D78).
+- **Iguais à omissão do plano** (o Martinho, 2026-11-17): várias frações por contrato não se suportam (Q3: a falta e a
+  frase); sem as letras F e D/DG (Q4: a nota); sem regras de 2023 e 2024 (Q5: o aviso vermelho); imóvel no
+  estrangeiro sem estimativa (Q12); o n.º 24 com a renda de hoje (Q2).
+
+Por decidir (vaga 2): quem envia a migração das comunicações (c.fisco.comunicacoesV) de um contrato partilhado, que
+hoje não sobe à nuvem; e remover uma categoria com id.

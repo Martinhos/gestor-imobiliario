@@ -122,7 +122,8 @@ function ESTADO(o = {}) {
       data: { id: 'H1', name: 'T2 Lisboa', rooms: [] } }],
     records: o.semCasa ? [] : records,
     userRecords: o.semUser ? [] : [
-      { kind: 'settings', id: 'main', updatedAt: 1, data: {} },
+      // as definições de uma conta já migrada: sem as marcas, sobem uma vez (nucleo.js:definicoesDaBase)
+      { kind: 'settings', id: 'main', updatedAt: 1, data: { catsV: 2, irsMapaV: 2 } },
       { kind: 'profile', id: 'main', updatedAt: 1, data: { id: 'EU', name: 'Eu' } },
     ],
     roles: [], collaborators: [], invites: [], shareLink: null,

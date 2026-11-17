@@ -203,7 +203,9 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
     desfazerDom = domCom({ c_rent: '800' });
     app.collectCt();
     igual(app.cForm.fisco, { estado: 'naoDeclarado', numero: '1234567', finalidade: 'hp', celebracao: '', renovavel: true, renovacoes: [], cessacaoMotivo: '',
-      comunicacoes: {}, rendaAcimaDoLimite: null, rendaAnterior: 0, isencao: '' });
+      cessacao: { data: '', motivo: '' }, comunicacoes: {}, comunicacoesV: 2, rendaAcimaDoLimite: null, rendaAnterior: 0, isencao: '',
+      ihru: '', nrau3536: null, alRegistado2022: null, empresaHabitacao: null, consumosIncluidos: false, obrasSemOutroUso: null,
+      extrasMensais: 0, atualizacao2023: '' });
   });
 });
 
@@ -332,11 +334,19 @@ describe('o formulário do movimento', () => {
     assert.match(html, /Pela categoria: IMI/);
     for (const [, rotulo] of app.IRS_COLUNAS) assert.ok(html.includes(app.esc(rotulo)), 'a coluna «' + rotulo + '»');
     assert.match(html, /Só o que pagaste para obter a renda entra/);
-    // a primeira opção segue a categoria e a subcategoria
-    app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Impostos' });
+    // a primeira opção segue a categoria e a subcategoria (os «Impostos» sem subcategoria
+    // passaram a «a confirmar» na vaga 1 do IRS, dados.js:IRS_MAPA0; o condomínio não mudou)
+    app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Condomínio' });
+    assert.match(app.txBody(), /Pela categoria: Condomínio/);
+    app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Impostos', sub: 'Taxas municipais' });
     assert.match(app.txBody(), /Pela categoria: Taxas autárquicas/);
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Manutenção e reparações', sub: 'Pragas' });
     assert.match(app.txBody(), /Pela categoria: Conservação e manutenção/);
+    // a regra que depende do caso, e a omissão, dizem «A confirmar» — e não «Pela categoria: » vazio
+    app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Outros' });
+    assert.match(app.txBody(), /Pela categoria: A confirmar</);
+    app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Categoria da Ana' });
+    assert.match(app.txBody(), /Pela categoria: A confirmar</);
     // com uma coluna escolhida à mão, a primeira opção continua a dizer a regra — e a escolha fica marcada
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Impostos', sub: 'IMI', irsCol: 'obras24' });
     html = app.txBody();
@@ -448,9 +458,13 @@ describe('a ficha do movimento', () => {
     // o font-weight:400 da origem passou à classe utilitária: o atributo é class="small u-fw-400"
     const linha = (h) => { const m = /<span>Anexo F<\/span><b>([^<]*)(?:<span class="small(?: [^"]*)?"[^>]*>([^<]*)<\/span>)?<\/b>/.exec(h); assert.ok(m, 'a linha Anexo F'); return [m[1].trim(), m[2] || '']; };
     igual(linha(despesa({ category: 'Impostos', sub: 'IMI' })), ['IMI', 'pela subcategoria']);
-    igual(linha(despesa({ category: 'Impostos' })), ['Taxas autárquicas', 'pela categoria']);
+    igual(linha(despesa({ category: 'Condomínio' })), ['Condomínio', 'pela categoria']);
     igual(linha(despesa({ category: 'Impostos', sub: 'IMI', irsCol: 'obras24' })), ['Obras antes do arrendamento (24 meses)', 'escolhida neste movimento']);
-    igual(linha(despesa({ category: 'Categoria inventada' })), ['Outros gastos', 'sem regra, cai em Outros']);
+    // sem regra fica a confirmar (irs-papeis.js:irsColunaDe, D61); o texto da origem é do
+    // movimento.js (a folha do formulário do movimento muda-o), por isso só se confere a coluna
+    assert.equal(linha(despesa({ category: 'Categoria inventada' }))[0], 'A confirmar');
+    // o AIMI é «não dedutível» fixo, mesmo com outra coluna escolhida no movimento (D66)
+    assert.equal(linha(despesa({ category: 'Impostos', sub: 'AIMI', irsCol: 'outros' }))[0], 'Não dedutível');
     app.db.settings.exclude = { 'cats:Fora': true };
     igual(linha(despesa({ category: 'Fora' })), ['Não dedutível', 'não conta: categoria fora dos totais']);
     assert.doesNotMatch(renda(), /Anexo F/, 'uma renda não tem coluna');

@@ -153,7 +153,7 @@ describe('o PDF do Anexo F', () => {
     assert.ok(t.includes('Arroios · T2 Arroios · titular A'));
     assert.ok(t.includes('Arroios · T2 Arroios · titular B'));
     assert.ok(t.includes('Benfica longo · T1 Benfica · titular B'), 'o T1 Benfica, só do Bruno, entra pela letra dele');
-    assert.ok(t.includes('1 contrato com rendas em 2025 · a tua parte e a do titular B'), 'o Arroios conta uma vez');
+    assert.ok(t.some((s) => s.startsWith('1 contrato com rendas em 2025 · a tua parte e a do titular B')), 'o Arroios conta uma vez');
     assert.ok(t.includes('2 contratos nos quadros 4.1 e 4.2'));
     assert.ok(t.includes('6 250,00 €'), 'metade das rendas do Arroios, em cada linha');
   });
@@ -195,16 +195,13 @@ describe('o PDF do Anexo F', () => {
   });
 });
 
+/* Desde o D57 a Declaração requer os Contratos: o escritor do PDF (do serviço
+   Contratos) vem sempre com ela, e sem os Contratos não há Declaração. */
 describe('sem o serviço Contratos', () => {
-  test('não há escritor: um aviso a dizer porquê, e nada descarregado', async () => {
+  test('a Declaração traz o escritor com ela, e cai quando os Contratos se desligam', () => {
     const so = comPdf(carregarServico(['fisco'], { hoje: '2026-03-15' }));
-    assert.equal(typeof so.PDF, 'undefined', 'o escritor é do serviço Contratos');
-    let baixou = false; const ditos = [];
-    so.downloadBytes = () => { baixou = true; };
-    so.toast = (m) => { ditos.push(m); };
-    await so.fiscoPdf();
-    assert.equal(baixou, false);
-    assert.equal(ditos.length, 1);
-    assert.match(ditos[0], /^O PDF faz-se com o serviço Contratos\. O serviço Contratos está desligado nesta conta\./);
+    assert.equal(typeof so.PDF, 'function', 'o escritor é do serviço Contratos, que a Declaração requer');
+    so.definirServicosDesligados(['contracts']);
+    assert.ok(!so.servicoLigado('fisco'), 'sem os Contratos não há Declaração');
   });
 });

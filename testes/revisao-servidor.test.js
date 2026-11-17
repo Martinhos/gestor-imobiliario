@@ -48,7 +48,7 @@ const limite = async (env, chave) => env.DB.prepare('SELECT n FROM rate_limits W
 
 const kinds = (lista) => lista.map((r) => r.kind).sort();
 const frase = FRASE_DESLIGADO;
-const SEM_IMOVEIS = ['properties', 'contracts', 'visits', 'colaboradores', 'credits'];
+const SEM_IMOVEIS = ['properties', 'contracts', 'visits', 'colaboradores', 'credits', 'fisco'];
 
 /* O cenário (o mesmo de servicos-servidor.test.js): D é dono de H1
    (partilhada com P, comproprietário) e de H2, com um registo de cada kind
@@ -127,7 +127,7 @@ describe('os desligados são de quem pede: colaborador e dono não se tocam', ()
     // o contabilista desliga: o dono continua igual, e ele deixa de ver e de gravar
     await desligar(env, C, 'transactions');
     const stC = await estado(env, C);
-    assert.deepEqual(stC.servicos.desligados, ['transactions', 'recurring']);
+    assert.deepEqual(stC.servicos.desligados, ['transactions', 'recurring', 'fisco']);
     assert.deepEqual(kinds(stC.records), ['contract', 'tenant']);
     assert.deepEqual(await sync(env, C, [
       { op: 'put', scope: 'record', houseId: 'H1', kind: 'tx', id: 'xd', data: { label: 'outro' } },
@@ -327,7 +327,7 @@ describe('o back office: cadeia, rasto, linhas antigas e permissões', () => {
     let ultimo = (await auditoria(env)).pop();
     assert.equal(ultimo.alvo, D.id);
     assert.equal(ultimo.quem, 's1');
-    assert.match(ultimo.detalhe, /properties — desligados agora: properties, contracts, visits, colaboradores, credits/);
+    assert.match(ultimo.detalhe, /properties — desligados agora: properties, contracts, visits, colaboradores, credits, fisco/);
     const linhas = await linhasDe(env, D);
     assert.deepEqual(linhas.map((l) => l.service).sort(), [...SEM_IMOVEIS].sort());
     for (const l of linhas) { assert.equal(l.enabled, 0); assert.equal(l.updated_by, 's1'); }
@@ -348,12 +348,12 @@ describe('o back office: cadeia, rasto, linhas antigas e permissões', () => {
     // ligar o pai: só ele; os dependentes ficam à espera, um a um
     r = await corpoDe(await mudar(env, MASTER, D.id, 'properties', true));
     assert.equal(r.status, 200);
-    assert.deepEqual(desligadosDa(r.servicos), ['contracts', 'visits', 'colaboradores', 'credits']);
+    assert.deepEqual(desligadosDa(r.servicos), ['contracts', 'visits', 'colaboradores', 'credits', 'fisco']);
     ultimo = (await auditoria(env)).pop();
     assert.equal(ultimo.acao, 'conta.servico.ligar.feito');
-    assert.match(ultimo.detalhe, /properties — desligados agora: contracts, visits, colaboradores, credits/);
+    assert.match(ultimo.detalhe, /properties — desligados agora: contracts, visits, colaboradores, credits, fisco/);
     st = await estado(env, D);
-    assert.deepEqual(st.servicos.desligados, ['contracts', 'visits', 'colaboradores', 'credits']);
+    assert.deepEqual(st.servicos.desligados, ['contracts', 'visits', 'colaboradores', 'credits', 'fisco']);
     assert.deepEqual(st.houses.map((h) => h.id).sort(), ['H1', 'H2'], 'as casas voltaram');
     assert.deepEqual(kinds(st.records), ['rec', 'tenant', 'tx'], 'contratos e visitas ainda não');
     assert.deepEqual(st.roles, [], 'os Colaboradores ainda não');
@@ -361,20 +361,20 @@ describe('o back office: cadeia, rasto, linhas antigas e permissões', () => {
     assert.equal(p.enabled, 1);
     assert.equal(p.updated_by, 'm1');
 
-    for (const s of ['contracts', 'visits', 'colaboradores', 'credits']) {
+    for (const s of ['contracts', 'visits', 'colaboradores', 'credits', 'fisco']) {
       r = await corpoDe(await mudar(env, SUPORTE, D.id, s, true));
       assert.equal(r.status, 200, s);
     }
     assert.deepEqual(desligadosDa(r.servicos), []);
     ultimo = (await auditoria(env)).pop();
-    assert.match(ultimo.detalhe, /^credits — tudo ligado$/);
+    assert.match(ultimo.detalhe, /^fisco — tudo ligado$/);
     st = await estado(env, D);
     assert.deepEqual(st.servicos.desligados, []);
     assert.deepEqual(kinds(st.records), ['contract', 'rec', 'tenant', 'tx', 'visit']);
     assert.equal(st.roles.length, 2);
     // cada PUT deixou a intenção e o desfecho, sempre aos pares
     const todas = await acoes();
-    assert.equal(todas.length, 14, '7 PUT × (intenção + desfecho)');
+    assert.equal(todas.length, 16, '8 PUT × (intenção + desfecho)');
     for (let i = 0; i < todas.length; i += 2) assert.ok(todas[i + 1].startsWith(todas[i] + '.'), todas[i] + ' → ' + todas[i + 1]);
   });
 
@@ -469,10 +469,10 @@ describe('ligar, esconder e ler os serviços de uma conta: as regressões', () =
     assert.deepEqual(await servicosDesligados(env, D.id), SEM_IMOVEIS, 'antes: o fecho');
     const r = await corpoDe(await mudar(env, SUPORTE, D.id, 'properties', true));
     assert.equal(r.status, 200);
-    assert.deepEqual(desligadosDa(r.servicos), ['contracts', 'visits', 'colaboradores', 'credits'],
+    assert.deepEqual(desligadosDa(r.servicos), ['contracts', 'visits', 'colaboradores', 'credits', 'fisco'],
       'os dependentes ficam desligados — o suporte liga-os um a um, como quando o fecho foi escrito');
-    assert.deepEqual((await estado(env, D)).servicos.desligados, ['contracts', 'visits', 'colaboradores', 'credits']);
-    assert.match((await auditoria(env)).pop().detalhe, /desligados agora: contracts, visits, colaboradores, credits/);
+    assert.deepEqual((await estado(env, D)).servicos.desligados, ['contracts', 'visits', 'colaboradores', 'credits', 'fisco']);
+    assert.match((await auditoria(env)).pop().detalhe, /desligados agora: contracts, visits, colaboradores, credits, fisco/);
   });
 
   // revisão dos serviços, A.2-2

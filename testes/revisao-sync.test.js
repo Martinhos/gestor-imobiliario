@@ -90,7 +90,8 @@ function ESTADO(o) {
       data: { id: 'H1', name: 'T2 Lisboa', rooms: [] } }],
     records,
     userRecords: [
-      { kind: 'settings', id: 'main', updatedAt: 1, data: {} },
+      // as definições de uma conta já migrada: sem as marcas, sobem uma vez (nucleo.js:definicoesDaBase)
+      { kind: 'settings', id: 'main', updatedAt: 1, data: { catsV: 2, irsMapaV: 2 } },
       { kind: 'profile', id: 'main', updatedAt: 1, data: { id: 'EU', name: 'Eu' } },
     ],
     roles: [], collaborators: [], invites: [], shareLink: null,
@@ -106,8 +107,8 @@ describe('o estado aplicado no cliente (applyState) com serviços desligados', (
     const { app } = montar();
     app.tab = 'contracts';
     aplicar(app, ESTADO({ desligados: ['contracts'], semContrato: true }));
-    igual(app.servicosDesligados(), ['contracts']);
-    assert.equal(app.localStorage.getItem('gi_servicos_off'), '["contracts"]');
+    igual(app.servicosDesligados(), ['contracts', 'fisco'], 'a Declaração cai com os Contratos (D57)');
+    assert.equal(app.localStorage.getItem('gi_servicos_off'), '["contracts","fisco"]');
     assert.equal(app.tab, 'dashboard', 'o separador desligado dá lugar ao primeiro que abre');
     assert.equal(app.setPage, '');
     // um separador ligado fica onde está
@@ -116,7 +117,7 @@ describe('o estado aplicado no cliente (applyState) com serviços desligados', (
     assert.equal(app.tab, 'transactions');
     // o fecho aplica-se também no cliente: sem Imóveis caem os que os requerem
     aplicar(app, ESTADO({ desligados: ['properties'], semContrato: true, semTx: true }));
-    igual(app.servicosDesligados(), ['properties', 'contracts', 'visits', 'colaboradores', 'credits']);
+    igual(app.servicosDesligados(), ['properties', 'contracts', 'visits', 'colaboradores', 'credits', 'fisco']);
     // um estado SEM o campo servicos volta a ligar tudo
     const st = ESTADO();
     delete st.servicos;
@@ -339,7 +340,7 @@ describe('o servidor: os serviços são da conta de quem lê e de quem escreve, 
     assert.ok(kinds(antes.records).includes('contract'), 'com tudo ligado o contabilista vê o contrato: ' + kinds(antes.records));
     await desligar(env, C, 'contracts');
     const stC = await estado(env, C);
-    assert.deepEqual(stC.servicos.desligados, ['contracts']);
+    assert.deepEqual(stC.servicos.desligados, ['contracts', 'fisco']);
     assert.ok(!kinds(stC.records).includes('contract'), 'sem os contratos do dono: ' + kinds(stC.records));
     assert.ok(kinds(stC.records).includes('tx'), 'os outros kinds continuam a vir');
     assert.equal(stC.houses.length, 1, 'e a casa de colaboração também');
@@ -350,7 +351,7 @@ describe('o servidor: os serviços são da conta de quem lê e de quem escreve, 
     await ligarTudo(env, C);
     await desligar(env, D, 'contracts');
     const stD2 = await estado(env, D);
-    assert.deepEqual(stD2.servicos.desligados, ['contracts']);
+    assert.deepEqual(stD2.servicos.desligados, ['contracts', 'fisco']);
     assert.ok(!kinds(stD2.records).includes('contract'));
     const stC2 = await estado(env, C);
     assert.deepEqual(stC2.servicos.desligados, []);

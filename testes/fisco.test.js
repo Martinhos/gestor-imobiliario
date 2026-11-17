@@ -156,19 +156,19 @@ describe('o resumo do quadro 4.1', () => {
     assert.equal(a.toca, 'camada');
   });
 
-  test('uma despesa sem regra de dedução conta em Outros e é apontada', () => {
-    mov({ kind: 'expense', category: 'Coisas várias', amount: 50, date: ANO + '-06-10' });
+  test('uma despesa sem regra de dedução não conta: fica a confirmar, com o nome e o valor (D61)', () => {
+    const t = mov({ kind: 'expense', category: 'Coisas várias', label: 'Coisa', amount: 50, date: ANO + '-06-10' });
     const r = app.resumoFiscal(ANO, '');
-    assert.equal(r.semRegra, 1);
-    perto(r.linhas[0].gastos.outros, 50, 1e-9);
-    const a = r.avisos.find((x) => /sem regra de dedução/.test(x.texto));
-    assert.ok(a);
-    assert.match(a.texto, /Definições → Categorias, etiquetas e IRS/, 'o caminho que a raiz das Definições tem desde 2026-10');
-    assert.equal(a.abrir, "go('settings');goSet('irs')");
-    // uma despesa marcada à mão com a coluna manda sobre a categoria
+    assert.equal(r.semRegra, 1, 'o semRegra conta as da omissão dentro do aConfirmar');
+    perto(r.linhas[0].gastos.outros, 0, 1e-9, 'na dúvida a app não deduz: já não conta em Outros');
+    assert.equal(r.aConfirmar.length, 1);
+    assert.deepEqual(JSON.parse(JSON.stringify(r.aConfirmar[0])), { txId: t.id, nome: 'Coisa', data: ANO + '-06-10', valor: 50,
+      propertyId: 'v1', imovel: 'T2 Arroios', categoria: 'Coisas várias', sub: '', origem: 'omissao' });
+    // uma despesa marcada à mão com a coluna manda sobre a categoria, e conta
     mov({ kind: 'expense', category: 'Coisas várias', amount: 70, irsCol: 'taxas', date: ANO + '-06-11' });
     const r2 = app.resumoFiscal(ANO, '');
     assert.equal(r2.semRegra, 1);
+    assert.equal(r2.aConfirmar.length, 1, 'a escolhida à mão não está a confirmar');
     perto(r2.linhas[0].gastos.taxas, 70, 1e-9);
   });
 
@@ -250,9 +250,10 @@ describe('a vista, o texto e o CSV', () => {
     assert.match(html, /<div class="fis-cts">/, 'os campos de cada quadro em cartões');
     /* um cartão por quadro, que abre com onde se preenche e o resumo dos contratos dele */
     assert.doesNotMatch(html, /Quadros 4\.1 e 4\.2|<th>Quadro<\/th>/, 'sem o resumo misto dos dois quadros');
-    assert.match(html, /<p class="fis-onde">Preenche no <b>quadro 4\.1<\/b> do Anexo F: uma linha por contrato\.<\/p>/);
+    /* uma linha por prédio ou fração, não por contrato (D69), e por esta ordem (D77): folha 2.1.11 */
+    assert.match(html, /<p class="fis-onde">Preenche no <b>quadro 4\.1<\/b> do Anexo F, <b>por esta ordem<\/b>: uma linha por prédio ou fração de cada contrato, com a renda que lhe cabe\./);
     const r = app.resumoFiscal(ANO, '');
-    assert.ok(html.includes('<span class="small">imposto ' + app.euro2(r.totais.imposto) + '</span>'), 'com um quadro só, o imposto do total do quadro é o dos cartões');
+    assert.ok(html.includes('<span class="small">imposto estimado ' + app.euro2(r.totais.imposto) + '</span>'), 'com um quadro só, o imposto do total do quadro é o dos cartões');
     /* as obrigações, a situação e os prazos numa grelha; os quadros numa
        pilha com intervalo, e a coluna encolhe para a tabela do resumo rolar */
     const grelha = html.indexOf('class="fis-grelha"'), pilha = html.indexOf('class="fiscoPilha u-d-grid u-gtc-minmax-0-1fr u-g-14px"');
@@ -282,9 +283,10 @@ describe('a vista, o texto e o CSV', () => {
     assert.equal(app.fiscoRotuloDoAviso("propView('v1')"), 'Abrir imóvel');
     assert.equal(app.fiscoRotuloDoAviso("go('transactions')"), 'Ver movimentos');
     const html = app.vFisco();
-    /* 2024 não tem versão das regras: o aviso disso vem à cabeça, em âmbar e sem botão; e,
-       sem sessão com dois proprietários, logo a seguir o de que os valores vão por inteiro */
-    assert.match(html, /<span class="badge amber fis-num">1<\/span><p>Ainda não há versão das regras de 2024\. Usam-se as de 2025, a mais antiga que a app tem\.<\/p><\/div>/);
+    /* 2024 é antes da primeira versão das regras: o aviso disso vem à cabeça, a vermelho e
+       sem botão (D50, folha 2.1.9); e, sem sessão com dois proprietários, logo a seguir o de
+       que os valores vão por inteiro */
+    assert.match(html, /<span class="badge red fis-num">1<\/span><p>A app não tem as regras de 2024: [^<]*Não uses estes números para a declaração desse ano\.<\/p><\/div>/);
     assert.match(html, /<span class="badge amber fis-num">2<\/span><p>Sem sessão não se sabe qual dos proprietários és: os valores vão por inteiro/);
     assert.match(html, /<span class="badge red fis-num">3<\/span><p>Contrato Arroios: declarado à AT, sem o n\.º do contrato<\/p><button type="button" class="btn sm" data-toca="camada" data-click="ctView\('C1'\)">Abrir contrato<\/button>/);
     assert.match(html, /<span class="badge grey fis-num">\d+<\/span><p>1 contrato marcado como não declarado fica fora deste resumo\.<\/p><\/div>/, 'o que só se diz não tem botão');
@@ -337,18 +339,22 @@ describe('a vista, o texto e o CSV', () => {
     assert.ok(guardado, 'descarregou');
     assert.equal(guardado.nome, 'anexo-f-2024.csv');
     const linhas = guardado.conteudo.split('\n');
-    assert.equal(linhas.length, 3, 'cabeçalho + C1 + C2');
+    /* o formato do CSV é da folha 2.1.8 (D74: vírgula decimal e os códigos como texto; D34: as
+       linhas de «A tratar», a das regras e o aviso no fim); aqui fica o que o resumo põe nele */
     assert.match(linhas[0], /^"ano";"declarado";"contrato";"n_at"/);
     assert.match(linhas[0], /"conservacao";"condominio";"imi";"selo";"taxas";"outros";"obras24"/);
-    assert.match(linhas[1], /^"2024";"sim";"Arroios";"1234567";"2024-01-01";"T2 Arroios";"110623";"U";"4651";"A";"07";"Tiago";"123456789";"100";"12500";"500"/);
-    assert.match(linhas[1], /;"0";"120";"300";"0";"0";"0";"200";"2023-07-01";"2";"";/);
+    assert.match(linhas[1], /^"2024";"sim";"Arroios";="1234567";"2024-01-01";"T2 Arroios";="110623";"U";"4651";"A";="07";"Tiago";"123456789";"100";"12500,00";"500,00"/);
+    assert.match(linhas[1], /;"0,00";"120,00";"300,00";"0,00";"0,00";"0,00";"200,00";"2023-07-01";"2";"";/);
     // as colunas novas vão no fim: quadro, taxa, líquido (12 500 − 420 − 200), imposto a 25 %, anos anteriores, termo, renovação,
-    // e as do titular, do 6D, do 4.2A e do 4.2B
-    assert.match(linhas[1], /;"4\.1";"25";"11880";"2970";"";"";"";"A";"";"";"";""$/);
+    // as do titular, do 6D, do 4.2A e do 4.2B, e o n.º do campo (D77) e o prejuízo (D98)
+    assert.match(linhas[1], /;="4\.1";"25";"11880,00";"2970,00";"";"";"";"A";"";"";"";"";="4001";"0,00";/);
     assert.match(linhas[2], /^"2024";"nao";"Benfica";"";"2023-06-01";"T1 Benfica"/);
-    assert.match(linhas[2], /"1200";"0"/);
-    const n = linhas[0].split(';').length;
-    linhas.forEach((l) => assert.equal(l.split(';').length, n, 'todas as linhas com as mesmas colunas'));
+    assert.match(linhas[2], /"1200,00";"0,00"/);
+    assert.ok(linhas.slice(3).every((l) => /^"2024";"(a tratar|regras|aviso)/.test(l)), 'depois dos contratos, só as linhas de «A tratar», das regras e do aviso');
+    // as células contam-se entre aspas: o texto de uma linha de «A tratar» pode levar «;»
+    const celulas = (l) => (l.match(/=?"(?:[^"]|"")*"/g) || []).length;
+    const n = celulas(linhas[0]);
+    linhas.forEach((l) => assert.equal(celulas(l), n, 'todas as linhas com as mesmas colunas'));
   });
 
   test('o ano automático: até junho o anterior, se tiver rendas', () => {

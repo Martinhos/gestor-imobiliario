@@ -42,7 +42,10 @@ const SERVICOS=[
   {id:'credits',nome:'Créditos',ficheiros:['app/creditos.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:['properties'],usa:['transactions','recurring']},
   {id:'projections',nome:'Projeções',ficheiros:['app/projecoes.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['contracts','properties','transactions']},
   {id:'reports',nome:'Avaliação',ficheiros:['app/avaliacao.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['properties','contracts','transactions','owners']},
-  {id:'fisco',nome:'Declaração',ficheiros:['app/fisco-titulares.js','app/fisco-resumo.js','app/fisco-avisos.js','app/fisco-quadros.js','app/fisco.js','app/fisco-exportar.js','app/fisco-pdf.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:[],usa:['contracts','transactions','tenants','properties']},
+  /* a Declaração requer os Contratos e os Movimentos (D57, auditoria ao IRS):
+     cada linha do 4.1 e do 4.2 é um contrato com as rendas dele, e sem eles o
+     quadro ficava vazio e as rendas, ligadas, iam a «sem contrato» */
+  {id:'fisco',nome:'Declaração',ficheiros:['app/fisco-titulares.js','app/fisco-resumo.js','app/fisco-avisos.js','app/fisco-quadros.js','app/fisco.js','app/fisco-exportar.js','app/fisco-pdf.js'],kinds:[],userKinds:[],casa:false,colab:false,requer:['contracts','transactions'],usa:['tenants','properties']},
 ];
 /* onde o aparelho guarda os serviços desligados nesta conta, para o
    arranque os saber antes de o servidor responder */

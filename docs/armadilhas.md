@@ -347,6 +347,19 @@ construir um registo de raiz num formulário, em vez de partir de uma cópia
 do que está guardado, remove sem querer os campos que não conhece — os
 formulários partem de normX(cópia) por isso.
 
+## Uma marca de migração nas definições não pode vir do blank, e não sobe sozinha
+A nuvem junta o blank.settings por baixo das definições do servidor
+(nucleo.js:normalizarDaChave, nucleo.js:rebuildDb). Uma marca (catsV,
+irsMapaV) posta no blank fazia uma conta antiga saltar a migração. E a
+migração corre em cada leitura sobre a forma local: a base da fusão saía já
+migrada, e o envio nunca levava a marca; a leitura seguinte voltava a migrar
+e desfazia o que a pessoa escolheu depois. Uma marca nova entra em
+nucleo.js:MIGRACOES_DAS_DEFINICOES com os campos que muda: a base fica sem a
+migração (nucleo.js:definicoesDaBase), a fusão ao ler usa-a migrada, e uma
+base por migrar que já não é fresca espera pela leitura seguinte. O mesmo
+vale para qualquer migração com marca dentro de um registo
+(c.fisco.comunicacoesV ainda não o faz).
+
 ## O bloco da fusão vive em dois ficheiros
 O `// <fusao>` … `// </fusao>` de worker/src/lib/permissoes.js e o de
 web/cloud/nucleo.js são o mesmo texto (o do worker com `export`). Muda-se um,

@@ -96,14 +96,15 @@ describe('ligado e desligado', () => {
   test('desligar aplica o fecho dos que requerem, na ordem do catálogo, e fica no aparelho', () => {
     const app = carregarApp();
     app.definirServicosDesligados(['properties']);
-    igual(app.servicosDesligados(), ['properties', 'contracts', 'visits', 'colaboradores', 'credits']);
+    // a Declaração cai pelos Contratos, transitivamente (D57)
+    igual(app.servicosDesligados(), ['properties', 'contracts', 'visits', 'colaboradores', 'credits', 'fisco']);
     assert.ok(!app.servicoLigado('contracts'));
     assert.ok(app.servicoLigado('transactions'));
     assert.ok(!app.separadorLigado('credits'));
     assert.ok(app.separadorLigado('settings'), 'as Definições nunca se desligam');
-    igual(JSON.parse(app.localStorage.getItem('gi_servicos_off')), ['properties', 'contracts', 'visits', 'colaboradores', 'credits']);
+    igual(JSON.parse(app.localStorage.getItem('gi_servicos_off')), ['properties', 'contracts', 'visits', 'colaboradores', 'credits', 'fisco']);
     app.definirServicosDesligados(['transactions']);
-    igual(app.servicosDesligados(), ['transactions', 'recurring']);
+    igual(app.servicosDesligados(), ['transactions', 'recurring', 'fisco']);
     app.definirServicosDesligados([]);
     igual(app.servicosDesligados(), []);
   });
@@ -385,15 +386,15 @@ describe('servidor: a lib e a migração', () => {
   test('servidor: desligar grava o fecho com quem mexeu; ligar exige os requer ligados', async () => {
     const e = env();
     const depois = await srv.guardarServico(e, 'U1', 'properties', false, 's1');
-    igual(depois, ['properties', 'contracts', 'visits', 'colaboradores', 'credits']);
+    igual(depois, ['properties', 'contracts', 'visits', 'colaboradores', 'credits', 'fisco']);
     igual(await srv.servicosDesligados(e, 'U1'), depois);
     const linhas = (await e.DB.prepare('SELECT service, enabled, updated_by FROM user_services WHERE user_id = ? ORDER BY service').bind('U1').all()).results;
-    assert.equal(linhas.length, 5);
+    assert.equal(linhas.length, 6);
     for (const l of linhas) { assert.equal(l.enabled, 0); assert.equal(l.updated_by, 's1'); }
     igual(await srv.servicosDesligados(e, 'U2'), [], 'outra conta não é tocada');
     await assert.rejects(() => srv.guardarServico(e, 'U1', 'contracts', true, 's1'), (err) => err.status === 400 && /Imóveis/.test(err.error));
-    igual(await srv.guardarServico(e, 'U1', 'properties', true, 's2'), ['contracts', 'visits', 'colaboradores', 'credits'], 'os dependentes ficam desligados de propósito');
-    igual(await srv.guardarServico(e, 'U1', 'contracts', true, 's2'), ['visits', 'colaboradores', 'credits']);
+    igual(await srv.guardarServico(e, 'U1', 'properties', true, 's2'), ['contracts', 'visits', 'colaboradores', 'credits', 'fisco'], 'os dependentes ficam desligados de propósito');
+    igual(await srv.guardarServico(e, 'U1', 'contracts', true, 's2'), ['visits', 'colaboradores', 'credits', 'fisco']);
     const p = await e.DB.prepare('SELECT enabled, updated_by FROM user_services WHERE user_id = ? AND service = ?').bind('U1', 'properties').first();
     assert.equal(p.enabled, 1);
     assert.equal(p.updated_by, 's2');
@@ -406,7 +407,7 @@ describe('servidor: a lib e a migração', () => {
   test('servidor: uma linha antiga sem os dependentes ainda dá o fecho ao ler', async () => {
     const e = env();
     await e.DB.prepare('INSERT INTO user_services (user_id, service, enabled, updated_at, updated_by) VALUES (?, ?, 0, ?, ?)').bind('U1', 'transactions', 1, '').run();
-    igual(await srv.servicosDesligados(e, 'U1'), ['transactions', 'recurring']);
+    igual(await srv.servicosDesligados(e, 'U1'), ['transactions', 'recurring', 'fisco']);
   });
 
   test('servidor: as perguntas das rotas — kinds, casas, colaboradores, dono de um kind, frase', () => {
@@ -423,6 +424,73 @@ describe('servidor: a lib e a migração', () => {
     assert.equal(srv.servicoDoKind('tpl'), '', 'tpl não é kind de records');
     assert.equal(srv.servicoDoKind('settings', 'user'), '', 'as definições são da base');
     assert.equal(srv.FRASE_DESLIGADO('contracts'), 'O serviço Contratos está desligado nesta conta.');
+  });
+});
+
+/* D57 (auditoria ao IRS): a Declaração ligada com os Contratos desligados dava
+   o quadro vazio, os totais a 0 € e mandava ligar ao contrato rendas que
+   estavam ligadas — o servidor não manda os registos 'contract' de um serviço
+   desligado. Cada linha do 4.1 e do 4.2 é um contrato com as rendas dele: sem
+   Contratos ou sem Movimentos não há Declaração, e o catálogo di-lo. */
+describe('a Declaração requer os Contratos e os Movimentos (D57)', () => {
+  test('o catálogo, nos dois lados: fisco requer contracts e transactions', () => {
+    const app = carregarApp();
+    igual(app.servicoDe('fisco').requer, ['contracts', 'transactions']);
+    igual(srv.servicoDe('fisco').requer, ['contracts', 'transactions']);
+    assert.ok(!app.servicoDe('fisco').usa.some((u) => app.servicoDe('fisco').requer.includes(u)), 'o que requer não fica também em «usa»');
+  });
+
+  test('desligar os Contratos, os Movimentos, os Inquilinos ou os Imóveis desliga a Declaração, no cliente e no servidor', () => {
+    const app = carregarApp();
+    for (const off of [['contracts'], ['transactions'], ['tenants'], ['properties']]) {
+      assert.ok(app.fechoDesligados(off).includes('fisco'), 'cliente: ' + off);
+      assert.ok(srv.fechoDesligados(off).includes('fisco'), 'servidor: ' + off);
+    }
+    for (const off of [['recurring'], ['owners'], ['visits'], ['credits'], ['colaboradores']]) {
+      assert.ok(!srv.fechoDesligados(off).includes('fisco'), 'o que a Declaração não requer não a leva: ' + off);
+    }
+  });
+
+  test('o cenário: com os Contratos desligados a Declaração some (separador, menu e go), e não mostra um quadro vazio', () => {
+    const app = carregarApp({ hoje: '2026-11-13' });
+    const fixos = elementos(app);
+    limpar(app);
+    app.db.owners.push(app.normPerson({ id: 'eu', name: 'Eu' }));
+    app.db.tenants.push(app.normPerson({ id: 't1', name: 'Inquilino', nif: '123456789' }));
+    app.db.properties.push(app.normProp({ id: 'p1', name: 'T2 Arroios', ownerIds: ['eu'], freguesiaCodigo: '110623', tipoPredio: 'U', matrix: '100' }));
+    app.db.contracts.push(app.normContract({ id: 'C1', name: 'Arroios', propertyId: 'p1', tenantIds: ['t1'], rent: 800, start: '2025-01-01', active: true, fisco: { estado: 'declarado', numero: '1' } }));
+    for (let m = 1; m <= 11; m++) app.db.transactions.push(app.normTx({ kind: 'income', category: 'Rendas', sub: 'Renda mensal', amount: 800, contractId: 'C1', propertyId: 'p1', date: `2026-${String(m).padStart(2, '0')}-05`, recibo: true }));
+    // controlo positivo: tudo ligado, a Declaração tem o contrato no quadro
+    assert.ok(app.servicoLigado('fisco'));
+    assert.equal(app.resumoFiscal(2026, 'eu').linhas.length, 1);
+    app.buildNav();
+    assert.ok(fixos.nav.innerHTML.includes("go('fisco')"));
+    // os Contratos desligados (o back office): o servidor deixa de mandar os contratos
+    app.definirServicosDesligados(['contracts']);
+    app.db.contracts.length = 0;
+    assert.ok(!app.servicoLigado('fisco'), 'a Declaração cai com os Contratos');
+    assert.ok(!app.separadorLigado('fisco'));
+    app.buildNav();
+    assert.ok(!fixos.nav.innerHTML.includes("go('fisco')"), 'fora do menu');
+    app.tab = 'dashboard';
+    app.go('fisco');
+    assert.equal(app.tab, 'dashboard', 'go recusa-a');
+    app.definirServicosDesligados([]);
+  });
+
+  test('ligar a Declaração com os Contratos desligados é 400 no servidor, com a frase do que ligar primeiro', async () => {
+    const e = { DB: baseDeTeste() };
+    igual(await srv.guardarServico(e, 'U1', 'contracts', false, 's1'), ['contracts', 'fisco']);
+    await assert.rejects(() => srv.guardarServico(e, 'U1', 'fisco', true, 's1'),
+      (err) => err.status === 400 && err.error === 'Para ligar Declaração é preciso ligar primeiro Contratos.');
+    igual(await srv.guardarServico(e, 'U1', 'contracts', true, 's1'), ['fisco'], 'o dependente fica desligado de propósito');
+    igual(await srv.guardarServico(e, 'U1', 'fisco', true, 's1'), []);
+  });
+
+  test('autonomia: a Declaração carrega com os Contratos e os Movimentos (e o que eles requerem)', () => {
+    const app = carregarServico(['fisco']);
+    for (const id of ['fisco', 'contracts', 'transactions', 'properties', 'tenants']) assert.ok(app.servicoLigado(id), id);
+    assert.equal(typeof app.vistaDoSeparador('contracts'), 'function', 'os ficheiros dos Contratos vieram');
   });
 });
 

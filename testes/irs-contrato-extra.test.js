@@ -75,22 +75,24 @@ describe('o bloco fiscal guarda as peças novas', () => {
     igual(app.normFisco(null).comunicacoes, {});
   });
 
-  test('a renda acima do limite é true, false ou por indicar; a renda anterior é um número ≥ 0; a isenção é uma das cinco', () => {
+  test('a renda acima do limite é true, false ou por indicar; a renda anterior é um número ≥ 0; a isenção é uma da lista', () => {
     assert.equal(app.normFisco({ rendaAcimaDoLimite: true }).rendaAcimaDoLimite, true);
     assert.equal(app.normFisco({ rendaAcimaDoLimite: false }).rendaAcimaDoLimite, false);
     assert.equal(app.normFisco({ rendaAcimaDoLimite: 'sim' }).rendaAcimaDoLimite, null);
     assert.equal(app.normFisco({ rendaAnterior: '900' }).rendaAnterior, 900);
     assert.equal(app.normFisco({ rendaAnterior: -5 }).rendaAnterior, 0);
     assert.equal(app.normFisco({ rendaAnterior: 'abc' }).rendaAnterior, 0);
-    for (const v of ['', 'paa', 'rsaa', 'pma', 'pmae']) assert.equal(app.normFisco({ isencao: v }).isencao, v);
-    assert.equal(app.normFisco({ isencao: 'al' }).isencao, '');
+    for (const v of ['', 'paa', 'rsaa', 'pma', 'pmae', 'prerau', 'al']) assert.equal(app.normFisco({ isencao: v }).isencao, v);
+    assert.equal(app.normFisco({ isencao: 'xpto' }).isencao, '');
   });
 
-  test('irsComunicado dá a data do ano, ou vazio', () => {
-    const c = ct({ fisco: { comunicacoes: { 2025: '2026-02-10' } } });
+  test('irsComunicado dá a data da comunicação do período em vigor no ano, ou vazio', () => {
+    const c = ct({ start: '2025-01-01', end: '2029-12-31' });
+    c.fisco.comunicacoes = { 2025: '2026-02-10' };
     assert.equal(app.irsComunicado(c, 2025), '2026-02-10');
     assert.equal(app.irsComunicado(c, '2025'), '2026-02-10');
-    assert.equal(app.irsComunicado(c, 2026), '');
+    assert.equal(app.irsComunicado(c, 2026), '2026-02-10', 'a do período conta nos anos seguintes');
+    assert.equal(app.irsComunicado(c, 2024), '', 'antes do contrato não há período');
     assert.equal(app.irsComunicado(null, 2025), '');
   });
 });
@@ -98,12 +100,14 @@ describe('o bloco fiscal guarda as peças novas', () => {
 describe('a comunicação de fevereiro marcada', () => {
   beforeEach(() => { monta(); renda('R1', '2025-05-08'); });
 
-  test('com a comunicação do ano marcada, o aviso do 15 de fevereiro desse ano cala-se', () => {
+  test('com a comunicação do período marcada, o aviso do 15 de fevereiro cala-se, também nos anos seguintes', () => {
     assert.ok(app.prazosDe('2026-01-10').some((p) => p.tipo === 'fev15'), 'cinco anos, rendas em 2025: avisa');
     app.db.contracts[0].fisco.comunicacoes = { 2024: '2025-02-01' };
-    assert.ok(app.prazosDe('2026-01-10').some((p) => p.tipo === 'fev15'), 'a de outro ano não conta');
+    assert.ok(app.prazosDe('2026-01-10').some((p) => p.tipo === 'fev15'), 'a chave de um ano sem período deste contrato não conta');
     app.db.contracts[0].fisco.comunicacoes = { 2025: '2026-01-05' };
     assert.ok(!app.prazosDe('2026-01-10').some((p) => p.tipo === 'fev15'));
+    renda('R2', '2026-05-08');
+    assert.ok(!app.prazosDe('2027-01-10').some((p) => p.tipo === 'fev15'), 'a do período conta nos anos seguintes');
   });
 
   test('a ficha diz o ano em causa e marca e desmarca pelo caminho de gravar', () => {
@@ -119,7 +123,8 @@ describe('a comunicação de fevereiro marcada', () => {
     assert.equal(app.irsComunicado(app.contract('C1'), 2025), '2026-02-10', 'marcada com o dia que a pessoa disse');
     assert.match(o.avisos.join(' '), /Comunicação de 2025 marcada como feita\./);
     html = app.ctFicha('C1');
-    assert.match(html, /Duração e renovações de 2026 por comunicar no Portal das Finanças: até 15\/02\/2027\./, 'passado o prazo de 2025, marcada, passa ao ano corrente');
+    assert.doesNotMatch(html, /Duração e renovações de 2026 por comunicar/, 'a comunicação do período serve o ano corrente: não se pede outra');
+    assert.match(html, /comunicadas no Portal das Finanças a 10\/02\/2026\./);
     app.ctMarcarComunicada('C1', 2025, 0);
     assert.equal(app.irsComunicado(app.contract('C1'), 2025), '');
     domCom({ c_comdia: '2026-12-01' });
@@ -162,7 +167,10 @@ describe('o art. 72.º n.º 23: renda acima de 150 % do limite', () => {
   });
 
   test('os parâmetros vivem na versão do ano', () => {
-    for (const a of [2025, 2026]) igual(app.irsAno(a).taxas.limiteRendaAlta, { desde: '2024-01-01', percentagem: 150 });
+    for (const a of [2025, 2026]) {
+      const L = app.irsAno(a).taxas.limiteRendaAlta;
+      igual([L.desde, L.percentagem], ['2024-01-01', 150]);
+    }
   });
 });
 
@@ -177,13 +185,18 @@ describe('o art. 72.º n.º 24: renda mais baixa do que a do contrato anterior',
     assert.equal(copia(app.irsReducao(com(2500, 0), 2025)).bonus, false, '0 é «não se aplica»');
   });
 
-  test('nunca abaixo do mínimo, só no período inicial, e só nos celebrados desde 2024', () => {
+  test('nunca abaixo do mínimo, só no período inicial, e só nos celebrados desde a data da versão', () => {
     const vinte = copia(app.irsReducao(com(2000, 3000, { end: '2044-02-29' }), 2025));
     assert.equal(vinte.taxa, 5); assert.equal(vinte.bonus, false, 'vinte anos já estão no mínimo');
+    assert.equal(vinte.elegivel24, true, 'mas o facto do n.º 24 fica (o quadro 4.2B)');
     const renovado = com(2000, 3000, { end: '2034-02-28', fisco: { finalidade: 'hp', rendaAnterior: 3000, renovacoes: [{ inicio: '2029-03-01', fim: '2034-02-28' }] } });
     assert.equal(copia(app.irsReducao(renovado, 2025)).bonus, true, 'em 2025 ainda é o contrato inicial');
     assert.equal(copia(app.irsReducao(renovado, 2030)).bonus, false, 'a renovação não é um contrato novo');
-    assert.equal(copia(app.irsReducao(com(2000, 3000, { start: '2023-11-01', end: '2028-10-31' }), 2025)).bonus, false);
+    const desde = app.irsAno(2025).taxas.bonusRendaMenor.desde, vespera = app.irsVespera(desde);
+    const antes = com(2000, 3000, { start: vespera, end: (Number(vespera.slice(0, 4)) + 5) + vespera.slice(4) });
+    antes.fisco.celebracao = vespera;
+    assert.equal(copia(app.irsReducao(antes, 2025)).bonus, false, 'celebrado na véspera da data da versão');
+    assert.equal(copia(app.irsReducao(antes, 2025)).elegivel24, false);
   });
 
   test('em 2026 a taxa final é a mais baixa entre a duração com o bónus e os 10 %', () => {
@@ -223,25 +236,27 @@ describe('o art. 72.º n.º 24: renda mais baixa do que a do contrato anterior',
   });
 });
 
-describe('as isenções (quadro 6D)', () => {
-  test('os códigos da versão: 01 PAA, 02 PMA, 03 PMAE; o RSAA só desde 2026, com o código por conhecer', () => {
-    const cod = (a) => Object.fromEntries(copia(app.irsAno(a).isencoes).map((x) => [x.id, x.codigo]));
-    igual(cod(2025), { paa: '01', pma: '02', pmae: '03' });
-    igual(cod(2026), { paa: '01', rsaa: '', pma: '02', pmae: '03' });
+describe('as isenções (quadros 6D, 6F e 6H)', () => {
+  test('os códigos da versão: 01 PAA, 02 PMA, 03 PMAE no 6D; o RSAA só desde 2026, com o código por conhecer; o 6H e o 6F sem código', () => {
+    const cod = (a) => Object.fromEntries(copia(app.irsAno(a).isencoes).map((x) => [x.id, x.quadro + ':' + x.codigo]));
+    igual(cod(2025), { paa: '6D:01', pma: '6D:02', pmae: '6D:03', prerau: '6H:', al: '6F:' });
+    igual(cod(2026), { paa: '6D:01', rsaa: '6D:', pma: '6D:02', pmae: '6D:03', prerau: '6H:', al: '6F:' });
     copia(app.irsAno(2026).isencoes).forEach((x) => {
-      assert.equal(x.quadro, '6D');
       assert.ok(x.nome && x.texto.length > 40, x.id);
       assert.doesNotMatch(x.texto, /\d{4}-\d{2}-\d{2}/, 'datas por extenso no texto que se mostra');
     });
   });
 
-  test('um contrato isento paga 0 %, «isento», e sai do 4.2', () => {
+  test('um contrato isento paga 0 %, «isento», e sai do 4.2; a isenção de habitação não vale num não habitacional', () => {
     const c = ct({ start: '2024-01-01', end: '2033-12-31', fisco: { estado: 'declarado', finalidade: 'hp', isencao: 'pma' } });
     const t = copia(app.irsTaxa(c, 2025));
     assert.equal(t.taxa, 0); assert.equal(t.motivo, 'isento'); assert.equal(t.reducao, null);
     assert.equal(t.isencao.codigo, '02');
     assert.equal(app.irsTaxaPorque(c, 2025), 'isento');
-    assert.equal(app.irsRate(ct({ fisco: { finalidade: 'nh', isencao: 'paa' } }), 2025), 0, 'a isenção vem antes da finalidade');
+    const nh = ct({ fisco: { finalidade: 'nh', isencao: 'paa' } });
+    nh.fisco.isencao = 'paa';
+    assert.equal(app.irsRate(nh, 2025), 28, 'o PAA é de habitação: a versão di-lo (finalidade)');
+    assert.match(app.irsIsencaoMotivo(nh, 2025), /habitação permanente ou habitação não permanente/);
   });
 
   test('o RSAA não isenta as rendas de 2025 (não existia), e isenta as de 2026', () => {

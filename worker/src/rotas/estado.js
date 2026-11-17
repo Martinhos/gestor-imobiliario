@@ -336,25 +336,39 @@ export async function rotasEstado(c) {
       id: x.id, userId: x.userId, name: nomeDe.get(x.userId) || '', roleName: x.roleName,
     }));
 
-    // propostas de divisão pendentes nas casas visíveis
+    // propostas de divisão pendentes nas casas visíveis (as minhas e as
+    // partilhadas comigo: um colaborador não vê as quotas, nem as propostas),
+    // com o que quem aprova está a aprovar — as percentagens, os
+    // comproprietários sem conta e desde quando (migração 0030), na forma
+    // em que rotas/casas.js as grava: sem `fora`, a proposta não mexe nos de
+    // fora; `fora: null` põe-nos por confirmar; [] é «não há outros»; e
+    // `desde: null` é «a partir do dia em que se aplica»
     let proposals = [];
     if (houseIds.length) {
       proposals = (await inChunks(houseIds,
-        `SELECT p.house_id, p.proposed_by, p.shares, p.approvals, p.created_at, u.name AS proposer_name
+        `SELECT p.house_id, p.proposed_by, p.shares, p.approvals, p.created_at, p.fora, p.desde,
+                u.name AS proposer_name
            FROM share_proposals p JOIN users u ON u.id = p.proposed_by
           WHERE p.house_id IN ({IN})`)).map((p) => {
         const onde = 'share_proposals ' + p.house_id;
         const shares = lerJSON(p.shares, onde);
         const approvals = shares === undefined ? undefined : lerJSON(p.approvals, onde);
         if (shares === undefined || approvals === undefined) return null;
-        return {
+        const fora = p.fora == null ? undefined : lerJSON(p.fora, onde);
+        if (p.fora != null && fora === undefined) return null;
+        // o que não é null nem uma lista é tão ilegível como o JSON estragado (casas.js recusa-o ao aceitar)
+        if (fora !== undefined && fora !== null && !Array.isArray(fora)) { estragadas.push(onde); return null; }
+        const out = {
           houseId: p.house_id,
           proposedBy: p.proposed_by,
           proposedByName: p.proposer_name,
           shares,
           approvals,
           createdAt: p.created_at,
+          desde: typeof p.desde === 'string' && p.desde ? p.desde : null,
         };
+        if (fora !== undefined) out.fora = fora;
+        return out;
       }).filter(Boolean);
     }
 

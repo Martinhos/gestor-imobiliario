@@ -4,13 +4,21 @@
 //
 // Uma versão por ano (web/app/irs-AAAA.js, lida pelo irs.js). Este guião copia
 // a mais recente para o ano pedido com o ano trocado, as datas da AT passadas
-// para o ano certo, o modelo do Anexo F marcado como provisório e as novidades
-// trocadas por uma frase verdadeira («ainda sem novidades confirmadas»), e
+// para o ano certo, o modelo do Anexo F marcado como provisório, as novidades
+// trocadas por uma frase verdadeira («ainda sem novidades confirmadas») e a
+// data da revisão e o IAS em branco (são do ano, e ninguém os conferiu), e
 // regista o ficheiro onde a app e os testes o procuram: o index.html, a SHELL
 // do sw.js, o MODULOS e a BASE do arnês e o MAPA dos docs. As taxas, os
 // quadros e os passos ficam os do ano anterior até alguém os confirmar com as
 // fontes — o fim do guião diz o quê e onde. Não apaga nem reescreve versões
 // que já existem.
+//
+// Só mudam as datas que são do ano dos rendimentos (a entrega e o 15 de
+// fevereiro). As outras são da lei e copiam-se como estão: o `desde` e o
+// `celebradoAte` das isenções (o PAA só até 31/08/2026), os regimes da
+// duração, os intervalos da portaria do n.º 23 (`limiteRendaAlta.portaria`),
+// o `ateAno` do ex-alojamento local. E os passos não podem ter anos escritos
+// (dizem {ano} e {ate}): se a versão de onde se copia os tiver, o guião pára.
 
 const fs = require('fs');
 const path = require('path');
@@ -32,29 +40,46 @@ function trocar(texto, procura, por, oque) {
   return texto.replace(procura, por);
 }
 
+/* Os anos escritos nos passos do guia de uma versão. Os passos dizem {ano} e
+   {ate}, para a cópia não arrastar o ano de onde veio.
+   Recebe: texto — o irs-AAAA.js.
+   Devolve: array com os anos (texto) encontrados nos passos; vazio se não há. */
+function anosNosPassos(texto) {
+  const i = texto.indexOf('passos:[');
+  if (i < 0) return [];
+  return texto.slice(i).match(/\b(?:19|20)\d{2}\b/g) || [];
+}
+
 /* O texto da versão nova a partir da anterior: o cabeçalho, o ano, a entrega e
-   a comunicação de fevereiro passadas para o ano novo, o modelo provisório e as
-   novidades por confirmar. O resto fica igual.
+   a comunicação de fevereiro passadas para o ano novo, o modelo provisório, as
+   novidades por confirmar, e a data da revisão e o IAS em branco. O resto
+   (as datas da lei incluídas) fica igual.
    Recebe: texto — o irs-<de>.js; de — o ano da anterior; para — o ano novo.
-   Devolve: o texto do irs-<para>.js. */
+   Devolve: o texto do irs-<para>.js; rebenta se os passos tiverem anos escritos. */
 function textoNovo(texto, de, para) {
+  const anos = anosNosPassos(texto);
+  if (anos.length) throw new Error('nova-versao-irs: os passos do irs-' + de + '.js escrevem anos (' + anos.join(', ') + '): troca-os por {ano} ou por uma frase sem ano antes de copiar');
   const d = para - de, mv = (s) => (Number(s.slice(0, 4)) + d) + s.slice(4);
-  let t = trocar(texto, /^\/\*[\s\S]*?\*\/\n/, `/* ================= IRS ${para} =================
+  let t = trocar(texto, /^\/\*[\s\S]*?\*\/\r?\n/, `/* ================= IRS ${para} =================
    As regras dos rendimentos de ${para}: a declaração que se entrega em ${para + 1}.
    O formato é o do irs-2025.js.
 
    Nasceu de uma cópia da versão de ${de} (scripts/nova-versao-irs.js). Até
    alguém a rever com a Lei do Orçamento do Estado para ${para}, a portaria que
    aprova o Modelo 3 destes rendimentos e o ofício-circulado da AT, as taxas,
-   os quadros e os passos são os de ${de} — e o modelo é provisório. Quem a
-   rever escreve aqui as fontes, com a data, como nas versões anteriores. */
+   os quadros e os passos são os de ${de} — e o modelo é provisório. A data da
+   revisão (revisto) e o IAS (ias) ficam em branco até alguém os confirmar.
+   Quem a rever escreve aqui as fontes, com a data, como nas versões
+   anteriores. */
 `, 'o cabeçalho');
   t = trocar(t, new RegExp('ano:' + de + ','), 'ano:' + para + ',', 'o ano');
+  t = trocar(t, /\brevisto:'(?:\d{4}-\d{2}-\d{2})?'/, "revisto:''", 'a data da revisão');
+  t = trocar(t, /\bias:(?:\d+(?:\.\d+)?|null)/, 'ias:null', 'o IAS');
   t = trocar(t, /entrega:\{de:'(\d{4}-\d{2}-\d{2})',ate:'(\d{4}-\d{2}-\d{2})'\}/, (m, a, b) => `entrega:{de:'${mv(a)}',ate:'${mv(b)}'}`, 'a entrega');
   t = trocar(t, /comunicacaoDuracao:'(\d{4}-\d{2}-\d{2})'/, (m, a) => `comunicacaoDuracao:'${mv(a)}'`, 'a comunicação de fevereiro');
   t = trocar(t, /modelo:\{oficial:(?:true|false),\s*texto:'[^']*'\}/, `modelo:{oficial:false,
     texto:'Ainda não há Anexo F aprovado para os rendimentos de ${para} — a portaria costuma sair entre fevereiro e março do ano da entrega. Até lá esta página segue os quadros do modelo de ${de}.'}`, 'o modelo');
-  t = trocar(t, /novidades:\[[\s\S]*?\],\n {2}passos:/, `novidades:[
+  t = trocar(t, /novidades:\[[\s\S]*?\],\r?\n {2}passos:/, `novidades:[
     'Ainda sem novidades confirmadas para ${para}: valem as regras de ${de} até o Orçamento do Estado e a portaria do Modelo 3 dizerem outra coisa.'],
   passos:`, 'as novidades');
   return t;
@@ -95,7 +120,7 @@ function criarVersao(raiz, para) {
   return { de, ficheiro };
 }
 
-module.exports = { anosExistentes, textoNovo, criarVersao };
+module.exports = { anosExistentes, anosNosPassos, textoNovo, criarVersao };
 
 if (require.main === module) {
   const para = Number(process.argv[2]);
@@ -105,14 +130,18 @@ if (require.main === module) {
     console.log('\nAntes de publicar, rever com as fontes (e escrevê-las no cabeçalho, com a data):');
     console.log('  1. A Lei do Orçamento do Estado para ' + para + ' e os decretos do ano: o art. 72.º do CIRS (taxas e reduções),');
     console.log('     o art. 41.º (gastos), o art. 45.º-C do EBF (rendas moderadas, até 2029) e os limites — mudar `taxas`');
-    console.log('     (com os n.os 23 e 24 do art. 72.º: `limiteRendaAlta` e `bonusRendaMenor`) e as `isencoes` (quadro 6D:');
-    console.log('     PAA, RSAA e programas municipais — os códigos e o prazo do IHRU), e o `englobamento` (os escalões do');
-    console.log('     art. 68.º e a solidariedade do 68.º-A, que o OE muda quase todos os anos).');
+    console.log('     (com os n.os 23 e 24 do art. 72.º: `limiteRendaAlta`, com a portaria dos limites em `portaria`, e');
+    console.log('     `bonusRendaMenor`) e as `isencoes` (6D: PAA, RSAA e programas municipais — os códigos, as condições');
+    console.log('     `desde`/`celebradoAte`/`ateAno`/`pede`/`pedeIhru` e o prazo do IHRU; 6F e 6H), e o `englobamento` (os');
+    console.log('     escalões do art. 68.º e a solidariedade do 68.º-A, que o OE muda quase todos os anos).');
     console.log('  2. A portaria que aprova o Modelo 3 dos rendimentos de ' + para + ' (fev/mar de ' + (para + 1) + ') e o ofício-circulado da AT:');
-    console.log('     quadros, colunas e códigos (`quadros`, `colunas`, `naturezas`). Quando sair: `modelo.oficial = true` e o texto.');
-    console.log('  3. As `novidades`: trocar a frase provisória pelo que mudou, em frases para quem declara.');
-    console.log('  4. Os `passos`: os factos com número (escalões, limites) e o que o modelo novo mudou.');
-    console.log('  5. node --test testes/irs-anos.test.js, a bateria inteira e uma entrada nas novidades da app (web/avisos.js).');
+    console.log('     quadros, colunas e códigos (`quadros`, `colunas`, `colunasNomes`, `naturezas`, `naturezasTexto`, `quadro5`,');
+    console.log('     `quadro10` — os regimes e os motivos). Quando sair: `modelo.oficial = true` e o texto.');
+    console.log('  3. O IAS de ' + para + ' (`ias`, a portaria do IAS sai em dezembro/janeiro) e, no fim, `revisto` com a data da revisão.');
+    console.log('  4. As `novidades`: trocar a frase provisória pelo que mudou, em frases para quem declara.');
+    console.log('  5. Os `passos`: os factos com número (escalões, limites) e o que o modelo novo mudou — sem anos escritos.');
+    console.log('  6. node --test testes/irs-anos.test.js testes/irs-versoes-quadros.test.js, a bateria inteira e uma entrada nas');
+    console.log('     novidades da app (web/avisos.js).');
   } catch (e) {
     console.error(e.message);
     process.exit(1);

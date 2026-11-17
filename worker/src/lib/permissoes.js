@@ -118,15 +118,27 @@ export function kindsVisiveis(perms) {
   return Object.keys(KIND_PERM).filter((k) => kindVisivel(perms, k));
 }
 
+// Os campos da casa que só os donos escrevem (D08, D29, D33, D52): os
+// comproprietários sem conta, o histórico das quotas, a venda e o
+// subarrendamento. Um colaborador, mesmo com house.edit, não os muda
+// (fundirCasa); os dois primeiros são quotas e nem os vê (projetarCasa). A
+// afetação da caderneta (D71) é dado registal: vê-se e escreve-se como a
+// morada.
+const SO_DOS_DONOS = ['comproprietariosFora', 'quotasHist', 'vendido', 'subarrendamento'];
+
 // A casa como um cargo a vê: sem hipotecas salvo loan.view, sem fotos salvo
 // file.view, sem valor/aquisição salvo report.view, sem notas/anúncio/tarefas salvo
-// house.edit, e nunca as quotas. O que fica é o que qualquer colaborador vê:
-// nome, morada, quartos, dados registais.
+// house.edit, e nunca as quotas (nem os comproprietários sem conta, nem o
+// histórico delas). O que fica é o que qualquer colaborador vê: nome,
+// morada, quartos, dados registais (a afetação incluída), a venda e o
+// subarrendamento.
 // Recebe: data — o JSON da casa já interpretado (objeto); perms — Set ou array.
 // Devolve: um objeto novo, despido; data não é alterado.
 export function projetarCasa(data, perms) {
   const d = Object.assign({}, data && typeof data === 'object' ? data : {});
   delete d.ownerShares;
+  delete d.comproprietariosFora;
+  delete d.quotasHist;
   if (!temPerm(perms, 'loan.view')) delete d.loans;
   if (!temPerm(perms, 'file.view')) delete d.photos;
   if (!temPerm(perms, 'report.view')) { delete d.value; delete d.purchase; }
@@ -151,7 +163,9 @@ export function projetarRegisto(kind, data, perms) {
 // A ficha do imóvel que um colaborador com house.edit grava, fundida sobre a
 // que está na base: só entram os campos que o cargo pode ver — o cliente
 // dele não tem o valor de mercado nem as hipotecas, e gravar a casa inteira
-// punha zeros por cima do que o dono escreveu. Donos e quotas nunca entram.
+// punha zeros por cima do que o dono escreveu. Donos e quotas nunca entram,
+// nem os campos SO_DOS_DONOS (os comproprietários sem conta, o histórico das
+// quotas, a venda e o subarrendamento): ficam como estão na base.
 // Recebe: existenteStr — o JSON da casa na base, em texto; incoming — o
 // objeto que o cliente mandou (já passado por cleanData); perms — Set ou array.
 // Devolve: um objeto novo com a casa fundida, pronto a gravar.
@@ -160,7 +174,7 @@ export function fundirCasa(existenteStr, incoming, perms) {
   try { const ex = JSON.parse(existenteStr); if (ex && typeof ex === 'object') base = ex; } catch (e) {}
   const out = Object.assign({}, base);
   const bloqueado = (k) =>
-    k === 'ownerIds' || k === 'ownerShares' ||
+    k === 'ownerIds' || k === 'ownerShares' || SO_DOS_DONOS.includes(k) ||
     (k === 'loans' && !temPerm(perms, 'loan.view')) ||
     (k === 'photos' && !temPerm(perms, 'file.view')) ||
     ((k === 'value' || k === 'purchase') && !temPerm(perms, 'report.view')) ||

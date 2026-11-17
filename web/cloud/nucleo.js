@@ -148,6 +148,8 @@ function loadBases() {
   var lidas = {};
   try { lidas = JSON.parse(localStorage.getItem(baseKey()) || '{}') || {}; } catch (e) { lidas = {}; }
   bases = {}; basesPorEnviar = {};
+  // uma base das definições por migrar guardada é de uma leitura antiga: espera pela próxima (pushNow)
+  definicoesLidasEm = 0; definicoesPorLer = false;
   Object.keys(lidas).forEach(function (id) {
     try {
       if (!lidas[id] || typeof lidas[id] !== 'object') return;
@@ -170,17 +172,16 @@ function loadBases() {
 /* Uma base guardada (ou o que o servidor manda), na forma local desta versão:
    pela normalização do tipo (normalizarDaChave) e sem as chaves de trabalho
    (strip; numa casa, também sem os donos e as quotas; nas definições, sem o
-   tema, que é do aparelho).
+   tema, que é do aparelho, e sem as migrações que o servidor ainda não
+   tinha: definicoesDaBase).
    Recebe: id — a chave da base (o id de uma casa, ou a chave do retrato de
    um registo); v — o objeto.
    Devolve: o objeto na forma local, ou null quando o tipo não se conhece. */
 function baseNaFormaLocal(id, v) {
   if (id.indexOf(':') < 0) return stripHouse(normProp(v));
+  if (parseKey(id).kind === 'settings') return definicoesDaBase(v);
   var n = normalizarDaChave(parseKey(id), v);
-  if (!n) return null;
-  n = strip(n);
-  if (parseKey(id).kind === 'settings') delete n.theme;
-  return n;
+  return n ? strip(n) : null;
 }
 
 /* Um registo pela normalização desta versão, pelo tipo da chave — a mesma
@@ -198,6 +199,104 @@ function normalizarDaChave(pk, v) {
     profile: normPerson, tpl: normTpl, group: normGroup }[pk.kind];
   return norm ? norm(v) : null;
 }
+
+/* As migrações das definições com marca (web/app/dados.js:fillCats): a marca e
+   os campos que cada uma muda. Correm em cada leitura (rebuildDb,
+   normalizarDaChave), mas a marca não sobe sozinha: a base da fusão a três
+   era a forma local já migrada, igual ao que este aparelho tem, e por isso o
+   envio nunca levava nem a marca nem os valores migrados (fusaoValor: igual
+   à base, fica o do servidor). Sem a marca no servidor, a leitura seguinte
+   migrava outra vez — a escolha de propósito de «Outros gastos» numa das
+   chaves do mapa voltava a «a confirmar», e a subcategoria nova removida
+   voltava. Ver definicoesDaBase. */
+var MIGRACOES_DAS_DEFINICOES = [
+  { marca: 'catsV', campos: ['cats', 'catsIn', 'catIds'] },
+  { marca: 'irsMapaV', campos: ['irsMapa'] }
+];
+
+/* O valor de uma marca de migração: um número > 0, ou 0 (sem marca, ou lixo),
+   como o fillCats a lê.
+   Recebe: v — a marca guardada.
+   Devolve: o número. */
+function marcaDe(v) {
+  return Number(v) > 0 ? Number(v) : 0;
+}
+
+/* As migrações das definições que umas definições ainda não têm e outras já:
+   as de cru com a marca abaixo da de migradas.
+   Recebe: cru — as definições como estão (do servidor, ou uma base);
+   migradas — as mesmas depois do fillCats (ou o que este aparelho tem).
+   Devolve: a lista das entradas de MIGRACOES_DAS_DEFINICOES em falta ([] se nenhuma). */
+function definicoesAbaixo(cru, migradas) {
+  cru = fusaoObjeto(cru) ? cru : {};
+  migradas = fusaoObjeto(migradas) ? migradas : {};
+  return MIGRACOES_DAS_DEFINICOES.filter(function (m) { return marcaDe(cru[m.marca]) < marcaDe(migradas[m.marca]); });
+}
+
+/* As definições na forma local, como a base de u:settings:main (sem as
+   chaves de trabalho nem o tema, que é do aparelho). Quando o servidor ainda
+   não tem uma das migrações (a marca abaixo da desta versão), a base fica
+   com a marca dele e, nos campos que a migração mudou, com o valor de antes
+   dela: o envio seguinte leva a marca e os valores migrados, uma vez
+   (baseParcial vê-os mudados), e o servidor deixa de migrar. Os outros
+   campos ficam normalizados, como sempre — uma diferença só de forma não
+   sobe. Idempotente: a base que isto dá, guardada e lida outra vez
+   (loadBases), dá a mesma.
+   Recebe: v — as definições como o servidor as tem (ou uma base guardada).
+   Devolve: um objeto novo. */
+function definicoesDaBase(v) {
+  var pk = { kind: 'settings' }, cru = fusaoObjeto(v) ? v : {};
+  var limpa = function (s) { s = strip(s); delete s.theme; return s; };
+  var mig = limpa(normalizarDaChave(pk, cru));
+  var abaixo = definicoesAbaixo(cru, mig);
+  if (!abaixo.length) return mig;
+  // as mesmas definições sem migrar: com as marcas já no fim, o fillCats só normaliza
+  var fixo = Object.assign({}, cru);
+  MIGRACOES_DAS_DEFINICOES.forEach(function (m) { fixo[m.marca] = mig[m.marca]; });
+  var sem = limpa(normalizarDaChave(pk, fixo));
+  abaixo.forEach(function (m) {
+    if (cru[m.marca] === undefined) delete mig[m.marca]; else mig[m.marca] = JSON.parse(JSON.stringify(cru[m.marca]));
+    m.campos.forEach(function (c) {
+      if (fusaoIguais(mig[c], sem[c])) return;
+      if (sem[c] === undefined) delete mig[c]; else mig[c] = sem[c];
+    });
+  });
+  return mig;
+}
+
+/* As definições de uma base como o fillCats as deixa (migradas), sem as
+   chaves de trabalho nem o tema: é a base da fusão ao ler (fundirRegistoLocal).
+   O que este aparelho tem e o que o servidor manda já vêm migrados; com a
+   base por migrar (definicoesDaBase), a migração contava como «mudei aqui» e
+   desfazia o que outro aparelho escolheu depois de migrar.
+   Recebe: b — a base das definições.
+   Devolve: um objeto novo. */
+function definicoesMigradas(b) {
+  var s = strip(normalizarDaChave({ kind: 'settings' }, fusaoObjeto(b) ? b : {}));
+  delete s.theme;
+  return s;
+}
+
+/* Quando o applyState deu às definições uma base sem as migrações do
+   servidor (definicoesDaBase), em ms; 0 sem nenhuma, ou numa página nova.
+   Essa base é o que o servidor tinha NESSA leitura: um envio muito depois
+   (o aparelho ficou sem rede, ou a app fechou e voltou a abrir) podia levar
+   a migração por cima de uma escolha feita entretanto noutro aparelho que
+   já tinha migrado — e a fusão do servidor não distingue «outros» por
+   migrar de «outros» escolhido. Passado DEFINICOES_FRESCAS_MS, as
+   definições esperam pela leitura seguinte, que refaz a base (pushNow). */
+var definicoesLidasEm = 0;
+var DEFINICOES_FRESCAS_MS = 60000;
+
+/* As definições da conta como o servidor as tem, no estado (o u:settings:main
+   de userRecords; o rebuildDb lê as mesmas).
+   Recebe: st — o estado de GET /api/state.
+   Devolve: o objeto, ou null quando o estado não as traz. */
+function definicoesDoEstado(st) {
+  var r = ((st && st.userRecords) || []).filter(function (x) { return x && x.kind === 'settings'; }).pop();
+  return r && fusaoObjeto(r.data) ? r.data : null;
+}
+var definicoesPorLer = false;   // o pushNow deixou as definições à espera de uma leitura (syncCycle lê já)
 
 /* A chave da base de uma entidade: o id da casa, ou a chave do retrato.
    Recebe: k — a chave do retrato ('h:…', 'r:…', 'u:…').
@@ -935,6 +1034,16 @@ function pushNow() {
        que a traz: subia sem base, com os campos de uma cópia que pode ser
        velha por cima dos do servidor */
     if (!b && (k in snap) && !sabeOServidor) return;
+    /* as definições com uma base por migrar (definicoesDaBase) de uma
+       leitura que já não é fresca: a migração podia ir por cima do que
+       outro aparelho escolheu entretanto. Esperam pela leitura seguinte
+       (syncCycle lê já), que refaz a base — e a base fica no aparelho,
+       para a fusão dessa leitura (reporPendentes) */
+    if (b && k === 'u:settings:main' && definicoesAbaixo(b, op.data).length
+      && !(definicoesLidasEm && Date.now() - definicoesLidasEm <= DEFINICOES_FRESCAS_MS)) {
+      basesPorEnviar[k] = 1; definicoesPorLer = true;
+      return;
+    }
     if (b) {
       op.base = baseParcial(b, op.data);
       /* igual à versão do servidor que este aparelho leu: não há nada a
@@ -1599,14 +1708,24 @@ function fundirTres(base, chega, atual) {
 }
 // </fusao>
 
+/* Os campos de uma casa que só o servidor escreve (worker/src/lib/acesso.js:
+   CAMPOS_DAS_QUOTAS, preserveOwnership): os donos e as quotas entre as
+   contas, os comproprietários sem conta e o histórico das quotas. Mudam
+   pelas propostas, ao sair, ao deixar de partilhar e ao apagar uma conta —
+   nunca pelo que este aparelho grava. */
+var CAMPOS_DO_SERVIDOR = ['ownerIds', 'ownerShares', 'comproprietariosFora', 'quotasHist'];
+
 /* O objeto local com o que é do servidor: as marcas (os campos com '_' —
-   quem escreveu e quando, o cargo, de quem é) e, numa casa, os donos e as
-   quotas, que só mudam por proposta confirmada. O resto é o que foi escrito
+   quem escreveu e quando, o cargo, de quem é) e, numa casa, os donos, as
+   quotas, os de fora e o histórico delas (CAMPOS_DO_SERVIDOR), que só mudam
+   no servidor: uma cópia velha deles aqui (uma casa mexida sem rede antes
+   de uma proposta aceite) não fica por cima até à leitura seguinte, nem a
+   lista dos de fora se junta à do servidor. O resto é o que foi escrito
    aqui e ainda não subiu.
    Recebe: local — o objeto deste aparelho; servidor — a versão da base refeita.
    Devolve: um objeto novo. */
 function fundidoComServidor(local, servidor) {
-  var doServidor = function (k) { return k.charAt(0) === '_' || k === 'ownerIds' || k === 'ownerShares'; };
+  var doServidor = function (k) { return k.charAt(0) === '_' || CAMPOS_DO_SERVIDOR.indexOf(k) > -1; };
   var c = JSON.parse(JSON.stringify(local));
   Object.keys(c).forEach(function (k) { if (doServidor(k)) delete c[k]; });
   Object.keys(servidor || {}).forEach(function (k) { if (doServidor(k)) c[k] = servidor[k]; });
@@ -1668,14 +1787,15 @@ function fundirCasaLocal(local, servidor, base) {
    fundido com o que o servidor acabou de mandar e com a base deste aparelho,
    como a casa (fundirCasaLocal): passa pela normalização do tipo, e as
    marcas são do servidor. Nas definições o tema fica de fora (é do
-   aparelho). Um tipo que esta versão não conhece fica como está aqui.
+   aparelho), e a base entra migrada (definicoesMigradas), como o local e o
+   do servidor já vêm. Um tipo que esta versão não conhece fica como está aqui.
    Recebe: pk — o resultado de parseKey; local — o objeto deste aparelho;
    servidor — o da base refeita; base — a base que este aparelho tinha
    (forma local), ou undefined.
    Devolve: um objeto novo. */
 function fundirRegistoLocal(pk, local, servidor, base) {
   var l = strip(local), s = strip(servidor);
-  if (pk.kind === 'settings') { delete l.theme; delete s.theme; }
+  if (pk.kind === 'settings') { delete l.theme; delete s.theme; if (base) base = definicoesMigradas(base); }
   var f = normalizarDaChave(pk, fundirTres(base || baseSemListas(l), l, s));
   return fundidoComServidor(f || local, servidor);
 }
@@ -1821,6 +1941,17 @@ function applyState(st, selo, resumoSt) {
     snap[k] = resumoDeTexto(JSON.stringify(map[k].data));
     bases[chaveDaBase(k)] = map[k].data;
   });
+  // as definições que o servidor ainda não tem migradas: a base é a dele sem
+  // as migrações, e o envio seguinte leva-as, uma vez (definicoesDaBase)
+  definicoesLidasEm = 0; definicoesPorLer = false;
+  var defsDoServidor = definicoesDoEstado(st);
+  if (defsDoServidor && bases['u:settings:main'] && definicoesAbaixo(defsDoServidor, db.settings).length) {
+    var baseDefs = definicoesDaBase(defsDoServidor);
+    bases['u:settings:main'] = baseDefs;
+    snap['u:settings:main'] = resumoDeTexto(JSON.stringify(baseDefs));
+    basesPorEnviar['u:settings:main'] = 1;
+    definicoesLidasEm = Date.now();
+  }
   // o que o servidor tem e o cliente decidiu deixar de exportar fica marcado
   // para o próximo push apagar; o que ele não sabe ler, e o que não sobe por
   // falta de permissão num imóvel de colaboração (é do dono), não
@@ -1892,9 +2023,15 @@ function pedirEstado(condicional) {
 // O servidor está como estava no último estado aplicado: não há nada para
 // refazer nem para repintar. Se esta leitura era uma tentativa de ligar (a
 // última conversa tinha falhado por falta de rede), o «A ligar» acaba em
-// «Guardado» — e vê-se se há por enviar.
+// «Guardado» — e vê-se se há por enviar. As definições à espera de uma
+// leitura (definicoesPorLer) têm-na: o servidor não mudou desde a base que
+// o último estado lhes deu, e ela volta a valer.
 // Devolve: nada.
 function estadoIgual() {
+  if (definicoesPorLer) {
+    definicoesPorLer = false;
+    if (definicoesLidasEm) { definicoesLidasEm = Date.now(); schedulePush(); }
+  }
   if (!ligou()) return;
   setSyncBadge('ok');
   schedulePush();
@@ -1943,6 +2080,8 @@ function intervaloDeLeitura(agora) {
 // de uma hora parada é de meia hora, e o selo ficava vermelho esse tempo todo
 // com a rede já de volta —, salvo se o envio deste ciclo já tentou. Com o
 // separador escondido só envia: ninguém está a ver, e voltar à frente lê.
+// As definições que o envio deixou à espera de uma leitura (definicoesPorLer)
+// leem-se já, sem esperar pelo intervalo.
 // Devolve: nada — dispara o push (e talvez o pull) e segue.
 function syncCycle() {
   if (!CW.user) return;
@@ -1953,7 +2092,7 @@ function syncCycle() {
   pushNow().then(function () {
     if (document.hidden || modalStack.length || aEscreverNumCampo()) return;
     var ler = semLigacao ? ultimaTentativa < desde : Date.now() - lastPull > intervaloDeLeitura();
-    if (ler) pullNow();
+    if (ler || definicoesPorLer) pullNow();
   });
 }
 

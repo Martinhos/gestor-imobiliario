@@ -291,6 +291,7 @@ describe('os números do exemplo', () => {
     assert.ok(imgs.includes('<span class="apr-a-fis-acoes"><span class="apr-m-botao pequeno">' + app.ic('livro', 12) + 'Guia</span><span class="apr-a-icobotao">' + app.ic('partilhar', 12) + '</span></span>'),
       'a barra: o livro com «Guia» e a partilha só de ícone');
     assert.match(imgs, /apr-m-botao pequeno apr-alvo">/, 'o «Guia» em destaque na imagem do titular');
-    assert.match(imgs, /escolhe-o no <b>funil<\/b> do cabeçalho, com o ano/);
+    // D81 (auditoria ao IRS): o funil só tem o ano desde o KAN-73; a frase do titular está no irs-guia-textos.test.js
+    assert.match(imgs, /No <b>funil<\/b> escolhes o ano/);
   });
 });

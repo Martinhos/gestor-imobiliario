@@ -50,6 +50,7 @@ com o caminho inteiro (worker/src/lib/servicos.js:SERVICOS).
 - As regras do IRS têm uma versão por ano
 - O que o contrato diz ao IRS para lá das datas
 - A Declaração sabe a tua situação
+- As categorias que o IRS lê
 - Segurar não é selecionar
 - Entrar na seleção é como nas Casas
 - A fita da barra de baixo
@@ -2408,7 +2409,10 @@ permissões neste imóvel são retiradas, o que registou fica com o dono, não s
 desfaz, e para voltar pede ao dono um convite novo. Ao comproprietário: as
 permissões são retiradas, a quota vai para os que ficam na proporção das
 deles (imovel.js:imvFraseDaQuota), os saldos e o IRS passam a contar com as
-quotas novas também nos movimentos já registados, e para voltar quem o criou
+quotas novas também nos movimentos já registados (o servidor guarda as de
+antes no histórico das quotas — ver «As quotas com data», em «Grupos
+partilhados» —, mas a Declaração ainda não o lê), e
+para voltar quem o criou
 tem de o partilhar outra vez. Não há Anular: a saída é no servidor
 (cloud/partilha.js:CW.sairDaCasa). Só depois da resposta aparece o aviso
 «Saíste de Nome.», as janelas fecham, os filtros que apontavam para o imóvel
@@ -3121,7 +3125,10 @@ linhas na proporção das rendas de cada uma — contando também as rendas que
 ficam fora do quadro, cuja parte não entra (fisco-resumo.js:fiscoReparte) —, e o
 imposto à cabeça é a estimativa sem englobamento; a página chama a cada uma
 estimativa, porque é. Quem declara é a pessoa, no Portal das Finanças; a app
-poupa-lhe a soma e a procura, não a assinatura.
+poupa-lhe a soma e a procura, não a assinatura. Os Termos dizem-no na
+cláusula do IRS, no §2, a seguir às minutas, aprovada palavra por palavra
+(web/legal.js; o testes/irs-termos-aviso.test.js confere-a), e o aviso curto
+que a Declaração, o PDF, o CSV e o guia levam é o irs.js:IRS_AVISO.
 
 A página é a prancheta D-Declaracao, mais curta: a barra só tem as ações,
 juntas à direita e numa linha também no telemóvel (fisco.js:fisBarra,
@@ -3132,9 +3139,16 @@ diz no aria-label e no title «Guia de preenchimento do Anexo F»; e o botão de
 partilha, só de ícone, no feitio do da Avaliação (avaliacao.js:avaPartilha),
 que abre a janela de escolha da casa (componentes.js:pickModal,
 fisco.js:fiscoPartilha) com «Exportar CSV» e «Exportar PDF»
-(fisco-pdf.js:fiscoPdf, só com os Contratos ligados, onde vive o escritor do
-PDF), cada uma com o ícone e uma linha do que leva. Não há partilha do resumo
-em texto: o CSV e o PDF já levam os números. A app não tem guia
+(fisco-pdf.js:fiscoPdf; a Declaração requer os Contratos, e a janela leva
+sempre o CSV e o PDF), cada uma com o ícone e uma linha do que leva. Não há
+partilha do resumo em texto: o CSV e o PDF já levam os números. O CSV, o PDF
+e o texto do resumo (fisco-exportar.js:fiscoTexto, que os testes leem) levam
+o campo de cada linha e o dos subquadros que se ligam a ela, as rendas sem
+contrato com o valor, o que há a tratar, a linha das regras
+(fisco-exportar.js:fiscoRegrasTexto: o ano, oficiais ou provisórias,
+revistas a, a versão da app) e o IRS_AVISO no fim. O imposto de uma linha
+nunca é negativo; o prejuízo a reportar é de cada titular
+(fisco-exportar.js:fiscoPrejuizos). A app não tem guia
 próprio nem faixa das regras do ano: o prazo, o que mudou e os passos vivem
 no guia. Um ano sem versão própria das regras, ou com uma provisória, di-lo
 em «A tratar antes de entregar» (fisco-avisos.js:fiscoAvisos). Depois, os cinco
@@ -3143,14 +3157,25 @@ cartão azul-noite (fisco.js:fiscoKpis); a grelha «A tratar antes de
 entregar», «A tua situação fiscal» e «Prazos da AT»; e um cartão por
 quadro, o 4.1 e o 4.2, com tudo o que é desse quadro lá dentro e nada do
 outro (fisco-quadros.js:fiscoQuadroCard): o título diz o quadro e o que lá vai
-(«Quadro 4.1 · sem redução pela duração»); abre com onde se preenche e o
-resumo dos contratos dele, um por linha, com as rendas, o imposto estimado e
-o que falta, e o total do quadro (fisco-quadros.js:fiscoQuadroResumoHtml); e depois
+(«Quadro 4.1 · sem redução pela duração»); abre com onde se preenche, por
+esta ordem — uma linha por prédio ou fração de cada contrato, com a renda que
+lhe cabe — e o resumo dos contratos dele, um por linha, com o n.º do campo, as
+rendas e o imposto estimado, ou o prejuízo; o total do quadro é a soma das
+linhas e bate com o KPI (fisco-quadros.js:fiscoQuadroResumoHtml); e depois
 os campos, num cartão por contrato, campo → valor pela ordem do impresso, sem
 rolar de lado (fisco-quadros.js:fiscoContratoHtml, fisco-quadros.js:fiscoCamposDe), com um
 cartão do total no fim. Nenhum cartão fala dos dois quadros ao mesmo tempo:
 uma tabela só, com o quadro numa coluna, não dizia onde se preenchia cada
-contrato. O PDF leva os mesmos
+contrato. A taxa da linha é a da lei do ano; a escrita no contrato, quando é
+outra, é uma nota no cartão (fisco-quadros.js:fiscoTaxaEscritaOutra). A
+natureza assumida vai com o selo de falta. O 4.2 não tem a data de início,
+que vai no 4.2A. O quadro 4.4 diz-se uma vez, no primeiro quadro, com a
+ligação ao guia (fisco-quadros.js:fiscoMudanca100kmHtml). Os cartões abrem
+sempre a ficha: a Declaração requer os Contratos e os Movimentos. No fim da
+página, um cartão discreto com o aviso aprovado (irs.js:IRS_AVISO,
+fisco.js:fiscoAvisoCard) e o botão do CSV e do PDF. Sem
+rendas no ano, o vazio nomeia os contratos em vigor nele sem rendas
+registadas (fisco.js:fiscoContratosSemRendas). O PDF leva os mesmos
 campos e os mesmos números. Não há simulação do englobamento: comparar com
 os escalões pedia os outros rendimentos do agregado e não se lia; o guia
 explica a escolha, e o imposto à cabeça diz «sem englobamento». «Fora da
@@ -3163,7 +3188,22 @@ cada aviso leva o selo do seu nível — vermelho o que falta à AT, âmbar o qu
 convém tratar, cinzento o que só se diz — e um botão que diz o sítio que
 abre (fisco.js:fiscoRotuloDoAviso). O nível vem do resumo
 (fisco-avisos.js:fiscoAvisos, o campo `nivel`), e os números do resumo não mudam
-com ele. Os prazos da AT
+com ele. Um ano antes da primeira versão das regras é vermelho: os números
+não servem para a declaração desse ano. As faltas dos contratos (sem início,
+sem finalidade — a 07 é assumida —, rendas depois do termo sem renovação
+registada) e a fração com mais do que um código são vermelhas. As rendas sem
+contrato também são vermelhas, com o valor: declaram-se na mesma. A taxa
+escrita que não é a da lei do ano dá um aviso. As rendas de cada contrato
+conferem-se renda a renda, pelo mês a que respeitam, e nunca pelo total do
+ano (fisco-avisos.js:fiscoAvAnaliseDasRendas): a retenção que não bate com a
+renda, o inquilino que devia reter e o ano sem retenção, os meses com duas
+rendas e as antecipadas por lançar (fisco-avisos.js:fiscoAvAntecipadas).
+Dizem sempre «confirma no recibo», porque a app não sabe o que se reteve. As
+taxas da retenção vêm da versão (o bloco retencao,
+fisco-avisos.js:fiscoAvRetencaoCerta). As despesas «a confirmar» aparecem uma
+por categoria, com o nome e o valor de cada uma. Sem avisos, «A tratar» diz
+«Não encontrámos nada em falta nos dados que registaste», e nunca que não
+falta nada. Os prazos da AT
 estão na própria página (fisco.js:fisPrazosCard): os de prazos.js:prazosAtivos
 do Modelo 2, da cessação, dos recibos, da entrega, de fevereiro, do IHRU e do
 Modelo 44, os cinco primeiros, com o selo da urgência da linguagem («Passou
@@ -3172,7 +3212,9 @@ cinzento), e nada antes de o estado chegar (espera.js:sabemosOEstado).
 
 Os números seguem a regra de caixa da lei. Uma renda conta no ano em que se
 recebe, mesmo que respeite a outro, e a parte de anos anteriores fica
-apontada para o quadro 8 (fisco-quadros.js:fiscoAnosAnterioresCard). Um gasto conta
+apontada para o quadro 8 (fisco-quadros.js:fiscoAnosAnterioresCard), com o
+8B e o prazo das declarações de substituição (30 dias depois do fim da
+entrega). Um gasto conta
 no ano em que se pagou, e só se o imóvel tinha um contrato em vigor nesse
 dia — o condomínio de um mês com a casa vazia não é gasto de arrendamento;
 o IMI e o selo contam no ano em que o imóvel deu rendas
@@ -3184,15 +3226,36 @@ A coluna onde um gasto cai sai de uma regra que se vê e se muda: o mapa
 categoria → coluna vive nas Definições, na coluna do Anexo F da tabela das
 categorias, por categoria ou por «categoria / subcategoria», e repõe-se num
 toque (definicoes.js:vCats, definicoes.js:tabelaDeCategorias). A escolha
-feita no próprio movimento manda sobre a regra, a subcategoria manda sobre a
-categoria, e o que não tem regra cai em «outros gastos» com a origem à vista
-(irs-papeis.js:irsColunaDe) — para o resumo poder dizer «isto foi por
-omissão» em vez de o esconder num total.
+feita no próprio movimento manda sobre a regra, e a subcategoria manda sobre
+a categoria. O que não tem regra, e o que o mapa diz «a confirmar» (a coluna
+'confirmar'), não conta em coluna nenhuma: fica em aConfirmar, com o nome e o
+valor, até a pessoa escolher a coluna na despesa (fisco-resumo.js:resumoFiscal;
+irs-papeis.js:irsColunaDe), e a despesa diz de onde veio a coluna («sem
+regra: escolhe a coluna», «fixo por lei: vai ao quadro 9») em vez de o
+esconder num total. O AIMI é sempre não dedutível, à frente da escolha do
+movimento e do mapa: vai ao quadro 9. Na dúvida, a app não deduz. A migração
+irsMapaV=2 só muda uma chave do mapa cujo valor gravado é ainda o antigo de
+origem.
 
 As obras feitas nos 24 meses antes de um contrato, com a casa vazia, entram
-na linha dele no primeiro ano em que ele tem rendas, e só nesse
-(fisco-resumo.js:resumoFiscal): o ano do início pode não ter renda nenhuma, e a obra
-não pode ficar em ano nenhum nem em dois.
+na linha dele no ano em que ele começa, como pedem as instruções, mesmo com a
+primeira renda paga antes, na assinatura (fisco-resumo.js:resumoFiscal). Só
+quando o ano do início não tem renda nenhuma vão para o primeiro ano com
+rendas, para não ficarem em ano nenhum nem em dois; o cartão das obras di-lo.
+
+O imposto estimado faz-se titular a titular
+(fisco-resumo.js:fiscoImpostoPorTitular; CIRS art. 55.º). A perda de um
+titular abate só às rendas dele no mesmo ano, repartida pelas linhas
+positivas na proporção do líquido, cada parte à taxa da sua linha, e nunca às
+do cônjuge. Nenhuma linha tem imposto negativo: a que tem o líquido negativo
+fica com o prejuízo. O KPI do imposto é o totais.imposto, e o KPI e os totais
+dos quadros são a mesma soma. O prejuízo diz-se por titular, com a condição
+dos 36 meses; com o quadro 9 há uma linha «depois do AIMI», e a falta a pagar
+conta com ela. Cada linha leva o n.º do campo do seu quadro (4001… no 4.1,
+4501… no 4.2), pela ordem da página (fisco-resumo.js:fiscoNumerarCampos). A
+finalidade por indicar (a natureza 07 é assumida), o início em falta e mais
+do que uma fração no mesmo campo são faltas. O contrato anterior do 4.2B é o
+do mesmo quarto, e já acabado.
 
 O contrato em PDF segue a mesma regra de não inventar. Uma frase sem o dado de
 que precisa sai, em vez de sair com um espaço em branco ou um valor por
@@ -3211,8 +3274,15 @@ vale para esses rendimentos: o prazo da entrega, se o Anexo F desse ano já
 foi aprovado (irs-2026.js:modelo), as taxas — a da habitação, a do não
 habitacional, os regimes da redução pela duração com as datas em que valem e
 a das rendas moderadas (irs-2026.js:rendaModerada) —, as colunas de gastos,
-os códigos da natureza, os quadros, a data da comunicação de fevereiro, o que
-mudou nesse ano e o guia de preenchimento. Uma versão é dados, nunca código,
+os códigos da natureza, os quadros, os códigos e textos das tabelas do
+impresso (as naturezas das rendas, o quadro 5, o regime e o motivo do quadro
+10 — irs-2026.js:quadro10 —, os nomes das colunas), as isenções com as
+condições que o motor confere (irs-2026.js:isencoes: desde, celebradoAte,
+ateAno, pede, pedeIhru, finalidade), a portaria dos limites do n.º 23 por
+intervalo de datas (limiteRendaAlta.portaria), as taxas da retenção na fonte
+(o bloco retencao), o IAS do ano (ias), o dia da última revisão (revisto), a
+data da comunicação de fevereiro, o que mudou nesse ano e o guia de
+preenchimento. Uma versão é dados, nunca código,
 e cada dado tem a fonte no cabeçalho do ficheiro.
 
 O nome é o ano dos RENDIMENTOS, não o da entrega: o irs-2026.js é a
@@ -3222,21 +3292,36 @@ se aplica; o PDF diz sempre os dois (fisco-pdf.js:fiscoPdfDocumento).
 
 Quem lê é o motor (irs.js:irsAno, irs.js:irsTaxa, irs.js:irsReducao). A taxa
 de um contrato num ano sai da versão desse ano, e fica a mais baixa entre a
-base, a redução pela duração e a das rendas moderadas; a escrita no contrato
-manda sobre todas (irs.js:taxRateOf). A redução pela duração é o que manda um
+base, a redução pela duração e a das rendas moderadas. Fora da Declaração
+(as projeções, a renda líquida), a escrita no contrato manda sobre todas
+(irs.js:taxRateOf). Na Declaração a taxa é sempre a da lei do ano, e a
+escrita fica ao lado, em taxaEscrita, para a nota e o aviso
+(fisco-resumo.js:fiscoLinhaNova). A redução pela duração é o que manda um
 contrato para o quadro 4.2 e o que pede a comunicação de fevereiro
 (prazos.js:prazosDe); a taxa das rendas moderadas não pede nenhuma das duas.
-Por isso nenhum código pergunta se a taxa é menor do que 25 — com os 10 % de
-2026 essa pergunta acendia o aviso de fevereiro em quase todos os contratos.
+A redução só o é quando fica abaixo da taxa base da versão
+(taxas.habitacional): um contrato de 2 a 5 anos do regime de 2019 (26 %)
+paga os 25 % e não vai ao 4.2 (irs.js:irsReducaoDoPeriodo). A taxa das
+rendas moderadas nunca conta como redução.
+
+A taxa conta-se período a período, cada renovação a partir da do período
+anterior, nos dois regimes (OC 20217/2020; irs.js:irsCadeia), e um ano com
+uma renovação a meio, ou com rendas depois do termo sem renovação registada,
+parte-se em troços (irs.js:irsSegmentosDoAno).
 
 Um ano sem versão usa a mais recente antes dele, com as datas da AT passadas
 para o ano certo, e a página di-lo em vez de fingir (o `exato` do
 irs.js:irsAno). O ano novo funciona no dia 1 de janeiro, e a versão dele chega
 quando as regras forem conhecidas: o scripts/nova-versao-irs.js copia a
 última, passa as datas, marca o modelo como provisório, troca as novidades
-por uma frase verdadeira e regista o ficheiro no index.html, no sw.js, no
-arnês e no MAPA; depois alguém confirma com o Orçamento, a portaria do Modelo
-3 e o ofício-circulado da AT, e muda o que mudou. Os passos do guia não
+por uma frase verdadeira, deixa a data da revisão e o IAS em branco (são do
+ano e ninguém os conferiu), pára se os passos tiverem anos escritos e regista
+o ficheiro no index.html, no sw.js, no arnês e no MAPA; depois alguém
+confirma com o Orçamento, a portaria do Modelo 3 e o ofício-circulado da AT,
+e muda o que mudou. Só as datas do ano dos rendimentos andam com a cópia (a
+entrega e o 15 de fevereiro); as da lei — o desde de um regime, o
+celebradoAte do PAA, os intervalos da portaria do n.º 23 — copiam-se como
+estão. Os passos do guia não
 escrevem anos — dizem {ano} e {ate} — para a cópia não arrastar anos
 velhos; a página já não os mostra (vivem no guia público), mas ficam na
 versão como dados. O testes/irs-anos.test.js confere cada
@@ -3245,29 +3330,42 @@ versão, o registo dela e o próprio guião, numa cópia da árvore.
 ## O que o contrato diz ao IRS para lá das datas
 A taxa de um contrato não sai só das datas e da renda: sai também de quatro
 respostas que a pessoa dá no bloco fiscal (dados.js:normFisco). A isenção
-(`isencao`: PAA, RSAA, programa municipal ou de alojamento estudantil) vem
-antes de tudo — 0 % (irs.js:irsTaxa, irs.js:irsIsencao), na linha do 4.1 e
-com o quadro 6D a apontar para ela; a lista das isenções, com o código e a
-explicação, é da versão do ano (`isencoes` no irs-2026.js), e o RSAA não
-existe antes de 2026. Num contrato celebrado desde 2024, a renda acima de
+(`isencao`: PAA, RSAA, programa municipal ou de alojamento estudantil, renda
+antiga anterior ao RAU (6H) e ex-alojamento local (6F)) vem antes de tudo —
+0 % (irs.js:irsTaxa, irs.js:irsIsencao), na linha do 4.1 e com o quadro dela
+(o 6D, o 6F ou o 6H) a apontar para ela; a lista das isenções, com o quadro,
+o código e a explicação, é da versão do ano (`isencoes` no irs-2026.js), e o
+RSAA não existe antes de 2026. As isenções têm as condições na versão
+(desde, celebradoAte, ateAno, finalidade, pede, pedeIhru), e o motor diz qual
+falha (irs.js:irsIsencaoMotivo). As que pedem uma confirmação (`pede`: a
+renda antiga e o ex-alojamento local) o formulário não as oferece enquanto
+não tiver a pergunta que as confirma; a já escolhida continua à vista
+(contrato.js:fiscoSect). Num contrato celebrado desde 2024, a renda acima de
 150 % do limite do concelho faz perder a redução pela duração (CIRS art. 72.º
 n.º 23) e a renda pelo menos 5 % abaixo da do contrato anterior dá mais 5
 pontos no período inicial (n.º 24); os números vivem na versão
 (`taxas.limiteRendaAlta` e `taxas.bonusRendaMenor`), o motor só os lê
 (irs.js:irsReducao), e o formulário só pergunta quando a resposta conta
 (contrato.js:ctN23Visivel). A app não tem as tabelas dos limites por
-concelho: pergunta, e por indicar conta-se a redução.
+concelho: pergunta, e por indicar conta-se a redução. O limite das rendas
+moderadas testa-se com a média das rendas do ano por mês lançado, mais os
+extras (irs.js:irsRendaMensalDoTeste).
 
 Uma renovação regista-se, não se escreve por cima: o «Renovar…» da ficha
 (contrato.js:ctRenovar) e a pergunta do formulário quando o fim anda para a
 frente (contrato.js:ctFimPergunta) juntam a renovação ao histórico e levam o
 fim do contrato com ela; o período inicial acaba na véspera da primeira
 renovação (irs.js:irsPeriodos), para o escalão de cada período ser o dele.
+O termo do contrato (c.end) é sempre o estipulado e decide o escalão; o dia
+em que o contrato acabou mesmo vive em fisco.cessacao (irs.js:irsFimReal).
 
 Os avisos da AT calam-se quando a coisa está feita, e não só silenciados: a
-comunicação de fevereiro de cada ano marca-se na ficha
-(contrato.js:ctMarcarComunicada, irs.js:irsComunicado) e o prazo desse ano
-desaparece. O recibo eletrónico de uma renda marca-se no formulário dela,
+comunicação da duração de cada período (o contrato e cada renovação), que
+vale em todos os anos dele (irs.js:irsComunicacaoDoAno), marca-se na ficha
+(contrato.js:ctMarcarComunicada, irs.js:irsComunicado) e o prazo desaparece.
+A chave das comunicações é o ano do início do período; um contrato sem a
+marca comunicacoesV=2 passa as chaves antigas uma vez
+(dados.js:migrarComunicacoes). O recibo eletrónico de uma renda marca-se no formulário dela,
 numa linha de interruptor que se toca inteira, num cartão com borda que passa
 a cobalto ligado (movimento.js:txReciboLinha) — só num contrato declarado, e
 nunca num modelo nem num planeado. A dispensa do recibo eletrónico troca os avisos de recibos pelo
@@ -3288,7 +3386,14 @@ da casa é a 600 (estilos.css:.fis-linha-toque). Dentro do <label> o texto vai
 em <span>, nunca em <p>. Gravar não tira o foco (ver «Padrões de página»).
 As Definições têm uma linha que leva à página (ver «As Definições»). Vai com as definições para o
 servidor, e uma base antiga ganha-o completo (dados.js:normIrsDefs) — sempre
-um objeto novo, nunca o do blank, que a nuvem copia por referência.
+um objeto novo, nunca o do blank, que a nuvem copia por referência. Uma nota
+fixa diz as letras que a app não escreve — F no ano do óbito do cônjuge,
+D1/AF1/DG1 nas rendas de um dependente —, que se mudam no Portal.
+
+A situação do IRS é de cada ano: irs-papeis.js:irsSituacao lê
+settings.irs.porAno, herda o ano anterior mais perto, e o AIMI da
+demonstração nunca se herda; o cônjuge é escolhido, não se adivinha pela
+letra.
 
 - De quem é. A declaração é sempre a de quem tem a sessão, sem seletor de
   proprietário (fisco-titulares.js:fiscoTitulares): só os imóveis onde essa conta tem
@@ -3299,7 +3404,10 @@ um objeto novo, nunca o do blank, que a nuvem copia por referência.
   movimento sem imóvel é da conta que o registou: conta por inteiro para
   quem o recebeu ou pagou, se é titular da declaração, e sem «pago por»
   conta para quem declara; de outro, fica fora. Com imóveis à vista e
-  nenhum com quota (só colabora), a página diz «Nenhum imóvel teu».
+  nenhum com quota (só colabora), a página diz «Nenhum imóvel teu», com a
+  frase do art. 19.º: «O Anexo F é de quem é dono, pela sua quota-parte…» —
+  quem só recebe as rendas por conta do dono não as declara
+  (fisco.js:vFisco).
 - Titular. Sem conjunta é sempre A (cada um entrega o seu Anexo F). Em
   conjunta, quem declara leva a sua letra (A por omissão) e entra também a
   parte de quem está marcado como B, o cônjuge: um imóvel dos dois dá duas
@@ -3320,8 +3428,8 @@ um objeto novo, nunca o do blank, que a nuvem copia por referência.
   que abate ao imposto: a do VPT dos prédios com rendas sobre o VPT de todos
   os urbanos, até ao imposto das rendas (fisco-titulares.js:fiscoAimi). Sem o VPT de um
   prédio, não estima — diz qual falta.
-- 4.2A, 4.2B e 4.2C. Contrato a contrato, a comunicação de fevereiro
-  (comunicada a dd/mm/aaaa, ou por comunicar); os contratos com a descida do
+- 4.2A, 4.2B e 4.2C. Contrato a contrato, a comunicação da duração do
+  período (comunicada a dd/mm/aaaa, ou por comunicar); os contratos com a descida do
   n.º 24, com as duas rendas; e a resposta do 4.2C só quando todos os
   contratos celebrados desde 2024 estão confirmados dentro do limite
   (fisco-quadros.js:fiscoReducoesHtml).
@@ -3329,6 +3437,14 @@ um objeto novo, nunca o do blank, que a nuvem copia por referência.
   de ser falta e «A tratar antes de entregar» ganha a linha do Modelo 44,
   com o prazo (fim de fevereiro desde as rendas de 2025;
   fisco-resumo.js:fiscoPrazoModelo44).
+
+## As categorias que o IRS lê
+O IRS reconhece Rendas, Reembolsos, Impostos › IMI/AIMI/Imposto do selo e
+Devoluções ao inquilino por um id fixo (dados.js:CATS_DO_IRS), guardado em
+settings.catIds pela chave do nome atual e lido pelo dados.js:catIrsId. O
+nome muda à vontade, o id segue-o. A migração catsV=2 dá o id, uma vez por
+conta, a quem ainda tem o nome de origem; uma categoria renomeada antes fica
+sem id, porque não se adivinha.
 
 ## Segurar não é selecionar
 Um toque longo é um dedo parado sobre texto, e é isso que o browser espera
@@ -3639,6 +3755,12 @@ e não contam. E conta pelo mês a que respeita, não pelo dia em que entrou
 (planeados.js:mesDaRenda) — a renda de setembro paga a 3 de outubro é de
 setembro. Contar qualquer movimento do contrato fazia a caução do primeiro dia
 passar pela renda do primeiro mês, e o mês saltava sem ninguém o confirmar.
+Na Declaração o papel de cada receita vem do irs-papeis.js:irsReceitaDe, pelo
+identificador fixo das categorias (dados.js:catIrsId): a caução conta como
+renda do ano em que se recebe, os reembolsos do inquilino são renda, o do
+condomínio sem contrato e o do seguro abatem ao gasto, e o «Fora dos totais»
+dentro das Rendas não tira nada do Anexo F. O ehRenda, pelo nome, fica para o
+resto da app.
 
 Confirmar regista o dinheiro **no dia em que se confirma**, e não na data
 prevista: o «Confirmar» cria o movimento com a data de hoje
@@ -4876,8 +4998,9 @@ aqui fica por cima (nucleo.js:pendentesLocais, nucleo.js:reporPendentes), e o
 push seguinte envia-o. Uma casa ou um registo que o servidor também tem não
 vai inteiro por cima: funde-se com o do servidor e com a base deste aparelho
 (nucleo.js:fundirCasaLocal, nucleo.js:fundirRegistoLocal; ver o parágrafo a
-seguir). As marcas (os campos com _), os donos e as quotas são sempre do
-servidor (nucleo.js:fundidoComServidor). Duas exceções: uma base de outra
+seguir). As marcas (os campos com _), os donos, as quotas, os de fora e o
+histórico das quotas são sempre do servidor (nucleo.js:fundidoComServidor).
+Duas exceções: uma base de outra
 conta cede ao servidor inteira, e sem retrato os dados locais só sobem se o
 servidor estiver vazio. Trocar o db pelo do servidor, como se fazia, perdia o
 que se escreveu offline e o que um 429 recusou.
@@ -4964,6 +5087,14 @@ aparelho (a primeira sessão com bases, uma cópia que esta versão normaliza de
 outra maneira), o que o servidor já tem não sobe antes do primeiro estado
 (nucleo.js:pushNow), e ao ler os campos simples são os do servidor e as
 listas com ids juntam-se (nucleo.js:baseSemListas).
+
+As definições que o servidor ainda não tem migradas sobem uma vez, logo a
+seguir à leitura: a base fica sem a migração (nucleo.js:definicoesDaBase), e
+a diferença sobe com a marca. Uma leitura com mais de um minuto sem envio, ou
+vinda do arranque, não sobe a migração: espera pela leitura seguinte. Uma
+marca nova entra em nucleo.js:MIGRACOES_DAS_DEFINICOES com os campos que
+muda (ver nas armadilhas «Uma marca de migração nas definições não pode vir
+do blank, e não sobe sozinha»).
 
 Os anexos sobem à parte dos registos. Guardar um anexo no aparelho é também subi-lo
 (cloud/anexos.js: o idbPut embrulhado → subirAnexo), com a casa a que pertence quando já se
@@ -5416,8 +5547,46 @@ apaga-o.»); quem não tem acesso leva 404. É o grau que decide o caminho:
   (worker/src/lib/acesso.js:redistribuirQuotas: 2 casas decimais a somar
   exatamente 100, o resto do arredondamento para a maior; sem quotas
   guardadas, `ownerShares` sai e fica em partes iguais). `ownerIds` fica com
-  os que ficam, e a proposta pendente da casa apaga-se. É a única escrita das
-  quotas que não passa por uma proposta aceite.
+  os que ficam, e a proposta pendente da casa apaga-se.
+
+Sair, apagar uma conta e as mudanças nas partilhas e nos grupos que tiram
+alguém de uma casa são as únicas escritas das quotas que não passam por uma
+proposta aceite. Todas fecham o período: as quotas de antes vão para o
+quotasHist da casa até ontem, em Lisboa
+(worker/src/lib/acesso.js:fecharQuotasHoje). Deixar de partilhar uma casa
+numa ligação, cortar a ligação, tirar a casa de um grupo, apagar o grupo,
+sair dele ou ser removido fecham-no como sair do imóvel
+(conexoes.js:fecharQuotasDeQuemSaiu): a quota de quem sai vai para os que
+ficam, e a proposta pendente cai; uma casa que quem saiu ainda tem por outro
+caminho não se toca. A purga lê os donos de todas as casas numa consulta só
+(worker/src/lib/acesso.js:participantesDeCasas).
+
+**As quotas com data.** A quota de cada um muda com uma data. Uma proposta de
+divisão leva as percentagens entre as contas, acertadas a 2 casas decimais e
+a somar exatamente 100 — só se acerta o arredondamento, até 0,05 pontos por
+percentagem (worker/src/lib/acesso.js:acertarQuotas) —, os comproprietários
+sem conta, em % da casa inteira (null por confirmar, [] «não há outros»;
+worker/src/lib/acesso.js:validarFora), e desde quando valem: hoje ou antes,
+em Lisboa, nunca depois (worker/src/rotas/casas.js:propostaDoCorpo). As
+propostas pendentes chegam no /api/state com o fora e o desde, para quem
+aprova ver o que aprova (worker/src/rotas/estado.js:rotasEstado). Com um
+dono só aplica-se sem pedir. Aplicar (worker/src/lib/acesso.js:aplicarQuotas)
+põe o estado que acaba no quotasHist da casa, [{ate, ownerIds, ownerShares,
+fora}] por ordem de ate, com ate na véspera do primeiro dia do novo
+(worker/src/lib/acesso.js:quotasComHistorico). Uma data que cai num período
+já guardado corta esse período na véspera e tira os seguintes: é assim que
+se corrige uma data errada, e os donos de agora, todos de acordo, reescrevem
+um período em que estava quem já saiu. Sem data, confirmar os de fora vale
+também para trás, nos períodos em que estavam por confirmar; e de «por
+confirmar» a «não há outros» não abre período. Os donos, as quotas, os de
+fora e o histórico só o servidor os escreve: a ficha que o cliente grava
+fica com os da base (worker/src/lib/acesso.js:preserveOwnership, a lista
+worker/src/lib/acesso.js:CAMPOS_DAS_QUOTAS), e um colaborador nem os vê nem
+os escreve (worker/src/lib/permissoes.js:projetarCasa,
+worker/src/lib/permissoes.js:fundirCasa). O saldos.js:quotasFiscais dá a
+quota de cada um num dia, com quem saiu a contar nos dias em que era dono; a
+Declaração ainda conta com as quotas de hoje (fisco-titulares.js:fiscoQuota),
+e os Saldos também.
 
 Duas escritas na mesma casa não se esmagam. Toda a escrita da app em
 `houses` passa por worker/src/lib/acesso.js:gravarCasa, que grava com uma
@@ -6247,7 +6416,9 @@ rótulos e as mesmas cores (o selo, o cartão do imóvel, a linha do contrato, o
 história (landing.js:RECEITA_MES, landing.js:DESPESA_MES,
 landing.js:PRESTACAO_MES, landing.js:CASAS): as rendas dos Imóveis somam o
 último mês do gráfico, e o que o hero diz estar por confirmar é o que os
-Planeados mostram. As alturas das barras são regras :nth-child geradas dos
+Planeados mostram. O imposto da maquete da montra é o que a app dá nesse ano
+(landing.js:IRS_DA_MAQUETE, landing.js:anoIrsDaMontra); quem acrescenta um
+ano à app acrescenta-o lá (o testes/irs-guia-textos.test.js obriga). As alturas das barras são regras :nth-child geradas dos
 dados (landing.js:alturasDasBarras), porque a página não tem atributos de
 estilo, e o único JavaScript que leva é o do rasto, a quem o aceitou («O rasto
 das pessoas»). A montra só promete o que a produção tem, e nunca que a app
@@ -6271,9 +6442,11 @@ não se deduz uma cruz vermelha, e cada linha diz o sentido também ao leitor
 de ecrã; as condições levam um ponto, as notas âmbar o que pede cuidado. As
 fontes só ligam para endereços oficiais confirmados a abrir. A montra leva
 até ele pelo «IRS» do cabeçalho, por um cartão antes do fecho e pelo rodapé.
-O IRS aparece como guia, e só como guia: nenhuma frase diz que a app declara,
-calcula, preenche ou entrega o IRS, porque a Declaração ainda só existe em
-dev (testes/landing.test.js, «promessasDoIrs»). Quando houver mais guias, o
+Nenhuma frase da montra diz que a app declara, entrega, submete ou envia o
+IRS (testes/landing.test.js, «promessasDoIrs»). O guia é informação; a única
+frase sobre a app é o aviso da Declaração (IRS_AVISO, à letra,
+guia-vista.js:IRS_AVISO_GUIA) na nota do fim, porque a Declaração o abre no
+botão Guia. Quando houver mais guias, o
 «IRS» passa a «Guias» e leva a uma página /guias.
 
 O guia navega-se: um caminho no topo («Início › Guia do IRS das rendas», com
@@ -6464,7 +6637,10 @@ serviço, o id (o do separador), o nome, os ficheiros que o compõem, os
 kinds de registo que possui, o que requer (sem Imóveis não há Contratos) e
 o que usa quando está ligado. O espelho no servidor é
 worker/src/lib/servicos.js:SERVICOS, e um teste compara os dois
-(testes/servicos.test.js).
+(testes/servicos.test.js). A Declaração requer os Contratos e os Movimentos:
+cada linha do 4.1 e do 4.2 é um contrato com as rendas dele, e sem eles o
+quadro ficava vazio e as rendas iam a «sem contrato» (servicos.js:SERVICOS, o
+espelho worker/src/lib/servicos.js:SERVICOS).
 
 A base nunca nomeia um serviço: despacha pelo registo. Ao carregar, cada
 serviço diz o que tem (servicos.js:registarServico) — a vista do separador,
@@ -6517,7 +6693,8 @@ resposta): GET /api/equipa/pessoas/:id/servicos devolve {servicos: [{id,
 nome, ligado, requer}]}, um por serviço do catálogo e pela ordem dele; PUT
 /api/equipa/pessoas/:id/servicos/:servico com {ligado: true} ou {ligado:
 false} grava e devolve a mesma lista. Desligar desliga também os que dependem
-desse (Imóveis leva Contratos, Visitas, Colaboradores e Créditos); ligar exige
+desse (Imóveis leva Contratos, Visitas, Colaboradores, Créditos e a
+Declaração); ligar exige
 os requeridos ligados — senão 400, com a frase que diz o que ligar primeiro —
 e os dependentes ligam-se um a um. Uma conta que não existe dá 404, um serviço
 fora do catálogo 400, um papel que não vê pessoas 403. Cada mudança fica no
@@ -7570,7 +7747,13 @@ primeira letra posta à mão.
 Um CSV sai com a marca de ordem de bytes à frente, para o Excel em Windows ler
 os acentos (copias.js:download), e uma célula de texto que comece por =, +,
 -, @, uma tabulação ou um retorno leva uma plica à frente, para não ser lida
-como fórmula (copias.js:celulaCsv); os números vão tal e qual.
+como fórmula (copias.js:celulaCsv); os sinais de largura inteira também levam
+a plica, e os números vão tal e qual. No CSV do Anexo F, os valores vão com
+vírgula decimal e duas casas (copias.js:celulaNumero), e os códigos como
+="040810", para o Excel não lhes tirar os zeros (copias.js:celulaCodigo).
+Uma coluna nova vai no fim, e as que existem não mudam de sítio; as linhas de
+rodapé (a tratar, regras, aviso) levam o texto na coluna contrato. O CSV dos
+movimentos fica com os números tal e qual.
 
 ## Toque e acessibilidade
 A app não amplia no telemóvel: nem o zoom automático do iPhone ao tocar num

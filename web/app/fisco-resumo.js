@@ -50,13 +50,79 @@ function fiscoParte(r,ls){
   return ls.some(l=>l.quota<1)?'a tua quota-parte':'';
 }
 /* O contrato anterior sobre o mesmo imóvel — o que o quadro 4.2B pede ao lado
-   do novo (o número e a renda): o que começou mais tarde antes deste.
+   do novo (o número e a renda): o que começou mais tarde antes deste, entre
+   os que arrendavam a MESMA parte (o mesmo quarto, ou os dois sem quarto) e
+   já tinham acabado quando este começou — o último dia em vigor
+   (irs.js:irsFimReal) até ao início dele; um terminado sem data nenhuma
+   conta como acabado. Num imóvel por quartos, o contrato de outro quarto
+   ainda em vigor nunca é o anterior (D38). Sem nenhum, null: o 4.2B fica
+   «por identificar», como já dizia.
    Recebe: c — o contrato novo.
    Devolve: o contrato anterior, ou null. */
 function fiscoContratoAnterior(c){
   if(!c||!c.propertyId||!c.start)return null;
-  return (db.contracts||[]).filter(x=>x.id!==c.id&&x.propertyId===c.propertyId&&x.start&&x.start<c.start)
+  const quarto=c.roomId||'';
+  const acabou=x=>{const fim=irsFimReal(x);return fim?fim<=c.start:x.active===false};
+  return (db.contracts||[]).filter(x=>x&&x.id!==c.id&&x.propertyId===c.propertyId&&(x.roomId||'')===quarto&&x.start&&x.start<c.start&&acabou(x))
     .sort((a,b)=>a.start<b.start?1:a.start>b.start?-1:0)[0]||null;
+}
+/* O número do primeiro campo de cada quadro de linhas do Anexo F (4001 no
+   4.1, 4501 no 4.2), por onde o 4.2A, o 4.2B, o 6D, o quadro 8 e o 9 ligam
+   as linhas (D77). Lê-se da versão do ano quando ela o trouxer
+   (`quadros.campos`, {'4.1':'4001', …}); até lá, o do impresso de hoje. */
+const FISCO_CAMPOS0={'4.1':4001,'4.2':4501};
+/* O número do campo de cada linha, pela ordem final das linhas dentro do
+   seu quadro: '4001', '4002'… no 4.1; '4501'… no 4.2. Um quadro sem número
+   conhecido fica com ''.
+   Recebe: L — as linhas, já ordenadas; v — a versão do ano (irsAno).
+   Devolve: nada — escreve l.campo em cada linha. */
+function fiscoNumerarCampos(L,v){
+  const q=(v&&v.quadros&&v.quadros.campos)||FISCO_CAMPOS0,n={};
+  L.forEach(l=>{
+    const ini=Number(q[l.quadro]);
+    if(!(ini>0)){l.campo='';return}
+    n[l.quadro]=(n[l.quadro]||0)+1;
+    l.campo=String(ini+n[l.quadro]-1);
+  });
+}
+/* O campo da fração tem mais do que uma fração? O Anexo F leva uma por
+   linha, com a renda que lhe cabe (D69). Separadores: a vírgula, « e », a
+   barra e o «+». O «R/C» (rés-do-chão) não é uma segunda fração.
+   Recebe: fr — o texto da fração do imóvel.
+   Devolve: true quando há mais do que uma. */
+function fiscoVariasFracoes(fr){
+  const s=String(fr||'').replace(/\br\s*\/\s*c\b/ig,'rc');
+  return /,|\/|\+|\se\s/i.test(s);
+}
+/* O imposto estimado de cada titular, com as perdas dentro dele (CIRS art.
+   55.º n.º 1): o resultado negativo de um titular só abate aos resultados
+   positivos DELE no mesmo ano, nunca aos de outro (D72). Dentro de cada
+   titular, as linhas negativas abatem às positivas na proporção do
+   líquido delas, e cada parte paga a taxa da sua linha; o que sobra da
+   perda é o prejuízo a reportar desse titular. Uma linha nunca tem imposto
+   negativo (D98): a linha com líquido negativo fica com imposto 0 e o
+   prejuízo dela. As linhas isentas ficam de fora (o líquido delas não
+   paga nem abate).
+   Recebe: L — as linhas, já com liquido e taxa arredondados.
+   Devolve: {[titularId]: {liquido, imposto, prejuizo}} — e escreve
+   l.imposto (≥ 0) e l.prejuizo em cada linha. */
+function fiscoImpostoPorTitular(L){
+  const por={},grupos={};
+  L.forEach(l=>{
+    l.prejuizo=l.isencao?0:r2(Math.max(0,-l.liquido));
+    l.imposto=0;
+    const k=l.titularId||'';
+    if(!por[k])por[k]={liquido:0,imposto:0,prejuizo:0};
+    if(!l.isencao)(grupos[k]||(grupos[k]=[])).push(l);
+  });
+  Object.keys(grupos).forEach(k=>{
+    const ls=grupos[k],P=sum(ls.filter(l=>l.liquido>0).map(l=>l.liquido)),N=sum(ls.filter(l=>l.liquido<0).map(l=>-l.liquido));
+    /* a fração de cada linha positiva que fica depois de abater as perdas */
+    const fica=P>N&&P>0?(P-N)/P:0;
+    ls.forEach(l=>{if(l.liquido>0)l.imposto=r2(l.liquido*fica*l.taxa/100)});
+    por[k]={liquido:r2(P-N),imposto:r2(sum(ls.map(l=>l.imposto))),prejuizo:r2(Math.max(0,N-P))};
+  });
+  return por;
 }
 /* A data-limite do Modelo 44 — a declaração anual das rendas de quem está
    dispensado do recibo eletrónico: o fim de fevereiro do ano seguinte desde as
@@ -128,7 +194,14 @@ function fiscoReparte(ls,valor,fn,resto){
    duração, o 4.1 nos outros), a taxa e a natureza do ano, as datas do 4.2A e
    as faltas que se veem sem olhar às rendas — o que a AT pergunta e a app não
    tem. Um NIF que não bate certo é uma falta como as outras: vai para o Anexo
-   F tal e qual, e volta recusado.
+   F tal e qual, e volta recusado. A taxa é a da lei do ano (irs.js:irsTaxa),
+   nunca a escrita no contrato, que vai em taxaEscrita (o número, ou null).
+   Sem finalidade, a natureza 07 é assumida (naturezaAssumida) e é uma falta
+   em todas as linhas; sem data de início e com mais do que uma fração no
+   mesmo campo, também. As faltas começam sempre pelo mesmo texto (os avisos
+   procuram-nas pelo princípio): 'finalidade do contrato', 'data de início
+   do contrato', 'fração: mais do que uma'. As datas da última renovação do
+   4.2A são só de um período começado até 31 de dezembro do ano.
    E o que os subquadros pedem: o titular (fiscoTitularDe), a isenção do
    contrato (irs.js:irsIsencao, pela taxa — um isento fica no 4.1 com taxa 0 e
    vai ao 6D), a data da comunicação de fevereiro (irs.js:irsComunicado; ''
@@ -155,15 +228,24 @@ function fiscoLinhaNova(c,p,q,ano,titularId){
     if(ok===false)faltas.push('NIF do inquilino '+t.name+' não bate certo');
     else if(ok===null&&!String(t.pais||'').trim())faltas.push('NIF ou país do inquilino '+t.name);
   });
-  if(tx.reducao&&!f.finalidade)faltas.push('finalidade do contrato (a redução pela duração é só da habitação permanente)');
-  const ps=irsPeriodos(c),ult=ps.length>1?ps[ps.length-1]:null;
+  /* sem finalidade a app assume habitação (a natureza 07 e a taxa dela), mas
+     di-lo sempre — numa loja ou garagem a natureza é 06 e a taxa 28 % (D16) */
+  if(!f.finalidade)faltas.push('finalidade do contrato (a natureza 06 ou 07 e a taxa dependem dela)');
+  if(!c.start)faltas.push('data de início do contrato');
+  if(p&&fiscoVariasFracoes(p.fraction))faltas.push('fração: mais do que uma no mesmo campo ('+String(p.fraction).trim()+') — no Anexo F cada fração vai numa linha, com a renda que lhe cabe');
+  /* o 4.2A pede a última renovação DESTE ano: só contam os períodos
+     começados até 31 de dezembro (D13), como na taxa (irs.js:irsPeriodoDoAno) */
+  const ps=irsPeriodos(c),vivos=ps.filter((x,i)=>i===0||(x.inicio&&x.inicio<=ano+'-12-31')),ult=vivos.length>1?vivos[vivos.length-1]:null;
   const g={};v.colunas.forEach(k=>{g[k]=0});
+  const escrita=Number(c.taxRate)>0?Number(c.taxRate):null;
   return {contratoId:c.id,propertyId:p?p.id:(c.propertyId||null),nome:ctName(c),imovel:p?p.name:'',
     atNumero:f.numero,inicio:c.start||'',estado:f.estado,
     freguesiaCodigo:p?p.freguesiaCodigo:'',tipoPredio:p?p.tipoPredio:'',artigo:p?p.matrix:'',fracao:p?p.fraction:'',
-    quota:q,natureza:naturezaIrs(c,ano),titular:fiscoTitularDe(p,titularId,ano),titularId:titularId||'',
-    quadro:tx.reducao&&!is?v.quadros.comReducao:v.quadros.semReducao,taxaReduzida:!!tx.reducao&&!is,
-    taxa:is?0:taxRateOf(c,ano),taxaEscrita:!is&&Number(c.taxRate)>0,motivoTaxa:tx.motivo,
+    quota:q,natureza:naturezaIrs(c,ano),naturezaAssumida:!f.finalidade,titular:fiscoTitularDe(p,titularId,ano),titularId:titularId||'',
+    quadro:tx.reducao&&!is?v.quadros.comReducao:v.quadros.semReducao,taxaReduzida:!!tx.reducao&&!is,campo:'',
+    /* na Declaração a taxa é sempre a da lei do ano (art. 72.º; Q9/D17); a
+       escrita no contrato fica ao lado, para a nota e o aviso */
+    taxa:is?0:tx.taxa,taxaEscrita:is?null:escrita,motivoTaxa:tx.motivo,
     isencao:is?{id:is.id||f.isencao,nome:is.nome||'',curto:is.curto||is.nome||'',quadro:is.quadro||'6D',codigo:is.codigo||''}:null,
     comunicado:irsComunicado(c,ano)||'',
     bonus:!!(tx.reducao&&tx.reducao.bonus),renda:Number(c.rent)||0,rendaAnterior:Number(f.rendaAnterior)||0,
@@ -173,7 +255,7 @@ function fiscoLinhaNova(c,p,q,ano,titularId){
        da última, que vai na coluna dela */
     datas:{inicio:c.start||'',fim:(ps[0]&&ps[0].fim)||c.end||'',renovacaoInicio:ult?ult.inicio:'',renovacaoFim:ult?ult.fim:''},
     inquilinos:ts.map(t=>({id:t.id,nome:t.name,nif:t.nif||'',pais:t.pais||''})),
-    rendas:0,retencoes:0,gastos:g,obras24:{valor:0,inicioGastos:''},anosAnteriores:{},liquido:0,imposto:0,
+    rendas:0,retencoes:0,gastos:g,obras24:{valor:0,inicioGastos:''},anosAnteriores:{},liquido:0,imposto:0,prejuizo:0,
     faltas:faltas,recibosPorEmitir:0};
 }
 /* O resumo do Anexo F de um ano — a função pura por trás da página, do texto e
@@ -185,36 +267,32 @@ function fiscoLinhaNova(c,p,q,ano,titularId){
    entram pela coluna do irsColunaDe, com o peso de metricas.js:txWeight e pela
    quota, só se foram pagos com um contrato em vigor (o IMI e o selo sempre), e
    repartem-se pelas linhas do imóvel na proporção das rendas (fiscoReparte).
-   As obras dos 24 meses (fiscoObra24De) entram só na linha do contrato a que
-   pertencem, no primeiro ano em que ele tem rendas, e nunca nas colunas
-   normais. Por linha, o líquido e o imposto estimado à taxa do contrato.
+   As obras dos 24 meses (fiscoObra24De) só na linha do contrato a que
+   pertencem, no ano em que ele começa (sem rendas nesse ano, no primeiro com
+   rendas). As despesas «a confirmar» não contam: ficam em aConfirmar. O
+   imposto, à taxa da lei do ano, sai titular a titular
+   (fiscoImpostoPorTitular); cada linha leva o n.º do campo (fiscoNumerarCampos).
    A declaração é a de quem a pede (fiscoTitulares): eu e, em conjunta, o
-   titular B — só os imóveis onde um deles tem quota, e rendas, retenções,
-   gastos e obras pela quota de cada um (os não declarados e as rendas sem
-   contrato pela soma). Um movimento sem imóvel é da conta que o registou:
-   inteiro para quem o recebeu ou pagou, se é titular, e para mim sem «pago
-   por»; de outro, fica fora. Sem saber quem és, tudo por inteiro.
+   titular B — só os imóveis onde um deles tem quota, e tudo pela quota de
+   cada um (os não declarados e as rendas sem contrato pela soma). Um
+   movimento sem imóvel é da conta que o registou: inteiro para quem o
+   recebeu ou pagou, se é titular, e para mim sem «pago por». Sem saber quem
+   és, tudo por inteiro.
    Recebe: ano — o ano (número ou texto); eu (opcional) — o id de quem declara ('' por
    inteiro; omitido, o da sessão: fiscoEu); opcoes (opcional) — {semExtras:true}, sem efeito ainda.
    Devolve: {ano, versao, colunas, titularId, titulares, porInteiro, semSessao,
    variosTitulares, imoveis, linhas, fora, semContrato, totais, avisos,
-   semRegra, obrasSoltas, foraDoPeriodo, aimi} — versao é irsAno(ano);
-   titularId quem declara ('' por inteiro); titulares os ids (eu à cabeça);
-   porInteiro e semSessao os do fiscoTitulares; variosTitulares, linhas de
-   mais do que um; linhas: [{contratoId, propertyId, nome, imovel, atNumero,
-   inicio, estado, freguesiaCodigo, tipoPredio, artigo, fracao, quota,
-   titular, titularId, natureza, quadro, taxaReduzida, taxa, taxaEscrita,
-   motivoTaxa, datas:{inicio, fim, renovacaoInicio, renovacaoFim},
-   inquilinos:[{id, nome, nif, pais}], rendas, retencoes, gastos:{<coluna>:
-   euros}, obras24:{valor, inicioGastos}, anosAnteriores:[{ano, valor}],
-   liquido, imposto, faltas:[texto], recibosPorEmitir}] e os campos dos
-   subquadros (fiscoLinhaNova); fora: [{contratoId, nome, imovel, rendas, n,
-   quota}]; semContrato: [{propertyId, imovel, rendas, n, ids}]; totais:
-   {rendas, retencoes, gastos, obras24, liquido, imposto, prejuizo,
-   anosAnteriores, isentos:{n, rendas, liquido}}, os isentos fora do líquido e
-   do imposto; avisos: [{texto, abrir, toca, nivel}]; semRegra, obrasSoltas,
-   foraDoPeriodo: n.º de despesas sem regra, de obras24 sem contrato a seguir
-   e pagas sem contrato em vigor; imoveis: quantos entraram; aimi: fiscoAimi. */
+   aConfirmar, semRegra, obrasSoltas, foraDoPeriodo, aimi} — linhas as de
+   fiscoLinhaNova, com rendas, retencoes, gastos:{<coluna>: euros}, obras24,
+   anosAnteriores:[{ano, valor}], liquido, imposto (≥ 0), prejuizo e campo
+   ('4001'…, '4501'…); fora: [{contratoId, nome, imovel, rendas, n, quota}];
+   semContrato: [{propertyId, imovel, rendas, n, ids}]; totais: {rendas,
+   retencoes, gastos, obras24, liquido, imposto, prejuizo, porTitular:
+   {[titularId]: {liquido, imposto, prejuizo}}, anosAnteriores, isentos:{n,
+   rendas, liquido}} — o imposto e o prejuízo, a soma dos de cada titular;
+   aConfirmar: [{txId, nome, data, valor (o do movimento), propertyId, imovel,
+   categoria, sub, origem}]; semRegra quantas delas são da omissão;
+   obrasSoltas e foraDoPeriodo, n.º de despesas; aimi: fiscoAimi. */
 function resumoFiscal(ano,eu,opcoes){
   ano=Number(ano)||YEAR;
   const quem=fiscoTitulares(eu,ano),tits=quem.ids;
@@ -268,20 +346,27 @@ function resumoFiscal(ano,eu,opcoes){
      por imóvel, porque um movimento de grupo pode ser obra num imóvel vago e
      gasto corrente noutro — para não voltar a entrar nas colunas normais, nem
      sequer quando a linha do contrato a que pertence não é deste ano. A obra
-     entra na linha do contrato no PRIMEIRO ano em que ele tem rendas — o do
-     início, quase sempre, que é o que a AT pede; um contrato que começa em
-     dezembro e recebe a primeira renda em janeiro não tem linha no ano do
-     início, e a obra perdia-se nos dois */
-  const primeiroAno={};
+     entra na linha do contrato no ano em que ele COMEÇA, que é o que as
+     instruções pedem, quando ele tem rendas (e linha) nesse ano — mesmo que a
+     primeira renda tenha sido paga antes, na assinatura (D63). Só quando o
+     ano do início não tem rendas (um contrato que começa em dezembro e recebe
+     a primeira renda em janeiro) vai para o primeiro ano com rendas, para a
+     obra não se perder nos dois */
+  const anosComRenda={};
   (db.transactions||[]).forEach(t=>{
     if(!ehRenda(t)||!t.contractId)return;
     const y=String(t.date||'').slice(0,4);
-    if(/^\d{4}$/.test(y)&&(!primeiroAno[t.contractId]||y<primeiroAno[t.contractId]))primeiroAno[t.contractId]=y;
+    if(/^\d{4}$/.test(y))(anosComRenda[t.contractId]||(anosComRenda[t.contractId]={}))[y]=1;
   });
+  const anoDasObras=id=>{
+    const ys=anosComRenda[id];if(!ys)return '';
+    const c=contract(id),y0=c&&/^\d{4}-/.test(String(c.start||''))?String(c.start).slice(0,4):'';
+    return y0&&ys[y0]?y0:Object.keys(ys).sort()[0];
+  };
   const consumidos={};
   (db.transactions||[]).forEach(t=>{
     if(t.kind!=='expense')return;
-    const r=irsColunaDe(t);if(r.col==='nao')return;
+    const r=irsColunaDe(t)||{};if(r.col==='nao')return;
     const alvo=fiscoObra24De(t,r.col),pids=Object.keys(alvo);
     if(!pids.length)return;
     consumidos[t.id]=alvo;
@@ -290,7 +375,7 @@ function resumoFiscal(ano,eu,opcoes){
       const p=props[pid];if(!p)return;
       const w=txWeight(t,pid,false);if(!(w>0))return;
       partes(p,t.date).forEach(([o,qo])=>{
-        const ls=alvo[pid].map(c=>linhas[c.id+'|'+o]).filter(l=>l&&primeiroAno[l.contratoId]===A);
+        const ls=alvo[pid].map(c=>linhas[c.id+'|'+o]).filter(l=>l&&anoDasObras(l.contratoId)===A);
         if(!ls.length)return;
         fiscoReparte(ls,(Number(t.amount)||0)*w*qo,(l,parte)=>{
           l.obras24.valor+=parte;
@@ -305,11 +390,27 @@ function resumoFiscal(ano,eu,opcoes){
      — salvo quando a coluna foi escolhida à mão no movimento: aí a pessoa
      decidiu, e manda. Uma despesa marcada à mão como obras24 sem contrato a
      começar depois não tem linha onde caia — conta-se, para o aviso dizer
-     que ficou de fora */
-  let semRegra=0,obrasSoltas=0,foraDoPeriodo=0;
+     que ficou de fora.
+     Uma despesa «a confirmar» (a coluna 'confirmar' do mapa, uma sem regra
+     nenhuma — a omissão —, ou uma coluna que o ano não tem) não conta em
+     coluna nenhuma: vai para aConfirmar, com o nome e o valor, se toca um
+     imóvel da declaração com linha no ano (D61 e os gastos do D06/D07/D24–
+     D27/D60). Na dúvida a app não deduz */
+  let obrasSoltas=0,foraDoPeriodo=0;
+  const aConfirmar=[];
+  const pidsComLinha={};Object.keys(porImovel).forEach(k=>{pidsComLinha[porImovel[k][0].propertyId]=1});
   (db.transactions||[]).forEach(t=>{
     if(t.kind!=='expense'||!noAno(t))return;
-    const r=irsColunaDe(t);if(r.col==='nao')return;
+    const r=irsColunaDe(t)||{};if(r.col==='nao')return;
+    if(r.col!=='obras24'&&(r.origem==='omissao'||cols.indexOf(r.col)<0)){
+      const toca=txProps(t).filter(p=>pidsComLinha[p.id]&&txWeight(t,p.id,false)>0);
+      if(!toca.length)return;
+      const p0=prop(t.propertyId)||toca[0];
+      aConfirmar.push({txId:t.id,nome:t.label||[t.category,t.sub].filter(Boolean).join(' › ')||'Despesa',data:String(t.date||''),
+        valor:r2(Number(t.amount)||0),propertyId:t.propertyId||null,imovel:t.propertyId?(p0?p0.name:''):toca.map(p=>p.name).join(', '),
+        categoria:t.category||'',sub:t.sub||'',origem:r.origem||''});
+      return;
+    }
     const jaFoi=consumidos[t.id]||{},d=String(t.date||'');
     let entrou=false,vazio=false;
     Object.keys(porImovel).forEach(k=>{
@@ -323,8 +424,9 @@ function resumoFiscal(ano,eu,opcoes){
     if(vazio)foraDoPeriodo++;
     if(!entrou)return;
     if(r.col==='obras24')obrasSoltas++;
-    else if(r.origem==='omissao')semRegra++;
   });
+  aConfirmar.sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:String(a.nome).localeCompare(String(b.nome),'pt'));
+  const semRegra=aConfirmar.filter(x=>x.origem==='omissao').length;
   /* arredondar ao cêntimo no fim, para os totais baterem com as linhas; o
      líquido e o imposto de cada linha saem dos valores já arredondados. As
      linhas isentas entram nas rendas, nas retenções e nos gastos (são do
@@ -336,26 +438,31 @@ function resumoFiscal(ano,eu,opcoes){
     cols.forEach(k=>{l.gastos[k]=r2(l.gastos[k]);totais.gastos[k]+=l.gastos[k]});
     l.anosAnteriores=Object.keys(l.anosAnteriores).map(Number).sort((a,b)=>a-b).map(y=>({ano:y,valor:r2(l.anosAnteriores[y])}));
     l.liquido=r2(l.rendas-sum(cols.map(k=>l.gastos[k]))-l.obras24.valor);
-    l.imposto=l.isencao?0:r2(l.liquido*l.taxa/100);
     totais.rendas+=l.rendas;totais.retencoes+=l.retencoes;totais.obras24+=l.obras24.valor;
     totais.anosAnteriores+=sum(l.anosAnteriores.map(x=>x.valor));
     if(l.isencao){totais.isentos.n++;totais.isentos.rendas+=l.rendas;totais.isentos.liquido+=l.liquido}
-    else{totais.liquido+=l.liquido;totais.imposto+=l.imposto}
+    else totais.liquido+=l.liquido;
   });
   ['rendas','retencoes','obras24','liquido','anosAnteriores'].forEach(k=>{totais[k]=r2(totais[k])});
   totais.isentos.rendas=r2(totais.isentos.rendas);totais.isentos.liquido=r2(totais.isentos.liquido);
   cols.forEach(k=>{totais.gastos[k]=r2(totais.gastos[k])});
-  /* um resultado negativo não paga imposto: reporta-se aos seis anos seguintes (CIRS art. 55.º) */
-  totais.imposto=Math.max(0,r2(totais.imposto));totais.prejuizo=totais.liquido<0?-totais.liquido:0;
+  /* o imposto e o prejuízo, titular a titular (CIRS art. 55.º): um resultado
+     negativo não paga imposto, abate só aos positivos do mesmo titular e o
+     resto reporta-se aos seis anos seguintes. O KPI e os totais dos quadros
+     saem deste mesmo cálculo (a soma dos l.imposto) */
+  totais.porTitular=fiscoImpostoPorTitular(L);
+  const PT=Object.keys(totais.porTitular).map(k=>totais.porTitular[k]);
+  totais.imposto=r2(sum(PT.map(x=>x.imposto)));totais.prejuizo=r2(sum(PT.map(x=>x.prejuizo)));
   const pt=(a,b)=>String(a).localeCompare(String(b),'pt');
   /* as duas linhas de um contrato dos dois cônjuges ficam juntas, a A primeiro */
   L.sort((a,b)=>pt(a.quadro,b.quadro)||pt(a.imovel,b.imovel)||pt(a.inicio,b.inicio)||pt(a.nome,b.nome)||pt(a.titular,b.titular));
+  fiscoNumerarCampos(L,v);
   const F=Object.keys(fora).map(k=>fora[k]).map(f=>Object.assign(f,{rendas:r2(f.rendas)})).sort((a,b)=>pt(a.nome,b.nome));
   const S=Object.keys(semC).map(k=>semC[k]).map(s=>Object.assign(s,{rendas:r2(s.rendas)})).sort((a,b)=>pt(a.imovel,b.imovel));
   const donos={};L.forEach(l=>{donos[l.titularId]=1});
   const r={ano:ano,versao:v,colunas:cols,titularId:quem.eu,titulares:tits.slice(),porInteiro:quem.porInteiro,semSessao:quem.semSessao,
     variosTitulares:Object.keys(donos).length>1,imoveis:base.length,linhas:L,fora:F,semContrato:S,totais:totais,
-    avisos:[],semRegra:semRegra,obrasSoltas:obrasSoltas,foraDoPeriodo:foraDoPeriodo,
+    avisos:[],aConfirmar:aConfirmar,semRegra:semRegra,obrasSoltas:obrasSoltas,foraDoPeriodo:foraDoPeriodo,
     aimi:fiscoAimi(ano,t=>sum(partesSem(t).map(x=>x[1])),props,p=>quotaCasa(p,A+'-12-31'),L,totais.imposto)};
   r.avisos=fiscoAvisos(r);
   return r;

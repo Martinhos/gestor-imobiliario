@@ -61,7 +61,10 @@ describe('autonomia: cada serviço de análise carrega e rende só com a base', 
     test('autonomia: ' + id + ' regista a vista e rende com a db vazia e com dados, sem os outros serviços', () => {
       const app = carregarServico([id]);
       assert.ok(app.servicoLigado(id));
-      for (const outro of OUTROS) assert.ok(!app.servicoLigado(outro), outro + ' está desligado');
+      // o que o serviço requer vem com ele (a Declaração requer os Contratos e os Movimentos, D57)
+      const requer = new Set();
+      (function pede(x) { for (const r of app.servicoDe(x).requer) { requer.add(r); pede(r); } })(id);
+      for (const outro of OUTROS.filter((o) => !requer.has(o))) assert.ok(!app.servicoLigado(outro), outro + ' está desligado');
       const vista = app.vistaDoSeparador(id);
       assert.equal(typeof vista, 'function', 'a vista está registada');
       assert.equal(vista, app[VISTAS[id]], 'e é a função do ficheiro do serviço');
@@ -117,15 +120,18 @@ describe('autonomia: cada serviço de análise carrega e rende só com a base', 
     assert.doesNotMatch(html, /Contratos ativos/, 'a tabela é dos contratos, que não estão cá');
   });
 
-  test('autonomia: a declaração lista as obrigações sem toque quando os serviços das fichas não estão cá', () => {
+  /* Desde o D57 a Declaração requer os Contratos e os Movimentos, e com eles
+     vêm os Imóveis e os Inquilinos: as fichas estão sempre cá, e os avisos
+     abrem-nas. */
+  test('autonomia: a declaração carrega com as fichas que requer, e os avisos abrem-nas', () => {
     const app = carregarServico(['fisco']);
     semear(app);
     const r = app.resumoFiscal(ANO, '');
     assert.ok(r.avisos.length >= 3, 'há avisos (contrato por indicar, inquilino sem NIF, imóvel sem dados, renda sem contrato)');
-    for (const a of r.avisos) assert.equal(a.abrir, '', a.texto + ' fica sem toque');
+    assert.ok(r.avisos.some((a) => a.abrir), 'com as fichas cá, há avisos com toque');
     const html = app.vFisco();
     assert.match(html, /Quadro 4\.1 · sem redução pela duração/);
-    assert.doesNotMatch(html, /ctView\(|personView\(|propView\(|txView\(/);
+    assert.match(html, /ctView\(/);
   });
 });
 
@@ -228,39 +234,25 @@ describe('desligado: com os serviços que usam desligados, cada vista rende sem 
     assert.match(vazio, SUPORTE);
   });
 
-  test('desligado: a declaração sem os contratos, os inquilinos, os imóveis nem os movimentos', () => {
+  /* Desde o D57 (auditoria ao IRS, 2026-11-17) a Declaração requer os
+     Contratos e os Movimentos: sem eles desliga-se também, e o estado «a
+     Declaração com as fichas desligadas» deixou de existir. */
+  test('desligado: sem os contratos nem os movimentos, a declaração desliga-se com eles (D57)', () => {
     const app = carregarApp();
     semear(app);
-    let html = app.vFisco();
-    for (const s of ['ctView(', 'personView(', 'propView(', 'txView(']) assert.ok(html.includes(s), 'controlo: ' + s);
+    assert.ok(app.servicoLigado('fisco'), 'controlo: com tudo ligado, a Declaração está ligada');
+    assert.match(app.vFisco(), /ctView\(/, 'controlo: e abre as fichas');
     desligar(app);
-    html = app.vFisco();
-    assert.doesNotMatch(html, /ctView\(|personView\(|propView\(|txView\(|go\('contracts'\)|go\('transactions'\)|go\('properties'\)/);
-    assert.match(html, /Quadro 4\.1 · sem redução pela duração/, 'o quadro fica');
-    assert.match(html, /A tratar antes de entregar/, 'as obrigações ficam, sem toque');
-    assert.match(html, /Fora da declaração/);
-    assert.match(html, /Rendas sem contrato/);
-    assert.match(html, /O serviço Contratos está desligado nesta conta\./);
-    assert.match(html, /O serviço Movimentos está desligado nesta conta\./);
-    assert.match(html, SUPORTE);
-    assert.match(html, /go\('settings'\)|hdrFiltToggle\(\)|fiscoPartilha\(\)/, 'o que é da base fica');
-    const r = app.resumoFiscal(ANO, '');
-    for (const a of r.avisos) if (!/Definições/.test(a.texto)) assert.equal(a.abrir, '', a.texto + ' fica sem toque');
-    // o vazio sem imóveis
-    zerar(app); ligarTudo(app);
-    assert.match(app.vFisco(), /go\('properties'\)/, 'controlo');
-    desligar(app);
-    const vazio = app.vFisco();
-    assert.doesNotMatch(vazio, /go\('properties'\)/);
-    assert.match(vazio, /O serviço Imóveis está desligado nesta conta\./);
+    assert.equal(app.servicoLigado('fisco'), false, 'a Declaração cai com os Contratos e os Movimentos');
   });
 
   test('desligado: ligar tudo outra vez repõe os atalhos — o registo não muda, só o interruptor', () => {
     const app = carregarApp();
     semear(app);
     desligar(app);
-    assert.doesNotMatch(app.vFisco(), /ctView\(/);
+    assert.equal(app.servicoLigado('fisco'), false);
     ligarTudo(app);
+    assert.ok(app.servicoLigado('fisco'), 'a Declaração volta com eles');
     assert.match(app.vFisco(), /ctView\('C1'\)/);
     assert.match(app.vCalendar(), /visView\('V1'\)/);
     assert.match(app.vDashboard(), /pendToggle\(\)/);

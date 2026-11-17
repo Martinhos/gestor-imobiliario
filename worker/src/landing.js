@@ -239,32 +239,69 @@ function ecraPlaneados(hoje) {
 <div class="m-cartao m-plan-lista">${seguintes.map(([nome, quando, origem, cor, v]) => `<div class="m-plan"><div class="m-entre"><span><b>${nome}</b><span class="m-sub">${quando}</span></span><b class="n ${cor}">${eurosDaMontra(v, true)}</b></div><div class="m-selos">${origem}</div></div>`).join('')}</div>`;
 }
 
+/* A taxa do IRS que a app dá às rendas da maquete em cada ano com regras
+   próprias (web/app/irs-AAAA.js), como fração. As rendas da maquete (os
+   quartos de 350 €, o T2 de 950 €, o T0 de 425 € e o T1 de 690 €) são todas
+   de contratos só para habitação e abaixo dos 2 300 € por mês: 25 % em 2025
+   (CIRS art. 72.º n.º 2) e 10 % em 2026 (EBF art. 45.º-C, rendas moderadas,
+   até às rendas de 2029). Antes (D107, 2026-11-17) a maquete fazia tudo a
+   25 % no ano do pedido, e em 2026 mostrava 2,5 vezes o imposto que a app
+   mostra. O worker não pode ler os irs-AAAA.js (scripts do browser): o
+   testes/irs-guia-textos.test.js confere estas taxas contra o irs.js:irsRate
+   e que há uma por cada versão da app — quem acrescenta um ano à app tem de o
+   acrescentar aqui. */
+export const IRS_DA_MAQUETE = { 2025: 0.25, 2026: 0.10 };
+
+/* O ano dos rendimentos que o ecrã do IRS da maquete mostra: o do pedido,
+   se a app tiver regras para ele; senão, o último antes dele que as tenha
+   (é esse que se declara nos primeiros meses do ano), ou o primeiro de todos.
+   Recebe: hoje — a Date do pedido.
+   Devolve: o ano (número), sempre uma chave de IRS_DA_MAQUETE. */
+export function anoIrsDaMontra(hoje) {
+  const anos = Object.keys(IRS_DA_MAQUETE).map(Number).sort((a, b) => a - b);
+  const atual = hoje.getUTCFullYear();
+  const antes = anos.filter((a) => a <= atual);
+  return antes.length ? antes[antes.length - 1] : anos[0];
+}
+
 /* O resumo do Anexo F do mesmo portefólio, no ano dos dez meses: as rendas
    de cada imóvel somam a RECEITA (o T3 com os 140 € a mais do terceiro mês,
    o T1 com os oito meses antes de ficar vago), e os gastos são os que as
    outras maquetes mostram — o condomínio do T3 todos os meses e a primeira
-   prestação do IMI do T2. Tudo no quadro 4.1, sem redução, a 25 %.
-   Devolve: [{nome, rendas, imposto}], um por imóvel. */
-function quadroDaMontra() {
+   prestação do IMI do T2. Tudo no quadro 4.1, sem redução pela duração, à
+   taxa que a app dá a estas rendas nesse ano (IRS_DA_MAQUETE).
+   Recebe: ano — o ano dos rendimentos (uma chave de IRS_DA_MAQUETE).
+   Devolve: [{nome, rendas, gastos, imposto}], um por imóvel. */
+export function quadroDaMontra(ano) {
   const n = RECEITA_MES.length;
+  const taxa = IRS_DA_MAQUETE[ano];
   const linhas = [
     { nome: 'T3 Bonfim', rendas: rendaDaCasa(CASAS[0]) * n + 140, gastos: 45 * n },
     { nome: 'T2 Paranhos', rendas: rendaDaCasa(CASAS[1]) * n, gastos: 142 },
     { nome: 'T0 Campanhã', rendas: rendaDaCasa(CASAS[2]) * n, gastos: 0 },
     { nome: 'T1 Cedofeita', rendas: 690 * (n - 2), gastos: 0 },
   ];
-  return linhas.map((l) => ({ nome: l.nome, rendas: l.rendas, imposto: (l.rendas - l.gastos) * 0.25 }));
+  // ao cêntimo, como o resumo da app
+  return linhas.map((l) => ({ ...l, imposto: Math.round((l.rendas - l.gastos) * taxa * 100) / 100 }));
+}
+
+/* As rendas de cada contrato da maquete, por mês, para o teste conferir a
+   taxa de cada uma no irs.js (o T1 de 690 € já não tem contrato: é o que
+   teve antes de ficar vago).
+   Devolve: os valores, um por contrato. */
+export function rendasDaMaquete() {
+  return [...CASAS.flatMap((c) => c.contratos.map((k) => k.renda)), 690];
 }
 
 /* O ecrã do IRS · Anexo F (web/app/fisco.js): o cartão «A tratar antes de
    entregar» com o que falta nos dados (fiscoObrigacoesCard), e o cartão do
    quadro 4.1 com as rendas e o imposto estimado de cada imóvel
-   (fiscoQuadroResumoHtml).
+   (fiscoQuadroResumoHtml), no ano de anoIrsDaMontra.
    Recebe: hoje — a Date do pedido, para o ano.
    Devolve: o HTML do interior do ecrã. */
 function ecraIrs(hoje) {
-  const ano = hoje.getUTCFullYear();
-  const linhas = quadroDaMontra();
+  const ano = anoIrsDaMontra(hoje);
+  const linhas = quadroDaMontra(ano);
   const imposto = linhas.reduce((a, l) => a + l.imposto, 0);
   const ponto = (num, texto, botao) => `<div class="m-ponto">${selo(String(num), 'red')}<span><span class="m-ponto-txt">${texto}</span><span class="botao-maquete pequeno">${botao}</span></span></div>`;
   return `<p class="tit ecra-titulo">Análise</p>${abasDaMaquete(['Avaliação', 'Projeções', 'IRS · Anexo F'], 'IRS · Anexo F')}
@@ -309,7 +346,7 @@ const ECRAS = [
     ecra: ecraPlaneados },
   { id: 'irs', chapeu: 'IRS · Anexo F', tom: 't3', titulo: 'O IRS das rendas, já resumido',
     texto: 'As rendas e os gastos de cada imóvel chegam arrumados pelo quadro do Anexo F onde os escreves, com o imposto estimado. A app resume; quem declara és tu, no Portal das Finanças.',
-    pontos: ['Por titular, cada um pela sua quota-parte.', 'O que falta nos teus dados, como um NIF ou um artigo matricial, antes de entregares.', 'O resumo em PDF ou CSV, e o guia de como declarar as rendas ao lado.'],
+    pontos: ['A tua declaração, pela tua quota-parte de cada imóvel.','O que falta nos teus dados, como um NIF ou um artigo matricial, antes de entregares.', 'O resumo em PDF ou CSV, e o guia de como declarar as rendas ao lado.'],
     rotulo: 'O ecrã do IRS · Anexo F num telemóvel: dois pontos a tratar antes de entregar, um inquilino sem NIF e um imóvel sem artigo matricial, e o quadro 4.1 com as rendas e o imposto estimado de cada um dos quatro imóveis.',
     ecra: ecraIrs },
 ];
@@ -595,7 +632,7 @@ ${e.ecra(hoje)}
         <p class="chapeu">Guia</p>
         <h2 id="t-guia">${TITULO_GUIA}</h2>
         <p>Se tens de declarar as rendas, onde e como o fazes, e o que a lei deixa abater: IMI, condomínio, obras,
-        seguros, e os documentos a guardar para cada imóvel.</p>
+        o seguro de renda, e os documentos a guardar para cada imóvel.</p>
       </div>
       <a class="btn" href="${CAMINHO_GUIA}">Ler o guia</a>
     </div>

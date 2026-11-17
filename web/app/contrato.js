@@ -1125,7 +1125,11 @@ function repaintCt(){const b=modalBodyEl();if(!b)return;b.innerHTML=ctBody();mar
 function fiscoSect(){
   const c=cForm,f=fiscoDe(c),renovs=f.renovacoes||[];
   const vA=irsAno(YEAR),L=vA.taxas.limiteRendaAlta,B=vA.taxas.bonusRendaMenor,isens=vA.isencoes||[];
-  const isOpts=[{v:'',label:'Nenhuma'}].concat(isens.map(x=>({v:x.id,label:x.nome})));
+  /* as isenções que pedem uma confirmação (pede: a renda antiga do 6H, o
+     ex-alojamento local do 6F) só se oferecem com a pergunta que as confirma,
+     que chega na vaga 3 da auditoria (decisão do Martinho, 2026-11-17); a já
+     escolhida continua à vista */
+  const isOpts=[{v:'',label:'Nenhuma'}].concat(isens.filter(x=>!x.pede||x.id===f.isencao).map(x=>({v:x.id,label:x.nome})));
   if(f.isencao&&!isens.some(x=>x.id===f.isencao))isOpts.push({v:f.isencao,label:f.isencao.toUpperCase()});
   /* o segmentado da casa (a prancheta): três escolhas curtas, com a mesma
      letra e a mesma cor — «não declarado» é uma decisão, não um erro */

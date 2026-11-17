@@ -9,6 +9,37 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { carregarApp, limpar, perto, repor } from './arnes.js';
 
+/* As células de uma linha do CSV do Anexo F (fisco-exportar.js:fiscoCsvTexto):
+   entre aspas, com as de dentro dobradas, ou um código escrito ="…"
+   (copias.js:celulaCodigo); o ';' só separa fora das aspas — o aviso e os
+   textos de «A tratar» têm ';' lá dentro.
+   Recebe: linha — a linha (string).
+   Devolve: os valores, sem as aspas (array de strings). */
+function celulas(linha) {
+  const out = [];
+  let i = 0;
+  for (;;) {
+    let v = '';
+    if (linha[i] === '=' && linha[i + 1] === '"') { const j = linha.indexOf('"', i + 2); v = linha.slice(i + 2, j); i = j + 1; }
+    else if (linha[i] === '"') {
+      i++;
+      for (;;) { const j = linha.indexOf('"', i); if (linha[j + 1] === '"') { v += linha.slice(i, j) + '"'; i = j + 2; } else { v += linha.slice(i, j); i = j + 1; break; } }
+    } else { const j = linha.indexOf(';', i), e = j < 0 ? linha.length : j; v = linha.slice(i, e); i = e; }
+    out.push(v);
+    if (linha[i] !== ';') return out;
+    i++;
+  }
+}
+/* O CSV do Anexo F lido: o cabeçalho, as linhas como objetos pelo nome da
+   coluna, e as das linhas dos quadros (declarado «sim» ou «por indicar»).
+   Recebe: csv — o conteúdo que o fiscoCsv entregou ao download.
+   Devolve: {cab, rows, quadros, larguras}. */
+function lerCsv(csv) {
+  const ls = csv.split('\n').map(celulas), cab = ls[0];
+  const rows = ls.slice(1).map((c) => Object.fromEntries(cab.map((k, i) => [k, c[i]])));
+  return { cab, rows, quadros: rows.filter((x) => x.declarado === 'sim' || x.declarado === 'por indicar'), larguras: ls.map((c) => c.length) };
+}
+
 // a app vive na primavera a seguir ao ano do resumo, que é o de 2025 — o
 // primeiro com versão própria das regras
 const app = carregarApp({ hoje: '2026-03-15' });
@@ -48,11 +79,11 @@ describe('as escolhas guardadas nas definições', () => {
   afterEach(() => repor(app));
 
   test('o blank traz o bloco irs, e uma base antiga sem ele fica com ele completo', () => {
-    assert.deepEqual(copia(app.blank.settings.irs), { conjunta: false, titulares: {}, dispensaRecibos: false, outrosRendimentos: {} });
+    assert.deepEqual(copia(app.blank.settings.irs), { conjunta: false, titulares: {}, dispensaRecibos: false, outrosRendimentos: {}, porAno: {} });
     const d = app.normalizarBase({ settings: { growth: 3 } });
-    assert.deepEqual(copia(d.settings.irs), { conjunta: false, titulares: {}, dispensaRecibos: false, outrosRendimentos: {} });
+    assert.deepEqual(copia(d.settings.irs), { conjunta: false, titulares: {}, dispensaRecibos: false, outrosRendimentos: {}, porAno: {} });
     const lixo = app.normalizarBase({ settings: { irs: { conjunta: 'sim', titulares: { ana: 'B', bruno: 'X' }, outrosRendimentos: { 2025: '1500', ano: 3, 2024: -5 } } } });
-    assert.deepEqual(copia(lixo.settings.irs), { conjunta: false, titulares: { ana: 'B' }, dispensaRecibos: false, outrosRendimentos: { 2025: 1500 } });
+    assert.deepEqual(copia(lixo.settings.irs), { conjunta: false, titulares: { ana: 'B' }, dispensaRecibos: false, outrosRendimentos: { 2025: 1500 }, porAno: {} });
   });
 
   test('o bloco irs da base nunca é o do blank (mudar um não muda o outro)', () => {
@@ -108,11 +139,12 @@ describe('o titular A ou B', () => {
     let guardado = null;
     app.download = (nome, mime, conteudo) => { guardado = conteudo; };
     app.fiscoCsv();
-    const linhas = guardado.split('\n');
-    assert.match(linhas[0], /"ultima_renovacao";"titular";"isencao_6d";"comunicacao_4_2a";"reducao_4_2b";"renda_anterior_4_2b"$/);
-    assert.match(linhas[1], /;"B";"";"";"";""$/);
-    const n = linhas[0].split(';').length;
-    linhas.forEach((l) => assert.equal(l.split(';').length, n));
+    const { cab, quadros, larguras } = lerCsv(guardado);
+    // as colunas antigas no mesmo sítio, e as novas da vaga 1 do IRS no fim
+    assert.deepEqual(cab.slice(32, 38), ['ultima_renovacao', 'titular', 'isencao_6d', 'comunicacao_4_2a', 'reducao_4_2b', 'renda_anterior_4_2b']);
+    assert.deepEqual(cab.slice(38), ['campo', 'prejuizo', 'nif', 'pais', 'renda_4_2b', 'n_at_anterior_4_2b']);
+    assert.deepEqual([quadros[0].titular, quadros[0].isencao_6d, quadros[0].comunicacao_4_2a, quadros[0].reducao_4_2b, quadros[0].renda_anterior_4_2b], ['B', '', '', '', '']);
+    larguras.forEach((n, i) => assert.equal(n, cab.length, 'a linha ' + i + ' tem as colunas do cabeçalho'));
   });
 
   test('o cartão «A tua situação fiscal» vem em linhas, ao lado dos prazos, com interruptores e o segmentado A/B só em conjunta', () => {
@@ -177,9 +209,9 @@ describe('a Declaração é a de quem tem a sessão (KAN-73)', () => {
     let csv = null;
     app.download = (nome, mime, conteudo) => { csv = conteudo; };
     app.fiscoCsv();
-    const linhas = csv.split('\n');
-    assert.equal(linhas.length, 2, 'o cabeçalho e o Arroios');
-    assert.match(linhas[1], /;"50";"6500";"125";/);
+    const q = lerCsv(csv).quadros;
+    assert.equal(q.length, 1, 'só o Arroios');
+    assert.deepEqual([q[0].quota_pct, q[0].rendas_iliquidas, q[0].retencoes], ['50', '6500,00', '125,00'], 'a quota e os valores com vírgula e duas casas');
     // o Bruno, na sessão dele, tem a outra metade e o Benfica inteiro
     app.CW = { user: { id: 'bruno' } };
     const b = app.resumoFiscal(ANO);
@@ -216,7 +248,7 @@ describe('a Declaração é a de quem tem a sessão (KAN-73)', () => {
     assert.match(html, /<dt>Titular<\/dt><dd>A<\/dd>/);
     assert.match(html, /<dt>Titular<\/dt><dd>B<\/dd>/);
     assert.match(html, /T2 Arroios · titular B · quota-parte 50%/);
-    assert.match(html, /Preenche no <b>quadro 4\.1<\/b> do Anexo F: uma linha por contrato e por titular\./);
+    assert.match(html, /Preenche no <b>quadro 4\.1<\/b> do Anexo F[^.]*e por titular/, 'uma linha por titular (o texto do cartão é da folha 2.1.11)');
     assert.match(html, /<b>Total do quadro 4\.1<\/b><span class="small">2 contratos · líquido /);
     assert.match(html, /<span class="small">2025 · a tua parte e a do titular B<\/span>/);
     assert.match(html, /Em tributação conjunta entra também a do titular B, cada linha com a sua letra\./);
@@ -226,9 +258,7 @@ describe('a Declaração é a de quem tem a sessão (KAN-73)', () => {
     let csv = null;
     app.download = (nome, mime, conteudo) => { csv = conteudo; };
     app.fiscoCsv();
-    const linhas = csv.split('\n').slice(1);
-    assert.deepEqual(linhas.map((x) => x.match(/^"2025";"[^"]*";"([^"]+)"/)[1] + ' ' + x.match(/;"([AB])";"[^"]*";"[^"]*";"[^"]*";"[^"]*"$/)[1]),
-      ['Benfica B', 'Arroios A', 'Arroios B']);
+    assert.deepEqual(lerCsv(csv).quadros.map((x) => x.contrato + ' ' + x.titular), ['Benfica B', 'Arroios A', 'Arroios B']);
   });
 
   test('um movimento sem imóvel é de quem o registou: conta se é meu (ou sem «pago por») ou do B em conjunta, e não se é de outro', () => {
@@ -420,7 +450,7 @@ describe('o 4.2: a comunicação de fevereiro, o 4.2B e o 4.2C', () => {
     assert.match(html, /por comunicar/);
     assert.match(html, /até 15\/02\/2026/);
     assert.doesNotMatch(html, /O 4\.2A pergunta ainda se a duração/, 'o aviso fixo saiu');
-    assert.match(app.fiscoTexto(), /4\.2A: comunicada a 10\/02\/2026 · início/);
+    assert.match(app.fiscoTexto(), /4\.2A \(campo 45\d\d\): comunicada a 10\/02\/2026 · início/, 'com o campo do 4.2 a que se liga (D77)');
   });
 
   test('a renda 10 % abaixo da anterior vai ao 4.2B; o celebrado desde 2024 e confirmado responde Sim no 4.2C', () => {

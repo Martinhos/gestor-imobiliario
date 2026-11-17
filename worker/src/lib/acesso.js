@@ -123,6 +123,40 @@ export async function participantsOf(env, houseId) {
   return parts;
 }
 
+/* Os participantes de várias casas numa consulta só — as mesmas três portas
+   de participantsOf (o dono, as partilhas em ligações aceites e os membros
+   dos grupos vivos que não saíram), sem a ordem dela. É o que a purga de uma
+   conta usa para fechar o período das quotas de cada casa sem gastar três
+   consultas por casa.
+   Recebe: env — o ambiente do worker (a base D1); ids — os ids das casas.
+   Devolve: promessa de um Map id da casa → lista de ids (sem repetidos);
+   uma casa apagada ou inexistente não vem. */
+export async function participantesDeCasas(env, ids) {
+  const out = new Map();
+  if (!ids.length) return out;
+  const rows = (await env.DB.prepare(
+    `SELECT h.id AS house_id, h.owner_id AS user_id FROM houses h
+      WHERE h.deleted = 0 AND h.id IN (SELECT value FROM json_each(?1))
+     UNION
+     SELECT s.house_id, CASE WHEN c.requester_id = s.owner_id THEN c.target_id ELSE c.requester_id END
+       FROM shares s JOIN connections c ON c.id = s.connection_id
+       JOIN houses h ON h.id = s.house_id AND h.deleted = 0
+      WHERE c.status = 'accepted' AND s.house_id IN (SELECT value FROM json_each(?1))
+     UNION
+     SELECT gh.house_id, m.user_id FROM shared_group_houses gh
+       JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
+       JOIN shared_group_members m ON m.group_id = gh.group_id
+       JOIN houses h ON h.id = gh.house_id AND h.deleted = 0
+      WHERE gh.house_id IN (SELECT value FROM json_each(?1)) AND ${SAIU_DA_CASA}`
+  ).bind(JSON.stringify([...new Set(ids)])).all()).results;
+  rows.forEach((r) => {
+    if (!out.has(r.house_id)) out.set(r.house_id, []);
+    const l = out.get(r.house_id);
+    if (!l.includes(r.user_id)) l.push(r.user_id);
+  });
+  return out;
+}
+
 // O acesso completo de um utilizador a uma casa, com o grau: dono,
 // comproprietário (share numa conexão aceite, ou membro de um grupo
 // partilhado vivo com a casa) ou colaborador (cargo do dono numa lista de
@@ -383,26 +417,278 @@ export async function apagarCasa(env, houseId, ownerId) {
   await env.DB.batch(stmts);
 }
 
-// As quotas (ownerIds/ownerShares) são geridas pelo servidor através das
-// propostas de divisão: um cliente a gravar a casa nunca as pode alterar.
+// Os campos da casa que só o servidor escreve: os donos e as quotas entre as
+// contas, os comproprietários sem conta (D08) e o histórico das quotas com a
+// data em que cada estado acabou (D29). Mudam pelas propostas de divisão, ao
+// sair de uma casa e ao apagar uma conta — nunca por um cliente a gravar a
+// ficha.
+export const CAMPOS_DAS_QUOTAS = ['ownerShares', 'ownerIds', 'comproprietariosFora', 'quotasHist'];
+
+// As quotas (ownerIds/ownerShares, comproprietariosFora e quotasHist) são
+// geridas pelo servidor através das propostas de divisão: um cliente a gravar
+// a casa nunca as pode alterar.
 // Recebe: existingDataStr — o JSON da casa como está na base, em texto (pode
 // nem ser JSON válido); incoming — o objeto da casa que o cliente mandou,
 // alterado no próprio sítio.
-// Devolve: o mesmo incoming, com ownerShares/ownerIds repostos do que havia
+// Devolve: o mesmo incoming, com os CAMPOS_DAS_QUOTAS repostos do que havia
 // (ou sem eles, quando não havia).
 export function preserveOwnership(existingDataStr, incoming) {
   // sem casa anterior (criação, ou ressurreição de uma apagada) as quotas
   // partem do zero: só o caminho das propostas as pode escrever
-  delete incoming.ownerShares;
-  delete incoming.ownerIds;
+  CAMPOS_DAS_QUOTAS.forEach((k) => { delete incoming[k]; });
   try {
     const ex = JSON.parse(existingDataStr);
     if (ex && typeof ex === 'object') {
-      if (ex.ownerShares !== undefined) incoming.ownerShares = ex.ownerShares;
-      if (ex.ownerIds !== undefined) incoming.ownerIds = ex.ownerIds;
+      CAMPOS_DAS_QUOTAS.forEach((k) => { if (ex[k] !== undefined) incoming[k] = ex[k]; });
     }
   } catch (e) {}
   return incoming;
+}
+
+/* ===================== As quotas com data (D08, D29, D93) =====================
+   A quota de cada um muda com uma data: a proposta aceite diz desde quando
+   (share_proposals.desde, migração 0030), e sair de uma casa ou apagar uma
+   conta mudam-na a partir de hoje (em Lisboa, o «hoje» da app). O estado que
+   acaba vai para o quotasHist da casa com ate = a véspera desse dia:
+   [{ate, ownerIds, ownerShares, fora}], por ordem de ate — o que valia até
+   esse dia, inclusive. O de hoje é o ownerShares/ownerIds/comproprietariosFora
+   da própria casa. A Declaração de cada ano usa o estado de cada data
+   (web/app/saldos.js:quotasFiscais, o espelho no cliente).
+   O ownerShares continua relativo entre as contas (soma 100, como nos
+   Saldos); o comproprietariosFora — null (por confirmar), [] (não há outros)
+   ou [{id, nome, quota}] — é a parte da casa de quem não tem conta, em % da
+   casa inteira. A quota fiscal de cada conta é ownerShares × (100 − soma de
+   fora) / 100. */
+
+/* O dia de uma data AAAA-MM-DD real (2026-02-30 não é), ou nada.
+   Recebe: v — o valor (texto vindo do cliente, ou qualquer outro).
+   Devolve: o próprio 'AAAA-MM-DD', ou '' quando não é uma data de 1900 em diante. */
+export function diaValido(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof v === 'string' ? v : '');
+  if (!m) return '';
+  const y = Number(m[1]), mes = Number(m[2]), dia = Number(m[3]);
+  const d = new Date(Date.UTC(y, mes - 1, dia));
+  if (y < 1900 || d.getUTCFullYear() !== y || d.getUTCMonth() !== mes - 1 || d.getUTCDate() !== dia) return '';
+  return v;
+}
+
+/* O dia anterior a uma data, sem fuso (aritmética em UTC).
+   Recebe: iso — 'AAAA-MM-DD'.
+   Devolve: 'AAAA-MM-DD' da véspera, ou '' quando iso não é uma data. */
+export function vesperaDe(iso) {
+  if (!diaValido(iso)) return '';
+  const d = new Date(Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)) - 1));
+  return d.toISOString().slice(0, 10);
+}
+
+/* O dia de hoje em Lisboa, que é o «hoje» da app (web/app/formato.js:today
+   corre no telemóvel de quem usa): é o dia em que uma saída ou uma conta
+   apagada mudam as quotas. A mesma conta de lib/avisos-atraso.js:hojeEmLisboa,
+   escrita aqui porque esse ficheiro importa este.
+   Recebe: agora (opcional) — ms de época (now() por omissão).
+   Devolve: 'AAAA-MM-DD'. */
+export function diaEmLisboa(agora) {
+  const partes = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Lisbon', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(agora == null ? now() : agora));
+  const o = {};
+  for (const p of partes) o[p.type] = p.value;
+  return o.year + '-' + o.month + '-' + o.day;
+}
+
+// Uma percentagem guardada que conta: um número finito e ≥ 0.
+// Recebe: v — o valor guardado.
+// Devolve: true quando conta.
+function quotaConta(v) {
+  return v !== undefined && v !== null && v !== '' && isFinite(Number(v)) && Number(v) >= 0;
+}
+
+/* As frações das contas de um estado das quotas, com a mesma regra do
+   web/app/saldos.js:sharesOf (quem não tem percentagem fica com o que falta
+   até 100, em partes iguais; sem nenhuma, partes iguais) — sem olhar para as
+   fichas, que o servidor não tem.
+   Recebe: ids — os donos (contas); raw — o ownerShares ({id: percentagem}).
+   Devolve: {id: fração 0–1}; vazio sem donos. */
+export function fracoesDasQuotas(ids, raw) {
+  const os = [...new Set(Array.isArray(ids) ? ids.filter((x) => typeof x === 'string' && x) : [])];
+  const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const out = {};
+  if (!os.length) return out;
+  const tem = (o) => Object.prototype.hasOwnProperty.call(r, o) && quotaConta(r[o]);
+  const dados = os.filter(tem), vazios = os.filter((o) => !tem(o));
+  if (!dados.length) { os.forEach((o) => { out[o] = 1 / os.length; }); return out; }
+  const somaD = dados.reduce((n, o) => n + Number(r[o]), 0);
+  const resto = vazios.length ? Math.max(0, 100 - somaD) : 0, tot = somaD + resto;
+  if (!(tot > 0)) { os.forEach((o) => { out[o] = 0; }); return out; }
+  os.forEach((o) => { out[o] = tem(o) ? Number(r[o]) / tot : resto / vazios.length / tot; });
+  return out;
+}
+
+/* Os comproprietários sem conta guardados numa casa, limpos: só os que têm
+   nome e quota entre 0 e 100 (exclusive).
+   Recebe: v — o comproprietariosFora guardado (null, [] ou a lista).
+   Devolve: null (por confirmar, ou ilegível) ou a lista [{id, nome, quota}]. */
+function foraGuardados(v) {
+  if (!Array.isArray(v)) return null;
+  return v.filter((f) => f && typeof f === 'object' && typeof f.nome === 'string' && f.nome.trim()
+    && isFinite(Number(f.quota)) && Number(f.quota) > 0 && Number(f.quota) < 100)
+    .map((f) => ({ id: typeof f.id === 'string' ? f.id : '', nome: f.nome, quota: Number(f.quota) }));
+}
+
+/* O estado das quotas de uma casa, como vai para o quotasHist: os donos
+   (as contas que a casa tem), as percentagens só deles e os de fora.
+   Recebe: data — o JSON da casa (objeto); donos (opcional) — os
+   participantes de agora (acesso.js:participantsOf); sem eles, o
+   data.ownerIds.
+   Devolve: { ownerIds, ownerShares, fora } — cópias, sem referências ao data. */
+export function estadoDasQuotas(data, donos) {
+  const d = data && typeof data === 'object' ? data : {};
+  const ids = [...new Set((Array.isArray(donos) ? donos : Array.isArray(d.ownerIds) ? d.ownerIds : [])
+    .filter((x) => typeof x === 'string' && x))];
+  const raw = d.ownerShares && typeof d.ownerShares === 'object' ? d.ownerShares : {};
+  const ownerShares = {};
+  ids.forEach((u) => { if (Object.prototype.hasOwnProperty.call(raw, u) && quotaConta(raw[u])) ownerShares[u] = Number(raw[u]); });
+  return { ownerIds: ids, ownerShares, fora: foraGuardados(d.comproprietariosFora) };
+}
+
+/* Dois estados das quotas dão a mesma Declaração: as mesmas frações de cada
+   conta (fracoesDasQuotas) e os mesmos de fora (nome e quota). «Por
+   confirmar» (null) e «não há outros» ([]) contam como iguais: confirmar
+   «Só eu» não muda o imposto de ninguém, e não abre um período novo.
+   Recebe: a, b — dois estados ({ownerIds, ownerShares, fora}).
+   Devolve: true quando são iguais. */
+export function quotasIguais(a, b) {
+  const fa = fracoesDasQuotas(a && a.ownerIds, a && a.ownerShares);
+  const fb = fracoesDasQuotas(b && b.ownerIds, b && b.ownerShares);
+  const ids = [...new Set([...Object.keys(fa), ...Object.keys(fb)])];
+  if (ids.some((u) => Math.abs((fa[u] || 0) - (fb[u] || 0)) > 1e-9)) return false;
+  const canon = (x) => (foraGuardados(x && x.fora) || [])
+    .map((f) => f.nome.trim() + '|' + Math.round(f.quota * 100)).sort().join(';');
+  return canon(a) === canon(b);
+}
+
+/* O quotasHist de uma casa quando as quotas mudam de «antes» para «novo» a
+   partir do dia desde. O estado que valia na véspera acaba nesse dia:
+   - se desde vem depois do fim do último período guardado, «antes» (o de
+     hoje) entra no fim com ate = véspera(desde) — se for mesmo diferente do
+     novo;
+   - se desde cai dentro de um período já guardado (uma correção da data, ou
+     uma mudança com efeitos para trás, aceite por todos), esse período passa
+     a acabar na véspera e os seguintes saem: de desde em diante vale o novo.
+   No fim, dois períodos seguidos iguais juntam-se, e um último igual ao novo
+   sai (o novo já vale nesses dias). Puro: não mexe no que recebe.
+   Recebe: hist — o quotasHist guardado (lixo conta como []); antes — o
+   estado de hoje (estadoDasQuotas); novo — o estado que fica; desde —
+   'AAAA-MM-DD', o primeiro dia do novo.
+   Devolve: a lista nova, por ordem de ate. */
+export function quotasComHistorico(hist, antes, novo, desde) {
+  const lista = (Array.isArray(hist) ? hist : [])
+    .filter((e) => e && typeof e === 'object' && diaValido(e.ate))
+    .map((e) => ({ ...e }))
+    .sort((x, y) => (x.ate < y.ate ? -1 : x.ate > y.ate ? 1 : 0));
+  const ate = vesperaDe(desde);
+  if (!ate) return lista;
+  const i = lista.findIndex((e) => e.ate >= ate);
+  let out;
+  if (i === -1) {
+    if (quotasIguais(antes, novo)) return lista;
+    out = lista.concat([{ ate, ownerIds: antes.ownerIds, ownerShares: antes.ownerShares, fora: antes.fora }]);
+  } else {
+    out = lista.slice(0, i + 1);
+    out[i].ate = ate;
+  }
+  // dois seguidos iguais: o primeiro sai (o segundo cobre os dois períodos)
+  const juntos = out.filter((e, k) => k === out.length - 1 || !quotasIguais(e, out[k + 1]));
+  if (juntos.length && quotasIguais(juntos[juntos.length - 1], novo)) juntos.pop();
+  return juntos;
+}
+
+/* As percentagens de uma proposta, acertadas (D93): cada uma a 2 casas
+   decimais e a soma exatamente 100 — o que falta (ou sobra) do
+   arredondamento vai para a última, como o cliente a escreve (33,33 × 3 dá
+   33,33/33,33/33,34). Só se acerta o que é arredondamento: cada percentagem
+   pode estar a 0,05 pontos da certa (33,3 × 3 passa); 50/49,6 não passa.
+   Se a última ficasse negativa, o acerto vai para a maior.
+   Recebe: shares — {id: percentagem}, pela ordem em que vieram.
+   Devolve: { quotas } com o ownerShares acertado, ou { erro } com a frase. */
+export function acertarQuotas(shares) {
+  const ids = Object.keys(shares || {});
+  if (!ids.length) return { erro: 'Corpo inválido — envia { shares: { utilizador: percentagem } }.' };
+  const cent = [];
+  for (const k of ids) {
+    const v = Number(shares[k]);
+    if (shares[k] === null || shares[k] === '' || !isFinite(v) || v < 0) return { erro: 'Percentagens inválidas.' };
+    cent.push(Math.round(v * 100));
+  }
+  const falta = 10000 - cent.reduce((n, v) => n + v, 0);
+  if (Math.abs(falta) > 5 * ids.length) return { erro: 'As percentagens têm de somar 100.' };
+  let k = ids.length - 1;
+  if (cent[k] + falta < 0) cent.forEach((v, j) => { if (v > cent[k]) k = j; });
+  cent[k] += falta;
+  const quotas = {};
+  ids.forEach((u, j) => { quotas[u] = cent[j] / 100; });
+  return { quotas };
+}
+
+// Quantos comproprietários sem conta uma casa pode ter, e o tamanho do nome.
+const MAX_FORA = 20, MAX_NOME_FORA = 80;
+
+/* Os comproprietários sem conta de uma proposta (D08), validados: cada um
+   com nome e quota em % da casa inteira (0 < quota < 100, a 2 casas), a soma
+   abaixo de 100 (as contas ficam sempre com alguma coisa). O id vem do
+   cliente (seguro) ou nasce aqui. null é «por confirmar»; [] é «não há
+   outros» (o «Só eu»).
+   Recebe: v — o fora que veio no corpo; idNovo — função que dá um id novo.
+   Devolve: { fora } (null ou a lista [{id, nome, quota}]) ou { erro }. */
+export function validarFora(v, idNovo) {
+  if (v === null) return { fora: null };
+  if (!Array.isArray(v) || v.length > MAX_FORA) return { erro: 'Os comproprietários de fora vêm numa lista (até ' + MAX_FORA + ').' };
+  const fora = [], vistos = new Set();
+  let soma = 0;
+  for (const f of v) {
+    const nome = f && typeof f.nome === 'string' ? f.nome.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, MAX_NOME_FORA) : '';
+    const q = f ? Math.round(Number(f.quota) * 100) / 100 : NaN;
+    if (!nome || !isFinite(q) || q <= 0 || q >= 100) {
+      return { erro: 'Cada comproprietário de fora precisa de um nome e de uma quota entre 0 e 100.' };
+    }
+    let id = f && typeof f.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(f.id) ? f.id : '';
+    if (!id || vistos.has(id)) id = idNovo();
+    vistos.add(id);
+    soma += Math.round(q * 100);
+    fora.push({ id, nome, quota: q });
+  }
+  if (soma >= 10000) return { erro: 'As quotas dos comproprietários de fora têm de somar menos de 100.' };
+  return { fora };
+}
+
+/* Aplica um estado novo das quotas a uma casa, com o período que acaba a ir
+   para o quotasHist: as percentagens entre as contas, os donos e — quando
+   vem — os de fora. É o que a proposta aceite (e a de um dono só) faz.
+   Sem data, as quotas novas valem a partir de hoje; e os de fora que
+   estavam por confirmar (null) passam a ser os confirmados também para
+   trás, nos períodos em que estavam por confirmar: confirmar quem mais é
+   dono não é uma mudança, é dizer o que já era (o irmão que herdou a meias
+   em 2020 não entrou na casa no dia em que a Ana o escreveu). Com data,
+   vale a data: o que estava por confirmar até à véspera fica assim.
+   Recebe: data — o JSON da casa (objeto, alterado no sítio); parts — os
+   participantes de agora; quotas — o ownerShares novo; fora — a lista nova,
+   null, ou undefined para ficar como está; desde — 'AAAA-MM-DD', o primeiro
+   dia das quotas novas, ou null (sem data: hoje, em Lisboa).
+   Devolve: o mesmo data. */
+export function aplicarQuotas(data, parts, quotas, fora, desde) {
+  const antes = estadoDasQuotas(data, parts);
+  if (!desde && Array.isArray(fora)) {
+    if (antes.fora === null) antes.fora = fora;
+    if (Array.isArray(data.quotasHist)) {
+      data.quotasHist = data.quotasHist.map((e) => (e && typeof e === 'object' && foraGuardados(e.fora) === null ? { ...e, fora } : e));
+    }
+  }
+  data.ownerShares = quotas;
+  data.ownerIds = parts;
+  if (fora !== undefined) data.comproprietariosFora = fora;
+  data.quotasHist = quotasComHistorico(data.quotasHist, antes, estadoDasQuotas(data, parts), desde || diaEmLisboa());
+  if (!data.quotasHist.length) delete data.quotasHist;
+  return data;
 }
 
 // A frase de quando outra escrita passou à frente vezes seguidas: o pedido
@@ -475,6 +761,19 @@ export function redistribuirQuotas(shares, saiId, ficam) {
   const out = {};
   ids.forEach((u, i) => { out[u] = cent[i] / 100; });
   return out;
+}
+
+/* Quem sai de uma casa (ou apaga a conta) muda as quotas a partir de hoje:
+   o estado de antes vai para o quotasHist com ate = ontem (em Lisboa). O
+   data já tem as quotas novas; antes é o que tinha antes de mudar.
+   Recebe: data — o JSON da casa (objeto, alterado no sítio), já com as
+   quotas de quem fica; antes — estadoDasQuotas de antes da mudança; ficam —
+   os participantes que continuam; agora (opcional) — ms de época.
+   Devolve: o mesmo data. */
+export function fecharQuotasHoje(data, antes, ficam, agora) {
+  data.quotasHist = quotasComHistorico(data.quotasHist, antes, estadoDasQuotas(data, ficam), diaEmLisboa(agora));
+  if (!data.quotasHist.length) delete data.quotasHist;
+  return data;
 }
 
 // O aviso de que alguém saiu de uma casa, para um destinatário: uma linha de
@@ -569,17 +868,28 @@ async function purgarConta(env, uid) {
     ).results;
 
     const stmts = [];
+    // os donos de cada uma antes de a conta sair (numa consulta só): o
+    // período das quotas que acaba hoje leva-os a todos (D29)
+    const donosDe = await participantesDeCasas(env, foreign.map((r) => r.house_id));
     for (const row of foreign) {
       const h = await env.DB.prepare('SELECT data, rev FROM houses WHERE id = ?').bind(row.house_id).first();
       if (!h) continue;
       let data;
       try { data = JSON.parse(h.data); } catch (e) { continue; }
+      if (!data || typeof data !== 'object' || Array.isArray(data)) continue;
+      const donos = donosDe.get(row.house_id) || [];
+      const antes = estadoDasQuotas(data, donos);
       let touched = false;
       if (data.ownerShares && data.ownerShares[uid] !== undefined) { delete data.ownerShares[uid]; touched = true; }
       if (Array.isArray(data.ownerIds) && data.ownerIds.includes(uid)) {
         data.ownerIds = data.ownerIds.filter((x) => x !== uid);
         touched = true;
       }
+      // a quota de quem sai passa aos que ficam a partir de hoje: até ontem,
+      // a Declaração de cada um continua com as quotas de antes
+      const histAntes = JSON.stringify(data.quotasHist);
+      fecharQuotasHoje(data, antes, donos.filter((x) => x !== uid));
+      if (JSON.stringify(data.quotasHist) !== histAntes) touched = true;
       if (touched) {
         stmts.push(gravarCasa(env, row.house_id, h.rev, { data: JSON.stringify(data) }, now()));
       }

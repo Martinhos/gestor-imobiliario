@@ -255,6 +255,14 @@ function escreverCasa(e, o, linha) {
   }
   if (linha && linha.owner_id !== me.id) return { res: { ok: false, status: 403 } };
   const dados = preserveOwnership('', data);
+  // ressuscitar é o «Anular» de apagar: os comproprietários sem conta e o
+  // histórico das quotas (D08, D29) voltam do que a casa tinha — são factos
+  // da casa, e o cliente não os pode escrever. Os donos e as percentagens
+  // entre as contas não: as partilhas saíram ao apagar (acesso.js:apagarCasa).
+  const apagada = linha ? lerJSON(linha.data) : null;
+  if (fusaoObjeto(apagada)) {
+    ['comproprietariosFora', 'quotasHist'].forEach((k) => { if (apagada[k] !== undefined) dados[k] = apagada[k]; });
+  }
   const recusa = recusaPelaCompra('house', dados, linha ? lerJSON(linha.data) : null, dados.purchaseDate);
   if (recusa) return { res: recusa };
   return {

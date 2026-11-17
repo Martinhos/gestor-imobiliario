@@ -4,8 +4,18 @@
    guia acompanha-o do princípio ao fim (ticket a89a5fcb, 2026-11-09): 1. se
    tem de declarar, 2. onde, 3. como preenche o Anexo F, 4. o que pode
    deduzir — e as fontes oficiais no fim. É informação, não uma função da
-   app — a montra continua a não prometer a Declaração (em produção desde
-   2026-11-12), até o Martinho decidir mostrá-la.
+   app; a Declaração (em produção desde 2026-11-12) abre-o no botão «Guia»,
+   e por isso a nota do fim leva o aviso dela, à letra (IRS_AVISO_GUIA).
+
+   A 2026-11-17 (auditoria ao IRS, KAN-126) o guia corrigiu-se onde a
+   auditoria o achou errado ou curto, cada frase nova com a fonte aberta
+   nesse dia: a caução (D03), o seguro de renda (D07), as letras A e B do
+   rosto (D30), os limites do n.º 23 desde a Portaria 454/2026/1 (D78), as
+   rendas isentas e os outros quadros (D79), o Modelo 44 só para os
+   dispensados do recibo eletrónico (D80), o prazo das substituições do 8B
+   (D84), o quadro 4.4 (D106) e o limite das rendas moderadas como o
+   Decreto-Lei n.º 97/2026 o escreve (D109). O Martinho verifica-as antes de
+   promover, como as de 2026-11-09.
 
    A parte 4 (a regra geral, o que podes, o que não podes, o que pede
    cuidado, os documentos) e os quatro pontos do Anexo F na parte 3 são o
@@ -41,9 +51,29 @@ const APP = 'https://app.rendorium.com';
 const SITIO = 'https://rendorium.com';
 // o endereço do guia, o mesmo em todos os hosts (index.js) e no rodapé da montra
 export const CAMINHO_GUIA = '/guias/declarar-rendas';
-// a última revisão do texto com o Martinho: a data do Article e do mapa do sítio
-// (a ficha da página escreve-a por extenso, «Verificado a»: as duas mudam juntas)
-export const GUIA_REVISTO = '2026-11-09';
+// a última verificação do texto contra as fontes: a data de modificação do Article e
+// do mapa do sítio (a ficha da página escreve-a por extenso, «Verificado a», pela
+// dataPorExtenso: as duas mudam juntas)
+export const GUIA_REVISTO = '2026-11-17';
+// o dia em que o guia saiu, a data de publicação do Article (não muda com as revisões)
+const GUIA_PUBLICADO = '2026-11-09';
+
+/* O aviso da Declaração, à letra (web/app/irs.js:IRS_AVISO, decisão do
+   Martinho de 2026-11-13: «igual em todos os sítios», o guia incluído). O
+   guia é do worker e não pode ler o irs.js, que é um script do browser: o
+   texto copia-se, e o testes/irs-guia-textos.test.js confere que é igual. */
+export const IRS_AVISO_GUIA = 'A app resume; quem declara és tu, no Portal das Finanças. Confirma cada valor antes ' +
+  'de entregar: o imposto aqui é uma estimativa.';
+
+const MESES_POR_EXTENSO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro',
+  'outubro', 'novembro', 'dezembro'];
+
+/* Uma data AAAA-MM-DD por extenso, como se escreve em Portugal.
+   Recebe: iso — a data. Devolve: o texto, ex.: «17 de novembro de 2026». */
+export function dataPorExtenso(iso) {
+  const [a, m, d] = String(iso).split('-').map(Number);
+  return d + ' de ' + MESES_POR_EXTENSO[m - 1] + ' de ' + a;
+}
 
 /* O que os motores de busca e as redes mostram (≤ 60 e ≤ 160 caracteres),
    com os termos de quem pesquisa: IRS, rendas, declarar, Anexo F, deduzir.
@@ -53,8 +83,8 @@ export const GUIA_REVISTO = '2026-11-09';
    o nome curto é o do caminho, do rodapé da montra e do rasto. */
 export const H1 = 'IRS das rendas: como declarar e o que podes deduzir';
 const TITULO = H1;
-const DESCRICAO = 'Vê se tens de declarar as rendas no IRS, como preencher o Anexo F e que despesas podes deduzir: ' +
-  'IMI, condomínio, obras, seguros e os documentos a guardar.';
+const DESCRICAO = 'Vê se tens de declarar as rendas no IRS, como preencher o Anexo F e o que podes deduzir: ' +
+  'IMI, condomínio, obras, seguro de renda e os documentos a guardar.';
 const NOME_CURTO = 'Guia do IRS das rendas';
 
 // os ícones de traço da casa (grelha de 24, traço 1.8), como os da montra
@@ -144,6 +174,47 @@ const SEGUIR = 'M9 6l6 6-6 6';
      fizer, o inquilino pode fazê-lo;
    - portaria106: arts. 2.º e 3.º, a comunicação do inquilino, facultativa,
      com efeitos desde 1 de agosto de 2025.
+   As que entraram a 2026-11-17 (auditoria ao IRS, KAN-126), abertas nesse
+   dia: as páginas da AT pelo texto em vigor e os PDF da AT lidos por
+   inteiro (pdftotext), com o que se cita de cada uma:
+   - portaria454: a Portaria 454/2026/1, de 13 de outubro (DR n.º 198/2026),
+     fixa os limites máximos de renda do RSAA por tipologia e concelho; art.
+     6.º b), revoga a Portaria 176/2019, com efeitos a 1 de setembro de 2026
+     (art. 7.º n.º 2); art. 7.º n.º 3, entre 1 de setembro de 2026 e a
+     entrada em vigor (14 de outubro) valem os valores da Portaria 176/2019;
+     com ela, o dl97 (lido no PDF da AT, decreto-lei-97-2026.pdf): art. 14.º
+     b), desde 1 de setembro de 2026 as referências aos limites da Portaria
+     176/2019 são aos do art. 4.º do anexo III (o RSAA); anexo III, art. 6.º
+     n.os 1 e 3, a isenção do RSAA e a submissão ao IHRU até 15 de janeiro
+     do ano seguinte ao da celebração; art. 15.º n.º 2, os contratos do
+     Programa de Arrendamento Acessível em vigor mantêm os efeitos fiscais;
+     art. 2.º n.º 2 a), o limite das rendas moderadas, à letra;
+   - dl68: art. 20.º n.º 1, a isenção das rendas do Programa de
+     Arrendamento Acessível;
+   - ebf71a: n.os 3 a 6, a isenção das rendas dos programas municipais de
+     arrendamento a custos acessíveis e de alojamento estudantil, pelo tempo
+     do contrato, que depende de reconhecimento (n.º 6);
+   - ebf74a: n.os 1 e 2, a isenção das rendas do alojamento local passado a
+     arrendamento para habitação permanente (registado e afeto até
+     2022-12-31, contrato celebrado e inscrito no Portal até 2024-12-31),
+     até às rendas de 2029;
+   - ebf46a: n.º 1, a isenção, pelo tempo do contrato, das rendas dos
+     contratos para habitação anteriores ao RAU (DL 321-B/90) e sujeitos aos
+     arts. 35.º ou 36.º do NRAU;
+   - cirs59: n.º 2 a), na tributação conjunta uma declaração com a
+     totalidade dos rendimentos do agregado;
+   - oc20256: o Ofício-Circulado 20256, de 2023-06-07, ponto 4 (a caução é
+     renda no ano em que se recebe) e ponto 6 (a devolução pode ser gasto
+     do Anexo F do ano em que se devolve);
+   - portaria98a: art. 5.º n.º 1, o recibo de renda eletrónico é
+     obrigatório, «ainda que a título de caução»; n.os 2 e 3, quem está
+     dispensado; art. 8.º n.º 1, a declaração anual (Modelo 44) é de quem
+     está dispensado (n.º 2 e n.º 3 b)) e não optou pelo recibo;
+   - e, já na lista, o cirs74 (n.os 7 e 8: a opção pelo 8B faz-se na
+     declaração do ano do pagamento, e as substituições entregam-se no prazo
+     do art. 60.º n.º 2, contado do fim do prazo do n.º 1), o cirs60 (n.º 2,
+     30 dias) e o anexoF (quadros 4.2C, 4.4, 5, 6D, 6F e 6H; a coluna
+     Titular, A e B como no rosto; os gastos «a seguros de renda»).
    As da parte 4, do texto do Martinho, verificadas a 2026-11-08. */
 const FONTES = [
   { id: 'cirs8', nome: 'AT, Código do IRS, artigo 8.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs8.aspx' },
@@ -168,6 +239,14 @@ const FONTES = [
   { id: 'cirs115', nome: 'AT, Código do IRS, artigo 115.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs115.aspx' },
   { id: 'cis60', nome: 'AT, Código do Imposto do Selo, artigo 60.º', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/selo/Pages/selo60.aspx' },
   { id: 'portaria106', nome: 'AT, Portaria n.º 106/2025/1, de 13 de março: a comunicação do contrato pelo inquilino', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/legislacao/diplomas_legislativos/Documents/Portaria_106_2025_1.pdf' },
+  { id: 'portaria454', nome: 'AT, Portaria n.º 454/2026/1, de 13 de outubro: os limites de renda do Regime Simplificado de Arrendamento Acessível', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/legislacao/diplomas_legislativos/Documents/portaria-454-2026-1.pdf' },
+  { id: 'dl68', nome: 'AT, Decreto-Lei n.º 68/2019, de 22 de maio: o Programa de Arrendamento Acessível', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/legislacao/diplomas_legislativos/Documents/Decreto_Lei_68_2019.pdf' },
+  { id: 'ebf71a', nome: 'AT, Estatuto dos Benefícios Fiscais, artigo 71.º-A', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/bf_rep/Pages/ebf71a.aspx' },
+  { id: 'ebf74a', nome: 'AT, Estatuto dos Benefícios Fiscais, artigo 74.º-A', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/bf_rep/Pages/ebf74a.aspx' },
+  { id: 'ebf46a', nome: 'AT, Estatuto dos Benefícios Fiscais, artigo 46.º-A', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/bf_rep/Pages/ebf46a.aspx' },
+  { id: 'cirs59', nome: 'AT, Código do IRS, artigo 59.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs59.aspx' },
+  { id: 'oc20256', nome: 'AT, Ofício-Circulado n.º 20256, de 7 de junho de 2023: a tributação da caução', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/legislacao/instrucoes_administrativas/Documents/Oficio_Circulado_20256_2023.pdf' },
+  { id: 'portaria98a', nome: 'AT, Portaria n.º 98-A/2015, de 31 de março: o recibo de renda eletrónico e a declaração Modelo 44', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/legislacao/diplomas_legislativos/Documents/Portaria_98_A-2015.pdf' },
   { id: 'cirs41', nome: 'AT, Código do IRS, artigo 41.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs41.aspx' },
   { nome: 'AT, página de apoio sobre rendimentos prediais', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_ao_contribuinte/Cidadaos/Rendimentos/Prediais/Paginas/default.aspx' },
   { nome: 'AT, Informação Vinculativa, processo 1115/2017: certificado energético, seguro, IMI, condomínio e reparações', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/rendimento/cirs/Documents/PIV_11676_Cat_F_Despesas_elegiveis_certificado_energetico_pintura_proporcionalidade_mensal_IMI.pdf' },
@@ -260,6 +339,9 @@ const DEDUCOES = [
         'A casa de onde saíste está arrendada para habitação.',
         'Os dois contratos de arrendamento estão registados no Portal das Finanças.',
       ] },
+      { p: 'Estas rendas têm um quadro próprio: declaras-las no quadro 4.4 do Anexo F, com o campo da ' +
+        'linha da casa que arrendaste, o número do contrato em que és tu o inquilino, a identificação matricial da casa nova e as rendas que pagaste no ano ' +
+        '(instruções do quadro 4.4 do Anexo F).' },
     ] },
   ] },
 
@@ -351,9 +433,38 @@ const GUIA = [
       { info: [
         '25 % nas rendas de arrendamento habitacional (artigo 72.º, n.º 2).',
         '28 % nas outras rendas prediais, como as de um arrendamento não habitacional (artigo 72.º, n.º 1, alínea e)).',
-        '10 % nas rendas de 2026 a 2029 de contratos só para habitação com renda mensal até 2,5 vezes a retribuição ' +
-          'mínima mensal de 2026, ou seja, 2 300 € no continente, salvo se te couber uma taxa mais baixa (artigo ' +
-          '45.º-C do Estatuto dos Benefícios Fiscais; Decreto-Lei n.º 97/2026, artigo 2.º; Decreto-Lei n.º 139/2025).',
+        // D109: o limite como o Decreto-Lei n.º 97/2026 o escreve, sem «no continente», que sugeria outro nas
+        // regiões autónomas; a lei não as distingue, e a AT ainda não disse qual retribuição vale nelas
+        '10 % nas rendas de 2026 a 2029 de contratos só para habitação com renda mensal até 2,5 vezes o valor ' +
+          'da retribuição mínima mensal prevista para 2026 (2 300 €, com a retribuição de 920 € do ' +
+          'Decreto-Lei n.º 139/2025), salvo se te couber uma taxa mais baixa (artigo 45.º-C do Estatuto dos ' +
+          'Benefícios Fiscais; Decreto-Lei n.º 97/2026, artigo 2.º, n.º 2, alínea a)).',
+      ] },
+    ] },
+    { grupo: 'Rendas isentas', blocos: [
+      { p: 'Algumas rendas estão isentas de IRS. No modelo do Anexo F em vigor, as que têm quadro próprio ' +
+        'declaram-se na mesma no quadro 4.1, e o contrato identifica-se no 6D, no 6F ou no 6H (instruções desses ' +
+        'quadros do Anexo F):' },
+      { info: [
+        'As dos contratos do Programa de Arrendamento Acessível (Decreto-Lei n.º 68/2019, artigo 20.º) e as dos ' +
+          'programas municipais de arrendamento a custos acessíveis ou de alojamento estudantil, depois de a isenção ' +
+          'ser reconhecida (artigo 71.º-A, n.os 3 a 6, do Estatuto dos Benefícios Fiscais). Identificam-se no ' +
+          'quadro 6D. Os contratos do Programa de Arrendamento Acessível que estavam em vigor quando ele deu lugar ' +
+          'ao Regime Simplificado de Arrendamento Acessível mantêm os efeitos fiscais (Decreto-Lei n.º 97/2026, ' +
+          'artigo 15.º, n.º 2).',
+        'As dos contratos do Regime Simplificado de Arrendamento Acessível, desde 1 de setembro de 2026, se o ' +
+          'contrato cumprir as condições dele, entre elas a renda até ao limite da tipologia no concelho, que a ' +
+          'Portaria n.º 454/2026/1 fixou, e se o submeteres ao IHRU até 15 de janeiro do ano seguinte ao da ' +
+          'celebração (Decreto-Lei n.º 97/2026, anexo III, artigos 4.º e 6.º). O modelo do Anexo F em vigor ainda ' +
+          'não tem código para ele no quadro 6D: confirma o quadro nas instruções do modelo do teu ano.',
+        'As de um imóvel que passou do alojamento local para arrendamento para habitação permanente, se o ' +
+          'alojamento local estava registado e afeto a esse fim até 31 de dezembro de 2022 e o contrato foi ' +
+          'celebrado e inscrito no Portal das Finanças até 31 de dezembro de 2024. Estão isentas até às rendas de ' +
+          '2029, e o imóvel identifica-se no quadro 6F (artigo 74.º-A do Estatuto dos Benefícios Fiscais).',
+        'As dos contratos de arrendamento para habitação celebrados antes do Regime do Arrendamento Urbano (o RAU, ' +
+          'do Decreto-Lei n.º 321-B/90) e sujeitos ao regime dos artigos 35.º ou 36.º do Novo Regime do ' +
+          'Arrendamento Urbano, enquanto o contrato durar. Não são todos os contratos antigos: só os que ficaram ' +
+          'nesse regime. Identificam-se no quadro 6H (artigo 46.º-A do Estatuto dos Benefícios Fiscais).',
       ] },
     ] },
     { grupo: 'Os contratos longos', blocos: [
@@ -366,8 +477,12 @@ const GUIA = [
         '20 anos ou mais: menos 20 pontos percentuais.',
       ] },
       { p: 'A redução não vale para os contratos de arrendamento habitacional feitos desde 1 de janeiro de 2024 cuja ' +
-        'renda mensal exceda em 50 % os limites gerais de preço de renda por tipologia e concelho, da Portaria ' +
-        'n.º 176/2019 (artigo 72.º, n.º 23).' },
+        'renda mensal exceda em 50 % os limites gerais de preço de renda por tipologia e concelho (artigo 72.º, ' +
+        'n.º 23). Até 31 de agosto de 2026 esses limites eram os da Portaria n.º 176/2019. Desde 1 de setembro de ' +
+        '2026 são os limites máximos de renda do Regime Simplificado de Arrendamento Acessível, que a Portaria ' +
+        'n.º 454/2026/1 fixou (Decreto-Lei n.º 97/2026, artigo 14.º, alínea b)); até ela entrar em vigor, a 14 de ' +
+        'outubro de 2026, valeram ainda os valores da Portaria n.º 176/2019 (Portaria n.º 454/2026/1, artigo 7.º, ' +
+        'n.º 3). No Anexo F, confirmas isto no quadro 4.2C, para os contratos que declaras no 4.2.' },
       { p: 'Se o contrato acabar antes do prazo por causa tua, senhorio, perdes as reduções desde o início do contrato ' +
         'ou da renovação. No ano em que acabou, declaras isso, para pagares a diferença com juros compensatórios ' +
         '(artigo 72.º, n.º 20).' },
@@ -411,8 +526,12 @@ const GUIA = [
           'das Finanças, se for anterior a 1 de abril de 2015), e a data de início.',
         'A identificação matricial: o código da freguesia, de seis dígitos, que está nos documentos de cobrança do ' +
           'IMI, o tipo de prédio (U, urbano, ou R, rústico), o artigo e a fração.',
-        'O titular das rendas: A ou B, como no rosto da declaração, ou o código do dependente (D1, D2…). O B só ' +
-          'se usa quando és casado ou unido de facto e optam pela tributação conjunta.',
+        'O titular das rendas: A ou B, a posição de cada um no rosto da declaração (o sujeito passivo A no quadro ' +
+          '3, o B no quadro 5A), ou o código do dependente (D1, D2…). O B só existe quando és casado ou unido de ' +
+          'facto e optam pela tributação conjunta. Aí a declaração é uma só, com as rendas de todo o agregado, as ' +
+          'tuas e as do teu cônjuge também, cada linha ' +
+          'com a letra de quem é titular delas (artigo 59.º, n.º 2, alínea a); instruções do quadro 3 e da coluna ' +
+          'Titular do Anexo F).',
         'As rendas pelo valor ilíquido, pagas ou colocadas à tua disposição no ano, e a natureza: 07 no arrendamento ' +
           'habitacional, 06 no não habitacional.',
         'As retenções na fonte de IRS feitas sobre essas rendas.',
@@ -422,6 +541,13 @@ const GUIA = [
         'As obras de conservação e manutenção pagas nos 24 meses antes do arrendamento, nas colunas próprias, só no ' +
           'ano em que o arrendamento começa.',
       ] },
+    ] },
+    { grupo: 'A caução', blocos: [
+      { p: 'Para a AT, a caução que recebes do inquilino é renda do ano em que a recebes: entra nas rendas desse ano, ' +
+        'na linha do contrato (Ofício-Circulado n.º 20256, de 7 de junho de 2023, ponto 4). E passas recibo de ' +
+        'renda eletrónico dela, como das outras rendas (Portaria n.º 98-A/2015, artigo 5.º, n.º 1).' },
+      { p: 'Quando a devolves ao inquilino, o que devolves pode ser abatido como gasto no Anexo F do ano em que o ' +
+        'devolves (o mesmo ofício-circulado, ponto 6).' },
     ] },
     { grupo: 'O quadro de cada contrato', blocos: [
       { p: 'No modelo do Anexo F em vigor desde janeiro de 2025, que a Portaria n.º 104/2026/1 manteve:' },
@@ -435,12 +561,24 @@ const GUIA = [
       { p: 'Se sair um modelo novo para o ano das tuas rendas, confirma os quadros nas instruções dele.' },
     ] },
     { grupo: 'Os outros quadros', blocos: [
-      { p: 'Conforme o teu caso, há mais três quadros a preencher (instruções do Anexo F):' },
+      { p: 'Conforme o teu caso, há outros quadros a preencher (instruções do Anexo F):' },
       { info: [
+        'Quadro 4.4: as rendas que pagas pela tua nova habitação própria e permanente, a mais de 100 km da casa que ' +
+          'arrendaste, se esta foi a tua habitação própria e permanente durante pelo menos 12 meses e os dois ' +
+          'contratos estão registados no Portal das Finanças. Abatem às rendas brutas de arrendamento habitacional, até ao valor ' +
+          'delas (artigo ' +
+          '41.º, n.º 8; ' +
+          'vê a parte 4).',
+        'Quadro 5: a sublocação. Se és inquilino de um imóvel e o subarrendas, declaras aqui a renda que recebes e ' +
+          'a que pagas ao senhorio, e não no 4.1 nem no 4.2.',
+        'Quadros 6D, 6F e 6H: os contratos com rendas isentas, que declaraste no quadro 4.1 (vê «Rendas isentas», ' +
+          'na parte 1).',
         'Quadro 8: as rendas de anos anteriores que recebeste no ano, e que já estão no valor da linha. Se quiseres ' +
           'usar o artigo 74.º, indicas de que ano é cada uma: no 8A, se englobares, e o valor reparte-se pelos anos a que respeita (artigo 74.º, n.º 1); ou ' +
           'no 8B, se em vez disso entregares declarações de substituição desses anos, até ao quinto ano anterior ao do ' +
-          'pagamento (artigo 74.º, n.º 3).',
+          'pagamento (artigo 74.º, n.º 3). O 8B escolhe-se na declaração do ano em que recebeste as rendas, e as ' +
+          'declarações de substituição entregam-se até 30 dias depois do fim do prazo dela, ou seja, até 30 de ' +
+          'julho do ano em que a entregas (artigo 74.º, n.os 7 e 8; artigo 60.º, n.º 2).',
         'Quadro 9: o Adicional ao IMI (AIMI) dos prédios que te deram rendas. Não entra nos gastos da linha, mas abate-se ' +
           'ao imposto, até a um limite: indicas cada prédio, com o valor patrimonial tributário, e os totais da ' +
           'liquidação do AIMI (artigo 78.º, n.º 1, alínea l), do Código do IRS; artigo 135.º-I do Código do IMI).',
@@ -461,9 +599,12 @@ const GUIA = [
       { info: [
         'Desde 1 de julho de 2025, não há retenção na fonte sobre as rendas quando o valor de cada retenção seria ' +
           'inferior a 25 € (artigo 101.º-B, n.º 1, alínea d), na redação do Decreto-Lei n.º 49/2025).',
-        'Desde 1 de julho de 2025, se não passas recibo de cada renda, entregas a declaração anual das rendas até ao fim ' +
-          'de fevereiro do ano seguinte, e já não até ao fim de janeiro (artigo 115.º, n.º 5, alínea b), na mesma ' +
-          'redação).',
+        'Desde 1 de julho de 2025, a declaração anual das rendas (Modelo 44) entrega-se até ao fim de fevereiro do ' +
+          'ano seguinte, e já não até ao fim de janeiro (artigo 115.º, n.º 5, alínea b), na mesma redação). Não é ' +
+          'uma escolha: o recibo de renda eletrónico de cada renda é obrigatório, e o Modelo 44 é só de quem está ' +
+          'dispensado dele e não o passa — quem não tem nem é obrigado a ter caixa postal eletrónica e, no ano ' +
+          'anterior, não recebeu mais de duas vezes o IAS em rendas, ou quem tinha 65 anos ou mais a 31 de dezembro ' +
+          'do ano anterior (Portaria n.º 98-A/2015, artigos 5.º e 8.º).',
         'Desde 1 de agosto de 2025, se não comunicares o contrato à AT no prazo, o inquilino pode comunicá-lo ele. A obrigação ' +
           'continua a ser tua (artigo 60.º, n.os 1 e 4, do Código do Imposto do Selo; Portaria n.º 106/2025/1).',
       ] },
@@ -641,7 +782,7 @@ function dadosEstruturados() {
         { '@type': 'ListItem', position: 2, name: NOME_CURTO, item: url },
       ] },
       { '@type': 'Article', headline: H1, description: DESCRICAO, inLanguage: 'pt-PT', url,
-        mainEntityOfPage: url, datePublished: GUIA_REVISTO, dateModified: GUIA_REVISTO, author: casa,
+        mainEntityOfPage: url, datePublished: GUIA_PUBLICADO, dateModified: GUIA_REVISTO, author: casa,
         publisher: { ...casa, logo: { '@type': 'ImageObject', url: SITIO + '/icon-512.png' } } },
     ],
   };
@@ -722,7 +863,7 @@ ${cabecaRaiz}
   <dl class="ficha">
     <div><dt>Para quem</dt><dd>Para ti, se és residente em Portugal e declaras as rendas como rendimentos prediais, da
     categoria F, sem teres escolhido as regras da categoria B.</dd></div>
-    <div><dt>Verificado a</dt><dd>9 de novembro de 2026</dd></div>
+    <div><dt>Verificado a</dt><dd><time datetime="${GUIA_REVISTO}">${dataPorExtenso(GUIA_REVISTO)}</time></dd></div>
   </dl>
 
   <p class="intro">Começas por ver se tens de declarar, depois onde e como, e no fim o que podes deduzir. Tudo o que
@@ -746,6 +887,8 @@ ${GUIA.map(parteDoGuia).join('\n\n')}
       diferente, ou a despesa for fora do comum, não substituem uma informação vinculativa pedida por ti. Se tiveres
       uma despesa importante que não encaixe bem nas listas de cima, o mais seguro é não a deduzir até teres uma
       resposta escrita da AT.</p>
+      <p>Se preparas a declaração com o resumo do IRS da Rendorium, lembra-te:</p>
+      <p class="aviso-app">${esc(IRS_AVISO_GUIA)}</p>
     </div>
   </aside>
 
@@ -958,6 +1101,10 @@ h3,h4{font-size:20px;line-height:1.25}
   border-radius:16px;background:var(--card);border:2px solid var(--accent);scroll-margin-top:80px}
 .seguranca h2{font-size:24px;margin-bottom:8px}
 .seguranca p{max-width:70ch}
+/* o aviso da Declaração (IRS_AVISO_GUIA), à letra, a seguir à nota: separado
+   dela por 12 px e no peso dos rótulos, para se ler como a frase da app que é */
+.seguranca p + p{margin-top:12px}
+.seguranca .aviso-app{font-weight:600}
 .i.escudo{color:var(--accent);width:32px;height:32px}
 
 /* o voltar ao início: o botão secundário, com a seta da casa, no fim da leitura */

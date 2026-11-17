@@ -87,14 +87,45 @@ function downloadBytes(name,mime,bin){
    que comece por = + - @, uma tabulação ou um retorno leva uma plica à frente:
    é assim que o Excel e o LibreOffice o leem como texto, e não como uma
    fórmula — um «=HYPERLINK(…)» numa nota que outra pessoa escreveu numa casa
-   partilhada corria no computador de quem exporta. Os números vão tal e qual:
+   partilhada corria no computador de quem exporta. Os sinais de largura
+   inteira (＝ ＋ － ＠), que o Excel de algumas línguas também lê como o
+   começo de uma fórmula, levam-na igual. Os números vão tal e qual:
    um valor negativo é um número, não uma fórmula.
    Recebe: x — o valor da célula (texto, número ou vazio).
    Devolve: a célula pronta a juntar com ';' (string). */
 function celulaCsv(x){
   let s=String(x==null?'':x);
-  if(typeof x!=='number'&&/^[=+\-@\t\r]/.test(s))s="'"+s;
+  if(typeof x!=='number'&&/^[=+\-@\t\r＝＋－＠]/.test(s))s="'"+s;
   return '"'+s.split('"').join('""')+'"';
+}
+/* Uma célula com um código que tem de chegar ao Excel tal e qual: o código
+   da freguesia (040810), a natureza (07), o número do campo (4001), o
+   código de uma isenção (01), o n.º do contrato na AT, o quadro (4.1, que
+   o Excel podia ler como uma data). Entre aspas só, o Excel abre um .csv e
+   converte «040810» em 40810 e «07» em 7; escrito como ="040810", lê-o como
+   o texto de uma fórmula e mostra os zeros. Só se faz assim com algarismos,
+   letras maiúsculas e o ponto, dentro das aspas da fórmula (nada que uma
+   fórmula possa usar); o resto vai pelo celulaCsv, com a plica se for preciso.
+   Recebe: x — o código (texto ou número; vazio dá a célula vazia).
+   Devolve: a célula pronta a juntar com ';' (string). */
+function celulaCodigo(x){
+  const s=String(x==null?'':x).trim();
+  return /^[0-9A-Z.]{1,20}$/.test(s)?'="'+s+'"':celulaCsv(s);
+}
+/* Uma célula com um valor, como o Excel português o lê: vírgula decimal e o
+   número de casas pedido (6147,00; 40,10), sem separador dos milhares e com
+   o sinal de menos à frente quando é negativo. Só leva algarismos, a
+   vírgula e o sinal: nunca é uma fórmula, por isso não leva a plica. Um
+   valor que não é número vai vazio.
+   Recebe: v — o valor (número ou texto com número); casas (opcional) — as
+   casas decimais (2 por omissão; 0 para contagens). Com casas null, as que o
+   valor tiver, até duas (25; 12,5), para as percentagens.
+   Devolve: a célula pronta a juntar com ';' (string). */
+function celulaNumero(v,casas){
+  if(v==null||v===''||!isFinite(Number(v)))return '""';
+  const n=Math.round(Number(v)*100)/100;
+  const s=casas===null?String(n):n.toFixed(casas==null?2:casas);
+  return '"'+(s==='-0'||/^-0[.,]?0*$/.test(s)?s.slice(1):s).replace('.',',')+'"';
 }
 /* Exporta todos os movimentos para CSV (ponto e vírgula, campos entre aspas), com
    as colunas já traduzidas para nomes legíveis — imóvel, quem pagou, inquilinos,

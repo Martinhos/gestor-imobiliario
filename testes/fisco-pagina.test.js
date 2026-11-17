@@ -90,7 +90,9 @@ describe('a barra', () => {
       + app.ic('livro', 18) + '<span>Guia</span></a>'
       + '<button type="button" class="btn sm so-icone" data-toca="camada" data-click="fiscoPartilha()" aria-haspopup="dialog" aria-label="Partilhar" title="Partilhar">'
       + app.ic('partilhar', 18) + '</button></div></div>');
-    assert.doesNotMatch(html, /Guia de preenchimento<\/a>|Exportar CSV|Exportar PDF|Partilhar resumo|fiscoAnoSel/, 'sem os botões soltos nem o ano na barra');
+    // o CSV e o PDF não são botões soltos na barra (o cartão do aviso, no fim, pode levar à mesma janela: é da página)
+    assert.doesNotMatch(barra, /Exportar CSV|Exportar PDF/, 'sem os botões soltos na barra');
+    assert.doesNotMatch(html, /Guia de preenchimento<\/a>|Partilhar resumo|fiscoAnoSel/, 'nem o ano na barra');
   });
 
   test('o livro do guia: no traço da casa, sem preenchimento', () => {
@@ -138,12 +140,19 @@ describe('a barra', () => {
     assert.match(css, /@media\(pointer:coarse\)\{\n {2}\.fis-ab>button,\.ana \.btn\.sm\{min-height:44px\}\n[^}]*\.ana \.btn\.sm\.so-icone\{width:44px\}/);
   });
 
-  test('sem o serviço Contratos (o do escritor do PDF), a janela só tem o CSV', () => {
+  // a Declaração requer os Contratos e os Movimentos (D57): sem um deles não há página, e o
+  // «só de leitura sem os Contratos» deixou de existir — os testes que desligavam os Contratos
+  // e chamavam o vFisco() à mão testavam um estado que já não se alcança
+  test('sem os Contratos ou sem os Movimentos, a Declaração desliga-se; com ela, o PDF está sempre', () => {
     assert.equal(typeof app.fiscoPdf, 'function', 'o fisco-pdf.js vem com o serviço da Declaração');
+    assert.equal(app.servicoLigado('fisco'), true);
     app.definirServicosDesligados(['contracts']);
-    const j = abrirPartilha();
-    assert.deepEqual(JSON.parse(JSON.stringify(j.opcoes.map((o) => o.v))), ['csv']);
-    assert.doesNotMatch(app.vFisco(), /fiscoPdf/);
+    assert.equal(app.servicoLigado('fisco'), false, 'sem os Contratos');
+    assert.equal(app.separadorLigado('fisco'), false, 'e o separador não abre');
+    app.definirServicosDesligados(['transactions']);
+    assert.equal(app.servicoLigado('fisco'), false, 'sem os Movimentos');
+    app.definirServicosDesligados([]);
+    assert.deepEqual(JSON.parse(JSON.stringify(abrirPartilha().opcoes.map((o) => o.v))), ['csv', 'pdf']);
   });
 });
 
@@ -194,8 +203,10 @@ describe('um cartão por quadro', () => {
     // a Ana é a única proprietária, e tudo é dela: o subtítulo é só o ano (sem «por inteiro» nem quota)
     assert.match(q1, /^<h2 class="ana-tit">Quadro 4\.1 · sem redução pela duração<\/h2><span class="small">2025<\/span>/);
     assert.match(q2, /^<h2 class="ana-tit">Quadro 4\.2 · com redução pela duração<\/h2>/);
-    assert.match(q1, /<p class="fis-onde">Preenche no <b>quadro 4\.1<\/b> do Anexo F: uma linha por contrato\.<\/p>/);
-    assert.match(q2, /<p class="fis-onde">Preenche no <b>quadro 4\.2<\/b> do Anexo F: uma linha por contrato, e no 4\.2A as datas de cada um\.<\/p>/);
+    // D69 (a frase fixa: o Anexo F pede uma linha por prédio ou fração) e D77 (por esta ordem)
+    assert.match(q1, /<p class="fis-onde">Preenche no <b>quadro 4\.1<\/b> do Anexo F, <b>por esta ordem<\/b>: uma linha por prédio ou fração de cada contrato, com a renda que lhe cabe\./);
+    assert.match(q2, /<p class="fis-onde">Preenche no <b>quadro 4\.2<\/b> do Anexo F, <b>por esta ordem<\/b>: uma linha por prédio ou fração de cada contrato, com a renda que lhe cabe, e no 4\.2A as datas de cada um\./);
+    assert.doesNotMatch(html, /uma linha por contrato/);
     // o resumo de cada quadro só tem os contratos dele, antes dos campos
     const res1 = q1.slice(0, q1.indexOf('Os campos, contrato a contrato')), res2 = q2.slice(0, q2.indexOf('Os campos, contrato a contrato'));
     assert.match(res1, /<div class="fis-qr-nome"><b>Arroios<\/b>/);
@@ -204,16 +215,13 @@ describe('um cartão por quadro', () => {
     assert.doesNotMatch(res2, /<b>Arroios<\/b>/, 'nem o do 4.1 no do 4.2');
     // as rendas e o imposto de cada contrato, e o total do quadro
     const l1 = r.linhas.find((x) => x.contratoId === 'C1');
-    assert.ok(res1.includes('<div class="fis-qr-num"><b>' + app.euro2(l1.rendas) + '</b><span class="small">imposto ' + app.euro2(l1.imposto) + '</span></div>'));
+    assert.ok(res1.includes('<div class="fis-qr-num"><b>' + app.euro2(l1.rendas) + '</b><span class="small">imposto estimado ' + app.euro2(l1.imposto) + '</span></div>'));
     assert.match(res1, /<b>Total do quadro 4\.1<\/b><span class="small">1 contrato · líquido /);
     assert.match(res1, /T2 Arroios · art\. 4651 · fr\. A · n\.º 1234567 · 25 % taxa base/, 'o imóvel, o n.º na AT e a taxa');
     assert.match(res2, /<span class="fis-qr-falta"><span class="badge red">N\.º do contrato na AT<\/span> <span class="small">\+3<\/span><\/span>/, 'o que falta num selo');
-    // tocar numa linha do resumo abre o contrato; sem os Contratos, é só de leitura
+    // tocar numa linha do resumo abre o contrato
     assert.match(res1, /<div class="fis-qr-linha tap" data-toca="camada" data-click="ctView\('C1'\)" aria-label="Arroios: abrir o contrato">/);
     assert.doesNotMatch(res1, /<table|tablewrap/, 'linhas, e não uma tabela a rolar de lado');
-    app.definirServicosDesligados(['contracts']);
-    const so = quadroDe(app.vFisco(), '4.1');
-    assert.doesNotMatch(so.slice(0, so.indexOf('Os campos')), /data-click|fis-qr-linha tap/);
   });
 });
 
@@ -272,6 +280,9 @@ describe('os quadros em cartões', () => {
     assert.equal(valorDe(c, 'N.º do contrato'), '<span class="badge red">falta</span>');
     assert.equal(valorDe(c, 'Freguesia (código)'), '<span class="badge red">falta</span>');
     assert.equal(valorDe(c, 'Fração ou secção'), '—', 'a fração não é obrigatória');
+    // D102: o 4.2 não tem a coluna da data de início — a data vai só no 4.2A
+    const linhaDoQuadro = c.slice(0, c.indexOf('<p class="lbl fis-ctc-grupo">'));
+    assert.doesNotMatch(linhaDoQuadro, /<dt>Data de início/, 'a linha do 4.2 sem «Data de início»');
     assert.equal(valorDe(c, 'País do inquilino'), 'Espanha');
     assert.match(c, /<dt>País do inquilino<span class="small">Vera<\/span><\/dt>/);
     assert.match(c, /<p class="lbl fis-ctc-grupo">Quadro 4\.2A<\/p>/);
@@ -282,13 +293,11 @@ describe('os quadros em cartões', () => {
     assert.match(html, /<b>Total do quadro 4\.2<\/b>/);
   });
 
-  test('um NIF que não bate certo vai como está, com o selo; sem o serviço dos Contratos o cartão é só de leitura', () => {
+  test('um NIF que não bate certo vai como está, com o selo; o cartão abre o contrato', () => {
     app.db.tenants.find((t) => t.id === 't1').nif = '123456780';
-    let c = cartaoDe(app.vFisco(), 'Arroios');
+    const c = cartaoDe(app.vFisco(), 'Arroios');
     assert.equal(valorDe(c, 'NIF do inquilino'), '<span class="u-ws-nowrap">' + app.fmtNIF('123456780') + '</span> <span class="badge red">não bate certo</span>');
-    app.definirServicosDesligados(['contracts']);
-    c = cartaoDe(app.vFisco(), 'Arroios');
-    assert.doesNotMatch(c, /data-click|class="fis-ctc tap"/);
+    assert.match(c, /^<div class="fis-ctc tap" data-toca="camada" data-click="ctView\('C1'\)">/);
   });
 
   test('o 4.2B no cartão do contrato: a renda dele e o n.º e a renda do anterior', () => {
@@ -307,9 +316,12 @@ describe('os quadros em cartões', () => {
 
   test('os campos são texto simples, na mesma ordem, para quem escreve o PDF', () => {
     const r = app.resumoFiscal(ANO, '');
-    const cs = app.fiscoCamposDe(r, r.linhas.find((x) => x.contratoId === 'C1'));
-    assert.deepEqual(JSON.parse(JSON.stringify(cs.slice(0, 3).map((c) => [c.grupo, c.campo, c.valor, c.falta]))),
-      [['', 'N.º do contrato', '1234567', false], ['', 'Data de início', '01/01/2024', false], ['', 'Freguesia (código)', '110623', false]]);
+    // o n.º do campo vem do resumo (l.campo); à cabeça, quando o há
+    const l = Object.assign({}, r.linhas.find((x) => x.contratoId === 'C1'), { campo: '4001' });
+    const cs = app.fiscoCamposDe(r, l);
+    assert.deepEqual(JSON.parse(JSON.stringify(cs.slice(0, 4).map((c) => [c.grupo, c.campo, c.valor, c.falta]))),
+      [['', 'Campo', '4001', false], ['', 'N.º do contrato', '1234567', false], ['', 'Data de início', '01/01/2024', false], ['', 'Freguesia (código)', '110623', false]]);
+    assert.equal(app.fiscoCamposDe(r, Object.assign({}, l, { campo: '' }))[0].campo, 'N.º do contrato', 'sem campo no resumo, não se inventa');
     assert.ok(cs.every((c) => !/[<>]/.test(c.valor)), 'sem HTML nos valores');
     assert.deepEqual(JSON.parse(JSON.stringify([...new Set(cs.map((c) => c.grupo))])), ['', 'Gastos']);
   });
