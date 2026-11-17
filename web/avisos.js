@@ -27,6 +27,20 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 76,
+    data: '2026-11-17',
+    titulo: 'Sem zoom também no browser do telemóvel',
+    seccoes: [
+      {
+        titulo: 'Telemóvel',
+        afeta: ['app'],
+        itens: [
+          'A app aberta no browser do telemóvel já não amplia com a pinça, mesmo nos browsers que deixam ampliar qualquer página, como o Samsung Internet com o «Zoom manual» ligado.',
+        ],
+      },
+    ],
+  },
+  {
     v: 75,
     data: '2026-11-17',
     titulo: 'Confirmar regista o movimento no dia de hoje',

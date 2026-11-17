@@ -2986,17 +2986,25 @@ document.addEventListener('input', function (e) {
 /* Sem zoom no back office, no telemóvel, como a app (KAN-137, 2026-11-16:
    «O backoffice deve ser igual»; a app em web/app/arranque.js:travarZoom).
    O viewport (equipa-vista.js:pagina) tem maximum-scale=1 e
-   user-scalable=no, e o duplo toque sai com o
-   html{touch-action:manipulation} do CSS_EQUIPA. A pinça o Safari do iOS
-   faz na mesma, porque ignora o user-scalable=no: trava-se aqui, nos
-   eventos de gesto do WebKit, que só ele tem. Nada de touchmove não passivo
-   no window: atrasava o scroll em todos os aparelhos.
+   user-scalable=no, e o html{touch-action:pan-x pan-y} do CSS_EQUIPA tira a
+   pinça e o duplo toque ao compositor. Há browsers que passam por cima dos
+   dois: o Safari do iOS ignora o user-scalable=no, e o Samsung Internet
+   («Zoom manual») e o Chrome («Forçar zoom») deixam ampliar qualquer página
+   — foi assim que o back office ainda ampliava (KAN-137, 2026-11-17).
+   Travam-se aqui, a cancelar o próprio gesto: no iOS, os eventos de gesto do
+   WebKit, que só ele tem; nos outros, o touchmove com dois ou mais dedos.
+   Esse ouvinte não é passivo (o primeiro touchmove de cada toque espera pela
+   linha principal antes de rolar), por isso não se pendura no iOS.
    Recebe: alvo — o window (ou um objeto com addEventListener, nos testes).
    Devolve: nada — pendura os ouvintes. */
 function travarZoom(alvo) {
   if (!alvo || typeof alvo.addEventListener !== 'function') return;
   var nao = function (ev) { if (ev && typeof ev.preventDefault === 'function') ev.preventDefault(); };
   ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (t) { alvo.addEventListener(t, nao, { passive: false }); });
+  if ('ongesturestart' in alvo) return;
+  alvo.addEventListener('touchmove', function (ev) {
+    if (ev && ev.touches && ev.touches.length > 1 && ev.cancelable !== false) nao(ev);
+  }, { passive: false });
 }
 try { travarZoom(window); } catch (e) { /* travar o zoom é um cuidado: nunca impede o arranque */ }
 

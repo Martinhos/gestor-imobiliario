@@ -122,6 +122,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-15 · A secção aberta pelo arrasto volta a fechar se nada lá cair (KAN-135)
 - 2026-11-16 · Os cartões dos pedidos entram nas regras de Human Tests, e o back office sem zoom (KAN-137, KAN-138)
 - 2026-11-16 · Confirmar um planeado regista o movimento no dia em que se confirma (KAN-141)
+- 2026-11-17 · A pinça trava-se no próprio toque: o Samsung Internet passa por cima do viewport (KAN-137)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4127,3 +4128,26 @@ dezembro confirmada em janeiro entra no ano em que o dinheiro entrou, marcada co
 
 Rejeitado: exceções para a prestação e a despesa (o pedido é para todos os planeados), e pôr o periodo
 dentro do recTx (o fillCriar partilha-o e passa a data de cada mês).
+
+## 2026-11-17 · A pinça trava-se no próprio toque: o Samsung Internet passa por cima do viewport (KAN-137)
+Depois do 27357fa, o Martinho comentou o KAN-137: «Estou a conseguir fazer zoom no tlm». Foi no back
+office, com os dedos a afastar, no Samsung Internet; na app não, porque no telemóvel dele a app é a APK,
+um WebView com o zoom desligado (setSupportZoom(false)). O user-scalable=no é um pedido que o browser
+pode ignorar: o Samsung Internet com o «Zoom manual» e o Chrome com o «Forçar zoom» ampliam qualquer
+página, e o touch-action:manipulation do html deixava a pinça (é pan-x pan-y pinch-zoom).
+
+O que segura a pinça em qualquer browser é cancelar o próprio toque: um touchmove com dois ou mais dedos
+com preventDefault nunca chega a gesto. O travarZoom (arranque.js, equipa-guiao.js e o do GUIAO_DOCS)
+pendura esse ouvinte fora do iOS, onde os eventos de gesto do WebKit já chegam, e a app também fora da
+APK (window.Android). O html passa a touch-action:pan-x pan-y, que tira a pinça ao compositor nos
+browsers que o respeitam, sem custo. A prova (.unlazy/zoom-backoffice/prova.mjs, fora do git) mostra os
+toques de dois dedos cancelados e o de um dedo a passar.
+
+Isto muda a decisão de 2026-11-14 «nada de touchmove não passivo»: o ouvinte não passivo faz o primeiro
+touchmove de cada toque esperar pela linha principal antes de a rolagem começar (depois de começar, o
+browser já não espera). Aceita-se esse custo onde não há outra forma de cumprir «Não deve ser possível
+fazer zoom»; no iOS e na APK, onde há, não se paga.
+
+Rejeitado: o touch-action:none no html (travava também a rolagem da página) e pendurar o ouvinte só
+quando o segundo dedo pousa (o browser decide se um toque espera pela página quando o primeiro dedo
+pousa, e um ouvinte novo a meio já não conta).

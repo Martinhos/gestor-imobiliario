@@ -48,9 +48,10 @@ const ICONE_FECHAR = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><pat
    seguir ao estilos.css) e o da pílula do QA.
    Sem zoom no telemóvel, como a app (KAN-137, 2026-11-16: «O backoffice deve
    ser igual»): o maximum-scale=1 tira ao iPhone o zoom automático ao tocar
-   num campo, o user-scalable=no tira a pinça no Android; o duplo toque sai
-   com o html{touch-action:manipulation} do CSS_EQUIPA, e a pinça do iOS,
-   que ignora o user-scalable, com o equipa-guiao.js:travarZoom.
+   num campo, o user-scalable=no a pinça no Android quando o browser o
+   respeita; o html{touch-action:pan-x pan-y} do CSS_EQUIPA a pinça e o duplo
+   toque; e a pinça dos browsers que passam por cima (o Safari do iOS, o
+   Samsung Internet com o «Zoom manual») trava-se no equipa-guiao.js:travarZoom.
    Devolve: string com o documento HTML completo, pronta a ir numa Response. */
 function pagina(corpo, titulo, comQa) {
   return `<!doctype html>
@@ -119,9 +120,9 @@ export const CSS_EQUIPA = `/* As letras da app, servidas de /fonts/ (a CSP só d
    :active de cada botão, e o foco que o toque deixava sai depois da ação
    (equipa-guiao.js:largarFocoDoToque) */
 *{-webkit-tap-highlight-color:transparent}
-/* sem zoom de duplo toque, como a app (KAN-137; equipa-guiao.js:travarZoom):
-   qualquer touch-action que não seja auto tira-o, e o manipulation deixa o resto */
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulation}
+/* sem zoom, como a app (KAN-137; equipa-guiao.js:travarZoom): o pan-x pan-y
+   deixa ao browser só a rolagem — nem a pinça nem o duplo toque */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:pan-x pan-y}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--letra);font-size:15px;line-height:1.45;
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 h1,h2,h3{font-family:var(--letra-titulo);font-weight:650;letter-spacing:-.015em;margin:0;line-height:1.2}

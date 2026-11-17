@@ -7574,19 +7574,25 @@ como fórmula (copias.js:celulaCsv); os números vão tal e qual.
 
 ## Toque e acessibilidade
 A app não amplia no telemóvel: nem o zoom automático do iPhone ao tocar num
-campo, nem a pinça, nem o duplo toque. O viewport do index.html tem
-maximum-scale=1 e user-scalable=no, o html tem touch-action:manipulation
-(estilos.css), e a pinça do Safari do iOS, que ignora o user-scalable=no,
-trava-se nos eventos de gesto (arranque.js:travarZoom). O back office é igual
-(KAN-137, 2026-11-16): as páginas do /equipa, a de entrada incluída
+campo, nem a pinça, nem o duplo toque. São três camadas, porque há browsers
+que passam por cima das primeiras: o viewport do index.html tem
+maximum-scale=1 e user-scalable=no; o html tem touch-action:pan-x pan-y
+(estilos.css), que tira a pinça e o duplo toque ao compositor; e o
+arranque.js:travarZoom cancela o próprio gesto — no Safari do iOS, que ignora o
+user-scalable=no, os eventos de gesto do WebKit; nos outros browsers, o
+touchmove com dois ou mais dedos, porque o Samsung Internet («Zoom manual») e
+o Chrome («Forçar zoom») ampliam qualquer página. Esse touchmove não é
+passivo: só se pendura fora do iOS e fora da APK (o WebView tem o zoom
+desligado), e só cancela com dois dedos — um dedo é a rolagem. O back office é
+igual (KAN-137): as páginas do /equipa, a de entrada incluída
 (worker/src/equipa-vista.js:pagina), e a Documentação (docs-vista.js) têm o
 mesmo viewport, o CSS_EQUIPA e o CSS_DOCS o mesmo touch-action no html, e o
-guião de cada uma trava a pinça do iOS (equipa-guiao.js:travarZoom e o do
+guião de cada uma o mesmo travarZoom (equipa-guiao.js:travarZoom e o do
 GUIAO_DOCS). Os campos ficam com o tamanho que têm, como na app: é o
 maximum-scale=1 que tira o zoom automático do iPhone, não os 16px. As páginas
 públicas do worker (montra, guias, documentos legais) continuam a deixar
-ampliar. Os
-touch-action com pinch-zoom que há na app ficam inertes, e não se tiram.
+ampliar. Os touch-action com pinch-zoom que há na app ficam sem a pinça (o
+efetivo é a interseção com o do html), e não se tiram.
 
 Em ecrã de dedo, nada abaixo do mínimo de toque, e só aí: no rato os
 tamanhos compactos continuam certos (estilos.css:@media(pointer:coarse)).

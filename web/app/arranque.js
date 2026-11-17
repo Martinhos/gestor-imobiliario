@@ -161,19 +161,28 @@ function donoDoExemplo(){
 /* ================= ARRANQUE ================= */
 /* Sem zoom na app, no telemóvel (pedido de 2026-11-14, decisão do Martinho:
    «Não deve ser possível fazer zoom»). O viewport (index.html) tem
-   maximum-scale=1 e user-scalable=no: o Android respeita os dois, e o iOS
-   deixa de ampliar a página ao tocar num campo (os campos têm 15px, abaixo
-   dos 16 em que o Safari amplia). O duplo toque sai com o
-   html{touch-action:manipulation} (estilos.css). A pinça o Safari do iOS faz
-   na mesma, porque ignora o user-scalable=no: trava-se aqui, nos eventos de
-   gesto do WebKit, que só ele tem. Nada de touchmove não passivo no window:
-   atrasava o scroll em todos os aparelhos.
+   maximum-scale=1 e user-scalable=no: o iOS deixa de ampliar a página ao
+   tocar num campo (os campos têm 15px, abaixo dos 16 em que o Safari
+   amplia), e o Android deixa a pinça quando o browser o respeita. O
+   html{touch-action:pan-x pan-y} (estilos.css) tira a pinça e o duplo toque
+   ao compositor. Há browsers que passam por cima dos dois: o Safari do iOS
+   ignora o user-scalable=no, e o Samsung Internet («Zoom manual») e o
+   Chrome («Forçar zoom») deixam ampliar qualquer página (KAN-137,
+   2026-11-17). Esses travam-se aqui, a cancelar o próprio gesto: no iOS,
+   os eventos de gesto do WebKit, que só ele tem; nos outros, o touchmove
+   com dois ou mais dedos. Esse ouvinte não é passivo, e o primeiro
+   touchmove de cada toque espera pela linha principal antes de rolar
+   (depois de a rolagem começar o browser já não espera): por isso só se
+   pendura onde faz falta — nem no iOS (tem os gestos) nem na APK (o WebView
+   tem o zoom desligado e a ponte window.Android).
    Recebe: alvo — o window (ou um objeto com addEventListener, nos testes).
    Devolve: nada — pendura os ouvintes. */
 function travarZoom(alvo){
   if(!alvo||typeof alvo.addEventListener!=='function')return;
   const nao=ev=>{if(ev&&typeof ev.preventDefault==='function')ev.preventDefault()};
   ['gesturestart','gesturechange','gestureend'].forEach(t=>alvo.addEventListener(t,nao,{passive:false}));
+  if('ongesturestart' in alvo||alvo.Android)return;
+  alvo.addEventListener('touchmove',ev=>{if(ev&&ev.touches&&ev.touches.length>1&&ev.cancelable!==false)nao(ev)},{passive:false});
 }
 try{travarZoom(window)}catch(e){}
 /* O teclado de um menu de escolha vem primeiro (componentes.js:selTecla): as

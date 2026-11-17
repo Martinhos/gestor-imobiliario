@@ -207,8 +207,8 @@ export const CSS_DOCS = `/* As letras da app, servidas de /fonts/ (a CSP só dei
   --line:#253049;--line2:#33405C;--accent:#7C9BFF;--accent-soft:#1E2A4D;--accent-text:#B5C6FF;
   --warn-soft:#352A12;--shadow:0 24px 60px rgba(0,0,0,.6)}}
 *{box-sizing:border-box}
-/* sem zoom de duplo toque, como a app e o back office (KAN-137; GUIAO_DOCS:travarZoom) */
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulation}
+/* sem zoom, como a app e o back office (KAN-137; GUIAO_DOCS:travarZoom): o pan-x pan-y deixa só a rolagem */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:pan-x pan-y}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--letra);font-size:15px;line-height:1.55;
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -407,15 +407,23 @@ export const GUIAO_DOCS = String.raw`(function () {
 
 /* Sem zoom no telemóvel, como a app e o resto do back office (KAN-137,
    2026-11-16; equipa-guiao.js:travarZoom): o viewport tira o zoom dos
-   campos e a pinça no Android, o html{touch-action:manipulation} do CSS_DOCS
-   o duplo toque, e aqui trava-se a pinça do Safari do iOS, que ignora o
-   user-scalable=no, nos eventos de gesto do WebKit.
+   campos, o html{touch-action:pan-x pan-y} do CSS_DOCS a pinça e o duplo
+   toque, e aqui trava-se a pinça dos browsers que passam por cima dos dois:
+   a do Safari do iOS, que ignora o user-scalable=no, nos eventos de gesto
+   do WebKit; e a do Samsung Internet («Zoom manual») e do Chrome («Forçar
+   zoom»), no touchmove com dois ou mais dedos (KAN-137, 2026-11-17), que
+   não se pendura no iOS (não é passivo: o primeiro touchmove de cada toque
+   espera pela linha principal).
    Recebe: alvo — o window (ou um objeto com addEventListener, nos testes).
    Devolve: nada — pendura os ouvintes. */
 function travarZoom(alvo) {
   if (!alvo || typeof alvo.addEventListener !== 'function') return;
   var nao = function (ev) { if (ev && typeof ev.preventDefault === 'function') ev.preventDefault(); };
   ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (t) { alvo.addEventListener(t, nao, { passive: false }); });
+  if ('ongesturestart' in alvo) return;
+  alvo.addEventListener('touchmove', function (ev) {
+    if (ev && ev.touches && ev.touches.length > 1 && ev.cancelable !== false) nao(ev);
+  }, { passive: false });
 }
 try { travarZoom(window); } catch (e) { /* travar o zoom é um cuidado: nunca parte a página */ }
 `;
