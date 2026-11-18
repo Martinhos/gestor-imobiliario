@@ -18,7 +18,13 @@
    contrato), a caução, os reembolsos e as devoluções da linha, as quotas do
    ano (l.quotas), o quadro 5 da sublocação (r.quadro5, totais.quadro5) e as
    obras dos 24 meses por confirmar (r.obrasPorConfirmar). Os nomes das
-   colunas e dos grupos do impresso vêm da versão do ano (colunasNomes). */
+   colunas e dos grupos do impresso vêm da versão do ano (colunasNomes). Os
+   da ronda 2 (KAN-129) também: o quadro 4.3 do direito real de habitação
+   duradoura (l.dhd, a linha caucaoDhd, as colunas de quadro43), os
+   benefícios do quadro 6 de cada linha (l.beneficios: o 6A, o 6B, o 6C) e
+   o líquido do imposto (l.liquidoTributavel), a união de freguesias extinta
+   em 2025 (l.freguesiaUniao, l.matrizConfirmada), o Anexo J (r.anexoJ) e a
+   categoria B (r.categoriaB) — um resumo sem eles desenha-se como antes. */
 /* Sem as regras do ano dos rendimentos: o ano é anterior à primeira versão
    das regras (irs-AAAA.js), e a taxa, o imposto e a regularização não se
    estimam — as taxas e os quadros desse ano eram outros (D50). O resumo
@@ -218,13 +224,61 @@ function fiscoNomesDoImpresso(r){
 /* O que é uma linha que não é a das rendas do contrato (D21, D51): a
    indemnização que compensa rendas (natureza 05) ou as outras receitas
    prediais (natureza 02, a cedência de uso que não é arrendamento), cada uma
-   numa linha à parte do mesmo contrato (l.papel, do resumo).
+   numa linha à parte do mesmo contrato (l.papel, do resumo); e, no quadro
+   4.3, a prestação anual da caução de um direito real de habitação
+   duradoura, do 11.º ano em diante (papel caucaoDhd, natureza 02 — D120).
    Recebe: l — a linha do resumo.
    Devolve: 'indemnização (natureza 05)', 'outras receitas prediais (natureza
-   02)', ou '' na linha das rendas. */
+   02)', 'prestação anual da caução (natureza 02)', ou '' na linha das rendas. */
 function fiscoPapelTexto(l){
   const p=l&&l.papel,n=l&&l.natureza?' (natureza '+l.natureza+')':'';
-  return p==='indemnizacao'?'indemnização'+n:p==='outra'?'outras receitas prediais'+n:'';
+  return p==='indemnizacao'?'indemnização'+n:p==='outra'?'outras receitas prediais'+n:p==='caucaoDhd'?'prestação anual da caução'+n:'';
+}
+/* O quadro 4.3 do ano (o do direito real de habitação duradoura, D120): o da
+   versão (quadros.dhd); uma versão sem ele não tem 4.3.
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: '4.3', ou '' sem o quadro na versão. */
+function fiscoQuadroDhd(r){
+  const Q=r&&r.versao&&r.versao.quadros;
+  return Q&&Q.dhd&&Q.dhd!==Q.semReducao?String(Q.dhd):'';
+}
+/* Os benefícios do quadro 6 de uma linha (l.beneficios, do resumo — D117,
+   D119, D121): o 6A dos imóveis reabilitados, o 6B das Lojas com História,
+   o 6C dos rústicos arrendados a uma entidade de gestão florestal. Um resumo
+   sem o campo não tem nenhum.
+   Recebe: l — a linha do resumo.
+   Devolve: [{id, quadro, campos, nome, curto, lei, aviso, taxa, fator,
+   fatorObras24}] (vazio sem benefícios). */
+function fiscoBeneficiosDe(l){
+  return Array.isArray(l&&l.beneficios)?l.beneficios.filter(b=>b&&b.quadro):[];
+}
+/* O líquido sobre que o imposto de uma linha se estima, quando é outro que o
+   do quadro: com o 6C as rendas contam 50 % e com o 6B as obras dos 24 meses
+   110 % (l.liquidoTributavel, do resumo — o quadro leva os valores por
+   inteiro, e é a AT que aplica o fator pelo campo do quadro 6). Um isento, ou
+   um resumo sem o campo, não tem outro.
+   Recebe: l — a linha do resumo.
+   Devolve: o líquido do imposto (euros), ou null quando é o do quadro. */
+function fiscoLiquidoDoImpostoOutro(l){
+  if(!l||l.isencao||typeof l.liquidoTributavel!=='number'||!fiscoBeneficiosDe(l).length)return null;
+  return Math.abs(l.liquidoTributavel-(Number(l.liquido)||0))<0.005?null:l.liquidoTributavel;
+}
+/* A frase de uma linha cujo imóvel tem o código de uma união de freguesias
+   extinta na reposição de outubro de 2025 (l.freguesiaUniao, do resumo, só
+   nas declarações de 2025 em diante — D135): a união, as freguesias repostas
+   dela (código e nome) e que o artigo pode ter mudado. A app não troca o
+   código: só a caderneta predial atual diz qual das repostas é a do prédio
+   (D137). Com a confirmação na caderneta (l.matrizConfirmada), di-lo.
+   Recebe: l — a linha do resumo.
+   Devolve: o texto, ou '' sem união extinta. */
+function fiscoFreguesiaUniaoTexto(l){
+  const u=l&&l.freguesiaUniao;if(!u||!u.codigo)return '';
+  const rs=(Array.isArray(u.repostas)?u.repostas:[]).map(x=>x.codigo+' '+x.nome);
+  const lista=rs.length<2?(rs[0]||''):rs.slice(0,-1).join(', ')+' ou '+rs[rs.length-1];
+  const conf=l.matrizConfirmada?' Confirmaste o código e o artigo na caderneta a '+dPT(l.matrizConfirmada)+'.'
+    :' Confirma o código e o artigo na caderneta predial atual (Portal das Finanças › Imóveis), e corrige a ficha do imóvel.';
+  return 'O código '+u.codigo+' é o de uma união de freguesias desagregada em outubro de 2025 (Lei 25-A/2025)'
+    +(lista?': o prédio passou para '+(rs.length>1?'uma destas — ':'')+lista:'')+', e o artigo pode ter mudado.'+conf;
 }
 /* O que as rendas de uma linha levam além das rendas do mês (D03, D20, D53):
    a caução recebida (renda do ano em que se recebe, OC 20256), os reembolsos
@@ -323,13 +377,14 @@ function fiscoQuotaNotas(r,l){
   return out;
 }
 /* O quadro de rendas que a página mostra primeiro: o 4.1 quando tem linhas,
-   senão o 4.2. O que se diz uma vez por página (o quadro 4.4, as despesas a
-   confirmar) vai no cartão dele.
+   senão o 4.2, senão o 4.3 (o direito real de habitação duradoura — D120). O
+   que se diz uma vez por página (o quadro 4.4, as despesas a confirmar) vai
+   no cartão dele.
    Recebe: r — o resumo (resumoFiscal).
-   Devolve: o quadro ('4.1', '4.2'). */
+   Devolve: o quadro ('4.1', '4.2', '4.3'). */
 function fiscoPrimeiroQuadro(r){
-  const Q=r.versao.quadros;
-  return r.linhas.some(l=>l.quadro===Q.semReducao)?Q.semReducao:Q.comReducao;
+  const Q=r.versao.quadros,tem=q=>r.linhas.some(l=>l.quadro===q),q43=fiscoQuadroDhd(r);
+  return tem(Q.semReducao)?Q.semReducao:!tem(Q.comReducao)&&q43&&tem(q43)?q43:Q.comReducao;
 }
 /* Os campos do 4.1/4.2 onde ficou um imóvel, para os quadros que o pedem
    pelo campo (o 9, o «Campo do Q4»): os das linhas desse imóvel nesse quadro.
@@ -398,8 +453,11 @@ function fiscoReducoesHtml(r,ls){
    de QA 5cbde185, e a escolha do Martinho de um cartão por quadro). Linhas e
    não uma tabela: sem rolar de lado no telemóvel. Tocar numa linha abre a
    ficha do contrato (a Declaração requer os Contratos).
+   Ronda 2: cada linha diz os quadros do 6 que apontam para ela (D117, D119,
+   D121), o total diz o líquido que o imposto conta quando é outro (o 6B, o
+   6C), e no 4.3 (D120) a linha é por contrato e por natureza.
    Recebe: r — o resumo (resumoFiscal); ls — as linhas do quadro; q — o
-   quadro ('4.1', '4.2'); red — true no quadro com redução pela duração.
+   quadro ('4.1', '4.2', '4.3'); red — true no quadro com redução pela duração.
    Devolve: o HTML (string). */
 function fiscoQuadroResumoHtml(r,ls,q,red){
   const cap=s=>String(s).charAt(0).toUpperCase()+String(s).slice(1);
@@ -408,8 +466,10 @@ function fiscoQuadroResumoHtml(r,ls,q,red){
   const semRegras=fiscoSemRegras(r);
   const linha=l=>{
     const escrita=semRegras?null:fiscoTaxaEscritaOutra(l),pj=fiscoPrejuizoDe(l);
-    const taxa=fiscoTaxaTexto(r,l,false);
-    const sub=[l.campo?'campo '+l.campo:'',fiscoPapelTexto(l),l.imovel,l.artigo?'art. '+l.artigo:'',l.fracao?'fr. '+l.fracao:'',l.atNumero?'n.º '+l.atNumero:'',taxa,
+    const taxa=fiscoTaxaTexto(r,l,false),bs=fiscoBeneficiosDe(l);
+    /* os quadros do 6 que apontam para esta linha (D117, D119, D121) */
+    const seis=bs.length?'com o '+listaE([...new Set(bs.map(b=>b.quadro))]):'';
+    const sub=[l.campo?'campo '+l.campo:'',fiscoPapelTexto(l),l.imovel,l.artigo?'art. '+l.artigo:'',l.fracao?'fr. '+l.fracao:'',l.atNumero?'n.º '+l.atNumero:'',taxa,seis,
       escrita!=null?'escreveste '+dec(escrita)+' % no contrato':'',r.variosTitulares?'titular '+l.titular:''].filter(Boolean).map(esc).join(' · ');
     const fs=fiscoFaltasDaLinha(l);
     const falta=fs.length?`<span class="fis-qr-falta"><span class="badge red">${esc(cap(fs[0]))}</span>${fs.length>1?` <span class="small">+${fs.length-1}</span>`:''}</span>`:'';
@@ -422,13 +482,19 @@ function fiscoQuadroResumoHtml(r,ls,q,red){
   /* o imposto do quadro é a soma do das linhas, cada uma já ≥ 0: os totais
      dos dois quadros somam o KPI (fisco.js:fiscoKpis), que é o mesmo cálculo */
   const rendas=r2(sum(ls.map(l=>l.rendas))),liquido=r2(sum(conta.map(l=>l.liquido))),imposto=r2(sum(conta.map(l=>Math.max(0,Number(l.imposto)||0))));
+  /* com o 6B ou o 6C o imposto conta outro líquido (as rendas a 50 %, as
+     obras a 110 %): o quadro leva os valores por inteiro, e o total di-lo */
+  const outro=conta.some(l=>fiscoLiquidoDoImpostoOutro(l)!=null);
+  const noImposto=outro&&!semRegras?' · no imposto '+euro2(r2(sum(conta.map(l=>{const t=fiscoLiquidoDoImpostoOutro(l);return t!=null?t:Number(l.liquido)||0})))):'';
   /* em conjunta, um contrato dos dois cônjuges vai numa linha por titular */
-  const nCt=fiscoNContratos(ls),porLinha='uma linha por prédio ou fração de cada contrato'+(ls.length>nCt?' e por titular':'')+', com a renda que lhe cabe';
+  const dhd=!!q&&q===fiscoQuadroDhd(r);
+  const nCt=fiscoNContratos(ls),porLinha=dhd?'uma linha por contrato'+(ls.length>nCt?', por titular e por natureza':' e por natureza')+' — a prestação mensal e, do 11.º ano em diante, a prestação anual da caução'
+    :'uma linha por prédio ou fração de cada contrato'+(ls.length>nCt?' e por titular':'')+', com a renda que lhe cabe';
   const ini=ls[0]&&ls[0].campo?ls[0].campo:'';
   const onde=`Preenche no <b>quadro ${esc(q)}</b> do Anexo F, <b>por esta ordem</b>: ${porLinha}${red?`, e no ${esc(r.versao.quadros.datas)} as datas de cada um`:''}.`
     +(ini?` O n.º do campo de cada linha (${esc(ini)}…) é o que os outros quadros pedem para a identificar.`:'');
   return `<p class="fis-onde">${onde}</p><div class="fis-qr">${ls.map(linha).join('')}
-    <div class="fis-qr-linha fis-qr-total"><div class="fis-qr-nome"><b>Total do quadro ${esc(q)}</b><span class="small">${fiscoN(nCt,'contrato','contratos')} · líquido ${euro2(liquido)}</span></div>
+    <div class="fis-qr-linha fis-qr-total"><div class="fis-qr-nome"><b>Total do quadro ${esc(q)}</b><span class="small">${fiscoN(nCt,'contrato','contratos')} · líquido ${euro2(liquido)}${noImposto}</span></div>
       <div class="fis-qr-num"><b>${euro2(rendas)}</b><span class="small">${semRegras?'sem regras de '+r.ano:'imposto estimado '+euro2(imposto)}</span></div></div></div>
     ${isentos?`<p class="hint">O líquido e o imposto não contam ${fiscoN(isentos,'o contrato isento','os contratos isentos')} (${qsIsentos.length>1?'quadros ':'quadro '}${esc(listaE(qsIsentos))}).</p>`:''}`;
 }
@@ -452,16 +518,25 @@ function fiscoQuadroResumoHtml(r,ls,q,red){
    quadro (fiscoPrimeiroQuadro): as despesas a confirmar, que não contam em
    coluna nenhuma (r.aConfirmar), e o quadro 4.4 — a renda da casa nova a
    mais de 100 km, que a app não conhece e a pessoa pode deduzir (D106).
-   Sem linhas nesse quadro, não se escreve.
-   Recebe: r — o resumo (resumoFiscal); q — o quadro ('4.1', '4.2').
+   O hint diz que as rendas ilíquidas são a renda do recibo, antes da
+   retenção, da comissão e de descontos (D112), que a identificação matricial
+   se copia da caderneta atual (D137, nos anos de 2025 em diante) e, com o 6B
+   ou o 6C, que o imposto conta outro líquido. O quadro 4.3 (o direito real
+   de habitação duradoura, D120) tem o seu título, os totais com as colunas
+   dele (fiscoNomes43) e o hint do que lá vai. Sem linhas nesse quadro, não
+   se escreve.
+   Recebe: r — o resumo (resumoFiscal); q — o quadro ('4.1', '4.2', '4.3').
    Devolve: o HTML do cartão (string), ou '' sem linhas. */
 function fiscoQuadroCard(r,q){
   const ls=r.linhas.filter(l=>l.quadro===q);if(!ls.length)return '';
   const cols=r.colunas,red=q===r.versao.quadros.comReducao,s=k=>r2(sum(ls.map(l=>k(l))));
-  const primeiro=q===fiscoPrimeiroQuadro(r);
-  const obras=s(l=>l.obras24.valor),N=fiscoNomesDoImpresso(r);
-  /* os nomes do impresso (D90): cada coluna de gastos e o grupo das obras */
-  const somas=[['Rendas (rendimento ilíquido)',s(l=>l.rendas)],['Retenções na fonte',s(l=>l.retencoes)]]
+  const primeiro=q===fiscoPrimeiroQuadro(r),dhd=q===fiscoQuadroDhd(r);
+  const obras=s(l=>l.obras24.valor),N=fiscoNomesDoImpresso(r),N43=fiscoNomes43(r);
+  /* os nomes do impresso (D90): cada coluna de gastos e o grupo das obras; no
+     4.3, as colunas e os gastos obrigatórios dele (D120) */
+  const somas=dhd?[[N43.col('valor','Rendimento – Valor ilíquido'),s(l=>l.rendas)],[N43.col('retencoes','Retenções na fonte'),s(l=>l.retencoes)]]
+      .concat(N43.gastos.map(g=>[g[1],s(l=>Number(((l.dhd&&l.dhd.gastos)||{})[g[0]])||0)]))
+    :[['Rendas (rendimento ilíquido)',s(l=>l.rendas)],['Retenções na fonte',s(l=>l.retencoes)]]
     .concat(cols.map(k=>[N.apos[k],s(l=>l.gastos[k])])).concat(obras?[[N.obras.titulo,obras]]:[]);
   const tot=`<div class="fis-ctc fis-ctc-total"><div class="fis-ctc-cab"><div class="fis-ctc-nome"><b>Total do quadro ${esc(q)}</b><span class="small">${fiscoN(fiscoNContratos(ls),'contrato','contratos')}</span></div></div>
     <dl class="fis-campos">${somas.map(x=>`<div class="fis-campo"><dt>${esc(x[0])}</dt><dd>${euro2(x[1])}</dd></div>`).join('')}</dl></div>`;
@@ -486,10 +561,35 @@ function fiscoQuadroCard(r,q){
   const aConf=Array.isArray(r.aConfirmar)?r.aConfirmar.length:0;
   const confirmar=!primeiro?'':aConf?' '+fiscoN(aConf,'despesa a confirmar não conta','despesas a confirmar não contam')+' em coluna nenhuma até escolheres a coluna de cada uma: estão em «A tratar antes de entregar».'
     :!Array.isArray(r.aConfirmar)&&r.semRegra?' '+fiscoN(r.semRegra,'despesa sem regra de dedução conta','despesas sem regra de dedução contam')+' em Outros.':'';
-  return fisCartao('Quadro '+esc(q)+' · '+(red?'com':'sem')+' redução pela duração',sub,
+  /* a identificação matricial copia-se da caderneta de agora: em outubro de
+     2025 foram repostas freguesias que estavam em uniões (D137) */
+  const caderneta=Number(r.ano)>=2025?' O código da freguesia, o tipo e o artigo copiam-se da caderneta predial atual ou da nota de cobrança do IMI mais recente: em outubro de 2025 foram repostas cerca de 300 freguesias que estavam em uniões (Lei 25-A/2025), e o código e o artigo de um prédio que era de uma união podem ter mudado.':'';
+  /* com o 6B ou o 6C, o imposto conta outro líquido que o do quadro */
+  const seis=ls.some(l=>fiscoLiquidoDoImpostoOutro(l)!=null)?' Nas linhas com o 6C as rendas contam 50 % no imposto, e nas com o 6B as obras dos 24 meses contam 110 %: o quadro leva os valores por inteiro, e é a AT que aplica o fator pelo campo do quadro 6.':'';
+  const hint=dhd
+    ?`No quadro ${esc(q)} vão as prestações de um direito real de habitação duradoura (Decreto-Lei 1/2020): a prestação mensal com a natureza ${esc(N43.nat('prestacao','01'))}, a 5 % (CIRS art. 72.º n.º 5), e a prestação anual da caução, do 11.º ano em diante, com a natureza ${esc(N43.nat('caucao','02'))}, à taxa base. A caução que recebes na escritura não é rendimento, e devolvê-la não é gasto. A dedução à caução por incumprimento do morador (natureza ${esc(N43.nat('deducaoCaucao','03'))}) a app não a calcula: se ficaste com parte da caução, essa parte vai numa linha à parte. Cessado por acordo das partes (motivo 01), os 5 % caem desde o início e a diferença dos anos anteriores regulariza-se nesta declaração (CIRS art. 72.º n.º 20). Os gastos vão em três colunas: ${esc(listaE(N43.gastos.map(g=>g[1].toLowerCase())))}.${caderneta}${confirmar}`
+    :`Rendas ilíquidas: a renda do recibo, antes da retenção, da comissão e de descontos — com a caução, no ano em que a recebes, e os reembolsos que o inquilino te pagou, menos as rendas que devolveste. Se uma gestora te transfere a renda já sem a comissão, a renda é a do recibo e a comissão é um gasto, na coluna Outros.${outras}${N.apos.titulo!=='Gastos'?` Os gastos vão na tabela de baixo do impresso, pelo mesmo campo, no grupo «${esc(N.apos.titulo)}»${obras?`, e as obras dos 24 meses no grupo «${esc(N.obras.titulo)}»`:''}.`:''} Os gastos de um imóvel com mais do que um contrato no ano repartem-se pelas linhas na proporção das rendas de cada uma — é uma estimativa; o rateio por VPT ou por área, quando o imóvel se arrenda por partes, fica para quem preenche.${seis}${caderneta}${confirmar}`;
+  const titulo='Quadro '+esc(q)+' · '+(dhd?'direito real de habitação duradoura':(red?'com':'sem')+' redução pela duração');
+  return fisCartao(titulo,sub,
     fiscoQuadroResumoHtml(r,ls,q,red)+`<p class="lbl fis-q-campos">Os campos, contrato a contrato</p>
     <div class="fis-cts">${ls.map(l=>fiscoContratoHtml(r,l)).join('')}${tot}</div>
-    <div class="hint">Rendas ilíquidas: o que entrou mais o que o inquilino reteve na fonte — com a caução, no ano em que a recebes, e os reembolsos que o inquilino te pagou, menos as rendas que devolveste.${outras}${N.apos.titulo!=='Gastos'?` Os gastos vão na tabela de baixo do impresso, pelo mesmo campo, no grupo «${esc(N.apos.titulo)}»${obras?`, e as obras dos 24 meses no grupo «${esc(N.obras.titulo)}»`:''}.`:''} Os gastos de um imóvel com mais do que um contrato no ano repartem-se pelas linhas na proporção das rendas de cada uma — é uma estimativa; o rateio por VPT ou por área, quando o imóvel se arrenda por partes, fica para quem preenche.${confirmar}</div>${datas}${primeiro?fiscoMudanca100kmHtml(r):''}`,'fis-quadro');
+    <div class="hint">${hint}</div>${datas}${primeiro?fiscoMudanca100kmHtml(r):''}`,'fis-quadro');
+}
+/* Os nomes do quadro 4.3 do ano (D120), da versão (quadro43): o de cada
+   coluna, o código de cada natureza, os gastos obrigatórios e os motivos da
+   cessação. Uma versão sem eles dá os nomes curtos da app.
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: {col(id, omissao), nat(chave, omissao), natTexto(codigo),
+   gastos:[[id, nome]], motivo(codigo)} — col e nat devolvem o da versão ou
+   a omissão; natTexto o texto da natureza ('' sem ele); motivo o motivo da
+   versão ({codigo, curto, texto, regulariza}) ou null. */
+function fiscoNomes43(r){
+  const q=(r&&r.versao&&r.versao.quadro43)||{};
+  const cs=Array.isArray(q.colunas)?q.colunas:[],ns=q.naturezas||{},nt=q.naturezasTexto||{},ms=Array.isArray(q.motivos)?q.motivos:[];
+  const gastos=Array.isArray(q.gastos)&&q.gastos.length?q.gastos.filter(g=>Array.isArray(g)&&g[0]):[['conservacaoExtra','Conservação extraordinária'],['condominio','Condomínio'],['outros','Outros']];
+  return {col:(id,o)=>{const c=cs.find(x=>Array.isArray(x)&&x[0]===id);return c&&c[1]?String(c[1]):o},
+    nat:(k,o)=>ns[k]?String(ns[k]):o,natTexto:c=>String(nt[c]||''),gastos:gastos,
+    motivo:c=>ms.find(m=>m&&String(m.codigo)===String(c))||null};
 }
 /* A linha do quadro 4.4, uma vez por página (no primeiro quadro): quem mudou
    a sua casa para mais de 100 km e arrendou a antiga deduz às rendas dela a
@@ -523,7 +623,9 @@ function fiscoMudanca100kmHtml(r){
    e a última renovação) e o 4.2B pelo facto do n.º 24 (fiscoElegivel24, D36:
    o campo, a renda de hoje — D37 —, o n.º e a renda do anterior). Texto
    simples, para o HTML e para um PDF: nada inventado; o que não se aplica
-   vem vazio.
+   vem vazio. A identificação matricial vem do fiscoCamposMatriz (a união de
+   freguesias extinta, D135; a caderneta atual, D137); uma linha do quadro
+   4.3 tem as colunas dele (fiscoCamposDhd, D120).
    Recebe: r — o resumo (resumoFiscal); l — a linha do contrato.
    Devolve: [{grupo, campo, sub, valor, falta, aviso, nota, nif}] — grupo ''
    para os campos da linha do quadro e o nome do subgrupo nos outros; sub o
@@ -540,13 +642,13 @@ function fiscoCamposDe(r,l){
   const add=(grupo,campo,valor,o)=>{o=o||{};out.push({grupo:grupo,campo:campo,sub:o.sub||'',valor:valor==null?'':String(valor),
     falta:!!o.falta,aviso:!!o.aviso,nota:o.nota||'',nif:!!o.nif})};
   const eur=x=>x?euro2(x):'',Q=r.versao.quadros,nat=r.versao.naturezas||{},red=l.quadro===Q.comReducao,N=fiscoNomesDoImpresso(r);
+  /* o quadro 4.3 tem as suas colunas (D120) */
+  if(l.quadro&&l.quadro===fiscoQuadroDhd(r))return fiscoCamposDhd(r,l);
   const porIndicar=!l.estado&&!l.atNumero;
   if(l.campo)add('','Campo',l.campo,{sub:'linha do quadro '+l.quadro});
   add('','N.º do contrato',l.atNumero,{falta:!l.atNumero&&(porIndicar||l.estado==='declarado'),nota:porIndicar?'por indicar se foi declarado':'falta'});
   if(!red)add('','Data de início',dPT(l.inicio),{falta:!l.inicio});
-  add('','Freguesia (código)',l.freguesiaCodigo,{falta:!l.freguesiaCodigo});
-  add('','Tipo',l.tipoPredio,{falta:!l.tipoPredio});
-  add('','Artigo',l.artigo,{falta:!l.artigo});
+  fiscoCamposMatriz(add,l);
   /* «C e AB» num campo só: o resumo aponta a falta, que começa por «fração:» */
   const variasFracoes=(l.faltas||[]).some(f=>/^fração:/.test(f));
   add('','Fração ou secção',l.fracao,{falta:variasFracoes,nota:'uma fração por linha'});
@@ -603,6 +705,108 @@ function fiscoCamposDe(r,l){
   }
   return out;
 }
+/* Os campos da identificação matricial de uma linha (o 4.1, o 4.2 e o 4.3
+   pedem os mesmos): o código da freguesia, o tipo e o artigo. O código
+   copia-se da caderneta predial atual (D137): sem ele, a falta di-lo; fora do
+   formato da AT, é falta (D136, a falta do resumo); o de uma união de
+   freguesias extinta em outubro de 2025 (l.freguesiaUniao — D135) vai a
+   âmbar, com o artigo, até se confirmar na caderneta (l.matrizConfirmada),
+   e a frase inteira vai na nota do cartão (fiscoFreguesiaUniaoTexto).
+   Recebe: add — o add do fiscoCamposDe (grupo, campo, valor, o); l — a linha.
+   Devolve: nada — acrescenta os campos. */
+function fiscoCamposMatriz(add,l){
+  const u=l.freguesiaUniao&&l.freguesiaUniao.codigo?l.freguesiaUniao:null,porConfirmar=!!u&&!l.matrizConfirmada;
+  const formato=(l.faltas||[]).some(f=>/^código da freguesia fora do formato/.test(String(f)));
+  add('','Freguesia (código)',l.freguesiaCodigo,{falta:!l.freguesiaCodigo||formato,aviso:porConfirmar,
+    nota:formato?'fora do formato':porConfirmar?'confirma na caderneta atual':'',
+    sub:!l.freguesiaCodigo?'da caderneta predial atual':u?(porConfirmar?'união de freguesias extinta em 2025':'confirmado na caderneta a '+dPT(l.matrizConfirmada)):''});
+  add('','Tipo',l.tipoPredio,{falta:!l.tipoPredio});
+  add('','Artigo',l.artigo,{falta:!l.artigo,aviso:porConfirmar&&!!l.artigo,nota:porConfirmar&&l.artigo?'pode ter mudado':''});
+}
+/* Os campos de uma linha do quadro 4.3 — o direito real de habitação
+   duradoura (D120) —, pela ordem e com os nomes das colunas do impresso
+   (quadro43 da versão, fiscoNomes43): o n.º do contrato e a data de início,
+   a data da escritura e o valor da caução (l.dhd), o titular, a
+   identificação matricial (fiscoCamposMatriz), o valor ilíquido (o que
+   leva: fiscoRendasDiz), a natureza com o texto da versão (01 a prestação
+   mensal, 02 a prestação anual da caução do 11.º ano em diante), as
+   retenções, o NIF de cada morador (ou o país — fiscoCamposInquilinos), nos
+   contratos de antes de 2022 a atualização de 2023; depois os gastos
+   obrigatórios nas três colunas do 4.3 (l.dhd.gastos) e, quando o direito
+   cessou no ano, a data e o motivo, com o texto curto da versão. A mesma
+   forma do fiscoCamposDe.
+   Recebe: r — o resumo (resumoFiscal); l — a linha do 4.3.
+   Devolve: [{grupo, campo, sub, valor, falta, aviso, nota, nif}]. */
+function fiscoCamposDhd(r,l){
+  const out=[],add=(grupo,campo,valor,o)=>{o=o||{};out.push({grupo:grupo,campo:campo,sub:o.sub||'',valor:valor==null?'':String(valor),
+    falta:!!o.falta,aviso:!!o.aviso,nota:o.nota||'',nif:!!o.nif})};
+  const N43=fiscoNomes43(r),d=l.dhd||{},eur=x=>x?euro2(x):'',porIndicar=!l.estado&&!l.atNumero;
+  const caucao=Number(d.caucao)>0?Number(d.caucao):0;
+  if(l.campo)add('','Campo',l.campo,{sub:'linha do quadro '+l.quadro});
+  add('',N43.col('numero','N.º do contrato'),l.atNumero,{falta:!l.atNumero&&(porIndicar||l.estado==='declarado'),nota:porIndicar?'por indicar se foi declarado':'falta'});
+  add('',N43.col('inicio','Data de início'),dPT(l.inicio),{falta:!l.inicio});
+  add('',N43.col('escritura','Data da escritura'),dPT(d.escritura),{falta:!d.escritura});
+  add('',N43.col('caucao','Valor da caução'),caucao?euro2(caucao):'',{sub:'a da escritura, por inteiro',falta:!caucao,nota:'falta no contrato'});
+  add('',N43.col('titular','Titular'),l.titular||'A');
+  fiscoCamposMatriz(add,l);
+  add('','Fração ou secção',l.fracao,{falta:(l.faltas||[]).some(f=>/^fração:/.test(String(f))),nota:'uma fração por linha'});
+  const sub=l.papel==='caucaoDhd'?'5 % da caução da escritura':fiscoRendasDiz(l);
+  add('',N43.col('valor','Valor ilíquido'),euro2(l.rendas),{sub:sub});
+  add('',N43.col('natureza','Natureza'),l.natureza,{sub:N43.natTexto(l.natureza),falta:!l.natureza,nota:'falta'});
+  add('',N43.col('retencoes','Retenções na fonte'),eur(l.retencoes));
+  fiscoCamposInquilinos(add,'',l.inquilinos||[],'morador');
+  const at=l.atualizacao2023;
+  if(at==='sim'||at==='nao'||at==='')add('',N43.col('atualizacao',fiscoNomesDoImpresso(r).atualizacao),at==='sim'?'Sim':at==='nao'?'Não':'',
+    {sub:'a renda de 2023 subiu mais de 2 %?',aviso:at==='',nota:'por responder no contrato'});
+  const g=N43.col('gastos','Gastos obrigatórios suportados e pagos'),gs=d.gastos||{};
+  N43.gastos.forEach(x=>add(g,x[1],eur(Number(gs[x[0]])||0)));
+  const cx=d.cessacao;
+  if(cx&&cx.data){
+    const gc=N43.col('cessacao','Cessação dos efeitos do DHD'),m=N43.motivo(cx.motivo);
+    add(gc,'Data',dPT(cx.data));
+    add(gc,'Motivo',cx.motivo?cx.motivo+(m&&m.curto?' · '+m.curto:''):'',{falta:!cx.motivo,nota:'por indicar no contrato'});
+  }
+  return out;
+}
+/* As notas de uma linha do quadro 4.3 (D120), para o cartão do contrato: a
+   caução recebida no ano, que não é rendimento e não está no valor
+   (l.dhd.caucaoRecebida); e a cessação por acordo das partes (um motivo que
+   regulariza, quadro43.motivos), em que os 5 % caem desde o início e a
+   diferença dos anos anteriores se regulariza nesta declaração
+   (r.regularizacoes com dhd — CIRS art. 72.º n.º 20).
+   Recebe: r — o resumo (resumoFiscal); l — a linha.
+   Devolve: [texto] (vazio fora do 4.3 ou sem nada a dizer). */
+function fiscoDhdNotas(r,l){
+  const d=l&&l.dhd;if(!d||l.quadro!==fiscoQuadroDhd(r))return [];
+  const out=[],rec=Number(d.caucaoRecebida)||0;
+  if(rec>0)out.push('Recebeste '+euro2(rec)+' de caução em '+r.ano+': a caução de um direito real de habitação duradoura não é rendimento, e fica fora do valor (CIRS art. 8.º n.º 5 b)). Do 11.º ano em diante, a prestação anual da caução vai numa linha à parte, com a natureza '+fiscoNomes43(r).nat('caucao','02')+'.');
+  const m=d.cessacao&&d.cessacao.motivo?fiscoNomes43(r).motivo(d.cessacao.motivo):null;
+  if(m&&m.regulariza&&l.papel!=='caucaoDhd'){
+    const g=(Array.isArray(r.regularizacoes)?r.regularizacoes:[]).find(x=>x&&x.contratoId===l.contratoId&&x.dhd);
+    out.push('Cessou por acordo das partes: os 5 % caem desde o início do direito, a prestação de '+r.ano+' paga a taxa base e a diferença dos anos anteriores regulariza-se nesta declaração, com juros compensatórios (CIRS art. 72.º n.º 20)'
+      +(g&&Number(g.total)>0&&!fiscoSemRegras(r)?' — estimativa sem juros: '+euro2(g.total)+'.':'.'));
+  }
+  return out;
+}
+/* As notas dos benefícios do quadro 6 de uma linha (D117, D119, D121), para o
+   cartão do contrato: em que quadro se indica o campo desta linha e o que o
+   benefício muda — os 5 % do imóvel reabilitado (6A, com o aviso da versão),
+   as obras dos 24 meses a 110 % (6B), as rendas a 50 % (6C) — e, com o 6B
+   ou o 6C, o líquido que o imposto conta (o quadro leva os valores por
+   inteiro).
+   Recebe: r — o resumo (resumoFiscal); l — a linha.
+   Devolve: [texto] (vazio sem benefícios). */
+function fiscoBeneficiosNotas(r,l){
+  const bs=fiscoBeneficiosDe(l);if(!bs.length)return [];
+  const campo=l.campo?'o campo '+l.campo+' desta linha':'o campo desta linha no quadro '+l.quadro;
+  const out=bs.map(b=>{
+    const o=b.taxa!=null?'as rendas pagam '+dec(b.taxa)+' %':b.fatorObras24!=null?'as obras dos 24 meses contam '+dec(r2(b.fatorObras24*100))+' % no imposto':b.fator!=null?'as rendas contam '+dec(r2(b.fator*100))+' % no imposto':'';
+    return 'Quadro '+b.quadro+' ('+(b.curto||b.nome)+'): indica '+campo+(o?' — '+o:'')+(b.lei?' ('+b.lei+')':'')+'.'+(b.aviso?' '+b.aviso:'');
+  });
+  const t=fiscoLiquidoDoImpostoOutro(l);
+  if(t!=null&&!fiscoSemRegras(r))out.push('O quadro leva as rendas e as obras por inteiro (líquido '+euro2(l.liquido)+'); o imposto estimado conta '+euro2(t)+', e é a AT que aplica o fator pelo campo do quadro 6.');
+  return out;
+}
 /* O cartão de um contrato num quadro: à cabeça o nome, o imóvel (o titular,
    quando as linhas são de mais do que um, e a quota-parte, quando não é
    inteiro) e a taxa da lei do ano e porquê (ou «isento», com o quadro e o
@@ -620,7 +824,11 @@ function fiscoCamposDe(r,l){
    falta leva o selo vermelho com a falta, o que convém tratar o âmbar, o que
    não se aplica um «—». O NIF não parte entre linhas (lê-se e copia-se para o
    Portal de uma vez). Tocar abre a ficha do contrato (a Declaração requer os
-   Contratos: sem eles não há página).
+   Contratos: sem eles não há página). Ronda 2: as notas do 4.3 (a caução
+   recebida, a cessação por acordo — fiscoDhdNotas, D120), dos benefícios do
+   quadro 6 (fiscoBeneficiosNotas, D117, D119, D121) e da união de
+   freguesias extinta (fiscoFreguesiaUniaoTexto, D135); a linha da prestação
+   anual da caução diz o que é.
    Recebe: r — o resumo (resumoFiscal); l — a linha do contrato.
    Devolve: o HTML do cartão (string). */
 function fiscoContratoHtml(r,l){
@@ -648,11 +856,12 @@ function fiscoContratoHtml(r,l){
   });
   /* as linhas 05 e 02 dizem o que são e porque vão à parte (D21, D51) */
   const papel=l.papel==='indemnizacao'?`Indemnização que compensa rendas deste contrato (a do seguro de renda, a da mora, a da ocupação depois do fim): vai numa linha à parte do mesmo contrato, com a natureza ${esc(l.natureza||'')}, à taxa base e sem recibo de renda (CIRS art. 8.º n.º 2 g)).`
-    :l.papel==='outra'?`Outras receitas prediais deste contrato (a cedência de uso que não é arrendamento: publicidade, antenas, partes comuns): vão numa linha à parte, com a natureza ${esc(l.natureza||'')}, à taxa base (CIRS art. 8.º n.º 2).`:'';
+    :l.papel==='outra'?`Outras receitas prediais deste contrato (a cedência de uso que não é arrendamento: publicidade, antenas, partes comuns): vão numa linha à parte, com a natureza ${esc(l.natureza||'')}, à taxa base (CIRS art. 8.º n.º 2).`
+    :l.papel==='caucaoDhd'?`Prestação anual da caução deste direito real de habitação duradoura: do 11.º ao 30.º ano, 5 % da caução da escritura por ano passam a ser teus e são rendimento (CIRS art. 8.º n.º 5 b)). Vai numa linha à parte do mesmo contrato, com a natureza ${esc(l.natureza||'')}, à taxa base — os 5 % do n.º 5 do art. 72.º são só da prestação mensal.`:'';
   const nota=(papel?`<p class="fis-ctc-nota">${papel}</p>`:'')
     +(escrita==null?'':`<p class="fis-ctc-nota">Escreveste ${esc(dec(escrita))} % no contrato; a lei de ${esc(String(r.ano))} dá ${esc(dec(l.taxa))} %, e é essa que conta aqui.</p>`)
     +(termo?`<p class="fis-ctc-nota">Rendas depois do termo (${dPT(termo)}) sem renovação registada: contam sem a redução pela duração. Se o contrato se renovou, regista a renovação na ficha.</p>`:'')
-    +fiscoQuotaNotas(r,l).map(t=>`<p class="fis-ctc-nota">${esc(t)}</p>`).join('');
+    +fiscoQuotaNotas(r,l).concat(fiscoDhdNotas(r,l),fiscoBeneficiosNotas(r,l),[fiscoFreguesiaUniaoTexto(l)]).filter(Boolean).map(t=>`<p class="fis-ctc-nota">${esc(t)}</p>`).join('');
   const faltas=fiscoFaltasDaLinha(l);
   return `<div class="fis-ctc tap" data-toca="camada" data-click="ctView('${jsq(l.contratoId)}')">
     <div class="fis-ctc-cab"><div class="fis-ctc-nome"><b>${esc(l.nome)}</b><span class="small">${esc(sub)}</span></div>${ic('chevR',18)}</div>
@@ -778,6 +987,52 @@ function fiscoIsentosDoQuadro(r,q,ls){
     <div class="stat"><span><b>Rendimento líquido isento</b></span><b>${euro2(liquido)}</b></div></div>
     <div class="hint">${hint}</div>`);
 }
+/* Os cartões dos benefícios do quadro 6, um por quadro — o 6A dos imóveis
+   reabilitados (D117), o 6B das Lojas com História (D121), o 6C dos rústicos
+   arrendados a uma entidade de gestão florestal (D119) —, como o do 6D: cada
+   linha que o tem, com o campo do 6 onde vai e o campo do 4.1 que lá se
+   escreve (l.beneficios e l.campo, do resumo). Sem benefícios, não se
+   escreve.
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: o HTML dos cartões (string), ou ''. */
+function fiscoBeneficiosCard(r){
+  const ls=r.linhas.filter(l=>!l.isencao&&fiscoBeneficiosDe(l).length);if(!ls.length)return '';
+  const qs=[];ls.forEach(l=>fiscoBeneficiosDe(l).forEach(b=>{if(qs.indexOf(b.quadro)<0)qs.push(b.quadro)}));
+  return qs.sort().map(q=>fiscoBeneficioDoQuadro(r,q,ls.filter(l=>fiscoBeneficiosDe(l).some(b=>b.quadro===q)))).join('');
+}
+/* O cartão de um quadro dos benefícios (fiscoBeneficiosCard): cada linha
+   com o campo do quadro 6 (01, 02…, pela ordem das linhas — a dos quadros) e
+   o campo do 4.1 que nele se indica, o imóvel e o valor a que o benefício
+   se aplica — as rendas no 6A e no 6C, as obras dos 24 meses no 6B —, o
+   total, e o que o benefício muda, com a lei e o aviso da versão (o 6A
+   segue a PIV 28153). O 6A diz também que, com o englobamento (quadro 6G),
+   estas rendas entram na opção como as outras. O nome, os campos, a taxa e
+   os fatores vêm da versão do ano, pela linha (l.beneficios), nunca daqui.
+   Recebe: r — o resumo; q — o quadro ('6A', '6B', '6C'); ls — as linhas
+   com esse benefício.
+   Devolve: o HTML do cartão (string). */
+function fiscoBeneficioDoQuadro(r,q,ls){
+  const de=l=>fiscoBeneficiosDe(l).find(x=>x.quadro===q)||{},b=de(ls[0]),semRegras=fiscoSemRegras(r);
+  const cs=Array.isArray(b.campos)?b.campos:[],obras=b.fatorObras24!=null,valor=l=>obras?Number(l.obras24&&l.obras24.valor)||0:Number(l.rendas)||0;
+  const Q6G=esc((r.versao.quadros&&r.versao.quadros.englobamento)||'6G');
+  const rows=ls.map((l,i)=>{
+    const sub=[cs[i]?'campo '+cs[i]+' do '+q:'',l.campo?'indica o campo '+l.campo+' do '+l.quadro:'campo do '+l.quadro+' por numerar',l.imovel,r.variosTitulares?'titular '+l.titular:''].filter(Boolean).map(esc).join(' · ');
+    return `<div class="stat"><span class="u-minw-0">${esc(l.nome)}<div class="small">${sub}</div></span><b>${euro2(valor(l))}</b></div>`;
+  }).join('');
+  const efeito=b.taxa!=null?'Pagam '+dec(b.taxa)+' % em vez da taxa do contrato'
+    :obras?'A AT considera estas obras em '+dec(r2(b.fatorObras24*100))+' %'
+    :b.fator!=null?'A AT considera estas rendas em '+dec(r2(b.fator*100))+' %':'';
+  const o=obras?'As obras de conservação dos 24 meses antes do arrendamento vão na linha do quadro, por inteiro, no grupo das obras':'Estas rendas vão na linha do quadro como as outras, por inteiro';
+  const hint=`${o}, e no ${esc(q)} indicas o campo do quadro de cada linha (o n.º ao lado de cada uma). ${esc(efeito)}${b.lei?' ('+esc(b.lei)+')':''}.`
+    +(b.fator!=null||obras?(semRegras?'':' O imposto estimado da página já conta com isso.'):'')
+    +(b.aviso?' '+esc(b.aviso):'')
+    +(b.taxa!=null?` Se optares pelo englobamento (quadro ${Q6G}), estas rendas entram também, à taxa dos escalões: a opção vale para todas as rendas.`:'')
+    +(cs.length&&ls.length>cs.length?` O impresso tem ${fiscoN(cs.length,'campo','campos')} no ${esc(q)}: com mais linhas, confirma no Portal como as indicar.`:'');
+  const tot=obras?'Obras dos 24 meses':'Rendas';
+  return fisCartao('Quadro '+esc(q)+' — '+esc(b.nome||b.curto||'benefício'),fiscoN(fiscoNContratos(ls),'contrato','contratos')+' em '+r.ano,
+    `<div>${rows}<div class="stat"><span><b>${tot}</b></span><b>${euro2(r2(sum(ls.map(valor))))}</b></div></div>
+    <div class="hint">${hint}</div>`);
+}
 /* Os dois números da demonstração de liquidação do AIMI do ano (o 9101, o
    imposto total, e o 9102, o valor tributável de todos os prédios sobre que
    incidiu): os do resumo (r.aimi.demonstracao), senão os da situação desse
@@ -884,8 +1139,11 @@ function fiscoObrasCard(r){
   if(!ls.length&&!pc.length)return '';
   const A=String(r.ano),N=fiscoNomesDoImpresso(r);
   const outroAno=l=>{const y=String(l.inicio||'').slice(0,4);return /^\d{4}$/.test(y)&&y!==A?y:''};
+  /* no 4.3 não há o grupo das obras: vão aos gastos obrigatórios, na
+     conservação extraordinária (l.dhd.gastos, D120) */
+  const q43=fiscoQuadroDhd(r),ex43=q43?(fiscoNomes43(r).gastos[0]||[])[1]||'':'';
   const linha=l=>{const y=outroAno(l);
-    return `<div class="stat"><span>${esc(l.nome)}<div class="small">${esc(l.imovel)} · quadro ${esc(l.quadro)}${l.campo?' · campo '+esc(l.campo):''}${r.variosTitulares?' · titular '+esc(l.titular):''} · contrato desde ${dPT(l.inicio)} · gastos desde ${dPT(l.obras24.inicioGastos)}${y?' · começou em '+y+', sem rendas nesse ano: vão no primeiro ano com rendas':''}</div></span><b>${euro2(l.obras24.valor)}</b></div>`};
+    return `<div class="stat"><span>${esc(l.nome)}<div class="small">${esc(l.imovel)} · quadro ${esc(l.quadro)}${l.campo?' · campo '+esc(l.campo):''}${r.variosTitulares?' · titular '+esc(l.titular):''} · contrato desde ${dPT(l.inicio)} · gastos desde ${dPT(l.obras24.inicioGastos)}${y?' · começou em '+y+', sem rendas nesse ano: vão no primeiro ano com rendas':''}${q43&&l.quadro===q43&&ex43?' · no '+esc(q43)+' vão na coluna «'+esc(ex43)+'»':''}</div></span><b>${euro2(l.obras24.valor)}</b></div>`};
   const porConf=x=>`<div class="stat"><span class="u-minw-0">${esc(x.nome||'')}<div class="small">${esc(x.imovel||'')}${x.imovel?' · ':''}gastos desde ${dPT(x.inicioGastos)} · ${x.resposta===false?'respondeste que não: ficam fora':'por responder: ficam fora até confirmares'}</div>`
     +`<button type="button" class="btn sm u-mt-6px" data-toca="camada" data-click="ctIrParaPergunta('${jsq(x.contratoId)}','c_fobras')">Responder</button></span><b>${euro2(x.valor)}</b></div>`;
   const total=r.totais&&r.totais.obras24!=null?r.totais.obras24:sum(ls.map(l=>l.obras24.valor));
@@ -984,6 +1242,85 @@ function fiscoForaCard(r){
     `<div class="list u-g-8px">${r.fora.map(linha).join('')}</div>
     <div class="hint">As rendas destes contratos não entram no quadro nem nos totais, e a parte deles nos gastos do imóvel também não. O estado muda-se na ficha do contrato.</div>`);
 }
+/* Um campo de um cartão (campo → valor), com o selo do que falta (vermelho,
+   com a nota) ou do que convém tratar (âmbar, com a nota; sem ela, o valor
+   todo), e «—» no que não tem valor — como o fiscoContratoHtml os pinta.
+   Recebe: c — {campo, sub, valor, falta, aviso, nota, nif}.
+   Devolve: o HTML do campo (string). */
+function fiscoCampoHtml(c){
+  const v=c.nif?`<span class="u-ws-nowrap">${esc(c.valor)}</span>`:esc(c.valor);
+  const dd=c.falta?(c.valor?v+' ':'')+`<span class="badge red">${esc(c.nota||'falta')}</span>`
+    :c.aviso&&c.nota?(c.valor?v+' ':'')+`<span class="badge amber">${esc(c.nota)}</span>`
+    :c.aviso?`<span class="badge amber">${v}</span>`:c.valor?v:'—';
+  return `<div class="fis-campo"><dt>${esc(c.campo)}${c.sub?`<span class="small">${esc(c.sub)}</span>`:''}</dt><dd>${dd}</dd></div>`;
+}
+/* O cartão «Anexo J · quadro 7A» (D133): as rendas de um imóvel fora de
+   Portugal não vão ao Anexo F, que é só dos rendimentos obtidos cá; vão ao
+   quadro 7A do Anexo J (r.anexoJ, do resumo), um cartão por contrato e
+   titular, campo → valor: o código do rendimento (F01, da versão), o país da
+   fonte com o código da tabela X (falta sem ele), o titular, o rendimento
+   líquido — as rendas menos os gastos do período arrendado (CIRS art. 41.º),
+   que se dizem por baixo — e o imposto pago lá (c.fisco.impostoEstrangeiro,
+   na quota). Sem imposto estimado (Q12: o crédito do art. 81.º depende do
+   país, da convenção e do englobamento): o cartão di-lo, e estas rendas não
+   estão nos totais nem no imposto da página. Tocar abre a ficha do
+   contrato. Sem imóveis lá fora, não se escreve.
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: o HTML do cartão (string), ou ''. */
+function fiscoAnexoJCard(r){
+  const xs=Array.isArray(r&&r.anexoJ)?r.anexoJ.filter(Boolean):[];if(!xs.length)return '';
+  const J=(r.versao&&r.versao.anexoJ)||{},Q=String(J.quadro||'7A');
+  const cartao=x=>{
+    const cod=String(x.codigo||J.codigo||''),ie=Number(x.impostoEstrangeiro)||0;
+    const campos=[{campo:'Código do rendimento',valor:cod,sub:'rendimentos prediais',falta:!cod,nota:'por conhecer'},
+      {campo:'País da fonte',valor:x.paisCodigo?x.paisCodigo+' · '+(x.pais||''):String(x.pais||''),sub:'o código da tabela X',falta:!x.paisCodigo,nota:'falta o código na ficha do imóvel'},
+      {campo:'Titular',valor:x.titular||'A'},
+      {campo:'Rendimento líquido',valor:euro2(Number(x.liquido)||0),sub:'as rendas menos os gastos'},
+      {campo:'Imposto pago no estrangeiro',valor:ie>0?euro2(ie):'',sub:'no país do imóvel, com o comprovativo'}];
+    const conta=[{campo:'Rendas',valor:euro2(Number(x.rendas)||0),sub:'com a caução e as indemnizações'},
+      {campo:'Gastos',valor:euro2(Number(x.gastos)||0),sub:'só do período arrendado (CIRS art. 41.º)'}]
+      .concat(Number(x.retencoes)>0?[{campo:'Retenções na fonte',valor:euro2(x.retencoes)}]:[]);
+    const sub=[x.imovel,r.variosTitulares?'titular '+x.titular:'',Number(x.quota)<1?'quota-parte '+fiscoPctQuota(x.quota):''].filter(Boolean).join(' · ');
+    const faltas=Array.isArray(x.faltas)?x.faltas:[];
+    return `<div class="fis-ctc tap" data-toca="camada" data-click="ctView('${jsq(x.contratoId)}')">
+    <div class="fis-ctc-cab"><div class="fis-ctc-nome"><b>${esc(x.nome||'')}</b><span class="small">${esc(sub)}</span></div>${ic('chevR',18)}</div>
+    ${faltas.length?`<p class="fis-ctc-falta">Falta: ${esc(faltas.join(', '))}.</p>`:''}
+    <dl class="fis-campos">${campos.map(fiscoCampoHtml).join('')}</dl>
+    <p class="lbl fis-ctc-grupo">Como se chega ao líquido</p><dl class="fis-campos">${conta.map(fiscoCampoHtml).join('')}</dl></div>`;
+  };
+  const T=(r.totais&&r.totais.anexoJ)||{},tot=k=>T[k]!=null&&isFinite(Number(T[k]))?Number(T[k]):r2(sum(xs.map(x=>Number(x[k])||0)));
+  const totHtml=`<div class="fis-ctc fis-ctc-total"><div class="fis-ctc-cab"><div class="fis-ctc-nome"><b>Total do quadro ${esc(Q)}</b><span class="small">${fiscoN(fiscoNContratos(xs),'contrato','contratos')}</span></div></div>
+    <dl class="fis-campos">${[['Rendas',tot('rendas')],['Gastos',tot('gastos')],['Rendimento líquido',tot('liquido')],['Imposto pago no estrangeiro',tot('impostoEstrangeiro')]]
+      .map(y=>`<div class="fis-campo"><dt>${esc(y[0])}</dt><dd>${euro2(y[1])}</dd></div>`).join('')}</dl></div>`;
+  const parte=r.porInteiro?'valores por inteiro':xs.some(x=>Number(x.quota)<1)?'a tua quota-parte':'';
+  return fisCartao('Anexo J · quadro '+esc(Q),r.ano+(parte?' · '+parte:''),
+    `<p class="fis-onde">Preenche no <b>quadro ${esc(Q)} do Anexo J</b>: uma linha por imóvel${xs.length>fiscoNContratos(xs)?' e por titular':''}, com o código ${esc(String(J.codigo||'F01'))}, o país da fonte, o rendimento líquido e o imposto pago lá.</p>
+    <div class="fis-cts">${xs.map(cartao).join('')}${totHtml}</div>
+    <div class="hint">As rendas de um imóvel fora de Portugal não vão ao Anexo F, que é só dos rendimentos obtidos cá: declaram-se no Anexo J, com o país da fonte pelo código da tabela X das instruções, o rendimento líquido dos gastos do período arrendado (CIRS art. 41.º) e o imposto pago lá, com o comprovativo — esse imposto abate ao IRS daqui pelo crédito por dupla tributação (CIRS art. 81.º). A app não estima o imposto destas rendas: depende do país, da convenção e do englobamento. Ficam fora dos totais e do imposto estimado da página.</div>`,'fis-quadro');
+}
+/* O cartão «Fora do Anexo F · categoria B» (D134): os contratos com as rendas
+   tributadas na categoria B (c.fisco.categoriaB — a opção do CIRS art. 4.º
+   n.º 1 n), ou o imóvel afeto à atividade, art. 3.º n.º 2 a)), que o resumo
+   tira do Anexo F (r.categoriaB), com o valor de cada um, o total e o anexo
+   onde vão — o B ou o C. Não é «não declarado»: o contrato continua com o
+   Modelo 2 e os recibos. Tocar abre a ficha do contrato. Sem nenhum, não se
+   escreve.
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: o HTML do cartão (string), ou ''. */
+function fiscoCategoriaBCard(r){
+  const xs=Array.isArray(r&&r.categoriaB)?r.categoriaB.filter(Boolean):[];if(!xs.length)return '';
+  const T=(r.totais&&r.totais.categoriaB)||{},total=T.rendas!=null&&isFinite(Number(T.rendas))?Number(T.rendas):r2(sum(xs.map(x=>Number(x.rendas)||0)));
+  const linha=x=>{
+    const sub=[x.imovel,Number(x.n)>0?fiscoN(Number(x.n),'renda','rendas')+' em '+r.ano:'',Number(x.quota)>0&&Number(x.quota)<1?'quota-parte '+fiscoPctQuota(x.quota):'',
+      Number(x.retencoes)>0?'retenções '+euro2(x.retencoes):''].filter(Boolean).map(esc).join(' · ');
+    return `<div class="card tap u-p-11px-13px" data-toca="camada" data-click="ctView('${jsq(x.contratoId)}')">
+      <div class="row-between u-ai-center u-g-10px"><div class="u-minw-0"><b>${esc(x.nome||'')}</b><div class="small">${sub}</div></div><b>${euro2(Number(x.rendas)||0)}</b></div></div>`;
+  };
+  return fisCartao('Fora do Anexo F · categoria B',fiscoN(xs.length,'contrato','contratos')+' para o Anexo B ou C',
+    `<div class="list u-g-8px">${xs.map(linha).join('')}</div>
+    <div class="stat"><span><b>Total</b></span><b>${euro2(total)}</b></div>
+    <div class="hint">Marcaste as rendas destes contratos como da categoria B: porque optaste por ela (CIRS art. 4.º n.º 1 n)) ou porque o imóvel está afeto à tua atividade (art. 3.º n.º 2 a)). Não vão ao Anexo F: declaram-se no Anexo B, no regime simplificado, ou no Anexo C, com contabilidade organizada, pelas regras da categoria B. Ficam fora dos quadros, dos totais e do imposto estimado desta página, e a parte delas nos gastos do imóvel também. O contrato continua com o Modelo 2 e os recibos de renda; a marca muda-se na ficha do contrato.</div>`);
+}
 /* O cartão «Rendas sem contrato»: as rendas do ano que não dizem de que
    contrato são, por imóvel, com a saída para as ligar — que é dos Movimentos
    (a Declaração requer-os: estão sempre ligados aqui).
@@ -998,12 +1335,13 @@ function fiscoSemContratoCard(r){
     +(n===1?saida('Abrir o movimento',`txView('${jsq(r.semContrato[0].ids[0])}')`,'camada'):saida('Ver movimentos',"go('transactions')",'ecra')));
 }
 /* «Fora da declaração» quando não há nada fora (a prancheta): nenhum contrato
-   marcado como não declarado e nenhuma renda sem contrato no ano — diz-se,
-   para não se ficar a pensar se faltou ver. Com algum dos dois, quem fala são
-   os cartões deles (fiscoForaCard, fiscoSemContratoCard).
+   marcado como não declarado, nenhuma renda sem contrato no ano e nenhum
+   contrato na categoria B — diz-se, para não se ficar a pensar se faltou
+   ver. Com algum dos três, quem fala são os cartões deles (fiscoForaCard,
+   fiscoSemContratoCard, fiscoCategoriaBCard — D134).
    Recebe: r — o resumo (resumoFiscal).
    Devolve: o HTML do cartão (string), ou ''. */
 function fisNadaForaCard(r){
-  if(r.fora.length||r.semContrato.length)return '';
+  if(r.fora.length||r.semContrato.length||(Array.isArray(r.categoriaB)&&r.categoriaB.length))return '';
   return fisCartao('Fora da declaração','',`<p class="hint">Nenhum contrato marcado «não declarado» e nenhuma renda sem contrato em ${r.ano}.</p>`,'fis-nada-fora');
 }

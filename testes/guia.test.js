@@ -170,7 +170,7 @@ describe('o guia «Declarar as rendas»', () => {
     // ticket 720b5908: o botão leva à entrega do IRS (a autenticação do Modelo 3), e não à página inicial do Portal
     assert.match(p2, /<p class="ir"><a class="btn" href="https:\/\/irs\.portaldasfinancas\.gov\.pt\/app\/entrega" rel="noopener"><span>Entregar o IRS no Portal das Finanças<\/span><svg class="i seguir"/);
     assert.doesNotMatch(html, /href="https:\/\/www\.portaldasfinancas\.gov\.pt\/"/, 'nenhuma ligação à página inicial do Portal');
-    for (const frase of ['Cada prédio vai numa linha própria', 'código da freguesia, de seis dígitos', 'pelo valor ilíquido',
+    for (const frase of ['Cada prédio vai numa linha própria', 'código da freguesia, de seis caracteres','pelo valor ilíquido',
       '07 no arrendamento habitacional, 06 no não habitacional', 'retenções na fonte', 'O NIF português do inquilino',
       'nos 24 meses antes do arrendamento', 'Quadro 4.1', 'Quadro 4.2', 'quadro 4.2A', 'Quadro 6G']) {
       assert.ok(t3.includes(frase), '3, falta: ' + frase);

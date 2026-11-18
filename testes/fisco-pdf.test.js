@@ -183,7 +183,7 @@ describe('o PDF do Anexo F', () => {
     app.fiscoAno = '2019';
     await app.fiscoPdf();
     assert.equal(guardado, null);
-    assert.deepEqual(avisos, ['Sem contratos nos quadros 4.1, 4.2 e 5 em 2019: não há PDF para exportar.']);
+    assert.deepEqual(avisos, ['Sem rendas a declarar em 2019 (nos quadros 4.1, 4.2, 4.3 e 5 do Anexo F, nem no Anexo J): não há PDF para exportar.']);
   });
 
   test('no Android vai para o seletor nativo, em base64', async () => {

@@ -76,7 +76,7 @@ describe('o formulário do imóvel', () => {
       app.propModal();
       const repor = comCampos({ p_name: 'Casa', p_freguesiaCodigo: '1106' });
       try { app.onSave(); } finally { repor(); }
-      assert.deepEqual(avisos, ['O código da freguesia tem 6 dígitos.']);
+      assert.deepEqual(avisos, ['O código da freguesia tem 6 caracteres (distrito, concelho e freguesia), como na caderneta.']);
       assert.equal(app.db.properties.length, 0, 'não gravou');
       // com seis dígitos grava; e vazio também, que o código é opcional
       const repor2 = comCampos({ p_name: 'Casa', p_freguesiaCodigo: '110623' });

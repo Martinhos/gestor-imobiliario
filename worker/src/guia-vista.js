@@ -606,7 +606,7 @@ const GUIA = [
         'O número do contrato, que vem da declaração Modelo 2 do Imposto do Selo (ou do registo do contrato no Portal ' +
           'das Finanças, se for anterior a 1 de abril de 2015), e a data de início.',
         // D137 (2026-11-17): de que caderneta, e a reposição das freguesias
-        'A identificação matricial: o código da freguesia, de seis dígitos, que está nos documentos de cobrança do ' +
+        'A identificação matricial: o código da freguesia, de seis caracteres (quatro algarismos e, desde 2025, às vezes duas letras no fim), que está nos documentos de cobrança do ' +
           'IMI, o tipo de prédio (U, urbano, ou R, rústico), o artigo e a fração. Tira-os da caderneta predial ' +
           'atual, que obténs no Portal das Finanças, ou da nota de cobrança do IMI mais recente.',
         'Em outubro de 2025 foram repostas cerca de 300 freguesias que estavam agregadas em uniões de freguesias, ' +

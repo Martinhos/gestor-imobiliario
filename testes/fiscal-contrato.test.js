@@ -295,7 +295,7 @@ describe('o formulário do movimento', () => {
     let html = app.txBody();
     assert.match(html, new RegExp('id="t_periodo" type="month" value="' + ANO + '-09"'));
     assert.match(html, /id="t_retencao"[^>]*inputmode="decimal"[^>]*value="12,5"/);
-    assert.match(html, /a renda bruta é o montante mais isto/);
+    assert.match(html, /O montante é a renda do recibo menos o retido na fonte\. No retido entra só o IRS que o inquilino reteve e entregou à AT por ti/);
     assert.doesNotMatch(html, /id="t_recibo"/, 'por indicar: sem recibo');
     // e vem logo a seguir ao contrato
     assert.ok(html.indexOf('id="t_ct"') < html.indexOf('id="t_periodo"'));

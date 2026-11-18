@@ -561,3 +561,15 @@ não o chame deixa a despesa apagada voltar na importação seguinte, se a
 pessoa limpar o «Só desde». Os hooks não gravam: grava quem apaga. O
 «Anular a última importação» não os chama, de propósito: anular deixa
 reimportar.
+
+## Uma chave do Splitwise escrita fora da importação não tem a categoria do CSV
+A chave de uma despesa importada (t.swKey, splitwise.js:swChave) junta a
+data, a descrição, o custo total e a categoria do CSV. O «Repor o total» da
+Declaração dá a chave a despesas importadas antes de ela existir, e a app
+não guardou a categoria do CSV: a chave sai com ela em branco
+(fisco-avisos.js:fiscoAvChaveSplitwise). Uma reimportação do mesmo grupo
+calcula a chave com a categoria e não a achava; e a despesa, já com chave,
+deixou de estar nas antigas sem chave — entrava repetida. O
+splitwise.js:swPrepare procura também a chave sem a categoria. Quem
+escrever outra chave fora da importação usa a mesma forma, ou acrescenta a
+procura dela ao swPrepare.

@@ -72,9 +72,11 @@ function txTitulo(){
    que é comum aos modos e entrega ao guardar do modo (txGuardarPlaneado,
    txGuardarModelo, txGuardarMovimento). A distribuição de um pagamento de
    crédito sai aqui da função pura (distribuicaoDe), uma vez, com o que está
-   no formulário — pintar o cartão não a escreve.
+   no formulário — pintar o cartão não a escreve. Uma renda abaixo da do
+   planeado desse mês, ainda sem resposta, pergunta porquê antes de gravar
+   (txRendaAbaixo, txPerguntarRendaAbaixo).
    Recebe: id — o id do movimento em edição (null num novo).
-   Devolve: nada — grava e fecha, ou diz o que falta. */
+   Devolve: nada — grava e fecha, ou diz o que falta (ou abre a pergunta). */
 function txGuardar(id){
   collectTx();
   const m=txModo,planeado=m.modo==='rec';
@@ -128,6 +130,12 @@ function txGuardar(id){
   }
   if(planeado)return txGuardarPlaneado();
   if(m.modo==='tpl')return txGuardarModelo();
+  /* uma renda abaixo da do planeado desse mês pergunta porquê, uma vez; a que
+     já respondeu «Pagamento parcial» grava-se assim, e a que deixou de estar
+     abaixo deixa de ser parcial (D112–D115) */
+  const abaixo=txRendaAbaixo(id);
+  if(abaixo&&!tForm.parcial)return txPerguntarRendaAbaixo(id,abaixo);
+  if(!abaixo)tForm.parcial=false;
   return txGuardarMovimento(id);
 }
 /* A data de uma RECEITA do formulário é antes da compra da casa
@@ -223,7 +231,9 @@ function txGuardarModelo(){
    com esse id, e um normal que passa a grupo fica o lote dele. O que só se
    sabe ao partir (um grupo sem imóveis, um imóvel onde não posso) recusa
    antes de mexer na base. O novo (também o que nasce de confirmar um
-   planeado) leva o «Ver» no aviso (componentes.js:avisoComVer).
+   planeado) leva o «Ver» no aviso (componentes.js:avisoComVer). Uma renda
+   paga só em parte (t.parcial) não avança o planeado que se confirma: o resto
+   continua por confirmar (D115).
    Recebe: id — o id do movimento em edição (null num novo; numa parte de um
    lote, o dessa parte).
    Devolve: nada — grava, fecha e redesenha. */
@@ -245,12 +255,152 @@ function txGuardarMovimento(id){
   else{const i=db.transactions.findIndex(x=>x.id===tForm.id);
     if(i<0)db.transactions.push(tForm);else db.transactions[i]=tForm}
   tocadas.forEach(lid=>{const x=anyLoan(lid);if(x)acertarCapital(x.l)});
-  if(recId&&servicoLigado('recurring')){const r=(db.recurring||[]).find(x=>x.id===recId);if(r)recAdvance(r)}
+  /* um pagamento parcial não avança o planeado: o resto da renda fica por confirmar (D115) */
+  const parcial=!!tForm.parcial;
+  if(recId&&!parcial&&servicoLigado('recurring')){const r=(db.recurring||[]).find(x=>x.id===recId);if(r)recAdvance(r)}
   save();closeModal();buildNav();render();refreshDetail();
   if(!novo)return toast('Movimento guardado.');
   /* de vários imóveis, a ficha da primeira parte é a do lote inteiro (txFicha) */
   const alvo=novos&&novos.length?novos[0].id:tForm.id;
-  avisoComVer(recId?'Movimento confirmado.':'Movimento adicionado.','transactions',()=>txView(alvo));
+  avisoComVer(parcial?'Pagamento parcial registado: o resto da renda fica em dívida.':recId?'Movimento confirmado.':'Movimento adicionado.','transactions',()=>txView(alvo));
+}
+/* ---- a renda que entra abaixo da do planeado (D112–D115; decisão do
+   Martinho: sem campo «Descontado», uma pergunta com duas saídas) ---- */
+/* A pergunta aberta da renda abaixo: o movimento em edição, a renda do mês, o
+   que falta, o imóvel e o mês — o que as escolhas (txRendaAbaixoEscolha)
+   precisam depois de a folha abrir. null sem pergunta aberta. */
+let txAbaixo=null;
+/* Esta renda fica abaixo da do planeado desse mês? Só numa renda (o papel do
+   irs-papeis.js:irsReceitaDe) ligada a um contrato, com o planeado da renda
+   com a ocorrência no mês a que ela respeita (planeados.js:recDaRendaNoMes —
+   o que confirmo, ou o do contrato): a renda em vigor nesse mês é o montante
+   dele mais a retenção, e nunca o c.rent de hoje. Contam as outras rendas do
+   mesmo contrato e mês já registadas (um pagamento parcial e o resto). Sem
+   Planeados ligados, ou sem planeado nesse mês, não pergunta.
+   Recebe: id — o id do movimento em edição (null num novo).
+   Devolve: null, ou {renda, ja, falta, mes} — a renda do mês, o que as outras
+   rendas desse mês já somam, o que falta (euros) e o mês ('AAAA-MM'). */
+function txRendaAbaixo(id){
+  const t=tForm;
+  if(t.kind!=='income'||!t.contractId||!servicoLigado('recurring'))return null;
+  if(irsReceitaDe(t).papel!=='renda')return null;
+  const c=contract(t.contractId),mes=mesDaRenda(t);
+  const r=c?recDaRendaNoMes(c,mes,txModo.modo==='confirmar'?txModo.recId:null):null;
+  if(!r)return null;
+  const renda=r2((Number(r.tx.amount)||0)+(Number(r.tx.retencao)||0));
+  const outras=(db.transactions||[]).filter(x=>x.id!==id&&x.id!==t.id&&x.contractId===c.id&&ehRenda(x)&&mesDaRenda(x)===mes);
+  const ja=r2(sum(outras.map(rendaBruta))),falta=r2(renda-ja-rendaBruta(t));
+  return falta>0.005?{renda,ja,falta,mes}:null;
+}
+/* Os descontos que a pergunta da renda abaixo conhece: o rótulo e a
+   explicação da escolha, o ícone, a descrição da despesa, a categoria
+   proposta (pelo id do IRS, ou pelo nome de origem: só se existir nesta
+   conta) e a coluna do Anexo F que a despesa tem de ter — fixada no
+   movimento quando a categoria não a dá. O encargo do imóvel escolhe-se
+   depois, de ENCARGOS_DO_INQUILINO. */
+const TX_DESCONTOS_RENDA={
+  comissao:{label:'Comissão da gestora',sub:'A gestora tirou a comissão antes de te transferir a renda.',icon:'carteira',
+    desc:'Comissão da gestora',cat:['Gestão e mediação','Gestão do imóvel'],col:'outros'},
+  conservacao:{label:'Obra de reparação paga pelo inquilino',sub:'Conservação ou manutenção: deduz-se com a fatura em teu nome.',icon:'gear',
+    desc:'Obra paga pelo inquilino',cat:['Manutenção e reparações',''],col:'conservacao'},
+  melhoria:{label:'Obra de melhoria paga pelo inquilino',sub:'Uma beneficiação (cozinha nova, ar condicionado): não se deduz.',icon:'up',
+    desc:'Obra de melhoria paga pelo inquilino',cat:['Obras e benfeitorias','Remodelação'],col:'nao'},
+  condominio:{desc:'Condomínio pago pelo inquilino',cat:['Condomínio','Quota mensal'],col:'condominio'},
+  imi:{desc:'IMI pago pelo inquilino',catId:'impostos/imi',col:'imi'},
+  seguro:{desc:'Seguro pago pelo inquilino',cat:['Seguros','Multirriscos'],col:''},
+  consumos:{desc:'Água, luz e gás pagos pelo inquilino',cat:['Água, luz e gás',''],col:''},
+  outro:{label:'Outro desconto',sub:'Escolhes a categoria da despesa.',icon:'dots',desc:'Desconto na renda',cat:null,col:''}
+};
+/* A pergunta «Entrou menos do que a renda: porquê?» (txRendaAbaixo), por
+   cima do formulário, com as duas saídas da decisão do Martinho: pagamento
+   parcial — grava a renda como está, com t.parcial, e o resto fica em dívida
+   (o planeado não avança) — ou um desconto — a comissão da gestora, uma obra
+   ou um encargo pago pelo inquilino: regista a renda inteira e propõe a
+   despesa do desconto (txRendaAbaixoDesconto). O IRS conta a renda do recibo,
+   antes da retenção, da comissão e de descontos; a despesa deduz-se pela
+   coluna dela, uma vez. «Voltar» devolve ao formulário, para corrigir o
+   montante.
+   Recebe: id — o id do movimento em edição (null num novo); a — o que o
+   txRendaAbaixo devolveu.
+   Devolve: nada — abre a folha da escolha. */
+function txPerguntarRendaAbaixo(id,a){
+  txAbaixo={id:id||null,falta:a.falta,renda:a.renda,mes:a.mes,pid:tForm.propertyId,camada:modalTop()};
+  const D=TX_DESCONTOS_RENDA,f=euro2(a.falta);
+  const opts=[{v:'parcial',label:'Pagamento parcial',sub:'Faltam '+f+': ficam em dívida, e o planeado continua a pedir esta renda.',icon:'clock'}]
+    .concat(['comissao','conservacao','melhoria'].map(k=>({v:k,label:D[k].label,sub:D[k].sub,icon:D[k].icon})))
+    .concat([{v:'encargo',label:'Encargo do imóvel pago pelo inquilino',sub:'O condomínio, o IMI, o seguro ou a água, luz e gás.',icon:'building'},
+      {v:'outro',label:D.outro.label,sub:D.outro.sub,icon:D.outro.icon}]);
+  pickModal('Entrou menos do que a renda: porquê?',opts,txRendaAbaixoEscolha,
+    `<div class="hint u-fs-14px">A renda de ${esc(mesPt(a.mes))} é ${euro2(a.renda)}, e faltam ${f}. O IRS conta a renda do recibo, antes da retenção, da comissão e de descontos: num desconto registas a renda inteira e o desconto como despesa.</div>`);
+}
+/* Uma escolha da pergunta da renda abaixo: o pagamento parcial grava já; o
+   encargo do imóvel pergunta qual (ENCARGOS_DO_INQUILINO); o resto é um
+   desconto (txRendaAbaixoDesconto).
+   Recebe: o — a opção escolhida ({v}).
+   Devolve: nada. */
+function txRendaAbaixoEscolha(o){
+  const a=txAbaixo;if(!a||!o)return;
+  if(o.v==='parcial'){txRendaAbaixoFecha();txAbaixo=null;tForm.parcial=true;return txGuardarMovimento(a.id)}
+  if(o.v!=='encargo')return txRendaAbaixoDesconto(o.v,false);
+  /* a escolha seguinte fica no lugar desta (o pickModal guarda uma escolha de
+     cada vez): o «Voltar» dela devolve ao formulário */
+  txRendaAbaixoFecha();
+  pickModal('Que encargo pagou o inquilino?',ENCARGOS_DO_INQUILINO.map(e=>({v:e.id,label:e.nome,icon:'building'})),txRendaAbaixoEncargo);
+}
+/* O encargo que o inquilino pagou e descontou na renda: com o planeado desse
+   encargo no mesmo mês (planeados.js:recDoEncargoNoMes), oferece saltá-lo —
+   confirmá-lo também deduzia o mesmo dinheiro duas vezes (D114); sem ele,
+   segue para o desconto.
+   Recebe: o — a opção escolhida ({v: o id do encargo, label}).
+   Devolve: nada. */
+function txRendaAbaixoEncargo(o){
+  const a=txAbaixo;if(!a||!o)return;
+  const r=servicoLigado('recurring')?recDoEncargoNoMes(a.pid,o.v,a.mes):null;
+  if(!r)return txRendaAbaixoDesconto(o.v,false);
+  txRendaAbaixoFecha();
+  pickModal(String(o.label||'')+' de '+mesPt(a.mes)+': está nos planeados',[
+    {v:'saltar',label:'Saltar o planeado deste mês',sub:'O inquilino pagou este encargo: confirmá-lo também deduzia o mesmo dinheiro duas vezes.',icon:'check'},
+    {v:'manter',label:'Manter o planeado',sub:'Se este mês também pagaste tu este encargo.',icon:'repetir'}],
+    x=>txRendaAbaixoDesconto(o.v,x.v==='saltar'?r.id:false));
+}
+/* Fecha as folhas da pergunta, até ao formulário do movimento que a abriu.
+   Devolve: nada. */
+function txRendaAbaixoFecha(){
+  const a=txAbaixo;if(!a)return;
+  let guarda=0;
+  while(guarda++<10&&modalStack.length&&modalTop()!==a.camada)closeModal();
+}
+/* O desconto: a renda grava-se inteira (o montante sobe o que faltava; o
+   IRS conta a renda do recibo) e abre-se a despesa do desconto, já com o
+   valor, o dia, o imóvel, a descrição e a categoria (TX_DESCONTOS_RENDA; a
+   coluna do Anexo F fixa-se no movimento quando a categoria desta conta não
+   a dá) — para a pessoa conferir e guardar. Num encargo com o planeado do
+   mesmo mês, salta-o antes (planeados.js:recSaltarEncargo).
+   Recebe: k — a chave do desconto (TX_DESCONTOS_RENDA, ou o id do encargo);
+   saltar — o id do planeado do encargo a saltar, ou false.
+   Devolve: nada — grava a renda e abre o formulário da despesa. */
+function txRendaAbaixoDesconto(k,saltar){
+  const a=txAbaixo,d=TX_DESCONTOS_RENDA[k];if(!a||!d)return;
+  txRendaAbaixoFecha();txAbaixo=null;
+  tForm.amount=r2((Number(tForm.amount)||0)+a.falta);tForm.parcial=false;
+  const pid=a.pid,date=tForm.date||today();
+  txGuardarMovimento(a.id);
+  if(saltar&&servicoLigado('recurring')){recSaltarEncargo(saltar);save();buildNav();render()}
+  const preset={label:d.desc+' · '+mesPt(a.mes),amount:a.falta,date};
+  const cat=d.catId?txCatDoId('expense',d.catId):d.cat?txCatNome(d.cat[0],d.cat[1]):null;
+  if(cat){preset.category=cat.category;preset.sub=cat.sub}
+  if(d.col&&irsColunaDe(Object.assign({kind:'expense'},preset)).col!==d.col)preset.irsCol=d.col;
+  txModal({kind:'expense',propId:pid,preset});
+  toast(saltar?'Renda registada inteira, e o planeado deste mês saltou. Confere a despesa do desconto e guarda.':'Renda registada inteira. Confere a despesa do desconto e guarda.');
+}
+/* Uma categoria das despesas pelo nome, só se existir nesta conta (a árvore
+   de cada um pode não a ter): a subcategoria só se for dela.
+   Recebe: c — o nome da categoria; s — o da subcategoria ('' sem ela).
+   Devolve: {category, sub}, ou null quando a categoria não existe. */
+function txCatNome(c,s){
+  const arv=catsFor('expense')||{};
+  if(!(c in arv))return null;
+  return {category:c,sub:s&&(arv[c]||[]).indexOf(s)>-1?s:''};
 }
 /* Afina o tForm depois de mudar o imóvel ou o tipo: limpa quem paga/recebe se já não for dono,
    escolhe a hipoteca viva por defeito e, se o montante ainda estiver vazio, sugere valor e
@@ -449,6 +599,7 @@ function txFicha(id){
     renda&&ehRenda(t)&&t.periodo?{rotulo:'Mês da renda',valor:esc(mesPt(t.periodo))}:null,
     renda&&retido>0?{rotulo:'Retido na fonte',valor:euro2(retido)}:null,
     renda&&retido>0?{rotulo:'Renda bruta',valor:euro2(r2((Number(montante)||0)+retido))}:null,
+    renda&&t.parcial?{rotulo:'Pagamento',valor:'Parcial: o resto fica em dívida'}:null,
     recibo?{rotulo:'Recibo eletrónico',valor:t.recibo?'Emitido':'Por emitir'}:null,
     t.kind==='settle'?{rotulo:'Transferência',valor:nome(t.paidBy)+' → '+nome(t.toId)}:null,
     t.kind!=='settle'&&owner(t.paidBy)?{rotulo:isIn(t.kind)?'Recebido por':'Pago por',valor:nome(t.paidBy)}:null,
@@ -841,13 +992,17 @@ function credHint(){
 function refreshCredHint(){const e=document.getElementById('credHint');if(e){tForm.creditor=val('t_creditor');e.innerHTML=credHint()}}
 /* O que o IRS pergunta a uma renda: o mês a que respeita (uma renda de agosto
    paga em setembro é de agosto), o que o inquilino reteve na fonte (o
-   montante é o que entrou; a renda bruta é a soma), e — só num contrato
+   montante é a renda do recibo menos o retido; a renda bruta é a soma), e — só num contrato
    declarado à AT, porque só aí ela o espera — se o recibo eletrónico já foi
    emitido. Vai logo a seguir ao contrato, porque é dele que depende.
    Numa «Renda em atraso» o mês é obrigatório (D54), com o asterisco; o mês
    sugerido pelo planeado, quando não é o da data, diz de onde veio. Por
    baixo da retenção, a conta do que entrou quando o montante ficou na renda
    do contrato (txDicaDaRetencao, D23), num span que se refaz a cada tecla.
+   A dica diz que a renda conta pelo recibo, antes da retenção, da comissão e
+   de descontos, e que no retido só entra o IRS que o inquilino entregou à AT
+   (D112, D116); numa renda paga só em parte (t.parcial), que o resto fica em
+   dívida.
    Devolve: string com o HTML da secção. */
 function txFiscoSect(){
   const t=tForm,c=t.contractId?contract(t.contractId):null;
@@ -861,8 +1016,9 @@ function txFiscoSect(){
   return `<div class="${fixo?'row':''}">
       ${fixo?`<label>Mês a que respeita${atraso?' <span class="req">*</span>':' (opcional)'}<input id="t_periodo" type="month" value="${esc(t.periodo||'')}" placeholder="Ex: 2026-08"></label>`:''}
       <label>Retido na fonte (€)<input id="t_retencao" type="text" inputmode="decimal" value="${t.retencao?dec(t.retencao):''}" placeholder="Opcional" data-input="txRetencaoEscrita()" autocomplete="off"></label></div>
-    <div class="hint u-mt-n6px">${fixo?(atraso?'Numa renda em atraso, o mês a que respeita é o que a leva ao ano certo. ':(doPlaneado?'O mês é o da renda mais antiga por confirmar deste contrato: corrige-o se esta renda é de outro. ':'')+'Mês em branco: o da data. '):''}Se o inquilino é uma empresa que retém IRS, escreve o que ficou retido: a renda bruta é o montante mais isto.</div>
+    <div class="hint u-mt-n6px">${fixo?(atraso?'Numa renda em atraso, o mês a que respeita é o que a leva ao ano certo. ':(doPlaneado?'O mês é o da renda mais antiga por confirmar deste contrato: corrige-o se esta renda é de outro. ':'')+'Mês em branco: o da data. '):''}O montante é a renda do recibo menos o retido na fonte. No retido entra só o IRS que o inquilino reteve e entregou à AT por ti (vem no recibo); a comissão da gestora e os descontos não são retenção: registam-se à parte, como despesa.</div>
     <div class="hint u-mt-n6px" id="t_retDica"${ret?'':' hidden'}><span class="amber">${esc(ret)}</span></div>
+    ${fixo&&t.parcial?'<div class="hint u-mt-n6px">Pagamento parcial: o resto da renda fica em dívida, e o planeado continua a pedi-lo.</div>':''}
     ${fixo&&ctDeclarado(c)?txReciboLinha(!!t.recibo):''}`;
 }
 /* A conta da retenção, por baixo do campo (D23): o montante é o que entrou,

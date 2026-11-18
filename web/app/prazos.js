@@ -29,7 +29,10 @@
    escolhido na página Declaração) — que, por isso mesmo, deixa de ser
    avisado dos recibos por emitir. Um contrato que o senhorio marcou como
    «não declarado» é uma escolha dele: nenhum destes prazos nasce dele, e
-   nenhum texto o julga. */
+   nenhum texto o julga. Um imóvel fora de Portugal não tem prazos da AT (as
+   rendas vão ao Anexo J); as rendas da categoria B guardam o Modelo 2 e os
+   recibos, sem a comunicação de fevereiro; e a caução de um direito real de
+   habitação duradoura não pede recibo. */
 
 // dias de antecedência com que cada tipo de prazo começa a avisar
 const PZ_ANTECEDENCIA = { oposicao: 150, fim: 60, aumento: 45, cc: 60, energia: 90, taxa: 90, spread: 60,
@@ -41,6 +44,13 @@ const PZ_ANTECEDENCIA = { oposicao: 150, fim: 60, aumento: 45, cc: 60, energia: 
    janeiro (Portaria 98-A/2015, art. 8.º). Conta o dia do prazo: o fim de
    fevereiro de 2026 já é depois dessa data, o fim de janeiro de 2025 não. */
 const PZ_MODELO44 = { fevereiroDesde: '2025-07-01' };
+
+/* A frase dos contratos de um imóvel fora de Portugal (pzForaDePortugal): o
+   arrendamento de um imóvel rege-se pela lei do país onde ele está, salvo se
+   as partes escolheram outra (Regulamento (CE) 593/2008, Roma I, arts. 3.º e
+   4.º n.º 1 c)) — por isso os prazos do Código Civil português (a oposição à
+   renovação, o fim, o aumento) não se avisam (decisão do Martinho). */
+const PZ_LEI_DO_PAIS='Os prazos do contrato seguem a lei do país do imóvel (Regulamento Roma I, art. 4.º), salvo se o contrato escolheu outra.';
 
 /* O Modelo 2 só vale para os contratos com início desde 1 de abril de 2015
    (Portaria 98-A/2015; FAQ 1523 da AT). Os de antes não o têm: o n.º que o
@@ -177,6 +187,40 @@ function pzPrazoIhru(c){
   return irsIsencao(Object.assign({},c,{fisco:Object.assign({},f,{ihru:prazo})}),a)?prazo:'';
 }
 
+/* O imóvel fica fora de Portugal (o país da ficha do imóvel, p.pais: '' é
+   Portugal — dados.js:paisDoImovel)? As rendas dele não são do Anexo F: vão
+   ao Anexo J, e o contrato não tem Modelo 2, comunicação de fevereiro, recibo
+   de renda eletrónico nem envio ao IHRU (D133). Lê o campo com cuidado: um
+   imóvel gravado antes dele não o tem, e «Portugal» escrito à mão é Portugal.
+   Recebe: pid — o id do imóvel (aguenta vazio ou um imóvel que já não existe).
+   Devolve: true quando o imóvel tem outro país; senão false. */
+function pzForaDePortugal(pid){
+  const p=pid?prop(pid):null,pa=String((p&&p.pais)||'').trim();
+  return !!pa&&!/^portugal$/i.test(pa);
+}
+
+/* As rendas do contrato tributam-se na categoria B (fisco.categoriaB, num
+   contrato declarado): a opção do CIRS art. 4.º n.º 1 n) ou o imóvel afeto à
+   atividade (art. 3.º n.º 2 a)). Saem do Anexo F, mas o contrato continua com
+   o Modelo 2 e os recibos; sem taxa autónoma não há redução pela duração, e
+   por isso não há comunicação de fevereiro (D134).
+   Recebe: c — o contrato (aguenta null).
+   Devolve: true ou false. */
+function pzCategoriaB(c){
+  const f=c?fiscoDe(c):null;
+  return !!f&&f.estado==='declarado'&&f.categoriaB===true;
+}
+
+/* A receita é a caução de um direito real de habitação duradoura? A caução
+   que o morador entrega na escritura não é rendimento (DL 1/2020; o quadro 4.3 só leva a prestação anual da caução do 11.º ano em diante e a
+   dedução por incumprimento, naturezas 02 e 03): sem recibo de renda (D120).
+   Recebe: papel — o papel da receita (irs-papeis.js:irsReceitaDe); c — o
+   contrato dela (aguenta null).
+   Devolve: true ou false. */
+function pzCaucaoDoDhd(papel,c){
+  return papel==='caucao'&&!!c&&fiscoDe(c).finalidade==='dhd';
+}
+
 /* Quem pode marcar uma coisa feita num contrato (a comunicação de fevereiro, o
    envio ao IHRU): quem o pode alterar, como na ficha.
    Recebe: c — o contrato.
@@ -185,7 +229,8 @@ function pzPodeMarcar(c){return !!c&&!!podeEditar(c.propertyId,'contract.add',c)
 
 /* Todos os prazos do portefólio que já entraram na janela de aviso, do mais
    urgente para o menos. Função pura sobre o db; os testes passam o dia.
-   As fontes: contratos em vigor com fim (a oposição, pela antecedência da
+   As fontes: contratos em vigor com fim de um imóvel em Portugal (num de
+   fora vale a lei do país dele — PZ_LEI_DO_PAIS) (a oposição, pela antecedência da
    lei — pzOposicao —, e o fim, que num ativo com o termo passado pede para
    registar a renovação), o aumento anual (o aviso de 30 dias), os cartões de
    cidadão de inquilinos ativos e de proprietários, os certificados
@@ -201,7 +246,12 @@ function pzPodeMarcar(c){return !!c&&!!podeEditar(c.propertyId,'contract.add',c)
    período pesar numa declaração por entregar, e outro no ano seguinte à
    cessação de um período com redução; o envio ao IHRU do RSAA, até se marcar
    o dia; e o Modelo 44 de quem teve a dispensa no ano anterior. Nada nasce
-   de um contrato «não declarado».
+   de um contrato «não declarado», e nenhum prazo da AT de um imóvel fora de
+   Portugal (pzForaDePortugal: as rendas dele vão ao Anexo J, que a entrega
+   do IRS diz). As rendas da categoria B (pzCategoriaB) guardam o Modelo 2 e
+   os recibos, sem a comunicação de fevereiro, e vão ao Anexo B ou C; a
+   caução de um direito real de habitação duradoura não é renda nem pede
+   recibo (pzCaucaoDoDhd).
    Recebe: hoje (opcional) — data ISO de referência; sem ela usa o dia real.
    Devolve: lista de {chave, tipo, titulo, sub, alvo, dias, urg, abrir}, do
    mais urgente para o menos e os sem data no fim; `abrir` é código para o
@@ -231,6 +281,10 @@ function prazosDe(hoje){
        Era o ctVivo que decidia isto, pelo dia REAL — o «fim» morria no próprio
        dia em que passava, e um teste com hoje fingido só passava por acaso. */
     if(c.active===false||irsCessacao(c).data)return;
+    /* um imóvel fora de Portugal: o arrendamento segue a lei do país do imóvel
+       (Regulamento Roma I, art. 4.º n.º 1 c)), e não o Código Civil — sem a
+       oposição, o fim nem o aumento daqui (PZ_LEI_DO_PAIS) */
+    if(pzForaDePortugal(c.propertyId))return;
     const nome=c.name||propName(c.propertyId)||'contrato';
     /* o toque abre a ficha do contrato (tocar num registo é lê-lo; o «Editar»
        está lá para quem pode) — só com os Contratos ligados nesta conta; sem
@@ -253,7 +307,7 @@ function prazosDe(hoje){
          do selo sobre o aumento (CIS art. 60.º; TGIS verba 2; FAQ 5069) */
       poe('aumento',c.id+':'+aniv,aviso,'Aumento anual da renda — '+nome,
         'Para valer a '+dPT(aniv)+', o aviso ao inquilino (30 dias) segue até '+dPT(aviso)+'. Renda '+euro(c.rent)+' '+(c.increase>0?'+':'')+c.increase+'%.'
-        +(ctDeclarado(c)?' A atualização pelo coeficiente legal não se comunica à AT: a renda nova vai no recibo. Um aumento combinado com o inquilino comunica-se pelo Modelo 2 até ao fim do mês seguinte, e o imposto do selo que paga é dedutível no Anexo F.':''),abrir,false);
+        +(ctDeclarado(c)&&!pzForaDePortugal(c.propertyId)?' A atualização pelo coeficiente legal não se comunica à AT: a renda nova vai no recibo. Um aumento combinado com o inquilino comunica-se pelo Modelo 2 até ao fim do mês seguinte, e o imposto do selo que paga é dedutível no Anexo F.':''),abrir,false);
     }
   });
 
@@ -273,17 +327,25 @@ function prazosDe(hoje){
      terminou não pede o Modelo 2 do início */
   const vivoEm=c=>c.active!==false&&!(c.end&&c.end<h)&&!irsCessacao(c).data;
   const desde=pzIso(new Date(ano,Number(h.slice(5,7))-1-3,1));   // primeiro dia de há três meses
-  let houveRendasEmY=false,houveRecibosEmY=false;
+  /* os anexos das rendas do ano anterior: o F, o J (imóveis fora de Portugal,
+     D133) e o B ou C (as rendas da categoria B, D134) */
+  let houveRendasEmY=false,houveRecibosEmY=false,houveJEmY=false,houveBEmY=false;
   (db.transactions||[]).forEach(t=>{
     if(!t||!t.date)return;
     const papel=irsReceitaDe(t).papel;
     if(PZ_PAPEIS_ANEXO_F.indexOf(papel)<0)return;
     const c=t.contractId?contract(t.contractId):null;
     if(c&&ctNaoDeclarado(c))return;
+    /* a caução de um DHD não é rendimento: nem recibo nem Anexo F (D120) */
+    if(pzCaucaoDoDhd(papel,c))return;
+    const doAno=t.date.slice(0,4)===String(Y);
+    /* um imóvel fora de Portugal: Anexo J, sem recibo de renda (D133) */
+    if(pzForaDePortugal(c?c.propertyId:t.propertyId)){if(doAno)houveJEmY=true;return}
     const pede=PZ_PAPEIS_RECIBO.indexOf(papel)>-1;
     /* uma renda sem contrato (ou de contrato entretanto apagado) é renda na
-       mesma: conta para o Anexo F, e a página Declaração lista-a à parte */
-    if(t.date.slice(0,4)===String(Y)){houveRendasEmY=true;if(pede)houveRecibosEmY=true}
+       mesma: conta para o Anexo F, e a página Declaração lista-a à parte. As
+       da categoria B vão ao Anexo B ou C, com o recibo como as outras */
+    if(doAno){if(pzCategoriaB(c))houveBEmY=true;else houveRendasEmY=true;if(pede)houveRecibosEmY=true}
     /* o recibo é de quitação: passa-se quando se recebe (CIRS art. 115.º n.º
        5 a); a lei não lhe dá outro prazo, e o «fim do mês seguinte» que aqui
        havia era o do Modelo 2). Uma receita com data à frente ainda não se
@@ -301,7 +363,11 @@ function prazosDe(hoje){
   });
   (db.contracts||[]).forEach(c=>{
     if(ctNaoDeclarado(c))return;
+    /* um imóvel fora de Portugal não tem prazos da AT: nem Modelo 2, nem
+       cessação, nem comunicação de fevereiro, nem IHRU (D133) */
+    if(pzForaDePortugal(c.propertyId))return;
     const nome=nomeDe(c),abrir=servicoLigado('contracts')?`ctView('${jsq(c.id)}')`:'',pode=pzPodeMarcar(c),id=jsq(c.id);
+    const dhd=fiscoDe(c).finalidade==='dhd',catB=pzCategoriaB(c);
     if(ctFiscoPorIndicar(c)&&c.start&&vivoEm(c)){
       if(c.start<PZ_MODELO2_DESDE){
         /* sem Modelo 2 nem prazo (FAQ 1523 e 1525 da AT): fica um aviso sem
@@ -311,8 +377,14 @@ function prazosDe(hoje){
           alvo:h,dias:0,urg:'info',abrir:abrir,semData:true});
       }else{
         const alvo=fimDoMesSeguinte(c.start);
+        /* o DHD regista-se também pelo Modelo 2, e é esse registo que dá o
+           n.º que o quadro 4.3 pede; o imposto do selo dele não é o de uma
+           renda (fica sem a frase) */
         poe('modelo2',c.id+':'+alvo,alvo,'Comunicar o contrato à AT (Modelo 2) — '+nome,
-          'Até '+dPT(alvo)+', o fim do mês seguinte ao início. Com ele paga-se o imposto do selo (10 % de uma renda), que é dedutível no Anexo F: regista-o como despesa. Se já o comunicaste, ou se não vais declarar este contrato, marca-o na ficha e este aviso desaparece.',
+          'Até '+dPT(alvo)+', o fim do mês seguinte ao início. '
+          +(dhd?'É esse registo que dá o n.º do contrato que o quadro '+(vY.quadros.dhd||'')+' do Anexo F pede. '
+            :'Com ele paga-se o imposto do selo (10 % de uma renda), que é dedutível no Anexo F: regista-o como despesa. ')
+          +'Se já o comunicaste, ou se não vais declarar este contrato, marca-o na ficha e este aviso desaparece.',
           abrir,true);
       }
     }
@@ -335,7 +407,9 @@ function prazosDe(hoje){
        pelo dia em que acabou. Nos contratos com redução pela duração, a
        Portaria 110/2019 (art. 2.º c)) pede ainda a data e o motivo até 15 de
        fevereiro do ano seguinte (o 15 de fevereiro da cessação, mais abaixo) */
-    const fimR=pzDiaDaCessacao(c,h),segR=fimR?irsTaxaNaData(c,fimR):null,comRed=!!(segR&&segR.reducao);
+    /* nas rendas da categoria B não há taxa autónoma, nem redução pela
+       duração a comunicar em fevereiro (D134) */
+    const fimR=pzDiaDaCessacao(c,h),segR=fimR&&!catB?irsTaxaNaData(c,fimR):null,comRed=!!(segR&&segR.reducao);
     const fev15Ces=comRed?irsAno(Number(fimR.slice(0,4))).prazos.comunicacaoDuracao:'';
     if(fimR){
       const alvo=fimDoMesSeguinte(fimR);
@@ -354,7 +428,7 @@ function prazosDe(hoje){
        anterior já não pesa em nenhuma declaração por entregar. O «feito»
        grava pela chave do período (o ano do início), como a ficha */
     const ps=irsPeriodos(c),iniY=Y+'-01-01',vistos={};
-    irsPrazosDeComunicacao(c).forEach(x=>{
+    (catB?[]:irsPrazosDeComunicacao(c)).forEach(x=>{
       if(x.data||!x.prazo||vistos[x.chave])return;
       vistos[x.chave]=1;
       if(fimR&&x.periodoInicio>fimR)return;
@@ -386,10 +460,15 @@ function prazosDe(hoje){
       'Quem tem dispensa do recibo de renda eletrónico entrega, até '+dPT(alvo)+', a declaração anual das rendas (Modelo 44) no Portal das Finanças: as rendas recebidas em '+Y+', discriminadas. É ela que faz as vezes dos recibos que não se emitiram.',
       servicoLigado('fisco')?"go('fisco')":'',true);
   }
-  if(houveRendasEmY){
-    const alvo=vY.entrega.ate;
-    poe('irs',String(Y),alvo,'Entregar o IRS — Anexo F de '+Y,
-      'De '+irsDiaMes(vY.entrega.de)+' a '+irsDiaMes(alvo)+'.'+(servicoLigado('fisco')?' A página Declaração tem as linhas dos quadros 4.1 e 4.2 e o que ainda falta.':''),
+  /* a entrega do IRS diz os anexos das rendas do ano: o F, o B ou C das da
+     categoria B e o J das de imóveis fora de Portugal */
+  if(houveRendasEmY||houveBEmY||houveJEmY){
+    const alvo=vY.entrega.ate,letras=[houveRendasEmY?'F':'',houveBEmY?'B (ou C)':'',houveJEmY?'J':''].filter(Boolean);
+    const anexos=(letras.length>1?'Anexos '+letras.slice(0,-1).join(', ')+' e '+letras[letras.length-1]:'Anexo '+letras[0]);
+    poe('irs',String(Y),alvo,'Entregar o IRS — '+anexos+' de '+Y,
+      'De '+irsDiaMes(vY.entrega.de)+' a '+irsDiaMes(alvo)+'.'+(houveRendasEmY&&servicoLigado('fisco')?' A página Declaração tem as linhas dos quadros 4.1 e 4.2 e o que ainda falta.':'')
+      +(houveBEmY?' As rendas da categoria B vão ao Anexo B ou C, com a tua atividade.':'')
+      +(houveJEmY?' As rendas dos imóveis fora de Portugal vão ao Anexo J, com o imposto pago lá.':''),
       servicoLigado('fisco')?"go('fisco')":'',false);
   }
 

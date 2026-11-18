@@ -136,7 +136,11 @@ if (require.main === module) {
     console.log('     escalões do art. 68.º e a solidariedade do 68.º-A, que o OE muda quase todos os anos).');
     console.log('  2. A portaria que aprova o Modelo 3 dos rendimentos de ' + para + ' (fev/mar de ' + (para + 1) + ') e o ofício-circulado da AT:');
     console.log('     quadros, colunas e códigos (`quadros`, `colunas`, `colunasNomes`, `naturezas`, `naturezasTexto`, `quadro5`,');
-    console.log('     `quadro10` — os regimes e os motivos). Quando sair: `modelo.oficial = true` e o texto.');
+    console.log('     `quadro10` — os regimes e os motivos; `quadro43` — as colunas, as naturezas e os motivos do DHD, com o');
+    console.log('     `taxas.dhd`; `anexoJ` — o quadro e o código dos imóveis fora de Portugal; `quadros.campos` — o primeiro campo');
+    console.log('     de cada quadro de linhas). Quando sair: `modelo.oficial = true` e o texto.');
+    console.log('     E os `beneficios` (6A, 6B, 6C): o `vigenteAte` do 6C (o OE prorrogou-o?), a vigência do 6B (EBF 59.º-I) e a');
+    console.log('     doutrina do 6A (a PIV da AT em vigor sobre a data de compra).');
     console.log('  3. O IAS de ' + para + ' (`ias`, a portaria do IAS sai em dezembro/janeiro) e, no fim, `revisto` com a data da revisão.');
     console.log('  4. As `novidades`: trocar a frase provisória pelo que mudou, em frases para quem declara.');
     console.log('  5. Os `passos`: os factos com número (escalões, limites) e o que o modelo novo mudou — sem anos escritos.');

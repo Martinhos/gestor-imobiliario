@@ -381,3 +381,14 @@ describe('apagar uma linha importada fica entre as apagadas de propósito, e o A
     assert.deepEqual([...app.db.settings.swIgnoradas], [], 'e a linha deixa de estar entre as apagadas');
   });
 });
+
+describe('D122 e D126 — uma despesa reposta pela Declaração não volta a entrar ao reimportar', () => {
+  test('a chave da reposição (sem a categoria do CSV) conta como a mesma linha', () => {
+    // uma despesa antiga, reposta pelo «Repor o total» da Declaração: o total e a chave sem a categoria
+    const t = app.normTx({ kind: 'expense', src: 'splitwise', label: 'Condomínio', amount: 60, propertyId: 'v1', date: '2026-01-05', category: 'Condomínio', sub: '' });
+    t.swKey = app.fiscoAvChaveSplitwise(t, 60);
+    app.db.transactions.push(t);
+    importar(csv(['2026-01-05,Condomínio,Condomínio,60.00,EUR,60.00,-60.00']), { desde: '' });
+    assert.equal(doSplitwise().length, 1, 'não duplica a despesa reposta');
+  });
+});

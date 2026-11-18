@@ -265,7 +265,9 @@ function swPrepare(opts){
     l.col=irsColunaDe(normTx({kind:'expense',category:l.category,sub:l.sub,amount:1})).col;
     l.swKey=swChave(iso,desc,custo,catCsv);
     const n=(vistas.get(l.swKey)||0)+1;vistas.set(l.swKey,n);
-    const ja=(naBase.get(l.swKey)||0)+antigas.filter(t=>t.date===iso&&t.label===l.label&&Math.abs((Number(t.amount)||0)-custo)<0.005).length;
+    /* uma despesa reposta pela Declaração (fisco-avisos.js:fiscoAvChaveSplitwise) tem a chave sem a
+       categoria do CSV: conta como a mesma linha */
+    const ja=(naBase.get(l.swKey)||0)+(catCsv?(naBase.get(swChave(iso,desc,custo,''))||0):0)+antigas.filter(t=>t.date===iso&&t.label===l.label&&Math.abs((Number(t.amount)||0)-custo)<0.005).length;
     if(desde&&iso<desde)l.tipo='antes';
     else if(ign.has(l.swKey))l.tipo='ignorada';
     else if(n<=ja)l.tipo='repetida';

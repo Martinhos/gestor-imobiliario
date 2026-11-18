@@ -2058,6 +2058,7 @@ var ACOES_RASTO = {
   abrirSeletorFicheiros: 'Escolher ficheiros', selecionarCampo: 'Selecionar a ligação',
   // imóveis
   propModal: 'Adicionar ou editar imóvel', propView: 'Abrir o imóvel', delProp: 'Apagar o imóvel', seed: 'Carregar exemplo',
+  fiscoAvReporSplitwise: 'Repor o total das despesas do Splitwise', imvFreguesiaCorrigir: 'Corrigir o código', imvFreguesiaGuardar: 'Guardar o imóvel (sem confirmar ou confirmado na caderneta)', imvMatrizCorrigir: 'Corrigir o código da freguesia', imvMatrizConfirmar: 'Confirmei na caderneta',
   imvGaleria: 'Ver as fotografias', marcarVisitaNoImovel: 'Marcar visita', contratoNoQuarto: 'Novo contrato',
   delPropOwner: 'Remover proprietário', addPropOwner: 'Adicionar proprietário', delRoom: 'Remover quarto', addRoom: 'Adicionar quarto',
   addLoan: 'Adicionar crédito', delLoan: 'Remover crédito', setLType: 'Escolher o tipo de crédito',

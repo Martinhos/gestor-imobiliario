@@ -9,7 +9,11 @@ let pForm={};
    (imvQuotasDoFormulario: somam 100 com os de fora, D93); mudá-las num
    imóvel que já existe pergunta desde quando valem (imvPerguntarDesde) e
    guarda as de antes no quotasHist (imvFecharQuotas, D29). O
-   subarrendamento pede o NIF do senhorio e a renda paga (D52).
+   subarrendamento pede o NIF do senhorio e a renda paga (D52). O código da
+   freguesia aceita as letras da AT (D136), e o de uma união desagregada em
+   2025 por confirmar pergunta antes de gravar (imvPerguntarFreguesia, D135);
+   o imóvel reabilitado (6A) pede as datas e a data de aquisição (D117), e o
+   país fora de Portugal o código da tabela X com três algarismos (D133).
    Recebe: id (opcional) — o id do imóvel a editar; sem id, cria um imóvel novo.
    Devolve: nada — abre o modal e deixa a gravação pendurada em onSave. */
 function propModal(id){
@@ -27,13 +31,16 @@ function propModal(id){
     if(!pForm.name.trim())return falhaCampo('p_name','Dá um nome ao imóvel.');
     /* o campo vive numa dobra que pode estar fechada (display:none): o falhaCampo
        não chega a um campo escondido, por isso abre-se a dobra primeiro */
-    if(pForm.freguesiaCodigo&&!/^\d{6}$/.test(pForm.freguesiaCodigo)){
+    /* o código da AT: quatro algarismos (distrito e concelho) e dois caracteres
+       que podem ser letras (0302FE, 0308FA — D136) */
+    if(pForm.freguesiaCodigo&&!IMV_FREGUESIA_FORMATO.test(pForm.freguesiaCodigo)){
       const f=document.getElementById('fold_reg');if(f&&!f.classList.contains('open'))toggleFold('reg');
-      return falhaCampo('p_freguesiaCodigo','O código da freguesia tem 6 dígitos.');
+      return falhaCampo('p_freguesiaCodigo','O código da freguesia tem 6 caracteres (distrito, concelho e freguesia), como na caderneta.');
     }
-    const errSub=imvSubErro(pForm);
+    const errSub=imvSubErro(pForm)||imvPaisErro(pForm)||imvReabErro(pForm);
     if(errSub){
-      const f=document.getElementById('fold_reg');if(f&&f.classList&&!f.classList.contains('open'))toggleFold('reg');
+      /* a data de aquisição está no grupo dos valores, sempre aberto */
+      const f=errSub.campo==='p_purchaseDate'?null:document.getElementById('fold_reg');if(f&&f.classList&&!f.classList.contains('open'))toggleFold('reg');
       return falhaCampo(errSub.campo,errSub.msg);
     }
     /* as quotas à mão só existem sem nuvem (com ela são da proposta, cloud/utilizadores.js) */
@@ -49,21 +56,221 @@ function propModal(id){
     /* a redução de spread tem «Durante (meses)» obrigatório (loanProdLinha) */
     const semMeses=servicoLigado('credits')?loanProdSemMeses(pForm.loans):'';
     if(semMeses)return falhaCampo(semMeses,LOAN_PROD_FRASES.semMeses);
-    /* as quotas de um imóvel que já existe mudaram: desde quando valem as novas? (D29) */
-    const guardado=locais?prop(pForm.id):null,muda=guardado?imvComoMudamAsQuotas(guardado,pForm):'';
-    if(muda==='paraTras')imvFecharQuotas(pForm,guardado,'');
-    if(muda==='comData')return imvPerguntarDesde(desde=>{imvFecharQuotas(pForm,guardado,desde);imvGravarFormulario(id)});
-    imvGravarFormulario(id);
+    const seguir=()=>{
+      /* as quotas de um imóvel que já existe mudaram: desde quando valem as novas? (D29) */
+      const guardado=locais?prop(pForm.id):null,muda=guardado?imvComoMudamAsQuotas(guardado,pForm):'';
+      if(muda==='paraTras')imvFecharQuotas(pForm,guardado,'');
+      if(muda==='comData')return imvPerguntarDesde(desde=>{imvFecharQuotas(pForm,guardado,desde);imvGravarFormulario(id)});
+      imvGravarFormulario(id);
+    };
+    /* o código de uma união de freguesias desagregada em 2025, por confirmar na
+       caderneta atual: pergunta antes de gravar (D135) */
+    const uniao=pForm.matrizConfirmada?null:imvFreguesiaUniao(pForm);
+    if(uniao)return imvPerguntarFreguesia(uniao,seguir);
+    seguir();
   };
 }
+/* O formato do código da freguesia da AT (D136): distrito e concelho em quatro
+   algarismos e a freguesia em dois caracteres, que podem ser letras — 110623,
+   0302FE, 0308FA. É o que o formulário aceita; o dados.js:normProp guarda as
+   maiúsculas cortadas a seis sem impor o formato inteiro. */
+const IMV_FREGUESIA_FORMATO=/^\d{4}[0-9A-Z]{2}$/;
+/* O código de freguesia como o formulário o guarda: sem espaços e em maiúsculas
+   (a caderneta escreve 0302FE; quem digita escreve 0302fe).
+   Recebe: v — o que está no campo.
+   Devolve: o código (texto; '' sem nada). */
+function imvCodigoFreguesia(v){return String(v==null?'':v).replace(/\s+/g,'').toUpperCase()}
+/* A união de freguesias extinta em outubro de 2025 (Lei 25-A/2025) a que
+   pertence o código de um imóvel em Portugal (irs-freguesias-2025.js:freguesiaReposta).
+   Um imóvel fora de Portugal não tem freguesia da AT.
+   Recebe: p — o imóvel (o do formulário ou o da base).
+   Devolve: {uniao:{codigo, nome}, repostas:[{codigo, nome}]}, ou null. */
+function imvFreguesiaUniao(p){
+  if(!p||String(p.pais||'').trim())return null;
+  const c=imvCodigoFreguesia(p.freguesiaCodigo);
+  return c?freguesiaReposta(c):null;
+}
+/* A frase do aviso de uma união extinta, com as freguesias repostas pelo
+   código e pelo nome (os da tabela da AT; o nome da união não se mostra: na
+   tabela vem em maiúsculas e às vezes abreviado).
+   Recebe: rep — o que imvFreguesiaUniao devolve.
+   Devolve: o texto (sem HTML; quem o põe na página escapa-o). */
+function imvFreguesiaFrase(rep){
+  const rs=((rep&&rep.repostas)||[]).map(r=>r.codigo+' '+r.nome);
+  const lista=rs.length<2?(rs[0]||''):rs.slice(0,-1).join(', ')+' ou '+rs[rs.length-1];
+  return 'O código '+rep.uniao.codigo+' é o de uma união de freguesias desagregada em outubro de 2025 (Lei 25-A/2025). '
+    +'O prédio passou para '+(rs.length>1?'uma destas: ':'')+lista+', e o artigo pode ter mudado. Confirma na caderneta predial atual.';
+}
+/* O que a pergunta da união extinta corre quando a pessoa responde (a gravação
+   do formulário); null sem pergunta aberta. */
+let imvFreguesiaSeguir=null;
+/* A pergunta ao guardar um imóvel com o código de uma união extinta que ainda
+   não se confirmou na caderneta (D135): corrigir o código, guardar assim, ou
+   dizer que se confirmou (grava o dia em matrizConfirmada). A app não troca o
+   código: só a caderneta diz qual das freguesias repostas é a do prédio.
+   Recebe: rep — a união (imvFreguesiaUniao); seguir — a função que grava.
+   Devolve: nada — abre a pergunta. */
+function imvPerguntarFreguesia(rep,seguir){
+  imvFreguesiaSeguir=seguir;
+  openModal('Confirma o código da freguesia',`<div class="form"><div class="hint u-fs-14px">${esc(imvFreguesiaFrase(rep))}</div>
+    <div class="hint">Nas declarações de substituição de 2024 e antes, o código da união é o certo. Sem a caderneta à mão, guarda assim: a ficha e a Declaração lembram-te.</div>
+    <div class="imv-botoes"><button type="button" class="btn" data-toca="camada" data-click="imvFreguesiaCorrigir()">Corrigir o código</button></div></div>`,
+    `<button type="button" class="btn" data-toca="dados" data-click="imvFreguesiaGuardar(0)">Guardar sem confirmar</button><button type="button" class="btn primary" data-toca="dados" data-click="imvFreguesiaGuardar(1)">Confirmei na caderneta</button>`);
+}
+/* A resposta à pergunta da união extinta: fecha-a e grava o imóvel; com
+   «Confirmei na caderneta», com o dia de hoje em matrizConfirmada.
+   Recebe: confirmei — 1 (confirmou na caderneta atual) ou 0 (guarda sem confirmar).
+   Devolve: nada. */
+function imvFreguesiaGuardar(confirmei){
+  const f=imvFreguesiaSeguir;imvFreguesiaSeguir=null;
+  closeModal();
+  if(confirmei)pForm.matrizConfirmada=today();
+  if(f)f();
+}
+/* «Corrigir o código»: fecha a pergunta e volta ao campo do código, com a
+   dobra dos dados registais aberta.
+   Devolve: nada. */
+function imvFreguesiaCorrigir(){
+  imvFreguesiaSeguir=null;
+  closeModal();
+  const f=document.getElementById('fold_reg');if(f&&f.classList&&!f.classList.contains('open'))toggleFold('reg');
+  const e=document.getElementById('p_freguesiaCodigo');try{if(e&&e.focus)e.focus()}catch(x){}
+}
+/* Se o código e o artigo se confirmaram na caderneta atual (D135), com o aviso da
+   união extinta quando o código é o de uma: o pedaço do formulário por baixo do
+   código e do artigo, que se repinta sozinho enquanto se escreve (imvMatrizEscrito).
+   Só num imóvel em Portugal com o código ou o artigo escritos.
+   Recebe: p — o imóvel do formulário.
+   Devolve: o HTML (texto; '' sem nada a dizer). */
+function imvMatrizHtml(p){
+  if(!p||String(p.pais||'').trim()||!(p.freguesiaCodigo||String(p.matrix||'').trim()))return '';
+  const rep=imvFreguesiaUniao(p),conf=p.matrizConfirmada;
+  return `${rep?`<div class="imv-nota imv-nota-aviso small">${esc(imvFreguesiaFrase(rep))}</div>`:''}
+      <label class="check"><input type="checkbox" id="p_matrizConfirmada"${conf?' checked':''}> Confirmei o código e o artigo na caderneta predial atual</label>
+      <div class="hint u-mt-n4px">${conf?'Confirmado a '+dPT(conf)+'. Mudar o código ou o artigo pede outra confirmação.':'Opcional. A Declaração lembra-te dos códigos que mudaram desde então.'}</div>`;
+}
+/* O código da freguesia ou o artigo mudou no formulário: guarda-os em pForm, e
+   a confirmação na caderneta, que era a dos de antes, cai (D135). Repinta só o
+   pedaço de baixo (imvMatrizHtml): o foco fica no campo.
+   Devolve: nada. */
+function imvMatrizEscrito(){
+  const c=imvCodigoFreguesia(val('p_freguesiaCodigo')),m=val('p_matrix');
+  if(c!==imvCodigoFreguesia(pForm.freguesiaCodigo)||String(m)!==String(pForm.matrix||'')){pForm.freguesiaCodigo=c;pForm.matrix=m;pForm.matrizConfirmada=''}
+  const b=document.getElementById('imv_matriz');if(b)b.innerHTML=imvMatrizHtml(pForm);
+}
+/* «Confirmei na caderneta», no cartão dos dados registais da ficha (D135): o
+   dia de hoje em matrizConfirmada.
+   Recebe: id — o id do imóvel.
+   Devolve: nada — grava e repinta. */
+function imvMatrizConfirmar(id){
+  const x=prop(id);if(!x)return;
+  if(!pode(id,'house.edit'))return toast(fraseSemPerm('house.edit'));
+  x.matrizConfirmada=today();save();render();toast('Código e artigo confirmados na caderneta atual.');
+}
+/* «Corrigir», no aviso da ficha: o formulário do imóvel com os dados registais
+   abertos e o foco no código da freguesia.
+   Recebe: id — o id do imóvel.
+   Devolve: nada — abre o formulário. */
+function imvMatrizCorrigir(id){
+  if(!prop(id))return;
+  propModal(id);
+  const f=document.getElementById('fold_reg');if(f&&f.classList&&!f.classList.contains('open'))toggleFold('reg');
+  const e=document.getElementById('p_freguesiaCodigo');try{if(e&&e.focus)e.focus()}catch(x){}
+}
+/* O país do imóvel no formulário (D133): em branco é Portugal; com outro país,
+   o código da tabela X (o Anexo J pede-o) e a frase de que as rendas vão ao
+   Anexo J e não ao Anexo F. Repinta-se sozinho enquanto se escreve (imvPaisEscrito).
+   Recebe: p — o imóvel do formulário.
+   Devolve: o HTML (texto). */
+function imvPaisHtml(p){
+  if(!String(p.pais||'').trim())return '<div class="hint u-mt-n4px">Em branco: Portugal.</div>';
+  return `<label>Código do país (tabela X)<input id="p_paisCodigo" value="${esc(p.paisCodigo||'')}" inputmode="numeric" maxlength="3" placeholder="Opcional" autocomplete="off"></label>
+      <div class="hint u-mt-n4px">Um imóvel fora de Portugal não vai ao Anexo F: as rendas, os gastos e o imposto pago lá declaram-se no Anexo J (quadro 7A), com o código do país da tabela X das instruções. Sem freguesia, artigo, Modelo 2 nem recibos da AT.</div>`;
+}
+/* O país mudou no formulário: guarda-o em pForm e repinta só o código e a
+   frase de baixo (imvPaisHtml), para o foco ficar no campo.
+   Devolve: nada. */
+function imvPaisEscrito(){
+  const e=document.getElementById('p_paisCodigo');if(e)pForm.paisCodigo=String(e.value||'').trim();
+  pForm.pais=val('p_pais');
+  const b=document.getElementById('imv_pais');if(b)b.innerHTML=imvPaisHtml(pForm);
+}
+/* O que está mal no país do formulário: o código da tabela X, se escrito, tem
+   três algarismos (dados.js:codigoDoPais).
+   Recebe: p — o imóvel do formulário.
+   Devolve: {campo, msg} ou null. */
+function imvPaisErro(p){
+  if(!p||!paisDoImovel(p.pais)||!String(p.paisCodigo||'').trim())return null;
+  return codigoDoPais(String(p.paisCodigo).trim())?null:{campo:'p_paisCodigo',msg:'O código do país tem 3 algarismos, como na tabela X das instruções do Anexo J.'};
+}
+/* Um benefício do quadro 6 tal como a versão das regras do ano o escreve
+   (irs-AAAA.js:beneficios): as condições e os textos vêm de lá.
+   Recebe: id — 'reab71' (6A) ou 'lojaHistoria' (6B).
+   Devolve: o objeto da versão do ano corrente, ou null. */
+function imvBeneficio(id){return (irsAno(YEAR).beneficios||[]).find(b=>b&&b.id===id)||null}
+/* Uma data das regras escrita por extenso: «6 de outubro de 2023».
+   Recebe: d — 'AAAA-MM-DD'.
+   Devolve: o texto ('' sem data). */
+function imvDiaPorExtenso(d){const s=String(d||''),dm=irsDiaMes(s);return dm?dm+' de '+s.slice(0,4):''}
+/* As afetações da caderneta que não são habitação: só nelas se pergunta pela
+   Loja com História (o 6B é de imóveis não habitacionais). */
+const IMV_NAO_HABITACAO=['comercio','servicos','industria','outros'];
+/* Os benefícios do quadro 6 que são do imóvel (D117, D121): o imóvel
+   reabilitado (6A), com o tipo, o início e a conclusão, o certificado da
+   câmara e a data de aquisição (diz se já eras dono no dia que a versão
+   escreve), e a Loja com História (6B), só num imóvel não habitacional (ou já
+   marcado, para se poder desmarcar). As condições lê-as o motor
+   (irs.js:irsBeneficiosAvaliados); aqui escreve-se o que ele usa.
+   Recebe: p — o imóvel do formulário.
+   Devolve: o HTML (texto). */
+function imvBeneficiosHtml(p){
+  const R=p.reabilitacao||{},b=imvBeneficio('reab71'),l=imvBeneficio('lojaHistoria');
+  const tipos=[{v:'',label:'Não'},{v:'aru',label:'Sim, numa área de reabilitação urbana (ARU)'},{v:'nrau',label:'Sim, arrendado no NRAU e reabilitado'}];
+  const reab=`<label>Imóvel reabilitado (quadro 6A)${sel('p_reabTipo',R.tipo||'',tipos,'imvReabMudou','rascunho')}</label>
+      ${R.tipo?`<div class="row">
+        <label>Início da reabilitação <span class="req">*</span><input id="p_reabInicio" type="date" value="${esc(R.inicio||'')}"></label>
+        <label>Conclusão <span class="req">*</span><input id="p_reabConclusao" type="date" value="${esc(R.conclusao||'')}"></label></div>
+      <label class="check"><input type="checkbox" id="p_reabCertificado"${R.certificado?' checked':''}> Tenho o certificado da câmara do início e da conclusão</label>`:''}
+      <div class="hint${R.tipo?' u-mt-n4px':''}">${b?esc(b.texto)+' A data de aquisição, em Valores, diz se já eras dono'+(b.donoEm?' a '+imvDiaPorExtenso(b.donoEm):'')+'.'+(R.tipo&&b.aviso?' '+esc(b.aviso):''):''}</div>`;
+  const loja=l&&(IMV_NAO_HABITACAO.indexOf(p.afetacao)>-1||p.lojaComHistoria)?`<label class="check"><input type="checkbox" id="p_lojaHistoria"${p.lojaComHistoria?' checked':''}> Reconhecido como Loja com História (Lei 42/2017)</label>
+      <div class="hint u-mt-n4px">${esc(l.texto)} Quadro 6B.</div>`:'';
+  return reab+loja;
+}
+/* O tipo da reabilitação mudou: com «Não» os dados dela escondem-se (e saem ao
+   guardar); com um tipo, aparecem o início, a conclusão e o certificado.
+   Devolve: nada — repinta o formulário. */
+function imvReabMudou(){collectProp();repaintProp()}
+/* A afetação mudou: mostra (ou esconde) a Loja com História.
+   Devolve: nada — repinta o formulário. */
+function imvAfetacaoMudou(){collectProp();repaintProp()}
+/* O que falta no imóvel reabilitado (6A) marcado: o início e a conclusão (a
+   conclusão não antes do início) e a data de aquisição, que diz se já eras
+   dono no dia da versão (PIV 28153).
+   Recebe: p — o imóvel do formulário.
+   Devolve: {campo, msg} ou null. */
+function imvReabErro(p){
+  const R=(p&&p.reabilitacao)||{};
+  if(!R.tipo)return null;
+  if(!dataExiste(String(R.inicio||'')))return {campo:'p_reabInicio',msg:'Indica quando começou a reabilitação.'};
+  if(!dataExiste(String(R.conclusao||'')))return {campo:'p_reabConclusao',msg:'Indica quando ficou concluída a reabilitação.'};
+  if(R.conclusao<R.inicio)return {campo:'p_reabConclusao',msg:'A conclusão é antes do início.'};
+  const b=imvBeneficio('reab71'),dono=b&&b.donoEm?imvDiaPorExtenso(b.donoEm):'';
+  if(!dataExiste(String(p.purchaseDate||'')))return {campo:'p_purchaseDate',msg:'Indica a data de aquisição: o 6A só vale se já eras dono'+(dono?' a '+dono:'')+'.'};
+  return null;
+}
 /* O fim do Guardar do formulário do imóvel, já validado: as hipotecas com
-   nome, o imóvel na base, os planeados da ficha, a pergunta das prestações
+   nome, a reabilitação e o país na forma guardada, o imóvel na base, os
+   planeados da ficha, a pergunta das prestações
    em falta e o aviso. Fecha a janela de cima, que é a do formulário (a
    pergunta «Desde quando?» fecha a dela antes de chamar).
    Recebe: id — o id com que o formulário abriu ('' ou nada num imóvel novo).
    Devolve: nada. */
 function imvGravarFormulario(id){
   (pForm.loans||[]).forEach(l=>{l.name=l.name||l.bank||'Hipoteca'});   /* a recorrência identifica-se pelo nome */
+  /* os campos da ronda 2 na forma do dados.js:normProp: a reabilitação desmarcada
+     sai inteira, e o código do país só fica com país */
+  if(!(pForm.reabilitacao||{}).tipo)pForm.reabilitacao={tipo:'',inicio:'',conclusao:'',certificado:false};
+  pForm.pais=paisDoImovel(pForm.pais);pForm.paisCodigo=pForm.pais?codigoDoPais(pForm.paisCodigo):'';
   /* a pergunta pelas prestações desde o início (creditos.js) cria movimentos numa hipoteca:
      corre com os Créditos e os Movimentos ligados nesta conta; o planeado da prestação só
      com os Planeados */
@@ -384,22 +591,34 @@ function imvFixas(p,c){
    distrito, tipo, tipologia, fração, andar, descrição, artigo, classe e
    validade do certificado energético) e, para quem vê os valores, o fiscal —
    o VPT (reparte os gastos quando só se arrenda parte do imóvel) e o dia em
-   que o imóvel foi comprado (o Anexo G).
+   que o imóvel foi comprado (o Anexo G). O país de um imóvel fora de
+   Portugal (D133), os benefícios do quadro 6 marcados (6A, 6B — D117, D121),
+   o dia em que o código e o artigo se confirmaram na caderneta e, num código
+   de uma união desagregada em 2025 por confirmar, o aviso com as freguesias
+   repostas e, a quem edita, «Corrigir» e «Confirmei na caderneta» (D135).
    Recebe: p — o imóvel; vRep — se o cargo deixa ver os valores.
    Devolve: o HTML do cartão, ou '' sem nada escrito. */
 function imvRegistais(p,vRep){
-  const reg=[p.freguesia||p.parish,p.freguesiaCodigo?'freguesia n.º '+p.freguesiaCodigo:'',p.concelho,p.distrito,
+  const R=p.reabilitacao||{},pais=String(p.pais||'').trim();
+  const reg=[pais?'país: '+pais+(p.paisCodigo?' (código '+p.paisCodigo+')':''):'',
+    p.freguesia||p.parish,p.freguesiaCodigo?'freguesia n.º '+p.freguesiaCodigo:'',p.concelho,p.distrito,
     p.tipoPredio==='U'?'urbano':p.tipoPredio==='R'?'rústico':'',p.tipologia,
     p.fraction?'fração '+p.fraction:'',p.floor,p.registry?'descrição predial n.º '+p.registry:'',p.matrix?'artigo '+p.matrix:'',
+    p.matrizConfirmada?'confirmados na caderneta a '+dPT(p.matrizConfirmada):'',
     p.afetacao?'afetação: '+imvAfetacaoNome(p.afetacao):'',p.energyClass?'classe '+p.energyClass:'',
     p.energyValid?'certificado válido até '+dPT(p.energyValid):''].filter(Boolean).map(esc).join(' · ');
   const sub=p.subarrendamento||{};
-  const fisco=vRep?[p.vpt?'VPT '+euro(p.vpt):'',p.purchaseDate?'adquirido a '+dPT(p.purchaseDate):'',
+  const benef=[R.tipo?'imóvel reabilitado ('+(R.tipo==='aru'?'ARU':'NRAU')+(R.certificado?', com certificado':', sem certificado')+') · quadro 6A':'',
+    p.lojaComHistoria?'Loja com História · quadro 6B':''].filter(Boolean).map(esc).join(' · ');
+  const fisco=[vRep?[p.vpt?'VPT '+euro(p.vpt):'',p.purchaseDate?'adquirido a '+dPT(p.purchaseDate):'',
     p.vendido?'vendido a '+dPT(p.vendido):'',
-    sub.ativo?'subarrendado: pagas '+euro2(sub.rendaMensal)+'/mês ao senhorio'+(sub.nifSenhorio?' (NIF '+esc(sub.nifSenhorio)+')':''):''].filter(Boolean).join(' · '):'';
+    sub.ativo?'subarrendado: pagas '+euro2(sub.rendaMensal)+'/mês ao senhorio'+(sub.nifSenhorio?' (NIF '+esc(sub.nifSenhorio)+')':''):''].filter(Boolean).join(' · '):'',benef].filter(Boolean).join(' · ');
+  const rep=p.matrizConfirmada?null:imvFreguesiaUniao(p),q=jsq(p.id),ed=rep&&!!p.id&&pode(p.id,'house.edit');
+  const aviso=rep?`<div class="imv-nota imv-nota-aviso small">${esc(imvFreguesiaFrase(rep))}${ed?`
+      <div class="imv-botoes u-mt-12px"><button type="button" class="btn sm" data-toca="camada" data-click="imvMatrizCorrigir('${q}')">Corrigir</button><button type="button" class="btn sm" data-toca="dados" data-click="imvMatrizConfirmar('${q}')">Confirmei na caderneta</button></div>`:''}</div>`:'';
   if(!reg&&!fisco)return '';
   return `<div class="card imv-sec">${imvCab('Dados registais e fiscais')}<div class="imv-sec-corpo">
-    ${reg?`<p class="small num"><b class="imv-rot">Registo</b> ${reg}</p>`:''}${fisco?`<p class="small num"><b class="imv-rot">Fiscal</b> ${fisco}</p>`:''}</div></div>`;
+    ${reg?`<p class="small num"><b class="imv-rot">Registo</b> ${reg}</p>`:''}${aviso}${fisco?`<p class="small num"><b class="imv-rot">Fiscal</b> ${fisco}</p>`:''}</div></div>`;
 }
 /* A galeria das fotos de um imóvel, numa janela: as miniaturas em grelha, e
    tocar numa abre-a (componentes.js:openMeta). É o botão da capa da ficha.
@@ -899,8 +1118,8 @@ function propBody(){
       <div class="imv-2col">
         <label>Valor de mercado (€)<input id="p_value" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.value)}" placeholder="Opcional" autocomplete="off"></label>
         <label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.purchase)}" placeholder="Opcional" autocomplete="off"></label></div>
-      <label>Data de aquisição<input id="p_purchaseDate" type="date" value="${p.purchaseDate||''}"></label>
-      <div class="hint imv-colado">Serve para o Anexo G, se um dia venderes.</div>
+      <label>Data de aquisição${(p.reabilitacao||{}).tipo?' <span class="req">*</span>':''}<input id="p_purchaseDate" type="date" value="${p.purchaseDate||''}"></label>
+      <div class="hint imv-colado">Serve para o Anexo G, se um dia venderes${(p.reabilitacao||{}).tipo?', e para o quadro 6A do imóvel reabilitado':''}.</div>
     </div>
     ${!servicoLigado('credits')?'':`<div class="sect imv-grupo">
       ${imvCab('Hipotecas',`<span class="small num">${ls.length?(ls.length+(ls.length===1?' hipoteca · ':' hipotecas · ')+euro2(payOf(p))+'/mês'):'nenhuma'}</span>`)}
@@ -914,17 +1133,19 @@ function propBody(){
     ${fixasSect()}
     ${fold('photos','Fotos',fileBlock('',p.photos||[],'p_photoin','propAddPhotos','delPropPhoto',{photos:true,move:1,hint:'A primeira foto é a capa do imóvel. Arrasta pelo puxador para reordenar.'}),{icon:'photo',open:!!(p.photos||[]).length,summary:(p.photos||[]).length?p.photos.length+' foto'+(p.photos.length===1?'':'s'):'a primeira é a capa'})}
     ${fold('reg','Dados registais e fiscais',`
+      <label>País<input id="p_pais" value="${esc(p.pais||'')}" placeholder="Opcional" autocomplete="off" data-input="imvPaisEscrito()"></label>
+      <div id="imv_pais">${imvPaisHtml(p)}</div>
       <div class="row">
         <label>Freguesia<input id="p_freguesia" value="${esc(p.freguesia||p.parish||'')}" placeholder="Opcional"></label>
         <label>Concelho<input id="p_concelho" value="${esc(p.concelho||'')}" placeholder="Opcional"></label></div>
       <div class="row3">
         <label>Distrito<input id="p_distrito" value="${esc(p.distrito||'')}" placeholder="Opcional"></label>
-        <label>Código da freguesia (opcional)<input id="p_freguesiaCodigo" value="${esc(p.freguesiaCodigo||'')}" inputmode="numeric" maxlength="6" placeholder="Ex: 110623" autocomplete="off"></label>
+        <label>Código da freguesia (opcional)<input id="p_freguesiaCodigo" value="${esc(p.freguesiaCodigo||'')}" inputmode="text" autocapitalize="characters" spellcheck="false" maxlength="6" placeholder="Ex: 110623" autocomplete="off" data-input="imvMatrizEscrito()"></label>
         <label>Tipo de prédio${sel('p_tipoPredio',p.tipoPredio||'',[{v:'',label:'—'},{v:'U',label:'Urbano'},{v:'R',label:'Rústico'}],'','rascunho')}</label></div>
       <div class="row">
         <label>Tipologia${sel('p_tipologia',p.tipologia||'',[{v:'',label:'—'}].concat(['T0','T1','T2','T3','T4','T5','T6'].map(x=>({v:x,label:x}))),'','rascunho')}</label>
         <label>VPT (€)<input id="p_vpt" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.vpt)}" placeholder="Opcional" autocomplete="off"></label></div>
-      <label>Afetação (da caderneta)${sel('p_afetacao',p.afetacao||'',IMV_AFETACOES,'','rascunho')}</label>
+      <label>Afetação (da caderneta)${sel('p_afetacao',p.afetacao||'',IMV_AFETACOES,'imvAfetacaoMudou','rascunho')}</label>
       <div class="row3">
         <label>Fração autónoma (opcional)<input id="p_fraction" value="${esc(p.fraction||'')}" placeholder="Ex: A"></label>
         <label>Andar (opcional)<input id="p_floor" value="${esc(p.floor||'')}" placeholder="Ex: 2.º"></label>
@@ -935,17 +1156,20 @@ function propBody(){
         <label>Código postal (opcional)<input id="p_postalCode" value="${esc(p.postalCode||'')}" placeholder="Ex: 1200-195"></label></div>
       <label>Localidade<input id="p_locality" value="${esc(p.locality||'')}" placeholder="Opcional"></label>
       <div class="row">
-        <label>Artigo matricial (opcional)<input id="p_matrix" value="${esc(p.matrix)}" placeholder="Ex: 4651"></label>
+        <label>Artigo matricial (opcional)<input id="p_matrix" value="${esc(p.matrix)}" placeholder="Ex: 4651" data-input="imvMatrizEscrito()"></label>
         <label>Licença de utilização (opcional)<input id="p_licence" value="${esc(p.licence)}" placeholder="Ex: Alvará n.º 26/2013"></label></div>
+      <div id="imv_matriz">${imvMatrizHtml(p)}</div>
       <div class="row3">
         <label>Certificado energético (opcional)<input id="p_energyCert" value="${esc(p.energyCert)}" placeholder="Ex: SCE395442330"></label>
         <label>Classe (opcional)<input id="p_energyClass" value="${esc(p.energyClass)}" placeholder="Ex: D"></label>
         <label>Válido até<input id="p_energyValid" type="date" value="${p.energyValid||''}"></label></div>
       <div class="hint">Usados nas cláusulas do contrato em PDF e no resumo do Anexo F. Deixa em branco o que não se aplicar — as frases correspondentes são omitidas.
-        O código da freguesia (6 dígitos), o tipo de prédio e o artigo vêm da caderneta predial ou da nota de cobrança do IMI; o Anexo F pede-os em cada linha do quadro das rendas.
-        O VPT serve para repartir os gastos quando só se arrenda parte do imóvel. A afetação decide o AIMI: só contam os prédios urbanos de habitação e os terrenos para construção.</div>
+        O código da freguesia (6 caracteres), o tipo de prédio e o artigo vêm da caderneta predial atual (no Portal das Finanças) ou da nota de cobrança do IMI mais recente; o Anexo F pede-os em cada linha do quadro das rendas.
+        Em outubro de 2025 foram repostas cerca de 300 freguesias que estavam em uniões (Lei 25-A/2025): se o prédio era de uma união, o código e o artigo podem ter mudado — usa a caderneta de agora, não a da compra.
+        O VPT serve para repartir os gastos quando só se arrenda parte do imóvel. A afetação decide o AIMI: só contam os prédios urbanos de habitação e os terrenos para construção. Num imóvel que não é de habitação, pergunta-se também pela Loja com História (quadro 6B).</div>
+      ${imvBeneficiosHtml(p)}
       ${imvSubSect(p)}`,
-      {icon:'recibo',summary:[esc(p.freguesia||p.parish||''),p.freguesiaCodigo?'freguesia n.º '+esc(p.freguesiaCodigo):'',p.registry?'descrição predial n.º '+esc(p.registry):''].filter(Boolean).join(' · ')||'para o contrato e o Anexo F'})}
+      {icon:'recibo',summary:[p.pais?esc(p.pais):'',esc(p.freguesia||p.parish||''),p.freguesiaCodigo?'freguesia n.º '+esc(p.freguesiaCodigo):'',p.registry?'descrição predial n.º '+esc(p.registry):''].filter(Boolean).join(' · ')||'para o contrato e o Anexo F'})}
     ${fold('text','Anúncio e comentários',`<label>Descrição para anúncios<textarea id="p_listing" placeholder="Opcional">${esc(p.listing||'')}</textarea></label>
       ${richEditor('Comentários dos proprietários','p_notes',p.notes,'Opcional')}
       <div class="hint">Os comentários dos proprietários nunca chegam a quem colabora.</div>`,
@@ -1018,7 +1242,21 @@ function collectProp(){
   if(has('p_seguroMes'))p.seguroMes=Math.min(12,Math.max(0,Math.round(num(val('p_seguroMes')))));
   ['parish','freguesia','concelho','distrito','freguesiaCodigo','tipoPredio','tipologia','afetacao','purchaseDate','fraction','floor','street','doorNumber','postalCode','locality','registry','matrix','licence','energyCert','energyClass','energyValid'].forEach(k=>{
     const e=document.getElementById('p_'+k);if(e)p[k]=e.value});
-  p.freguesiaCodigo=String(p.freguesiaCodigo||'').trim();   /* a validação ao guardar conta dígitos, não espaços */
+  p.freguesiaCodigo=imvCodigoFreguesia(p.freguesiaCodigo);   /* sem espaços e em maiúsculas: 0302fe é 0302FE (D136) */
+  /* o país (D133): em branco, ou «Portugal», é Portugal; o código da tabela X só fora dele */
+  if(has('p_pais'))p.pais=paisDoImovel(val('p_pais'));
+  if(has('p_paisCodigo'))p.paisCodigo=String(val('p_paisCodigo')||'').trim();
+  if(!paisDoImovel(p.pais))p.paisCodigo='';
+  /* o imóvel reabilitado (6A, D117): com «Não», os dados dele saem ao guardar (imvGravarFormulario) */
+  const R=Object.assign({tipo:'',inicio:'',conclusao:'',certificado:false},p.reabilitacao||{});
+  if(has('p_reabTipo'))R.tipo=['aru','nrau'].indexOf(val('p_reabTipo'))>-1?val('p_reabTipo'):'';
+  if(has('p_reabInicio'))R.inicio=val('p_reabInicio');
+  if(has('p_reabConclusao'))R.conclusao=val('p_reabConclusao');
+  if(has('p_reabCertificado'))R.certificado=chk('p_reabCertificado');
+  p.reabilitacao=R;
+  if(has('p_lojaHistoria'))p.lojaComHistoria=chk('p_lojaHistoria');
+  /* «Confirmei na caderneta» (D135): marcado, o dia em que se confirmou (o de antes, ou hoje) */
+  if(has('p_matrizConfirmada'))p.matrizConfirmada=chk('p_matrizConfirmada')?(p.matrizConfirmada||today()):'';
   if(document.getElementById('p_notes'))p.notes=richVal('p_notes');
   if(has('p_listing'))p.listing=val('p_listing');
   (p.rooms||[]).forEach(r=>{const e=document.getElementById('p_room_'+r.id);if(e)r.name=e.value});

@@ -27,13 +27,16 @@ function ctRecOf(c){return (db.recurring||[]).find(r=>r.auto&&r.tx&&r.tx.contrac
    a caução e os empréstimos recebidos são dinheiro que se devolve e não pagam
    mês nenhum — e a caução entra quase sempre no mês de início, que era o mês
    cuja renda planeada ficava calada. E conta pelo mês a que a renda respeita
-   (mesDaRenda): a de agosto paga a 3 de setembro é de agosto.
+   (mesDaRenda): a de agosto paga a 3 de setembro é de agosto. Uma renda
+   paga só em parte (t.parcial, a resposta «Pagamento parcial» do
+   movimento.js:txPerguntarRendaAbaixo) não fecha o mês: o resto fica em
+   dívida, e o planeado continua a pedi-lo (D115).
    Recebe: c — o contrato; iso — uma data AAAA-MM-DD.
    Devolve: true se já existe uma renda desse contrato para esse mês. */
 function rendaJaLancada(c,iso){
   if(!c||!iso)return false;
   const mes=String(iso).slice(0,7);
-  return (db.transactions||[]).some(t=>t.contractId===c.id&&ehRenda(t)&&mesDaRenda(t)===mes);
+  return (db.transactions||[]).some(t=>t.contractId===c.id&&ehRenda(t)&&!t.parcial&&mesDaRenda(t)===mes);
 }
 /* O mês a que uma renda respeita: o que o movimento diz (periodo), e a data
    nos que não o dizem (os de antes do campo, os que vêm de um planeado).
@@ -180,11 +183,16 @@ function ctRendasPorRegistar(c){
    adiam a primeira ocorrência. A atualização passa pelo aplicaPlanoNaRec, o
    mesmo das prestações: despejar o modelo inteiro por cima apagava a divisão
    entre proprietários que o utilizador tinha dado à renda (o modelo traz
-   split:null) e a categoria escolhida à mão. Mexe em db.recurring — quem
-   chama grava.
+   split:null) e a categoria escolhida à mão. Antes, passa à frente as
+   ocorrências já vencidas dos encargos do imóvel que o contrato põe a cargo
+   do inquilino (recSaltarEncargosDoInquilino, Q13). Mexe em db.recurring —
+   quem chama grava.
    Recebe: c — o contrato a sincronizar (objeto de db.contracts).
    Devolve: nada — mexe em db.recurring; quem chama grava. */
 function syncContractRec(c){
+  /* os encargos do imóvel que este contrato põe a cargo do inquilino (Q13)
+     deixam de se pedir ao senhorio nos meses em que ele está em vigor */
+  recSaltarEncargosDoInquilino((c||{}).propertyId);
   /* ctVivo e não isActive: um contrato que só começa daqui a um ano tem de
      ter a renda marcada desde já. Com o isActive, ela era apagada no arranque
      seguinte — e com ela a divisão entre proprietários e a categoria que a
@@ -372,7 +380,9 @@ function proximoFimDoMes(mes){
    Condomínio / Quota mensal, Seguros / Multirriscos) enquanto ela lá estiver,
    como a renda faz com as Rendas. Só nos imóveis de que sou dono: quem
    colabora recebe os planeados do dono com os registos da casa, e não os
-   cria por ele. Mexe em db.recurring — quem chama grava.
+   cria por ele. No fim passa à frente as ocorrências vencidas dos encargos
+   que um contrato em vigor põe a cargo do inquilino
+   (recSaltarEncargosDoInquilino, Q13). Mexe em db.recurring — quem chama grava.
    Recebe: p — o imóvel (objeto de db.properties).
    Devolve: nada — mexe em db.recurring; quem chama grava. */
 function syncPropRecs(p){
@@ -397,6 +407,8 @@ function syncPropRecs(p){
     db.recurring.push(normRec({auto:true,name:q.name,autoName:q.name,every:q.every,next:q.next,tx}));
   });
   propRecsOf(p).forEach(r=>{if(!quer.some(q=>q.propRec===r.tx.propRec&&q.propRecN===(r.tx.propRecN||0)))db.recurring=db.recurring.filter(x=>x.id!==r.id)});
+  /* os que um contrato em vigor põe a cargo do inquilino não se pedem (Q13) */
+  recSaltarEncargosDoInquilino(p.id);
 }
 // Apaga os planeados da ficha de imóveis que já não existem e sincroniza os
 // dos imóveis vivos (syncPropRecs).
@@ -406,6 +418,154 @@ function syncAllPropRecs(){
   if(!servicoLigado('properties'))return;
   (db.recurring||[]).slice().forEach(r=>{if(r.auto&&(r.tx||{}).propRec&&!prop(r.tx.propertyId))db.recurring=db.recurring.filter(x=>x.id!==r.id)});
   db.properties.forEach(syncPropRecs);
+}
+/* ---- os encargos do imóvel a cargo do inquilino (Q13, D114) ----
+   O contrato diz que encargos do imóvel paga o inquilino (c.encargosInquilino,
+   ids de dados.js:ENCARGOS_DO_INQUILINO). Nos meses em que esse contrato está
+   em vigor, o planeado desse encargo do mesmo imóvel não se pede nem se
+   confirma: quem o confirmava deduzia o que não pagou. */
+/* O encargo do imóvel que um planeado paga: pelo planeado automático da ficha
+   do imóvel (tx.propRec: 'imi', 'condominio', 'seguro', ids fixos) e, num
+   planeado feito à mão, pela categoria que o IRS lê — o id do IMI
+   (dados.js:catIrsId, 'impostos/imi') ou a coluna do Anexo F
+   (irs-papeis.js:irsColunaDe: 'imi' ou 'condominio'). Nunca pelo nome: a
+   categoria pode ter outro nesta conta. O seguro e a água, luz e gás não têm
+   id nem coluna própria: feitos à mão não se reconhecem.
+   Recebe: r — o planeado (ou o molde, {tx}).
+   Devolve: o id do encargo ('condominio', 'imi', 'seguro'…), ou ''. */
+function recEncargoDoInquilino(r){
+  const t=(r&&r.tx)||{};
+  if(t.kind!=='expense'||!t.propertyId)return '';
+  const ids=ENCARGOS_DO_INQUILINO.map(e=>e.id);
+  if(t.propRec)return ids.indexOf(t.propRec)>-1?t.propRec:'';
+  if(t.sub&&catIrsId('expense',t.category,t.sub)==='impostos/imi')return 'imi';
+  const col=irsColunaDe(t).col;
+  return (col==='imi'||col==='condominio')&&ids.indexOf(col)>-1?col:'';
+}
+/* O contrato está em vigor neste mês, para os encargos que põe a cargo do
+   inquilino? Do mês do início ao mês do último dia em vigor: a cessação, o
+   termo de um terminado, ou o termo com as renovações (irs.js:irsFimReal).
+   Um contrato que continua depois do termo (ctRendaDepoisDoTermo) não tem
+   fim; um terminado sem data nenhuma não está em vigor.
+   Recebe: c — o contrato; mes — 'AAAA-MM'.
+   Devolve: true ou false. */
+function ctEmVigorNoMes(c,mes){
+  if(!c||!/^\d{4}-\d{2}$/.test(String(mes||'')))return false;
+  const ini=String(c.start||'').slice(0,7);
+  if(ini&&mes<ini)return false;
+  const fim=String(irsFimReal(c)||'');
+  if(!fim)return c.active!==false;
+  if(ctRendaDepoisDoTermo(c))return true;
+  return mes<=fim.slice(0,7);
+}
+/* Esta ocorrência do planeado é de um encargo que o inquilino paga? Um
+   contrato do mesmo imóvel, em vigor no mês dela (ctEmVigorNoMes), com esse
+   encargo em c.encargosInquilino (lido com cuidado: um contrato sem o campo
+   não suspende nada).
+   Recebe: r — o planeado; d — a data 'AAAA-MM-DD' da ocorrência.
+   Devolve: o contrato que o põe a cargo do inquilino, ou null. */
+function recSuspensaPeloInquilino(r,d){
+  const pid=((r||{}).tx||{}).propertyId;
+  if(!pid||!/^\d{4}-\d{2}-\d{2}$/.test(String(d||'')))return null;
+  /* primeiro os contratos da casa com encargos marcados: sem nenhum (o caso de
+     quase todos), nem se procura o encargo do planeado — isto corre a cada pintura */
+  const cs=(db.contracts||[]).filter(c=>c&&c.propertyId===pid&&Array.isArray(c.encargosInquilino)&&c.encargosInquilino.length);
+  if(!cs.length)return null;
+  const enc=recEncargoDoInquilino(r),mes=String(d).slice(0,7);
+  return enc?cs.find(c=>c.encargosInquilino.indexOf(enc)>-1&&ctEmVigorNoMes(c,mes))||null:null;
+}
+/* O que o Confirmar diz de um planeado de um encargo que o inquilino paga
+   (recSuspensaPeloInquilino): de quem é, e até quando, sem o registar.
+   Recebe: c — o contrato que o põe a cargo do inquilino.
+   Devolve: a frase (texto). */
+function recFraseDoInquilino(c){
+  const fim=String(irsFimReal(c)||'');
+  return 'Este encargo é do inquilino enquanto o contrato '+ctName(c)+' estiver em vigor'+
+    (fim&&!ctRendaDepoisDoTermo(c)?' (até '+dPT(fim)+')':'')+': o planeado não o pede nesses meses. Se o pagaste tu, regista-o como despesa.';
+}
+/* Passa um planeado à ocorrência seguinte, sem mais nada: a largura da janela
+   next..until fica; «uma só vez», ou a seguinte para lá do fim (end), sai da
+   base. É o passo do recAdvance, sem o aviso e sem mexer no silêncio.
+   Recebe: r — o planeado (objeto de db.recurring).
+   Devolve: true se ficou, false se saiu. */
+function recPassarUma(r){
+  if(r.every==='once'){db.recurring=db.recurring.filter(x=>x.id!==r.id);return false}
+  const gap=r.until&&r.until>r.next?Math.round((new Date(r.until+'T00:00:00')-new Date(r.next+'T00:00:00'))/864e5):0;
+  r.next=nextDate(r.next,r.every);r.until=gap?addDays(r.next,gap):'';
+  if(r.end&&r.next>r.end){db.recurring=db.recurring.filter(x=>x.id!==r.id);return false}
+  return true;
+}
+/* Passa à frente, nos planeados das despesas de um imóvel, as ocorrências já
+   vencidas (até hoje) de um encargo que o inquilino paga nesse mês
+   (recSuspensaPeloInquilino). Sem isto o planeado ficava parado no primeiro
+   mês do contrato e, quando ele acabasse, pedia de uma vez todos os meses
+   que o inquilino pagou. As de hoje em diante esperam pelo dia delas: o
+   contrato pode acabar antes. Só a quem é dono da casa, como o syncPropRecs:
+   quem colabora não mexe nos planeados do dono, e o recPorConfirmar já não
+   lhos pede.
+   Recebe: pid — o id do imóvel.
+   Devolve: nada — mexe em db.recurring; quem chama grava. */
+function recSaltarEncargosDoInquilino(pid){
+  if(!pid||!cargoDe(pid).dono)return;
+  const hoje=today();
+  (db.recurring||[]).slice().forEach(r=>{
+    if(!r||!r.tx||r.tx.propertyId!==pid||!recEncargoDoInquilino(r))return;
+    let guarda=0;
+    while(guarda++<1200&&/^\d{4}-\d{2}-\d{2}$/.test(String(r.next||''))&&r.next<=hoje&&recSuspensaPeloInquilino(r,r.next)){
+      if(!recPassarUma(r))break;
+    }
+  });
+}
+/* O planeado de um encargo do imóvel com a ocorrência neste mês: o que a
+   pergunta da renda abaixo (movimento.js:txPerguntarRendaAbaixo) oferece
+   saltar, quando o inquilino descontou o encargo na renda.
+   Recebe: pid — o id do imóvel; enc — o id do encargo (ENCARGOS_DO_INQUILINO);
+   mes — 'AAAA-MM'.
+   Devolve: o planeado, ou null. */
+function recDoEncargoNoMes(pid,enc,mes){
+  if(!pid||!enc||!mes)return null;
+  return (db.recurring||[]).find(r=>r&&r.tx&&r.tx.propertyId===pid&&recEncargoDoInquilino(r)===enc&&String(r.next||'').slice(0,7)===mes)||null;
+}
+/* Salta a ocorrência deste mês do planeado de um encargo (recDoEncargoNoMes),
+   sem registar nada: o inquilino pagou-o e descontou-o na renda, e confirmá-lo
+   também deduzia o mesmo dinheiro duas vezes (D114).
+   Recebe: id — o id do planeado.
+   Devolve: nada — mexe em db.recurring; quem chama grava. */
+function recSaltarEncargo(id){
+  const r=(db.recurring||[]).find(x=>x.id===id);if(r)recPassarUma(r);
+}
+/* ---- a renda paga só em parte (D115) ---- */
+/* O planeado da renda de um contrato com a ocorrência no mês a que uma renda
+   respeita: o que confirmo (recId), ou o automático do contrato (ctRecOf).
+   O montante dele mais a retenção é a renda em vigor nesse mês — nunca o
+   c.rent de hoje, que depois de uma atualização dava falsos alarmes nos meses
+   de antes. Sem planeado nesse mês, não há com que comparar.
+   Recebe: c — o contrato; mes — 'AAAA-MM'; recId (opcional) — o planeado que
+   se está a confirmar.
+   Devolve: o planeado, ou null. */
+function recDaRendaNoMes(c,mes,recId){
+  if(!c||!mes)return null;
+  const r=recId?(db.recurring||[]).find(x=>x.id===recId):ctRecOf(c);
+  if(!r||!r.tx||r.tx.kind!=='income'||r.tx.contractId!==c.id)return null;
+  return recPeriodo(r)===mes?r:null;
+}
+/* O que falta da renda do mês de um planeado, depois de uma renda paga só em
+   parte (t.parcial): a renda do planeado (montante mais retenção) menos as
+   rendas desse contrato já registadas nesse mês (mesDaRenda); a retenção do
+   resto é a do planeado menos a já retida. É o que o Confirmar regista, em
+   vez da renda inteira outra vez.
+   Recebe: r — o planeado.
+   Devolve: {amount, retencao} do resto, ou null quando não há renda nenhuma
+   desse mês (ou o planeado não é de uma renda de contrato). */
+function recRestoDaRenda(r){
+  const t=(r&&r.tx)||{},mes=recPeriodo(r);
+  if(t.kind!=='income'||!t.contractId||!mes)return null;
+  const ja=(db.transactions||[]).filter(x=>x.contractId===t.contractId&&ehRenda(x)&&mesDaRenda(x)===mes);
+  if(!ja.length)return null;
+  const bruto=r2((Number(t.amount)||0)+(Number(t.retencao)||0)),resto=r2(bruto-sum(ja.map(rendaBruta)));
+  if(!(resto>0.005))return null;
+  const ret=Math.min(resto,Math.max(0,r2((Number(t.retencao)||0)-sum(ja.map(x=>Number(x.retencao)||0)))));
+  return {amount:r2(resto-ret),retencao:ret};
 }
 /* Este planeado é mesmo a prestação mensal da hipoteca l? Um pagamento de
    crédito mensal, que não é amortização antecipada, com um montante da ordem
@@ -565,7 +725,8 @@ function datasEmFalta(r){
     d=seg;
     if(r.end&&d>r.end)break;
   }
-  return datas.filter(x=>!jaRegistado(r,x)&&!recDepoisDaVenda(r,x));
+  /* nem as de um encargo que o inquilino pagou nesse mês (Q13) */
+  return datas.filter(x=>!jaRegistado(r,x)&&!recDepoisDaVenda(r,x)&&!recSuspensaPeloInquilino(r,x));
 }
 /* O dia em que foi vendido o imóvel de um planeado (p.vendido, que o «Marcar
    como vendido» escreve; dados.js:imovelVendido), também quando a venda está
@@ -589,12 +750,14 @@ function recDepoisDaVenda(r,d){
   const v=recVendidoEm(r);
   return !!v&&/^\d{4}-\d{2}-\d{2}$/.test(String(d||''))&&String(d)>v;
 }
-/* O planeado está por confirmar? A data prevista já passou ou é hoje, e não
-   é de depois da venda do imóvel (recDepoisDaVenda).
+/* O planeado está por confirmar? A data prevista já passou ou é hoje, não é
+   de depois da venda do imóvel (recDepoisDaVenda), nem de um encargo que um
+   contrato em vigor nesse mês põe a cargo do inquilino
+   (recSuspensaPeloInquilino, Q13): esse não se pede, nem fica em atraso.
    Recebe: r — o planeado.
    Devolve: true ou false. */
 function recPorConfirmar(r){
-  return !!(r&&r.next&&r.next<=today()&&!recDepoisDaVenda(r,r.next));
+  return !!(r&&r.next&&r.next<=today()&&!recDepoisDaVenda(r,r.next)&&!recSuspensaPeloInquilino(r,r.next));
 }
 /* recorrências vencidas (a data prevista já passou ou é hoje), sem as de
    depois da venda do imóvel (recPorConfirmar)
@@ -619,10 +782,8 @@ function recLate(){return recActive().filter(recIsLate)}
    Devolve: nada — altera r (ou tira-a de db.recurring); quem chama grava. */
 function recAdvance(r){
   r.muted=false;
-  if(r.every==='once'){db.recurring=db.recurring.filter(x=>x.id!==r.id);return}
-  const gap=r.until&&r.until>r.next?Math.round((new Date(r.until+'T00:00:00')-new Date(r.next+'T00:00:00'))/864e5):0;
-  r.next=nextDate(r.next,r.every);r.until=gap?addDays(r.next,gap):'';
-  if(r.end&&r.next>r.end){db.recurring=db.recurring.filter(x=>x.id!==r.id);toast('“'+r.name+'” chegou ao fim: deixa de se repetir.')}
+  /* o passo é o do recPassarUma; só o fim de um que se repetia se diz */
+  if(!recPassarUma(r)&&r.every!=='once')toast('“'+r.name+'” chegou ao fim: deixa de se repetir.');
 }
 /* Um planeado que termina ao ser confirmado: «uma só vez», ou com fim e a
    ocorrência seguinte já para lá dele — o que o recAdvance apaga em vez de
@@ -803,6 +964,9 @@ function recPeriodo(r){
    Numa renda cujo dia previsto é de outro ano que hoje (recPedeODia), não
    regista: pergunta primeiro o dia em que entrou (recPerguntarDia), porque a
    renda conta no IRS do ano em que se recebe (D22, decisão do Martinho).
+   O encargo que um contrato em vigor põe a cargo do inquilino não se confirma
+   (recSuspensaPeloInquilino, Q13), e a renda de um mês pago só em parte
+   regista o resto (recRestoDaRenda, D115).
    Recebe: id — o id da recorrência a confirmar; dia (opcional) — o dia
    AAAA-MM-DD em que o dinheiro entrou, já perguntado (recConfirmarNoDia);
    sem ele, hoje.
@@ -812,6 +976,7 @@ function quickConfirmRec(id,dia){
   dia=/^\d{4}-\d{2}-\d{2}$/.test(String(dia||''))?String(dia):'';
   const recusa=recusaConfirmar(r);if(recusa)return toast(recusa);
   if(recDepoisDaVenda(r,r.next))return toast('O imóvel foi vendido a '+dPT(recVendidoEm(r))+': o planeado já não pede nada depois disso.');
+  const sus=recSuspensaPeloInquilino(r,r.next);if(sus)return toast(recFraseDoInquilino(sus));
   /* sem saber a que hipoteca abate, o movimento saía sem crédito: abre-se para escolher */
   if(recSemCredito(r))return toast('Sem crédito associado — abre o planeado para escolher a hipoteca.');
   /* a mesma frase do formulário: confirmar depressa não pode aceitar o que o Guardar recusa */
@@ -834,6 +999,8 @@ function quickConfirmRec(id,dia){
      como pelo formulário (movimento.js:registarMolde); o que não se parte
      (um grupo sem imóveis) não avança o planeado */
   const mol=recTx(r,dia||today()),periodo=recPeriodo(r);if(periodo)mol.periodo=periodo;
+  /* depois de um pagamento parcial, o que entra é o resto da renda, e não ela outra vez (D115) */
+  const resto=recRestoDaRenda(r);if(resto){mol.amount=resto.amount;mol.retencao=resto.retencao}
   const reg=registarMolde(mol);if(reg.erro)return toast(reg.erro);
   reg.partes.forEach(t=>{if(t.kind==='loan')applyLoan(t);db.transactions.push(t)});
   /* o movimento nasce aqui: o «Ver» abre a ficha dele (de vários imóveis, a primeira parte, que a ficha lê como o lote) */
@@ -914,15 +1081,20 @@ function recusaConfirmar(r){
 /* Abrir para rever antes de confirmar. A data começa no dia de hoje, como no
    Confirmar (quickConfirmRec), e continua editável; a renda de um contrato
    traz o mês previsto no «Mês a que respeita» (recPeriodo) — sem ele, o
-   formulário tirava-o da data de hoje (movimento.js:prefill).
+   formulário tirava-o da data de hoje (movimento.js:prefill). Num mês pago
+   só em parte, o montante e a retenção são o resto (recRestoDaRenda); o
+   encargo que o inquilino paga não abre (recSuspensaPeloInquilino).
    Recebe: id — o id da recorrência a confirmar.
    Devolve: nada — abre o formulário do movimento em modo de confirmação. */
 function confirmRec(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   const recusa=recusaConfirmar(r);if(recusa)return toast(recusa);
   if(recDepoisDaVenda(r,r.next))return toast('O imóvel foi vendido a '+dPT(recVendidoEm(r))+': o planeado já não pede nada depois disso.');
+  const sus=recSuspensaPeloInquilino(r,r.next);if(sus)return toast(recFraseDoInquilino(sus));
   const preset=Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:today(),label:r.tx.label||r.name});
   const periodo=recPeriodo(r);if(periodo)preset.periodo=periodo;
+  /* depois de um pagamento parcial, o formulário abre com o resto (D115) */
+  const resto=recRestoDaRenda(r);if(resto){preset.amount=resto.amount;preset.retencao=resto.retencao}
   txModal({kind:r.tx.kind,propId:r.tx.propertyId,ctId:r.tx.contractId,preset,modo:'confirmar',recId:id});
 }
 /* Onde fica o movimento de um molde (um planeado ou um modelo), na ficha e no
@@ -957,12 +1129,13 @@ function recSeguroNoIrs(t){
 
    «O que é isto que me estão a pedir para confirmar, de quanto, de onde vem,
    e desde quando está à espera?» O «de onde vem» é o que explica porque é
-   que um planeado automático volta sozinho depois de apagado.
+   que um planeado automático volta sozinho depois de apagado. Um encargo que
+   o inquilino paga nesse mês (recSuspensaPeloInquilino) diz porque não se pede.
    Recebe: id — o id do planeado.
    Devolve: o HTML do corpo, ou vazio se o planeado já não existir. */
 function recFicha(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return '';
-  const t=r.tx||{};
+  const t=r.tx||{},sus=recSuspensaPeloInquilino(r,r.next);
   const vem=r.auto?(t.loanId?'Prestação da hipoteca '+esc(loanName(((anyLoan(t.loanId)||{}).l)||null))
     :(t.contractId&&contract(t.contractId)?'Renda do contrato '+esc(ctName(contract(t.contractId)))
     :(t.propRec?({imi:'IMI',condominio:'Condomínio',seguro:'Seguro'})[t.propRec]+' do imóvel '+esc(propName(t.propertyId))+' — o valor vive na ficha do imóvel; apagar este planeado remove-o de lá.'+recSeguroNoIrs(t):''))):'';
@@ -971,7 +1144,10 @@ function recFicha(id){
     t.amount?{rotulo:'Montante',valor:euro2(t.amount)}:null,
     {rotulo:'Quando',valor:dPT(r.next||'')+(r.until&&r.until!==r.next?' a '+dPT(r.until):'')+(r.every?' · '+esc(EVERY[r.every]||r.every):'')},
     {rotulo:'Estado',valor:(recIsLate(r)?'<span class="perigo">Em atraso</span> desde '+dPT(r.until||r.next||'')
-      :(recPorConfirmar(r)?'Por confirmar':(recDepoisDaVenda(r,r.next)?'Imóvel vendido a '+dPT(recVendidoEm(r)):'Em dia')))+(r.muted?' · silenciada':'')},
+      :(recPorConfirmar(r)?'Por confirmar':(recDepoisDaVenda(r,r.next)?'Imóvel vendido a '+dPT(recVendidoEm(r))
+      :(sus?'Pago pelo inquilino':'Em dia'))))+(r.muted?' · silenciada':'')},
+    /* o encargo que um contrato em vigor põe a cargo do inquilino (Q13) diz porque não se pede */
+    sus?{tipo:'nota',valor:esc(recFraseDoInquilino(sus))}:null,
     {rotulo:'Tipo',valor:esc((KIND[t.kind]||{}).short||'')},
     /* um planeado pode estar num grupo de imóveis, ou em «Todos», em vez de num imóvel */
     {rotulo:'Imóvel',valor:esc(imovelDoMolde(t))},

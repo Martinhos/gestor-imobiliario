@@ -115,7 +115,7 @@ describe('o guia na ronda 2 da auditoria ao IRS', () => {
   test('D137: o código e o artigo da caderneta atual, e a reposição das freguesias em outubro de 2025', () => {
     const lal = grupo(parte('como-preencher'), 'Linha a linha');
     const id = linha(lal, 'A identificação matricial');
-    assert.match(id, /código da freguesia, de seis dígitos/);
+    assert.match(id, /código da freguesia, de seis caracteres \(quatro algarismos e, desde 2025, às vezes duas letras no fim\)/, 'D136: o código pode ter letras');
     assert.match(id, /da caderneta predial atual, que obténs no Portal das Finanças, ou da nota de cobrança do IMI mais recente/);
     const rep = linha(lal, 'Em outubro de 2025');
     for (const f of ['cerca de 300 freguesias', 'Lei n.º 25-A/2025', 'o código e o artigo podem ter mudado',

@@ -126,6 +126,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-17 · A vaga 1 da auditoria ao IRS: dados, motor, versões, termos, guia e a Declaração (KAN-126)
 - 2026-11-17 · A vaga 2 da auditoria ao IRS: o fim dos contratos, os prazos da AT, a situação de cada ano e o reporte (KAN-127)
 - 2026-11-18 · A vaga 3 da auditoria ao IRS: o bloco fiscal do contrato, as receitas da Declaração, os quadros raros e o guia (KAN-128)
+- 2026-11-18 · A vaga 4 da auditoria ao IRS: os quadros raros nos formulários e na Declaração, a renda abaixo e os encargos do inquilino (KAN-129)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4420,3 +4421,74 @@ Os avisos, os cartões, a exportação e o Splitwise (lote B):
 - **«Como a categoria» grava-se numa subcategoria com regra de origem** (dados.js:IRS_MAPA_HERDA,
   definicoes.js:setIrsMapa): apagar a chave fazia a regra de origem voltar no fillCats seguinte, como o vazio de uma
   categoria, que grava «a confirmar» (D61).
+
+## 2026-11-18 · A vaga 4 da auditoria ao IRS: os quadros raros nos formulários e na Declaração, a renda abaixo e os encargos do inquilino (KAN-129)
+A vaga 4 leva aos formulários e à Declaração o que as vagas 1 a 3 deixaram nos dados e no motor: o direito real de
+habitação duradoura (4.3), o 6A, o 6B e o 6C, a categoria B, os imóveis fora de Portugal (Anexo J), o código da
+freguesia com letras, a renda abaixo da do planeado e os encargos a cargo do inquilino. As decisões do Martinho de
+hoje:
+
+- **O aviso da conjunta sobre os imóveis do cônjuge que não estão partilhados é informativo** (o Martinho: «os imóveis
+  do cônjuge que não estiverem na aplicação devem ser inseridos no portal das finanças manualmente»). Substitui o âmbar
+  da vaga 3 (D31): a app não vê as casas da outra conta, e a pessoa não tem nada a tratar na app.
+- **A natureza 03 do 4.3 é só um aviso em «A tratar»**: a parte da caução de um DHD que o proprietário fica por
+  incumprimento do morador (CIRS art. 8.º n.º 5 b)) é rendimento do ano, mas a app não sabe que parte da caução foi
+  retida. Sem campo nem marca: o aviso diz que se declara à mão, no 4.3, com a natureza 03.
+- **Num imóvel fora de Portugal, os prazos do Código Civil português não aparecem** (o Martinho pediu «o que diz a
+  lei»): o arrendamento rege-se pela lei do país do imóvel, salvo escolha das partes (Regulamento Roma I, arts. 3.º e
+  4.º n.º 1 c)). Sem a oposição à renovação, o fim nem o aumento da renda; a ficha e o formulário dizem porquê
+  (prazos.js:PZ_LEI_DO_PAIS). O contrato continua com as datas, os planeados e as rendas.
+- **As de antes que mudam esta vaga**: sem alojamento local (2026-11-17; fica do D130 só a renda recebida antes do
+  início do contrato); o imóvel no estrangeiro sem estimativa (Q12), fora do Anexo F, com as rendas, os gastos, o país
+  e o imposto pago lá, para o quadro 7A do Anexo J; os encargos a cargo do inquilino (Q13), com o campo no contrato e
+  a suspensão do planeado desse encargo; sem campo «Descontado» (D112–D116): uma pergunta ao gravar uma renda abaixo,
+  com o pagamento parcial e os descontos.
+
+O porquê do resto (lote A):
+
+- **O DHD sem aviso nos contratos sem termo**: apanharia os de duração indeterminada. Pela mesma razão do 4.3, a caução
+  inicial de um DHD não é rendimento (CIRS art. 8.º n.º 5 b), na redação da Lei 2/2020): não pede recibo, não entra
+  nas rendas, e devolvê-la não é gasto; a prestação anual do 11.º ano em diante é. A regularização de um DHD cessado
+  por acordo segue o art. 72.º n.º 20, «desde o início do contrato», à taxa base, porque o DHD não tem escalões de
+  duração. O momento e o valor da prestação anual (5 % da caução, no aniversário da escritura) ficam INCERTOS.
+- **Sem estimativa fora de Portugal e na categoria B**: fora de Portugal por decisão do Martinho (Q12); na categoria B
+  porque a taxa depende do regime da atividade, e inventá-la seria pior do que não a dar. A categoria B guarda o Modelo
+  2 e os recibos; se nas rendas da atividade o documento é a fatura fica INCERTO.
+- **O 6C pela letra da lei**: o EBF art. 59.º-G n.º 11 diz «50 % do seu valor» — o fator é das rendas, e os gastos
+  deduzem-se por inteiro. O plano dizia «50 % do líquido» e cedeu.
+- **A pergunta da freguesia deixa guardar sem confirmar**: quem não tem a caderneta à mão não fica preso, e nas
+  declarações de substituição de 2024 e antes o código da união é o certo. A app nunca troca o código: escolher uma
+  reposta sem a caderneta era adivinhar. A Loja com História só se pergunta num imóvel de afetação não habitacional,
+  para não encher o formulário de quem não a tem; com o 6A a data de aquisição é obrigatória, porque sem ela o motor
+  não dá os 5 %.
+- **A renda abaixo compara-se com o planeado desse mês, e não com o c.rent**: o contrato não guarda o histórico da
+  renda, e o c.rent de hoje acusava as rendas de antes de uma atualização. O parcial não fecha o mês, para o resto
+  continuar a pedir-se; o desconto abre a despesa num formulário em vez de a gravar sozinha, porque a categoria (e,
+  numa obra, a fatura em nome do senhorio) é da pessoa. A comissão da gestora vai a Gestão e mediação › Gestão do
+  imóvel (a comissão de quem cobra a renda), com a coluna Outros. Na Declaração, a renda abaixo tem uma folga de 7 %
+  por ano (o maior coeficiente legal desde 2020 é 1,0694), para nunca acusar uma atualização.
+- **A suspensão dos encargos passa à frente só o que já venceu**: um contrato que acabe antes não deixa meses por
+  pedir. Só se reconhecem pelo id ou pela coluna do IRS: o seguro e os consumos feitos à mão, sem id fixo, não se
+  suspendem.
+
+O porquê do lote B (os avisos, os cartões e a exportação):
+
+- **A conjunta é cinzenta** (a decisão do Martinho de hoje, acima): o aviso diz o mesmo, mas não há nada a corrigir na
+  app. **A natureza 03 é um âmbar num DHD que acabou no ano com caução**, sem campo novo (a decisão de hoje): é nesse
+  ano que o proprietário faz a dedução (CIRS art. 8.º n.º 5 b)); se a caução se acerta depois do fim, o ano é o do
+  acerto (INCERTO).
+- **As despesas do Splitwise cortadas repõem-se num toque, e as repetidas não** (D122): uma despesa com outra igual no
+  mesmo imóvel pode ser a parte de cada dono, e repor dobrava a dedução. O total é o valor a dividir pela quota de hoje
+  (a da importação não ficou guardada), e a confirmação mostra cada um para o conferir no Splitwise. A chave que o
+  repor grava não tem a categoria do CSV, que a app não guardou: a reimportação procura também a chave sem ela
+  (splitwise.js:swPrepare), senão a despesa reposta entrava outra vez.
+- **A frase da informação vinculativa só nas condições da reabilitação** (D117): é aí que a doutrina da AT mudou
+  (PIV 23119 para a PIV 28153).
+- **O 6A, o 6B e o 6C em cartões à parte, como o 6D**: o impresso pede em cada um o campo do 4.1 da linha, e não uma
+  coluna da linha. A ordem das linhas pelos campos 01 a 05 do quadro fica INCERTA.
+- **A união de freguesias extinta é um aviso na página e uma falta na exportação** (D135): na exportação é a falta que
+  se copia para o Portal; confirmada na caderneta, deixa de o ser. A confirmação conta com qualquer data, porque o
+  campo só existe depois da reposição de outubro de 2025.
+- **O Anexo J sem estimativa** (Q12): o cartão, o texto, o CSV e o PDF dizem as rendas, os gastos, o líquido e o
+  imposto pago lá, e nenhum soma ao imposto da página. As colunas do quadro 7A seguem o achado (INCERTO: não se abriu
+  o impresso).

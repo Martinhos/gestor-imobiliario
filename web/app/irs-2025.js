@@ -255,7 +255,7 @@ registarAnoIrs({
       {codigo:'03',curto:'Renúncia do morador',texto:'Extinção do DHD por renúncia do morador (artigo 17.º do Decreto-Lei n.º 1/2020, de 9 de janeiro)'},
       {codigo:'04',curto:'Incumprimento do proprietário',texto:'Resolução do DHD por incumprimento definitivo imputável ao proprietário (artigo 18.º do Decreto-Lei n.º 1/2020, de 9 de janeiro)'},
       {codigo:'05',curto:'O morador comprou o imóvel',texto:'Extinção do DHD por aquisição da propriedade pelo morador'},
-      {codigo:'06',curto:'Fim do prazo',texto:'Cessação do DHD no final do prazo'}]},
+      {codigo:'06',quem:'fim',curto:'Fim do prazo',texto:'Cessação do DHD no final do prazo'}]},
   /* Os benefícios que não são isenções e que o quadro 6 identifica pelo campo
      do 4.1 (irs.js:irsBeneficios). Cada um diz onde se marca (`marca`: o
      campo do imóvel ou do bloco fiscal do contrato que o liga) e as condições
@@ -363,6 +363,9 @@ registarAnoIrs({
         texto:'Cessação do enquadramento nos Programas municipais para alojamento estudantil por motivos imputáveis ao candidato (inquilino/locatário/sublocatário)'},
       {codigo:'12',para:'pmae',quem:'fim',curto:'Saiu do alojamento estudantil municipal no fim do prazo ou de uma renovação',
         texto:'Cessação do enquadramento nos Programas municipais para alojamento estudantil - contratos no final dos prazos de duração dos mesmos ou das suas renovações'}]},
+  /* Anexo J: os rendimentos prediais de um imóvel fora de Portugal vão ao quadro
+     7A, com o código F01 (Tabela IV das instruções do Anexo J; Q12: sem estimativa) */
+  anexoJ:{quadro:'7A',codigo:'F01'},
   /* 4.4: as rendas que o senhorio paga pela casa nova a mais de 100 km da
      antiga, que arrendou (CIRS art. 41.º n.º 8, na redação do DL 57/2024);
      5: a sublocação; 4.3: o direito real de habitação duradoura (quadro43).

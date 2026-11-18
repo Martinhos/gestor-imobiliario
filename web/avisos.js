@@ -27,6 +27,44 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 80,
+    data: '2026-11-18',
+    titulo: 'A Declaração: os quadros raros, o Anexo J e a renda abaixo do recibo',
+    seccoes: [
+      {
+        titulo: 'Os contratos',
+        afeta: ['contratos'],
+        itens: [
+          'O contrato conhece o direito real de habitação duradoura (quadro 4.3), as rendas tributadas na categoria B, os prédios rústicos arrendados a entidades de gestão florestal (quadro 6C) e os imóveis fora de Portugal, com o imposto que pagaste lá. Num imóvel fora de Portugal, os prazos seguem a lei do país do imóvel.',
+          'Podes marcar os encargos que ficam a cargo do inquilino (condomínio, IMI, seguro, água, luz e gás): o planeado desse encargo deixa de se pedir enquanto o contrato estiver em vigor.',
+        ],
+      },
+      {
+        titulo: 'Os imóveis',
+        afeta: ['imoveis'],
+        itens: [
+          'O código da freguesia aceita as letras da AT (como 0302FE), e um código de uma união de freguesias desagregada em outubro de 2025 mostra as freguesias repostas e pede que o confirmes na caderneta.',
+          'Podes marcar um imóvel reabilitado (quadro 6A), uma Loja com História (quadro 6B) e o país de um imóvel fora de Portugal (Anexo J).',
+        ],
+      },
+      {
+        titulo: 'As rendas',
+        afeta: ['movimentos', 'contratos'],
+        itens: [
+          'Quando registas uma renda abaixo da do planeado, a app pergunta porquê. Um pagamento parcial deixa o resto em dívida. Uma comissão, uma obra ou um encargo descontado ficam com a renda inteira e a despesa à parte, como o IRS pede.',
+        ],
+      },
+      {
+        titulo: 'A Declaração',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'A Declaração mostra o quadro 4.3, os quadros 6A, 6B e 6C, as rendas de imóveis no estrangeiro para o Anexo J (sem estimativa do imposto) e as da categoria B à parte. O PDF, o CSV e o texto dizem o mesmo.',
+          '«A tratar» pergunta pelas rendas abaixo do recibo e pelas recebidas antes do início do contrato, avisa das retenções de inquilinos particulares e dos códigos de freguesia que mudaram em 2025, e repõe num toque o custo total das despesas antigas do Splitwise. A nota da tributação conjunta passa a só informar.',
+        ],
+      },
+    ],
+  },
+  {
     v: 79,
     data: '2026-11-18',
     titulo: 'A Declaração: cauções, reembolsos, quadro 5 e Splitwise',

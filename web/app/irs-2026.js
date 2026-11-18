@@ -171,7 +171,7 @@ registarAnoIrs({
       {codigo:'03',curto:'Renúncia do morador',texto:'Extinção do DHD por renúncia do morador (artigo 17.º do Decreto-Lei n.º 1/2020, de 9 de janeiro)'},
       {codigo:'04',curto:'Incumprimento do proprietário',texto:'Resolução do DHD por incumprimento definitivo imputável ao proprietário (artigo 18.º do Decreto-Lei n.º 1/2020, de 9 de janeiro)'},
       {codigo:'05',curto:'O morador comprou o imóvel',texto:'Extinção do DHD por aquisição da propriedade pelo morador'},
-      {codigo:'06',curto:'Fim do prazo',texto:'Cessação do DHD no final do prazo'}]},
+      {codigo:'06',quem:'fim',curto:'Fim do prazo',texto:'Cessação do DHD no final do prazo'}]},
   beneficios:[
     {id:'reab71',quadro:'6A',campos:['01','02','03','04','05'],marca:'imovel.reabilitacao',taxa:5,
       tipos:['aru','nrau'],certificado:true,inicioDesde:'2008-01-02',inicioAte:'2023-10-06',concluida:true,donoEm:'2023-10-06',
@@ -225,6 +225,9 @@ registarAnoIrs({
         texto:'Cessação do enquadramento nos Programas municipais para alojamento estudantil por motivos imputáveis ao candidato (inquilino/locatário/sublocatário)'},
       {codigo:'12',para:'pmae',quem:'fim',curto:'Saiu do alojamento estudantil municipal no fim do prazo ou de uma renovação',
         texto:'Cessação do enquadramento nos Programas municipais para alojamento estudantil - contratos no final dos prazos de duração dos mesmos ou das suas renovações'}]},
+  /* Anexo J: os rendimentos prediais de um imóvel fora de Portugal vão ao quadro
+     7A, com o código F01 (Tabela IV das instruções do Anexo J; Q12: sem estimativa) */
+  anexoJ:{quadro:'7A',codigo:'F01'},
   quadros:{semReducao:'4.1',comReducao:'4.2',datas:'4.2A',dhd:'4.3',mudanca100km:'4.4',sublocacao:'5',anosAnteriores:'8',englobamento:'6G',aimi:'9',cessados:'10',
     /* 9: as linhas dos prédios do quadro 9 (campos 9001 a 9020 do impresso do
        Anexo F, lidos pelo voto da lei do D71) */
