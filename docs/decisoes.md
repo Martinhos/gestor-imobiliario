@@ -125,6 +125,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-17 · A pinça trava-se no próprio toque: o Samsung Internet passa por cima do viewport (KAN-137)
 - 2026-11-17 · A vaga 1 da auditoria ao IRS: dados, motor, versões, termos, guia e a Declaração (KAN-126)
 - 2026-11-17 · A vaga 2 da auditoria ao IRS: o fim dos contratos, os prazos da AT, a situação de cada ano e o reporte (KAN-127)
+- 2026-11-18 · A vaga 3 da auditoria ao IRS: o bloco fiscal do contrato, as receitas da Declaração, os quadros raros e o guia (KAN-128)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4322,3 +4323,100 @@ o «outros fins» fora do quadro 9, o 9102 da demonstração antes ou depois da 
 só português, os prejuízos de 2022 e antes com a mesma janela, e o recibo devido no dia (a lei não lhe dá prazo).
 
 Ficou decidido o que a entrada da vaga 1 deixava «por decidir (vaga 2)»: as duas decisões acima.
+
+## 2026-11-18 · A vaga 3 da auditoria ao IRS: o bloco fiscal do contrato, as receitas da Declaração, os quadros raros e o guia (KAN-128)
+A vaga 3 corrige os defeitos que pediam as perguntas novas do contrato, o papel de cada receita no resumo, os quadros
+raros da ronda 2 no motor e nos dados, e o guia. Duas decisões do Martinho de 2026-11-17 mudam o plano:
+
+- **Sem alojamento local na app** (o Martinho: «Esta aplicação é exclusiva para senhorios que fazem arrendamento com
+  contratos»). Anula a Q11 (D130 na parte do AL, D131, D132): não há categoria «Alojamento local», nem migração
+  catsV=3, nem papel `al` no irs-papeis.js:irsReceitaDe — uma categoria da pessoa com esse nome fica por classificar,
+  como as outras —, nem texto do AL no guia. A única menção que fica no guia é a isenção do 6F, que é de
+  arrendamento: o imóvel que passou do AL a habitação permanente. O exemplo de uma categoria de receitas nova é
+  «Garagem». A parte do D130 sobre as rendas recebidas antes do início do contrato fica para a vaga 4.
+- **A caução não conta para o limite dos 2 300 € das rendas moderadas** (o Martinho: «Não deve contar»): o
+  irs.js:irsRendaMensalDoTeste soma só as receitas com o papel de renda — também as das Rendas «Fora dos totais» e
+  o reembolso do inquilino —, sem a caução, a indemnização (05) e as outras receitas prediais (02). O DL 97/2026,
+  art. 3.º, fala da renda; uma caução de dois meses no primeiro mês subia a média do ano e podia passar o limite. No
+  resumo a caução continua a ser renda do ano em que se recebe (D03).
+
+O porquê do resto:
+
+- **As isenções com condições que a app não vê só contam com a confirmação da pessoa** (D18, D46): o motor já o
+  fazia; o formulário pergunta-o e oferece só as isenções cujas datas servem à celebração. As do 6H e do 6F voltam ao
+  formulário com a pergunta delas (era o «Esconder até à vaga 3» da vaga 1). A renda antiga oferece-se a qualquer
+  contrato, porque a versão não escreve o dia do RAU (14 ou 18 de novembro de 1990, INCERTO); o 6F junta numa
+  pergunta o registo do AL até 31/12/2022 e a inscrição do contrato até 31/12/2024.
+- **A pergunta das obras dos 24 meses não exclui o primeiro contrato do imóvel** (D28): é o caso típico do art. 41.º
+  n.º 7 (PIV 26713). Até à resposta «Sim», as obras ficam por confirmar e não passam a conservação.
+- **As rendas antecipadas e a caução registam-se com o dia em que se receberam** (D56): é o ano do recibo (OC 20256).
+  O planeado arranca depois delas, e o «em falta» propunha-as no mês a que respeitam, no ano errado. A caução só se
+  propõe com a subcategoria dela na conta: sem ela, ia às rendas sem se saber que é a caução.
+- **A Declaração escolhe as receitas pelo papel, e não pelo nome** (D19, D20, D21, D51): renomear as Rendas, ou
+  pô-las fora dos totais, tirava rendas do Anexo F. A caução segue a AT (OC 20256, D03). A devolução de uma renda
+  nunca é gasto (art. 41.º), nem com a coluna escolhida à mão: abate às rendas. O reembolso do seguro não abate
+  sozinho, porque não se sabe a que coluna pertence o gasto.
+- **A indemnização (05) e as outras receitas prediais (02) vão à taxa base da finalidade**, sem a redução pela
+  duração, as rendas moderadas nem a isenção do contrato: a lei dá-as às rendas do contrato e não diz se valem para
+  a indemnização ou a cedência de uso (INCERTO).
+- **O quadro 5 vai à taxa base, e a diferença negativa não abate às outras rendas** (D52; art. 41.º n.º 6). Se a AT
+  a reporta fica INCERTO. A renda paga ao senhorio estima-se pela renda escrita no imóvel e pelos meses do
+  subarrendamento, e não pelas despesas, que podem ter outra categoria.
+- **Os 5 % do 6A seguem a PIV 28153** (D117; despacho de 2026-09-25: quem era dono a 6/10/2023, reabilitação iniciada
+  entre 2/1/2008 e 6/10/2023), a doutrina mais recente, contra a PIV 23119 (2025: só até às rendas de 2024); o
+  benefício leva um aviso da mudança de posição. Os quadros raros (6A, 6B, 6C, 4.3) suportam-se todos, decisão do
+  Martinho de 2026-11-13 (D117–D121). O 6C guarda a vigência da lei (até 31/12/2026): sem nova prorrogação, não conta
+  em 2027. O 6B pode ter caducado pelo art. 3.º do EBF (INCERTO); descreve-se como as instruções do Anexo F em vigor.
+- **O direito real de habitação duradoura guarda-se já, mas só entra no formulário com o 4.3 na Declaração**
+  (D120; dados.js:FISCO_FINALIDADES_TODAS): escolhido antes, a linha ia ao 4.1.
+- **O código da freguesia tem letras** (D136): a tabela da AT das freguesias repostas em 2025 tem códigos como 0302FE
+  (Barcelos, Guimarães), nas uniões e nas repostas. A base guarda-os em maiúsculas; um número perde o zero à
+  esquerda e não casa com as uniões dos distritos 01 a 09. Bicos (Odemira) repõe-se a partir de duas uniões: são 303
+  linhas e 302 códigos novos.
+- **O guia** diz a renda do recibo (antes da retenção, da comissão e de descontos), com a gestora e a obra
+  descontada na renda (D112, D113); o que não vai ao Anexo F (a categoria B nos dois casos, os imóveis de fora no
+  Anexo J); os 5 % da reabilitação pela PIV 28153, com a mudança de posição; os quadros 4.3, 6A, 6B e 6C; e a
+  caderneta atual depois da reposição das freguesias («cerca de 300»: a imprensa disse 302, a tabela tem 303). A
+  montra diz «de cada imóvel arrendado». As frases novas ficam para o Martinho verificar antes do promove.
+- **A ficha de um movimento diz o recibo eletrónico** nas receitas que o resumo conta nos recibos por emitir — a
+  renda, a caução e o reembolso do inquilino de um contrato declarado —: a ficha lia o ehRenda, pelo nome, e o recibo
+  da caução que a Declaração pede não se via nela.
+- **Os códigos da natureza guardam-se por ano** (irs.js:irsNaturezasDoAno): o papel lido por receita custava ao
+  resumo mais de metade do tempo novo só no irsAno de cada natureza.
+
+Os avisos, os cartões, a exportação e o Splitwise (lote B):
+
+- **«A tratar» avisa o que a Declaração não sabe arrumar**, sem decidir por ninguém. A casa que conta por inteiro sem
+  os donos fora da app confirmados é âmbar (D08, decisão do Martinho de 2026-11-13: avisar uma casa a 100 % não
+  confirmada), e as quotas que mudaram no ano dizem-se (D29). Com o cônjuge escolhido, um âmbar diz que só entram os
+  imóveis dele partilhados com esta conta (D31, a mesma decisão): a app não vê as casas da outra conta, por isso não
+  sabe se faltam, e o aviso não se cala. O reembolso do condomínio sem contrato abate sem pedir o contrato (Q7). As
+  receitas fora das Rendas dão um aviso condicional (D05, D51): a app não sabe se são do imóvel; a compensação do
+  IHRU aos contratos anteriores ao RAU (DL 132/2023 e o corte a 18/11/1990 ficam INCERTOS) não é rendimento.
+- **Os imóveis do exemplo têm os donos fora da app confirmados** (arranque.js:seed, comproprietariosFora vazio): sem
+  isso, uma conta nova via um âmbar por imóvel do exemplo.
+- **Os nomes das colunas são os do impresso, lidos da versão** (D90): é a referência de quem copia para o Portal. O
+  CSV fica com os ids no cabeçalho, porque são chaves de máquina e não mudam de sítio.
+- **Um inquilino de fora sem NIF português leva o país, e não um código inventado** (D59): a app não tem a tabela X
+  do Anexo J para as pessoas, e o cartão manda escolher o código no Portal. O número estrangeiro não é falta
+  (fisco-resumo.js:fiscoFaltaDoInquilino); sem NIF nem país, é. O nif_ou_pais do CSV deixou de repetir o número
+  estrangeiro (a vaga 1 tinha-o deixado como era): é a coluna que se copia, e o impresso não o aceita.
+- **A quota mostra-se com as casas decimais que tem** (D93): arredondar 50,2 % a 50 % escondia a quota que a
+  Declaração usou. As quotas escritas que não somam 100 % dizem-se.
+- **Em conjunta, as letras A e B são as do Rosto** (D30): o subtítulo do PDF dizia sempre «titular B», e a pessoa
+  pode ser a B com o cônjuge A.
+- **O quadro 5 e as linhas 05/02 à taxa base** (herdado da 2.3.2): o cartão diz o que a app faz («não abate uma
+  diferença negativa às outras rendas»), e não o que a lei diz. A coluna da atualização de 2023 vai no quadro 5 pelo
+  contrato, e não nas linhas 05/02 (INCERTO).
+- **A importação do Splitwise lança o custo total** (D122): a Declaração já reparte pela quota do imóvel com data
+  (D08), e uma despesa cortada pela quota não se distingue de outra; a quota-parte da importação aplicava-se duas
+  vezes. O «Só desde» por omissão é o dia da última importação (D127): o dia a seguir à despesa mais recente andava
+  para trás quando se apagavam as últimas, e elas voltavam. «Meu» é quem criou (_createdBy), e não quem escreveu por
+  último (D128): uma correção do outro dono a uma despesa minha não muda de quem é o lote. Os reembolsos ficam de
+  fora e listados (D125), sem os lançar como receita «Reembolsos»: não se sabe que despesa abatem, e o Splitwise
+  não traz o contrato. Uma repetida não se importa à força (D126): pela chave e por multiplicidade, é a mesma linha.
+  Os nomes do acerto e das colunas noutras línguas não se confirmaram numa exportação real (INCERTO), por isso há a
+  rede pela forma da linha.
+- **«Como a categoria» grava-se numa subcategoria com regra de origem** (dados.js:IRS_MAPA_HERDA,
+  definicoes.js:setIrsMapa): apagar a chave fazia a regra de origem voltar no fillCats seguinte, como o vazio de uma
+  categoria, que grava «a confirmar» (D61).

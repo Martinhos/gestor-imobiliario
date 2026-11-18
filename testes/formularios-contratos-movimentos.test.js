@@ -134,7 +134,7 @@ describe('os movimentos, tipo a tipo', () => {
     app.txModal({ kind: 'income', propId: 'P1' });
     app.document.getElementById('t_cat').value = '__new__';
     app.onCatChange();
-    assert.match(abertas[abertas.length - 1].b, /placeholder="Ex: Alojamento local"/);
+    assert.match(abertas[abertas.length - 1].b, /placeholder="Ex: Garagem"/);
   });
 });
 

@@ -52,7 +52,7 @@ describe('o bloco fiscal do contrato', () => {
     igual(c.fisco, { estado: '', numero: '', finalidade: '', celebracao: '', renovavel: null, renovacoes: [], cessacaoMotivo: '',
       cessacao: { data: '', motivo: '' }, comunicacoes: {}, comunicacoesV: 2, rendaAcimaDoLimite: null, rendaAnterior: 0, isencao: '',
       ihru: '', nrau3536: null, alRegistado2022: null, empresaHabitacao: null, consumosIncluidos: false, obrasSemOutroUso: null,
-      extrasMensais: 0, atualizacao2023: '' });
+      extrasMensais: 0, atualizacao2023: '', egf: false, categoriaB: false, impostoEstrangeiro: {} });
     assert.ok(app.ctFiscoPorIndicar(c));
     assert.ok(!app.ctDeclarado(c));
     assert.ok(!app.ctNaoDeclarado(c));

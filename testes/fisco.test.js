@@ -31,7 +31,8 @@ beforeEach(() => {
   );
   app.db.contracts.push(
     app.normContract({ id: 'C1', name: 'Arroios', propertyId: 'v1', tenantIds: ['t1'], rent: 1000, start: `${ANO}-01-01`, active: true,
-      fisco: { estado: 'declarado', numero: '1234567', finalidade: 'hp' } }),
+      // a casa esteve só à espera de inquilino antes do C1: as obras dos 24 meses contam (D28)
+      fisco: { estado: 'declarado', numero: '1234567', finalidade: 'hp', obrasSemOutroUso: true } }),
     app.normContract({ id: 'C2', name: 'Benfica', propertyId: 'v2', tenantIds: ['t2'], rent: 400, start: `${ANO - 1}-06-01`, active: true,
       fisco: { estado: 'naoDeclarado' } }),
   );
@@ -186,7 +187,8 @@ describe('o resumo do quadro 4.1', () => {
   });
 
   test('os gastos de um imóvel com dois contratos repartem-se pelas rendas de cada um', () => {
-    app.db.contracts.push(app.normContract({ id: 'C3', propertyId: 'v1', tenantIds: ['t2'], rent: 300, start: `${ANO}-01-01`, active: true, roomId: 'q' }));
+    app.db.contracts.push(app.normContract({ id: 'C3', propertyId: 'v1', tenantIds: ['t2'], rent: 300, start: `${ANO}-01-01`, active: true, roomId: 'q',
+      fisco: { obrasSemOutroUso: true } }));
     for (let i = 1; i <= 12; i++) mov({ kind: 'income', category: 'Rendas', amount: 250, contractId: 'C3', date: `${ANO}-${String(i).padStart(2, '0')}-06` });
     const r = app.resumoFiscal(ANO, '');
     const c1 = r.linhas.find((l) => l.contratoId === 'C1'), c3 = r.linhas.find((l) => l.contratoId === 'C3');
@@ -199,7 +201,7 @@ describe('o resumo do quadro 4.1', () => {
   test('um movimento de grupo é obra num imóvel vago e gasto corrente noutro, sem se perder nem se repetir', () => {
     app.db.properties.push(app.normProp({ id: 'v3', name: 'T0 Alvalade', ownerIds: ['ana'] }));
     app.db.contracts.push(app.normContract({ id: 'C4', propertyId: 'v3', tenantIds: ['t1'], rent: 500, start: `${ANO + 1}-01-01`, active: true,
-      fisco: { estado: 'declarado', numero: '999' } }));
+      fisco: { estado: 'declarado', numero: '999', obrasSemOutroUso: true } }));
     app.db.groups.push(app.normGroup({ id: 'G', name: 'Lisboa', kind: 'prop', ids: ['v1', 'v3'] }));
     mov({ kind: 'expense', category: 'Manutenção e reparações', amount: 1000, propertyId: null, groupId: 'G', date: ANO + '-06-01' });
     const r = app.resumoFiscal(ANO, '');
@@ -223,9 +225,11 @@ describe('o resumo do quadro 4.1', () => {
     assert.ok(a && /sem contrato a começar depois/.test(a.texto));
   });
 
-  test('uma caução não é renda, e uma renda de contrato futuro não conta antes de entrar', () => {
+  test('a caução é renda do ano em que se recebe (D03), e uma renda de contrato futuro não conta antes de entrar', () => {
     mov({ kind: 'income', category: 'Rendas', sub: 'Caução', amount: 2000, contractId: 'C1', date: ANO + '-01-02' });
-    perto(app.resumoFiscal(ANO, '').linhas[0].rendas, 12500, 1e-9);
+    const l = app.resumoFiscal(ANO, '').linhas[0];
+    perto(l.rendas, 12500 + 2000, 1e-9);
+    perto(l.caucao, 2000, 1e-9);
     assert.equal(app.resumoFiscal(ANO + 1, '').linhas.length, 0);
   });
 });
@@ -328,10 +332,10 @@ describe('a vista, o texto e o CSV', () => {
     assert.match(t, /ANEXO F · QUADROS 4\.1 E 4\.2 — 2024/);
     assert.match(t, /\[4\.1\] n\.º 1234567/, 'cada contrato diz o seu quadro');
     assert.ok(t.includes('Rendas ilíquidas ' + app.euro2(12500)));
-    assert.ok(t.includes('IMI ' + app.euro2(300)));
+    assert.ok(t.includes('Imposto municipal sobre imóveis ' + app.euro2(300)), 'os nomes do impresso (D90)');
     assert.ok(t.includes('n.º 1234567'));
     assert.match(t, /FORA DA DECLARAÇÃO\n  Benfica — T1 Benfica: /);
-    assert.match(t, /Obras antes do arrendamento .* \(desde 01\/07\/2023\)/);
+    assert.match(t, /Com obras de conservação e manutenção: .*Data de início dos gastos \(ano, mês\) 07\/2023/, 'os nomes e as datas do impresso (D90)');
   });
 
   test('o CSV tem um cabeçalho e uma linha por contrato, com o não declarado marcado', () => {

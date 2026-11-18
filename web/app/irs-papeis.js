@@ -4,7 +4,7 @@
    o papel de cada receita na Declaração (irsReceitaDe) e a devolução de uma
    renda (irsDevolucaoDeRenda), o que é uma renda fora da Declaração e a renda
    ilíquida (ehRenda, rendaBruta), o NIF (o dígito de controlo, nifValido, e a
-   pessoa coletiva, nifColetivo) e a situação de quem declara em cada ano
+   pessoa coletiva, nifColetivo, e o particular, nifParticular) e a situação de quem declara em cada ano
    (irsSituacao). Partiu-se do irs.js (KAN-125), que fica com o motor das
    taxas e o bloco fiscal do contrato. São da base pelas mesmas razões: as
    cópias, as definições, os contratos e a Declaração também os usam.
@@ -76,7 +76,7 @@ const irsColunaNome=col=>{if(col==='confirmar')return 'A confirmar';const c=IRS_
    · Outras receitas, Subsídios e apoios e as categorias da pessoa: 'porClassificar'.
    A natureza de uma renda ou de uma caução é a da linha do contrato
    (irs.js:naturezaIrs, no ano da data), null sem contrato; a da indemnização e a das
-   outras receitas prediais vêm da versão do ano (irsAno(ano).naturezas); nos outros
+   outras receitas prediais vêm da versão do ano (irs.js:irsNaturezasDoAno); nos outros
    papéis, null.
    Recebe: t — o movimento.
    Devolve: {papel, natureza} — papel 'renda', 'caucao', 'indemnizacao', 'outra',
@@ -90,7 +90,7 @@ function irsReceitaDe(t){
   const papel=(p,n)=>({papel:p,natureza:n===undefined?null:n});
   /* a natureza da linha do contrato a que a receita está ligada */
   const daLinha=()=>{const c=temCt?(db.contracts||[]).find(x=>x&&x.id===t.contractId):null;return c?naturezaIrs(c,ano):null};
-  const daVersao=k=>{const n=irsAno(ano).naturezas||{};return n[k]||null};
+  const daVersao=k=>{const n=irsNaturezasDoAno(ano);return n[k]||null};
   if(cid==='rendas'){
     if(sid==='rendas/caucao')return papel('caucao',daLinha());
     if(sid==='rendas/indemnizacao')return papel('indemnizacao',daVersao('indemnizacao'));
@@ -156,6 +156,19 @@ function nifValido(nif){
 function nifColetivo(nif){
   const s=String(nif==null?'':nif).replace(/\s/g,'');
   return /^\d{9}$/.test(s)&&'5679'.indexOf(s[0])>-1;
+}
+/* O NIF é de uma pessoa singular residente? Pelo primeiro dígito: 1, 2 ou 3 (DL
+   14/2013 art. 4.º). Serve para perguntar pelas retenções de um inquilino particular
+   (D116): só retém quem tem, ou devia ter, contabilidade organizada (CIRS art. 101.º
+   n.º 1), e um empresário em nome individual com contabilidade também tem um NIF
+   destes — por isso é um «confirma», nunca um bloqueio. O 45 (não residentes
+   singulares) fica de fora, como no contrato de interfaces. Não diz se o NIF é
+   válido (nifValido).
+   Recebe: nif — o NIF como foi escrito (string ou número; espaços são ignorados).
+   Devolve: true se tem nove dígitos e começa por 1, 2 ou 3. */
+function nifParticular(nif){
+  const s=String(nif==null?'':nif).replace(/\s/g,'');
+  return /^\d{9}$/.test(s)&&'123'.indexOf(s[0])>-1;
 }
 /* A situação de quem declara num ano dos rendimentos (D30, D71, D91): a de
    settings.irs.porAno desse ano; sem ela, a do ano anterior mais perto (a situação

@@ -202,7 +202,7 @@ describe('o guia «Declarar as rendas»', () => {
     const p3 = /<section class="bloco" id="como-preencher"[\s\S]*?\n {2}<\/section>/.exec(html)[0];
     const t3 = texto(p3);
     const grupos = [...p3.matchAll(/<div class="grupo">\s*<h3>([^<]+)<\/h3>/g)].map((m) => m[1]);
-    assert.deepEqual(grupos, ['Linha a linha', 'A caução', 'O quadro de cada contrato', 'Os outros quadros',
+    assert.deepEqual(grupos, ['Linha a linha', 'Quando a renda não chega inteira', 'A caução', 'O quadro de cada contrato', 'Os outros quadros',
       'Se os gastos passarem as rendas', 'Depois de entregares', 'O que mudou em 2025'], 'os grupos da parte 3, pela ordem');
     for (const frase of [
       'O B só existe quando és casado ou unido de facto e optam pela tributação conjunta',
@@ -239,9 +239,11 @@ describe('o guia «Declarar as rendas»', () => {
   test('as fontes apontam só para domínios oficiais', () => {
     const fontes = /<ul class="fontes">([\s\S]*?)<\/ul>/.exec(html)[1];
     const urls = [...fontes.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
-    // as oito de 2026-11-17 (auditoria ao IRS): a 454/2026/1, o DL 68/2019, os EBF 71.º-A, 74.º-A e 46.º-A, o CIRS 59.º, o OC 20256 e a 98-A/2015
-    assert.equal((fontes.match(/<li>/g) || []).length, 22 + 8 + 9, 'as trinta das partes 1 a 3 e as nove das deduções');
-    assert.equal(urls.length, 39, 'todas com o endereço confirmado');
+    // as oito de 2026-11-17 (auditoria ao IRS): a 454/2026/1, o DL 68/2019, os EBF 71.º-A, 74.º-A e 46.º-A, o CIRS 59.º, o OC 20256 e a 98-A/2015;
+    // e as catorze da ronda 2 (KAN-128): os CIRS 3.º, 4.º, 15.º e 81.º, os Anexos B e J, o EBF 71.º de antes de 2023,
+    // os processos 28153 e 23119, os EBF 59.º-I e 59.º-G, o CIMI 113.º, a reposição das freguesias e a Lei 25-A/2025
+    assert.equal((fontes.match(/<li>/g) || []).length, 22 + 8 + 14 + 9, 'as quarenta e quatro das partes 1 a 3 e as nove das deduções');
+    assert.equal(urls.length, 53, 'todas com o endereço confirmado');
     assert.equal(new Set(urls).size, urls.length, 'nenhuma repetida');
     for (const u of urls) {
       assert.match(u, /^https:\/\/(?:info\.portaldasfinancas\.gov\.pt|irs\.portaldasfinancas\.gov\.pt|diariodarepublica\.pt)\//, u);

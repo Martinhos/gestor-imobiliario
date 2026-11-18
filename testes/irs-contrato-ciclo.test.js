@@ -339,13 +339,14 @@ describe('o fim e a vida do contrato pelo motor (irsFimEfetivo, irsFimReal)', ()
     assert.match(at, /quadro 4\.1/);
   });
 
-  test('o formulário continua sem as isenções que pedem uma confirmação (6H e 6F)', () => {
-    monta();
+  test('as isenções que pedem uma confirmação (6H e 6F) voltam ao formulário, com a pergunta delas', () => {
+    monta({ start: '2024-03-01', fisco: { celebracao: '2024-02-20' } });
     app.cForm = app.normContract(copia(app.contract('C1')));
     const f = app.fiscoSect();
     assert.match(f, /id="c_fisen"/);
-    for (const x of app.irsAno(2026).isencoes.filter((i) => i.pede)) assert.ok(!opcoes('c_fisen').includes(x.id), x.id);
+    for (const x of app.irsAno(2026).isencoes.filter((i) => i.pede)) assert.ok(opcoes('c_fisen').includes(x.id), x.id);
     assert.ok(opcoes('c_fisen').includes('paa'), 'controlo: as outras estão');
+    assert.match(f, /<div id="c_fnrauBox" hidden>/, 'a pergunta só com a isenção dela');
   });
 });
 

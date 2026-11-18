@@ -345,7 +345,7 @@ const ECRAS = [
     rotulo: 'O ecrã dos Planeados num telemóvel: três rendas por confirmar, uma delas em atraso, cada uma com o botão Confirmar, e a seguir a prestação do crédito, o condomínio e o IMI que vêm aí.',
     ecra: ecraPlaneados },
   { id: 'irs', chapeu: 'IRS · Anexo F', tom: 't3', titulo: 'O IRS das rendas, já resumido',
-    texto: 'As rendas e os gastos de cada imóvel chegam arrumados pelo quadro do Anexo F onde os escreves, com o imposto estimado. A app resume; quem declara és tu, no Portal das Finanças.',
+    texto: 'As rendas e os gastos de cada imóvel arrendado chegam arrumados pelo quadro do Anexo F onde os escreves, com o imposto estimado. A app resume; quem declara és tu, no Portal das Finanças.',
     pontos: ['A tua declaração, pela tua quota-parte de cada imóvel.','O que falta nos teus dados, como um NIF ou um artigo matricial, antes de entregares.', 'O resumo em PDF ou CSV, e o guia de como declarar as rendas ao lado.'],
     rotulo: 'O ecrã do IRS · Anexo F num telemóvel: dois pontos a tratar antes de entregar, um inquilino sem NIF e um imóvel sem artigo matricial, e o quadro 4.1 com as rendas e o imposto estimado de cada um dos quatro imóveis.',
     ecra: ecraIrs },

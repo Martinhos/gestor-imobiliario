@@ -172,9 +172,11 @@ describe('D43 — o contrato sem data de início tem a falta', () => {
 });
 
 describe('D63 — as obras dos 24 meses vão para o ano em que o contrato começa', () => {
+  // a casa esteve só à espera de inquilino: sem a resposta «sim», as obras ficam por confirmar (D28)
+  const espera = { estado: 'declarado', numero: '1234567', finalidade: 'hp', obrasSemOutroUso: true };
   test('a 1.ª renda paga em dezembro, antes do início em janeiro: as obras são do ano do início', () => {
     imovel();
-    contrato({ start: '2027-01-01' });
+    contrato({ start: '2027-01-01', fisco: espera });
     mov({ kind: 'income', category: 'Rendas', sub: 'Renda mensal', amount: 1000, contractId: 'C1', date: '2026-12-15', periodo: '2027-01', recibo: true });
     rendas('C1', 2027, 1000, [2, 3, 4]);
     mov({ kind: 'expense', category: 'Manutenção e reparações', sub: 'Pequenas reparações', amount: 4000, date: '2026-10-10' });
@@ -186,7 +188,7 @@ describe('D63 — as obras dos 24 meses vão para o ano em que o contrato começ
 
   test('sem rendas no ano do início, as obras vão para o primeiro ano com rendas (o recurso)', () => {
     imovel();
-    contrato({ start: '2026-12-01' });
+    contrato({ start: '2026-12-01', fisco: espera });
     rendas('C1', 2027, 1000, [1, 2, 3]);
     mov({ kind: 'expense', category: 'Manutenção e reparações', sub: 'Pequenas reparações', amount: 3000, date: '2026-10-10' });
     perto(linha(app.resumoFiscal(2027, 'ana'), 'C1').obras24.valor, 3000, 1e-9);

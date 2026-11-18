@@ -279,8 +279,9 @@ describe('as obras dos 24 meses', () => {
     app.db.owners = [app.normPerson({ id: 'ana', name: 'Ana' })];
     app.db.tenants = [app.normPerson({ id: 't1', name: 'Tiago', nif: '123456789' })];
     app.db.properties = [app.normProp({ id: 'v1', name: 'T2', ownerIds: ['ana'], freguesiaCodigo: '110623', tipoPredio: 'U', matrix: '4651' })];
+    /* obrasSemOutroUso: o T2 esteve só à espera de inquilino (D28, CIRS art. 41.º n.º 7) */
     app.db.contracts = [app.normContract({ id: 'C1', name: 'Tiago', propertyId: 'v1', tenantIds: ['t1'], rent: 800, start: inicio, active: true,
-      fisco: { estado: 'declarado', numero: '1', finalidade: 'hp' } })];
+      fisco: { estado: 'declarado', numero: '1', finalidade: 'hp', obrasSemOutroUso: true } })];
     app.db.transactions = [app.normTx({ kind: 'expense', label: 'Pintura', category: 'Manutenção e reparações', amount: 1200, propertyId: 'v1', date: '2024-06-10' })];
     ['2025-01-05', '2025-02-05', '2026-01-05'].forEach((d) => app.db.transactions.push(app.normTx({ kind: 'income', category: 'Rendas', amount: 800,
       propertyId: 'v1', contractId: 'C1', date: d })));

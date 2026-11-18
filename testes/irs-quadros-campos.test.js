@@ -143,9 +143,10 @@ describe('D63 · as obras dos 24 meses com o ano certo', () => {
 
   test('as colunas das obras pedem o mês e o ano, como o impresso', () => {
     const r = resumoAMao((l) => { if (l.contratoId === 'C1') Object.assign(l, { inicio: '2026-02-01', obras24: { valor: 900, inicioGastos: '2025-11-20' } }); });
-    const cs = app.fiscoCamposDe(r, linhaDe(r, 'C1')), g = 'Obras dos 24 meses antes do contrato';
-    assert.equal(campo(cs, g, 'Início do contrato').valor, '02/2026');
-    assert.equal(campo(cs, g, 'Mês do primeiro pagamento').valor, '11/2025');
+    // os nomes do grupo e das colunas são os do impresso, da versão do ano (D90, vaga 3)
+    const cs = app.fiscoCamposDe(r, linhaDe(r, 'C1')), g = 'Com obras de conservação e manutenção';
+    assert.equal(campo(cs, g, 'Data de início do contrato de arrendamento (ano, mês)').valor, '02/2026');
+    assert.equal(campo(cs, g, 'Data de início dos gastos (ano, mês)').valor, '11/2025');
     assert.equal(campo(cs, g, 'Valor').valor, app.euro2(900));
   });
 });
@@ -251,7 +252,8 @@ describe('D77 · o n.º do campo e «por esta ordem»', () => {
     assert.match(texto(app.fiscoAnosAnterioresCard(r)), /quadro 4\.1 · campo 4001 · respeitam a 2024/);
     // o 9: o campo onde o prédio ficou
     r.aimi = { n: 1, total: 120, predios: [{ propertyId: 'v1', imovel: 'T2 Arroios', quadro: '4.1', vpt: 100000 }], vptArrendados: 100000, vptTotal: 100000, semVpt: [], abate: 60, parte: 60 };
-    assert.match(texto(app.fiscoAimiCard(r)), /T2 Arroios campo 4001 do quadro 4\.1 · valor patrimonial tributário/);
+    // (com a identificação matricial do prédio antes do campo, D71 na vaga 3)
+    assert.match(texto(app.fiscoAimiCard(r)), /T2 Arroios 9001 · 110623-U-4651-A · campo 4001 do quadro 4\.1 · valor patrimonial tributário/, 'a linha do 9 tem o seu campo (9001…)');
   });
 
   test('de ponta a ponta: o resumo numera, e a página mostra-o', () => {

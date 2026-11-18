@@ -233,9 +233,10 @@ describe('os quadros em cartões', () => {
     assert.doesNotMatch(q, /<table|tablewrap/, 'sem tabela larga a rolar de lado');
     const c = cartaoDe(html, 'Arroios');
     assert.match(c, /<span class="small">T2 Arroios · taxa 25 % · base<\/span>/, 'o imóvel e a taxa à cabeça');
+    // D90: os gastos com os nomes do impresso, no grupo «Após início do arrendamento»
     const ordem = ['N.º do contrato', 'Data de início', 'Freguesia (código)', 'Tipo', 'Artigo', 'Fração ou secção', 'Titular',
       'Rendas (rendimento ilíquido)', 'Natureza', 'Retenções na fonte', 'NIF do inquilino',
-      'Conservação e manutenção', 'Condomínio', 'IMI', 'Imposto do selo', 'Taxas autárquicas', 'Outros gastos'];
+      'Conservação e manutenção', 'Condomínio', 'Imposto municipal sobre imóveis', 'Imposto do selo', 'Taxas autárquicas', 'Outros'];
     const pos = ordem.map((k) => c.indexOf('<dt>' + k));
     pos.forEach((p, i) => assert.ok(p > -1, ordem[i] + ' está no cartão'));
     pos.slice(1).forEach((p, i) => assert.ok(p > pos[i], ordem[i + 1] + ' vem depois de ' + ordem[i]));
@@ -252,7 +253,8 @@ describe('os quadros em cartões', () => {
     assert.match(c, /<dt>Natureza<span class="small">habitacional<\/span><\/dt>/);
     assert.equal(valorDe(c, 'Retenções na fonte'), app.euro2(250));
     assert.equal(valorDe(c, 'NIF do inquilino'), '<span class="u-ws-nowrap">' + app.fmtNIF('123456789') + '</span>');
-    assert.equal(valorDe(c, 'IMI'), app.euro2(l.gastos.imi));
+    assert.equal(valorDe(c, 'Imposto municipal sobre imóveis'), app.euro2(l.gastos.imi));
+    assert.match(c, /<p class="lbl fis-ctc-grupo">Após início do arrendamento<\/p>/, 'o grupo do impresso');
     assert.equal(valorDe(c, 'Condomínio'), app.euro2(l.gastos.condominio));
     assert.equal(valorDe(c, 'Imposto do selo'), '—', 'o que não há leva um traço, não um zero inventado');
     assert.match(c, /data-toca="camada" data-click="ctView\('C1'\)"/, 'tocar abre o contrato');
@@ -268,7 +270,7 @@ describe('os quadros em cartões', () => {
     const soma = (f) => Math.round(ls.reduce((n, l) => n + f(l), 0) * 100) / 100;
     assert.equal(valorDe(t, 'Rendas (rendimento ilíquido)'), app.euro2(soma((l) => l.rendas)));
     assert.equal(valorDe(t, 'Retenções na fonte'), app.euro2(soma((l) => l.retencoes)));
-    assert.equal(valorDe(t, 'IMI'), app.euro2(soma((l) => l.gastos.imi)));
+    assert.equal(valorDe(t, 'Imposto municipal sobre imóveis'), app.euro2(soma((l) => l.gastos.imi)));
     assert.equal(valorDe(t, 'Imposto do selo'), app.euro2(0), 'no total, o zero diz-se');
   });
 
@@ -283,7 +285,9 @@ describe('os quadros em cartões', () => {
     // D102: o 4.2 não tem a coluna da data de início — a data vai só no 4.2A
     const linhaDoQuadro = c.slice(0, c.indexOf('<p class="lbl fis-ctc-grupo">'));
     assert.doesNotMatch(linhaDoQuadro, /<dt>Data de início/, 'a linha do 4.2 sem «Data de início»');
-    assert.equal(valorDe(c, 'País do inquilino'), 'Espanha');
+    // D59: sem NIF português, o NIF fica vazio e conta o país, com o código da tabela X a escolher no Portal
+    assert.equal(valorDe(c, 'NIF do inquilino'), '—');
+    assert.equal(valorDe(c, 'País do inquilino'), 'Espanha <span class="badge amber">no Portal, o código do país (tabela X)</span>');
     assert.match(c, /<dt>País do inquilino<span class="small">Vera<\/span><\/dt>/);
     assert.match(c, /<p class="lbl fis-ctc-grupo">Quadro 4\.2A<\/p>/);
     // a comunicação é do período de 2024, com o prazo a 15/02/2025, já passado a 15/03/2026 (D01, D35, KAN-127)
@@ -325,6 +329,6 @@ describe('os quadros em cartões', () => {
       [['', 'Campo', '4001', false], ['', 'N.º do contrato', '1234567', false], ['', 'Data de início', '01/01/2024', false], ['', 'Freguesia (código)', '110623', false]]);
     assert.equal(app.fiscoCamposDe(r, Object.assign({}, l, { campo: '' }))[0].campo, 'N.º do contrato', 'sem campo no resumo, não se inventa');
     assert.ok(cs.every((c) => !/[<>]/.test(c.valor)), 'sem HTML nos valores');
-    assert.deepEqual(JSON.parse(JSON.stringify([...new Set(cs.map((c) => c.grupo))])), ['', 'Gastos']);
+    assert.deepEqual(JSON.parse(JSON.stringify([...new Set(cs.map((c) => c.grupo))])), ['', 'Após início do arrendamento'], 'o grupo do impresso (D90)');
   });
 });

@@ -252,7 +252,7 @@ describe('a Declaração é a de quem tem a sessão (KAN-73)', () => {
     const html = app.vFisco();
     assert.match(html, /<dt>Titular<\/dt><dd>A<\/dd>/);
     assert.match(html, /<dt>Titular<\/dt><dd>B<\/dd>/);
-    assert.match(html, /T2 Arroios · titular B · quota-parte 50%/);
+    assert.match(html, /T2 Arroios · titular B · quota-parte 50 %/, 'a quota com as casas que tem (D93, folha 2.3.4)');
     assert.match(html, /Preenche no <b>quadro 4\.1<\/b> do Anexo F[^.]*e por titular/, 'uma linha por titular (o texto do cartão é da folha 2.1.11)');
     assert.match(html, /<b>Total do quadro 4\.1<\/b><span class="small">2 contratos · líquido /);
     assert.match(html, /<span class="small">2025 · a tua parte e a do titular B<\/span>/);

@@ -118,6 +118,17 @@ const TAGS0=['Urgente','A reembolsar','Recorrente','Dedutível','Em disputa'];
 const FISCO_ESTADOS=['','declarado','naoDeclarado'];
 /* a finalidade do arrendamento, como o Modelo 2 a pergunta (a natureza no Anexo F sai daqui) */
 const FISCO_FINALIDADES=[['hp','Habitação permanente'],['hnp','Habitação não permanente'],['nh','Não habitacional']];
+/* As finalidades que o bloco fiscal guarda: as do Modelo 2 (FISCO_FINALIDADES, as do
+   formulário) e o direito real de habitação duradoura (DL 1/2020), que vai ao quadro
+   4.3 do Anexo F a 5 % (art. 72.º n.º 5; a escritura é o c.start, a caução o
+   c.deposit — D120). O DHD guarda-se já; o formulário só o mostra quando a
+   Declaração tiver o 4.3. */
+const FISCO_FINALIDADES_TODAS=FISCO_FINALIDADES.concat([['dhd','Direito real de habitação duradoura']]);
+/* Os encargos do imóvel que o contrato põe a cargo do inquilino (o Q13: «Encargos a
+   cargo do inquilino» no contrato, c.encargosInquilino — uma lista destes ids). É uma
+   lista aberta: acrescentar um encargo aqui não pede migração nenhuma. */
+const ENCARGOS_DO_INQUILINO=[{id:'condominio',nome:'Condomínio'},{id:'imi',nome:'IMI'},{id:'seguro',nome:'Seguro'},
+  {id:'consumos',nome:'Água, luz e gás'}];
 /* as colunas de gastos do quadro 4.1 do Anexo F, a das obras dos 24 meses anteriores ao
    arrendamento, e «não dedutível» — o que o artigo 41.º do CIRS deixa de fora */
 const IRS_COLUNAS=[['conservacao','Conservação e manutenção'],['condominio','Condomínio'],['imi','IMI'],['selo','Imposto do selo'],
@@ -128,6 +139,13 @@ const IRS_COLUNAS=[['conservacao','Conservação e manutenção'],['condominio',
    Martinho, D06/D07/D24–D27/D60/D61). Só o mapa a aceita: o irsCol de um movimento
    continua a ser só um id de IRS_COLUNAS (normTx). */
 const IRS_MAPA_VALORES=IRS_COLUNAS.concat([['confirmar','A confirmar em cada despesa']]);
+/* «Como a categoria» numa subcategoria do mapa: a subcategoria segue a coluna da
+   categoria. Apagar a chave não chegava numa subcategoria com regra de origem (o
+   fillCats repunha a regra do IRS_MAPA0 na leitura seguinte); com este valor a
+   escolha fica. Não é uma coluna (não está em IRS_MAPA_VALORES): o
+   irs-papeis.js:irsColunaDe não o aceita na subcategoria e passa à categoria. Só vale
+   numa chave de subcategoria que está na árvore das despesas (fillCats). */
+const IRS_MAPA_HERDA='categoria';
 /* de cada categoria de origem (ou «Categoria / Sub») à coluna do Anexo F. Fora, por lei: os
    gastos financeiros (juros, comissões, seguro de vida do crédito), as depreciações, o
    mobiliário, os eletrodomésticos e a decoração; e o que acrescenta valor (beneficiação:
@@ -407,7 +425,8 @@ function normTarefas(t){
 /* normaliza um imóvel e migra o que mudou entre versões: equity passa a purchase, o crédito único
    vira lista de hipotecas, quartos em texto ganham id, e quotas de donos removidos são descartadas.
    Os campos fiscais (o que o Anexo F e o Modelo 2 pedem por imóvel): distrito, código da
-   freguesia (seis dígitos, da caderneta ou da nota do IMI), tipo de prédio (U/R), tipologia,
+   freguesia (seis caracteres da caderneta ou da nota do IMI, que podem acabar em letras,
+   em maiúsculas — D136), tipo de prédio (U/R), tipologia,
    VPT e data de aquisição. O vpt das versões antigas deixou de ser apagado — é o mesmo valor,
    e o rateio dos gastos num imóvel arrendado por partes faz-se por ele.
    As despesas fixas do imóvel, que criam planeados sozinhas (planeados.js:syncPropRecs):
@@ -422,6 +441,13 @@ function normTarefas(t){
    ({ativo, nifSenhorio, rendaMensal}: «arrendo este imóvel e subarrendo-o», o quadro 5
    — D52) e afetacao (a da caderneta, que decide o AIMI — D71). Cada um com lixo
    volta à omissão.
+   Os da ronda 2: reabilitacao ({tipo: '' | 'aru' | 'nrau', inicio, conclusao,
+   certificado} — o imóvel reabilitado em ARU ou pelo NRAU com o certificado da câmara,
+   EBF art. 71.º, quadro 6A; a data de compra é o purchaseDate — D117), lojaComHistoria
+   (reconhecida pela Lei 42/2017, quadro 6B — D121), pais ('' é Portugal, paisDoImovel)
+   e paisCodigo (o da tabela X, codigoDoPais; '' sem país) — um imóvel fora de Portugal
+   vai ao Anexo J (D133) — e matrizConfirmada (o dia em que o código e o artigo se
+   conferiram na caderneta atual, ou '' — D135).
    Recebe: p — o imóvel em bruto, de qualquer versão dos dados (ou nada).
    Devolve: um objeto novo com o imóvel completo e já migrado. */
 function normProp(p){
@@ -429,7 +455,8 @@ function normProp(p){
     value:0,purchase:0,ownerIds:[],ownerShares:{},notes:'',listing:'',photos:[],loans:[],
     parish:'',concelho:'',freguesia:'',fraction:'',floor:'',street:'',doorNumber:'',postalCode:'',locality:'',registry:'',matrix:'',licence:'',energyCert:'',energyClass:'',energyValid:'',
     distrito:'',freguesiaCodigo:'',tipoPredio:'',tipologia:'',vpt:0,purchaseDate:'',imi:0,condominio:0,seguro:0,seguroMes:0,
-    comproprietariosFora:null,quotasHist:[],vendido:'',subarrendamento:null,afetacao:''},p||{});
+    comproprietariosFora:null,quotasHist:[],vendido:'',subarrendamento:null,afetacao:'',
+    reabilitacao:null,lojaComHistoria:false,pais:'',paisCodigo:'',matrizConfirmada:''},p||{});
   o.id=idSeguro(o.id);o.ownerIds=idsSeguros(o.ownerIds);
   ['imi','condominio','seguro'].forEach(k=>{o[k]=Math.max(0,Math.round((Number(o[k])||0)*100)/100)});
   o.seguroMes=Math.min(12,Math.max(0,Math.round(Number(o.seguroMes)||0)));
@@ -441,7 +468,11 @@ function normProp(p){
   o.loans=(o.loans||[]).map(normLoan).map(l=>Object.assign(l,{name:l.name||l.bank||'Hipoteca'}));
   ['imiRate','status','monthlyRent','rentIncrease','tenant','loan','loanId'].forEach(k=>{delete o[k]});
   o.distrito=String(o.distrito||'');
-  o.freguesiaCodigo=String(o.freguesiaCodigo||'').replace(/\D/g,'').slice(0,6);
+  /* o código da AT: quatro algarismos (distrito e concelho) e dois caracteres da
+     freguesia, que podem ser letras (0302FE, 0308FA — D136). Só algarismos e letras,
+     em maiúsculas, cortado a seis; o formato inteiro confere-o quem o lê (uma falta) */
+  const fc=o.freguesiaCodigo;
+  o.freguesiaCodigo=typeof fc==='string'||(typeof fc==='number'&&isFinite(fc))?String(fc).toUpperCase().replace(/[^0-9A-Z]/g,'').slice(0,6):'';
   o.tipoPredio=(o.tipoPredio==='U'||o.tipoPredio==='R')?o.tipoPredio:'';
   o.tipologia=/^T\d$/.test(String(o.tipologia||''))?String(o.tipologia):'';
   o.vpt=Math.max(0,Number(o.vpt)||0);
@@ -461,7 +492,32 @@ function normProp(p){
   o.subarrendamento={ativo:sub.ativo===true,nifSenhorio:String(sub.nifSenhorio==null?'':sub.nifSenhorio).replace(/\D/g,'').slice(0,9),
     rendaMensal:typeof sub.rendaMensal!=='boolean'&&isFinite(rm)&&rm>0?Math.round(rm*100)/100:0};
   o.afetacao=['habitacao','comercio','servicos','industria','outros'].indexOf(o.afetacao)>-1?o.afetacao:'';
+  const re=o.reabilitacao&&typeof o.reabilitacao==='object'&&!Array.isArray(o.reabilitacao)?o.reabilitacao:{};
+  o.reabilitacao={tipo:['aru','nrau'].indexOf(re.tipo)>-1?re.tipo:'',inicio:dataExiste(re.inicio)?re.inicio:'',
+    conclusao:dataExiste(re.conclusao)?re.conclusao:'',certificado:re.certificado===true};
+  o.lojaComHistoria=o.lojaComHistoria===true;
+  o.pais=paisDoImovel(o.pais);
+  o.paisCodigo=o.pais?codigoDoPais(o.paisCodigo):'';
+  o.matrizConfirmada=dataExiste(o.matrizConfirmada)?o.matrizConfirmada:'';
   return o;
+}
+/* O país de um imóvel (D133): '' é Portugal (e escrever «Portugal» também o é);
+   senão o nome, sem caracteres de controlo, aparado, até 60 caracteres.
+   Recebe: v — o valor tal como veio.
+   Devolve: o nome (texto), ou '' para Portugal e para o que não for texto. */
+function paisDoImovel(v){
+  if(typeof v!=='string')return '';
+  const s=v.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,60).trim();
+  return /^portugal$/i.test(s)?'':s;
+}
+/* O código do país da tabela X das instruções do Anexo J (o quadro 7A pede-o):
+   três algarismos, como o ISO 3166-1 numérico (250 França, 076 Brasil — INCERTO:
+   o formato confere-se nas instruções do ano). Um número ganha os zeros da frente.
+   Recebe: v — o valor tal como veio.
+   Devolve: o código (texto de três algarismos), ou '' quando não serve. */
+function codigoDoPais(v){
+  const s=typeof v==='number'?(Number.isInteger(v)&&v>0&&v<1000?String(v).padStart(3,'0'):''):typeof v==='string'?v.trim():'';
+  return /^\d{3}$/.test(s)&&s!=='000'?s:'';
 }
 /* Os comproprietários de uma casa que não têm conta na app (D08): null é «não
    confirmado» (a casa conta como só dos donos com conta, e a Declaração pergunta);
@@ -546,13 +602,20 @@ function imovelVendido(p,hoje){
    o limite dos 10 % — D48) e atualizacao2023 ('sim', 'nao' ou '' — a renda de 2023
    subiu mais de 2 %? — D76). As perguntas de sim/não são true, false ou null (por
    responder); cada campo com lixo volta à omissão.
+   Os da ronda 2: a finalidade aceita também o DHD ('dhd', FISCO_FINALIDADES_TODAS —
+   quadro 4.3, D120); egf (prédio rústico arrendado a uma entidade de gestão florestal
+   reconhecida, EBF art. 59.º-G, quadro 6C — D119) e categoriaB (as rendas tributam-se
+   na categoria B: a opção do art. 4.º n.º 1 n) ou o imóvel afeto à atividade, art. 3.º
+   n.º 2 a); não é «não declarado»: o contrato continua no Modelo 2 e nos recibos —
+   D134), os dois true ou false; e impostoEstrangeiro ({'AAAA': €} — o imposto pago no
+   estrangeiro num imóvel fora de Portugal, para o Anexo J — D133).
    Recebe: f — o bloco em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos do bloco preenchidos. */
 function normFisco(f){
   const o=Object.assign({estado:'',numero:'',finalidade:'',celebracao:'',renovavel:null,renovacoes:[],cessacaoMotivo:'',
     cessacao:null,comunicacoes:{},comunicacoesV:0,rendaAcimaDoLimite:null,rendaAnterior:0,isencao:'',ihru:'',
     nrau3536:null,alRegistado2022:null,empresaHabitacao:null,consumosIncluidos:false,obrasSemOutroUso:null,
-    extrasMensais:0,atualizacao2023:''},f&&typeof f==='object'&&!Array.isArray(f)?f:{});
+    extrasMensais:0,atualizacao2023:'',egf:false,categoriaB:false,impostoEstrangeiro:{}},f&&typeof f==='object'&&!Array.isArray(f)?f:{});
   const com={},cIn=o.comunicacoes&&typeof o.comunicacoes==='object'&&!Array.isArray(o.comunicacoes)?o.comunicacoes:{};
   Object.keys(cIn).forEach(k=>{if(/^\d{4}$/.test(k)&&dataExiste(cIn[k]))com[k]=cIn[k]});
   o.comunicacoes=com;
@@ -561,7 +624,7 @@ function normFisco(f){
   const ra=Number(o.rendaAnterior);o.rendaAnterior=isFinite(ra)&&ra>0?ra:0;
   if(['','paa','rsaa','pma','pmae','prerau','al'].indexOf(o.isencao)<0)o.isencao='';
   if(FISCO_ESTADOS.indexOf(o.estado)<0)o.estado='';
-  if(!FISCO_FINALIDADES.some(x=>x[0]===o.finalidade))o.finalidade='';
+  if(!FISCO_FINALIDADES_TODAS.some(x=>x[0]===o.finalidade))o.finalidade='';
   o.numero=String(o.numero||'').trim();
   o.celebracao=/^\d{4}-\d{2}-\d{2}$/.test(String(o.celebracao||''))?String(o.celebracao):'';
   o.renovavel=simNaoNulo(o.renovavel);
@@ -578,6 +641,14 @@ function normFisco(f){
   const ex=typeof o.extrasMensais==='boolean'?NaN:Number(o.extrasMensais);
   o.extrasMensais=isFinite(ex)&&ex>0?Math.round(ex*100)/100:0;
   if(['','sim','nao'].indexOf(o.atualizacao2023)<0)o.atualizacao2023='';
+  o.egf=o.egf===true;
+  o.categoriaB=o.categoriaB===true;
+  /* o imposto pago no estrangeiro, por ano: só chaves de quatro algarismos e euros ≥ 0
+     (um número, ou o texto de um), ao cêntimo */
+  const ie={},ieIn=o.impostoEstrangeiro&&typeof o.impostoEstrangeiro==='object'&&!Array.isArray(o.impostoEstrangeiro)?o.impostoEstrangeiro:{};
+  Object.keys(ieIn).forEach(k=>{const v=ieIn[k],n=typeof v==='number'||(typeof v==='string'&&v.trim()!=='')?Number(v):NaN;
+    if(/^\d{4}$/.test(k)&&isFinite(n)&&n>=0)ie[k]=Math.round(n*100)/100});
+  o.impostoEstrangeiro=ie;
   return o;
 }
 /* A migração das comunicações da duração (D01): até à marca comunicacoesV=2 a chave
@@ -612,13 +683,15 @@ function migrarComunicacoes(o){
    e o que precisa das datas do contrato faz-se aqui: uma renovação escrita no bloco
    com o fim depois do termo leva o termo (c.end) com ela, como o «Renovar…» faz (D42 —
    só num contrato com termo; um sem termo não ganha um), e as comunicações antigas
-   migram para a chave do período (migrarComunicacoes, D01)
+   migram para a chave do período (migrarComunicacoes, D01).
+   encargosInquilino são os encargos do imóvel que o contrato põe a cargo do inquilino
+   (o Q13): ids de ENCARGOS_DO_INQUILINO, sem repetidos e pela ordem dela ([] sem nenhum).
    Recebe: c — o contrato em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos do contrato preenchidos. */
 function normContract(c){
   const o=Object.assign({id:uid(),name:'',propertyId:null,roomId:null,tenantIds:[],rent:0,taxRate:0,iban:'',
     ownerEmail:'',ownerPhone:'',tenantEmail:'',tenantPhone:'',ownerContactId:'',tenantContactId:'',
-    photoIds:[],keys:[],fisco:null,
+    photoIds:[],keys:[],fisco:null,encargosInquilino:[],
     deposit:0,payDay:1,payDayTo:0,advance:0,autoRec:true,start:'',end:'',increase:null,active:true,notes:'',files:[],inventory:[]},c||{});
   o.id=idSeguro(o.id);o.propertyId=idSeguro(o.propertyId);o.roomId=idSeguro(o.roomId);
   o.tenantIds=idsSeguros(o.tenantIds);o.photoIds=idsSeguros(o.photoIds);
@@ -630,6 +703,8 @@ function normContract(c){
   if(dataExiste(o.end))o.fisco.renovacoes.forEach(r=>{
     if(dataExiste(r.inicio)&&dataExiste(r.fim)&&r.inicio<=r.fim&&r.fim>o.end)o.end=r.fim});
   migrarComunicacoes(o);
+  const enc=Array.isArray(o.encargosInquilino)?o.encargosInquilino:[];
+  o.encargosInquilino=ENCARGOS_DO_INQUILINO.map(e=>e.id).filter(id=>enc.indexOf(id)>-1);
   o.files=(o.files||[]).map(normFile);
   o.inventory=(o.inventory||[]).map(i=>{const q=Object.assign({id:uid(),name:'',qty:1,state:'usado'},i);q.id=idSeguro(q.id);return q});
   o.keys=(o.keys||[]).map(i=>{const q=Object.assign({id:uid(),name:'',qty:1},i);q.id=idSeguro(q.id);return q});
@@ -661,6 +736,25 @@ function normLote(l){
   const modo=PSPLIT_MODES.some(m=>m[0]===l.modo)?l.modo:'equal';
   return {id,n,total,alvo:alvo==='todos'?'todos':'g:'+g,modo,partes:chavesSeguras(l.partes)};
 }
+/* A chave de uma linha importada do Splitwise (t.swKey, settings.swIgnoradas — D127):
+   o texto tal como o splitwise.js o fez, com os caracteres de controlo trocados por
+   espaços e até 500 caracteres. Não se apara: é uma identidade, e quem compara uma
+   chave acabada de calcular com as guardadas passa-a primeiro por aqui.
+   Recebe: v — a chave tal como veio.
+   Devolve: o texto, ou '' quando não é texto. */
+function normSwKey(v){
+  return typeof v==='string'?v.replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,500):'';
+}
+/* As linhas do Splitwise importadas e apagadas de propósito (settings.swIgnoradas,
+   D127): a reimportação não as repõe. Só chaves de texto não vazias (normSwKey), sem
+   repetidas, pela ordem em que vieram.
+   Recebe: l — a lista tal como veio.
+   Devolve: um array novo de chaves. */
+function normSwIgnoradas(l){
+  const vistas=new Set();
+  (Array.isArray(l)?l:[]).forEach(x=>{const k=normSwKey(x);if(k)vistas.add(k)});
+  return Array.from(vistas);
+}
 /* kind: income (renda), expense (despesa), loan (prestação), owed (dívida recebida de terceiro),
    repay (pagamento dessa dívida), settle (acerto entre proprietários: paidBy → toId).
    split: como o valor se divide entre os donos — {mode:'equal'|'quota'|'pct'|'percent'|'amount'|'adjust',parts:{ownerId:n}};
@@ -671,6 +765,10 @@ function normLote(l){
    coluna do Anexo F escolhida à mão, um id de IRS_COLUNAS; vazio = pela categoria) e
    notaPropria (só numa despesa: «é a minha nota» do IMI de uma casa com mais de um
    dono — conta inteira para quem pagou, sem quota, D32; false em tudo o resto).
+   parcial (só numa renda: a resposta «pagamento parcial» à pergunta da renda abaixo
+   da do planeado — o resto fica em dívida, e cala o aviso da renda abaixo, D115) e
+   swKey (a chave da linha do Splitwise de onde o movimento veio, normSwKey: escreve-a
+   só a importação, e editar o movimento não a muda — D127; '' nos outros).
    Onde o movimento vive: propertyId (um imóvel), ou — só num molde (planeado ou
    modelo) e nos antigos — groupId (um grupo) ou todos (todos os meus imóveis à
    data, só numa receita ou despesa), com o psplit a dizer como se divide; um e
@@ -692,7 +790,7 @@ function normLote(l){
 const normTx=t=>{const novo=!t||t.id==null||t.id==='';
   const o=Object.assign({id:uid(),kind:'expense',label:'',amount:0,date:'',propertyId:null,contractId:null,
   loanId:null,payType:'prestacao',paidBy:null,toId:null,creditor:'',category:'',sub:'',tags:[],notes:'',split:null,groupId:null,psplit:null,
-  todos:false,lote:null,retencao:0,periodo:'',recibo:false,irsCol:'',notaPropria:false},t||{});
+  todos:false,lote:null,retencao:0,periodo:'',recibo:false,irsCol:'',notaPropria:false,parcial:false,swKey:''},t||{});
   const criado=typeof o.criado==='number'||typeof o.criado==='string'?Number(o.criado):NaN;
   if(isFinite(criado)&&criado>0)o.criado=criado;else if(novo)o.criado=Date.now();else delete o.criado;
   o.retencao=Math.max(0,Number(o.retencao)||0);
@@ -700,6 +798,8 @@ const normTx=t=>{const novo=!t||t.id==null||t.id==='';
   o.recibo=!!o.recibo;
   if(!IRS_COLUNAS.some(c=>c[0]===o.irsCol))o.irsCol='';
   o.notaPropria=o.kind==='expense'&&o.notaPropria===true;
+  o.parcial=o.kind==='income'&&o.parcial===true;
+  o.swKey=normSwKey(o.swKey);
   o.id=idSeguro(o.id);
   ['propertyId','contractId','loanId','paidBy','toId','groupId'].forEach(k=>{o[k]=idSeguro(o[k])});
   if(o.split&&(!o.split.mode||o.split.mode==='quota'))o.split=null;
@@ -751,14 +851,17 @@ function migrateSettlements(d){
      é ainda o antigo de origem.
    Uma árvore que falta (ou não é árvore) volta à de origem, e com ela os ids de origem.
    Uma marca maior do que a desta versão fica como está. Depois, sempre: o catIds só
-   com ids de CATS_DO_IRS da árvore certa e chaves que existem nela (normCatIds), e o
-   mapa só com colunas de IRS_MAPA_VALORES, completado com as regras de origem.
+   com ids de CATS_DO_IRS da árvore certa e chaves que existem nela (normCatIds), o
+   mapa só com colunas de IRS_MAPA_VALORES (e o IRS_MAPA_HERDA numa subcategoria das
+   despesas), completado com as regras de origem, e as linhas do Splitwise apagadas de
+   propósito (swIgnoradas) pelo normSwIgnoradas.
    Recebe: st — o objeto settings da base.
    Devolve: nada — completa st.cats, st.catsIn, st.catsV, st.catIds, st.exclude,
-   st.irsMapa, st.irsMapaV e st.irs no próprio objeto. */
+   st.irsMapa, st.irsMapaV, st.irs e st.swIgnoradas no próprio objeto. */
 function fillCats(st){
   st.irs=normIrsDefs(st.irs);
   st.exclude=(st.exclude&&typeof st.exclude==='object')?st.exclude:{};
+  st.swIgnoradas=normSwIgnoradas(st.swIgnoradas);
   delete st.repete;
   const arvore=a=>a&&typeof a==='object'&&!Array.isArray(a)&&Object.keys(a).length;
   const deOrigem={cats:false,catsIn:false};
@@ -789,10 +892,14 @@ function fillCats(st){
   });
   st.catIds=normCatIds(ids,st);
   st.catsV=Math.max(vCats,2);
-  /* o mapa: só colunas que existem; antes da marca, as chaves de origem que mudaram
+  /* o mapa: só colunas que existem, e o «como a categoria» (IRS_MAPA_HERDA) só numa
+     subcategoria da árvore das despesas; antes da marca, as chaves de origem que mudaram
      passam ao valor novo onde a pessoa não lhes mexeu */
-  const g={},gIn=st.irsMapa&&typeof st.irsMapa==='object'&&!Array.isArray(st.irsMapa)?st.irsMapa:{};
-  Object.keys(gIn).forEach(k=>{if(k&&k!=='__proto__'&&IRS_MAPA_VALORES.some(c=>c[0]===gIn[k]))g[k]=gIn[k]});
+  const g={},gIn=st.irsMapa&&typeof st.irsMapa==='object'&&!Array.isArray(st.irsMapa)?st.irsMapa:{},subs=chavesDaArvore(st.cats);
+  Object.keys(gIn).forEach(k=>{
+    if(!k||k==='__proto__')return;
+    if(IRS_MAPA_VALORES.some(c=>c[0]===gIn[k])||(gIn[k]===IRS_MAPA_HERDA&&subs.has(k)&&subs.get(k).sub))g[k]=gIn[k];
+  });
   const vMapa=Number(st.irsMapaV)>0?Number(st.irsMapaV):0;
   if(vMapa<2)Object.keys(IRS_MAPA_MIGRA).forEach(k=>{if(g[k]===IRS_MAPA_MIGRA[k])g[k]=IRS_MAPA0[k]});
   st.irsMapa=Object.assign({},IRS_MAPA0,g);

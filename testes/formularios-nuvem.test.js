@@ -213,7 +213,7 @@ describe('o resto da base', () => {
     assert.equal(cs[0].placeholder, EX + 'Date,Description,Category,Cost,Currency');
   });
 
-  test('importar do Splitwise: o imóvel com asterisco; a quota-parte diz «Opcional» e o que vale em branco', () => {
+  test('importar do Splitwise: o imóvel com asterisco; sem a quota-parte (lança o custo total, D122) e com o «Só desde»', () => {
     limpar(app);
     app.db.properties = [app.normProp({ id: 'P1', name: 'T2 Lisboa' })];
     const abertas = janelasFalsas(app);
@@ -222,7 +222,8 @@ describe('o resto da base', () => {
     app.swMapModal();
     conferir('importar Splitwise', abertas[0].b, { obrigatorios: [], deixados: ['sw_prop'] });
     assert.match(abertas[0].b, /Lançar em que imóvel\? <span class="req">\*<\/span>/);
-    assert.match(abertas[0].b, /Em branco: 100 %\./);
+    assert.doesNotMatch(abertas[0].b, /sw_quota/, 'a quota é a do imóvel: a Declaração reparte');
+    assert.match(abertas[0].b, /<label>Só desde<input id="sw_desde" type="date"/);
   });
 
   test('a fotografia, a avaliação e as projeções: nenhum placeholder fora de «Opcional» ou «Ex: »', () => {

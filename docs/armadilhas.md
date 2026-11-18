@@ -523,3 +523,41 @@ carregou o vê. Os movimentos entraram nas duas a 2026-11-13 (KAN-122). E
 quem troca o objeto de um formulário inteiro (planeados.js:applyTemplate,
 aplicar um modelo) guarda os anexos do que lá estava, ou eles saem do
 registo ao gravar.
+
+## O pronome depois do verbo leva o verbo sem o -s
+Com o pronome a seguir ao verbo, o -s do verbo cai e o pronome ganha o l:
+«declara-las», «paga-lo», e nunca «declaras-las». O guia tinha «declaras-las
+no quadro 4.4», e o teste que o guardava (testes/irs-guia-textos.test.js)
+fixava a forma errada. O testes/irs-guia-ronda2.test.js recusa agora, em
+todo o texto do guia, uma letra seguida de «s-lo», «s-la», «s-los» ou
+«s-las». Um texto novo da app com o verbo na 2.ª pessoa e o pronome depois
+segue a mesma regra.
+
+## O .badge é de uma linha só
+O estilos.css:.badge tem white-space:nowrap: serve para «arrendado» ou «Por
+começar», e não para uma frase. Um selo com uma frase («por comunicar · até
+15/02/2027», «campo do modelo novo por conhecer») ficava numa linha e, a
+375 px, empurrava a página da Declaração para 399 px, sem erro nenhum até o
+percurso do Interface medir a largura. Um selo que pode levar uma frase
+parte em linhas no sítio onde vive, como o .fis-campo dd .badge
+(white-space:normal, max-width:100%, fisco-quadros.js:fiscoContratoHtml); ou
+a frase vai num texto, e não num selo.
+
+## Uma linha de um contrato no resumo não é a linha das rendas dele
+Um contrato pode dar mais do que uma linha em r.linhas: a das rendas
+(papel 'renda') e as da indemnização (05) e das outras receitas prediais
+(02), por titular (fisco-resumo.js:fiscoLinhaDaReceita). Quando a das rendas
+vai ao 4.2 e há uma 05/02 no 4.1, a 05/02 vem primeiro no array. Quem
+deduplica por contrato (os avisos, um `visto` por contratoId) e fica com a
+primeira que encontra apanha a linha errada: prefere l.papel === 'renda'.
+
+## Um caminho novo que apaga movimentos tem de chamar o swIgnorar
+A importação do Splitwise salta as linhas que a pessoa apagou de propósito
+pela chave delas (t.swKey), guardada em settings.swIgnoradas. Quem a escreve
+é quem apaga: o movimento.js:delTx e o movimento.js:apagarLote chamam o
+splitwise.js:swIgnorar antes de tirar o movimento, e o Anular deles o
+splitwise.js:swDesignorar. Um sítio novo que apague movimentos escolhidos e
+não o chame deixa a despesa apagada voltar na importação seguinte, se a
+pessoa limpar o «Só desde». Os hooks não gravam: grava quem apaga. O
+«Anular a última importação» não os chama, de propósito: anular deixa
+reimportar.

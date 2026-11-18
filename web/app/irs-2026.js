@@ -49,7 +49,9 @@
      plataforma do IHRU até 15 de janeiro do ano seguinte, não há isenção;
    - a Portaria 480-A/2025/1, de 30 de dezembro (IAS de 2026: 537,13 €);
    - para as naturezas, o quadro 5, o quadro 10, os nomes do impresso, as
-     isenções 6F e 6H e o n.º 24, as do irs-2025.js (o modelo de 2025). */
+     isenções 6F e 6H e o n.º 24, as do irs-2025.js (o modelo de 2025);
+   - para o quadro 4.3, a taxa do DHD e os benefícios do quadro 6 (6A, 6B,
+     6C — ronda 2 da auditoria, KAN-128), as do irs-2025.js. */
 registarAnoIrs({
   ano:2026,
   revisto:'2026-11-17',
@@ -95,7 +97,10 @@ registarAnoIrs({
           texto:'os limites do arrendamento acessível, que de 1 de setembro a 13 de outubro de 2026 são ainda os valores da Portaria 176/2019 (Portaria 454/2026/1, art. 7.º n.º 3)'},
         {desde:'2026-10-14',ate:'',portaria:'Portaria 454/2026/1',valoresDa:'Portaria 454/2026/1',
           texto:'os limites máximos de renda do arrendamento acessível por tipologia e concelho, do anexo à Portaria 454/2026/1, de 13 de outubro'}]},
-    bonusRendaMenor:{desde:'2023-10-07',rendaMenorPct:5,pontos:5,minimo:5}},
+    bonusRendaMenor:{desde:'2023-10-07',rendaMenorPct:5,pontos:5,minimo:5},
+    /* CIRS art. 72.º n.º 5: a prestação mensal de um DHD a 5 % (como em 2025;
+       a taxa das rendas moderadas é do arrendamento e nunca fica abaixo) */
+    dhd:5},
   /* As isenções (o formato e as fontes do 6D, 6F e 6H estão no irs-2025.js).
      O PAA acabou a 1 de setembro de 2026 (DL 97/2026, arts. 17.º e 18.º), mas
      os contratos que lá estavam nesse dia mantêm a isenção (art. 15.º n.º 2):
@@ -134,14 +139,55 @@ registarAnoIrs({
   colunas:['conservacao','condominio','imi','selo','taxas','outros'],
   colunasNomes:{
     apos:{titulo:'Após início do arrendamento',conservacao:'Conservação e manutenção',condominio:'Condomínio',imi:'Imposto municipal sobre imóveis',selo:'Imposto do selo',taxas:'Taxas autárquicas',outros:'Outros'},
-    obras:{titulo:'Com obras de conservação e manutenção',inicioContrato:'Data de início do contrato de arrendamento (ano, mês)',inicioGastos:'Data de início dos gastos (ano, mês)',valor:'Valor'}},
-  naturezas:{habitacional:'07',naoHabitacional:'06',indemnizacao:'05',outras:'02'},
+    obras:{titulo:'Com obras de conservação e manutenção',inicioContrato:'Data de início do contrato de arrendamento (ano, mês)',inicioGastos:'Data de início dos gastos (ano, mês)',valor:'Valor'},
+    /* a última coluna das linhas do 4.1 e do 4.2, nos contratos em vigor antes de 2022 (D76) */
+    atualizacao:'Atualização da renda superior a 1,02?'},
+  naturezas:{habitacional:'07',naoHabitacional:'06',indemnizacao:'05',outras:'02',dhd:'01'},
   naturezasTexto:{'01':'Arrendamento (anos de 2015 a 2022)','02':'Cedência de uso do prédio ou de parte dele, que não arrendamento',
     '03':'Aluguer de maquinismos e mobiliários instalados no imóvel locado',
     '04':'Constituição, a título oneroso, de direitos reais de gozo temporários, ainda que vitalícios, sobre prédios rústicos, urbanos ou mistos',
     '05':'Indemnizações que visem compensar perdas de rendimentos da categoria F','06':'Arrendamento não habitacional','07':'Arrendamento habitacional'},
   quadro5:{naturezas:{habitacional:'02',naoHabitacional:'01'},
     naturezasTexto:{'01':'Subarrendamento não habitacional','02':'Subarrendamento habitacional'}},
+  /* O quadro 4.3 e os benefícios do quadro 6 (6A, 6B, 6C): o formato, as
+     fontes e os pontos INCERTOS estão no irs-2025.js. Iguais aos de 2025 —
+     o modelo destes rendimentos ainda não saiu. O 6C está em vigor até 31 de
+     dezembro de 2026 (Lei 73-A/2025, art. 260.º n.º 3): a versão de 2027
+     copia o vigenteAte, e o benefício só volta se o Orçamento de 2027 o
+     prorrogar e alguém o mudar aqui. */
+  quadro43:{
+    colunas:[['numero','Contrato – Número'],['inicio','Contrato – Data de início'],['escritura','Escritura pública ou documento particular – Data da celebração'],
+      ['caucao','Escritura pública ou documento particular – Valor da caução'],['titular','Titular'],['matriz','Identificação matricial dos prédios'],
+      ['valor','Rendimento – Valor ilíquido'],['natureza','Rendimento – Natureza'],['retencoes','Retenções na fonte'],['moradores','NIF morador(es)'],
+      ['atualizacao','Atualização da renda superior a 1,02?'],['gastos','Gastos obrigatórios suportados e pagos'],['cessacao','Cessação dos efeitos do DHD']],
+    naturezas:{prestacao:'01',caucao:'02',deducaoCaucao:'03'},
+    naturezasTexto:{'01':'Prestação pecuniária mensal (rendas)','02':'Prestação pecuniária anual (caução) - 11.º ano e seguintes',
+      '03':'Dedução ao montante da caução por incumprimento dos deveres do morador'},
+    reduzidas:['01'],
+    gastos:[['conservacaoExtra','Conservação extraordinária'],['condominio','Condomínio'],['outros','Outros']],
+    motivos:[
+      {codigo:'01',regulariza:true,curto:'Por acordo das partes',texto:'Cessação do DHD por acordo das partes (n.º 20 do artigo 72.º do Código do IRS)'},
+      {codigo:'02',curto:'Morte do morador',texto:'Caducidade por morte do morador(es) (artigo 16.º do Decreto-Lei n.º 1/2020, de 9 de janeiro)'},
+      {codigo:'03',curto:'Renúncia do morador',texto:'Extinção do DHD por renúncia do morador (artigo 17.º do Decreto-Lei n.º 1/2020, de 9 de janeiro)'},
+      {codigo:'04',curto:'Incumprimento do proprietário',texto:'Resolução do DHD por incumprimento definitivo imputável ao proprietário (artigo 18.º do Decreto-Lei n.º 1/2020, de 9 de janeiro)'},
+      {codigo:'05',curto:'O morador comprou o imóvel',texto:'Extinção do DHD por aquisição da propriedade pelo morador'},
+      {codigo:'06',curto:'Fim do prazo',texto:'Cessação do DHD no final do prazo'}]},
+  beneficios:[
+    {id:'reab71',quadro:'6A',campos:['01','02','03','04','05'],marca:'imovel.reabilitacao',taxa:5,
+      tipos:['aru','nrau'],certificado:true,inicioDesde:'2008-01-02',inicioAte:'2023-10-06',concluida:true,donoEm:'2023-10-06',
+      nome:'Imóvel reabilitado (ARU ou NRAU)',curto:'imóvel reabilitado',
+      lei:'EBF art. 71.º n.º 7, revogado pela Lei 56/2023; EBF art. 11.º n.º 1; PIV 28153',
+      texto:'Imóvel numa área de reabilitação urbana recuperado, ou arrendado no NRAU e objeto de ações de reabilitação, com o início e a conclusão certificados pela câmara: as rendas pagam 5 %, se a reabilitação começou entre 2 de janeiro de 2008 e 6 de outubro de 2023 e já eras dono a 6 de outubro de 2023.',
+      taxaTexto:'Nas rendas de imóveis reabilitados com certificado da câmara, se já eras dono a 6 de outubro de 2023',
+      aviso:'Os 5 % seguem a posição mais recente da AT (informação vinculativa 28153, de setembro de 2026): a lei que os dava foi revogada em 2023, e em 2025 a AT chegou a dizer que só valiam até às rendas de 2024 (informação vinculativa 23119). Confirma antes de entregar.'},
+    {id:'lojaHistoria',quadro:'6B',campos:['08','09','10','11','12'],marca:'imovel.lojaComHistoria',fatorObras24:1.1,finalidade:['nh'],
+      nome:'Loja com História (Lei 42/2017)',curto:'Loja com História',
+      lei:'EBF art. 59.º-I n.º 2; Lei 42/2017',
+      texto:'Imóvel reconhecido pelo município como Loja com História e inscrito no inventário nacional: as obras de conservação dos 24 meses antes do arrendamento contam 110 %.'},
+    {id:'egf',quadro:'6C',campos:['13','14','15','16','17'],marca:'contrato.egf',fator:0.5,tipoPredio:'R',contratosAte:'2020-12-31',anos:12,vigenteAte:'2026-12-31',
+      nome:'Prédio rústico arrendado a uma entidade de gestão florestal (EGF ou UGF)',curto:'arrendado a uma EGF',
+      lei:'EBF art. 59.º-G n.os 11, 14 e 15; Lei 45-A/2024, art. 333.º; Lei 73-A/2025, art. 260.º n.º 3',
+      texto:'Prédio rústico florestal arrendado até 31 de dezembro de 2020 a uma entidade ou unidade de gestão florestal reconhecida: as rendas contam 50 %, durante 12 anos a contar do ano do contrato.'}],
   quadro10:{
     regimes:[
       {codigo:'01',texto:'Artigo 72.º, n.º 2, do Código do IRS',n:2},
@@ -179,7 +225,10 @@ registarAnoIrs({
         texto:'Cessação do enquadramento nos Programas municipais para alojamento estudantil por motivos imputáveis ao candidato (inquilino/locatário/sublocatário)'},
       {codigo:'12',para:'pmae',quem:'fim',curto:'Saiu do alojamento estudantil municipal no fim do prazo ou de uma renovação',
         texto:'Cessação do enquadramento nos Programas municipais para alojamento estudantil - contratos no final dos prazos de duração dos mesmos ou das suas renovações'}]},
-  quadros:{semReducao:'4.1',comReducao:'4.2',datas:'4.2A',mudanca100km:'4.4',sublocacao:'5',anosAnteriores:'8',englobamento:'6G',aimi:'9',cessados:'10'},
+  quadros:{semReducao:'4.1',comReducao:'4.2',datas:'4.2A',dhd:'4.3',mudanca100km:'4.4',sublocacao:'5',anosAnteriores:'8',englobamento:'6G',aimi:'9',cessados:'10',
+    /* 9: as linhas dos prédios do quadro 9 (campos 9001 a 9020 do impresso do
+       Anexo F, lidos pelo voto da lei do D71) */
+    campos:{'4.1':4001,'4.2':4501,'4.3':4901,'9':9001}},
   prazos:{comunicacaoDuracao:'2027-02-15'},
   /* As taxas gerais do CIRS art. 68.º dos rendimentos de 2026, na redação da
      Lei 73-A/2025, de 30 de dezembro (OE 2026) — a versão em vigor no Portal
@@ -213,7 +262,7 @@ registarAnoIrs({
     {titulo:'Rendas de anos anteriores (quadro 8)',
       texto:'Uma renda de outro ano recebida em {ano} já está no valor da linha. No quadro 8 dizes que parte é de que ano: no 8A se englobares (o valor reparte-se pelos anos a que respeita), ou no 8B se entregares declarações de substituição desses anos, até cinco para trás.'},
     {titulo:'Englobar ou não (quadro 6G)',
-      texto:'Sem englobamento, as rendas pagam a taxa especial: 10 % nas rendas moderadas, 25 % na restante habitação, 28 % no resto, menos nos contratos longos. Com englobamento somam-se aos teus outros rendimentos e pagam a taxa dos escalões — com rendas a 10 % quase nunca compensa (o primeiro escalão do ano é de 12,5 %). A opção vale para todas as rendas: simula as duas no Portal.'},
+      texto:'Sem englobamento, as rendas pagam a taxa especial: 10 % nas rendas moderadas, 25 % na restante habitação, 28 % no resto, menos nos contratos longos, 5 % nos imóveis reabilitados do quadro 6A e na prestação de um direito real de habitação duradoura (quadro 4.3). Com englobamento somam-se aos teus outros rendimentos e pagam a taxa dos escalões — com rendas a 10 % quase nunca compensa (o primeiro escalão do ano é de 12,5 %). A opção vale para todas as rendas: simula as duas no Portal.'},
     {titulo:'AIMI e contratos que acabaram (quadros 9 e 10)',
       texto:'Se pagaste o Adicional ao IMI, o quadro 9 abate-o ao imposto na parte dos prédios arrendados (não é um gasto do 4.1). Cada contrato com redução de taxa, ou isento num programa de arrendamento acessível, que acabou no ano vai ao quadro 10, seja qual for o motivo: o regime, o n.º, o ano de início do benefício, a data e o motivo (nos contratos com redução, a data e o motivo também se comunicam no Portal até 15 de fevereiro do ano seguinte). Se acabou antes do prazo por motivo do senhorio, a redução perde-se desde o início do contrato ou da renovação, e a diferença de imposto de cada ano paga-se nesta declaração, com juros compensatórios.'},
     {titulo:'Simular e entregar',

@@ -120,7 +120,7 @@ describe('o guia depois da auditoria ao IRS', () => {
     for (const f of ['a mais de 100 km', 'durante pelo menos 12 meses', 'os dois contratos estão registados no Portal das Finanças',
       'artigo 41.º, n.º 8']) assert.ok(q44.includes(f), 'falta: ' + f);
     const mudanca = texto(grupo(parte('pode-deduzir'), 'Situação especial: mudança da habitação própria'));
-    assert.match(mudanca, /declaras-las no quadro 4\.4 do Anexo F/);
+    assert.match(mudanca, /declara-las no quadro 4\.4 do Anexo F/);
   });
 
   test('D109: o limite das rendas moderadas como o DL 97/2026 o escreve, sem «no continente»', () => {

@@ -211,10 +211,10 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
       fisco: { estado: 'naoDeclarado', numero: '1234567', finalidade: 'hp', renovavel: true } });
     desfazerDom = domCom({ c_rent: '800' });
     app.collectCt();
-    igual(app.cForm.fisco, { estado: 'naoDeclarado', numero: '1234567', finalidade: 'hp', celebracao: '', renovavel: true, renovacoes: [], cessacaoMotivo: '',
-      cessacao: { data: '', motivo: '' }, comunicacoes: {}, comunicacoesV: 2, rendaAcimaDoLimite: null, rendaAnterior: 0, isencao: '',
-      ihru: '', nrau3536: null, alRegistado2022: null, empresaHabitacao: null, consumosIncluidos: false, obrasSemOutroUso: null,
-      extrasMensais: 0, atualizacao2023: '' });
+    /* a forma é a do normFisco (os campos que ele vier a ganhar entram sozinhos) */
+    igual(app.cForm.fisco, JSON.parse(JSON.stringify(app.normFisco({ estado: 'naoDeclarado', numero: '1234567', finalidade: 'hp', renovavel: true, comunicacoesV: 2 }))));
+    for (const [k, v] of [['ihru', ''], ['nrau3536', null], ['alRegistado2022', null], ['consumosIncluidos', false], ['obrasSemOutroUso', null], ['extrasMensais', 0], ['atualizacao2023', '']])
+      assert.equal(app.cForm.fisco[k], v, k);
   });
 });
 
@@ -456,7 +456,10 @@ describe('a ficha do movimento', () => {
     monta({ estado: 'naoDeclarado' });
     assert.doesNotMatch(renda({ periodo: ANO + '-09', recibo: true }), /Recibo eletrónico/);
     monta({ estado: 'declarado' });
-    assert.doesNotMatch(renda({ periodo: ANO + '-09', category: 'Rendas', sub: 'Caução' }), /Mês da renda|Recibo eletrónico/, 'uma caução não é renda');
+    const caucao = renda({ periodo: ANO + '-09', category: 'Rendas', sub: 'Caução' });
+    assert.doesNotMatch(caucao, /Mês da renda/, 'uma caução não é a renda de um mês');
+    assert.match(caucao, /<span>Recibo eletrónico<\/span><b>Por emitir<\/b>/, 'mas é renda do ano no Anexo F e pede recibo (D03), como o resumo conta');
+    assert.match(renda({ category: 'Reembolsos', sub: 'Inquilino' }), /<span>Recibo eletrónico<\/span><b>Por emitir<\/b>/, 'o reembolso do inquilino também');
     assert.doesNotMatch(renda({ kind: 'expense', category: 'Impostos', retencao: 250 }), /Retido na fonte/);
   });
 

@@ -15,7 +15,12 @@
    dispensados do recibo eletrónico (D80), o prazo das substituições do 8B
    (D84), o quadro 4.4 (D106) e o limite das rendas moderadas como o
    Decreto-Lei n.º 97/2026 o escreve (D109). O Martinho verifica-as antes de
-   promover, como as de 2026-11-09.
+   promover, como as de 2026-11-09. No mesmo dia, a ronda 2 da auditoria
+   (KAN-128): o que não vai ao Anexo F (a categoria B nos seus dois casos,
+   D134; os imóveis fora de Portugal, D133, também na ficha «Para quem»; sem
+   alojamento local, que a app não trata, por decisão do Martinho), a renda que se declara quando não chega inteira
+   (D112, D113), os 5 % da reabilitação e os quadros 4.3, 6A, 6B e 6C (D118)
+   e a caderneta atual depois da reposição das freguesias (D137).
 
    A parte 4 (a regra geral, o que podes, o que não podes, o que pede
    cuidado, os documentos) e os quatro pontos do Anexo F na parte 3 são o
@@ -215,6 +220,42 @@ const SEGUIR = 'M9 6l6 6-6 6';
      do art. 60.º n.º 2, contado do fim do prazo do n.º 1), o cirs60 (n.º 2,
      30 dias) e o anexoF (quadros 4.2C, 4.4, 5, 6D, 6F e 6H; a coluna
      Titular, A e B como no rosto; os gastos «a seguros de renda»).
+   As da ronda 2 (KAN-128), abertas a 2026-11-17, as páginas da AT pelo
+   texto em vigor e os PDF da AT lidos (pdftotext):
+   - cirs3: n.º 2 a), os rendimentos prediais imputáveis a atividades
+     empresariais e profissionais são categoria B;
+   - cirs4: n.º 1 n), o arrendamento com opção pela categoria B; n.º 5, a
+     opção na declaração de início ou de alterações;
+   - anexoB: «modelo em vigor a partir de janeiro de 2026»; o campo 410 do
+     quadro 4A (os dois casos da categoria B);
+   - cirs15: n.º 1, os residentes pagam IRS sobre os rendimentos obtidos
+     fora do território;
+   - anexoJ: «modelo em vigor a partir de janeiro de 2026»; quadro 7A, o
+     código F01, o país onde se situa o imóvel (tabela X), o rendimento
+     líquido dos gastos do período arrendado e o imposto pago no estrangeiro;
+   - cirs81: n.º 1, o crédito de imposto por dupla tributação internacional;
+   - ebf71ra: o artigo 71.º, n.º 7, na redação até outubro de 2023 (os 5 %);
+   - piv28153: despacho de 2026-09-25, pontos 10 e 11 — o antigo n.º 7
+     continua a aplicar-se a quem era dono a 6-10-2023 de imóvel cuja
+     reabilitação começou entre 2-1-2008 e 6-10-2023, mesmo nas rendas
+     depois dessa data;
+   - piv23119: despacho de 2025-05-26 — só as rendas até 2024 de contratos
+     celebrados até 6-10-2023 (a posição anterior);
+   - ebf59i: n.º 2, os gastos do art. 41.º, n.º 7, do CIRS a 110 % nas
+     lojas com história (o quadro 6B, nas instruções do Anexo F, com a Lei
+     42/2017);
+   - ebf59g: n.os 11, 14 e 15, as rendas de arrendamentos a EGF ou UGF a
+     50 %, até 2020 e por 12 anos; a vigência até 31-12-2026 (Lei 73-A/2025,
+     art. 260.º, n.º 3);
+   - cimi113: n.º 1, o IMI liquida-se com as matrizes a 31 de dezembro;
+   - reposicao: os prédios passaram às freguesias repostas com a entrada em
+     vigor da Lei 25-A/2025, em outubro de 2025;
+   - lei25a: a ficha da AT da Lei n.º 25-A/2025, de 13 de março;
+   - e, já na lista, o anexoF (os quadros 4.3, 6A, 6B e 6C, cada benefício
+     indicado pelos campos do quadro 4.1) e o processo 615/2016 (a comissão
+     da gestora).
+   O «cerca de 300» das freguesias repostas é de propósito: a imprensa falou
+   de 302, e a tabela da AT tem 303 linhas.
    As da parte 4, do texto do Martinho, verificadas a 2026-11-08. */
 const FONTES = [
   { id: 'cirs8', nome: 'AT, Código do IRS, artigo 8.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs8.aspx' },
@@ -247,6 +288,20 @@ const FONTES = [
   { id: 'cirs59', nome: 'AT, Código do IRS, artigo 59.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs59.aspx' },
   { id: 'oc20256', nome: 'AT, Ofício-Circulado n.º 20256, de 7 de junho de 2023: a tributação da caução', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/legislacao/instrucoes_administrativas/Documents/Oficio_Circulado_20256_2023.pdf' },
   { id: 'portaria98a', nome: 'AT, Portaria n.º 98-A/2015, de 31 de março: o recibo de renda eletrónico e a declaração Modelo 44', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/legislacao/diplomas_legislativos/Documents/Portaria_98_A-2015.pdf' },
+  { id: 'cirs3', nome: 'AT, Código do IRS, artigo 3.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs3.aspx' },
+  { id: 'cirs4', nome: 'AT, Código do IRS, artigo 4.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs4.aspx' },
+  { id: 'anexoB', nome: 'AT, Anexo B da declaração Modelo 3 e instruções de preenchimento, modelo em vigor desde janeiro de 2026', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_contribuinte/modelos_formularios/irs/Documents/Mod_3_anexo_B.pdf' },
+  { id: 'cirs15', nome: 'AT, Código do IRS, artigo 15.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs15.aspx' },
+  { id: 'anexoJ', nome: 'AT, Anexo J da declaração Modelo 3 e instruções de preenchimento, modelo em vigor desde janeiro de 2026', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_contribuinte/modelos_formularios/irs/Documents/Mod_3_anexo_J.pdf' },
+  { id: 'cirs81', nome: 'AT, Código do IRS, artigo 81.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs81.aspx' },
+  { id: 'ebf71ra', nome: 'AT, Estatuto dos Benefícios Fiscais, artigo 71.º, redação até outubro de 2023', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/bf_rep/ra/Pages/ebf71_ra202310.aspx' },
+  { id: 'piv28153', nome: 'AT, Informação Vinculativa, processo 28153: a taxa de 5 % dos imóveis reabilitados depois da Lei n.º 56/2023', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/EBF/PIV_28153.pdf' },
+  { id: 'piv23119', nome: 'AT, Informação Vinculativa, processo 23119: a posição anterior da AT sobre a mesma taxa', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/rendimento/cirs/Documents/PIV_23119.pdf' },
+  { id: 'ebf59i', nome: 'AT, Estatuto dos Benefícios Fiscais, artigo 59.º-I', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/bf_rep/Pages/ebf59i.aspx' },
+  { id: 'ebf59g', nome: 'AT, Estatuto dos Benefícios Fiscais, artigo 59.º-G', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/bf_rep/Pages/ebf59g.aspx' },
+  { id: 'cimi113', nome: 'AT, Código do IMI, artigo 113.º', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cimi/Pages/cimi113.aspx' },
+  { id: 'reposicao', nome: 'AT, «Reposição de freguesias agregadas 2025»: a tabela de correspondência', url: 'https://info.portaldasfinancas.gov.pt/pt/destaques/Paginas/Reposicao-freguesias-agregadas-2025-tab-correspondencia.aspx' },
+  { id: 'lei25a', nome: 'AT, Lei n.º 25-A/2025: a reposição das freguesias agregadas', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/legislacao/diplomas_legislativos/Documents/lei-25-a-2025.pdf' },
   { id: 'cirs41', nome: 'AT, Código do IRS, artigo 41.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs41.aspx' },
   { nome: 'AT, página de apoio sobre rendimentos prediais', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_ao_contribuinte/Cidadaos/Rendimentos/Prediais/Paginas/default.aspx' },
   { nome: 'AT, Informação Vinculativa, processo 1115/2017: certificado energético, seguro, IMI, condomínio e reparações', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/rendimento/cirs/Documents/PIV_11676_Cat_F_Despesas_elegiveis_certificado_energetico_pintura_proporcionalidade_mensal_IMI.pdf' },
@@ -339,7 +394,7 @@ const DEDUCOES = [
         'A casa de onde saíste está arrendada para habitação.',
         'Os dois contratos de arrendamento estão registados no Portal das Finanças.',
       ] },
-      { p: 'Estas rendas têm um quadro próprio: declaras-las no quadro 4.4 do Anexo F, com o campo da ' +
+      { p: 'Estas rendas têm um quadro próprio: declara-las no quadro 4.4 do Anexo F, com o campo da ' +
         'linha da casa que arrendaste, o número do contrato em que és tu o inquilino, a identificação matricial da casa nova e as rendas que pagaste no ano ' +
         '(instruções do quadro 4.4 do Anexo F).' },
     ] },
@@ -420,9 +475,26 @@ const DEDUCOES = [
 const GUIA = [
   { id: 'tens-de-declarar', titulo: 'Tens de declarar?', blocos: [
     { p: 'As rendas que recebes de um prédio arrendado são rendimentos prediais, da categoria F do IRS, a não ser ' +
-      'que tenhas escolhido ser tributado pelas regras da categoria B (artigo 8.º do Código do IRS).' },
+      'que sejam da categoria B, nos dois casos que vês mais abaixo (artigo 8.º, n.º 1, do Código do IRS).' },
     { p: 'Recebeste rendas num ano, tu ou um dependente do teu agregado? Então declara-las no IRS desse ano, na ' +
       'Modelo 3, com o Anexo F (artigo 57.º e instruções do Anexo F).' },
+    // D133, D134 (2026-11-17): as rendas que saem do Anexo F, e para que anexo vão. Sem alojamento local
+    // (decisão do Martinho, 2026-11-17: a app é só de arrendamento com contratos)
+    { grupo: 'Quando não vão ao Anexo F', blocos: [
+      { p: 'Há rendas que não se declaram no Anexo F:' },
+      { info: [
+        'As rendas da categoria B, em dois casos: optaste por tributar o arrendamento na categoria B, na ' +
+          'declaração de início de atividade ou na de alterações (artigo 4.º, n.º 1, alínea n), e n.º 5), ou o ' +
+          'prédio está afeto a uma atividade tua, empresarial ou profissional, e as rendas são-lhe imputáveis ' +
+          '(artigo 3.º, n.º 2, alínea a)). Nos dois, o resultado vai ao Anexo B, no campo 410 do quadro 4A ' +
+          '(instruções do Anexo B), ou ao Anexo C, se a atividade tem contabilidade organizada.',
+        'As rendas de um imóvel fora de Portugal. Se és residente, declara-las no Anexo J, no quadro 7A, com o ' +
+          'código F01, o país onde fica o imóvel, o rendimento já líquido dos gastos do tempo em que esteve ' +
+          'arrendado e o imposto que lá pagaste: o Anexo F é só dos rendimentos obtidos em Portugal (artigo 15.º, ' +
+          'n.º 1; instruções dos Anexos F e J). O imposto pago no país do imóvel abate-se ao IRS, até a um limite ' +
+          '(artigo 81.º, n.º 1).',
+      ] },
+    ] },
     { grupo: 'O prazo', blocos: [
       { p: 'Entregas a declaração de 1 de abril a 30 de junho do ano seguinte ao das rendas. Ou seja, as rendas de ' +
         '2026 declaras de 1 de abril a 30 de junho de 2027 (artigo 60.º, n.º 1).' },
@@ -439,6 +511,15 @@ const GUIA = [
           'da retribuição mínima mensal prevista para 2026 (2 300 €, com a retribuição de 920 € do ' +
           'Decreto-Lei n.º 139/2025), salvo se te couber uma taxa mais baixa (artigo 45.º-C do Estatuto dos ' +
           'Benefícios Fiscais; Decreto-Lei n.º 97/2026, artigo 2.º, n.º 2, alínea a)).',
+        // D118 (2026-11-17): os 5 % da reabilitação, pela doutrina da AT, que já mudou uma vez
+        '5 % nas rendas de um imóvel reabilitado, em área de reabilitação urbana ou do Novo Regime do ' +
+          'Arrendamento Urbano, com a reabilitação comprovada pela câmara, se ela começou entre 2 de janeiro de ' +
+          '2008 e 6 de outubro de 2023 e já eras dono do imóvel a 6 de outubro de 2023. A norma que dava esta ' +
+          'taxa (artigo 71.º, n.º 7, do Estatuto dos Benefícios Fiscais) foi revogada pela Lei n.º 56/2023, mas a ' +
+          'AT continua a aplicá-la a estes donos, também nas rendas depois dessa data (informação vinculativa, ' +
+          'processo 28153, de 25 de setembro de 2026). A AT já mudou de posição: em 2025 só a aplicava às rendas ' +
+          'até 2024 de contratos feitos até 6 de outubro de 2023 (processo 23119). Declaras estas rendas no ' +
+          'quadro 4.1, e indicas a linha no quadro 6A (instruções do quadro 6A).',
       ] },
     ] },
     { grupo: 'Rendas isentas', blocos: [
@@ -524,22 +605,45 @@ const GUIA = [
       { info: [
         'O número do contrato, que vem da declaração Modelo 2 do Imposto do Selo (ou do registo do contrato no Portal ' +
           'das Finanças, se for anterior a 1 de abril de 2015), e a data de início.',
+        // D137 (2026-11-17): de que caderneta, e a reposição das freguesias
         'A identificação matricial: o código da freguesia, de seis dígitos, que está nos documentos de cobrança do ' +
-          'IMI, o tipo de prédio (U, urbano, ou R, rústico), o artigo e a fração.',
+          'IMI, o tipo de prédio (U, urbano, ou R, rústico), o artigo e a fração. Tira-os da caderneta predial ' +
+          'atual, que obténs no Portal das Finanças, ou da nota de cobrança do IMI mais recente.',
+        'Em outubro de 2025 foram repostas cerca de 300 freguesias que estavam agregadas em uniões de freguesias, ' +
+          'e os prédios delas passaram para as freguesias repostas (Lei n.º 25-A/2025; AT, reposição das ' +
+          'freguesias agregadas). Se o teu prédio era de uma união de freguesias, o código e o artigo podem ter ' +
+          'mudado, e a caderneta da compra ou uma nota do IMI antiga trazem os de antes. O IMI de cada ano ' +
+          'liquida-se com as matrizes a 31 de dezembro (artigo 113.º, n.º 1, do Código do IMI): a nota do IMI de ' +
+          '2025, que pagas em 2026, já traz os novos.',
         'O titular das rendas: A ou B, a posição de cada um no rosto da declaração (o sujeito passivo A no quadro ' +
           '3, o B no quadro 5A), ou o código do dependente (D1, D2…). O B só existe quando és casado ou unido de ' +
           'facto e optam pela tributação conjunta. Aí a declaração é uma só, com as rendas de todo o agregado, as ' +
           'tuas e as do teu cônjuge também, cada linha ' +
           'com a letra de quem é titular delas (artigo 59.º, n.º 2, alínea a); instruções do quadro 3 e da coluna ' +
           'Titular do Anexo F).',
-        'As rendas pelo valor ilíquido, pagas ou colocadas à tua disposição no ano, e a natureza: 07 no arrendamento ' +
-          'habitacional, 06 no não habitacional.',
+        'As rendas pelo valor ilíquido (a renda do recibo, antes da retenção, da comissão e de descontos), pagas ' +
+          'ou colocadas à tua disposição no ano, e a natureza: 07 no arrendamento habitacional, 06 no não ' +
+          'habitacional.',
         'As retenções na fonte de IRS feitas sobre essas rendas.',
         'O NIF português do inquilino ou, se ele não o tiver, o código do país.',
         'Os gastos suportados e pagos no ano, enquanto o prédio esteve arrendado, cada um na sua coluna: conservação ' +
           'e manutenção, condomínio, IMI pago no ano, imposto do selo, taxas autárquicas e outros.',
         'As obras de conservação e manutenção pagas nos 24 meses antes do arrendamento, nas colunas próprias, só no ' +
           'ano em que o arrendamento começa.',
+      ] },
+    ] },
+    // D112, D113 (2026-11-17): a renda é a do recibo, e o que fica pelo caminho é gasto, se for
+    { grupo: 'Quando a renda não chega inteira', blocos: [
+      { p: 'Declaras a renda do recibo, antes da retenção, da comissão e de descontos: a que o inquilino paga, ou ' +
+        'que fica à tua disposição, e não só o que chega à tua conta (artigo 8.º, n.º 1; instruções do quadro 4.1 ' +
+        'do Anexo F).' },
+      { info: [
+        'Se uma imobiliária ou gestora cobra a renda em teu nome e te transfere o resto, declaras a renda inteira, e a ' +
+          'comissão dela é um gasto, na coluna de outros, com os documentos que a ligam ao contrato e ao imóvel ' +
+          '(artigo 41.º, n.º 1; informação vinculativa, processo 615/2016).',
+        'Se o inquilino pagou uma obra e a descontou na renda, declaras a renda inteira. A obra só se deduz se for ' +
+          'de conservação ou manutenção e tiveres a fatura em teu nome; uma melhoria não se deduz (artigo 41.º, ' +
+          'n.os 1 e 9).',
       ] },
     ] },
     { grupo: 'A caução', blocos: [
@@ -556,6 +660,10 @@ const GUIA = [
         'Quadro 4.2: os contratos para habitação permanente com essa redução, celebrados ou renovados desde 1 de ' +
           'janeiro de 2019, com o quadro 4.2A preenchido (as datas do contrato e da última renovação). Um contrato ' +
           'celebrado desde 1 de janeiro de 2024 com a renda acima do limite do artigo 72.º, n.º 23, vai para o 4.1.',
+        // D118 (2026-11-17)
+        'Quadro 4.3: o direito real de habitação duradoura (Decreto-Lei n.º 1/2020): a prestação mensal que o ' +
+          'morador te paga, com a taxa reduzida em 20 pontos, como nos contratos de 20 anos ou mais (artigo 72.º, ' +
+          'n.º 5; instruções do quadro 4.3).',
         'Quadro 6G: a opção pelo englobamento (campo 06).',
       ] },
       { p: 'Se sair um modelo novo para o ano das tuas rendas, confirma os quadros nas instruções dele.' },
@@ -573,6 +681,15 @@ const GUIA = [
           'a que pagas ao senhorio, e não no 4.1 nem no 4.2.',
         'Quadros 6D, 6F e 6H: os contratos com rendas isentas, que declaraste no quadro 4.1 (vê «Rendas isentas», ' +
           'na parte 1).',
+        // D118 (2026-11-17): os benefícios raros, cada um indicado pelos campos do quadro 4.1
+        'Quadros 6A, 6B e 6C: benefícios de linhas que declaraste no quadro 4.1, indicadas pelo campo de cada ' +
+          'uma. No 6A, o imóvel reabilitado com a taxa de 5 % (vê «A taxa», na parte 1). No 6B, um prédio ' +
+          'arrendado que o município reconheceu como loja com história (Lei n.º 42/2017): as obras de conservação ' +
+          'e manutenção dos 24 meses antes do arrendamento contam 110 % (artigo 59.º-I, n.º 2, do Estatuto dos ' +
+          'Benefícios Fiscais). No 6C, um prédio rústico florestal arrendado a uma entidade ou unidade de gestão ' +
+          'florestal reconhecida: as rendas contam 50 %, nos arrendamentos feitos até 31 de dezembro de 2020 e ' +
+          'durante 12 anos a contar do ano do contrato, com o artigo em vigor até 31 de dezembro de 2026 (artigo ' +
+          '59.º-G, n.os 11, 14 e 15, do Estatuto dos Benefícios Fiscais).',
         'Quadro 8: as rendas de anos anteriores que recebeste no ano, e que já estão no valor da linha. Se quiseres ' +
           'usar o artigo 74.º, indicas de que ano é cada uma: no 8A, se englobares, e o valor reparte-se pelos anos a que respeita (artigo 74.º, n.º 1); ou ' +
           'no 8B, se em vez disso entregares declarações de substituição desses anos, até ao quinto ano anterior ao do ' +
@@ -861,8 +978,9 @@ ${cabecaRaiz}
   </div>
 
   <dl class="ficha">
-    <div><dt>Para quem</dt><dd>Para ti, se és residente em Portugal e declaras as rendas como rendimentos prediais, da
-    categoria F, sem teres escolhido as regras da categoria B.</dd></div>
+    <div><dt>Para quem</dt><dd>Para ti, se és residente em Portugal e recebes rendas de imóveis em Portugal, que
+    declaras como rendimentos prediais, da categoria F, sem teres escolhido as regras da categoria B. As de um imóvel
+    fora de Portugal vão ao Anexo J.</dd></div>
     <div><dt>Verificado a</dt><dd><time datetime="${GUIA_REVISTO}">${dataPorExtenso(GUIA_REVISTO)}</time></dd></div>
   </dl>
 

@@ -346,7 +346,7 @@ describe('os formulários das Definições e dos grupos', () => {
     const { app, esp } = comEstado();
     app.addCat('cats'); app.addCat('catsIn'); app.addSub('cats', 'Obras'); app.renameSub('cats', 'Obras', 'Pintura'); app.addTag();
     app.CW.grupoNovo(); app.CW.grupoRenomear('G2'); app.mudarNomeCategoria('cats', 'Seguros');
-    const esperado = [['Nova categoria', 'Jardim e piscina'], ['Nova categoria', 'Alojamento local'], ['Nova subcategoria', 'Canalização'],
+    const esperado = [['Nova categoria', 'Jardim e piscina'], ['Nova categoria', 'Garagem'], ['Nova subcategoria', 'Canalização'],
       ['Mudar o nome da subcategoria', 'Canalização'], ['Nova etiqueta', 'Obras de 2026'], ['Novo grupo partilhado', 'Casas de Lisboa'], ['Mudar o nome', 'Casas de Lisboa'],
       ['Mudar o nome da categoria', 'Jardim e piscina']];
     assert.equal(esp.abertas.length, esperado.length);

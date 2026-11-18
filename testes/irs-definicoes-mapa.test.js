@@ -193,20 +193,35 @@ describe('D19 — a categoria renomeada antes da migração', () => {
 });
 
 describe('D19 — o «Fora dos totais» nas categorias que o IRS lê', () => {
-  /* Só se diz o que o resumo faz hoje: as despesas contam pelo irsColunaDe (o
-     IMI, o selo e a devolução da caução ficam); as rendas fora dos totais ainda
-     saem do resumo, e por isso nas receitas não se diz nada. */
-  test('nos Impostos o IMI e o selo continuam, nas Devoluções a caução; nas Rendas não se promete', () => {
+  /* Só se diz o que o resumo faz: as despesas contam pelo irsColunaDe (o IMI, o
+     selo e a devolução da caução ficam), a devolução de renda abate às rendas
+     (irsDevolucaoDeRenda) e as receitas escolhem-se pelo irsReceitaDe, que
+     ignora o «Fora dos totais» dentro das Rendas. */
+  test('nos Impostos o IMI e o selo continuam, nas Devoluções a caução e a renda; nas Rendas, todas', () => {
     semEcra();
     app.toggleExc('catsIn', 'Rendas');
-    assert.doesNotMatch(pagina('catsIn'), /continua a declarar-se|continuam a declarar-se/);
+    assert.match(pagina('catsIn'), /Sai dos totais e dos gráficos, mas continua a declarar-se no Anexo F\./, 'nas Rendas');
+    app.toggleExc('catsIn', 'Reembolsos');
+    assert.equal((pagina('catsIn').match(/continua a declarar-se/g) || []).length, 1, 'nos Reembolsos não');
+    assert.equal(app.defForaDeclara('catsIn', 'Rendas', 'Caução'), 'tudo');
     app.toggleExc('cats', 'Devoluções ao inquilino');
     app.toggleExc('cats', 'Impostos');
     const h = pagina('cats');
-    assert.match(h, /Sai dos totais e dos gráficos; no Anexo F, «Devolução da caução» continua a declarar-se\./);
+    assert.match(h, /Sai dos totais e dos gráficos; no Anexo F, «Devolução da caução» e «Devolução de renda» continuam a declarar-se\./);
     assert.match(h, /Sai dos totais e dos gráficos; no Anexo F, «IMI» e «Imposto do selo» continuam a declarar-se\./);
     app.toggleExc('cats', 'Seguros');
     assert.equal((pagina('cats').match(/Sai dos totais e dos gráficos/g) || []).length, 2, 'nos Seguros não');
+  });
+
+  test('e é verdade no resumo: as rendas e a devolução de renda fora dos totais continuam no Anexo F', () => {
+    semEcra();
+    app.toggleExc('catsIn', 'Rendas');
+    app.toggleExc('cats', 'Devoluções ao inquilino');
+    for (const sub of ['Renda mensal', 'Caução']) receita('Rendas', sub);
+    assert.deepEqual(app.db.transactions.map(papel), ['renda', 'caucao']);
+    const dev = app.normTx({ kind: 'expense', amount: 100, date: '2026-05-01', propertyId: 'P1', contractId: 'C1', category: 'Devoluções ao inquilino', sub: 'Devolução de renda' });
+    assert.equal(app.countsInTotals(dev), false, 'fora dos totais');
+    assert.equal(app.irsDevolucaoDeRenda(dev), true, 'e abate na mesma às rendas');
   });
 
   test('e é verdade no resumo: o IMI e a devolução da caução fora dos totais contam no Anexo F', () => {
@@ -220,8 +235,8 @@ describe('D19 — o «Fora dos totais» nas categorias que o IRS lê', () => {
   });
 
   test('a nota da página diz que fora dos totais sai do Anexo F, salvo o que fica', () => {
-    assert.match(pagina('catsIn'), /«Fora dos totais» tira-os do Anexo F e deixa-os na lista, mas não somam\./);
-    assert.match(pagina('cats'), /salvo o IMI, o imposto do selo do contrato e a devolução da caução, que continuam a declarar-se/);
+    assert.match(pagina('catsIn'), /«Fora dos totais» tira-os do Anexo F — salvo as rendas, que continuam a declarar-se — e deixa-os na lista, mas não somam\./);
+    assert.match(pagina('cats'), /salvo o IMI, o imposto do selo do contrato e as devoluções da caução e de renda, que continuam a declarar-se/);
   });
 });
 
@@ -300,6 +315,52 @@ describe('D61 — «A confirmar» no mapa das colunas', () => {
     assert.equal(app.db.settings.irsMapa['Limpeza e jardim'], 'confirmar', 'a regra de origem não volta');
     app.setIrsMapa('Gestão e mediação', 'inventada');
     assert.equal(app.db.settings.irsMapa['Gestão e mediação'], 'confirmar', 'uma coluna que não existe não entra');
+  });
+});
+
+describe('«Como a categoria» numa subcategoria com regra de origem', () => {
+  test('fica gravado (IRS_MAPA_HERDA), e a subcategoria segue a categoria', () => {
+    semEcra();
+    app.setIrsMapa('Seguros / Multirriscos', '');
+    app.fillCats(app.db.settings);
+    assert.equal(app.db.settings.irsMapa['Seguros / Multirriscos'], app.IRS_MAPA_HERDA, 'a regra de origem não volta');
+    const t = app.normTx({ kind: 'expense', amount: 100, date: '2026-05-01', propertyId: 'P1', category: 'Seguros', sub: 'Multirriscos' });
+    assert.equal(app.irsColunaDe(t).col, app.db.settings.irsMapa['Seguros'], 'a coluna da categoria');
+    app.setIrsMapa('Seguros', 'outros');
+    assert.equal(app.irsColunaDe(t).col, 'outros', 'e muda com ela');
+  });
+
+  test('o menu mostra «Como a categoria», com a classe herda, e lê o valor gravado como o vazio', () => {
+    semEcra();
+    app.setIrsMapa('Seguros / Multirriscos', app.IRS_MAPA_HERDA);
+    assert.equal(app.db.settings.irsMapa['Seguros / Multirriscos'], app.IRS_MAPA_HERDA, 'o valor também se aceita tal e qual');
+    const h = pagina('cats');
+    const i = app.irsMapaChaves().indexOf('Seguros / Multirriscos');
+    assert.equal(app.window.__sel['irsm_' + i].options[0].label, 'Como a categoria');
+    assert.match(h, new RegExp('<label class="def-cat-col herda"><span class="def-oculto">Coluna no Anexo F de Seguros › Multirriscos</span><div class="sel" id="sel_irsm_' + i + '">\\s*<input type="hidden" id="irsm_' + i + '" value="">'));
+    app.setIrsMapa();
+    assert.equal(app.db.settings.irsMapa['Seguros / Multirriscos'], app.IRS_MAPA_HERDA);
+  });
+
+  test('numa subcategoria sem regra de origem o vazio apaga; numa categoria, «A confirmar»', () => {
+    semEcra();
+    app.db.settings.cats['Seguros'].push('Recheio');
+    app.setIrsMapa('Seguros / Recheio', 'outros');
+    app.setIrsMapa('Seguros / Recheio', '');
+    assert.equal(Object.prototype.hasOwnProperty.call(app.db.settings.irsMapa, 'Seguros / Recheio'), false);
+    app.setIrsMapa('Seguros', app.IRS_MAPA_HERDA);
+    assert.equal(app.db.settings.irsMapa['Seguros'], 'confirmar');
+  });
+});
+
+describe('Sem alojamento local: o exemplo de uma categoria de receitas', () => {
+  test('ao criar e ao mudar o nome, o exemplo é «Garagem»', () => {
+    const vistos = [];
+    app.promptModal = (t, l, v, cb, exemplo) => { vistos.push(exemplo); };
+    app.addCat('catsIn');
+    app.mudarNomeCategoria('catsIn', 'Outras receitas');
+    assert.deepEqual(vistos, ['Garagem', 'Garagem']);
+    assert.doesNotMatch(String(app.addCat) + String(app.mudarNomeCategoria), /Alojamento local/);
   });
 });
 

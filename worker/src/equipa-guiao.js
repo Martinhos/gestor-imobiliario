@@ -2071,7 +2071,8 @@ var ACOES_RASTO = {
   ctFiltroRapido: 'Ver terminados', delContract: 'Apagar o contrato', reactivateContract: 'Reativar o contrato',
   ctPdfJanela: 'Gerar contrato em PDF', ctPdfDescarregar: 'Descarregar o PDF', ctRenovar: 'Renovar', ctRenovarOk: 'Renovar',
   endContract: 'Terminar', ctTerminarOk: 'Terminar o contrato com o dia e o motivo',
-  ctFimCurtoResposta: 'Responder se o fim mais cedo é uma correção', ctResponderEmpresa: 'Responder sobre o inquilino empresa', recConfirmarNoDia: 'Confirmar a renda no dia em que entrou',
+  ctFimCurtoResposta: 'Responder se o fim mais cedo é uma correção', ctResponderEmpresa: 'Responder sobre o inquilino empresa',
+  ctAntecipadasOk: 'Registar o que se pagou na assinatura', ctIrParaPergunta: 'Responder a uma pergunta do contrato', recConfirmarNoDia: 'Confirmar a renda no dia em que entrou',
   pzMarcarComunicada: 'Marcar a comunicação da duração', pzMarcarIhru: 'Marcar o envio ao IHRU',
   pesNaoRetem: 'Confirmei: não retém', catIrsEscolher: 'Escolher a categoria do IRS',
   imvForaAdicionar: 'Adicionar dono fora da app', imvForaRemover: 'Remover um dono fora da app',
@@ -2148,7 +2149,7 @@ var ACOES_RASTO = {
   fcModal: 'Novo filtro comum', fcGuardar: 'Guardar', delFiltroComum: 'Apagar o filtro comum',
   temaEscolher: 'Escolher o tema', setTheme: 'Escolher o tema', exportarSoMeu: 'Guardar cópia', driveOpen: 'Repor uma cópia',
   bkPasteBox: 'Colar cópia', bkReporColado: 'Repor', undoImport: 'Desfazer a importação', swEscolherFicheiro: 'Escolher ficheiro',
-  swPasteBox: 'Colar o texto do CSV', swParseColado: 'Continuar', swDo: 'Importar', wipe: 'Apagar todos os dados',
+  swPasteBox: 'Colar o texto do CSV', swParseColado: 'Continuar', swDo: 'Importar', swEscreverQuotas: 'Escrever as quotas', wipe: 'Apagar todos os dados',
   aveMudarNasDefinicoes: 'Mudar os avisos por email', rstMudarNasDefinicoes: 'Mudar nas Definições',
   // ajuda, apresentações, tutorial, novidades e QA
   aprResponder: 'Não mostrar mais ou voltar à apresentação', aprPassar: 'Anterior', aprSeguinte: 'Seguinte',

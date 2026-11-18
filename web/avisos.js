@@ -27,6 +27,45 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 79,
+    data: '2026-11-18',
+    titulo: 'A Declaração: cauções, reembolsos, quadro 5 e Splitwise',
+    seccoes: [
+      {
+        titulo: 'Os contratos',
+        afeta: ['contratos'],
+        itens: [
+          'O contrato pergunta o que a Declaração precisa de saber: a isenção das rendas antigas e do ex-alojamento local passado a arrendamento, o envio ao IHRU, se a renda inclui a água, a luz e o gás, o que se paga à parte e as obras antes do início.',
+          'Ao guardar um contrato com rendas antecipadas ou caução, a app propõe registá-las com o dia em que as recebeste.',
+        ],
+      },
+      {
+        titulo: 'A Declaração',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'A caução conta no ano em que a recebes, tal como os reembolsos que o inquilino te paga e as indemnizações, que têm linha própria. As rendas que devolveste abatem. A caução não conta para o limite das rendas moderadas.',
+          'Quem subarrenda tem o quadro 5. As colunas têm os nomes do impresso, os contratos antigos mostram a pergunta da atualização de 2023, e o quadro 9 lista os prédios.',
+          '«A tratar» mostra as receitas que a app não conta como renda, os reembolsos do seguro, as despesas sem imóvel, as obras por confirmar e os imóveis em que falta dizer se há outros donos fora da app. O PDF, o CSV e o texto dizem o mesmo que a página.',
+        ],
+      },
+      {
+        titulo: 'Os movimentos',
+        afeta: ['movimentos'],
+        itens: [
+          'A ficha de uma caução ou de um reembolso do inquilino diz se o recibo eletrónico já foi emitido, como a de uma renda.',
+          'A importação do Splitwise lança o custo total de cada despesa e deixa a tua quota à Declaração. Reconhece o IMI, o AIMI, a prestação do crédito e os acertos entre vocês. Deixa de fora os reembolsos e as despesas noutra moeda, até escreveres o valor em euros. Não repete o que já importaste nem o que apagaste, e diz quanto entra em cada ano.',
+        ],
+      },
+      {
+        titulo: 'O guia do IRS',
+        afeta: ['app'],
+        itens: [
+          'O guia «Declarar as rendas» diz o que não vai ao Anexo F (as rendas da categoria B e os imóveis fora de Portugal), que renda declaras quando uma gestora ou uma obra a desconta, a taxa de 5 % dos imóveis reabilitados e onde tirar o código da freguesia depois da reposição de 2025.',
+        ],
+      },
+    ],
+  },
+  {
     v: 78,
     data: '2026-11-17',
     titulo: 'Contratos, prazos e Declaração: o que a AT pede',
@@ -1883,7 +1922,7 @@ var VERSAO = AVISOS[0].v;
 /* Versão mínima aceite. Subir isto obriga toda a gente a atualizar antes de
    continuar a usar a app — é para quando uma versão antiga passa a estar
    errada, não para empurrar novidades. */
-var VERSAO_MINIMA = 78;
+var VERSAO_MINIMA = 79;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { AVISOS: AVISOS, VERSAO: VERSAO, VERSAO_MINIMA: VERSAO_MINIMA, FUNCIONALIDADES: FUNCIONALIDADES };

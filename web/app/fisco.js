@@ -57,11 +57,12 @@
    ano não tem versão própria das regras), «A tua situação fiscal» e os
    prazos da AT; um cartão por quadro, o 4.1 e o 4.2, cada um com onde se
    preenche, o resumo dos seus contratos e os campos de cada contrato (com
-   o 4.2A, o 4.2B e o 4.2C no do 4.2); os
-   isentos do 6D, as obras dos 24 meses, as rendas de anos anteriores, o AIMI
-   do quadro 9, o que ficou fora por escolha e as rendas sem contrato; e, no
-   fim, o aviso de responsabilidade (fiscoAvisoCard). Sem imóveis diz-o e
-   aponta a saída; sem rendas no ano, diz-o e nomeia os contratos que
+   o 4.2A, o 4.2B e o 4.2C no do 4.2); o quadro 5 da sublocação (D52); os
+   isentos do 6D, as obras dos 24 meses (e as por confirmar), as rendas de
+   anos anteriores, o AIMI do quadro 9, o que ficou fora por escolha e as
+   rendas sem contrato; e, no fim, o aviso de responsabilidade
+   (fiscoAvisoCard). Sem imóveis diz-o e aponta a saída; sem rendas no ano
+   (nem no 4.1 e 4.2, nem no quadro 5), diz-o e nomeia os contratos que
    estiveram em vigor nele sem nenhuma renda registada
    (fiscoContratosSemRendas) — um contrato sem rendas não tem linha, e a
    página não pode ficar só com «Sem rendas»; com imóveis à vista mas nenhum
@@ -90,7 +91,10 @@ function vFisco(){
       :`<div class="empty"><b>Sem imóveis</b>O Anexo F parte das rendas de cada imóvel.
     ${saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`));
   }
-  if(!r.linhas.length&&!r.fora.length&&!r.semContrato.length){
+  /* um ano só com sublocação (o quadro 5) tem rendas a declarar: não é «Sem
+     rendas» (D52) */
+  const q5=Array.isArray(r.quadro5)?r.quadro5.length:0;
+  if(!r.linhas.length&&!q5&&!r.fora.length&&!r.semContrato.length){
     const outros=anos.filter(y=>y!==ano&&(db.transactions||[]).some(t=>ehRenda(t)&&String(t.date||'').startsWith(String(y))));
     return panel+`<div class="ana fis"><div class="empty"><b>Sem rendas em ${ano}</b>${fiscoFraseSemRendas(fiscoContratosSemRendas(r),ano)}${outros.length?'Há rendas em '+esc(outros.join(', '))+'. ':''}Uma renda entra aqui quando o movimento é da categoria Rendas e está ligado ao contrato.
       ${saida('Escolher outro ano','hdrFiltToggle()','vista')}</div></div>`;
@@ -104,7 +108,7 @@ function vFisco(){
   return panel+`<div class="ana fis">`+fisBarra()+fiscoKpis(r)
     +`<div class="fis-grelha">`+fiscoObrigacoesCard(r)+fiscoSituacaoCard(r)+fisPrazosCard()+`</div>`
     +`<div class="fiscoPilha u-d-grid u-gtc-minmax-0-1fr u-g-14px">`
-    +fiscoQuadroCard(r,Q.semReducao)+fiscoQuadroCard(r,Q.comReducao)+fiscoIsentosCard(r)+fiscoObrasCard(r)
+    +fiscoQuadroCard(r,Q.semReducao)+fiscoQuadroCard(r,Q.comReducao)+fiscoQuadro5Card(r)+fiscoIsentosCard(r)+fiscoObrasCard(r)
     +fiscoAnosAnterioresCard(r)+fiscoAimiCard(r)+fiscoForaCard(r)+fiscoSemContratoCard(r)+fisNadaForaCard(r)+`</div>`
     +fiscoAvisoCard()+`</div>`;
 }
@@ -204,6 +208,10 @@ function fiscoPartilha(){
    contrato do 4.2 que acabou por motivo do senhorio (quadro 10, código 01),
    a regularização das reduções soma-se à parte, numa linha, como estimativa
    sem juros (totais.regularizacao, D10). A falta a pagar conta com os três.
+   As rendas ilíquidas levam a caução do ano em que se recebe (D03), os
+   reembolsos do inquilino e as indemnizações, menos as rendas devolvidas; as
+   de um imóvel subarrendado (o quadro 5, D52) dizem-se numa linha à parte, e
+   o imposto e as retenções delas já estão nos do resumo.
    Recebe: r — o resumo (resumoFiscal).
    Devolve: o HTML da grelha (string). */
 function fiscoKpis(r){
@@ -215,6 +223,12 @@ function fiscoKpis(r){
   const reg=fiscoRegularizacao(r);
   const aPagar=r2(depois+reg-(Number(T.retencoes)||0));
   const Q9=esc((r.versao&&r.versao.quadros&&r.versao.quadros.aimi)||'9');
+  /* o quadro 5 (a sublocação, D52): as rendas dele não estão nas dos quadros
+     4.1 e 4.2, e diz-se à parte; o imposto delas já está no estimado
+     (totais.imposto) e as retenções nas retenções (totais.retencoes) */
+  const Q5=(r.versao&&r.versao.quadros&&r.versao.quadros.sublocacao)||'5',T5=T.quadro5||null;
+  const rec5=T5&&Number(T5.rendaRecebida)>0?r2(Number(T5.rendaRecebida)):0;
+  const linha5=rec5?`<div class="foot">mais ${euro(rec5)} recebidos no quadro ${esc(Q5)} (sublocação)</div>`:'';
   /* o rodapé e a explicação do rendimento líquido: com prejuízo, de quem é e
      a condição do reporte (n.º 8: 36 meses de rendas nos cinco anos seguintes) */
   const reporte='O resultado negativo não se perde: abate às rendas dos seis anos seguintes, desde que os imóveis desses gastos deem rendas durante pelo menos 36 meses, seguidos ou não, nos cinco anos seguintes (CIRS art. 55.º). É de cada titular e só abate às rendas dele; a AT faz a conta.';
@@ -235,13 +249,13 @@ function fiscoKpis(r){
   /* a linha da regularização do quadro 10, somada à parte (D10) */
   const Q10=esc((r.versao&&r.versao.quadros&&r.versao.quadros.cessados)||'10');
   const linhaReg=reg>0?`<div class="foot">com a regularização do quadro ${Q10}: ~${euro(r2(depois+reg))} (+${euro(reg)}, estimativa sem juros)</div>`:'';
-  const porqueImp='O rendimento líquido de cada linha à taxa que a lei de '+r.ano+' dá ao contrato, somado titular a titular: as perdas de uma linha abatem às rendas das outras do mesmo titular, nunca às de outro titular, e o imposto nunca é negativo. É uma estimativa sem englobamento, com as taxas nacionais: quem reside nos Açores tem as taxas 30 % mais baixas, e a AT aplica-as pela residência. O valor certo é o da liquidação da AT. As retenções do inquilino abatem a isto.'
+  const porqueImp='O rendimento líquido de cada linha à taxa que a lei de '+r.ano+' dá ao contrato, somado titular a titular: as perdas de uma linha abatem às rendas das outras do mesmo titular, nunca às de outro titular, e o imposto nunca é negativo. '+(T5&&Number(T5.n)>0?'Conta também a diferença positiva de cada linha do quadro '+esc(Q5)+' (a sublocação). ':'')+'É uma estimativa sem englobamento, com as taxas nacionais: quem reside nos Açores tem as taxas 30 % mais baixas, e a AT aplica-as pela residência. O valor certo é o da liquidação da AT. As retenções do inquilino abatem a isto.'
     +(repUsado?' Os prejuízos de anos anteriores que a app conhece ('+euro(repUsado)+') abatem ao rendimento deste ano, o mais antigo primeiro e titular a titular (CIRS art. 55.º): o imposto estimado desce '+euro(repImposto)+'. Pode faltar informação — imóveis fora da app, anos sem registos, a condição dos 36 meses de rendas nos cinco anos seguintes —, e a AT faz a conta na liquidação.':'')
     +(a?' O AIMI pago abate ao imposto (quadro '+Q9+'): a app estima a parte dos prédios arrendados e limita-a ao imposto estimado das rendas. É a leitura da app; a lei fala da coleta à taxa de 28 %, e a conta certa é a da AT.'+(abate>0&&T.retencoes?' A falta a pagar já conta com este abate.':''):'')
     +(reg>0?' Um contrato com redução pela duração que acabou antes do prazo por motivo do senhorio (quadro '+Q10+') perde a redução do período em que acabou: a diferença para a taxa da duração que decorreu regulariza-se nesta declaração, com juros compensatórios (CIRS art. 72.º). A app soma a diferença à parte, sem os juros'+(T.retencoes?', e a falta a pagar já a conta.':'.'):'');
   return `<div class="grid fis-kpis">
-    ${kpi('Rendas ilíquidas',euro(T.rendas),'',fiscoN(fiscoNContratos(r.linhas),'contrato','contratos')+' em '+r.ano,'O que entrou como renda mais o que o inquilino reteve na fonte, no ano em que foi recebido. É o valor que vai aos quadros 4.1 e 4.2; cauções e empréstimos recebidos ficam de fora.')}
-    ${kpi('Retenções na fonte',euro(T.retencoes),'',T.retencoes?'retidas pelos inquilinos':'nenhuma registada','O que os inquilinos retiveram na fonte e entregaram à AT por ti, como está nos movimentos. Já conta nas rendas ilíquidas e abate ao imposto.')}
+    ${kpi('Rendas ilíquidas',euro(T.rendas),'',fiscoN(fiscoNContratos(r.linhas),'contrato','contratos')+' em '+r.ano,'O que entrou como renda mais o que o inquilino reteve na fonte, no ano em que foi recebido — com a caução, que é renda do ano em que a recebes, os reembolsos que o inquilino te pagou, as indemnizações que compensam rendas e as outras receitas prediais, menos as rendas que devolveste. É o valor que vai aos quadros 4.1 e 4.2; os empréstimos recebidos ficam de fora.'+(rec5?' As rendas de um imóvel que subarrendas vão ao quadro '+esc(Q5)+', à parte: o rendimento delas é a diferença para a renda que pagas ao senhorio.':''),null,null,{extra:linha5})}
+    ${kpi('Retenções na fonte',euro(T.retencoes),'',T.retencoes?'retidas pelos inquilinos':'nenhuma registada','O que os inquilinos retiveram na fonte e entregaram à AT por ti, como está nos movimentos'+(T5&&Number(T5.retencoes)>0?' — com as do quadro '+esc(Q5)+', a sublocação':'')+'. Já conta nas rendas ilíquidas e abate ao imposto.')}
     ${kpi('Gastos dedutíveis',euro(g),'',T.obras24?'com '+euro(T.obras24)+' de obras dos 24 meses':'conservação, condomínio, IMI, selo, taxas e outros','As colunas de gastos dos quadros, pela regra de cada categoria (Definições → Categorias, etiquetas e IRS), só do período em que o imóvel esteve arrendado, e as obras de conservação dos 24 meses antes de um contrato. Ficam fora os juros, o mobiliário, o AIMI e as obras que acrescentam valor. Para o IRS conta a quota de cada um no imóvel, e não quem pagou nem a divisão escolhida no movimento (CIRS art. 19.º).')}
     ${kpi('Rendimento líquido',euro(T.liquido),T.liquido<0?'neg':'',pePre||(T.isentos.n?'sem os '+euro(T.isentos.liquido)+' isentos (6D)':'rendas menos gastos'),porqueLiq)}
     ${kpi('Imposto estimado',euro(imposto),'',T.retencoes?'já retido '+euro(T.retencoes)+' · '+(aPagar>=0?'falta '+euro(aPagar):'a receber '+euro(-aPagar)):'sem englobamento',porqueImp,null,null,{extra:linhaRep+linhaAimi+linhaReg})}</div>`;
@@ -288,7 +302,8 @@ function fiscoRegularizacao(r){
   return r2(Math.max(0,sum(rs.map(x=>Number(x&&x.total)||0))));
 }
 /* O rótulo do botão de um aviso, pelo sítio que ele abre: a ficha de um
-   contrato, de um inquilino, de um imóvel ou de um movimento, a lista dos
+   contrato, de um inquilino, de um imóvel ou de um movimento, uma pergunta
+   do contrato (o «Responder» de contrato.js:ctIrParaPergunta), a lista dos
    contratos, dos imóveis ou dos movimentos, as definições do IRS, ou o
    «Marcar como enviado» do envio ao IHRU (prazos.js:pzIhruPergunta).
    Recebe: abrir — o código da ação do aviso.
@@ -296,7 +311,7 @@ function fiscoRegularizacao(r){
 function fiscoRotuloDoAviso(abrir){
   const a=String(abrir||'');
   if(/^pzIhruPergunta\(/.test(a))return 'Marcar como enviado';
-  if(/^ctResponderEmpresa\(/.test(a))return 'Responder';
+  if(/^ctResponderEmpresa\(/.test(a)||/^ctIrParaPergunta\(/.test(a))return 'Responder';
   if(/^ctView\(/.test(a))return 'Abrir contrato';
   if(/^personView\(/.test(a))return 'Abrir inquilino';
   if(/^propView\(/.test(a))return 'Abrir imóvel';

@@ -290,12 +290,23 @@ function ctAtDaFicha(c){
       +ctKv('Cessação',cessacao?esc(cessacao):'')
       +ctKv('Nota da cessação',notaAntiga?esc(notaAntiga):'')
       +ctKv('Inquilino empresa',empresa?empresa.kv:'')
+      +ctKv('Envio ao IHRU',ctIsencaoPede(c,'ihru')&&fisc.ihru?dPT(fisc.ihru):'')
+      +ctKv('Consumos',fisc.consumosIncluidos===true?'incluídos na renda':'')
+      +ctKv('Pago à parte',fisc.extrasMensais>0?euro2(fisc.extrasMensais)+' por mês (móveis e serviços)':'')
+      +ctKv('Obras antes do início',fisc.obrasSemOutroUso===true?'o imóvel esteve só à espera de inquilino':fisc.obrasSemOutroUso===false&&ctObrasAntes(c)?'o imóvel teve outro uso: não se deduzem':'')
+      +ctKv('Renda de 2023',ctAtualizacao2023Visivel(c)&&fisc.atualizacao2023?(fisc.atualizacao2023==='sim'?'subiu mais de 2 %':'não subiu mais de 2 %'):'')
       +ctKv('Recibos eletrónicos',recibos)
       +ctKv('Anexo F',isento?'quadro 4.1 · isento':taxaReduzida?'quadro 4.2 · pela duração':'quadro 4.1 · '+esc(irsTaxaPorque(c)));
-  }else corpo=`<p class="hint">${fisc.estado==='naoDeclarado'?'Fica fora do resumo do Anexo F e dos prazos da AT.':'Comunicaste este contrato às Finanças (Modelo 2)? Indica-o ao editar: o resumo do Anexo F e os prazos da AT dependem disso.'}</p>`;
+  }else corpo=`<p class="hint">${fisc.estado==='naoDeclarado'?'Fica fora do resumo do Anexo F e dos prazos da AT.'
+    :ctAntesDoModelo2(c)?'Começou antes de abril de 2015: não tem Modelo 2. Registaste-o no Portal das Finanças (os elementos mínimos do contrato)? Indica-o ao editar: o resumo do Anexo F e os prazos da AT dependem disso.'
+    :'Comunicaste este contrato às Finanças (Modelo 2)? Indica-o ao editar: o resumo do Anexo F e os prazos da AT dependem disso.'}</p>`;
+  /* a isenção escolhida que não conta no ano: porquê, e o caminho para a
+     pergunta que a confirma, a quem pode alterar o contrato */
+  const isNaoConta=fisc.estado==='declarado'&&!isento?ctIsencaoNaoContaDaFicha(c):'';
   const notas=[
     isento?'Isento de IRS: '+esc(isento.nome)+'. As rendas declaram-se na linha do quadro 4.1 do Anexo F, sem imposto, e o quadro '+esc(isento.quadro)+' aponta para ela'
-      +(isento.codigo?' (código '+esc(isento.codigo)+').':' (o código ainda não se conhece: o Anexo F destes rendimentos não foi aprovado).'):'',
+      +(isento.semCodigo?'.':isento.codigo?' (código '+esc(isento.codigo)+').':' (o código ainda não se conhece: o Anexo F destes rendimentos não foi aprovado).'):'',
+    isNaoConta,
     taxaReduzida?'Pela duração, este contrato tem direito à taxa reduzida de '+dec(irsDoAno.reducao.taxa)+' %'
       +(irsDoAno.reducao.bonus&&bonusRM?', já com os '+dec(bonusRM.pontos)+' pontos a menos de uma renda mais baixa do que a do contrato anterior (quadro 4.2B)':'')
       +'. Isso pede duas coisas: o quadro 4.2 do Anexo F preenchido, e a duração comunicada no Portal das Finanças — uma vez, até 15 de fevereiro do ano seguinte ao início do contrato e de cada renovação.'
@@ -581,6 +592,10 @@ function ctSaver(){
        um contrato terminado antes dele continua a gravar-se) */
     const ces=irsCessacao(cForm);
     if(cForm.active===false&&ces.data){const e=ctCessacaoErro(cForm,ces.data,ces.motivo,false);if(e)return falhaCampo(e.id,e.msg)}
+    /* o bloco fiscal: o dia do envio ao IHRU com as regras do «Marcar como
+       enviado» (prazos.js:pzMarcarIhru), só com a pergunta à vista; e o que
+       se paga à parte nunca negativo */
+    const ef=ctFiscoErro(cForm);if(ef)return falhaCampo(ef.id,ef.msg);
     /* só quando o fim vai para a frente (uma renovação nunca o encurta) e a
        renovação ainda não foi escrita à mão nas renovações */
     if(fimAntes&&cForm.end&&cForm.end>fimAntes&&!(fiscoDe(cForm).renovacoes||[]).some(r=>r.inicio===pzAddDias(fimAntes,1)))
@@ -593,6 +608,23 @@ function ctSaver(){
       return ctFimCurtoPergunta(fimAntes);
     ctGravarOuCessar();
   };
+}
+/* Os erros do bloco fiscal do formulário, pela ordem dos campos: o dia do
+   envio ao IHRU (só quando a isenção escolhida o pede — ctIsencaoPede), nunca
+   depois de hoje nem antes da celebração (ou do início, sem ela), como o
+   «Marcar como enviado» do aviso; e o que se paga à parte, nunca negativo.
+   Recebe: c — o contrato do formulário (cForm, já recolhido).
+   Devolve: null, ou {id, msg} — o campo e a frase do erro. */
+function ctFiscoErro(c){
+  const f=fiscoDe(c);
+  if(f.estado!=='declarado')return null;
+  if(ctIsencaoPede(c,'ihru')&&f.ihru){
+    if(f.ihru>today())return {id:'c_fihru',msg:'O dia do envio não pode ser depois de hoje.'};
+    const cel=f.celebracao||c.start||'';
+    if(cel&&f.ihru<cel)return {id:'c_fihru',msg:'O dia do envio não pode ser antes da celebração ('+dPT(cel)+').'};
+  }
+  if(document.getElementById('c_fextras')&&num(val('c_fextras'))<0)return {id:'c_fextras',msg:'O que se paga à parte não pode ser negativo.'};
+  return null;
 }
 /* O contrato teve redução da taxa pela duração em algum período (o inicial
    ou uma renovação — irs.js:irsPrazosDeComunicacao)?
@@ -698,11 +730,16 @@ function ctJuntaRenovacao(c,inicio,fim){
    contrato novo diz «Contrato adicionado.» com o «Ver» para a ficha dele
    (componentes.js:avisoComVer); o dos movimentos fora vem primeiro. Uma
    renovação escrita à mão que passa o fim leva o fim com ela
-   (ctFimPelasRenovacoes, D42).
+   (ctFimPelasRenovacoes, D42). Com rendas antecipadas ou caução novas (ou
+   mudadas), propõe logo o registo do que se pagou na assinatura
+   (ctAntecipadasProposta, D56).
    Devolve: nada. */
 function ctGravar(){
   ctFimPelasRenovacoes(cForm);
-  const i=db.contracts.findIndex(x=>x.id===cForm.id),cid=cForm.id;
+  const i=db.contracts.findIndex(x=>x.id===cForm.id),cid=cForm.id,antes=i<0?null:db.contracts[i];
+  /* o que se pagou na assinatura propõe-se num contrato novo, ou quando as
+     antecipadas ou a caução mudaram — não em cada gravação */
+  const propor=!antes||Number(antes.advance)!==Number(cForm.advance)||Number(antes.deposit)!==Number(cForm.deposit);
   if(i<0)db.contracts.push(cForm);else db.contracts[i]=cForm;
   /* a renda planeada é dos Planeados: desligados nesta conta, o servidor nem
      aceitava o registo — o contrato guarda-se na mesma, sem ela */
@@ -713,11 +750,95 @@ function ctGravar(){
      era dizer que entrou noutro — muda a receita do ano, o IRS, o cashflow
      e as contas entre proprietários. A app aponta, e a pessoa decide. */
   const fora=movimentosForaDoContrato(cForm);
-  if(fora.length)return toast(fora.length===1?'1 movimento deste contrato está fora das datas dele.'
+  if(fora.length)toast(fora.length===1?'1 movimento deste contrato está fora das datas dele.'
     :fora.length+' movimentos deste contrato estão fora das datas dele.',
     {rotulo:'Ver',ms:9000,fn:()=>verMovimentosFora(cForm.id)});
-  if(i>-1)return toast('Contrato guardado.');
-  avisoComVer('Contrato adicionado.','contracts',()=>ctView(cid));
+  else if(i>-1)toast('Contrato guardado.');
+  else avisoComVer('Contrato adicionado.','contracts',()=>ctView(cid));
+  if(propor)ctAntecipadasProposta(cid);
+}
+/* O que o inquilino pagou na assinatura e ainda não está registado (D56): as
+   rendas antecipadas — uma por cada um dos primeiros meses do contrato
+   (c.advance), com o mês a que respeita — e a caução, com o dia em que se
+   pagaram: a celebração (fisco.celebracao); sem ela, o início, ou hoje se o
+   contrato ainda não começou. Declaram-se no ano em que se recebem, com
+   recibo (Ofício-Circulado 20256). Um mês que já tem renda deste contrato, ou
+   uma caução já registada, não se propõe. Só com os Movimentos ligados e a
+   quem pode adicionar movimentos no imóvel; um pagamento que seria depois de
+   hoje não se propõe (ainda não se recebeu).
+   Recebe: c — o contrato (o da base).
+   Devolve: null, ou {data, itens:[{tipo:'renda'|'caucao', periodo, valor, rotulo}]}. */
+function ctAntecipadasPorRegistar(c){
+  if(!c||!servicoLigado('transactions')||!pode(c.propertyId,'tx.add'))return null;
+  const ini=String(c.start||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(ini))return null;
+  const f=fiscoDe(c),h=today(),data=f.celebracao||(ini>h?h:ini);
+  if(!data||data>h)return null;
+  const doCt=(db.transactions||[]).filter(t=>t&&t.contractId===c.id&&t.kind==='income');
+  const papel=t=>irsReceitaDe(t).papel,itens=[];
+  const n=Math.max(0,Math.min(36,Math.round(Number(c.advance)||0)));
+  if(Number(c.rent)>0)for(let k=0;k<n;k++){
+    const y=Number(ini.slice(0,4)),m0=Number(ini.slice(5,7))-1+k,mes=(y+Math.floor(m0/12))+'-'+String(m0%12+1).padStart(2,'0');
+    if(doCt.some(t=>papel(t)==='renda'&&irsMesDaRenda(t)===mes))continue;
+    itens.push({tipo:'renda',periodo:mes,valor:Number(c.rent),rotulo:'Renda de '+(MESES[m0%12]||'')+' de '+mes.slice(0,4)});
+  }
+  /* a caução só com a subcategoria dela (o id rendas/caucao): sem ela, ia às
+     rendas sem se saber que é a caução */
+  if(Number(c.deposit)>0&&ctCatDoId('rendas/caucao')&&!doCt.some(t=>papel(t)==='caucao'))
+    itens.push({tipo:'caucao',periodo:'',valor:Number(c.deposit),rotulo:'Caução'});
+  return itens.length?{data:data,itens:itens}:null;
+}
+/* A categoria e a subcategoria de receita que a conta dá a um id do IRS
+   (settings.catIds.catsIn — o nome pode ter mudado; o id não).
+   Recebe: id — o id ('rendas', 'rendas/renda-mensal', 'rendas/caucao'…).
+   Devolve: {category, sub}, ou null quando a conta não tem esse id. */
+function ctCatDoId(id){
+  const ids=(db.settings&&db.settings.catIds&&db.settings.catIds.catsIn)||{};
+  const k=Object.keys(ids).find(x=>ids[x]===id);if(!k)return null;
+  const i=k.indexOf(' / ');
+  return i<0?{category:k,sub:''}:{category:k.slice(0,i),sub:k.slice(i+3)};
+}
+/* Propõe, por cima da lista, o registo do que se pagou na assinatura
+   (ctAntecipadasPorRegistar): cada renda antecipada e a caução num
+   interruptor (todos ligados; a linha inteira toca-se, com 44 px), e o dia
+   em que se pagaram (a celebração, por omissão).
+   Sem nada a registar não abre.
+   Recebe: id — o id do contrato.
+   Devolve: nada — abre a janela, ou nada. */
+function ctAntecipadasProposta(id){
+  const c=contract(id),p=ctAntecipadasPorRegistar(c);if(!p)return;
+  const linhas=p.itens.map((x,k)=>ctInterruptor('c_antItem_'+k,true,x.rotulo,euro2(x.valor)+(x.tipo==='caucao'?', a caução do contrato':', paga à cabeça'))).join('');
+  const temRendas=p.itens.some(x=>x.tipo==='renda');
+  openModal('O que se pagou na assinatura',`<div class="form">
+    <div class="hint">O que o inquilino pagou ao assinar declara-se no ano em que o recebeste, com recibo${temRendas?', e cada renda antecipada fica com o mês a que respeita':''}. Desmarca o que não recebeste.</div>
+    ${linhas}
+    <label>Pago a <span class="req">*</span><input id="c_antData" type="date" value="${esc(p.data)}" max="${esc(today())}"></label></div>`,
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Agora não</button><button class="btn primary" data-toca="dados" data-click="ctAntecipadasOk('${jsq(id)}')">Registar</button>`);
+}
+/* Regista o que se marcou na janela do que se pagou na assinatura: cada
+   renda com o dia escrito e o mês a que respeita (periodo), na categoria das
+   Rendas (e Renda mensal) da conta; a caução na subcategoria dela. Com
+   «Anular» (remove o que se registou).
+   Recebe: id — o id do contrato.
+   Devolve: nada. */
+function ctAntecipadasOk(id){
+  const c=contract(id),p=ctAntecipadasPorRegistar(c);if(!p)return closeModal();
+  const dia=val('c_antData'),h=today();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(dia))return falhaCampo('c_antData','Indica o dia em que se pagou.');
+  if(dia>h)return falhaCampo('c_antData','O dia não pode ser depois de hoje.');
+  const marcados=p.itens.filter((x,k)=>{const e=document.getElementById('c_antItem_'+k);return !e||e.checked});
+  if(!marcados.length)return closeModal();
+  const rendas=ctCatDoId('rendas'),mensal=ctCatDoId('rendas/renda-mensal'),caucao=ctCatDoId('rendas/caucao');
+  const novos=marcados.map(x=>{
+    const cat=x.tipo==='caucao'?caucao:(mensal||rendas||{category:'',sub:''});
+    return normTx({kind:'income',label:(x.tipo==='caucao'?'Caução ':'Renda ')+ctName(c),amount:x.valor,date:dia,
+      propertyId:c.propertyId,contractId:c.id,category:cat.category,sub:cat.sub,periodo:x.periodo,split:null});
+  });
+  novos.forEach(t=>db.transactions.push(t));
+  const ids=novos.map(t=>t.id);
+  closeModal();save();buildNav();render();
+  comDesfazer(novos.length===1?'1 movimento registado.':novos.length+' movimentos registados.',()=>{
+    db.transactions=db.transactions.filter(t=>ids.indexOf(t.id)<0);save();buildNav();render();
+  });
 }
 /* HTML do formulário do contrato, montado a partir de cForm, como a prancheta
    M-NovoContrato: os campos em grupos (.sect) — o que se arrenda (o imóvel, o
@@ -755,6 +876,7 @@ function ctBody(){
       <label>Renda mensal (€) <span class="req">*</span><input id="c_rent" type="text" inputmode="decimal" class="num" value="${c.rent||''}" placeholder="Ex: 450" data-input="liveNet()" autocomplete="off"></label>
       <label>Imposto sobre a renda (%, opcional)<input id="c_tax" type="text" inputmode="decimal" class="num" value="${c.taxRate?dec(c.taxRate):''}" placeholder="Ex: ${dec(irsRate(c))}" data-input="liveNet()" autocomplete="off"></label>
       <div class="hint ct-colado">Em branco: <b id="c_taxVazio">${dec(irsRate(c))} %</b>, a estimativa para ${YEAR}. ${esc(irsTaxasTexto(YEAR))} É uma estimativa sobre a renda bruta: as despesas dedutíveis (IMI, condomínio, obras) baixam o imposto.</div>
+      <p class="hint ct-colado" id="c_taxAviso"${ctTaxaEscritaAviso(c)?'':' hidden'}><b>${esc(ctTaxaEscritaAviso(c))}</b></p>
       <div class="ct-net" id="netBox">${netBox()}</div>
       <div class="ct-campo"><span class="flabel" id="c_diasRot">A renda paga-se</span>
         <div class="ct-par ct-dias" role="group" aria-labelledby="c_diasRot">
@@ -1151,18 +1273,25 @@ function ctOposicaoDias(o){
 }
 /* O contrato como está escrito no formulário agora, para a estimativa da
    taxa: a renda, as datas, a finalidade, a celebração, a isenção e as duas
-   perguntas do art. 72.º n.os 23 e 24 dos campos que estão no ecrã, o resto
-   do cForm. Não grava nada.
+   perguntas do art. 72.º n.os 23 e 24 dos campos que estão no ecrã — e a
+   taxa escrita, as perguntas das isenções, o dia do envio ao IHRU e o que se
+   paga à parte —, o resto do cForm. Não grava nada.
    Devolve: um objeto novo com a forma de um contrato. */
 function ctEmEdicao(){
-  const eR=document.getElementById('c_rent');
+  const eR=document.getElementById('c_rent'),eT=document.getElementById('c_tax');
   const f=Object.assign({},fiscoDe(cForm));
+  const simNao=id=>{const r=val(id);return r==='1'?true:r==='0'?false:null};
   if(document.getElementById('c_ffin'))f.finalidade=val('c_ffin');
   if(document.getElementById('c_fcel'))f.celebracao=val('c_fcel');
   if(document.getElementById('c_fisen'))f.isencao=val('c_fisen');
-  if(document.getElementById('c_facima')){const r=val('c_facima');f.rendaAcimaDoLimite=r==='1'?true:r==='0'?false:null}
+  if(document.getElementById('c_facima'))f.rendaAcimaDoLimite=simNao('c_facima');
   if(document.getElementById('c_fant'))f.rendaAnterior=num(val('c_fant'))||0;
-  return Object.assign({},cForm,{rent:eR?num(eR.value):cForm.rent,start:val('c_start')||cForm.start,end:val('c_end')||cForm.end,fisco:f});
+  if(document.getElementById('c_fnrau'))f.nrau3536=simNao('c_fnrau');
+  if(document.getElementById('c_fal'))f.alRegistado2022=simNao('c_fal');
+  if(document.getElementById('c_fihru'))f.ihru=val('c_fihru');
+  if(document.getElementById('c_fextras'))f.extrasMensais=Math.max(0,num(val('c_fextras'))||0);
+  return Object.assign({},cForm,{rent:eR?num(eR.value):cForm.rent,taxRate:eT?numTaxa(eT.value):cForm.taxRate,
+    start:val('c_start')||cForm.start,end:val('c_end')||cForm.end,fisco:f});
 }
 // HTML do resumo bruto → imposto → líquido. Lê os campos do formulário se
 // já estiverem no DOM; antes disso usa os valores de cForm. Sem taxa escrita,
@@ -1190,18 +1319,49 @@ function netBox(){
 // duração e da oposição por baixo das datas (ctFraseDoPrazo).
 // Recebe: nada — lê os campos do formulário.
 // Devolve: nada — reescreve a caixa #netBox, o placeholder de c_tax, o
-// #c_taxVazio, o #c_prazoFrase, o #c_fisenHint, o hidden do #c_fn23 e o do
-// #c_fempBox (a pergunta do inquilino empresa, ctEmpresaVisivel).
+// #c_taxVazio, o #c_taxAviso (a taxa escrita que não é a da lei, D17), o
+// #c_prazoFrase, o #c_fisenHint, as dicas do n.º e do por indicar (D85), o
+// hidden do #c_fn23, o do #c_fempBox (a pergunta do inquilino empresa,
+// ctEmpresaVisivel), os das perguntas das isenções (#c_fnrauBox, #c_falBox,
+// #c_fihruBox), o das obras (#c_fobrasBox, com a pergunta) e o da
+// atualização de 2023 (#c_fat23Box); e, quando as datas mudam as isenções
+// que servem ao contrato (ctIsencoesOferecidas), a escolha da isenção.
 function liveNet(){
   const b=document.getElementById('netBox');if(b)b.innerHTML=netBox();
   const v=document.getElementById('c_taxVazio'),t=document.getElementById('c_tax');
   const est=ctEmEdicao(),r=dec(irsRate(est));
   if(v)v.textContent=r+' %';
   if(t)t.placeholder='Ex: '+r;
+  const av=document.getElementById('c_taxAviso');if(av){const x=ctTaxaEscritaAviso(est);av.hidden=!x;av.innerHTML=x?'<b>'+esc(x)+'</b>':''}
   const fr=document.getElementById('c_prazoFrase');if(fr)fr.textContent=ctFraseDoPrazo(est);
   const n=document.getElementById('c_fn23');if(n)n.hidden=!ctN23Visivel(est);
   const emp=document.getElementById('c_fempBox');if(emp)emp.hidden=!ctEmpresaVisivel(est);
-  const h=document.getElementById('c_fisenHint');if(h)h.textContent=ctIsencaoTexto(fiscoDe(est).isencao);
+  const caixa=(id,on)=>{const e=document.getElementById(id);if(e)e.hidden=!on};
+  caixa('c_fnrauBox',ctIsencaoPede(est,'nrau3536'));
+  caixa('c_falBox',ctIsencaoPede(est,'alRegistado2022'));
+  caixa('c_fihruBox',ctIsencaoPede(est,'ihru'));
+  caixa('c_fat23Box',ctAtualizacao2023Visivel(est));
+  const ob=document.getElementById('c_fobrasBox');
+  if(ob){const o=ctObrasAntes(est);ob.hidden=!o;const p=document.getElementById('c_fobrasPerg');if(p)p.textContent=ctObrasPergunta(est,o)}
+  const ih=document.getElementById('c_fihruHint');if(ih)ih.textContent=ctIhruDica(est);
+  const nh=document.getElementById('c_fnumHint');if(nh)nh.textContent=ctNumeroDica(est);
+  const pi=document.getElementById('c_fporIndicar');if(pi)pi.textContent=ctPorIndicarDica(est);
+  ctIsencoesRefaz(est);
+  const h=document.getElementById('c_fisenHint');if(h)h.textContent=ctIsencaoTexto(fiscoDe(est).isencao,est);
+}
+/* Refaz a escolha da isenção quando as isenções que servem ao contrato
+   mudam (uma data de celebração ou de início nova — ctIsencoesOferecidas),
+   com a escolhida ainda escolhida. Sem a escolha no ecrã, ou com as mesmas
+   opções, não toca em nada (o foco fica onde está).
+   Recebe: est — o contrato como está escrito (ctEmEdicao).
+   Devolve: nada — troca o #sel_c_fisen. */
+function ctIsencoesRefaz(est){
+  const caixa=document.getElementById('sel_c_fisen'),antes=window.__sel&&window.__sel.c_fisen;
+  if(!caixa||!antes)return;
+  const opts=ctIsencoesOferecidas(est),chave=o=>o.map(x=>x.v).join('|');
+  if(chave(opts)===chave(antes.options||[]))return;
+  const tmp=document.createElement('div');tmp.innerHTML=sel('c_fisen',fiscoDe(est).isencao,opts,'liveNet','rascunho');
+  const novo=tmp.firstElementChild;if(novo&&caixa.parentNode)caixa.parentNode.replaceChild(novo,caixa);
 }
 /* Copia o que está nos campos do modal para cForm. Chamar SEMPRE antes de
    repintar ou de mexer nas listas (inventário, chaves, fotos), senão o que
@@ -1261,6 +1421,18 @@ function collectCt(){
   if(document.getElementById('c_fisen'))f.isencao=val('c_fisen');
   if(document.getElementById('c_facima')){const r=val('c_facima');f.rendaAcimaDoLimite=r==='1'?true:r==='0'?false:null}
   if(document.getElementById('c_fant'))f.rendaAnterior=num(val('c_fant'))||0;
+  /* o que a Declaração não sabe sozinha (auditoria ao IRS, vaga 3): as
+     perguntas que confirmam as isenções, o envio ao IHRU, os consumos, o que
+     se paga à parte, as obras antes do início e a atualização de 2023 —
+     escondidas ou não, com o valor guardado: lê-las não o apaga */
+  const simNao=id=>{const r=val(id);return r==='1'?true:r==='0'?false:null};
+  if(document.getElementById('c_fnrau'))f.nrau3536=simNao('c_fnrau');
+  if(document.getElementById('c_fal'))f.alRegistado2022=simNao('c_fal');
+  if(document.getElementById('c_fihru'))f.ihru=val('c_fihru');
+  if(document.getElementById('c_fcons'))f.consumosIncluidos=chk('c_fcons');
+  if(document.getElementById('c_fextras'))f.extrasMensais=num(val('c_fextras'))||0;
+  if(document.getElementById('c_fobras'))f.obrasSemOutroUso=simNao('c_fobras');
+  if(document.getElementById('c_fat23'))f.atualizacao2023=val('c_fat23');
   c.fisco=normFisco(f);
 }
 // Repinta o corpo do modal a partir de cForm e recarrega as miniaturas das
@@ -1286,30 +1458,39 @@ function repaintCt(){const b=modalBodyEl();if(!b)return;b.innerHTML=ctBody();mar
    do art. 72.º — a renda acima de 150 % do limite (n.º 23) e a renda do
    contrato anterior (n.º 24) —, escondidas quando não se aplicam (o liveNet
    mostra-as quando a celebração ou as datas mudam).
+   E o que a Declaração não sabe sozinha (auditoria ao IRS, vaga 3): a
+   pergunta que confirma a isenção da renda antiga (6H) e a do ex-alojamento
+   local (6F), e o dia do envio ao IHRU (RSAA), cada uma só com a sua isenção
+   escolhida; se a renda inclui os consumos (campo 30 do Modelo 2); com obras
+   de conservação nos 24 meses antes do início, se o imóvel esteve só à
+   espera de inquilino (CIRS art. 41.º n.º 7); o que se paga à parte por
+   móveis e serviços, que conta para o limite das rendas moderadas; e, nos
+   começados antes de 2022, se a renda de 2023 subiu mais de 2 %. As
+   escondidas ficam no ecrã com o valor guardado (o collectCt lê-as), e o
+   liveNet mostra-as ou esconde-as.
    Devolve: string com o HTML da secção. */
 function fiscoSect(){
   const c=cForm,f=fiscoDe(c),renovs=f.renovacoes||[];
-  const vA=irsAno(YEAR),L=vA.taxas.limiteRendaAlta,B=vA.taxas.bonusRendaMenor,isens=vA.isencoes||[];
-  /* as isenções que pedem uma confirmação (pede: a renda antiga do 6H, o
-     ex-alojamento local do 6F) só se oferecem com a pergunta que as confirma,
-     que chega na vaga 3 da auditoria (decisão do Martinho, 2026-11-17); a já
-     escolhida continua à vista */
-  const isOpts=[{v:'',label:'Nenhuma'}].concat(isens.filter(x=>!x.pede||x.id===f.isencao).map(x=>({v:x.id,label:x.nome})));
-  if(f.isencao&&!isens.some(x=>x.id===f.isencao))isOpts.push({v:f.isencao,label:f.isencao.toUpperCase()});
+  const vA=irsAno(YEAR),L=vA.taxas.limiteRendaAlta,B=vA.taxas.bonusRendaMenor,M=vA.taxas.rendaModerada;
+  /* as isenções que valem para a data do contrato (ctIsencoesOferecidas); a
+     já escolhida continua à vista */
+  const isOpts=ctIsencoesOferecidas(c);
+  const sn=(v,sim,nao)=>v===true?sim:v===false?nao:'';
   /* o segmentado da casa (a prancheta): três escolhas curtas, com a mesma
      letra e a mesma cor — «não declarado» é uma decisão, não um erro */
   const seg=`<div class="ct-campo"><span class="flabel" id="c_fiscoRot">Perante a AT</span>
     <div class="segm ct-at-segm" role="radiogroup" aria-labelledby="c_fiscoRot">${[['','Por indicar'],['declarado','Declarado'],['naoDeclarado','Não declarado']]
       .map(([k,lb])=>`<button type="button" role="radio" aria-checked="${f.estado===k?'true':'false'}" class="${f.estado===k?'on':''}" data-toca="rascunho" data-click="setFiscoEstado('${k}')">${lb}</button>`).join('')}</div></div>`;
   if(f.estado==='naoDeclarado')return seg+`<div class="hint ct-colado">Este contrato fica fora do resumo do Anexo F e dos prazos da AT. Podes mudar isto quando quiseres.</div>`;
-  if(f.estado!=='declarado')return seg+`<div class="hint ct-colado">Comunicaste este contrato às Finanças (Modelo 2)? Marca aqui: o resumo do Anexo F e os prazos da AT dependem disso.${/^\d{4}-\d{2}-\d{2}$/.test(String(c.start||''))?' O prazo é '+dPT(fimDoMesSeguinte(c.start))+', o fim do mês seguinte ao início.':''}</div>`;
+  if(f.estado!=='declarado')return seg+`<div class="hint ct-colado" id="c_fporIndicar">${esc(ctPorIndicarDica(c))}</div>`;
   /* a redução pela duração é só dos contratos de habitação permanente (irsReducao) */
   const reduzida=irsTaxa(c,YEAR).reducao;
+  const obras=ctObrasAntes(c);
   /* cada dica logo a seguir ao campo de que fala: lado a lado só o que cabe
      a 390px (a data e o «Renovável») */
   return seg+`
     <label>N.º do contrato na AT (opcional)<input id="c_fnum" type="text" inputmode="numeric" class="num" value="${esc(f.numero)}" placeholder="Ex: 1234567" autocomplete="off"></label>
-    <div class="hint ct-colado">Vem no comprovativo do Modelo 2; o Anexo F pede-o em cada linha.</div>
+    <div class="hint ct-colado" id="c_fnumHint">${esc(ctNumeroDica(c))}</div>
     <label>Finalidade${sel('c_ffin',f.finalidade,[{v:'',label:'—'}].concat(FISCO_FINALIDADES.map(x=>({v:x[0],label:x[1]}))),'liveNet','rascunho')}</label>
     <div id="c_fempBox"${ctEmpresaVisivel(c)?'':' hidden'}><div class="form">
       <label>O contrato identifica quem lá mora e proíbe a sublocação?${sel('c_femp',f.empresaHabitacao===true?'1':f.empresaHabitacao===false?'0':'',[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'','rascunho')}</label>
@@ -1318,15 +1499,38 @@ function fiscoSect(){
     <div class="ct-par">
       <label>Data de celebração<input id="c_fcel" type="date" value="${esc(f.celebracao)}" data-change="liveNet()"></label>
       <label>Renovável${sel('c_fren',f.renovavel===true?'1':f.renovavel===false?'0':'',[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'','rascunho')}</label></div>
-    <div class="hint ct-colado">O dia em que assinaram: o quadro 4.2 do Anexo F pede-o nos contratos de longa duração.</div>
+    <div class="hint ct-colado">${esc(ctCelebracaoDica())}</div>
     <label>Isenção de IRS${sel('c_fisen',f.isencao,isOpts,'liveNet','rascunho')}</label>
-    <div class="hint ct-colado" id="c_fisenHint">${esc(ctIsencaoTexto(f.isencao))}</div>
+    <div class="hint ct-colado" id="c_fisenHint">${esc(ctIsencaoTexto(f.isencao,c))}</div>
+    <div id="c_fnrauBox"${ctIsencaoPede(c,'nrau3536')?'':' hidden'}><div class="form">
+      <label>O contrato é anterior ao RAU (1990) e ficou sujeito aos arts. 35.º ou 36.º do NRAU?${sel('c_fnrau',sn(f.nrau3536,'1','0'),[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'liveNet','rascunho')}</label>
+      <div class="hint ct-colado">${esc(ctPedeDica('nrau3536'))}</div>
+    </div></div>
+    <div id="c_falBox"${ctIsencaoPede(c,'alRegistado2022')?'':' hidden'}><div class="form">
+      <label>${esc(ctAlPergunta())}${sel('c_fal',sn(f.alRegistado2022,'1','0'),[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'liveNet','rascunho')}</label>
+      <div class="hint ct-colado">${esc(ctPedeDica('alRegistado2022'))}</div>
+    </div></div>
+    <div id="c_fihruBox"${ctIsencaoPede(c,'ihru')?'':' hidden'}><div class="form">
+      <label>Enviado ao IHRU a<input id="c_fihru" type="date" value="${esc(f.ihru)}" max="${esc(today())}" data-change="liveNet()"></label>
+      <div class="hint ct-colado" id="c_fihruHint">${esc(ctIhruDica(c))}</div>
+    </div></div>
     ${L&&B?`<div id="c_fn23"${ctN23Visivel(c)?'':' hidden'}><div class="form">
       <label>Renda acima de ${dec(L.percentagem)} % do limite do concelho?${sel('c_facima',f.rendaAcimaDoLimite===true?'1':f.rendaAcimaDoLimite===false?'0':'',[{v:'',label:'Não sei'},{v:'0',label:'Não'},{v:'1',label:'Sim'}],'liveNet','rascunho')}</label>
       <div class="hint ct-colado">Num contrato de habitação celebrado desde ${dPT(L.desde)}, uma renda mensal acima de ${dec(L.percentagem)} % dos limites gerais da tipologia no concelho (os do arrendamento acessível) faz perder a redução pela duração, e o contrato vai ao quadro 4.1 (CIRS art. 72.º n.º 23). A app não tem essas tabelas: indica-o aqui. Em «Não sei» conta-se a redução.</div>
       <label>Renda do contrato anterior neste imóvel (€)<input id="c_fant" type="text" inputmode="decimal" value="${f.rendaAnterior?dec(f.rendaAnterior):''}" placeholder="Opcional" data-input="liveNet()" autocomplete="off"></label>
       <div class="hint ct-colado">Se a renda deste contrato for pelo menos ${dec(B.rendaMenorPct)} % mais baixa do que a do anterior, a taxa desce mais ${dec(B.pontos)} pontos (CIRS art. 72.º n.º 24, quadro 4.2B do Anexo F). Em branco: não se aplica.</div>
     </div></div>`:''}
+    ${ctInterruptor('c_fcons',f.consumosIncluidos===true,'A renda inclui os consumos','Água, luz, gás ou internet incluídos na renda: só quando o contrato o diz e o Modelo 2 o declarou (campo 30). Ligado, os que pagas deste imóvel contam como gasto no Anexo F; desligado, são do inquilino e não se deduzem.')}
+    ${M&&YEAR<=M.ate?`<label>Móveis e serviços pagos à parte (€/mês)<input id="c_fextras" type="text" inputmode="decimal" class="num" value="${f.extrasMensais?dec(f.extrasMensais):''}" placeholder="Opcional" data-input="liveNet()" autocomplete="off"></label>
+    <div class="hint ct-colado">${esc(ctExtrasDica())}</div>`:''}
+    <div id="c_fobrasBox"${obras?'':' hidden'}><div class="form">
+      <label><span id="c_fobrasPerg">${esc(ctObrasPergunta(c,obras))}</span>${sel('c_fobras',sn(f.obrasSemOutroUso,'1','0'),[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'','rascunho')}</label>
+      <div class="hint ct-colado">Há obras de conservação deste imóvel pagas nos 24 meses antes do início do contrato. Só se deduzem se, nesse tempo, o imóvel não teve outro uso (CIRS art. 41.º n.º 7). Em «Não sei», ficam fora do Anexo F até confirmares.</div>
+    </div></div>
+    <div id="c_fat23Box"${ctAtualizacao2023Visivel(c)?'':' hidden'}><div class="form">
+      <label>A renda de 2023 subiu mais de 2 %?${sel('c_fat23',f.atualizacao2023,[{v:'',label:'Não sei'},{v:'sim',label:'Sim'},{v:'nao',label:'Não'}],'','rascunho')}</label>
+      <div class="hint ct-colado">O Anexo F pergunta-o nas linhas dos contratos em vigor antes de 2022: se a atualização da renda de 2023 passou o coeficiente de 1,02 (Lei 19/2022).</div>
+    </div></div>
     <div><div class="flabel">Renovações</div>
       ${renovs.length?`<div class="form u-g-9px">${renovs.map(r=>`<div class="invrow u-gtc-1fr-1fr-auto u-ai-end">
         <label>Início<input id="c_rini_${esc(r.id)}" type="date" value="${esc(r.inicio)}"></label>
@@ -1350,14 +1554,194 @@ function addRenov(){collectCt();cForm.fisco.renovacoes.push({id:uid(),inicio:'',
    Devolve: nada — repinta o formulário. */
 function delRenov(rid){collectCt();cForm.fisco.renovacoes=cForm.fisco.renovacoes.filter(r=>r.id!==rid);repaintCt()}
 /* A explicação curta da isenção escolhida, para a dica por baixo da escolha:
-   o texto da versão do ano e onde se declara; sem isenção, para que serve.
-   Recebe: id — o valor de fisco.isencao ('' ou o id de uma isenção).
+   o texto da versão do ano e onde se declara (o 6H e o 6F sem código: só
+   apontam para a linha do 4.1); sem isenção, para que servem, sem fechar a
+   lista (D18). Com o contrato, e quando uma condição de datas, de finalidade
+   ou do IHRU já a deixa de fora no ano corrente, diz qual (irs.js:
+   irsIsencaoMotivo) — as perguntas que a confirmam têm o seu lugar logo a
+   seguir, e não se repetem aqui.
+   Recebe: id — o valor de fisco.isencao ('' ou o id de uma isenção); c
+   (opcional) — o contrato (o do formulário, ou o que ctEmEdicao devolve).
    Devolve: o texto (sem HTML). */
-function ctIsencaoTexto(id){
+function ctIsencaoTexto(id,c){
   const x=id?(irsAno(YEAR).isencoes||[]).find(i=>i.id===id):null;
-  if(!id)return 'Só os contratos de um programa de arrendamento acessível estão isentos de IRS. Com isenção, a taxa estimada passa a 0 %.';
+  if(!id)return 'Há isenções de IRS para alguns contratos: os dos programas de arrendamento acessível, as rendas antigas de contratos anteriores ao RAU (1990) sujeitos ao NRAU, e o ex-alojamento local passado a arrendamento, entre outros. Escolhe a do contrato, se a tiver: com isenção, a taxa estimada passa a 0 %.';
   if(!x)return 'Esta isenção não existe nas regras de '+YEAR+'.';
-  return x.texto+' Declara-se no quadro '+x.quadro+' do Anexo F'+(x.codigo?' (código '+x.codigo+')':' (o código ainda não se conhece)')+'.';
+  const onde=x.semCodigo?' Declara-se no quadro '+x.quadro+' do Anexo F, que aponta para a linha do contrato no quadro 4.1.'
+    :' Declara-se no quadro '+x.quadro+' do Anexo F'+(x.codigo?' (código '+x.codigo+')':' (o código ainda não se conhece)')+'.';
+  let porque='';
+  if(c){
+    /* as perguntas que a isenção pede contam-se como respondidas: quem diz
+       que faltam é a própria pergunta, logo abaixo */
+    const f=fiscoDe(c),conf={};[].concat(x.pede||[]).forEach(k=>{conf[k]=true});
+    porque=irsIsencaoMotivo(Object.assign({},c,{fisco:Object.assign({},f,conf)}),YEAR);
+  }
+  return x.texto+onde+(porque?' Atenção: '+porque+'.':'');
+}
+/* A isenção escolhida no contrato, como a versão do ano corrente a escreve.
+   Recebe: c — o contrato (o do formulário, ou o da base).
+   Devolve: a isenção da versão ({id, quadro, pede, pedeIhru…}), ou null. */
+function ctIsencaoDe(c){
+  const id=fiscoDe(c).isencao;
+  return id?(irsAno(YEAR).isencoes||[]).find(x=>x&&x.id===id)||null:null;
+}
+/* As isenções que o formulário oferece: as da versão do ano corrente cujas
+   datas servem a este contrato — celebrado (fisco.celebracao, senão o
+   início) desde o `desde` e até ao `celebradoAte` da versão: o PAA só aos
+   celebrados até 31/08/2026, o RSAA desde 01/09/2026, o ex-alojamento local
+   até 31/12/2024 (D46). Sem data ainda, todas. A já escolhida fica sempre,
+   para se ver e se poder trocar (a dica diz porque não conta); uma que a
+   versão já não tem fica com o id.
+   Recebe: c — o contrato (o do formulário, ou o que ctEmEdicao devolve).
+   Devolve: [{v, label}] — a primeira é «Nenhuma» (v ''). */
+function ctIsencoesOferecidas(c){
+  const f=fiscoDe(c),cel=String(f.celebracao||(c&&c.start)||''),isens=irsAno(YEAR).isencoes||[];
+  const serve=x=>!/^\d{4}-\d{2}-\d{2}$/.test(cel)||((!x.desde||cel>=x.desde)&&(!x.celebradoAte||cel<=x.celebradoAte));
+  const out=[{v:'',label:'Nenhuma'}].concat(isens.filter(x=>x&&(x.id===f.isencao||serve(x))).map(x=>({v:x.id,label:x.nome})));
+  if(f.isencao&&!isens.some(x=>x&&x.id===f.isencao))out.push({v:f.isencao,label:f.isencao.toUpperCase()});
+  return out;
+}
+/* A isenção escolhida pede esta confirmação? Os campos do `pede` da versão
+   (a renda antiga: nrau3536; o ex-alojamento local: alRegistado2022), e
+   'ihru' para a que pede o dia do envio ao IHRU (o RSAA: pedeIhru).
+   Recebe: c — o contrato; campo — 'nrau3536', 'alRegistado2022' ou 'ihru'.
+   Devolve: true se a pergunta desse campo se mostra. */
+function ctIsencaoPede(c,campo){
+  const x=ctIsencaoDe(c);if(!x)return false;
+  if(campo==='ihru')return !!(x.pedeIhru||x.prazoIhru);
+  return [].concat(x.pede||[]).indexOf(campo)>-1;
+}
+/* A dica por baixo de uma pergunta que confirma uma isenção: a lei que a
+   pede e o que acontece em «Não sei» — e, no ex-alojamento local, até que
+   ano vale (o ateAno da versão).
+   Recebe: campo — 'nrau3536' ou 'alRegistado2022'.
+   Devolve: o texto (sem HTML). */
+function ctPedeDica(campo){
+  const x=(irsAno(YEAR).isencoes||[]).find(i=>i&&[].concat(i.pede||[]).indexOf(campo)>-1)||{};
+  const lei=x.lei?' ('+x.lei+')':'';
+  if(campo==='nrau3536')return 'É o que a isenção pede'+lei+': as rendas antigas de um inquilino com rendimentos baixos, ou com 65 ou mais anos, ou com deficiência de 60 % ou mais. Em «Não sei», a isenção não conta.';
+  return 'É o que a isenção pede'+lei+(x.ateAno?', e vale para as rendas até às de '+x.ateAno:'')+'. Em «Não sei», a isenção não conta.';
+}
+/* A pergunta do ex-alojamento local (o 6F), com a data-limite do contrato
+   lida da versão (o celebradoAte).
+   Devolve: o texto (sem HTML). */
+function ctAlPergunta(){
+  const x=(irsAno(YEAR).isencoes||[]).find(i=>i&&[].concat(i.pede||[]).indexOf('alRegistado2022')>-1)||{};
+  return 'O alojamento local estava registado até 31/12/2022, e este contrato foi celebrado e inscrito no Portal das Finanças'+(x.celebradoAte?' até '+dPT(x.celebradoAte):'')+'?';
+}
+/* A dica do dia do envio ao IHRU (RSAA, D46): até quando se envia — o
+   `prazoIhru` da versão no ano seguinte ao da celebração (ou ao do início,
+   sem ela) — e o que acontece sem o envio. É o mesmo campo que o «Marcar
+   como enviado» do aviso grava (prazos.js:pzMarcarIhru).
+   Recebe: c — o contrato (o do formulário, ou o que ctEmEdicao devolve).
+   Devolve: o texto (sem HTML). */
+function ctIhruDica(c){
+  /* sem a isenção escolhida (a caixa escondida), a da versão que pede o envio */
+  const x=ctIsencaoDe(c)||(irsAno(YEAR).isencoes||[]).find(i=>i&&i.prazoIhru)||{};
+  const md=String(x.prazoIhru||''),f=fiscoDe(c),cel=String(f.celebracao||(c&&c.start)||'');
+  const ok=/^\d{2}-\d{2}$/.test(md),prazo=ok&&/^\d{4}-\d{2}-\d{2}$/.test(cel)?dPT((Number(cel.slice(0,4))+1)+'-'+md)
+    :ok?md.slice(3)+'/'+md.slice(0,2)+' do ano seguinte ao da celebração':'ao prazo da lei';
+  return 'A cópia do contrato e o comprovativo da comunicação às Finanças vão à plataforma do IHRU até '+prazo+': sem isso, as rendas não ficam isentas de IRS. Escreve o dia em que os enviaste.';
+}
+/* A dica da data de celebração (D108): para que serve na app — o regime da
+   redução e o quadro 4.2C (o ano do `limiteRendaAlta` da versão) —, e que o
+   Anexo F pede a data de início, não esta.
+   Devolve: o texto (sem HTML). */
+function ctCelebracaoDica(){
+  const L=irsAno(YEAR).taxas.limiteRendaAlta,desde=L&&/^\d{4}/.test(String(L.desde||''))?String(L.desde).slice(0,4):'';
+  return 'O dia em que assinaram: decide o regime da redução pela duração'+(desde?' e se o quadro 4.2C se aplica (contratos celebrados desde '+desde+')':'')+'. No Anexo F vai a data de início, não esta.';
+}
+/* A dica do n.º do contrato (D85): nos começados antes de 1 de abril de 2015
+   (prazos.js:PZ_MODELO2_DESDE) não há Modelo 2 — o n.º vem do registo dos
+   elementos mínimos no Portal das Finanças.
+   Recebe: c — o contrato (o do formulário, ou o que ctEmEdicao devolve).
+   Devolve: o texto (sem HTML). */
+function ctNumeroDica(c){
+  if(ctAntesDoModelo2(c))return 'Começou antes de abril de 2015: não tem Modelo 2. O n.º vem do registo dos elementos mínimos do contrato no Portal das Finanças; o Anexo F pede-o em cada linha.';
+  return 'Vem no comprovativo do Modelo 2; o Anexo F pede-o em cada linha.';
+}
+/* A dica de um contrato por indicar perante a AT (D85): o Modelo 2 e o
+   prazo dele; nos começados antes de 1 de abril de 2015, o registo dos
+   elementos mínimos, sem Modelo 2 nem prazo.
+   Recebe: c — o contrato (o do formulário, ou o que ctEmEdicao devolve).
+   Devolve: o texto (sem HTML). */
+function ctPorIndicarDica(c){
+  if(ctAntesDoModelo2(c))return 'Registaste este contrato no Portal das Finanças? Começou antes de abril de 2015: não tem Modelo 2, regista-se com os elementos mínimos do contrato, e é desse registo que vem o n.º que o Anexo F pede. Marca aqui: o resumo do Anexo F e os prazos da AT dependem disso.';
+  return 'Comunicaste este contrato às Finanças (Modelo 2)? Marca aqui: o resumo do Anexo F e os prazos da AT dependem disso.'
+    +(/^\d{4}-\d{2}-\d{2}$/.test(String((c&&c.start)||''))?' O prazo é '+dPT(fimDoMesSeguinte(c.start))+', o fim do mês seguinte ao início.':'');
+}
+/* O contrato começou antes de haver Modelo 2 (1 de abril de 2015,
+   prazos.js:PZ_MODELO2_DESDE)?
+   Recebe: c — o contrato.
+   Devolve: true ou false (sem início, false). */
+function ctAntesDoModelo2(c){
+  const s=String((c&&c.start)||'');
+  return /^\d{4}-\d{2}-\d{2}$/.test(s)&&s<PZ_MODELO2_DESDE;
+}
+/* A dica do que se paga à parte (D48): o limite das rendas moderadas do ano
+   (irs-AAAA.js:taxas.rendaModerada) testa a renda com os móveis, os
+   equipamentos e os serviços pagos à parte (DL 97/2026, art. 3.º), e o
+   irs.js:irsRendaMensalDoTeste soma-lhe este valor.
+   Devolve: o texto (sem HTML); '' sem rendas moderadas no ano. */
+function ctExtrasDica(){
+  const m=irsAno(YEAR).taxas.rendaModerada;if(!m)return '';
+  return 'Para o limite das rendas moderadas ('+dec(m.taxa)+' % até '+euro(m.limiteMensal)+' por mês), conta a renda com o que o inquilino paga à parte por móveis, equipamentos e serviços, mesmo num contrato separado (DL 97/2026, art. 3.º). Em branco: nada à parte.';
+}
+/* As obras de conservação pagas nos 24 meses antes do início do contrato
+   que a Declaração conta como «obras antes do arrendamento» (CIRS art. 41.º
+   n.º 7) — a regra do fisco-resumo.js:fiscoObra24De, vista deste contrato
+   (também do que ainda não está gravado): despesas do imóvel na coluna das
+   obras dos 24 meses, ou de conservação sem contrato em vigor nesse dia,
+   pagas desde 24 meses antes do início e antes dele, quando nenhum outro
+   contrato do imóvel começa entre o pagamento e este início. Não exclui o
+   primeiro contrato do imóvel: é o caso típico do n.º 7 (D28). Só com a
+   Declaração ligada (é ela que as usa).
+   Recebe: c — o contrato (o do formulário, ou o da base).
+   Devolve: null sem obras; senão {desde} — o dia do primeiro pagamento ('AAAA-MM-DD'). */
+function ctObrasAntes(c){
+  if(!c||!c.propertyId||!servicoLigado('fisco')||!/^\d{4}-\d{2}-\d{2}$/.test(String(c.start||'')))return null;
+  const de=fiscoMenos24(c.start),pid=c.propertyId;let desde='';
+  (db.transactions||[]).forEach(t=>{
+    if(!t||t.kind!=='expense')return;
+    const d=String(t.date||'');if(!d||d<de||d>=c.start)return;
+    const col=irsColunaDe(t).col;if(col!=='obras24'&&col!=='conservacao')return;
+    if(!txProps(t).some(p=>p&&p.id===pid))return;
+    const outros=(db.contracts||[]).filter(x=>x&&x.id!==c.id&&x.propertyId===pid&&x.start);
+    /* a conservação paga com outro contrato em vigor é desse (fiscoHaviaContrato,
+       sem este: a versão gravada dele não conta contra a que se escreve) */
+    if(col==='conservacao'&&outros.some(x=>{if(x.start>d)return false;const f=fiscoFimDaVida(x);return f!==null&&(!f||f>=d)}))return;
+    if(outros.some(x=>x.start>d&&x.start<c.start))return;
+    if(!desde||d<desde)desde=d;
+  });
+  return desde?{desde:desde}:null;
+}
+/* A pergunta das obras antes do início (D28): «Entre setembro de 2025 e
+   01/06/2026, o imóvel esteve só à espera de inquilino…» — do mês do primeiro
+   pagamento ao início do contrato.
+   Recebe: c — o contrato; o — o ctObrasAntes dele (ou null).
+   Devolve: o texto (sem HTML). */
+function ctObrasPergunta(c,o){
+  const d=o&&o.desde?String(o.desde):'',mes=d?(MESES[Number(d.slice(5,7))-1]||'')+' de '+d.slice(0,4):'';
+  return (mes?'Entre '+mes+' e '+dPT(c.start)+', o':'Antes do início, o')+' imóvel esteve só à espera de inquilino, sem uso teu, da família nem alojamento local?';
+}
+/* A pergunta da atualização de 2023 (D76) faz-se nos contratos começados
+   antes de 2022 — a mesma regra do fisco-resumo.js (l.atualizacao2023).
+   Recebe: c — o contrato.
+   Devolve: true se a pergunta se mostra. */
+function ctAtualizacao2023Visivel(c){
+  const s=String((c&&c.start)||'');
+  return /^\d{4}-\d{2}-\d{2}$/.test(s)&&s<'2022-01-01';
+}
+/* A taxa escrita no contrato que não é a da lei do ano (D17): a Declaração
+   usa sempre a da lei de cada ano (irs.js:irsTaxa), e a escrita serve só à
+   renda líquida do formulário e da ficha.
+   Recebe: c — o contrato (com taxRate; o do formulário ou o que ctEmEdicao devolve).
+   Devolve: o texto do aviso (sem HTML), ou '' sem taxa escrita ou quando é a da lei. */
+function ctTaxaEscritaAviso(c){
+  const escrita=Number(c&&c.taxRate)||0;if(!(escrita>0))return '';
+  const lei=irsRate(c,YEAR);
+  if(Math.round(escrita*100)===Math.round(lei*100))return '';
+  return 'Escreveste '+dec(escrita)+' %, e pelas regras de '+YEAR+' a taxa deste contrato é '+dec(lei)+' % ('+irsTaxaPorque(c,YEAR)+'). Na Declaração conta sempre a da lei de cada ano: a escrita serve só para a renda líquida.';
 }
 /* A pergunta do inquilino empresa (D47) faz-se quando conta: um contrato de
    habitação (permanente ou não) com algum inquilino de NIF de pessoa
@@ -1392,12 +1776,37 @@ function ctEmpresaDaFicha(c){
    no botão da escolha. Quem não pode alterar recebe a ficha (ctModal).
    Recebe: id — o id do contrato.
    Devolve: nada — abre o formulário. */
-function ctResponderEmpresa(id){
+function ctResponderEmpresa(id){ctIrParaPergunta(id,'c_femp')}
+/* Abre o formulário do contrato e leva-o a uma pergunta do bloco fiscal, com
+   o foco nela — o «Responder» da ficha e dos avisos da Declaração: o
+   inquilino empresa (c_femp), as perguntas das isenções (c_fnrau, c_fal), o
+   envio ao IHRU (c_fihru), as obras antes do início (c_fobras), a
+   atualização de 2023 (c_fat23), os consumos (c_fcons). Quem não pode
+   alterar recebe a ficha (ctModal).
+   Recebe: id — o id do contrato; campo — o id do campo.
+   Devolve: nada — abre o formulário. */
+function ctIrParaPergunta(id,campo){
   ctModal(id);
   if(!cForm||cForm.id!==id)return;
-  const s=document.getElementById('sel_c_femp'),b=document.getElementById('selb_c_femp');
+  const k=String(campo||'');
+  const s=document.getElementById('sel_'+k)||document.getElementById(k),b=document.getElementById('selb_'+k)||document.getElementById(k);
   if(s&&typeof s.scrollIntoView==='function')try{s.scrollIntoView({block:'center'})}catch(e){}
   if(b&&typeof b.focus==='function')try{b.focus({preventScroll:true})}catch(e){}
+}
+/* A nota da ficha quando a isenção escolhida não conta no ano corrente
+   (irs.js:irsIsencaoMotivo): porquê e, quando o que falta é uma pergunta do
+   contrato (a do 6H, a do 6F, o envio ao IHRU), o «Responder» que leva a ela,
+   a quem pode alterar o contrato.
+   Recebe: c — o contrato.
+   Devolve: o HTML da nota, ou '' (sem isenção, ou ela conta). */
+function ctIsencaoNaoContaDaFicha(c){
+  const x=ctIsencaoDe(c),m=x?irsIsencaoMotivo(c,YEAR):'';if(!m)return '';
+  const f=fiscoDe(c);
+  const campo=ctIsencaoPede(c,'nrau3536')&&f.nrau3536!==true?'c_fnrau':ctIsencaoPede(c,'alRegistado2022')&&f.alRegistado2022!==true?'c_fal'
+    :ctIsencaoPede(c,'ihru')&&!f.ihru?'c_fihru':'';
+  const ok=campo&&podeEditar(c.propertyId,'contract.add',c);
+  return esc('Isenção escolhida: '+(x.curto||x.nome)+'. Nas rendas de '+YEAR+', '+m+'.')
+    +(ok?`<div class="toolbar u-m-9px-0-0"><button type="button" class="btn sm" data-toca="camada" data-click="ctIrParaPergunta('${jsq(c.id)}','${campo}')">Responder</button></div>`:'');
 }
 /* As perguntas dos n.os 23 e 24 do art. 72.º só se fazem quando contam: num
    contrato celebrado (ou começado, sem celebração escrita) desde a data do

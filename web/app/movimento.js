@@ -421,8 +421,12 @@ function txFicha(id){
   /* O que o IRS pergunta a este movimento. Numa renda: o mês a que respeita,
      o que ficou retido na fonte (e a renda bruta, que é o que o Anexo F quer)
      e o recibo eletrónico — este só num contrato declarado, porque só aí a AT
-     o espera. Numa despesa: a coluna do Anexo F, e de onde veio a decisão. */
-  const renda=t.kind==='income',recibo=renda&&ehRenda(t)&&ctDeclarado(ct);
+     o espera, e nas receitas que o pedem: a renda, a caução e o reembolso do
+     inquilino (irs-papeis.js:irsReceitaDe, as mesmas que o resumo conta nos
+     recibos por emitir). Numa despesa: a coluna do Anexo F, e de onde veio a
+     decisão. */
+  const papelIrs=t.kind==='income'&&ct?irsReceitaDe(t).papel:'';
+  const renda=t.kind==='income',recibo=(papelIrs==='renda'||papelIrs==='caucao')&&ctDeclarado(ct);
   const col=t.kind==='expense'?irsColunaDe(t):null;
   const quadroAimi=((irsAno(anoIrs(String(t.date||'').slice(0,4)))||{}).quadros||{}).aimi;
   const origem=col?({movimento:'escolhida neste movimento',sub:'pela subcategoria',categoria:'pela categoria',
@@ -1455,7 +1459,7 @@ function onCatChange(){
     const tr=catsFor(tForm.kind);if(tr&&!tr[nm])tr[nm]=[];
     save();tForm.category=nm;tForm.sub='';repaintTx();
     toast('Categoria criada.');
-  },isIn(tForm.kind)?'Alojamento local':'Obras')}
+  },isIn(tForm.kind)?'Garagem':'Obras')}
   tForm.category=v;tForm.sub='';
   if(tForm.kind==='income')txSugereMesDaRenda();   /* a «Renda em atraso» que saiu deixa de pedir o mês */
   repaintTx();
@@ -1599,6 +1603,8 @@ function applyLoan(t){
    O toast traz "Anular", que desfaz as duas coisas; os anexos dele só saem do
    aparelho e do servidor quando o Anular expira (anexos.js:apagarAnexosSemRegisto),
    como os de um contrato. Uma parte de um lote apaga o lote inteiro (apagarLote).
+   Uma linha importada do Splitwise fica entre as apagadas de propósito
+   (splitwise.js:swIgnorar, D127): reimportar o grupo não a repõe; o Anular tira-a.
    Recebe: id — o id do movimento a apagar (string).
    Devolve: nada — grava e re-renderiza. */
 function delTx(id){
@@ -1612,10 +1618,11 @@ function delTx(id){
   if(l)fixarCapitalInicio(l,db.transactions);   /* os dados antigos: antes de o movimento sair */
   const capital=l?l.capitalInicio:null;
   db.transactions=db.transactions.filter(x=>x.id!==id);
+  swIgnorar(copia);
   if(l){acertarCapital(l);if(servicoLigado('recurring'))syncLoanRec(prop(t.propertyId),l)}
   save();closeAllModals();render();
   comDesfazer('Movimento apagado.',()=>{
-    db.transactions.push(copia);
+    db.transactions.push(copia);swDesignorar(copia);
     /* volta a procurar a hipoteca: um sync entretanto pode ter trocado os objetos da db */
     const l2=copia.kind==='loan'&&copia.loanId?findLoan(prop(copia.propertyId),copia.loanId):null;
     if(l2){if(l2.capitalInicio==null)l2.capitalInicio=capital;acertarCapital(l2);if(servicoLigado('recurring'))syncLoanRec(prop(copia.propertyId),l2)}
@@ -1784,7 +1791,8 @@ function registarMolde(t){return ehDeVariosImoveis(t)?partirMovimento(t):{partes
    repô-las todas. Só com o lote inteiro nesta base e cada parte ao meu
    alcance (recusaDoLote): apagar só as partes que vejo deixava os outros
    imóveis com um pedaço de um movimento que já não existe. Os anexos (os
-   mesmos em todas as partes) saem quando o Anular expira, uma vez cada.
+   mesmos em todas as partes) saem quando o Anular expira, uma vez cada. As
+   linhas do Splitwise ficam entre as apagadas de propósito, como no delTx.
    Recebe: t — uma parte do lote.
    Devolve: nada — grava e redesenha (ou diz porque não apagou). */
 function apagarLote(t){
@@ -1792,8 +1800,10 @@ function apagarLote(t){
   const partes=partesDoLote(t.lote.id),ids=new Set(partes.map(x=>x.id));
   const copias=JSON.parse(JSON.stringify(partes));
   db.transactions=db.transactions.filter(x=>!ids.has(x.id));
+  swIgnorar(copias);
   save();closeAllModals();render();
   comDesfazer('Movimento apagado.',()=>{
+    swDesignorar(copias);
     /* repõe as partes todas — só as que um sync entretanto não trouxe de volta */
     const ja=new Set(db.transactions.map(x=>x.id));
     copias.forEach(c=>{if(!ja.has(c.id))db.transactions.push(c)});

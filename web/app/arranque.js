@@ -25,17 +25,18 @@ function seed(){
   const l3=normLoan({name:'Aquisição',bank:'CGD',outstanding:98000,years:15,type:'fixa',rate:3.1,start:`${YEAR-9}-01-15`});
   db.properties=[
     normProp({id:p1,name:'T2 Lisboa',address:'Campo de Ourique',use:'investimento',rentalMode:'inteiro',
-      value:280000,purchase:225000,ownerIds:[o1.id],loans:[l1,l1b],
+      /* sem donos fora da app, confirmado (D08: «A tratar» não pede a confirmação) */
+      value:280000,purchase:225000,ownerIds:[o1.id],comproprietariosFora:[],loans:[l1,l1b],
       parish:'freguesia e concelho de Lisboa',registry:'15937',matrix:'4651',
       /* o crédito de aquisição começa a 1 de maio: a escritura foi uns dias antes */
       distrito:'Lisboa',freguesiaCodigo:'110659',tipoPredio:'U',tipologia:'T2',vpt:98000,purchaseDate:`${YEAR-6}-04-27`,
       licence:'Alvará de Utilização n.º 26/2013',energyCert:'SCE395442330',energyClass:'D',energyValid:`${YEAR+10}-02-06`,
       listing:'T2 remodelado em Campo de Ourique, 78 m², cozinha equipada, muita luz natural. Perto de transportes e comércio.'}),
     normProp({id:p2,name:'T3 Coimbra',address:'Solum',use:'investimento',rentalMode:'quartos',rooms:[q1,q2,q3,q4],
-      value:210000,purchase:168000,ownerIds:[o1.id],
+      value:210000,purchase:168000,ownerIds:[o1.id],comproprietariosFora:[],
       distrito:'Coimbra',freguesiaCodigo:'060316',tipoPredio:'U',tipologia:'T3',vpt:74000,purchaseDate:`${YEAR-4}-10-15`,
       notes:'Caldeira revista em junho. *Rever o esquentador* antes do inverno.'}),
-    normProp({id:p3,name:'Casa de família',address:'Sintra',use:'proprio',value:340000,purchase:290000,ownerIds:[o1.id],loans:[l3],
+    normProp({id:p3,name:'Casa de família',address:'Sintra',use:'proprio',value:340000,purchase:290000,ownerIds:[o1.id],comproprietariosFora:[],loans:[l3],
       distrito:'Lisboa',freguesiaCodigo:'111124',tipoPredio:'U',tipologia:'T4',vpt:126000,purchaseDate:`${YEAR-9}-01-10`})
   ];
   const t1=normPerson({name:'Ana Rodrigues',phone:'912 000 001',email:'ana@exemplo.pt',nif:'220000018',gender:'f',marital:'Solteiro(a)'});
@@ -65,7 +66,10 @@ function seed(){
     fisco:{estado:'declarado',numero:'1188417',finalidade:'hp',celebracao:`${YEAR}-08-25`,renovavel:true}});
   const c4=normContract({propertyId:p2,roomId:q3.id,tenantIds:[t4.id,t5.id],rent:430,deposit:430,payDay:1,
     start:`${YEAR}-07-01`,notes:'Casal, quarto com casa de banho privativa',
-    ownerEmail:o1.email,ownerPhone:o1.phone,tenantPhone:'912 000 004'});
+    ownerEmail:o1.email,ownerPhone:o1.phone,tenantPhone:'912 000 004',
+    /* a pintura do quarto antes de o arrendar entra nas obras dos 24 meses: o
+       quarto esteve só à espera de inquilino (CIRS art. 41.º n.º 7) */
+    fisco:{obrasSemOutroUso:true}});
   /* o do quarto 4 tem prazo: 10 anos, habitação permanente — a redução pela
      duração (irs-AAAA.js:taxas.duracao) manda-o para o quadro 4.2 do Anexo F,
      com o 4.2A das datas; os outros, sem termo, ficam no 4.1. Começa depois

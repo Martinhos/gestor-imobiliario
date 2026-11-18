@@ -59,7 +59,7 @@ describe('as versões por ano dos rendimentos', () => {
       assert.ok(v.modelo.texto.length > 40);
       assert.equal(v.taxas.habitacional, 25); assert.equal(v.taxas.naoHabitacional, 28);
       igualA(v.colunas, ['conservacao', 'condominio', 'imi', 'selo', 'taxas', 'outros']);
-      igualA(v.naturezas, { habitacional: '07', naoHabitacional: '06', indemnizacao: '05', outras: '02' });
+      igualA(v.naturezas, { habitacional: '07', naoHabitacional: '06', indemnizacao: '05', outras: '02', dhd: '01' });
       assert.ok(v.novidades.length >= 1 && v.passos.length >= 5);
       v.passos.forEach((p) => assert.ok(p.titulo && p.texto.length > 20));
       v.passos.forEach((p) => assert.doesNotMatch(p.texto, /\b(?:19|20)\d{2}\b/, 'os passos não escrevem anos: ' + p.titulo));
@@ -83,6 +83,14 @@ describe('as versões por ano dos rendimentos', () => {
       assert.ok(Array.isArray(L.portaria) && L.portaria.length >= 1 && L.portaria[0].desde === L.desde);
       L.portaria.forEach((p) => assert.ok(p.portaria && p.valoresDa && p.texto && /^\d{4}-\d{2}-\d{2}$/.test(p.desde) && (p.ate === '' || /^\d{4}-\d{2}-\d{2}$/.test(p.ate))));
       v.taxas.duracao.forEach((r) => r.escaloes.forEach((e) => assert.ok([2, 3, 4, 5].includes(e.n), 'n do escalão')));
+      // a ronda 2 (KAN-128): o 4.3 do DHD, a taxa dele e os benefícios do quadro 6
+      assert.equal(v.quadros.dhd, '4.3'); assert.equal(v.taxas.dhd, 5); assert.equal(v.naturezas.dhd, '01');
+      assert.ok(v.quadro43.motivos.length === 6 && v.quadro43.reduzidas.length >= 1 && v.quadro43.colunas.length > 5);
+      igualA(v.beneficios.map((b) => [b.id, b.quadro]), [['reab71', '6A'], ['lojaHistoria', '6B'], ['egf', '6C']]);
+      v.beneficios.forEach((b) => {
+        assert.ok(b.campos.length === 5 && b.nome && b.curto && b.lei && b.texto && /^(imovel|contrato)\./.test(b.marca), b.id);
+        for (const k of ['inicioDesde', 'inicioAte', 'donoEm', 'contratosAte', 'vigenteAte']) if (b[k] != null) assert.match(b[k], /^\d{4}-\d{2}-\d{2}$/, b.id + '.' + k);
+      });
       const isens = v.isencoes;
       assert.ok(['paa', 'pma', 'pmae', 'prerau', 'al'].every((id) => isens.some((x) => x.id === id)));
       isens.forEach((x) => {
@@ -411,6 +419,8 @@ describe('o guião do ano novo (scripts/nova-versao-irs.js)', () => {
       assert.equal(ctx.versoes[0].passos.length, copia(app.irsAno(ult)).passos.length, 'os passos vêm iguais, com os marcadores');
       assert.equal(ctx.versoes[0].revisto, ''); assert.equal(ctx.versoes[0].ias, null);
       assert.deepEqual(copia(ctx.versoes[0].quadro10), copia(app.irsAno(ult)).quadro10, 'as tabelas do quadro 10 vêm iguais até alguém as confirmar');
+      assert.deepEqual(copia(ctx.versoes[0].quadro43), copia(app.irsAno(ult)).quadro43, 'o quadro 4.3 vem igual');
+      assert.deepEqual(copia(ctx.versoes[0].beneficios), copia(app.irsAno(ult)).beneficios, 'os benefícios do quadro 6 vêm iguais: o vigenteAte do 6C é da lei, e só muda se o Orçamento o prorrogar');
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

@@ -270,8 +270,8 @@ describe('o CSV do Anexo F', () => {
     let c = lerCsv(csvDescarregado().conteudo).quadros[0];
     assert.equal(c.nif, '');
     assert.equal(c.pais, 'Espanha');
-    assert.equal(c.nif_ou_pais, 'X1234567L', 'a coluna antiga fica como era');
-    assert.match(app.fiscoTexto(), /Inquilinos: Lucía \(sem NIF português · país Espanha\)/);
+    assert.equal(c.nif_ou_pais, 'Espanha', 'o número estrangeiro também não vai na coluna antiga (vaga 3)');
+    assert.match(app.fiscoTexto(), /Inquilinos: Lucía \(NIF português — · país Espanha · código do país da tabela X das instruções do Anexo J\)/);
     app.db.contracts[0].tenantIds = ['t1'];
     c = lerCsv(csvDescarregado().conteudo);
     assert.equal(c.quadros[0].nif, '123456789');

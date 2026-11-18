@@ -21,22 +21,23 @@ function dataDoInstante(ms){
   const d=new Date(n),dois=x=>String(x).padStart(2,'0');
   return dois(d.getDate())+'/'+dois(d.getMonth()+1)+'/'+d.getFullYear();
 }
-/* A última importação do Splitwise, para o botão de a anular dizer o que
-   anula: quantos movimentos e de que dia. Cada importação é um lote com o id
-   'b' + o instante em que se fez (splitwise.js:swDo), e o undoImport anula o
-   mais recente — o mesmo que se conta aqui.
+/* A minha última importação do Splitwise, para o botão de a anular dizer o
+   que anula: quantos movimentos e de que dia. Cada importação é um lote com o
+   id 'b' + o instante em que se fez (splitwise.js:swDo), e o undoImport anula
+   o meu mais recente (splitwise.js:swLotesMeus, D128) — numa casa partilhada,
+   a importação de outra pessoa não conta aqui.
    Recebe: nada.
-   Devolve: {n, data} — data em «dd/mm/aaaa», ou '' num id antigo —, ou null sem importações. */
+   Devolve: {n, data} — data em «dd/mm/aaaa», ou '' num id antigo —, ou null sem importações minhas. */
 function ultimaImportacao(){
-  const lotes=[...new Set(db.transactions.filter(t=>t.batch).map(t=>t.batch))].sort(),ult=lotes[lotes.length-1];
+  const ult=swLotesMeus().pop();
   if(!ult)return null;
-  return {n:db.transactions.filter(t=>t.batch===ult).length,data:dataDoInstante(String(ult).slice(1))};
+  return {n:ult.txs.length,data:dataDoInstante(String(ult.batch).slice(1))};
 }
 /* A subpágina «Importar e cópias» (o canvas de 2026-10, D-DefDados): a cópia de
    segurança e a exportação lado a lado; a importação do Splitwise — escolher o
-   ficheiro ou colar o texto, com o imóvel, a quota-parte e a pré-visualização
+   ficheiro ou colar o texto, com o imóvel, o «Só desde» e a pré-visualização
    na janela seguinte (splitwise.js:swMapModal), e o «Anular a última
-   importação» a dizer quantos movimentos e de que dia —; e apagar todos os
+   importação» (a minha) a dizer quantos movimentos e de que dia —; e apagar todos os
    dados. Com sessão iniciada, apagar aqui apagava também na conta e nos
    outros aparelhos: o cartão diz porquê e dá as duas saídas certas (terminar
    a sessão, apagar a conta) em vez do botão. As cópias e as exportações levam
@@ -65,7 +66,7 @@ function vImport(){
     ${fora?`<p class="small">Imóveis onde só colaboras ficam de fora da cópia e do CSV dos movimentos${anexo?'; o do Anexo F é o mesmo da Declaração, com os imóveis de quem declara contigo':''}.</p>`:''}</section>`;
   const splitwise=`<section class="card def-bloco"><div class="def-bloco-cab"><h3>Importar do Splitwise</h3>
       ${ult?`<button class="btn sm ghost" data-toca="dados" data-risco="destroi" data-click="undoImport()">Anular a última importação (${ult.n} ${ult.n===1?'movimento':'movimentos'}${ult.data?', '+ult.data:''})</button>`:''}</div>
-    <p class="small">No Splitwise: abre o grupo → <b>Export as spreadsheet</b> → guarda o CSV. A seguir escolhes o imóvel e a tua quota-parte, e vês as despesas antes de as importar.</p>
+    <p class="small">No Splitwise: abre o grupo → <b>Export as spreadsheet</b> → guarda o CSV. A seguir escolhes o imóvel e desde quando, e vês as despesas antes de as importar. A app lança o custo total de cada uma; a Declaração conta a tua quota do imóvel.</p>
     <div class="def-ficheiro">
       <input type="file" id="swFile" class="u-d-none" data-change="swPick(this)">
       <button class="btn primary" data-toca="camada" data-click="swEscolherFicheiro()">Escolher ficheiro</button>
@@ -509,20 +510,21 @@ function defCatAbrir(botao,tk,k){
    Recebe: tk — a árvore; k — o nome atual.
    Devolve: nada — abre o prompt. */
 function mudarNomeCategoria(tk,k){
-  promptModal('Mudar o nome da categoria','Nome da categoria',k,v=>renameCat(tk,k,v),tk==='catsIn'?'Alojamento local':'Jardim e piscina');
+  promptModal('Mudar o nome da categoria','Nome da categoria',k,v=>renameCat(tk,k,v),tk==='catsIn'?'Garagem':'Jardim e piscina');
 }
 /* A coluna do Anexo F de uma categoria ou subcategoria, na tabela: o menu de
    escolha (sel) com o nome dito ao leitor de ecrã, e a cor que diz o que é —
    laranja no «Não dedutível», âmbar no «A confirmar» (escolhido, ou a omissão
    de uma categoria sem regra, D61), apagada na subcategoria que segue a
    categoria. Os menus chamam o setIrsMapa sem argumentos, que os lê pela
-   posição (irsMapaChaves).
+   posição (irsMapaChaves). Uma subcategoria com o «Como a categoria» gravado
+   (dados.js:IRS_MAPA_HERDA) lê-se como o vazio: o menu nele, a classe herda.
    Recebe: m — o mapa (irsMapa()); chaves — irsMapaChaves(); chave — 'Categoria'
    ou 'Categoria / Sub'; nome — o que se lê; opts — as opções do menu; sub —
    true numa subcategoria.
    Devolve: o HTML (texto). */
 function colunaDoAnexo(m,chaves,chave,nome,opts,sub){
-  const v=m[chave]||'',cl=v==='nao'?' nao':v==='confirmar'||(!v&&!sub)?' confirmar':(!v&&sub?' herda':'');
+  const v=m[chave]===IRS_MAPA_HERDA?'':(m[chave]||''),cl=v==='nao'?' nao':v==='confirmar'||(!v&&!sub)?' confirmar':(!v&&sub?' herda':'');
   return `<label class="def-cat-col${cl}"><span class="def-oculto">Coluna no Anexo F de ${esc(nome)}</span>${sel('irsm_'+chaves.indexOf(chave),v,opts,'setIrsMapa','dados')}</label>`;
 }
 /* Uma categoria (ou subcategoria) que o IRS lê, pelo id em settings.catIds
@@ -562,20 +564,21 @@ function colunaDoAimi(){
 }
 /* O que o «Fora dos totais» faz a uma categoria no Anexo F. Tira-a dos totais e
    dos gráficos e, quase sempre, também da Declaração; diz só o que o resumo faz
-   hoje (fisco-resumo.js conta os gastos pelo irs-papeis.js:irsColunaDe): o IMI e
-   o imposto do selo (IRS_DESPESAS_SEMPRE) e a devolução da caução (a categoria
-   das Devoluções, pelo id) continuam a contar. Nas receitas nada: as Rendas fora
-   dos totais ainda saem do resumo (ehRenda, pelo countsInTotals) até ele as ler
-   pelo irsReceitaDe (vaga 3, 2.3.2) — aí o catsIn volta a dizer 'tudo' nas
-   Rendas. A devolução de renda ainda não se abate (o resumo não lê o
-   irsDevolucaoDeRenda), e por isso também não se diz.
+   (fisco-resumo.js). Nas receitas, as Rendas (pelo id, e todas as subcategorias
+   delas) continuam a declarar-se: o resumo escolhe-as pelo
+   irs-papeis.js:irsReceitaDe, que ignora o «Fora dos totais» dentro delas (D19);
+   as outras receitas saem. Nos gastos (irs-papeis.js:irsColunaDe), o IMI e o
+   imposto do selo (IRS_DESPESAS_SEMPRE) e a devolução da caução continuam a
+   contar, e a devolução de renda continua a abater às rendas
+   (irs-papeis.js:irsDevolucaoDeRenda não olha ao «Fora dos totais», D53).
    Recebe: tk — a árvore; cat — a categoria; sub (opcional) — a subcategoria.
    Devolve: 'tudo' (continua a declarar-se), 'parte' (a categoria dos Impostos
    ou das Devoluções: só algumas subcategorias continuam) ou '' (sai do Anexo F). */
 function defForaDeclara(tk,cat,sub){
+  if(tk==='catsIn')return catIrsId(tk,cat)==='rendas'?'tudo':'';
   if(tk!=='cats')return '';
   const cid=catIrsId(tk,cat);
-  const sempre=(typeof IRS_DESPESAS_SEMPRE!=='undefined'?IRS_DESPESAS_SEMPRE:['impostos/imi','impostos/imposto-do-selo']).concat(['devolucoes/caucao']);
+  const sempre=IRS_DESPESAS_SEMPRE.concat(['devolucoes/caucao','devolucoes/renda']);
   if(sub)return sempre.indexOf(catIrsId(tk,cat,sub))>-1?'tudo':'';
   return cid==='impostos'||cid==='devolucoes'?'parte':'';
 }
@@ -848,7 +851,7 @@ function vCats(forcar){
     <button class="btn primary" data-toca="camada" data-click="addCat('${jsq(tk)}')">${ic('plus',18)} Nova categoria</button></span></div>
   ${cartaoDasCategoriasDoIrs()}
   ${tabelaDeCategorias(tk)}
-  <p class="hint def-nota">O número é quantos movimentos usam a categoria. Apagar uma categoria não apaga movimentos — ficam sem categoria. Mudar o nome a uma categoria não muda o que a Declaração faz com ela. «Fora dos totais» tira-os do Anexo F${tk==='cats'?' — salvo o IMI, o imposto do selo do contrato e a devolução da caução, que continuam a declarar-se —':''} e deixa-os na lista, mas não somam.</p>
+  <p class="hint def-nota">O número é quantos movimentos usam a categoria. Apagar uma categoria não apaga movimentos — ficam sem categoria. Mudar o nome a uma categoria não muda o que a Declaração faz com ela. «Fora dos totais» tira-os do Anexo F${tk==='cats'?' — salvo o IMI, o imposto do selo do contrato e as devoluções da caução e de renda, que continuam a declarar-se —':' — salvo as rendas, que continuam a declarar-se —'} e deixa-os na lista, mas não somam.</p>
   ${tk==='cats'?`<div class="def-repor"><button type="button" class="def-ligacao" data-toca="dados" data-risco="destroi" data-click="resetIrsMapa()">Repor as colunas do Anexo F</button></div>`:''}
   <div class="def-par">${cartaoDasEtiquetas()}${cartaoDoArt41()}</div>`;
 }
@@ -1127,7 +1130,7 @@ function promptModal(title,label,value,cb,exemplo,botao){
 // Pede o nome (com um exemplo da árvore) e cria uma categoria vazia na árvore tk; grava e repinta.
 // Recebe: tk — a árvore: 'cats' (pagamentos) ou 'catsIn' (receitas).
 // Devolve: nada — abre o prompt; só ao guardar cria e grava.
-function addCat(tk){promptModal('Nova categoria','Nome da categoria',null,v=>{const cs=db.settings[tk]||(db.settings[tk]={});if(!cs[v])cs[v]=[];save();render();toast('Categoria criada.')},tk==='catsIn'?'Alojamento local':'Jardim e piscina')}
+function addCat(tk){promptModal('Nova categoria','Nome da categoria',null,v=>{const cs=db.settings[tk]||(db.settings[tk]={});if(!cs[v])cs[v]=[];save();render();toast('Categoria criada.')},tk==='catsIn'?'Garagem':'Jardim e piscina')}
 /* Leva as escolhas guardadas por categoria (as exclusões dos totais, as colunas do
    Anexo F) das chaves antigas para as novas, ou tira-as. Vai chave a chave, e não
    por prefixo: «Obras/» apanhava também uma categoria chamada «Obras/Casa», que é
@@ -1265,7 +1268,11 @@ const irsMapaChaves=()=>{const cs=cats(),l=[];Object.keys(cs).forEach(k=>{l.push
 /* Grava a coluna do Anexo F de uma categoria ou subcategoria no mapa das
    definições. Vazio apaga a regra: a categoria fica a confirmar em cada despesa
    (irs-papeis.js:irsColunaDe, origem 'omissao'), a subcategoria volta a seguir a
-   categoria. Aceita as colunas do Anexo F e 'confirmar' (IRS_MAPA_VALORES, D61):
+   categoria. Numa chave com regra de origem (IRS_MAPA0) apagar não chegava — o
+   fillCats repunha a regra na leitura seguinte —, e o vazio grava-se: 'confirmar'
+   numa categoria, dados.js:IRS_MAPA_HERDA («Como a categoria») numa
+   subcategoria. Aceita as colunas do Anexo F, 'confirmar' (IRS_MAPA_VALORES, D61)
+   e o IRS_MAPA_HERDA (o mesmo que o vazio):
    «A confirmar em cada despesa» é uma escolha, e não só a omissão. Sem argumentos — é assim que os
    menus da subpágina chamam, porque o sel chama o onchange pelo nome e sem
    dizer qual foi (componentes.js:selPick) — lê todos os menus pela posição
@@ -1277,15 +1284,23 @@ const irsMapaChaves=()=>{const cs=cats(),l=[];Object.keys(cs).forEach(k=>{l.push
    Devolve: nada — grava em db.settings.irsMapa e redesenha. */
 function setIrsMapa(chave,col){
   db.settings.irsMapa=db.settings.irsMapa||JSON.parse(JSON.stringify(IRS_MAPA0));
-  const m=db.settings.irsMapa,valida=v=>!v||IRS_MAPA_VALORES.some(c=>c[0]===v);
-  /* o vazio de uma categoria com regra de origem grava-se 'confirmar' (o mesmo que a
-     omissão): apagada, a regra de origem voltava no fillCats seguinte */
-  const deOrigem=k=>Object.prototype.hasOwnProperty.call(cats(),k)&&Object.prototype.hasOwnProperty.call(IRS_MAPA0,k);
-  const poe=(k,v)=>{if(v)m[k]=v;else if(deOrigem(k))m[k]='confirmar';else delete m[k]};
+  const m=db.settings.irsMapa,valida=v=>!v||v===IRS_MAPA_HERDA||IRS_MAPA_VALORES.some(c=>c[0]===v);
+  /* o vazio de uma chave com regra de origem grava-se: 'confirmar' numa categoria (o
+     mesmo que a omissão), IRS_MAPA_HERDA numa subcategoria (segue a categoria);
+     apagada, a regra de origem voltava no fillCats seguinte */
+  const deOrigem=k=>Object.prototype.hasOwnProperty.call(IRS_MAPA0,k),ehCat=k=>Object.prototype.hasOwnProperty.call(cats(),k);
+  const poe=(k,v)=>{
+    if(v&&v!==IRS_MAPA_HERDA)m[k]=v;
+    else if(deOrigem(k)&&ehCat(k))m[k]='confirmar';
+    else if(deOrigem(k)&&k.indexOf(' / ')>0)m[k]=IRS_MAPA_HERDA;
+    else delete m[k];
+  };
+  /* o que o menu mostra: o «Como a categoria» gravado é o vazio */
+  const atual=k=>m[k]===IRS_MAPA_HERDA?'':(m[k]||'');
   if(chave!==undefined){if(!valida(col))return;poe(chave,col||'')}
   else irsMapaChaves().forEach((k,i)=>{
     const e=document.getElementById('irsm_'+i);if(!e)return;
-    const v=e.value||'';if(valida(v)&&(m[k]||'')!==v)poe(k,v);
+    const v=e.value||'';if(valida(v)&&atual(k)!==v)poe(k,v);
   });
   save();render();
 }

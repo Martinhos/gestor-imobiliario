@@ -64,7 +64,7 @@ const APP = [
   // a base
   'eventos', 'estilos-calculados', 'dados', 'anexos', 'formato', 'espera', 'registos', 'tipos', 'irs', 'irs-papeis', 'saldos', 'ambito', 'icones', 'tema',
   'lista', 'continuidade', 'graficos', 'credito', 'componentes', 'metricas', 'navegacao', 'servicos', 'acessos', 'vistas',
-  'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'splitwise', 'definicoes', 'copias', 'arranque',
+  'irs-freguesias-2025', 'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'splitwise', 'definicoes', 'copias', 'arranque',
   // os serviços
   'painel-geral', 'lista-imoveis', 'lista-contratos', 'lista-pessoas', 'lista-colaboradores',
   'lista-movimentos', 'projecoes', 'imovel', 'fine', 'pessoas', 'contrato', 'tarefas', 'planeados', 'visitas', 'calendario', 'movimento',

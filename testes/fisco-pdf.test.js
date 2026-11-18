@@ -126,7 +126,9 @@ describe('o PDF do Anexo F', () => {
     app.db.transactions.push(app.normTx({ kind: 'expense', category: 'Sem regra', amount: 30000, date: ANO + '-05-01', propertyId: 'v1' }));
     await app.fiscoPdf();
     const t = textos(guardado.bytes);
-    assert.ok(t.every((s) => !s.includes('?')), 'sem «?»: ' + t.filter((s) => s.includes('?')).join(' | '));
+    /* um «?» que fecha uma pergunta (fim, espaço, », ) ou …) é do texto; o que fica no meio de uma palavra é uma letra perdida */
+    const perdido = (s) => /\?(?![\s»)…]|$)/.test(s);
+    assert.ok(t.every((s) => !perdido(s)), 'sem «?» no lugar de uma letra: ' + t.filter(perdido).join(' | '));
     assert.equal(app.fiscoPdfTxt('1 250,50 € − Definições → IRS'), '1 250,50 € - Definições › IRS');
     assert.equal(app.fiscoPdfTxt('Łukasz Ōta'), '?ukasz Ota', 'a letra base quando a há');
   });
@@ -181,7 +183,7 @@ describe('o PDF do Anexo F', () => {
     app.fiscoAno = '2019';
     await app.fiscoPdf();
     assert.equal(guardado, null);
-    assert.deepEqual(avisos, ['Sem contratos nos quadros 4.1 e 4.2 em 2019: não há PDF para exportar.']);
+    assert.deepEqual(avisos, ['Sem contratos nos quadros 4.1, 4.2 e 5 em 2019: não há PDF para exportar.']);
   });
 
   test('no Android vai para o seletor nativo, em base64', async () => {
