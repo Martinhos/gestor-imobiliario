@@ -60,6 +60,7 @@ var AVISOS = [
         itens: [
           'A Declaração mostra o quadro 4.3, os quadros 6A, 6B e 6C, as rendas de imóveis no estrangeiro para o Anexo J (sem estimativa do imposto) e as da categoria B à parte. O PDF, o CSV e o texto dizem o mesmo.',
           '«A tratar» pergunta pelas rendas abaixo do recibo e pelas recebidas antes do início do contrato, avisa das retenções de inquilinos particulares e dos códigos de freguesia que mudaram em 2025, e repõe num toque o custo total das despesas antigas do Splitwise. A nota da tributação conjunta passa a só informar.',
+          'A simulação do englobamento saiu: o guia explica a escolha e o Portal das Finanças simula as duas.',
         ],
       },
     ],

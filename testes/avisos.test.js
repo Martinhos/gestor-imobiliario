@@ -486,3 +486,12 @@ describe('uma secção só do dev', () => {
     }));
   });
 });
+
+describe('D110 — a simulação do englobamento que as Novidades da v39 prometiam já não existe', () => {
+  test('uma versão mais nova diz que saiu', () => {
+    const v39 = AVISOS.find((a) => a.v === 39);
+    const promete = !!v39 && v39.seccoes.some((s) => s.itens.some((i) => /simula se compensa englobar/.test(i)));
+    const diz = AVISOS.filter((a) => a.v > 39).some((a) => a.seccoes.some((s) => s.itens.some((i) => /A simulação do englobamento saiu/.test(i))));
+    assert.ok(!promete || diz, 'quem leu a promessa da v39 fica a saber que saiu');
+  });
+});
