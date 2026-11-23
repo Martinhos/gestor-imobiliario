@@ -212,12 +212,14 @@ function contaCard(m){
    anualizado. Os saldos são dos proprietários: num imóvel onde só colaboro, ou
    sem saldos, o cartão fica só com os indicadores.
    Recebe: m — as métricas do ano; pid — o id do imóvel, 'g:ID' ou null; netY
-   (opcional) — a renda anual líquida de impostos do imóvel (o portefólio não a tem).
+   (opcional) — a renda anual líquida de impostos do imóvel (o portefólio não a
+   tem); semEst (opcional) — quantos contratos ficaram fora dela por não terem
+   estimativa do imposto (irs.js:irsSemEstimativa, sem taxa escrita).
    Devolve: o HTML do cartão (string). */
-function avaContasCard(m,pid,netY){
+function avaContasCard(m,pid,netY,semEst){
   const ind=`<div class="ava-ind">
     <div><span class="small">Renda anual contratada</span><b>${euro(m.annualRent)}</b></div>
-    ${netY!=null?`<div><span class="small">Renda anual líquida de impostos (estim.)</span><b>${euro(netY)}</b></div>`:''}
+    ${netY!=null?`<div><span class="small">Renda anual líquida de impostos (estim.)</span><b>${euro(netY)}</b>${semEst>0?`<span class="small">${avaSemEstimativaTexto(semEst)}</span>`:''}</div>`:''}
     <div><span class="small">NOI anualizado</span><b>${euro(m.noiAnual)}</b></div></div>`;
   const dono=!pid||String(pid).startsWith('g:')||souDono(pid),bal=dono?ownerBalances(pid):{},ks=Object.keys(bal);
   if(!ks.length)return avaCartao('Indicadores','',ind,'ava-contas');
@@ -301,10 +303,31 @@ function portCard(pid){
     +avaTabela(ps.filter(p=>pode(p.id,'report.view')),pid||null)
     +avaGraficos(pid||null,`<div class="hint">Sem gastos em ${YEAR}.</div>`);
 }
+/* Quantos contratos ficaram fora da renda líquida por não terem estimativa
+   do imposto (irs.js:irsLiquidaParaMostrar — imóvel fora de Portugal ou
+   categoria B, sem taxa escrita), numa frase para por baixo do total.
+   Recebe: n — o número (≥ 1).
+   Devolve: o texto (sem HTML). */
+function avaSemEstimativaTexto(n){
+  return n===1?'fica de fora um contrato sem estimativa do imposto':'ficam de fora '+n+' contratos sem estimativa do imposto';
+}
+/* As duas células do imposto e da líquida de um contrato na tabela
+   «Contratos ativos»: a taxa escrita, a estimada («estim.») ou «—» com
+   «sem estimativa» (irs.js:irsTaxaParaMostrar: o Anexo J e a categoria B sem
+   taxa escrita; um subarrendado com a taxa do quadro 5 sobre a diferença).
+   Recebe: x — o contrato.
+   Devolve: o HTML das duas células (<td>…</td><td>…</td>). */
+function avaImpostoDoContrato(x){
+  const t=irsTaxaParaMostrar(x),lq=irsLiquidaParaMostrar(x);
+  const imp=t.taxa==null?`— <span class="small">sem estimativa</span>`:`${dec(t.taxa)}%${t.escrita?'':' <span class="small">estim.</span>'}`;
+  return `<td class="neg">${imp}</td><td><b>${lq==null?'—':euro(lq)}</b></td>`;
+}
 /* A avaliação de um imóvel (a ficha que a linha da tabela abre): o nome, a
    morada e a ocupação; o herói do valor de mercado contra o valor por
    rendimento; os rácios; a conta de exploração com as contas entre
-   proprietários e os indicadores; os contratos ativos; os gráficos (avaGraficos); e
+   proprietários e os indicadores; os contratos ativos (o imposto e a
+   líquida de cada um por avaImpostoDoContrato, e os sem estimativa contados
+   à parte); os gráficos (avaGraficos); e
    — havendo hipotecas — a projeção da dívida até ao fim. Com um proprietário
    filtrado, os valores entram na quota-parte dele (como no portefólio); a
    tabela de contratos e o cartão das hipotecas ficam por inteiro, que são
@@ -313,7 +336,7 @@ function portCard(pid){
    Devolve: o HTML (string). */
 function repCard(p){
   const m=metrics(YEAR,p.id,{share:true}),ls=liveLoans(p),q=sh(p);
-  const ac=activeContracts(p.id),netY=netRentOf(p)*12*q;
+  const ac=activeContracts(p.id),netY=netRentOf(p)*12*q,semEst=ac.filter(x=>irsLiquidaParaMostrar(x)==null).length;
   const {valuation,diff}=valuationOf(m.noiAnual,m.value);
   const st=propStatus(p),own=ownerNames(p);
   /* a tabela dos contratos é dos Contratos, e a frase das despesas sem imóvel
@@ -326,13 +349,13 @@ function repCard(p){
       <span class="badge ${avaSelo(st)}">${esc(st.label)}</span></div>
     ${avaHeroi(m,valuation,diff,p)}
     ${rentGrid(m,p.id,kpi('Equity',euro(m.value-m.debt),'','mercado − dívida',WHY.equity,()=>evoValuation(p,'equity')))}
-    <div class="cols">${contaCard(m)}${avaContasCard(m,p.id,netY)}</div>
+    <div class="cols">${contaCard(m)}${avaContasCard(m,p.id,netY,semEst)}</div>
     ${comContratos?avaCartao('Contratos ativos',ac.length+' '+(ac.length===1?'contrato':'contratos')+' · renda por mês',`<div class="tablewrap"><table class="table ana-fixa"><thead><tr>
       <th>${p.rentalMode==='quartos'?'Quarto':'Contrato'}</th><th class="u-ta-left">Inquilinos</th><th>Renda</th><th>Imposto</th><th>Líquida</th></tr></thead><tbody>
       ${ac.map(x=>`<tr><td><b>${x.roomId?esc(roomName(p,x.roomId)):'Imóvel inteiro'}</b></td>
         <td class="u-ta-left u-ws-normal">${esc(ctNames(x))}</td><td>${euro(x.rent)}</td>
-        <td class="neg">${dec(taxRateOf(x))}%${Number(x.taxRate)>0?'':' <span class="small">estim.</span>'}</td><td><b>${euro(netRent(x))}</b></td></tr>`).join('')}
-      <tr class="ana-total"><td><b>Total mensal</b></td><td></td><td><b>${euro(rentOf(p))}</b></td><td></td><td><b>${euro(netRentOf(p))}</b></td></tr>
+        ${avaImpostoDoContrato(x)}</tr>`).join('')}
+      <tr class="ana-total"><td><b>Total mensal</b></td><td></td><td><b>${euro(rentOf(p))}</b></td><td></td><td><b>${euro(netRentOf(p))}</b>${semEst>0?`<span class="small"> · ${avaSemEstimativaTexto(semEst)}</span>`:''}</td></tr>
       </tbody></table></div>`):''}
     ${avaGraficos(p.id,`<div class="hint">Não há gastos atribuídos a este imóvel em ${YEAR}.${orfas.length?` Há ${euro(sum(orfas.map(x=>x.amount)))} em despesas sem imóvel atribuído, que aparecem na visão geral mas não aqui.`:''}</div>`)}
     ${ls.length?(()=>{
@@ -407,10 +430,13 @@ function evoRatio(field,pid){
 function reportText(){
   const m=metrics(YEAR,null,{share:true}),act=db.contracts.filter(c=>isActive(c)&&inScope(c.propertyId)),cs=c=>sh(prop(c.propertyId));
   const v=valuationOf(m.noiAnual,m.value);
+  /* a líquida só dos contratos com estimativa do imposto (irs.js:irsLiquidaParaMostrar), e quantos ficam de fora */
+  const liqs=act.map(c=>({c:c,l:irsLiquidaParaMostrar(c)})),semEst=liqs.filter(x=>x.l==null).length;
+  const liquida=sum(liqs.filter(x=>x.l!=null).map(x=>x.l*cs(x.c)));
   return `AVALIAÇÃO DO PORTEFÓLIO — ${YEAR}${ownerFilter?' · '+ownerFilterName()+(ownerIsGrp()?'':' (na quota-parte)'):''}
 
 Imóveis: ${m.props.length} · contratos ativos: ${act.length}
-Renda contratada ${euro(sum(act.map(c=>c.rent*cs(c))))}/mês · líquida de impostos (estim.) ${euro(sum(act.map(c=>netRent(c)*cs(c))))}/mês
+Renda contratada ${euro(sum(act.map(c=>c.rent*cs(c))))}/mês · líquida de impostos (estim.) ${euro(liquida)}/mês${semEst?' ('+avaSemEstimativaTexto(semEst)+')':''}
 Valor de mercado: ${euro(m.value)} · em dívida ${euro(m.debt)} · líquido ${euro(m.value-m.debt)}
 Valor por rendimento ${euro(v.valuation)} (a ${pct(capTargetFrac())}, NOI anualizado ${euro(m.noiAnual)}) · diferença ${diffKpi(v.diff).v}
 

@@ -268,7 +268,10 @@ function ctSeloDaAt(c){
    abrir a ficha. Assim tocar no Confirmar de um por confirmar não abre também
    o contrato por baixo. No telemóvel vê-se quem, a parte e até quando, os
    selos (o estado quando não está em vigor, e os dois avisos mais graves) e a
-   renda com a líquida; no computador, as colunas da tabela.
+   renda com a líquida; no computador, as colunas da tabela. O imposto e a
+   líquida são os de irs.js:irsTaxaParaMostrar — sem taxa escrita, um
+   contrato do Anexo J ou da categoria B fica com «—» e «sem estimativa»
+   (N052), e um subarrendado com a taxa do quadro 5 sobre a diferença (N053).
    Recebe: c — o contrato; p — o imóvel dele; ctx — o ctContextoDaLista.
    Devolve: o HTML da linha. */
 function ctLinha(c,p,ctx){
@@ -277,7 +280,7 @@ function ctLinha(c,p,ctx){
   const st=ctSeloDoEstado(c),avisos=ctAvisos(c,p,ctx);
   const selo=x=>`<span class="badge${x.cor?' '+x.cor:''}">${esc(x.txt)}</span>`;
   const selosTel=(ctEstado(c)==='ativo'?[]:[st]).concat(avisos.slice(0,2)).map(selo).join('');
-  const escrita=Number(c.taxRate)>0,liq=euro2(netRent(c));
+  const tx=irsTaxaParaMostrar(c),lq=irsLiquidaParaMostrar(c),liq=lq==null?'—':euro2(lq);
   return `<div class="ct-linha" data-lp="ct:${esc(c.id)}" data-fk="ct:${esc(c.id)}">
     <div class="row-between ct-cols" data-toca="camada" data-click="ctAbrirDaLista('${jsq(c.id)}')">
       <div class="ct-c-quem"><b class="ct-nome">${esc(quem)}</b>
@@ -285,7 +288,7 @@ function ctLinha(c,p,ctx){
         ${selosTel?`<span class="ct-selos ct-so-estreito">${selosTel}</span>`:''}</div>
       <div class="ct-c-per"><span>${esc(ctPeriodo(c))}</span>${selo(st)}</div>
       <div class="ct-c-renda"><b>${euro2(c.rent)}</b><span class="small ct-so-estreito">líquida ${liq}</span></div>
-      <div class="ct-c-imp"><span>${dec(taxRateOf(c))}%</span><span class="small">${escrita?'escrita no contrato':esc(irsTaxaPorque(c))+' · estim.'}</span></div>
+      <div class="ct-c-imp"><span>${tx.taxa==null?'—':dec(tx.taxa)+'%'}</span><span class="small">${esc(tx.porque)+(tx.escrita||tx.taxa==null?'':' · estim.')}</span></div>
       <div class="ct-c-liq">${liq}</div>
       <div class="ct-c-at">${ctSeloDaAt(c)}${avisos.map(selo).join('')}</div>
       <span class="ct-c-seta" aria-hidden="true">${ic('chevR',18)}</span>

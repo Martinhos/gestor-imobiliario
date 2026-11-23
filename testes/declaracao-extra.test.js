@@ -154,7 +154,8 @@ describe('o titular A ou B', () => {
   test('o cartão «A tua situação fiscal» vem em linhas, ao lado dos prazos, com interruptores e o segmentado A/B só em conjunta', () => {
     let html = app.vFisco();
     const sit = html.indexOf('A tua situação fiscal');
-    assert.ok(sit > html.indexOf('class="fis-grelha"') && sit > html.indexOf('A tratar antes de entregar') && sit < html.indexOf('fiscoPilha'), 'na grelha, depois das obrigações, antes dos quadros');
+    // a ordem da Declaração (D8, maqueta 6): A tratar e os quadros primeiro, a situação fiscal depois dos quadros e antes do aviso
+    assert.ok(sit > html.indexOf('A tratar antes de entregar') && sit > html.indexOf('fiscoPilha') && sit < html.indexOf('fis-aviso'), 'depois dos quadros, antes do aviso');
     assert.ok(html.includes('class="interruptor" role="switch" id="fiscoConjunta" aria-checked="false" aria-label="Tributação conjunta" data-toca="dados" data-click="fiscoSetSituacao(2025,\'conjunta\',true)"'));
     assert.match(html, /id="fiscoDispensa" aria-checked="false"[^>]*data-click="fiscoSetSituacao\(2025,'dispensaRecibos',true\)"/);
     assert.doesNotMatch(html, /id="fiscoMinhaLetra"/, 'sem conjunta, nem a letra nem o cônjuge');

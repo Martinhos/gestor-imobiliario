@@ -965,11 +965,60 @@ CW.sharesModal = function (connId) {
   };
 };
 
-// Passa à casa seguinte na fila das janelas das quotas que o modal das
+/* As casas em que alguém acabou de entrar por um grupo ou por um pedido de
+   partilha aceite e em que o servidor fechou o período das quotas na
+   véspera: o último período do quotasHist leva a marca entrada, com quem
+   entrou (worker/src/lib/acesso.js:fecharQuotasNaEntrada, N018). É o que pede
+   a janela das quotas com «… já era dono antes de entrar na app?». Uma
+   entrada que não abriu período (quem entrou fica com 0 %, a Declaração de
+   ninguém muda) não tem a marca e fica de fora. Lê o estado já relido
+   (CW.state.houses[].data, o JSON da casa como o servidor o guarda: o
+   normQuotasHist do cliente tira a marca).
+   Recebe: hids — as casas a ver; quem — os ids de quem pode ter entrado.
+   Devolve: [{hid, entrou: [ids]}], pela ordem de hids e sem repetir casas. */
+function entradasPorResponder(hids, quem) {
+  var casas = (CW.state && Array.isArray(CW.state.houses)) ? CW.state.houses : [];
+  var out = [];
+  (hids || []).forEach(function (hid) {
+    if (out.some(function (x) { return x.hid === hid; })) return;
+    var h = casas.find(function (x) { return x && x.id === hid; });
+    var hist = h && h.data && Array.isArray(h.data.quotasHist) ? h.data.quotasHist : [];
+    var ult = null;
+    hist.forEach(function (e) { if (e && typeof e.ate === 'string' && (!ult || e.ate > ult.ate)) ult = e; });
+    var marca = ult && Array.isArray(ult.entrada) ? ult.entrada : [];
+    var entrou = (quem || []).filter(function (u) { return marca.indexOf(u) > -1; });
+    if (entrou.length) out.push({ hid: hid, entrou: entrou });
+  });
+  return out;
+}
+
+/* Depois de alguém entrar em casas por um grupo (aceite pelo dono, ou casas
+   que entram nele) ou por um pedido de partilha aceite: as que fecharam o
+   período das quotas (entradasPorResponder) entram na fila das janelas das
+   quotas e abre-se a primeira (nextShareProposal), como depois de uma
+   partilha numa ligação. Quem entrou sou eu (o pedido aceite) vai como id
+   solto: a janela tira quem entrou do último período guardado
+   (imovel.js:imvPropostaAbrir), e eu não fico de fora.
+   Recebe: hids — as casas; quem — os ids de quem pode ter entrado.
+   Devolve: quantas janelas ficaram na fila. */
+function abrirJanelasDaEntrada(hids, quem) {
+  var eu = meuId();
+  var novas = entradasPorResponder(hids, quem).map(function (x) {
+    return x.entrou.length === 1 && x.entrou[0] === eu ? x.hid : x;
+  });
+  if (!novas.length) return 0;
+  CW._shareQueue = (CW._shareQueue || []).concat(novas);
+  nextShareProposal();
+  return novas.length;
+}
+
+// Passa à casa seguinte na fila das janelas das quotas: as que o modal das
 // partilhas deixou (as casas partilhadas com quotas escritas ou donos fora da
-// app, N017): cada uma abre a janela «Divisão de quotas» com quem entrou
-// (imovel.js:imvPropostaAbrir), e o Guardar ou o fim dela chama esta outra vez.
-// Uma entrada da fila é {hid, entrou: [ids]} (ou só o id, de antes).
+// app, N017) e as das entradas por um grupo ou por um pedido de partilha
+// aceite (abrirJanelasDaEntrada, N018). Cada uma abre a janela «Divisão de
+// quotas» com quem entrou (imovel.js:imvPropostaAbrir), e o Guardar ou o fim
+// dela chama esta outra vez. Uma entrada da fila é {hid, entrou: [ids]}, ou
+// só o id (quem entrou é quem não estava no último período guardado).
 // Devolve: nada — abre a janela seguinte, se a houver.
 function nextShareProposal() {
   var nxt = (CW._shareQueue || []).shift();

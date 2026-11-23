@@ -60,7 +60,15 @@ const campo = (cs, grupo, nome) => cs.find((c) => c.grupo === grupo && c.campo =
 /* o valor de um campo no HTML de um cartão (o que está no <dd>) */
 function valorDe(h, nome) {
   const m = new RegExp('<dt>' + nome.replace(/[()?]/g, '\\$&') + '(?:<span class="small">[^<]*</span>)?</dt><dd>(.*?)</dd>').exec(h);
-  return m ? m[1] : null;
+  return m ? semCopia(m[1]) : null;
+}
+/* um valor que se copia limpo (formato.js:fmtCopiavel, N107: os separadores no CSS) de
+   volta ao texto do euro2 e do fmtNIF, para o comparar com eles */
+function semCopia(h) {
+  const sep = app.euro2(1000).charAt(1), fim = app.euro2(1).slice(-2, -1), menos = app.euro2(-1).charAt(0), sepNif = app.fmtNIF('123456789').charAt(3);
+  const grupos = (gs, s) => gs.replace(/<span class="cp-g">(\d{3})<\/span>/g, s + '$1');
+  return String(h).replace(/<span class="cp-eur">(-?)(\d+)((?:<span class="cp-g">\d{3}<\/span>)*)(,\d+)?<\/span>/g,
+    (x, neg, a, gs, dec) => (neg ? menos : '') + a + grupos(gs, sep) + (dec || '') + fim + '€').replace(/<span class="cp-g">(\d{3})<\/span>/g, sepNif + '$1');
 }
 
 beforeEach(() => {
@@ -102,10 +110,13 @@ describe('D03 — a caução é renda do ano em que se recebe, e a página di-lo
     assert.match(k, /os empréstimos recebidos ficam de fora/);
   });
 
-  test('o cartão do quadro diz o que as rendas ilíquidas levam', () => {
+  test('o cartão do quadro diz o que as rendas ilíquidas levam — cada coisa só quando a há (D8, N066)', () => {
     imovel(); contrato();
     rendas(1000);
-    assert.match(texto(app.fiscoQuadroCard(resumo(), '4.1')), /com a caução, no ano em que a recebes, e os reembolsos que o inquilino te pagou, menos as rendas que devolveste/);
+    const r = resumo();
+    assert.doesNotMatch(texto(app.fiscoQuadroCard(r, '4.1')), /caução, no ano|reembolsos que o inquilino|devolveste/, 'sem caução, reembolsos nem devoluções, nada');
+    r.linhas = r.linhas.map((l) => Object.assign({}, l, { caucao: 1600, reembolsos: 240, devolucoes: 1000 }));
+    assert.match(texto(app.fiscoQuadroCard(r, '4.1')), /com a caução, no ano em que a recebes, e os reembolsos que o inquilino te pagou, menos as rendas que devolveste/);
   });
 });
 
@@ -292,6 +303,8 @@ describe('D90 — os nomes do impresso', () => {
   test('os gastos no grupo «Após início do arrendamento», com o nome de cada coluna', () => {
     imovel(); contrato();
     rendas(1000);
+    /* com um gasto: a dica do quadro só fala do grupo dos gastos quando os há (D8, N066) */
+    mov({ kind: 'expense', category: 'Condomínio', sub: 'Quota mensal', amount: 300, date: ANO + '-03-10' });
     const r = resumo(), cs = app.fiscoCamposDe(r, linhaDe(r)), N = app.irsAno(ANO).colunasNomes;
     const gastos = cs.filter((c) => c.grupo === N.apos.titulo).map((c) => c.campo);
     assert.deepEqual(JSON.parse(JSON.stringify(gastos)), JSON.parse(JSON.stringify(r.colunas.map((k) => N.apos[k]))));

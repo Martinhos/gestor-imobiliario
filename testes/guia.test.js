@@ -90,7 +90,9 @@ describe('o guia «Declarar as rendas»', () => {
   });
 
   test('o texto verificado chega inteiro: cada lista com as suas linhas', () => {
-    assert.equal(linhas(html, 'sim').length, 3 + 3 + 9 + 1 + 3, 'o que podes deduzir');
+    // a conservação perdeu os armários e bancadas e a sanita (N045: passaram à nota «Cozinha e casa de banho»), e
+    // os serviços juntaram o certificado e a comissão numa linha, pagos com o imóvel arrendado (N046)
+    assert.equal(linhas(html, 'sim').length, 3 + 3 + 7 + 1 + 2, 'o que podes deduzir');
     assert.equal(linhas(html, 'nao').length, 17, 'o que não podes deduzir');
     assert.equal(linhas(html, 'doc').length, 14, 'os documentos a guardar');
     // a regra geral (5), a mudança de habitação (4), a água e a luz (3), os quatro pontos do Anexo F (4)
@@ -242,8 +244,10 @@ describe('o guia «Declarar as rendas»', () => {
     // as oito de 2026-11-17 (auditoria ao IRS): a 454/2026/1, o DL 68/2019, os EBF 71.º-A, 74.º-A e 46.º-A, o CIRS 59.º, o OC 20256 e a 98-A/2015;
     // e as catorze da ronda 2 (KAN-128): os CIRS 3.º, 4.º, 15.º e 81.º, os Anexos B e J, o EBF 71.º de antes de 2023,
     // os processos 28153 e 23119, os EBF 59.º-I e 59.º-G, o CIMI 113.º, a reposição das freguesias e a Lei 25-A/2025
-    assert.equal((fontes.match(/<li>/g) || []).length, 22 + 8 + 14 + 9, 'as quarenta e quatro das partes 1 a 3 e as nove das deduções');
-    assert.equal(urls.length, 53, 'todas com o endereço confirmado');
+    // e as três da segunda auditoria de raiz (2026-11-23): o EBF 14.º e o OC 20268/2024 nas partes 1 a 3, o processo
+    // 26713 nas deduções
+    assert.equal((fontes.match(/<li>/g) || []).length, 22 + 8 + 14 + 2 + 9 + 1, 'as quarenta e seis das partes 1 a 3 e as dez das deduções');
+    assert.equal(urls.length, 56, 'todas com o endereço confirmado');
     assert.equal(new Set(urls).size, urls.length, 'nenhuma repetida');
     for (const u of urls) {
       assert.match(u, /^https:\/\/(?:info\.portaldasfinancas\.gov\.pt|irs\.portaldasfinancas\.gov\.pt|diariodarepublica\.pt)\//, u);

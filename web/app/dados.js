@@ -149,13 +149,18 @@ const IRS_MAPA_HERDA='categoria';
 /* de cada categoria de origem (ou «Categoria / Sub») à coluna do Anexo F. Fora, por lei: os
    gastos financeiros (juros, comissões, seguro de vida do crédito), as depreciações, o
    mobiliário, os eletrodomésticos e a decoração; e o que acrescenta valor (beneficiação:
-   uma cozinha nova, uma remodelação) não é conservação. O IMI e o selo têm coluna própria.
+   uma ampliação, uma reabilitação profunda, painéis solares — PIV 23775) não é
+   conservação. O IMI e o selo têm coluna própria.
    O que a AT recusa é «não dedutível» (o IMT e o selo da compra, o fundo de reserva, o
    multirriscos, a responsabilidade civil, a reparação de eletrodomésticos, os registos e a
    avaliação); o que depende do caso fica 'confirmar' (os honorários, a caldeira, os
-   consumos, a quota extraordinária, um imposto sem subcategoria, «Outros»). O que aqui não
-   está fica também a confirmar (irs-papeis.js:irsColunaDe, origem 'omissao'). O AIMI é
-   «não dedutível» fixo: o irsColunaDe ignora a escolha do movimento e do mapa. */
+   consumos, a quota extraordinária, um imposto sem subcategoria, «Outros», e as obras:
+   a categoria sem subcategoria, a cozinha, a casa de banho e a remodelação — reparar ou
+   substituir o que existe é conservação, PIV 11676; o que acrescenta valor não, N011,
+   N045). As obras que são conservação por natureza (pintura, canalização, eletricidade,
+   janelas) vão à conservação. Uma subcategoria da pessoa segue a categoria. O que aqui
+   não está fica também a confirmar (irs-papeis.js:irsColunaDe, origem 'omissao'). O AIMI
+   é «não dedutível» fixo: o irsColunaDe ignora a escolha do movimento e do mapa. */
 const IRS_MAPA0={
   'Impostos':'confirmar','Impostos / IMI':'imi','Impostos / AIMI':'nao','Impostos / IRS sobre rendas':'nao',
   'Impostos / Imposto do selo':'selo','Impostos / Mais-valias':'nao','Impostos / Outro imposto':'confirmar',
@@ -163,7 +168,9 @@ const IRS_MAPA0={
   'Condomínio':'condominio','Condomínio / Fundo de reserva':'nao','Condomínio / Quota extraordinária':'confirmar',
   'Seguros':'confirmar','Seguros / Vida (crédito)':'nao','Seguros / Multirriscos':'nao','Seguros / Responsabilidade civil':'nao',
   'Seguros / Renda garantida':'outros',
-  'Obras e benfeitorias':'conservacao','Obras e benfeitorias / Remodelação':'nao','Obras e benfeitorias / Cozinha':'nao','Obras e benfeitorias / Casa de banho':'nao',
+  'Obras e benfeitorias':'confirmar','Obras e benfeitorias / Remodelação':'confirmar','Obras e benfeitorias / Cozinha':'confirmar','Obras e benfeitorias / Casa de banho':'confirmar',
+  'Obras e benfeitorias / Pintura':'conservacao','Obras e benfeitorias / Canalização':'conservacao','Obras e benfeitorias / Eletricidade':'conservacao',
+  'Obras e benfeitorias / Janelas':'conservacao',
   'Manutenção e reparações':'conservacao','Manutenção e reparações / Eletrodomésticos':'nao','Manutenção e reparações / Caldeira / AVAC':'confirmar',
   'Água, luz e gás':'confirmar','Gestão e mediação':'outros',
   'Serviços profissionais':'confirmar','Serviços profissionais / Certificado energético':'outros',
@@ -174,18 +181,37 @@ const IRS_MAPA0={
   'Devoluções ao inquilino / Devolução de renda':'nao',
   'Outros':'confirmar'
 };
-/* A migração do mapa para a versão 2 (settings.irsMapaV, fillCats): as chaves de origem
+/* A migração do mapa para a versão 2 (settings.irsMapaV, fillCats; a 3 é a do
+   IRS_MAPA_MIGRA3): as chaves de origem
    que mudaram de valor, com o valor ANTIGO de origem. Numa conta muda-se só a chave cujo
    valor gravado é ainda esse — o que a pessoa escolheu fica. As chaves novas do
    IRS_MAPA0 entram pelo Object.assign do fillCats. */
 const IRS_MAPA_MIGRA={'Impostos':'taxas','Impostos / Outro imposto':'taxas','Seguros':'outros',
   'Água, luz e gás':'outros','Serviços profissionais':'outros','Outros':'outros'};
+/* A migração do mapa para a versão 3 (settings.irsMapaV, fillCats — N011, N045): as obras
+   passam a «a confirmar». Como na 2, as chaves de origem que mudaram, com o valor ANTIGO
+   de origem: muda-se só a que ainda o tem. */
+const IRS_MAPA_MIGRA3={'Obras e benfeitorias':'conservacao','Obras e benfeitorias / Remodelação':'nao',
+  'Obras e benfeitorias / Cozinha':'nao','Obras e benfeitorias / Casa de banho':'nao'};
+/* As subcategorias que a versão 3 passa a ter no mapa (iam pela categoria), com a chave da
+   categoria delas. Numa conta onde a pessoa tinha mudado a coluna da categoria, continuam
+   a segui-la (IRS_MAPA_HERDA): a escolha dela fica. */
+const IRS_MAPA_SEGUE3={'Obras e benfeitorias / Pintura':'Obras e benfeitorias','Obras e benfeitorias / Canalização':'Obras e benfeitorias',
+  'Obras e benfeitorias / Eletricidade':'Obras e benfeitorias','Obras e benfeitorias / Janelas':'Obras e benfeitorias'};
 /* As notas das regras de origem que pedem uma explicação (a tabela da §1.5 do plano):
-   quem mostra a regra ou a despesa «a confirmar» pode dizê-las. */
+   quem mostra a regra ou a despesa «a confirmar» pode dizê-las. A da quota mensal do
+   condomínio (e da categoria) diz que o fundo comum de reserva vai à parte (N044: a AT
+   só o aceita no ano em que o condomínio o gasta numa obra, PIV 13921 e 27168). */
 const IRS_MAPA_NOTAS={
+  'Condomínio':'Se a quota inclui o fundo comum de reserva (pelo menos 10 %), regista essa parte em Fundo de reserva: só se deduz no ano em que o condomínio a gasta numa obra, em Conservação e manutenção.',
+  'Condomínio / Quota mensal':'Se a quota inclui o fundo comum de reserva (pelo menos 10 %), regista essa parte em Fundo de reserva: só se deduz no ano em que o condomínio a gasta numa obra, em Conservação e manutenção.',
   'Condomínio / Quota extraordinária':'Escolhe Conservação e manutenção no ano em que o condomínio paga a obra.',
   'Seguros / Multirriscos':'Só a parte do seguro obrigatório de incêndio, se a apólice a separar, em Conservação e manutenção.',
-  'Manutenção e reparações / Caldeira / AVAC':'A inspeção e a manutenção da instalação deduzem-se; reparar ou trocar o aparelho não.'
+  'Manutenção e reparações / Caldeira / AVAC':'A inspeção e a manutenção da instalação deduzem-se; reparar ou trocar o aparelho não.',
+  'Obras e benfeitorias':'Reparar ou substituir o que já existe (pintura, canalização, janelas, loiças, armários fixos) é conservação: escolhe Conservação e manutenção. O que acrescenta valor (uma ampliação, ar condicionado, painéis solares, uma reabilitação profunda) não se deduz.',
+  'Obras e benfeitorias / Cozinha':'Reparar ou substituir o que já existia (armários fixos, bancada, revestimentos) é conservação: escolhe Conservação e manutenção. Uma cozinha nova que acrescenta valor e os eletrodomésticos não se deduzem.',
+  'Obras e benfeitorias / Casa de banho':'Reparar ou substituir o que já existia (sanita, lavatório, base de duche, azulejos, canos) é conservação: escolhe Conservação e manutenção. Uma casa de banho nova que acrescenta valor não se deduz.',
+  'Obras e benfeitorias / Remodelação':'Uma remodelação que repõe o estado do imóvel (substituir o que se gastou ou estragou) é conservação: escolhe Conservação e manutenção. A que acrescenta valor (ampliar, mudar a planta, reabilitar a fundo) não se deduz.'
 };
 const blank={v:13,properties:[],owners:[],tenants:[],contracts:[],transactions:[],settlements:[],templates:[],recurring:[],groups:[],visits:[],
   settings:{growth:2,inflation:2,years:10,theme:'auto',capTarget:5,quota:100,payTax:true,stampPct:4,
@@ -438,9 +464,13 @@ function normTarefas(t){
    outros», ou os de fora com nome e quota — D08), quotasHist (normQuotasHist: as
    quotas que valeram até cada data — D29; estes dois, na nuvem, só o servidor os
    escreve), vendido (o dia da venda, ou '' — D33, imovelVendido), subarrendamento
-   ({ativo, nifSenhorio, rendaMensal}: «arrendo este imóvel e subarrendo-o», o quadro 5
-   — D52) e afetacao (a da caderneta, que decide o AIMI — D71). Cada um com lixo
-   volta à omissão.
+   ({ativo, nifSenhorio, rendaMensal, parte, rendaParte}: «arrendo este imóvel e
+   subarrendo-o», o quadro 5 — D52; parte 'toda', 'parte' ou '' e rendaParte, a renda
+   paga ao senhorio pela parte subarrendada, € ≥ 0 — N023), afetacao (a da caderneta,
+   que decide o AIMI — D71) e parteArrendada (a parte da casa arrendada, em %, 0 a 100
+   ao centésimo, ou null por indicar — N012). Cada um com lixo volta à omissão. E as
+   linhas do Splitwise apagadas de propósito nele (swIgnoradas, normSwIgnoradasDaCasa —
+   N102), só quando as tem.
    Os da ronda 2: reabilitacao ({tipo: '' | 'aru' | 'nrau', inicio, conclusao,
    certificado} — o imóvel reabilitado em ARU ou pelo NRAU com o certificado da câmara,
    EBF art. 71.º, quadro 6A; a data de compra é o purchaseDate — D117), lojaComHistoria
@@ -456,7 +486,7 @@ function normProp(p){
     parish:'',concelho:'',freguesia:'',fraction:'',floor:'',street:'',doorNumber:'',postalCode:'',locality:'',registry:'',matrix:'',licence:'',energyCert:'',energyClass:'',energyValid:'',
     distrito:'',freguesiaCodigo:'',tipoPredio:'',tipologia:'',vpt:0,purchaseDate:'',imi:0,condominio:0,seguro:0,seguroMes:0,
     comproprietariosFora:null,quotasHist:[],vendido:'',subarrendamento:null,afetacao:'',
-    reabilitacao:null,lojaComHistoria:false,pais:'',paisCodigo:'',matrizConfirmada:''},p||{});
+    reabilitacao:null,lojaComHistoria:false,pais:'',paisCodigo:'',matrizConfirmada:'',parteArrendada:null},p||{});
   o.id=idSeguro(o.id);o.ownerIds=idsSeguros(o.ownerIds);
   ['imi','condominio','seguro'].forEach(k=>{o[k]=Math.max(0,Math.round((Number(o[k])||0)*100)/100)});
   o.seguroMes=Math.min(12,Math.max(0,Math.round(Number(o.seguroMes)||0)));
@@ -489,8 +519,15 @@ function normProp(p){
   o.vendido=dataExiste(o.vendido)?o.vendido:'';
   const sub=o.subarrendamento&&typeof o.subarrendamento==='object'&&!Array.isArray(o.subarrendamento)?o.subarrendamento:{};
   const rm=Number(sub.rendaMensal);
+  const rp=Number(sub.rendaParte);
   o.subarrendamento={ativo:sub.ativo===true,nifSenhorio:String(sub.nifSenhorio==null?'':sub.nifSenhorio).replace(/\D/g,'').slice(0,9),
-    rendaMensal:typeof sub.rendaMensal!=='boolean'&&isFinite(rm)&&rm>0?Math.round(rm*100)/100:0};
+    rendaMensal:typeof sub.rendaMensal!=='boolean'&&isFinite(rm)&&rm>0?Math.round(rm*100)/100:0,
+    parte:sub.parte==='toda'||sub.parte==='parte'?sub.parte:'',
+    rendaParte:typeof sub.rendaParte!=='boolean'&&isFinite(rp)&&rp>0?Math.round(rp*100)/100:0};
+  /* a parte da casa que está arrendada, em % (N012): 0 < x ≤ 100, ao centésimo; o resto é null */
+  const pa=o.parteArrendada;
+  o.parteArrendada=typeof pa==='number'&&isFinite(pa)&&pa>0&&pa<=100?Math.round(pa*100)/100:null;
+  if(o.parteArrendada===0)o.parteArrendada=null;
   o.afetacao=['habitacao','comercio','servicos','industria','outros'].indexOf(o.afetacao)>-1?o.afetacao:'';
   const re=o.reabilitacao&&typeof o.reabilitacao==='object'&&!Array.isArray(o.reabilitacao)?o.reabilitacao:{};
   o.reabilitacao={tipo:['aru','nrau'].indexOf(re.tipo)>-1?re.tipo:'',inicio:dataExiste(re.inicio)?re.inicio:'',
@@ -499,6 +536,10 @@ function normProp(p){
   o.pais=paisDoImovel(o.pais);
   o.paisCodigo=o.pais?codigoDoPais(o.paisCodigo):'';
   o.matrizConfirmada=dataExiste(o.matrizConfirmada)?o.matrizConfirmada:'';
+  /* as linhas do Splitwise apagadas de propósito: só numa casa que já as teve (uma
+     que nunca as teve não ganha o campo, nem sobe); vazia fica vazia, para a fusão
+     a três ver a remoção */
+  if(o.swIgnoradas!==undefined)o.swIgnoradas=normSwIgnoradasDaCasa(o.swIgnoradas);
   return o;
 }
 /* O país de um imóvel (D133): '' é Portugal (e escrever «Portugal» também o é);
@@ -512,11 +553,14 @@ function paisDoImovel(v){
 }
 /* O código do país da tabela X das instruções do Anexo J (o quadro 7A pede-o):
    três algarismos, como o ISO 3166-1 numérico (250 França, 076 Brasil — INCERTO:
-   o formato confere-se nas instruções do ano). Um número ganha os zeros da frente.
+   o formato confere-se nas instruções do ano). Um número, ou um texto de um a três
+   algarismos (a tabela escreve muitos sem os zeros: Brasil 76, Bélgica 56 — N105),
+   ganha os zeros da frente.
    Recebe: v — o valor tal como veio.
    Devolve: o código (texto de três algarismos), ou '' quando não serve. */
 function codigoDoPais(v){
-  const s=typeof v==='number'?(Number.isInteger(v)&&v>0&&v<1000?String(v).padStart(3,'0'):''):typeof v==='string'?v.trim():'';
+  const t=typeof v==='string'?v.trim():'';
+  const s=typeof v==='number'?(Number.isInteger(v)&&v>0&&v<1000?String(v).padStart(3,'0'):''):/^\d{1,3}$/.test(t)?t.padStart(3,'0'):t;
   return /^\d{3}$/.test(s)&&s!=='000'?s:'';
 }
 /* Os comproprietários de uma casa que não têm conta na app (D08): null é «não
@@ -613,7 +657,8 @@ function imovelVendido(p,hoje){
    na categoria B: a opção do art. 4.º n.º 1 n) ou o imóvel afeto à atividade, art. 3.º
    n.º 2 a); não é «não declarado»: o contrato continua no Modelo 2 e nos recibos —
    D134), os dois true ou false; e impostoEstrangeiro ({'AAAA': €} — o imposto pago no
-   estrangeiro num imóvel fora de Portugal, para o Anexo J — D133).
+   estrangeiro num imóvel fora de Portugal, para o Anexo J — D133). arrendamentoRural: um
+   rústico em arrendamento rural, sem recibos (N093), true ou false só quando veio.
    Recebe: f — o bloco em bruto (objeto parcial, ou nada).
    Devolve: um objeto novo com todos os campos do bloco preenchidos. */
 function normFisco(f){
@@ -661,6 +706,7 @@ function normFisco(f){
   if(['','sim','nao'].indexOf(o.atualizacao2023)<0)o.atualizacao2023='';
   o.egf=o.egf===true;
   o.categoriaB=o.categoriaB===true;
+  if(o.arrendamentoRural!==undefined)o.arrendamentoRural=o.arrendamentoRural===true;
   /* o imposto pago no estrangeiro, por ano: só chaves de quatro algarismos e euros ≥ 0
      (um número, ou o texto de um), ao cêntimo */
   const ie={},ieIn=o.impostoEstrangeiro&&typeof o.impostoEstrangeiro==='object'&&!Array.isArray(o.impostoEstrangeiro)?o.impostoEstrangeiro:{};
@@ -788,7 +834,7 @@ function normLote(l){
   const modo=PSPLIT_MODES.some(m=>m[0]===l.modo)?l.modo:'equal';
   return {id,n,total,alvo:alvo==='todos'?'todos':'g:'+g,modo,partes:chavesSeguras(l.partes)};
 }
-/* A chave de uma linha importada do Splitwise (t.swKey, settings.swIgnoradas — D127):
+/* A chave de uma linha importada do Splitwise (t.swKey, p.swIgnoradas, settings.swIgnoradas — D127):
    o texto tal como o splitwise.js o fez, com os caracteres de controlo trocados por
    espaços e até 500 caracteres. Não se apara: é uma identidade, e quem compara uma
    chave acabada de calcular com as guardadas passa-a primeiro por aqui.
@@ -797,15 +843,45 @@ function normLote(l){
 function normSwKey(v){
   return typeof v==='string'?v.replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,500):'';
 }
-/* As linhas do Splitwise importadas e apagadas de propósito (settings.swIgnoradas,
-   D127): a reimportação não as repõe. Só chaves de texto não vazias (normSwKey), sem
-   repetidas, pela ordem em que vieram.
+/* As linhas do Splitwise importadas e apagadas de propósito que ficam nas definições
+   da conta (settings.swIgnoradas, D127): as de antes de a marca viver no imóvel, e as
+   que quem apaga não pode escrever na ficha do imóvel (um colaborador sem «Editar a
+   ficha», um movimento sem imóvel — splitwise.js:swIgnorar, N102). A reimportação
+   não as repõe. Só chaves de texto não vazias (normSwKey), sem repetidas, pela ordem
+   em que vieram.
    Recebe: l — a lista tal como veio.
    Devolve: um array novo de chaves. */
 function normSwIgnoradas(l){
   const vistas=new Set();
   (Array.isArray(l)?l:[]).forEach(x=>{const k=normSwKey(x);if(k)vistas.add(k)});
   return Array.from(vistas);
+}
+/* O id de uma linha do Splitwise apagada de propósito, como o imóvel a guarda
+   (p.swIgnoradas, N102): um resumo da chave (idSeguro de 'sw|' e a chave — leva
+   sempre a barra, por isso é sempre o resumo), o mesmo para a mesma chave em todos
+   os aparelhos e contas. A ficha do imóvel fica sem a descrição nem o valor da
+   despesa (quem colabora no imóvel lê a ficha).
+   Recebe: chave — a chave da linha (t.swKey; passa pelo normSwKey).
+   Devolve: o id ('id_' e dezasseis dígitos hexadecimais), ou '' sem chave. */
+function swIdDaChave(chave){const k=normSwKey(chave);return k?idSeguro('sw|'+k):''}
+/* As linhas do Splitwise apagadas de propósito num imóvel (p.swIgnoradas, N102): a
+   reimportação do grupo não as repõe, seja quem for que importe. Vivem na casa, e não
+   nas definições de quem apagou, para valerem para todas as contas dela; e numa lista
+   com ids, para a fusão a três juntar as que dois aparelhos (ou duas contas) apagaram
+   ao mesmo tempo. Cada uma {id, dia}: o id do swIdDaChave e o dia em que se apagou
+   ('AAAA-MM-DD', ou ''). Uma chave em texto (a forma das definições) passa a id; um id
+   que não tem a forma cai; o mesmo id duas vezes fica uma (a primeira).
+   Recebe: l — a lista tal como veio.
+   Devolve: um array novo de {id, dia}. */
+function normSwIgnoradasDaCasa(l){
+  const out=[],vistos=new Set();
+  (Array.isArray(l)?l:[]).forEach(x=>{
+    const id=typeof x==='string'?swIdDaChave(x):x&&typeof x==='object'&&!Array.isArray(x)&&/^id_[0-9a-f]{16}$/.test(String(x.id))?String(x.id):'';
+    if(!id||vistos.has(id))return;
+    vistos.add(id);
+    out.push({id:id,dia:x&&typeof x==='object'&&dataExiste(x.dia)?x.dia:''});
+  });
+  return out;
 }
 /* kind: income (renda), expense (despesa), loan (prestação), owed (dívida recebida de terceiro),
    repay (pagamento dessa dívida), settle (acerto entre proprietários: paidBy → toId).
@@ -816,16 +892,17 @@ function normSwIgnoradas(l){
    renda respeita) e recibo (o recibo eletrónico já foi emitido); numa despesa, irsCol (a
    coluna do Anexo F escrita no movimento, um id de IRS_COLUNAS, ou 'confirmar' — a que
    apagar uma subcategoria deixa escrita quando ela a deixava a confirmar, N043; vazio =
-   pela categoria) e
-   notaPropria (só numa despesa: «é a minha nota» do IMI de uma casa com mais de um
-   dono — conta inteira para quem pagou, sem quota, D32; false em tudo o resto).
-   parcial (só numa renda: a resposta «pagamento parcial» à pergunta da renda abaixo
-   da do planeado — o resto fica em dívida, e cala o aviso da renda abaixo, D115) e
+   pela categoria) e notaPropria (só numa despesa: «é só a minha parte» numa casa com
+   mais de um dono, no IMI «é a minha nota»: conta inteira para quem pagou, sem quota —
+   D32, N041). parcial (só numa renda: a resposta «pagamento parcial» à pergunta da renda
+   abaixo da do planeado — o resto fica em dívida, e cala o aviso da renda abaixo, D115) e
    swKey (a chave da linha do Splitwise de onde o movimento veio, normSwKey: escreve-a
    só a importação, e editar o movimento não a muda — D127; '' nos outros). O periodo
    só com um mês que existe (01 a 12). catIrs é a marca do IRS (N006, normCatIrs):
    {id, cat, sub} — o id de CATS_DO_IRS que a categoria tinha quando se gravou, com os
-   nomes de então (carimbarCatIrs); só existe num movimento que a tem.
+   nomes de então (carimbarCatIrs). pagadorNif (só algarismos, até nove), pagadorNome
+   (até 80) e cedenciaNumero (até 40): numa receita, o que a linha da natureza 02 leva
+   (N076/D12). Estes quatro só existem num movimento que os tem.
    Onde o movimento vive: propertyId (um imóvel), ou — só num molde (planeado ou
    modelo) e nos antigos — groupId (um grupo) ou todos (todos os meus imóveis à
    data, só numa receita ou despesa), com o psplit a dizer como se divide; um e
@@ -857,6 +934,10 @@ const normTx=t=>{const novo=!t||t.id==null||t.id==='';
   /* a marca do IRS só existe num movimento que a tem (como o criado): sem ela não
      ganha campo nenhum, e os registos de antes não mudam nem sobem */
   if(o.catIrs!==undefined){const ci=normCatIrs(o.catIrs,o.kind);if(ci)o.catIrs=ci;else delete o.catIrs}
+  /* o pagador e a cedência da natureza 02 (N076): só numa receita, e só quando vêm */
+  if(o.pagadorNif!==undefined){if(o.kind==='income')o.pagadorNif=(typeof o.pagadorNif==='string'||typeof o.pagadorNif==='number'?String(o.pagadorNif):'').replace(/\D/g,'').slice(0,9);else delete o.pagadorNif}
+  if(o.cedenciaNumero!==undefined){if(o.kind==='income')o.cedenciaNumero=(typeof o.cedenciaNumero==='string'||typeof o.cedenciaNumero==='number'?String(o.cedenciaNumero):'').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,40).trim();else delete o.cedenciaNumero}
+  if(o.pagadorNome!==undefined){if(o.kind==='income')o.pagadorNome=(typeof o.pagadorNome==='string'?o.pagadorNome:'').replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,80).trim();else delete o.pagadorNome}
   o.notaPropria=o.kind==='expense'&&o.notaPropria===true;
   o.parcial=o.kind==='income'&&o.parcial===true;
   o.swKey=normSwKey(o.swKey);
@@ -908,7 +989,10 @@ function migrateSettlements(d){
    · catsV=2 — as categorias novas de origem (CATS_NOVAS) entram nas árvores, e as
      categorias do IRS ganham o id (catIds) se ainda têm o nome de origem;
    · irsMapaV=2 — as chaves do IRS_MAPA_MIGRA passam ao valor novo, só se o gravado
-     é ainda o antigo de origem.
+     é ainda o antigo de origem;
+   · irsMapaV=3 — o mesmo com as do IRS_MAPA_MIGRA3 (as obras a confirmar, N011,
+     N045); antes, as subcategorias do IRS_MAPA_SEGUE3 ficam a seguir a categoria
+     (IRS_MAPA_HERDA) onde a pessoa lhe tinha escolhido outra coluna.
    Uma árvore que falta (ou não é árvore) volta à de origem, e com ela os ids de origem.
    Uma marca maior do que a desta versão fica como está. Depois, sempre: o catIds só
    com ids de CATS_DO_IRS da árvore certa e chaves que existem nela (normCatIds), o
@@ -962,8 +1046,15 @@ function fillCats(st){
   });
   const vMapa=Number(st.irsMapaV)>0?Number(st.irsMapaV):0;
   if(vMapa<2)Object.keys(IRS_MAPA_MIGRA).forEach(k=>{if(g[k]===IRS_MAPA_MIGRA[k])g[k]=IRS_MAPA0[k]});
+  if(vMapa<3){
+    /* antes de a categoria mudar: onde a pessoa lhe escolheu outra coluna, as
+       subcategorias novas no mapa continuam a segui-la */
+    Object.keys(IRS_MAPA_SEGUE3).forEach(k=>{const c=IRS_MAPA_SEGUE3[k];
+      if(!Object.prototype.hasOwnProperty.call(g,k)&&g[c]!==undefined&&g[c]!==IRS_MAPA_MIGRA3[c]&&subs.has(k)&&subs.get(k).sub)g[k]=IRS_MAPA_HERDA});
+    Object.keys(IRS_MAPA_MIGRA3).forEach(k=>{if(g[k]===IRS_MAPA_MIGRA3[k])g[k]=IRS_MAPA0[k]});
+  }
   st.irsMapa=Object.assign({},IRS_MAPA0,g);
-  st.irsMapaV=Math.max(vMapa,2);
+  st.irsMapaV=Math.max(vMapa,3);
 }
 /* O catIds das definições, limpo: por árvore, só chaves que existem nela (a
    categoria ou 'Categoria / Sub', chavesDaArvore) e só ids de CATS_DO_IRS dessa árvore
@@ -1196,8 +1287,9 @@ const normSettle=x=>{const o=Object.assign({id:uid(),date:'',propertyId:null,fro
    propRec e propRecN são a origem de um planeado automático da ficha do imóvel (o IMI e a sua
    prestação, o condomínio, o seguro — planeados.js:syncPropRecs), como o loanId e o contractId
    são a das prestações e das rendas. catIrs (a marca do IRS, normTx) vai do molde para o
-   movimento confirmado. */
-const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','todos','psplit','contractId','loanId','paidBy','toId','creditor','category','sub','tags','notes','split','interest','stamp','principal','fee','payType','retencao','irsCol','notaPropria','propRec','propRecN','catIrs'];
+   movimento confirmado, e o pagador e a cedência da natureza 02 (pagadorNif,
+   pagadorNome, cedenciaNumero — N076) também: repetem-se todos os meses. */
+const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','todos','psplit','contractId','loanId','paidBy','toId','creditor','category','sub','tags','notes','split','interest','stamp','principal','fee','payType','retencao','irsCol','notaPropria','propRec','propRecN','catIrs','pagadorNif','pagadorNome','cedenciaNumero'];
 /* cópia profunda de um movimento só com os campos que fazem sentido repetir (TX_TPL_KEYS):
    é o que os modelos e as recorrências guardam — data e id ficam de fora de propósito
    Recebe: t — o movimento a copiar.

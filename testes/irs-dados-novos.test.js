@@ -164,10 +164,11 @@ describe('o imóvel: comproprietários fora da app, quotas com data, venda, suba
     assert.equal(app.imovelVendido(null), false);
   });
   test('D52 · o subarrendamento, D71 · a afetação', () => {
-    igual(app.normProp({}).subarrendamento, { ativo: false, nifSenhorio: '', rendaMensal: 0 });
-    igual(app.normProp({ subarrendamento: { ativo: true, nifSenhorio: ' 123 456 789 0', rendaMensal: '650.5' } }).subarrendamento,
-      { ativo: true, nifSenhorio: '123456789', rendaMensal: 650.5 });
-    igual(app.normProp({ subarrendamento: { ativo: 'sim', rendaMensal: -1 } }).subarrendamento, { ativo: false, nifSenhorio: '', rendaMensal: 0 });
+    igual(app.normProp({}).subarrendamento, { ativo: false, nifSenhorio: '', rendaMensal: 0, parte: '', rendaParte: 0 });
+    igual(app.normProp({ subarrendamento: { ativo: true, nifSenhorio: ' 123 456 789 0', rendaMensal: '650.5', parte: 'parte', rendaParte: '300.456' } }).subarrendamento,
+      { ativo: true, nifSenhorio: '123456789', rendaMensal: 650.5, parte: 'parte', rendaParte: 300.46 });
+    igual(app.normProp({ subarrendamento: { ativo: 'sim', rendaMensal: -1, parte: 'metade', rendaParte: true } }).subarrendamento,
+      { ativo: false, nifSenhorio: '', rendaMensal: 0, parte: '', rendaParte: 0 });
     assert.equal(app.normProp({ afetacao: 'comercio' }).afetacao, 'comercio');
     assert.equal(app.normProp({ afetacao: 'loja' }).afetacao, '');
   });
@@ -207,7 +208,7 @@ describe('D30, D71, D91 · a situação fiscal de cada ano', () => {
   });
 });
 
-describe('D06, D07, D24–D27, D53, D60, D61 · o mapa das colunas (irsMapaV=2)', () => {
+describe('D06, D07, D24–D27, D53, D60, D61 · o mapa das colunas (irsMapaV=2, e a 3 das obras)', () => {
   test('o mapa de origem segue a tabela 1.5', () => {
     const m = app.IRS_MAPA0;
     const esperado = {
@@ -236,7 +237,7 @@ describe('D06, D07, D24–D27, D53, D60, D61 · o mapa das colunas (irsMapaV=2)'
     assert.equal(st.irsMapa['Água, luz e gás'], 'conservacao', 'a escolha da pessoa fica');
     assert.equal(st.irsMapa['Serviços profissionais'], 'nao');
     assert.equal(st.irsMapa['Seguros / Multirriscos'], 'nao', 'as chaves novas entram');
-    assert.equal(st.irsMapaV, 2);
+    assert.equal(st.irsMapaV, 3);
     // escolhida depois da marca, fica — também em cada leitura seguinte
     st.irsMapa['Seguros'] = 'outros';
     app.fillCats(st);
@@ -257,11 +258,12 @@ describe('D06, D07, D24–D27, D53, D60, D61 · o mapa das colunas (irsMapaV=2)'
   });
 
   test('uma marca maior (de uma versão futura) fica, e não se migra por baixo dela', () => {
-    const st = { cats: { X: [] }, catsIn: { Y: [] }, irsMapaV: 3, catsV: 3, irsMapa: { 'Seguros': 'outros' } };
+    const st = { cats: { X: [] }, catsIn: { Y: [] }, irsMapaV: 4, catsV: 3, irsMapa: { 'Seguros': 'outros', 'Obras e benfeitorias': 'conservacao' } };
     app.fillCats(st);
-    assert.equal(st.irsMapaV, 3);
+    assert.equal(st.irsMapaV, 4);
     assert.equal(st.catsV, 3);
     assert.equal(st.irsMapa['Seguros'], 'outros');
+    assert.equal(st.irsMapa['Obras e benfeitorias'], 'conservacao');
   });
 });
 
@@ -395,7 +397,7 @@ describe('as migrações por onde passam: o load() e a leitura da nuvem', () => 
     assert.equal(db.contracts[0].fisco.comunicacoesV, 2);
     assert.equal(db.settings.irsMapa['Seguros'], 'confirmar');
     assert.equal(db.settings.irsMapa['Outros'], 'confirmar');
-    assert.equal(db.settings.irsMapaV, 2);
+    assert.equal(db.settings.irsMapaV, 3);
     assert.equal(db.settings.catsV, 2);
     assert.ok(db.settings.cats['Impostos'].includes('IMT'));
     assert.ok(db.settings.catsIn['Rendas'].includes('Indemnização'));
@@ -435,7 +437,7 @@ describe('as migrações por onde passam: o load() e a leitura da nuvem', () => 
     igual(s.catsIn, copia(app.CATS_IN0));
     igual(s.irsMapa, copia(app.IRS_MAPA0));
     igual(s.catIds, copia(app.blank.settings.catIds));
-    assert.equal(s.irsMapaV, 2);
+    assert.equal(s.irsMapaV, 3);
     assert.equal(s.catsV, 2);
   });
 });

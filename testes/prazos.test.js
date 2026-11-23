@@ -178,7 +178,8 @@ describe('os prazos da AT', () => {
     assert.equal(r.dias, -38);
     assert.match(r.titulo, /Recibo de renda por emitir — Ana · T2/);
     assert.match(r.sub, /Renda de agosto de 2026 recebida a 05\/08\/2026/);
-    assert.match(r.sub, /marca-o no movimento/);
+    // o recibo marca-se como emitido no próprio aviso (N062): «Marcar como emitido»
+    assert.match(r.sub, /e marca-o como emitido\./);
     assert.equal(r.abrir, "txView('R1')", 'a ficha do movimento, onde está o «Editar»');
     assert.ok(r.chave.startsWith('recibos:R1'), 'a chave é a do movimento');
     app.db.transactions[0].periodo = '2026-07';

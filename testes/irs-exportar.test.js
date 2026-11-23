@@ -349,8 +349,10 @@ describe('o campo de cada linha e os subquadros (D77), e o quadro 8 (D84)', () =
     assert.match(t, /\n {2}Campo 4001 · \[4\.1\] n\.º /);
     assert.match(t, /\n {2}Campo 4501 · \[4\.2\] n\.º 333 · Benfica longo/);
     assert.match(t, /4\.2A \(campo 4501\): /);
-    // D84: as substituições até 30 dias depois do fim do prazo da entrega de 2025 (30/06/2026)
-    assert.match(t, /QUADRO 8 · RENDAS DE ANOS ANTERIORES\n {2}No 8A [^\n]*no 8B [^\n]*até 30\/07\/2026 \(30 dias depois do fim do prazo da entrega\)/);
+    // D84: as substituições até 30 dias depois do fim do prazo da entrega de 2025 (30/06/2026);
+    // o quadro é facultativo (N082) e cada parte diz o quadro e o campo de onde é
+    assert.match(t, /QUADRO 8 · RENDAS DE ANOS ANTERIORES \(facultativo\)\n {2}Bragança[^\n]* · respeitam a 2024: [^\n]* · quadro 4\.1, campo 40\d\d\n/);
+    assert.match(t, /\n {2}Estas rendas já estão nas rendas da linha [^\n]*o 8A se optares pelo englobamento[^\n]*o 8B [^\n]*até 30\/07\/2026, 30 dias depois do fim do prazo da entrega\. Se não, deixa-o em branco\./);
   });
 
   test('o PDF leva o campo em cada linha e nos subquadros, e o prazo do 8B', async () => {
@@ -367,7 +369,7 @@ describe('o campo de cada linha e os subquadros (D77), e o quadro 8 (D84)', () =
     assert.ok(d6);
     const q8 = pdf.cartoes.find((x) => x.some((i) => Array.isArray(i) && i[0] === 'Bragança · de 2024'));
     assert.equal(campoDe(q8, 'Bragança · de 2024'), app.fiscoPdfEuro(512.25) + ' · quadro 4.1, campo ' + campo('C1'));
-    assert.ok(pdf.ditos.some((s) => s.includes('até 30/07/2026 (30 dias depois do fim do prazo da entrega)')), 'D84 no PDF');
+    assert.ok(pdf.ditos.some((s) => s.includes('até 30/07/2026, 30 dias depois do fim do prazo da entrega')), 'D84 no PDF');
     assert.ok(pdf.ditos.some((s) => /preenche por esta ordem/.test(s)), 'a ordem no título do quadro');
   });
 });

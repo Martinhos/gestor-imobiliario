@@ -741,7 +741,9 @@ function atencaoCorpo(){
       <button class="btn sm" data-toca="dados" data-click="${nao}">Recusar</button></div></div>`;
   };
   /* um por confirmar: o nome, de onde é, quando, o valor e o estado; Confirmar
-     regista já (quickConfirmRec), Rever abre o formulário (confirmRec) e
+     regista já (quickConfirmRec), «Confirmar e emiti o recibo» regista já com o
+     recibo marcado, numa renda que o pede (planeados.js:recPedeRecibo,
+     recConfirmarComRecibo; D8), Rever abre o formulário (confirmRec) e
      Silenciar cala-o sem o tirar (skipRec) — cada um só se o cargo deixa.
      Confirmar e Silenciar refazem a janela com o mesmo filtro: o planeado
      confirmado passa ao mês seguinte, e uma linha que ficasse à vista com a
@@ -759,6 +761,7 @@ function atencaoCorpo(){
       <p class="small">${onde?esc(onde)+' · ':''}${r.until&&r.until!==r.next?'entre '+dPT(r.next)+' e '+dPT(r.until):dPT(r.next)}</p></div>
       <div class="atencao-valor"><b class="num${cor?' '+cor:''}">${t.amount?(sai?'−':'')+euro2(t.amount):''}</b><span class="badge ${late?'red':''}">${late?'Em atraso':'Por confirmar'}</span></div>
       <div class="chips-fila atencao-acoes">${podeConf?`<button class="btn sm primary" data-toca="dados" data-click="quickConfirmRec('${jsq(r.id)}');notifModal('${jsq(f)}')">Confirmar</button>`:''}
+      ${podeConf&&servicoLigado('recurring')&&recPedeRecibo(r)?`<button class="btn sm" data-toca="dados" data-click="recConfirmarComRecibo('${jsq(r.id)}');notifModal('${jsq(f)}')">Confirmar e emiti o recibo</button>`:''}
       <button class="btn sm" data-toca="camada" data-click="closeModal();confirmRec('${jsq(r.id)}')">Rever</button>
       ${podeEd?`<button class="btn sm ghost" data-toca="dados" data-click="skipRec('${jsq(r.id)}');notifModal('${jsq(f)}')">Silenciar</button>`:''}</div></div>`;
   };

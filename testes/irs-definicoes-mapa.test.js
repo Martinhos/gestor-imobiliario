@@ -202,15 +202,20 @@ describe('D19 — o «Fora dos totais» nas categorias que o IRS lê', () => {
     app.toggleExc('catsIn', 'Rendas');
     assert.match(pagina('catsIn'), /Sai dos totais e dos gráficos, mas continua a declarar-se no Anexo F\./, 'nas Rendas');
     app.toggleExc('catsIn', 'Reembolsos');
-    assert.equal((pagina('catsIn').match(/continua a declarar-se/g) || []).length, 1, 'nos Reembolsos não');
+    /* nos Reembolsos, o do inquilino continua como renda e os que devolvem um gasto continuam a abater-lhe (N078, D12) */
+    assert.match(pagina('catsIn'), /Sai dos totais e dos gráficos; na Declaração, «Inquilino» continua a declarar-se como renda, e «Seguro», «Condomínio» e «Estado» continuam a abater ao gasto que devolvem \(o do condomínio ligado a um contrato é renda; o do Estado, só num imóvel: o do IRS fica fora\)\. Um reembolso sem subcategoria sai da Declaração\./);
     assert.equal(app.defForaDeclara('catsIn', 'Rendas', 'Caução'), 'tudo');
+    assert.equal(app.defForaDeclara('catsIn', 'Reembolsos', 'Inquilino'), 'tudo');
+    for (const s of ['Condomínio', 'Seguro', 'Estado']) assert.equal(app.defForaDeclara('catsIn', 'Reembolsos', s), 'abate', s);
+    assert.equal(app.defForaDeclara('catsIn', 'Empréstimos recebidos', 'Família'), '');
     app.toggleExc('cats', 'Devoluções ao inquilino');
     app.toggleExc('cats', 'Impostos');
     const h = pagina('cats');
     assert.match(h, /Sai dos totais e dos gráficos; no Anexo F, «Devolução da caução» e «Devolução de renda» continuam a declarar-se\./);
     assert.match(h, /Sai dos totais e dos gráficos; no Anexo F, «IMI» e «Imposto do selo» continuam a declarar-se\./);
     app.toggleExc('cats', 'Seguros');
-    assert.equal((pagina('cats').match(/Sai dos totais e dos gráficos/g) || []).length, 2, 'nos Seguros não');
+    assert.equal((pagina('cats').match(/Sai dos totais e dos gráficos[;,]/g) || []).length, 2, 'nos Seguros nada continua');
+    assert.match(pagina('cats'), /Sai dos totais, dos gráficos e do Anexo F: estas despesas não contam na Declaração\./, 'e diz-se que saem do Anexo F (N042)');
   });
 
   test('e é verdade no resumo: as rendas e a devolução de renda fora dos totais continuam no Anexo F', () => {
@@ -235,7 +240,7 @@ describe('D19 — o «Fora dos totais» nas categorias que o IRS lê', () => {
   });
 
   test('a nota da página diz que fora dos totais sai do Anexo F, salvo o que fica', () => {
-    assert.match(pagina('catsIn'), /«Fora dos totais» tira-os do Anexo F — salvo as rendas, que continuam a declarar-se — e deixa-os na lista, mas não somam\./);
+    assert.match(pagina('catsIn'), /«Fora dos totais» tira-os do Anexo F — salvo as rendas e os reembolsos, que continuam na Declaração: o do inquilino como renda, os do seguro, do condomínio e do Estado a abater ao gasto que devolvem — e deixa-os na lista, mas não somam\./);
     assert.match(pagina('cats'), /salvo o IMI, o imposto do selo do contrato e as devoluções da caução e de renda, que continuam a declarar-se/);
   });
 });

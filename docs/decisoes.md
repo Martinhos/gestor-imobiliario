@@ -128,6 +128,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-18 · A vaga 3 da auditoria ao IRS: o bloco fiscal do contrato, as receitas da Declaração, os quadros raros e o guia (KAN-128)
 - 2026-11-18 · A vaga 4 da auditoria ao IRS: os quadros raros nos formulários e na Declaração, a renda abaixo e os encargos do inquilino (KAN-129)
 - 2026-11-23 · A ronda 1 das correções da auditoria ao IRS de raiz: o quadro 10, as categorias pelo id, as cópias e as quotas (KAN-147, KAN-148, KAN-149)
+- 2026-11-23 · A ronda 2 das correções da auditoria ao IRS de raiz: rendas, taxas, gastos, textos e o caminho linear (KAN-150 a KAN-154)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4508,6 +4509,8 @@ sincronização e o Splitwise) e V3 (as quotas dos comproprietários). As decis�
   exato e vincula a AT). Substitui, só para este caso, o «15 %, o do escalão» da entrada de 2026-11-17, que fica como
   estava, com uma nota. O que se copia para o Anexo F é o mesmo nos dois casos; muda a taxa mostrada e o imposto
   estimado. O motor muda com a vaga V5 (KAN-151), na ronda 2: até lá, a app continua a dar 15 % neste caso.
+  *Nota de 2026-11-23, mais tarde:* o motor mudou na ronda 2 (KAN-151) e a app já dá 13 % neste caso
+  (irs.js:irsPassoDaCadeia); ver a entrada da ronda 2.
 - **D6 · Quem sai da app também sai da casa** (N021, N067, N068): a regra de 2026-10-22 fica — deixa de ser dono no
   dia em que sai, e a quota passa aos que ficam desse dia em diante, nunca para trás. O relatório recomendava manter
   a quota de quem sai até alguém registar a mudança (CIRS art. 19.º: conta quem é dono, não quem está na app); o
@@ -4623,6 +4626,8 @@ O porquê do resto, por vaga:
 - **O «Só desde» por omissão do Splitwise** (N037): o corte pelo dia da última importação (D127, 2026-11-18) tirava as
   despesas lançadas tarde, que são gastos dedutíveis. Fica onde protege: as importações sem chave e, até a marca das
   apagadas viver no imóvel (N102, ronda 2), as casas com outras contas.
+  *Nota de 2026-11-23, mais tarde:* a marca passou a viver no imóvel na ronda 2, e o corte das casas com outras contas
+  saiu.
 - **A entrada também fecha o período das quotas** (N017, N018, N019, N059, N139): «partes iguais para trás» dava a
   casa a quem comprou a meio, e as quotas escritas antes de partilhar perdiam-se no modal. A partilha parte da divisão
   real e pergunta «… já era dono deste imóvel?»; o «desde sempre» por omissão mantém o caso comum (o casal dono desde
@@ -4632,6 +4637,7 @@ O porquê do resto, por vaga:
   confirmar, que conta a casa toda para os donos da app — certo para quem passou a ter um dono de fora nesse dia; um
   «e antes?» para quem tinha outro dono de fora antes fica por fazer (INCERTO). As outras portas de entrada (os grupos
   e os pedidos de partilha aceites) ainda não fecham o período.
+  *Nota de 2026-11-23, mais tarde:* fecham desde a ronda 2 (N018), com a mesma pergunta; ver a entrada da ronda 2.
 - **A versão mínima sobe para 81** (avisos.js:VERSAO_MINIMA): um cliente 79 ou 80 que lesse um contrato por migrar
   migrava-o à maneira antiga — gravava a data tardia como dia da comunicação e subia a marca, sem volta —, lia pelo
   nome os movimentos da casa partilhada, e partilhava casas sem a proposta, deixando o recém-chegado a 0 % para trás
@@ -4640,3 +4646,171 @@ O porquê do resto, por vaga:
 Ficam para o Martinho: o «e antes?» da primeira resposta «Desde um dia»; se o «Renovar…» da ficha também deve deixar
 a duração em branco num contrato com redução; e se renomear uma categoria deve mudar o nome aos registos de uma casa
 com outros participantes.
+
+## 2026-11-23 · A ronda 2 das correções da auditoria ao IRS de raiz: rendas, taxas, gastos, textos e o caminho linear (KAN-150 a KAN-154)
+A ronda 2 corrige as vagas V4 (as rendas e as outras receitas, KAN-150), V5 (as taxas, as isenções e o imposto
+estimado, KAN-151), V6 (os gastos, KAN-152), V7 (os textos, o guia e as exportações, KAN-153) e V8 (um caminho
+linear: cada opção só quando conta, KAN-154), em doze folhas sobre a ronda 1. A V8 só mexeu nos formulários depois de
+o Martinho ver o antes e o depois de cada ecrã e aprovar as seis maquetes (D8). As decisões:
+
+- **D1 · 13 % na renovação que atravessa a mudança de regime** (N028): o período de antes recontado no regime novo
+  desde o início da cadeia (OC 20268/2024, pontos 7 e 8, «ab initio»), e a renovação desce a partir daí
+  (irs.js:irsPassoDaCadeia). A segunda renovação no regime novo desce a partir do resultado (11 %): o ofício só tem um
+  exemplo, INCERTO. Vinda de um período sem redução (os 26 % de um contrato de 3 anos), o ofício não decide e fica o
+  «15 %, o do escalão».
+- **D2 · O teste dos 2 300 €** (N013, N054): o que se recebeu, a dividir pelos meses decorridos do contrato no ano (a
+  letra do art. 3.º n.º 3 do DL 97/2026), com aviso quando difere da renda do contrato (irs.js:irsTesteModerada). Um
+  mês decorrido por pagar baixa a média; os meses que ainda não chegaram não contam, e um pagamento de três meses de
+  uma vez já não tira os 10 %. Os quartos da mesma fração só se avisam, sem somar (irs.js:irsModeradaPorFracao).
+- **D3 · O n.º 23 nas rendas de 2026** (N092): a página diz as portarias do ano com as datas, como o PDF, e a nota
+  da versão sobre o DL 97/2026, art. 14.º b) (fisco-quadros.js:fiscoLimitesDoN23).
+- **D4 · Por quartos e contratos seguidos** (N012, N049): a lei manda repartir os gastos da casa pela área (CIRS art.
+  41.º n.º 4, supletivo; instruções do Anexo F; PIV 27168), e a omissão aceite é a dos quartos com contrato sobre o
+  total, dia a dia, com a parte da área escrita na ficha a mandar (fisco-resumo.js:fiscoParteArrendada). O IMI conta
+  pela parte com contrato algum dia do ano, como a casa inteira conta o IMI todo no ano em que deu rendas. Com
+  contratos seguidos, um gasto pago com o primeiro em vigor não serviu as rendas do segundo: vai ao contrato do dia
+  (fisco-resumo.js:fiscoAlvoDoGasto; INCERTO como a AT o quer).
+- **D7 · A categoria B atrás de uma pergunta** (N015, N056, N029): «Tens atividade aberta com estas rendas na
+  categoria B?», dentro da particularidade fiscal; ligada, vê-se em qualquer estado, porque a categoria B não depende
+  de o contrato estar comunicado (o CIS art. 60.º é do Imposto do Selo). Só a correção (a) do N056: a (b) poria no
+  Anexo F as rendas de um contrato da B ainda não comunicado. O recibo de renda é só de quem não optou pela
+  categoria B (Portaria 98-A/2015, art. 5.º n.º 1): o documento é a fatura da atividade, e isto fecha o INCERTO de
+  2026-11-18.
+- **D8 · As seis maquetes aprovadas, com as condições da lei.** (1) O contrato depois de «Sim, tem n.º» pede o n.º e
+  a finalidade, e o raro fica atrás de «Este contrato tem alguma particularidade fiscal?». A celebração e o que se
+  paga à parte ficam à vista como perguntas próprias, e não dentro da particularidade: perto de 1/1/2019, 1/1/2024,
+  31/12/2024 e 1/9/2026 a data muda o regime, e o DL 97/2026 soma os móveis à parte mesmo em contrato separado —
+  esconder pela renda dava 10 % sem razão. (2) A renda só mostra «Retido na fonte» quando conta: à vista, convidava a
+  escrever a comissão da gestora, que abatia ao imposto (N016); a ligação «O inquilino reteve IRS?» fica sempre,
+  porque um empresário em nome individual com contabilidade organizada retém (CIRS art. 101.º n.º 1). (3) A coluna do
+  Anexo F numa linha com «Mudar», e o seletor só quando a categoria não decide; decide-se por haver rendas ou
+  contratos no ano e não pelo destino de hoje (um imóvel arrendado até junho tem linha). (4) «Confirmar e emiti o
+  recibo» no Confirmar da renda: o prazo e o aviso dos recibos nasciam de cada renda confirmada e só se resolviam a
+  editá-la, quatro toques por renda (planeados.js:recConfirmarComRecibo). (5) O aviso dos donos com «É só meu» e «Há
+  outros donos», um por imóvel: um botão para vários confirmava por engano um imóvel herdado (imovel.js:imvSoMeu).
+  (6) A Declaração começa pelo que se copia — os números, «A tratar» e os quadros —, com a situação fiscal numa linha
+  depois dos quadros e os prazos só se houver (fisco.js:vFisco). No imóvel, os campos do Anexo F ficam opcionais para
+  guardar (obrigatórios bloqueavam quem não tem a caderneta à mão) e a ficha diz o que falta meses antes da época; a
+  fração fica em todos os tipos (num rústico é a secção) e o tipo de prédio não se infere. «Não vou declarar» diz que
+  o Modelo 2 é do Imposto do Selo, para não sugerir que deixa de ser devido (N061).
+- **D9 · Os gastos** (N044, N045, N046, N041): (a) a quota do condomínio com o fundo de reserva — o fundo só se deduz
+  no ano em que o condomínio o gasta numa obra (DL 268/94, art. 4.º; PIV 13921, 27168): a regra diz-se onde se
+  escreve o valor, sem partir o planeado. (b) Os gastos pagos antes do contrato ficam fora, e o guia alinha com a
+  app: «Na dúvida, não os abatas» (o processo 26713, de 2024, ponto 7, só aceita as obras). A obra sem subcategoria, a
+  cozinha, a casa de banho e a remodelação passam a «a confirmar» (irsMapaV=3, dados.js:IRS_MAPA_MIGRA3): tanto são
+  conservação (PIV 11676) como beneficiação (PIV 23775, 26713), e «na dúvida, a app não deduz» passa a valer também
+  para as obras; o que é conservação por natureza (a pintura, a canalização) continua a deduzir-se sozinho. (c) A
+  nota própria pergunta-se — «É o total da casa» ou «É só a minha parte» — em qualquer despesa de um imóvel com mais
+  de um dono, obrigatória só no IMI.
+- **D12 · Natureza 02 e reembolsos fora dos totais** (N076, N078): a linha 02 leva o NIF de quem paga e o n.º da
+  cedência (fisco-resumo.js:fiscoPagadorDe), e uma 02 sem contrato tem linha própria. O reembolso do inquilino e o
+  do condomínio com contrato são renda (CIRS art. 8.º n.º 2 a), art. 115.º n.º 5 a)) e ficam na Declaração mesmo com
+  «Reembolsos» fora dos totais. **A extensão decidida pelo condutor (2026-11-23):** com «Reembolsos» fora dos totais,
+  o do seguro, o do condomínio sem contrato e o do Estado num imóvel saíam da Declaração e deixavam de abater ao gasto
+  que devolvem — uma dedução a mais, contra a AT. Ficam todos na Declaração a abater-lhe (irs-papeis.js:irsReceitaDe;
+  CIRS art. 41.º n.º 1: só conta o gasto suportado); fora fica só o do Estado sem imóvel (o do IRS) e um reembolso
+  sem subcategoria. Muda a regra «o «Fora dos totais» só se ignora dentro das Rendas»: uma escolha dos gráficos não
+  tira da Declaração o que a lei manda declarar ou abater.
+- **D15 · A caução devolvida num ano sem rendas** (N024): sem linha (as instruções mandam não referir prédios sem
+  rendimento; OC 20256 n.º 6), só o aviso com o valor (fisco-avisos.js:fiscoAvCaucoesSemLinha).
+- **D6 · As outras portas de entrada e de saída** (N018, N021): o grupo e o pedido de partilha eram portas que
+  faltavam. Por elas, quem entrava ficava dono desde sempre e a quota de quem saía passava sem ninguém saber. Agora
+  fazem às quotas o mesmo que a ligação, com a mesma pergunta «já era dono?» (cloud/partilha.js:abrirJanelasDaEntrada),
+  e quem fica com as casas recebe o aviso da saída também por um grupo. Num grupo grande isto dá uma janela por casa
+  e um aviso por casa e por membro: é o D6 à letra.
+
+O porquê do resto, por vaga:
+
+- **As rendas e as outras receitas (V4).** Uma renda recebida depois da venda é do ano em que se recebe (CIRS art. 8.º
+  n.º 1), e por isso o imóvel vendido entra nesse ano; os outros gastos do ano a seguir à venda ficam fora (incluí-los
+  seria decisão a tomar de propósito) (N022). Na sublocação, só a renda da parte subarrendada abate, e a app pede o
+  valor em euros porque a lei não fixa o critério (N023). A 02 paga 28 % porque não é arrendamento habitacional (CIRS
+  art. 72.º n.º 1 e)) e pede recibo como a renda (art. 115.º n.º 5 a)) (N075, N077); a indemnização continua sem
+  recibo. A escolha do imóvel e do contrato numa receita nova evita rendas fora de todas as linhas (N027, N083), e um
+  contrato que acabou continua a receber a renda em atraso (N025). A regra do dia do Confirmar valia só num dos três
+  caminhos (N026); a renda de janeiro pergunta o dia porque o regime supletivo a vence no mês anterior (CC art. 1075.º
+  n.º 2) e o IRS é o do dia em que entrou (N146). As rendas por estimativa contam como recebidas e por isso pedem-se
+  conferidas (N079). A renda abaixo compara também com a do contrato sem planeado, e a retenção na fonte é uma saída
+  da pergunta (N080, N081). O reembolso do Estado num imóvel reduz o gasto suportado (N071), e o seguro de renda
+  conta-se pago no ano ou no anterior — «em qualquer ano» apanharia um seguro de há muitos anos (N072). O email dos
+  atrasos repete no servidor a regra do cliente, porque o cliente só passa os encargos à frente quando a app abre
+  (N147). O mínimo de 25 € da retenção vale desde 1/7/2025 (DL 49/2025), e os 10 % da retenção desde 25/5/2026: o DL
+  97/2026 não tem dia de entrada em vigor, e conta a Lei 74/98 (N148, INCERTO).
+- **As taxas, as isenções e o imposto estimado (V5).** O regime conta-se pela celebração, como a lei e a AT definem
+  os contratos novos (Lei 56/2023, art. 50.º n.º 7; OC 20268/2024, ponto 2 b)) e como a dica do campo já prometia; a
+  AT pode ler a data de início comunicada (N086, INCERTO). As isenções leem as datas da versão: o PAA desde
+  1/7/2019, o ex-alojamento local com o AL registado e afeto «a 31/12/2022» (a PIV 25740 recusou um AL fechado em
+  setembro de 2022), a renda antiga só pela celebração escrita até ao fim de 1990 (N150, N156). O RSAA confere o prazo
+  mínimo (N088). Os 5 % do 6A começam no mês a seguir à conclusão: a renda do mês da conclusão ainda paga, em parte,
+  um imóvel em obras; não há doutrina, e o aviso manda confirmar (N091, INCERTO). A regra do quadro 5 vive no motor,
+  porque as análises a usam com a Declaração desligada; os 10 % no subarrendamento estão por confirmar pela AT (DL
+  97/2026, art. 2.º n.º 1 b); N053). A renda de outro ano paga as regras do ano em que se recebe (N014). Um imóvel lá
+  fora e a categoria B não têm estimativa em lado nenhum (N052), e as Projeções testam os 10 % com a renda projetada
+  (N121). Na regularização, os anos sem versão saem da soma: o art. 72.º n.º 20 usa a taxa de cada ano, e a app não
+  tem as de antes de 2025 (N125). O KPI diz à vista as taxas do continente (nos Açores descem 30 %, DLR 2/99/A, art.
+  4.º; na Madeira as especiais não, DLR 3/2001/M — N120), «sem estimativa» sem linhas do Anexo F (N051) e «—» num ano
+  sem regras (N050); o número de cima continua o de depois do reporte (D73), com o par de nomes «imposto estimado» /
+  «depois dos prejuízos de anos anteriores» (N123), e os prejuízos dos anos que não estão na app só no porquê (N124).
+  Os benefícios fiscais só valem sem dívidas por regularizar (EBF art. 14.º n.os 5 a 7; PIV 30751), e não se diz nas
+  reduções pela duração (N151).
+- **Os gastos (V6).** A coluna escolhida à mão numa categoria «a confirmar» já não fura sozinha o período arrendado:
+  só a ligação ao contrato o faz, que é a resposta própria que existe (PIV 26713: gastos contemporâneos do contrato;
+  N048). O «Fora dos totais» continua a tirar a despesa (D19), mas já não em silêncio (N042). A divisão própria longe
+  da quota diz-se a 20 pontos, e a regra continua a quota: os gastos seguem a proporção das rendas, desde que
+  suportados (CIRS art. 41.º; PIV 25058; N115). Os encargos que o contrato põe a cargo do inquilino dizem-se sem o IMI,
+  que a AT liquida ao dono (N111). Frações do mesmo prédio repartem os encargos comuns pela permilagem (CIRS art. 41.º
+  n.º 3), e a frase aponta para «Quotas a definir», que leva o número do título sem contas (N114). A marca de uma linha
+  apagada do Splitwise é da casa, não de quem apagou, numa lista com ids para dois aparelhos ou duas contas não se
+  esmagarem, e um resumo da chave porque a ficha também a lê quem colabora (N102).
+- **Os textos, o guia e as exportações (V7).** A dispensa do arrendamento rural é das rendas desses contratos e não
+  da pessoa (Portaria 98-A/2015, art. 5.º n.º 3 a)), e o Modelo 44 delas é opcional (art. 8.º n.º 4; Portaria 2/2024)
+  (N030, N093). O Anexo J é individual (instruções do Anexo J, quadro 3A) e o 7A não tem coluna de titular: um total
+  dos dois punha a quota do cônjuge no anexo de quem declara (N010). O 4.2C é resposta obrigatória sempre que o 4.2 tem
+  contratos de 2024 em diante, e o CSV não a pode calar (N039). O quadro 8 só o preenche quem quer o regime do art.
+  74.º: lido como obrigação, levava a preencher o 8B sem entregar a substituição (N082, N110). No PDF o que se vê é o
+  que se copia: o NIF vai seguido, e os euros mantêm o formato da app; na página os separadores são do CSS (N107). O
+  guia explica os contratos longos (N095, com o OC 20268/2024), o IMI e o selo pagos com a casa vazia (art. 41.º n.º 5;
+  N094), a cozinha e a casa de banho (N045) e os benefícios com dívidas (N151); o quadro 10 também dos programas
+  (N155). A pergunta da retenção do inquilino esconde-se num particular de habitação, porque a maior parte não
+  retém, e fica a ligação (N128).
+- **O código de uma união de freguesias extinta nunca se dá por confirmado (N087).** Desde outubro de 2025 nenhum
+  código de união está numa caderneta atual (Lei 25-A/2025; a tabela da AT tem 135 uniões e nenhuma coincide com
+  uma reposta): a marca «Confirmei na caderneta» calava um código que a matriz já não tem. O aviso, o cartão do
+  quadro, o texto, o CSV e o PDF dão-no como falta, e o imóvel só oferece «Corrigir o código» ou «Guardar assim»
+  (o código da união ainda serve nas substituições de 2024 e antes); a caixa da caderneta fica para os outros
+  códigos. Na integração, o cartão e as exportações ainda diziam «confirmado» depois da marca: passaram a seguir
+  o aviso.
+- **A versão mínima sobe para 82** (avisos.js:VERSAO_MINIMA): um cliente 81 que grave um imóvel subarrendado
+  reconstrói o subarrendamento só com o NIF e a renda, e a parte subarrendada perde-se; e o formulário da despesa da
+  81 põe «É só a minha parte» a falso fora do IMI ao editar, e a Declaração volta a cortar pela quota.
+
+Ficam para o Martinho:
+
+- **N088:** a pergunta «A renda cabe no limite da tipologia no concelho?» do RSAA, com «Não sei» a tirar a isenção.
+  Pedia o campo, a pergunta e a condição na versão ao mesmo tempo; a forma está pronta (fisco.rsaaLimite e
+  pede: 'rsaaLimite'). Até lá conta o prazo mínimo, e o texto da isenção diz o limite.
+- **O inquilino empresa ficou fora da particularidade fiscal** (a maqueta 1 punha-o lá dentro): só aparece com um NIF
+  coletivo num contrato de habitação, e lá dentro um «Não» à particularidade apagava uma resposta que dá 28 %.
+- **A renda de janeiro pergunta o dia sempre** que se confirma no próprio ano, uma vez por ano e por contrato, e não
+  só nos primeiros dias de janeiro; a renda do contrato supõe a atualização no aniversário do início.
+- **O tipo de prédio por omissão** (D8 g): nasce «—»; «Urbano» quando há tipologia ou fração fica por decidir.
+- **O campo «dos quais, fundo de reserva»** no condomínio (D9 a, sem recomendação): hoje só a frase.
+- **Um campo de permilagem** na ficha: hoje a frase só aparece quando a ficha diz que as frações são do mesmo prédio.
+- **«Conta mesmo com a casa vazia»** numa despesa «a confirmar»: não existe; hoje a saída é ligar a despesa ao
+  contrato.
+- **«É o total da casa» por omissão** fora do IMI: no IMI a resposta é obrigatória; se a quiser obrigatória em todas,
+  muda-se uma regra.
+- **O nome do programa no quadro 10:** «Programa de Apoio ao Arrendamento» (as instruções do Anexo F) contra
+  «Programa de Arrendamento Acessível» (a parte 1 do guia); e as frases novas do guia (GUIA_REVISTO 2026-11-23),
+  conferidas por ele antes do promove.
+- **Outros sem resposta escolhida:** a moradia inteira arrendada com o dono a viver noutra parte (a parte arrendada
+  só se pergunta por quartos); «É só meu» com nuvem sem Anular; os selos da lista dos contratos com os rótulos antigos
+  (Por indicar, Declarado, Não declarado); o imóvel vendido a escolher numa receita depois da venda; o limite dos
+  contratos terminados no seletor da receita (desde 1 de janeiro do ano antes do anterior).
+- **Os INCERTOS de lei, por confirmar com a AT:** a segunda renovação no regime novo a 11 % (N028); o regime pela
+  celebração (N086); os 5 % do 6A desde o mês a seguir à conclusão, e como declarar as rendas de antes (N091); o dia
+  25/5/2026 da retenção a 10 % (N148); os 10 % no subarrendamento (N053); os gastos de dois contratos seguidos (N049);
+  a diferença negativa do quadro 5 e o líquido negativo do Anexo J (N140, N142); o início das obras noutro ano
+  (N116); o que o Portal faz ao colar um valor (N107); «os imóveis do mesmo país somam-se numa linha» no Anexo J; o
+  número do art. 74.º no prazo das substituições; a presunção do arrendamento rural num rústico (N093, parte de
+  «Não»); o vermelho do código de uma união extinta (o verificador preferia âmbar, N087).

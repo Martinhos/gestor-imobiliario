@@ -121,14 +121,15 @@ describe('os formulários do imóvel e das pessoas, para lá do básico', () => 
     assert.equal(app.prop('P1').loans.length, 0, 'e o imóvel fica sem a hipoteca');
   });
 
-  test('pessoas: as instruções saíram dos placeholders — o país diz no rótulo quando se usa, a morada e as notas têm a dica por baixo', () => {
+  test('pessoas: as instruções saíram dos placeholders — o país só aparece quando conta, a morada e as notas têm a dica por baixo', () => {
     const abertas = base();
     app.db.tenants[0] = app.normPerson({ id: 'I1', name: 'Ana Rodrigues', phone: '912 345 678', nif: '123456789', pais: '', taxAddress: 'Rua A 1', notes: 'Fiador: o pai' });
     app.personModal('tenant', 'I1');
     const html = abertas[0].b;
     conferir('inquilino preenchido', html, { obrigatorios: ['pe_name'], exemplos: { pe_cc: true, pe_pais: true, pe_addr: true, pe_notes: true }, deixados: ['fn_'] });
     for (const ph of placeholders(html)) assert.ok(ph === 'Opcional' || ph.startsWith(EX), 'placeholder fora da regra: ' + ph);
-    assert.match(html, /País \(opcional; só sem NIF português\)<input id="pe_pais"/);
+    // N128: a condição do país aplica-se em vez de se escrever no rótulo — com um NIF português e sem país, escondido
+    assert.match(html, /<div id="pe_paisL" hidden>\s*<label>País \(opcional\)<input id="pe_pais"/);
     assert.match(html, /<div class="hint">A morada com rua, número, código postal e localidade\./);
     assert.match(html, /O fiador, as referências, outras observações\./);
     assert.match(html, /id="pe_name" value="Ana Rodrigues"/, 'os valores ficam nos campos');

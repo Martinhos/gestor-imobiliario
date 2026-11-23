@@ -101,7 +101,7 @@ describe('as isenções da renda antiga (6H) e do ex-alojamento local (6F) (D18)
     monta(app, { name: 'Renda antiga 1987', rent: 180, start: '1987-01-01', end: '' });
     let h = form(app);
     assert.ok(opcoes(app, 'c_fisen').includes('prerau'), 'o 6H está na escolha');
-    assert.ok(opcoes(app, 'c_fisen').includes('al'), 'e o 6F (celebrado antes de 2025)');
+    assert.ok(!opcoes(app, 'c_fisen').includes('al'), 'o 6F só se oferece aos celebrados desde 2023 (N156)');
     assert.equal(caixa(h, 'c_fnrauBox'), ' hidden', 'sem a isenção escolhida, a pergunta fica escondida');
     // escolhida a renda antiga: a pergunta aparece
     app.db.contracts[0].fisco.isencao = 'prerau';
@@ -127,7 +127,8 @@ describe('as isenções da renda antiga (6H) e do ex-alojamento local (6F) (D18)
     monta(app, { name: 'Ex-AL 2024', rent: 950, start: '2024-06-01', end: '2027-05-31', fisco: { celebracao: '2024-05-25', isencao: 'al' } });
     const h = form(app);
     assert.equal(caixa(h, 'c_falBox'), '');
-    assert.match(h, /O alojamento local estava registado até 31\/12\/2022, e este contrato foi celebrado e inscrito no Portal das Finanças até 31\/12\/2024\?/);
+    // registado E afeto a esse fim a 31/12/2022, e o contrato entre as datas da versão (N156)
+    assert.match(h, /O imóvel ainda estava em alojamento local, registado e afeto a esse fim, a 31\/12\/2022, e este contrato foi celebrado e registado no Portal das Finanças (entre 01\/01\/2023 e|até) 31\/12\/2024\?/);
     assert.match(h, /vale para as rendas até às de 2029/);
     domCom(app, { c_rent: '950', c_fisen: 'al', c_fal: '1' });
     app.collectCt();
@@ -139,7 +140,8 @@ describe('as isenções da renda antiga (6H) e do ex-alojamento local (6F) (D18)
     monta(app, { start: '2025-03-01', end: '2028-02-29', fisco: { celebracao: '2025-02-20' } });
     form(app);
     assert.ok(!opcoes(app, 'c_fisen').includes('al'));
-    assert.ok(opcoes(app, 'c_fisen').includes('prerau'), 'a renda antiga não tem data na versão (INCERTO): fica');
+    // a renda antiga lê-se pela celebração escrita (datasPelaCelebracao): celebrado em 2025, já não se oferece
+    assert.equal(opcoes(app, 'c_fisen').includes('prerau'), !app.irsAno(2026).isencoes.find((x) => x.id === 'prerau').celebradoAte);
   });
 
   test('a dica do 6H e do 6F diz que apontam para a linha do 4.1, sem código', () => {
@@ -240,16 +242,18 @@ describe('as condições das isenções: o envio ao IHRU e a data do PAA (D46)',
 });
 
 describe('os consumos incluídos na renda (D26)', () => {
-  test('um interruptor no bloco fiscal, desligado por omissão; o collectCt grava fisco.consumosIncluidos', () => {
+  test('uma escolha dos consumos nos encargos do inquilino (N126), «Não se aplica» por omissão; o collectCt grava fisco.consumosIncluidos', () => {
     monta(app);
-    const h = form(app);
-    assert.match(h, /<b>A renda inclui os consumos<\/b>/);
+    app.cForm = app.normContract(copia(app.contract('C1')));
+    const h = app.ctBody();
+    assert.match(h, /<label>Água, luz e gás<div class="sel" id="sel_c_fconsumos">/);
+    assert.match(h, /<input type="hidden" id="c_fconsumos" value="">/);
     assert.match(h, /campo 30/);
-    assert.match(h, /<input type="checkbox" role="switch" class="ct-sw" id="c_fcons">/);
-    domCom(app, { c_rent: '1000', c_fcons: true });
+    assert.doesNotMatch(app.fiscoSect(), /id="c_fcons"/, 'já não se pergunta no bloco fiscal');
+    domCom(app, { c_rent: '1000', c_encQ: true, c_fconsumos: 'incluidos' });
     app.collectCt();
     assert.equal(app.cForm.fisco.consumosIncluidos, true);
-    domCom(app, { c_rent: '1000', c_fcons: false });
+    domCom(app, { c_rent: '1000', c_encQ: true, c_fconsumos: '' });
     app.collectCt();
     assert.equal(app.cForm.fisco.consumosIncluidos, false);
     app.db.contracts[0].fisco.consumosIncluidos = true;
@@ -303,11 +307,14 @@ describe('as obras antes do início (D28)', () => {
 });
 
 describe('o que se paga à parte e o limite das rendas moderadas (D48)', () => {
-  test('o campo «Móveis e serviços pagos à parte (€/mês)» com a frase do limite; conta no teste dos 10 %', () => {
+  test('o que se paga à parte, atrás da sua pergunta, com a frase do limite; conta no teste dos 10 %', () => {
     monta(app, { rent: 2250, start: '2024-03-01', end: '2029-02-28' });
     const h = form(app);
-    assert.match(h, /<label>Móveis e serviços pagos à parte \(€\/mês\)<input id="c_fextras" type="text" inputmode="decimal" class="num" value="" placeholder="Opcional"[^>]*autocomplete="off">/);
-    assert.match(h, /Para o limite das rendas moderadas \(10 % até 2[\s.  ]?300[\s  ]€ por mês\), conta a renda com o que o inquilino paga à parte por móveis, equipamentos e serviços, mesmo num contrato separado \(DL 97\/2026, art\. 3\.º\)/);
+    // a pergunta de sim/não (N153) e o valor por baixo, com a letra do DL 97/2026 (N096)
+    assert.match(h, /<b>O inquilino paga à parte móveis, equipamentos ou serviços\?<\/b>/);
+    assert.match(h, /<label>Valor pago à parte por mês \(€\)<input id="c_fextras" type="text" inputmode="decimal" class="num" value="" placeholder="Opcional"[^>]*autocomplete="off">/);
+    assert.match(h, /ligados ao imóvel com carácter de permanência e pelos serviços que o valorizam, mesmo num contrato separado/);
+    assert.match(h, /Para o limite das rendas moderadas \(10 % até 2[\s.  ]?300[\s  ]€ por mês\) soma-se à renda o que o inquilino paga à parte pelos móveis/);
     assert.equal(app.irsRate(app.cForm, 2026), 10);
     domCom(app, { c_rent: '2250', c_start: '2024-03-01', c_end: '2029-02-28', c_fextras: '100' });
     app.collectCt();
@@ -368,12 +375,13 @@ describe('os contratos anteriores a abril de 2015 não têm Modelo 2 (D85)', () 
     const h = form(app);
     assert.doesNotMatch(h, /O prazo é 30\/06\/2012/);
     assert.doesNotMatch(h, /Comunicaste este contrato às Finanças \(Modelo 2\)/);
-    assert.match(h, /Registaste este contrato no Portal das Finanças\? Começou antes de abril de 2015: não tem Modelo 2, regista-se com os elementos mínimos do contrato/);
+    // a pergunta está no rótulo do grupo (N061); a dica diz o registo dos elementos mínimos
+    assert.match(h, /Começou antes de abril de 2015: não tem Modelo 2\. Regista-se no Portal das Finanças com os elementos mínimos do contrato/);
     const f = app.ctFicha('C1');
     assert.match(f, /Começou antes de abril de 2015: não tem Modelo 2\. Registaste-o no Portal das Finanças/);
     assert.doesNotMatch(f, /Comunicaste este contrato às Finanças \(Modelo 2\)/);
-    monta(app, { start: '2026-03-10', end: '', fisco: { estado: '' } });
-    assert.match(form(app), /O prazo é 30\/04\/2026, o fim do mês seguinte ao início\./, 'controlo: os de agora têm o prazo');
+    monta(app, { start: '2026-11-10', end: '', fisco: { estado: '' } });
+    assert.match(form(app), /O prazo é 31\/12\/2026, o fim do mês seguinte ao início\./, 'controlo: os de agora têm o prazo');
   });
 });
 

@@ -176,16 +176,18 @@ describe('D12: sem avisos, não se diz que não falta nada', () => {
 });
 
 describe('D70: as letras que a app não escreve', () => {
-  test('a nota fixa de «A tua situação fiscal» diz F, D1, AF1 e DG1, e que se mudam no Portal', () => {
+  /* N063 (D8): a F do óbito só com a conjunta; as D1, AF1 e DG1 dos dependentes também em
+     separado, numa nota à parte — no cartão aberto (fecha numa linha com «Mudar») */
+  test('«A tua situação fiscal» diz as D1, AF1 e DG1 também sem a conjunta; a F só com ela', () => {
     rendas('C1', 1000);
-    const h = app.fiscoSituacaoCard(app.resumoFiscal(ANO));
-    const t = textoDe(h);
-    assert.match(t, /A app só escreve as letras A e B\./);
-    assert.match(t, /levam F/);
-    assert.match(t, /D1, AF1 ou DG1/);
-    assert.match(t, /muda a letra no Portal das Finanças/);
-    // fixa: também sem a tributação conjunta
     assert.equal(app.fiscoIrsDefs().conjunta, false);
+    let t = textoDe(app.fiscoSituacaoCard(app.resumoFiscal(ANO), true));
+    assert.match(t, /D1, AF1 ou DG1/);
+    assert.match(t, /essa letra muda-se no Portal das Finanças/);
+    assert.doesNotMatch(t, /letra F/, 'sem a conjunta, sem a F');
+    app.db.settings.irs = app.normIrsDefs({ porAno: { [ANO]: { conjunta: true } } });
+    t = textoDe(app.fiscoSituacaoCard(app.resumoFiscal(ANO), true));
+    assert.match(t, /levam a letra F/);
   });
 });
 
@@ -250,9 +252,11 @@ describe('D72, D98, D97: o imposto e o prejuízo, titular a titular', () => {
 });
 
 describe('D86: a estimativa e os Açores', () => {
-  test('a explicação do imposto diz as taxas nacionais e os Açores, sem a Madeira', () => {
-    const e = kpiDe(app.fiscoKpis(resumoFeito({})), 'Imposto estimado').expl;
-    assert.match(e, /com as taxas nacionais: quem reside nos Açores tem as taxas 30 % mais baixas, e a AT aplica-as pela residência/);
+  /* N120: as taxas do continente, e os Açores também à vista no cartão */
+  test('a explicação do imposto diz as taxas do continente e os Açores, sem a Madeira', () => {
+    const k = kpiDe(app.fiscoKpis(resumoFeito({})), 'Imposto estimado'), e = k.expl;
+    assert.match(e, /com as taxas do continente: a quem reside nos Açores a AT aplica-as 30 % mais baixas, pela residência/);
+    assert.ok(k.pes.includes('taxas do continente; nos Açores a AT aplica menos 30 %'));
     assert.doesNotMatch(e, /Madeira/);
   });
 });
@@ -278,6 +282,9 @@ describe('D96: o Anexo F é de quem é dono', () => {
   });
 });
 
+/* a linha das taxas do continente, à vista no imposto (N120) */
+const AC = 'taxas do continente; nos Açores a AT aplica menos 30 %';
+
 describe('D99: o imposto depois do AIMI', () => {
   const aimi = (abate) => ({ total: 1000, n: 1, predios: [], vptArrendados: 0, vptTotal: 0, semVpt: abate == null ? ['T2 Arroios'] : [], parte: abate, abate });
 
@@ -285,7 +292,7 @@ describe('D99: o imposto depois do AIMI', () => {
     const h = app.fiscoKpis(resumoFeito({ imposto: 3000, retencoes: 500 }, { aimi: aimi(800) }));
     const k = kpiDe(h, 'Imposto estimado');
     assert.equal(k.valor, app.euro(3000), 'o número principal fica');
-    assert.deepEqual(k.pes, ['depois do AIMI: ~' + app.euro(2200) + ' (estimativa)', 'já retido ' + app.euro(500) + ' · falta ' + app.euro(1700)]);
+    assert.deepEqual(k.pes, ['depois do AIMI: ~' + app.euro(2200) + ' (estimativa)', 'já retido ' + app.euro(500) + ' · falta ' + app.euro(1700), AC]);
     assert.match(k.expl, /O AIMI pago abate ao imposto \(quadro 9\)/);
     assert.match(k.expl, /É a leitura da app; a lei fala da coleta à taxa de 28 %, e a conta certa é a da AT\./);
     assert.match(k.expl, /A falta a pagar já conta com este abate\./);
@@ -293,9 +300,9 @@ describe('D99: o imposto depois do AIMI', () => {
 
   test('sem o VPT de um prédio, a linha diz que falta; sem AIMI, nada', () => {
     const k = kpiDe(app.fiscoKpis(resumoFeito({}, { aimi: aimi(null) })), 'Imposto estimado');
-    assert.deepEqual(k.pes, ['abate do AIMI por estimar: falta um VPT', 'sem englobamento']);
+    assert.deepEqual(k.pes, ['abate do AIMI por estimar: falta um VPT', 'sem englobamento', AC]);
     const s = kpiDe(app.fiscoKpis(resumoFeito({})), 'Imposto estimado');
-    assert.deepEqual(s.pes, ['sem englobamento']);
+    assert.deepEqual(s.pes, ['sem englobamento', AC]);
     assert.doesNotMatch(s.expl, /AIMI/);
   });
 });

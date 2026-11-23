@@ -27,6 +27,94 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 82,
+    data: '2026-11-23',
+    titulo: 'Formulários mais curtos, e a Declaração mais certa nas rendas, nas taxas e nos gastos',
+    seccoes: [
+      {
+        titulo: 'O contrato',
+        afeta: ['contratos'],
+        itens: [
+          'O formulário do contrato ficou mais curto: cada pergunta só aparece quando conta. «Já o comunicaste às Finanças?» responde-se com «Ainda não», «Sim, tem n.º» ou «Não vou declarar».',
+          'Depois de «Sim, tem n.º», o contrato pede o n.º e a finalidade. O que é raro, como uma isenção ou rendas na categoria B, fica atrás de «Este contrato tem alguma particularidade fiscal?».',
+          'O imposto sobre a renda já não é um campo à vista: a app usa a taxa do ano, e se quiseres outra tocas em «Escrever outra taxa».',
+          'Os encargos que o inquilino paga abrem com uma pergunta, e a água, a luz e o gás escolhem-se numa só: pagos à parte, incluídos na renda ou não se aplica.',
+          'Num prédio rústico, o contrato pergunta se é um arrendamento rural. As rendas dele não pedem recibo eletrónico.',
+          'Um contrato que já acabou tem «Registar recebimento», para a renda em atraso ou a indemnização ficarem ligadas a ele.',
+        ],
+      },
+      {
+        titulo: 'As rendas',
+        afeta: ['movimentos', 'contratos'],
+        itens: [
+          'O formulário da renda só mostra «Retido na fonte» quando o inquilino retém. Nos outros casos, tocas em «O inquilino reteve IRS?».',
+          'A pergunta «Entrou menos do que a renda: porquê?» ganhou a retenção na fonte, e aparece também sem planeado, quando a renda fica abaixo da do contrato.',
+          'Ao confirmar uma renda, há agora «Confirmar e emiti o recibo»: marca o recibo eletrónico no mesmo toque.',
+          'O Confirmar pergunta o que muda a Declaração: o dia em que entrou a renda de janeiro, a retenção que a renda anterior teve, uma renda abaixo da do contrato e duas rendas no mesmo mês.',
+          'Numa casa com vários contratos, a renda pede o contrato a que pertence, e numa receita nova escolhes o imóvel ou «Sem imóvel». Assim nenhuma renda fica fora da Declaração.',
+          'A cedência de uso de uma parte do prédio, como um cartaz ou uma antena, pede o NIF de quem paga e o n.º da cedência, e pede recibo eletrónico como a renda.',
+        ],
+      },
+      {
+        titulo: 'As despesas',
+        afeta: ['movimentos'],
+        itens: [
+          'Numa despesa, a coluna do Anexo F diz-se numa linha, com «Mudar». A escolha só aparece quando a categoria não decide sozinha.',
+          'Numa casa com outros donos, dizes se a despesa é o total da casa ou só a tua parte. No IMI, a resposta é obrigatória.',
+          'As obras sem subcategoria, a cozinha, a casa de banho e as remodelações passam a «a confirmar»: reparar o que existia deduz-se, o que acrescenta valor não. As que já tinhas aparecem em «A tratar».',
+          'A ficha de cada despesa diz o que a Declaração faz com ela, por exemplo quando foi paga com a casa sem contrato.',
+          'Os reembolsos contam na Declaração mesmo com «Reembolsos» fora dos totais: o do inquilino como renda, e os do seguro, do condomínio e do Estado a abater ao gasto que devolvem.',
+          'As despesas do Splitwise que alguém da casa apagou já não voltam quando outra pessoa importa o grupo outra vez.',
+        ],
+      },
+      {
+        titulo: 'Os imóveis',
+        afeta: ['imoveis'],
+        itens: [
+          'O formulário do imóvel pergunta só o que conta para ti. O que o Anexo F pede da caderneta fica num grupo à vista, e a ficha diz o que falta, com «Preencher».',
+          'Um imóvel no estrangeiro marca-se com «O imóvel fica fora de Portugal», e os campos que só servem em Portugal saem do formulário.',
+          'Num imóvel arrendado por quartos podes dizer que parte da casa se arrenda. Os gastos da casa contam só nessa parte.',
+          'Quem subarrenda um quarto escreve a renda que paga por essa parte, e só essa abate na Declaração.',
+          'Com «Uso próprio» e contratos ainda em vigor, o formulário avisa e oferece «Terminar o contrato».',
+          'Por baixo do condomínio, a app explica o fundo comum de reserva: escreve a quota sem ele.',
+        ],
+      },
+      {
+        titulo: 'A Declaração',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'A Declaração começa pelo que se copia: os números, o que falta tratar e os quadros. A tua situação fiscal fica numa linha no fim, com «Mudar», e os prazos só aparecem quando há algum.',
+          'Em «A tratar», alguns avisos resolvem-se no próprio sítio: «É só meu» no dos donos, «Marcar as N como emitidas» no dos recibos, e o do imposto do selo abre a despesa já preenchida.',
+          'A renovação feita desde outubro de 2023 de um contrato de 2019 a 2023 passa a 13 %, como a AT.',
+          'O limite dos 2 300 € das rendas a 10 % conta o que recebeste a dividir pelos meses do contrato no ano: pagar três meses de uma vez já não te faz perder os 10 %.',
+          'Cada gasto vai ao contrato que estava em vigor quando o pagaste, e a renda recebida depois de venderes o imóvel já não se perde.',
+          'O imposto estimado diz à vista que usa as taxas do continente e o que não estima. Num ano sem regras já não mostra um número.',
+          'O PDF e o CSV seguem a ordem das colunas do impresso, dizem a resposta do quadro 4.2C, separam o Anexo J de cada titular na declaração conjunta e dizem que o quadro 8 é facultativo.',
+          'A Declaração avisa agora as rendas registadas por estimativa, a renda sempre abaixo da do contrato, a caução devolvida num ano sem rendas e o código de uma freguesia que deixou de existir.',
+        ],
+      },
+      {
+        titulo: 'Os imóveis partilhados',
+        afeta: ['imoveis', 'partilha'],
+        itens: [
+          'Quando alguém entra num grupo de imóveis, ou aceitas um pedido de partilha, a app pergunta desde quando a pessoa é dona: desde sempre ou desde um dia.',
+          'Quando alguém sai de um grupo, é removido ou o grupo é apagado, quem fica com os imóveis recebe um aviso.',
+          'O cartão das quotas responde-se na ficha do imóvel, com «É só meu» ou «Há outros donos».',
+        ],
+      },
+      {
+        titulo: 'Os prazos e os recibos',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'O aviso do recibo por emitir tem «Marcar como emitido»: um toque, com Anular.',
+          'As rendas da categoria B e as de um arrendamento rural deixam de pedir recibo eletrónico. A categoria B usa a fatura da tua atividade.',
+          'No formulário do inquilino, a retenção é uma pergunta de três respostas. Marcar que retém propõe a retenção na renda planeada.',
+          'O guia do IRS explica os contratos longos de antes de 2023, o IMI pago com a casa vazia e o que pede cuidado na cozinha e na casa de banho.',
+        ],
+      },
+    ],
+  },
+  {
     v: 81,
     data: '2026-11-23',
     titulo: 'A Declaração: o resumo de 2025, o quadro 10 e os imóveis partilhados',
@@ -2014,7 +2102,7 @@ var VERSAO = AVISOS[0].v;
 /* Versão mínima aceite. Subir isto obriga toda a gente a atualizar antes de
    continuar a usar a app — é para quando uma versão antiga passa a estar
    errada, não para empurrar novidades. */
-var VERSAO_MINIMA = 81;
+var VERSAO_MINIMA = 82;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { AVISOS: AVISOS, VERSAO: VERSAO, VERSAO_MINIMA: VERSAO_MINIMA, FUNCIONALIDADES: FUNCIONALIDADES };

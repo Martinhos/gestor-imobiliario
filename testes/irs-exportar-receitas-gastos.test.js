@@ -197,7 +197,7 @@ describe('D52 — o quadro 5 (a sublocação)', () => {
     assert.ok(p.bytes, 'há PDF: o quadro 5 é rendimento');
     const b = cartao(p, 'Arroios · T2 Arroios');
     assert.equal(campoDe(b, 'Renda paga ao senhorio'), euro(7200));
-    assert.equal(campoDe(b, 'NIF do senhorio'), '123 456 789');
+    assert.equal(campoDe(b, 'NIF do senhorio'), '123456789', 'o NIF que se copia, sem espaços (N107)');
     assert.equal(campoDe(b, 'Natureza'), '02 · subarrendamento habitacional');
     assert.ok(cartao(p, 'Total do quadro 5'));
     const t = app.fiscoTexto();

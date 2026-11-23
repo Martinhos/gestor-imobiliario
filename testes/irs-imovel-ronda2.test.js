@@ -81,7 +81,7 @@ describe('D136 · o código da freguesia com as letras da AT', () => {
   test('o 0302FE (Silveiros e Rio Covo, união desde 2013 e extinta em 2025) é aceite e fica guardado', () => {
     const { abertas } = base();
     guardar({ p_freguesiaCodigo: '0302FE', p_matrix: '88' });
-    assert.equal(abertas[abertas.length - 1].t, 'Confirma o código da freguesia', 'pergunta pela caderneta');
+    assert.equal(abertas[abertas.length - 1].t, 'Este código de freguesia mudou', 'avisa que mudou');
     app.imvFreguesiaGuardar(0);
     assert.equal(app.db.properties.length, 1);
     assert.equal(app.db.properties[0].freguesiaCodigo, '0302FE', 'não volta cortado a 0302');
@@ -94,27 +94,27 @@ describe('D135 · as freguesias repostas em outubro de 2025', () => {
     const { abertas } = base();
     guardar({ p_freguesiaCodigo: '010123', p_matrix: '1234' });
     const q = abertas[abertas.length - 1];
-    assert.equal(q.t, 'Confirma o código da freguesia');
+    assert.equal(q.t, 'Este código de freguesia mudou');
     assert.match(q.b, /O código 010123 é o de uma união de freguesias desagregada em outubro de 2025 \(Lei 25-A\/2025\)/);
     assert.match(q.b, /uma destas: 010128 Agadão, 010132 Belazaima do Chão ou 010134 Castanheira do Vouga, e o artigo pode ter mudado/);
-    assert.match(q.b, /Confirma na caderneta predial atual/);
     assert.doesNotMatch(q.b, /UNIÃO DAS FREGUESIAS/, 'o nome da tabela, em maiúsculas, não se mostra');
-    assert.match(q.b, /data-click="imvFreguesiaCorrigir\(\)"[^>]*>Corrigir o código</);
-    assert.match(q.f, /data-click="imvFreguesiaGuardar\(0\)">Guardar sem confirmar</);
-    assert.match(q.f, /data-click="imvFreguesiaGuardar\(1\)">Confirmei na caderneta</);
+    assert.match(q.f, /data-click="imvFreguesiaCorrigir\(\)"[^>]*>Corrigir o código</);
+    assert.match(q.f, /data-click="imvFreguesiaGuardar\(0\)">Guardar assim</);
+    assert.doesNotMatch(q.f + q.b, /Confirmei na caderneta/, 'um código de união não se confirma (N087)');
     assert.equal(app.db.properties.length, 0, 'ainda não gravou');
     app.imvFreguesiaGuardar(1);
     const p = app.db.properties[0];
     assert.equal(p.freguesiaCodigo, '010123', 'a app não escolhe a freguesia reposta');
-    assert.equal(p.matrizConfirmada, '2026-11-18', 'o dia em que se confirmou');
-    // confirmado, o próximo Guardar não pergunta
+    assert.equal(p.matrizConfirmada, '', 'o 1 de uma janela antiga grava como «Guardar assim»');
+    // o próximo Guardar pergunta outra vez, também com a marca da caderneta
     const n = abertas.length;
-    guardar({ p_freguesiaCodigo: '010123', p_matrix: '1234', p_matrizConfirmada: true }, p.id);
-    assert.equal(abertas.length, n + 1, 'só o formulário abriu');
-    assert.equal(app.prop(p.id).matrizConfirmada, '2026-11-18');
+    guardar({ p_freguesiaCodigo: '010123', p_matrix: '1234' }, p.id);
+    assert.equal(abertas.length, n + 2, 'o formulário e a pergunta');
+    app.imvFreguesiaGuardar(0);
+    assert.equal(app.modalStack.length, 0, 'gravou e fechou as duas');
   });
 
-  test('«Guardar sem confirmar» grava sem a data; «Corrigir o código» volta ao formulário sem gravar', () => {
+  test('«Guardar assim» grava sem a data; «Corrigir o código» volta ao formulário sem gravar', () => {
     const { abertas } = base();
     guardar({ p_freguesiaCodigo: '130812' });
     app.imvFreguesiaCorrigir();
@@ -138,13 +138,12 @@ describe('D135 · as freguesias repostas em outubro de 2025', () => {
     assert.equal(app.db.properties.length, 3);
   });
 
-  test('no formulário: o aviso por baixo do código e do artigo, a caixa «Confirmei», e mudar o código pede outra confirmação', () => {
+  test('no formulário: o aviso por baixo do código e do artigo, sem a caixa num código de união; a caixa num código novo', () => {
     base();
     app.pForm = app.normProp({ id: 'P1', name: 'T2', freguesiaCodigo: '010123', matrix: '1234', matrizConfirmada: '2026-11-01' });
     const html = app.propBody();
     assert.match(html, /<div id="imv_matriz">\s*<div class="imv-nota imv-nota-aviso small">O código 010123 é o de uma união/);
-    assert.match(html, /<input type="checkbox" id="p_matrizConfirmada" checked> Confirmei o código e o artigo na caderneta predial atual/);
-    assert.match(html, /Confirmado a 01\/11\/2026\./);
+    assert.doesNotMatch(html, /id="p_matrizConfirmada"/, 'um código de união não se confirma (N087)');
     assert.match(html, /id="p_freguesiaCodigo"[^>]*data-input="imvMatrizEscrito\(\)"/);
     assert.match(html, /id="p_matrix"[^>]*data-input="imvMatrizEscrito\(\)"/);
     // escreve um código novo: a confirmação era do antigo
@@ -168,18 +167,16 @@ describe('D135 · as freguesias repostas em outubro de 2025', () => {
     assert.doesNotMatch(app.propBody(), /p_matrizConfirmada|união de freguesias desagregada/);
   });
 
-  test('na ficha, o cartão dos dados registais avisa, com «Corrigir» e «Confirmei na caderneta», que grava o dia', () => {
+  test('na ficha, o cartão dos dados registais avisa só com «Corrigir», também com a marca da caderneta (N087)', () => {
     base();
     app.db.properties.push(app.normProp({ id: 'P1', name: 'Casa Agadão', ownerIds: ['O1'], freguesiaCodigo: '010123', matrix: '1234', tipoPredio: 'U' }));
     let html = app.propFicha('P1');
     assert.match(html, /<div class="imv-nota imv-nota-aviso small">O código 010123 é o de uma união de freguesias desagregada em outubro de 2025/);
     assert.match(html, /data-click="imvMatrizCorrigir\('P1'\)">Corrigir</);
-    assert.match(html, /data-toca="dados" data-click="imvMatrizConfirmar\('P1'\)">Confirmei na caderneta</);
-    app.imvMatrizConfirmar('P1');
-    assert.equal(app.prop('P1').matrizConfirmada, '2026-11-18');
+    assert.doesNotMatch(html, /Confirmei na caderneta/);
+    app.prop('P1').matrizConfirmada = '2026-11-01';
     html = app.propFicha('P1');
-    assert.doesNotMatch(html, /imv-nota-aviso/, 'confirmado, o aviso sai');
-    assert.match(html, /confirmados na caderneta a 18\/11\/2026/);
+    assert.match(html, /imv-nota-aviso/, 'a marca não cala um código que já não existe');
   });
 
   test('na ficha, quem não edita o imóvel vê o aviso sem os botões; e uma freguesia reposta não tem aviso', () => {
@@ -207,21 +204,25 @@ describe('D137 · a dica diz a caderneta atual e a reposição de 2025', () => {
 });
 
 describe('D133 · o país do imóvel', () => {
-  test('o país está nos dados registais, em branco é Portugal; com outro país aparece o código da tabela X e o Anexo J', () => {
-    base();
-    app.pForm = app.normProp({ id: 'P1', name: 'T2' });
-    const html = app.propBody();
-    assert.match(html, /<label>País<input id="p_pais" value="" placeholder="Opcional" autocomplete="off" data-input="imvPaisEscrito\(\)"><\/label>/);
-    assert.match(html, /<div id="imv_pais"><div class="hint u-mt-n4px">Em branco: Portugal\.<\/div><\/div>/);
+  test('o país só com «O imóvel fica fora de Portugal», junto da morada: com ele, o país (obrigatório), o código da tabela X e o Anexo J', () => {
+    const { abertas } = base();
+    app.propModal();
+    const html = abertas[0].b;
+    assert.match(html, /<input type="checkbox" id="p_foraPT" data-change="imvForaPTMudou\(\)"> O imóvel fica fora de Portugal<\/label>/);
+    assert.doesNotMatch(html, /id="p_pais"/, 'desligado, sem o país');
     assert.doesNotMatch(html, /p_paisCodigo/);
+    escrever({ p_foraPT: true });
+    app.imvForaPTMudou();
+    const b = app.modalBodyEl().innerHTML;
+    assert.match(b, /<label>País <span class="req">\*<\/span><input id="p_pais" value="" placeholder="Ex: Espanha"/);
+    assert.match(b, /<label>Código do país na tabela X \(opcional\)<input id="p_paisCodigo"[^>]*placeholder="Ex: 724"/);
+    assert.match(b, /não vai ao Anexo F: as rendas, os gastos e o imposto pago lá declaram-se no Anexo J \(quadro 7A\)/);
     escrever({ p_pais: 'Espanha' });
     app.imvPaisEscrito();
     assert.equal(app.pForm.pais, 'Espanha');
-    assert.match(el.imv_pais.innerHTML, /<label>Código do país \(tabela X\)<input id="p_paisCodigo"[^>]*placeholder="Opcional"/);
-    assert.match(el.imv_pais.innerHTML, /não vai ao Anexo F: as rendas, os gastos e o imposto pago lá declaram-se no Anexo J \(quadro 7A\)/);
     app.pForm.pais = 'Espanha';
-    conferir('imóvel no estrangeiro', app.propBody(), { obrigatorios: ['p_name'], exemplos: { p_freguesiaCodigo: true, p_fraction: true, p_floor: true,
-      p_registry: true, p_postalCode: true, p_matrix: true, p_licence: true, p_energyCert: true, p_energyClass: true }, deixados: ['p_share_', 'p_room_', 'fn_'] });
+    conferir('imóvel no estrangeiro', app.propBody(), { obrigatorios: ['p_name', 'p_pais'], exemplos: { p_paisCodigo: true, p_floor: true,
+      p_registry: true, p_postalCode: true, p_licence: true, p_energyCert: true, p_energyClass: true }, deixados: ['p_share_', 'p_room_', 'fn_'] });
   });
 
   test('guarda o país e o código; o código com outro formato é recusado; «Portugal» é Portugal', () => {
@@ -230,8 +231,8 @@ describe('D133 · o país do imóvel', () => {
     assert.equal(p.pais, 'Espanha');
     assert.equal(p.paisCodigo, '724');
     avisos.length = 0;
-    guardar({ p_name: 'Paris', p_pais: 'França', p_paisCodigo: '25' });
-    assert.deepEqual(avisos, ['O código do país tem 3 algarismos, como na tabela X das instruções do Anexo J.']);
+    guardar({ p_name: 'Paris', p_pais: 'França', p_paisCodigo: 'FR' });
+    assert.deepEqual(avisos, ['O código do país são 1 a 3 algarismos, como na tabela X das instruções do Anexo J (o Brasil é 76).']);
     assert.equal(app.db.properties.length, 1);
     app.modalStack.length = 0;
     const q = guardar({ p_name: 'Lisboa', p_pais: 'portugal', p_paisCodigo: '620' });

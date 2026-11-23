@@ -26,7 +26,7 @@ function txFilterCount(){
 // as etiquetas, como as datas, contam como UM, sejam uma ou várias
 // Devolve: número de filtros ativos, sem contar as datas.
 function txFilterCountSem(){
-  return (txFilter?1:0)+(txProp?1:0)+(txPaid?1:0)+(txCat?1:0)+(txSub?1:0)+(txNoPayer||txPaid?0:1)+(txEtiq.length?1:0);
+  return (txFilter?1:0)+(txProp?1:0)+(txPaid?1:0)+(txCat?1:0)+(txSub?1:0)+(txNoPayer||txPaid?0:1)+(txEtiq.length?1:0)+(txCt?1:0);
 }
 /* As etiquetas que se podem escolher no filtro: as da lista mestra
    (db.settings.tags, pela ordem de lá), as que algum movimento usa e já não
@@ -120,7 +120,8 @@ function txqTecla(ev,v){
    os movimentos dele, as partes dos lotes que lhe cabem e os movimentos de
    grupo antigos com quota nele), âmbito das contas (ambito.js:inScope),
    pessoa que pagou/recebeu, pesquisa, categoria/subcategoria, etiquetas
-   (basta uma das escolhidas: txTemEtiqueta) e intervalo de datas.
+   (basta uma das escolhidas: txTemEtiqueta), intervalo de datas e o
+   contrato (txCt, só o de um aviso: navegacao.js:goMovimentos).
    «Sem imóvel» quer dizer mesmo sem imóvel: um movimento sem imóvel, sem
    grupo e sem «Todos os imóveis» não é de nenhum imóvel, e um filtro por
    imóvel deixa-o de fora (entrava, como se fosse de todos). Passa sem filtro
@@ -157,6 +158,7 @@ function txMatch(t){
   // entre datas: as ISO comparam-se como texto, e vazio é "sem limite"
   if(txDe&&t.date<txDe)return false;
   if(txAte&&t.date>txAte)return false;
+  if(txCt&&t.contractId!==txCt)return false;
   return true;
 }
 /* O valor de um movimento como os filtros o veem: a parte que cabe ao imóvel
@@ -269,6 +271,7 @@ function filterSummary(){
   if(txProp==='__none__')p.push('sem imóvel');
   else if(String(txProp||'').startsWith('g:'))p.push('grupo '+((grp(txProp.slice(2))||{}).name||''));
   else if(txProp)p.push(propName(txProp));
+  if(txCt)p.push('contrato '+ctName(contract(txCt)));
   if(txPaid)p.push('pago/recebido por '+((owner(txPaid)||{}).name||''));
   if(txCat==='__none__')p.push('sem categoria');else if(txCat)p.push(txCat+(txSub&&txSub!=='__none__'?' / '+txSub:''));
   if(txSub==='__none__')p.push('sem subcategoria');
@@ -276,7 +279,8 @@ function filterSummary(){
   if(!txNoPayer&&!txPaid)p.push('só com pessoa atribuída');   /* com uma pessoa escolhida não conta (txMatch) */
   return esc(p.join(' · '));
 }
-/* um movimento novo assume os filtros ativos; sem filtro, o campo fica vazio
+/* um movimento novo assume os filtros ativos; sem filtro, o campo fica vazio.
+   O contrato de um aviso (txCt) liga-se a uma receita nova.
    Recebe: kind (opcional) — o tipo do movimento ('income', 'expense', …); sem ele assume 'income'.
    Devolve: nada — abre o modal do novo movimento. */
 function newTxFromFilters(kind){
@@ -285,7 +289,8 @@ function newTxFromFilters(kind){
   /* pagar crédito abate capital na ficha do imóvel: sem «Editar a ficha» diz-se antes de abrir o formulário */
   if(kind==='loan'&&pid){const rc=motivoCredito(pid);if(rc)return toast(rc)}
   const daArvore=treeKey(kind)===(cat in catsIn()&&!(cat in cats())?'catsIn':'cats');
-  txModal({kind:kind||'income',propId:pid,preset:{paidBy:txPaid||null,category:daArvore?cat:'',sub:daArvore?sub:''}});
+  const c=(kind||'income')==='income'&&txCt?contract(txCt):null,ct=c&&(!pid||c.propertyId===pid)?c.id:null;
+  txModal({kind:kind||'income',propId:pid,ctId:ct,preset:{paidBy:txPaid||null,category:daArvore?cat:'',sub:daArvore?sub:''}});
 }
 /* "Novo movimento": primeiro o tipo, num menu
    Recebe: after (opcional) — função chamada com o tipo escolhido, em vez do fluxo normal; sem ela segue
@@ -512,7 +517,7 @@ function onTxDatas(){
    (refrescarMovimentos), e por isso esvazia-se aqui, à mão.
    Devolve: nada — redesenha a lista e o painel. */
 function clearTxFilters(){
-  txFilter='';txProp='';txPaid='';txCat='';txSub='';txNoPayer=true;txSearch='';txDe='';txAte='';txEtiq=[];
+  txFilter='';txProp='';txPaid='';txCat='';txSub='';txNoPayer=true;txSearch='';txDe='';txAte='';txEtiq=[];txCt='';
   clearTimeout(_qT);
   const q=document.getElementById('tx_q');if(q&&q.value){q.value='';txqMostrarLimpar(q)}
   closePops();txRerender();
@@ -748,6 +753,8 @@ function txChipsHtml(){
     const rp=txProp==='__none__'?'Sem imóvel':String(txProp||'').startsWith('g:')?'Grupo · '+((grp(txProp.slice(2))||{}).name||''):propName(txProp);
     L.push(txChipSel('txcProp',txProp,txOpcoesImovel(),'txChipImovel','Imóvel',rp,!!txProp,"txLimparFiltro('prop')"));
   }
+  /* o contrato só vem de um aviso (navegacao.js:goMovimentos): um chip ligado, com o × */
+  if(txCt)L.push(`<span class="mov-chip on"><span class="mov-chip-txt">${esc('Contrato '+ctName(contract(txCt)))}</span><button type="button" class="mov-chip-x" aria-label="Limpar o contrato" data-toca="vista" data-click="txLimparFiltro('ct')">${ic('x',14)}</button></span>`);
   const rc=txCat==='__none__'?'Sem categoria':txCat+(txSub?' › '+(txSub==='__none__'?'sem subcategoria':txSub):'');
   L.push(txChipSel('txcCat',txCat,txOpcoesCategoria(),'txChipCategoria','Categoria',rc,!!(txCat||txSub),"txLimparFiltro('cat')"));
   /* as etiquetas são de escolha múltipla, que o menu da casa não tem: o chip
@@ -797,11 +804,13 @@ function txChipComum(){const v=val('txcComum');if(v)aplicarFiltroComum(v)}
 /* O × de um chip ligado: limpa só esse filtro.
    Recebe: qual — 'per' (as datas), 'tipo' (e a categoria, que era da árvore
    dele), 'prop', 'cat' (com a subcategoria), 'pago', 'pessoa' (volta a
-   incluir os movimentos sem pessoa atribuída) ou 'etiq' (todas as etiquetas).
+   incluir os movimentos sem pessoa atribuída), 'etiq' (todas as etiquetas)
+   ou 'ct' (o contrato de um aviso).
    Devolve: nada — muda o filtro e redesenha. */
 function txLimparFiltro(qual){
   if(qual==='per'){txDe='';txAte=''}
   else if(qual==='etiq')txEtiq=[];
+  else if(qual==='ct')txCt='';
   else if(qual==='tipo'){txFilter='';txCat='';txSub=''}
   else if(qual==='prop')txProp='';
   else if(qual==='cat'){txCat='';txSub=''}
@@ -1026,7 +1035,7 @@ function txFiltrosFechar(){txFiltAberto=false}
 // limpa os filtros próprios dos movimentos no estado (o botão dos estados vazios,
 // via limparFiltroAtual → anaClear, que limpa o proprietário e repinta)
 // Devolve: nada — só o estado.
-function txFiltrosLimpar(){txFilter='';txProp='';txPaid='';txCat='';txSub='';txNoPayer=true;txSearch='';txDe='';txAte='';txEtiq=[]}
+function txFiltrosLimpar(){txFilter='';txProp='';txPaid='';txCat='';txSub='';txNoPayer=true;txSearch='';txDe='';txAte='';txEtiq=[];txCt=''}
 /* O que os Movimentos acrescentam ao menu de toque longo de um IMÓVEL (data-lp
    "prop:<id>"): «Registar despesa», já com o imóvel escolhido. Só onde posso
    adicionar movimentos — a condição que vivia no ficheiro dos imóveis e agora

@@ -306,6 +306,40 @@ function txGroupOwners(t){
    Recebe: t — o movimento.
    Devolve: o texto ('pelo valor de mercado'…); '' sem divisão escolhida. */
 const psplitLabel=t=>({equal:'em partes iguais',value:'pelo valor de mercado',purchase:'pelo valor de aquisição',pct:'por quotas a definir',percent:'por percentagem',amount:'por valor certo',adjust:'por ajuste'})[(t.psplit||{}).mode]||'';
+/* Dois imóveis são frações do mesmo prédio em propriedade horizontal (CIRS
+   art. 41.º n.º 3, N114) quando a ficha o diz: o mesmo artigo matricial
+   urbano na mesma freguesia (o artigo é o do prédio; a fração é que as
+   distingue), ou a mesma rua e o mesmo número de porta, sem códigos postais
+   nem localidades diferentes. Sem esses dados não se adivinha: dois imóveis
+   quaisquer de um grupo não são frações do mesmo prédio.
+   Recebe: a, b — os imóveis.
+   Devolve: true quando a ficha diz que são do mesmo prédio. */
+function mesmoPredio(a,b){
+  if(!a||!b||a.id===b.id)return false;
+  const n=v=>String(v==null?'':v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^0-9a-z]/g,'');
+  const fa=n(a.freguesiaCodigo),ma=n(a.matrix);
+  if(fa&&ma&&a.tipoPredio!=='R'&&b.tipoPredio!=='R'&&fa===n(b.freguesiaCodigo)&&ma===n(b.matrix))return true;
+  const ra=n(a.street),pa=n(a.doorNumber);
+  if(!ra||!pa||ra!==n(b.street)||pa!==n(b.doorNumber))return false;
+  const igualOuFalta=(x,y)=>!x||!y||x===y;
+  return igualOuFalta(n(a.postalCode),n(b.postalCode))&&igualOuFalta(n(a.locality),n(b.locality));
+}
+/* A frase da permilagem, por baixo dos modos da divisão de um movimento de
+   grupo (ou de «Todos os imóveis») entre imóveis — quem a pinta é o
+   movimento.js:psplitSect: quando dois ou mais dos imóveis são frações do
+   mesmo prédio (mesmoPredio), os encargos comuns repartem-se pela
+   permilagem de cada fração (CIRS art. 41.º n.º 3), e a divisão por omissão
+   é em partes iguais. O modo «Quotas a definir» leva a permilagem tal como
+   está no título (800 e 200 dão 80 % e 20 %), sem contas. Entre imóveis que
+   não são frações do mesmo prédio, nada (a lei só fala delas).
+   Recebe: ps — os imóveis da divisão (array de objetos; txProps).
+   Devolve: o texto (por escapar), ou '' sem frações do mesmo prédio. */
+function psplitFrasePermilagem(ps){
+  const xs=(ps||[]).filter(Boolean),fr=xs.filter(p=>xs.some(q=>mesmoPredio(p,q)));
+  if(fr.length<2)return '';
+  return 'Frações do mesmo prédio ('+listaE(fr.map(p=>String(p.name||'Sem nome')))+'): os encargos comuns, como o condomínio, repartem-se pela permilagem de cada uma, a do título da propriedade horizontal (CIRS art. 41.º n.º 3). '
+    +'Escolhe «Quotas a definir» e escreve a permilagem de cada fração — 800 e 200, por exemplo.';
+}
 /* o que entra nas contas entre donos: receitas, despesas e prestações com pessoa indicada.
    Dívidas a terceiros (recebidas ou pagas) ficam de fora — são de quem as contraiu.
    Recebe: t — o movimento.

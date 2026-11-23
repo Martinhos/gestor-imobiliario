@@ -92,7 +92,7 @@ describe('D115, D114 — as rendas abaixo da do contrato com o recibo emitido', 
       + 'e o que se descontou (a comissão da gestora, uma obra) como despesa. Se o inquilino descontou um encargo, não o confirmes também como despesa. '
       + 'Se pagou só uma parte, o resto fica em dívida e não se declara');
     assert.equal(a[0].nivel, 'aviso');
-    assert.equal(a[0].abrir, "go('transactions')");
+    assert.equal(a[0].abrir, "goMovimentos('2026','v1','rendas','income','C1')", 'N134: as rendas do contrato');
   });
 
   test('um mês só abre o movimento; o inquilino empresa diz a declaração que ele entrega; os encargos do Q13 pelo nome', () => {
@@ -184,14 +184,15 @@ describe('D117, D119, D121 — os benefícios do quadro 6', () => {
     assert.equal(avisos(/está marcado, mas não conta/).length, 0);
   });
 
-  test('6C marcado num prédio urbano: não conta, as rendas por inteiro, com o «Responder» do contrato', () => {
+  // N127: o que falha é o tipo de prédio — o toque leva à ficha do imóvel
+  test('6C marcado num prédio urbano: não conta, as rendas por inteiro, com o toque na ficha do imóvel', () => {
     imovel({ tipoPredio: 'U' });
     contrato({ rent: 500, start: '2019-05-01' }, { finalidade: 'nh', egf: true, celebracao: '2019-05-01' });
     rendas(500);
     const a = avisos(/quadro 6C/);
     assert.equal(a.length, 1);
     assert.match(a[0].texto, /só vale num prédio rústico\. Sem ele, as rendas contam por inteiro, e não a 50 %$/);
-    assert.equal(a[0].abrir, "ctIrParaPergunta('C1','c_fegf')");
+    assert.equal(a[0].abrir, "propView('v1')");
   });
 
   test('6B marcado num contrato de habitação: as obras a 100 %', () => {
@@ -267,7 +268,7 @@ describe('D122 — as despesas do Splitwise com a quota já cortada', () => {
     assert.equal(a.length, 1);
     assert.match(a[0].texto, /^2 despesas de 2026 importadas do Splitwise com o valor já cortado pela tua quota, e com outra igual no mesmo imóvel/);
     assert.match(a[0].texto, /apaga a que está a mais/);
-    assert.equal(a[0].abrir, "go('transactions')");
+    assert.equal(a[0].abrir, "goMovimentos('2026','v1','Condomínio','expense','')", 'N134: as despesas do Condomínio do imóvel');
     let chamou = false;
     app.confirmModal = () => { chamou = true; };
     app.fiscoAvReporSplitwise(2026, 'ana');
@@ -342,22 +343,26 @@ describe('D136, D135 — o código da freguesia', () => {
     assert.equal(avisos(/código da freguesia/).length, 0);
   });
 
-  test('a união desagregada em 2025: âmbar com as repostas, desde a declaração de 2025; cala-se com o «Confirmei na caderneta»', () => {
+  // N087: o código da união deixou de existir — falta, e o «Confirmei na caderneta» não o cala
+  test('a união desagregada em 2025: falta com as repostas, desde a declaração de 2025; o «Confirmei na caderneta» não a cala', () => {
     imovel({ freguesiaCodigo: '010123' }); contrato({ start: '2024-03-01' });
     rendas(600, M12, {}, 2024);
     rendas(600, M12, {}, 2025);
     rendas(600);
     const a = avisos(/união de freguesias/);
     assert.equal(a.length, 1);
-    assert.equal(a[0].texto, 'Imóvel T2 Arroios: o código da freguesia, 010123, é o de uma união de freguesias desagregada em outubro de 2025 (Lei 25-A/2025). '
+    assert.equal(a[0].texto, 'Imóvel T2 Arroios: o código da freguesia, 010123, é o de uma união de freguesias desagregada em outubro de 2025 (Lei 25-A/2025) e deixou de existir. '
       + 'O prédio passou para uma destas: 010128 Agadão, 010132 Belazaima do Chão ou 010134 Castanheira do Vouga, e o artigo matricial pode ter mudado. '
-      + 'Confirma os dois na caderneta predial atual e corrige-os na ficha do imóvel; se estão certos, marca lá «Confirmei na caderneta»');
-    assert.equal(a[0].nivel, 'aviso');
-    assert.equal(a[0].abrir, "propView('v1')");
+      + 'Escolhe a freguesia reposta pela caderneta predial atual e corrige o código e o artigo na ficha do imóvel: é o que vai à declaração.');
+    assert.equal(a[0].nivel, 'falta');
+    assert.equal(a[0].abrir, "imvAbrirNoCampo('v1','p_freguesiaCodigo')");
+    assert.equal(a[0].abrirTexto, 'Corrigir o código');
     assert.equal(avisos(/união de freguesias/, 2025).length, 1);
     assert.equal(avisos(/união de freguesias/, 2024).length, 0, 'nas de 2024 o código da união é o certo');
     app.db.properties[0].matrizConfirmada = '2026-11-18';
-    assert.equal(avisos(/união de freguesias/).length, 0);
+    const b = avisos(/união de freguesias/);
+    assert.equal(b.length, 1, 'confirmado, o código continua a não existir');
+    assert.match(b[0].texto, /A marca «Confirmei na caderneta» não chega: este código já não está em nenhuma caderneta.$/);
   });
 });
 

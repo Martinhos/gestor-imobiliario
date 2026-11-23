@@ -61,25 +61,30 @@ describe('o formulário do contrato: a secção Fisco', () => {
     for (const v of ['', 'declarado', 'naoDeclarado']) assert.match(dobra, new RegExp("setFiscoEstado\\('" + v + "'\\)"), 'o botão «' + v + '»');
     // o segmentado da casa (role radio), com a escolha ligada
     assert.match(dobra, /<div class="segm ct-at-segm" role="radiogroup" aria-labelledby="c_fiscoRot">/);
-    assert.match(dobra, /role="radio" aria-checked="true" class="on" data-toca="rascunho" data-click="setFiscoEstado\(''\)">Por indicar</);
-    assert.match(dobra, /aria-checked="false"[^>]*>Declarado</);
-    assert.match(dobra, /aria-checked="false"[^>]*>Não declarado</);
-    assert.match(dobra, /Comunicaste este contrato às Finanças \(Modelo 2\)\?/);
+    // as três respostas respondem à pergunta do grupo (N061, D8 e)
+    assert.match(dobra, /<span class="flabel" id="c_fiscoRot">Já o comunicaste às Finanças\?<\/span>/);
+    assert.match(dobra, /role="radio" aria-checked="true" class="on" data-toca="rascunho" data-click="setFiscoEstado\(''\)">Ainda não</);
+    assert.match(dobra, /aria-checked="false"[^>]*>Sim, tem n\.º</);
+    assert.match(dobra, /aria-checked="false"[^>]*>Não vou declarar</);
+    assert.match(dobra, /Com «Ainda não», as rendas contam no resumo do Anexo F e a app lembra-te o prazo do Modelo 2\./);
     assert.doesNotMatch(dobra, /id="c_fnum"/, 'sem estado, nenhum campo do declarado');
     // o grupo vem logo a seguir ao do prazo
     assert.ok(html.indexOf('id="ct_prazo"') < html.indexOf('id="ct_fisco"'));
   });
 
-  test('por indicar, com o início escrito, diz até quando se entrega o Modelo 2', () => {
-    app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800, start: '2026-03-10' });
-    assert.match(dobraFisco(app.ctBody()), /O prazo é 30\/04\/2026, o fim do mês seguinte ao início\./);
+  test('por indicar, com o início escrito, diz até quando se entrega o Modelo 2 (no passado, se já passou)', () => {
+    app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800, start: (ANO + 1) + '-03-10' });
+    assert.match(dobraFisco(app.ctBody()), new RegExp('O prazo é 30/04/' + (ANO + 1) + ', o fim do mês seguinte ao início\\.'));
+    app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800, start: (ANO - 1) + '-03-10' });
+    assert.match(dobraFisco(app.ctBody()), new RegExp('O prazo era 30/04/' + (ANO - 1) + ', o fim do mês seguinte ao início: comunica-o quanto antes\\.'));
   });
 
-  test('declarado: pede o número da AT, a finalidade, a celebração, se renova e as renovações', () => {
+  test('declarado: pede o número da AT, a finalidade, a celebração e as renovações; o «Renovável» saiu', () => {
     app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800,
       fisco: { estado: 'declarado', numero: '1234567', finalidade: 'hnp', renovacoes: [{ id: 'R1', inicio: '2025-01-01', fim: '2025-12-31' }] } });
     const dobra = dobraFisco(app.ctBody());
-    for (const id of ['c_fnum', 'c_ffin', 'c_fcel', 'c_fren']) assert.match(dobra, new RegExp('id="' + id + '"'), id);
+    for (const id of ['c_fnum', 'c_ffin', 'c_fcelOutro', 'c_fcel']) assert.match(dobra, new RegExp('id="' + id + '"'), id);
+    assert.doesNotMatch(dobra, /id="c_fren"/, 'nada no IRS lê o «Renovável» (N060)');
     assert.match(dobra, /id="c_fnum"[^>]*inputmode="numeric"[^>]*value="1234567"/);
     assert.match(dobra, /Vem no comprovativo do Modelo 2/);
     for (const [, rotulo] of app.FISCO_FINALIDADES) assert.match(dobra, new RegExp(rotulo), 'a finalidade «' + rotulo + '»');
@@ -91,7 +96,7 @@ describe('o formulário do contrato: a secção Fisco', () => {
     assert.match(dobra, /addRenov\(\)/);
     assert.match(dobra, /Adicionar renovação/);
     assert.match(dobra, /quadro 4\.2A/);
-    assert.match(dobra, /aria-checked="true" class="on"[^>]*>Declarado</, 'o segmentado diz o estado');
+    assert.match(dobra, /aria-checked="true" class="on"[^>]*>Sim, tem n\.º</, 'o segmentado diz o estado');
     assert.doesNotMatch(dobra, /id="c_fces"/, 'sem fim nem inatividade não há cessação');
   });
 
@@ -116,7 +121,7 @@ describe('o formulário do contrato: a secção Fisco', () => {
     assert.match(dobra, /fica fora do resumo do Anexo F e dos prazos da AT\. Podes mudar isto quando quiseres\./);
     assert.doesNotMatch(dobra, /class="[^"]*\b(danger|neg|amber|warn|late)\b/, 'sem cor de perigo nem de aviso');
     assert.doesNotMatch(dobra, /ilegal|obrigat|coima|multa|risco/i, 'sem ameaça');
-    assert.match(dobra, /aria-checked="true" class="on"[^>]*>Não declarado</);
+    assert.match(dobra, /aria-checked="true" class="on"[^>]*>Não vou declarar</);
   });
 
   test('a dica da taxa reduzida: só no declarado, e só em habitação permanente', () => {
@@ -175,7 +180,7 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
     app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800, fisco: { estado: 'declarado' } });
     // a linha por preencher entra como a do addRenov: um contrato guardado não tem renovações sem início
     app.cForm.fisco.renovacoes.push({ id: 'R1', inicio: '', fim: '' });
-    desfazerDom = domCom({ c_fnum: ' 1234567 ', c_ffin: 'hp', c_fcel: '2024-03-01', c_fren: '1',
+    desfazerDom = domCom({ c_fnum: ' 1234567 ', c_ffin: 'hp', c_fcelOutro: true, c_fcel: '2024-03-01', c_fren: '1',
       c_rini_R1: '2025-03-01', c_rfim_R1: '2026-02-28', c_fces: 'fim do prazo', c_cesData: '2026-01-31', c_cesMot: '02', c_rent: '800', c_active: true });
     app.collectCt();
     const f = app.cForm.fisco;
@@ -183,7 +188,7 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
     assert.equal(f.numero, '1234567', 'aparado');
     assert.equal(f.finalidade, 'hp');
     assert.equal(f.celebracao, '2024-03-01');
-    assert.equal(f.renovavel, true);
+    assert.equal(f.renovavel, null, 'o «Renovável» já não se lê do ecrã (N060)');
     igual(f.renovacoes, [{ id: 'R1', inicio: '2025-03-01', fim: '2026-02-28' }]);
     assert.equal(f.cessacaoMotivo, '', 'o texto livre antigo do motivo já não se escreve');
     igual(f.cessacao, { data: '', motivo: '' }, 'em vigor, a cessação não se lê');
@@ -196,15 +201,16 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
   });
 
   test('collectCt: «Não» é false, «Não sei» é null, e o que não é válido cai', () => {
-    app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800, fisco: { estado: 'declarado', renovavel: true, finalidade: 'hp' } });
-    desfazerDom = domCom({ c_fren: '0', c_ffin: 'inventada', c_fcel: 'ontem', c_rent: '800' });
+    app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800, fisco: { estado: 'declarado', renovavel: true, finalidade: 'hp', obrasSemOutroUso: true } });
+    desfazerDom = domCom({ c_fobras: '0', c_ffin: 'inventada', c_fcelOutro: true, c_fcel: 'ontem', c_rent: '800' });
     app.collectCt();
-    assert.equal(app.cForm.fisco.renovavel, false);
+    assert.equal(app.cForm.fisco.obrasSemOutroUso, false);
     assert.equal(app.cForm.fisco.finalidade, '', 'uma finalidade fora de FISCO_FINALIDADES não se guarda');
     assert.equal(app.cForm.fisco.celebracao, '', 'só datas ISO');
-    desfazerDom(); desfazerDom = domCom({ c_fren: '', c_rent: '800' });
+    assert.equal(app.cForm.fisco.renovavel, true, 'o «Renovável» antigo fica como estava: já não se pergunta (N060)');
+    desfazerDom(); desfazerDom = domCom({ c_fobras: '', c_rent: '800' });
     app.collectCt();
-    assert.equal(app.cForm.fisco.renovavel, null);
+    assert.equal(app.cForm.fisco.obrasSemOutroUso, null);
   });
 
   test('collectCt sem os campos no ecrã (contrato não declarado) não toca no bloco', () => {
@@ -318,7 +324,8 @@ describe('o formulário do movimento', () => {
     app.db.contracts[0].fisco.estado = 'declarado';
     /* o modo do formulário vive no txModo (movimento.js), à parte do movimento */
     for (const modo of [{ modo: 'tpl' }, { modo: 'tpl', tplId: 'X' }, { modo: 'rec' }, { modo: 'rec', recId: 'X' }]) {
-      app.tForm = app.normTx({ kind: 'income', propertyId: 'P1', contractId: 'C1' });
+      // a retenção só tem o campo quando conta (a maqueta 2 do movimento): aqui já tem valor
+      app.tForm = app.normTx({ kind: 'income', propertyId: 'P1', contractId: 'C1', retencao: 25 });
       app.txModo = modo;
       const nome = modo.modo + (modo.tplId || modo.recId ? ' a alterar' : ' novo');
       const html = app.txBody();
@@ -338,7 +345,13 @@ describe('o formulário do movimento', () => {
   });
 
   test('uma despesa escolhe a coluna do Anexo F, com a regra da categoria à cabeça', () => {
+    // onde a categoria decide, uma linha de leitura com «Mudar» (a maqueta 3 do movimento);
+    // o seletor abre-se com o «Mudar» (_colAberta), com uma coluna escolhida ou sem regra
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Impostos', sub: 'IMI' });
+    assert.doesNotMatch(app.txBody(), /id="t_irscol"/);
+    assert.match(app.txBody(), /data-click="txMudarColuna\(\)"/);
+    const aberta = (x) => Object.assign(app.normTx(x), { _colAberta: true });
+    app.tForm = aberta({ kind: 'expense', propertyId: 'P1', category: 'Impostos', sub: 'IMI' });
     let html = app.txBody();
     assert.match(html, /id="t_irscol"/);
     assert.match(html, /Pela categoria: IMI/);
@@ -346,21 +359,21 @@ describe('o formulário do movimento', () => {
     assert.match(html, /Só o que pagaste para obter a renda entra/);
     // a primeira opção segue a categoria e a subcategoria (os «Impostos» sem subcategoria
     // passaram a «a confirmar» na vaga 1 do IRS, dados.js:IRS_MAPA0; o condomínio não mudou)
-    app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Condomínio' });
+    app.tForm = aberta({ kind: 'expense', propertyId: 'P1', category: 'Condomínio' });
     assert.match(app.txBody(), /Pela categoria: Condomínio/);
-    app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Impostos', sub: 'Taxas municipais' });
+    app.tForm = aberta({ kind: 'expense', propertyId: 'P1', category: 'Impostos', sub: 'Taxas municipais' });
     assert.match(app.txBody(), /Pela categoria: Taxas autárquicas/);
-    app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Manutenção e reparações', sub: 'Pragas' });
+    app.tForm = aberta({ kind: 'expense', propertyId: 'P1', category: 'Manutenção e reparações', sub: 'Pragas' });
     assert.match(app.txBody(), /Pela categoria: Conservação e manutenção/);
     // a regra que depende do caso, e a omissão, dizem «A confirmar» — e não «Pela categoria: » vazio
     // (o texto exato é do movimento.js: «a confirmar — escolhe a coluna», desde a vaga 2)
-    app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Outros' });
+    app.tForm = aberta({ kind: 'expense', propertyId: 'P1', category: 'Outros' });
     assert.match(app.txBody(), /Pela categoria: [Aa] confirmar\b/);
     assert.doesNotMatch(app.txBody(), /Pela categoria: </);
-    app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Categoria da Ana' });
+    app.tForm = aberta({ kind: 'expense', propertyId: 'P1', category: 'Categoria da Ana' });
     assert.match(app.txBody(), /Pela categoria: [Aa] confirmar\b/);
     // com uma coluna escolhida à mão, a primeira opção continua a dizer a regra — e a escolha fica marcada
-    app.tForm = app.normTx({ kind: 'expense', propertyId: 'P1', category: 'Impostos', sub: 'IMI', irsCol: 'obras24' });
+    app.tForm = aberta({ kind: 'expense', propertyId: 'P1', category: 'Impostos', sub: 'IMI', irsCol: 'obras24' });
     html = app.txBody();
     assert.match(html, /Pela categoria: IMI/);
     assert.match(html, /id="t_irscol" value="obras24"/);
@@ -466,8 +479,10 @@ describe('a ficha do movimento', () => {
 
   test('uma despesa diz a coluna do Anexo F e de onde veio a decisão', () => {
     monta();
+    // a linha lê a do resumo (a despesa só vai à Declaração num ano com rendas do imóvel): uma renda do C1 no ano
+    const rendaDoAno = app.normTx({ id: 'RA', kind: 'income', label: 'Renda', amount: 800, propertyId: 'P1', contractId: 'C1', category: 'Rendas', sub: 'Renda mensal', date: ANO + '-02-08' });
     const despesa = (extra) => {
-      app.db.transactions = [app.normTx(Object.assign({ id: 'D1', kind: 'expense', label: 'Gasto', amount: 100, propertyId: 'P1', date: ANO + '-03-01' }, extra || {}))];
+      app.db.transactions = [rendaDoAno, app.normTx(Object.assign({ id: 'D1', kind: 'expense', label: 'Gasto', amount: 100, propertyId: 'P1', date: ANO + '-03-01' }, extra || {}))];
       return app.txFicha('D1');
     };
     // o font-weight:400 da origem passou à classe utilitária: o atributo é class="small u-fw-400"
@@ -482,6 +497,7 @@ describe('a ficha do movimento', () => {
     assert.equal(linha(despesa({ category: 'Impostos', sub: 'AIMI', irsCol: 'outros' }))[0], 'Não dedutível');
     app.db.settings.exclude = { 'cats:Fora': true };
     igual(linha(despesa({ category: 'Fora' })), ['Não dedutível', 'não conta: categoria fora dos totais']);
-    assert.doesNotMatch(renda(), /Anexo F/, 'uma renda não tem coluna');
+    // uma renda não tem coluna de gastos (a linha dela, se a ficha a disser, é a do contrato)
+    assert.doesNotMatch(renda(), /pela (sub)?categoria|escolhida neste movimento/, 'uma renda não tem coluna');
   });
 });

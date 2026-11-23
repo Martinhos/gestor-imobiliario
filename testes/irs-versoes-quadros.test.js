@@ -97,7 +97,7 @@ describe('D21/D51 — as naturezas 05 (indemnizações) e 02 (cedência de uso)'
   for (const a of ANOS) {
     test(a + ': os códigos por papel e o texto de cada código da tabela', () => {
       const ver = v(a);
-      assert.deepEqual(ver.naturezas, { habitacional: '07', naoHabitacional: '06', indemnizacao: '05', outras: '02', dhd: '01' }, 'o dhd é a prestação mensal do 4.3 (D120)');
+      assert.deepEqual(ver.naturezas, { habitacional: '07', naoHabitacional: '06', indemnizacao: '05', outras: '02', dhd: '01', mobiliario: '03' }, 'o dhd é a prestação mensal do 4.3 (D120); o 03 é o aluguer dos móveis à parte (N096)');
       assert.deepEqual(Object.keys(ver.naturezasTexto), ['01', '02', '03', '04', '05', '06', '07']);
       assert.equal(ver.naturezasTexto['05'], 'Indemnizações que visem compensar perdas de rendimentos da categoria F');
       assert.equal(ver.naturezasTexto['02'], 'Cedência de uso do prédio ou de parte dele, que não arrendamento');

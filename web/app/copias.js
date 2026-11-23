@@ -293,12 +293,22 @@ function celulaNumero(v,casas){
    categoria. Pensado para abrir diretamente no Excel: a marca de ordem de bytes
    põe-na o download, e as células passam pelo celulaCsv. No fim vai o que o IRS
    pede: o mês a que a renda respeita, a retenção na fonte, se o recibo
-   eletrónico foi emitido (só nas rendas), a coluna do Anexo F (só nas despesas,
-   pela mesma regra do resumo: irs-papeis.js:irsColunaDe), e o estado fiscal e o
-   número na AT do contrato a que o movimento está preso.
+   eletrónico foi emitido (só nas rendas), a coluna do Anexo F (só nas despesas:
+   com a Declaração ligada, o que ela faz à despesa — a coluna com que conta, ou
+   porque fica de fora, como a ficha, fisco-resumo.js:fiscoDespesaNaDeclaracao,
+   N113; sem ela, a regra da categoria, irs-papeis.js:irsColunaDe), e o estado
+   fiscal e o número na AT do contrato a que o movimento está preso.
    Devolve: nada — dispara a descarga do CSV. */
 function downloadCsv(){
   const estadoFisco=c=>!c?'':ctDeclarado(c)?'declarado':ctNaoDeclarado(c)?'nao declarado':'por indicar';
+  const memo={};
+  const colunaIrs=t=>{
+    if(t.kind!=='expense')return '';
+    const d=servicoLigado('fisco')?fiscoDespesaNaDeclaracao(t,memo):null;
+    if(!d)return irsColunaNome(irsColunaDe(t).col);
+    if(d.conta&&d.col)return d.col==='obras24'?'Obras dos 24 meses':irsColunaNome(d.col);
+    return d.texto||irsColunaNome(irsColunaDe(t).col);
+  };
   const rows=[['data','descricao','tipo','valor','imovel','pago_por','recebido_por','divisao','quarto','inquilinos','categoria','subcategoria','etiquetas','credor','comentarios','capital','juros','selo',
       'mes_renda','retencao','recibo','coluna_irs','contrato_fisco','contrato_at'],
     ...db.transactions.map(t=>{const c=t.contractId?contract(t.contractId):null,p=prop(t.propertyId);
@@ -306,7 +316,7 @@ function downloadCsv(){
         t.paidBy&&owner(t.paidBy)?owner(t.paidBy).name:'',t.toId&&owner(t.toId)?owner(t.toId).name:'',splitLabel(t),
         c&&c.roomId?roomName(p,c.roomId):'',c?ctNames(c):'',t.category||'',t.sub||'',(t.tags||[]).join(' / '),
         t.creditor||'',t.notes||'',t.principal||'',t.interest||'',t.stamp||'',
-        t.periodo||'',t.retencao||'',ehRenda(t)?(t.recibo?'sim':'nao'):'',t.kind==='expense'?irsColunaNome(irsColunaDe(t).col):'',
+        t.periodo||'',t.retencao||'',ehRenda(t)?(t.recibo?'sim':'nao'):'',colunaIrs(t),
         estadoFisco(c),c?fiscoDe(c).numero:'']})];
   download('movimentos-imobiliarios.csv','text/csv;charset=utf-8',rows.map(r=>r.map(celulaCsv).join(';')).join('\n'));
   toast('CSV exportado.');

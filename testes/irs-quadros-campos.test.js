@@ -209,8 +209,11 @@ describe('D72 / D98 · prejuízo, e não imposto negativo; os totais dos quadros
       return m && m[1];
     };
     const soma = (q) => Math.round(r.linhas.filter((l) => l.quadro === q && !l.isencao).reduce((n, l) => n + l.imposto, 0) * 100) / 100;
-    assert.equal(total('4.1'), app.euro2(soma('4.1')));
-    assert.equal(total('4.2'), app.euro2(soma('4.2')));
+    /* desde a D8 (maqueta 6) um quadro com uma linha só não tem total: a linha já o diz */
+    for (const q of ['4.1', '4.2']) {
+      if (r.linhas.filter((l) => l.quadro === q).length > 1) assert.equal(total(q), app.euro2(soma(q)), 'o total do ' + q);
+      else assert.equal(total(q), null, 'o ' + q + ' com uma linha, sem total');
+    }
     assert.equal(Math.round((soma('4.1') + soma('4.2')) * 100) / 100, r.totais.imposto, 'os totais dos quadros somam o imposto estimado do KPI');
   });
 });
@@ -270,7 +273,8 @@ describe('D84 · o 8B com o prazo das substituições', () => {
   test('rendas de 2024 recebidas em 2026: as substituições até 30/07/2027', () => {
     const r = resumoAMao((l) => { if (l.contratoId === 'C1') l.anosAnteriores = [{ ano: 2024, valor: 2000 }]; });
     const h = texto(app.fiscoAnosAnterioresCard(r));
-    assert.match(h, /no 8B se entregares as declarações de substituição desses anos \(até cinco anos para trás\) até 30\/07\/2027, 30 dias depois do fim do prazo da entrega \(CIRS art\. 74\.º n\.º 8\)\./);
+    /* o texto é o das exportações (fisco-exportar.js:fiscoQuadro8Texto, N082): o 8B com a data */
+    assert.match(h, /o 8B se preferires entregar declarações de substituição dos anos a que respeitam \(até cinco anos para trás\), até 30\/07\/2027, 30 dias depois do fim do prazo da entrega\./);
   });
 
   test('de ponta a ponta: uma renda de novembro de 2024 paga em 2026', () => {

@@ -7,7 +7,9 @@
    reembolsos (D125), as linhas noutra moeda sem o valor em euros escrito
    (D129), as que já estão na base deste imóvel (pela chave da linha, swKey, e
    por multiplicidade — D126), as apagadas de propósito depois de importadas
-   (settings.swIgnoradas) e as de antes do «Só desde» (D127), listadas as que
+   (na ficha do imóvel, p.swIgnoradas, para valerem a todas as contas dele — N102;
+   as antigas nas definições, settings.swIgnoradas) e as de antes do «Só desde»
+   (D127), listadas as que
    não estão no imóvel. Num grupo com quem não é dono (o inquilino), a janela
    pergunta quem e a parte dessas pessoas sai do custo (D11). O «Anular» anula
    só um lote meu, e diz quanto sai de cada ano (D128). */
@@ -120,10 +122,10 @@ function swEhAcerto(r,c,cat,desc,custo){
 const swEmEuros=m=>{const s=String(m||'').trim().toUpperCase();return !s||s==='EUR'||s==='€'};
 /* O imóvel tem outras contas que podem apagar as despesas importadas (é de
    outro dono, de colaboração, com comproprietários com conta ou com
-   colaboradores)? As apagadas de propósito ficam na lista de quem as apagou
-   (settings.swIgnoradas, que é da conta), e a reimportação de outra pessoa
-   não a vê: nestas casas o «Só desde» por omissão continua a cortar
-   (swDesdeOmissao). Sem sessão não há outras contas.
+   colaboradores)? As apagadas de propósito vivem na ficha do imóvel
+   (p.swIgnoradas, N102) e valem para todas, por isso o «Só desde» por omissão
+   já não depende disto; a pré-visualização diz «apagadas neste imóvel» e não
+   «que apagaste» (swPrevHtml). Sem sessão não há outras contas.
    Recebe: p — o imóvel (aguenta null).
    Devolve: true ou false. */
 function swCasaComOutros(p){
@@ -131,22 +133,20 @@ function swCasaComOutros(p){
   return ownersOfProp(p).length>1||!!p._sharedFrom||!!p._cargo||(Array.isArray(p._colaboradores)&&p._colaboradores.length>0);
 }
 /* O dia por omissão do «Só desde» (D127). As repetidas já se apanham pela
-   chave da linha (swKey) e as apagadas de propósito pelo swIgnoradas: o corte
-   por data só tirava as despesas lançadas tarde no Splitwise (com a data de
-   antes da última importação), que são gastos que se deduzem. Por isso só
-   corta por omissão quando o imóvel tem despesas do Splitwise importadas sem
-   a chave (de antes de a app a guardar, cortadas pela quota — o casamento
-   por data, descrição e valor não as apanha), e com a data só delas: o mais
-   tardio entre o dia em que se fez a última dessas importações (o instante
-   do lote, 'b' + ms) e o dia a seguir à mais recente delas. Numa casa com
-   outras contas (swCasaComOutros) conta com todas as importadas, como antes:
-   as apagadas por outra pessoa voltavam sem o corte. Sem nada a cortar,
-   vazio: o ficheiro todo.
+   chave da linha (swKey) e as apagadas de propósito pela lista do imóvel
+   (swIgnoradasDoImovel — a de todas as contas da casa, N102): o corte por data
+   só tirava as despesas lançadas tarde no Splitwise (com a data de antes da
+   última importação), que são gastos que se deduzem. Por isso só corta por
+   omissão quando o imóvel tem despesas do Splitwise importadas sem a chave (de
+   antes de a app a guardar, cortadas pela quota — o casamento por data,
+   descrição e valor não as apanha), e com a data só delas: o mais tardio entre
+   o dia em que se fez a última dessas importações (o instante do lote, 'b' +
+   ms) e o dia a seguir à mais recente delas. É assim também numa casa com
+   outras contas. Sem nada a cortar, vazio: o ficheiro todo.
    Recebe: pid — o id do imóvel.
    Devolve: 'AAAA-MM-DD' ou ''. */
 function swDesdeOmissao(pid){
-  const todas=(db.transactions||[]).filter(t=>t&&t.src==='splitwise'&&t.propertyId===pid);
-  const ts=swCasaComOutros(pid?prop(pid):null)?todas:todas.filter(t=>!t.swKey);
+  const ts=(db.transactions||[]).filter(t=>t&&t.src==='splitwise'&&t.propertyId===pid&&!t.swKey);
   const ds=ts.map(t=>String(t.date||'')).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
   const ms=ts.map(t=>Number(String(t.batch||'').slice(1))).filter(n=>n>0).sort((a,b)=>a-b).pop();
   const dois=x=>String(x).padStart(2,'0'),d=ms?new Date(ms):null;
@@ -319,9 +319,9 @@ const swChave=(iso,desc,custo,cat)=>normSwKey([iso,desc,(Number(custo)||0).toFix
      importada antes da chave com a mesma data, descrição e custo total),
      contada por multiplicidade e só contra a base de antes (D126): duas iguais
      no ficheiro e uma na base, entra uma;
-   · 'ignorada' — apagada de propósito depois de importada
-     (settings.swIgnoradas); 'antes' — de antes do «Só desde» (D127), com
-     jaNaBase quando, sem o corte, seria repetida ou ignorada;
+   · 'ignorada' — apagada de propósito depois de importada, por quem quer que
+     seja da casa (swIgnoradasDoImovel, N102); 'antes' — de antes do «Só desde»
+     (D127), com jaNaBase quando, sem o corte, seria repetida ou ignorada;
    · com pessoas que não são donas (opts.naoDonos, D11): a despesa entra com a
      parte dos donos (swParteDosDonos; parteFora, o que saiu do custo, na moeda
      da linha, e foraEur, o mesmo em euros); 'deOutros' — cabe toda a quem não
@@ -332,11 +332,12 @@ const swChave=(iso,desc,custo,cat)=>normSwKey([iso,desc,(Number(custo)||0).toFix
    pessoas que não são donas (swNaoDonos)}.
    Devolve: {linhas: [{i, tipo, date, label, custo, moeda, amount, category,
    sub, col, swKey, jaNaBase?, parteFora?, foraEur?}], cols: as colunas (swColunas),
-   antigas: quantas despesas do Splitwise sem chave tem o imóvel}. */
+   antigas: quantas despesas do Splitwise sem chave tem o imóvel, comOutros: o
+   imóvel tem outras contas (swCasaComOutros)}. */
 function swPrepare(opts){
   const o=opts||{},c=swColunas(),pid=o.pid||'',euros=o.euros||{},nao=Array.isArray(o.naoDonos)?o.naoDonos:[];
   const desde=/^\d{4}-\d{2}-\d{2}$/.test(String(o.desde||''))?String(o.desde):'';
-  const ign=new Set(normSwIgnoradas(((db.settings||{}).swIgnoradas)));
+  const ignIds=swIgnoradasDoImovel(pid),ign={has:k=>ignIds.has(swIdDaChave(k))};
   /* o que já está na base deste imóvel, antes desta importação */
   const naBase=new Map(),antigas=[];
   (db.transactions||[]).forEach(t=>{
@@ -381,7 +382,7 @@ function swPrepare(opts){
     }
     linhas.push(l);
   });
-  return {linhas,cols:c,antigas:antigas.length};
+  return {linhas,cols:c,antigas:antigas.length,comOutros:swCasaComOutros(pid?prop(pid):null)};
 }
 /* Uma linha da pré-visualização entra na base: uma despesa, ou uma linha
    noutra moeda com o valor em euros escrito.
@@ -524,7 +525,9 @@ function swPrevHtml(prep){
   const rep=de('repetida');
   if(rep.length)fora.push(`${swN(rep.length,'despesa que já estava importada','despesas que já estavam importadas')} neste imóvel.`);
   const ign=de('ignorada');
-  if(ign.length)fora.push(`${swN(ign.length,'despesa que apagaste','despesas que apagaste')} depois de ${ign.length===1?'a':'as'} importar.`);
+  if(ign.length)fora.push(prep&&prep.comOutros
+    ?`${swN(ign.length,'despesa apagada','despesas apagadas')} neste imóvel depois de ${ign.length===1?'importada':'importadas'}, por ti ou por outra pessoa da casa.`
+    :`${swN(ign.length,'despesa que apagaste','despesas que apagaste')} depois de ${ign.length===1?'a':'as'} importar.`);
   const antes=de('antes');
   if(antes.length)fora.push(`${swN(antes.length,'despesa','despesas')} de antes do «Só desde».`);
   const deOutros=de('deOutros');
@@ -617,7 +620,7 @@ function swLotesMeus(){
    quantas despesas e quanto saem de cada ano, a âmbar os anos cujo prazo da
    declaração já acabou. Uma importação de outra pessoa da casa não se anula
    daqui. As despesas anuladas não vão à lista das apagadas de propósito
-   (settings.swIgnoradas): podem voltar a importar-se.
+   (swIgnorar): podem voltar a importar-se.
    Devolve: nada — se for confirmado, grava e redesenha a vista. */
 function undoImport(){
   const l=swLotesMeus().pop();
@@ -627,21 +630,51 @@ function undoImport(){
     db.transactions=db.transactions.filter(t=>t.batch!==l.batch);save();render();toast('Importação anulada.');
   });
 }
-/* Lembra as linhas do Splitwise de movimentos apagados de propósito
-   (settings.swIgnoradas, D127): a reimportação do grupo não as repõe. É quem
-   apaga um movimento que chama (movimento.js) — o «Anular a última
-   importação» não. Não grava: quem apaga grava.
+/* As linhas do Splitwise apagadas de propósito que valem para um imóvel (N102):
+   as da ficha dele (p.swIgnoradas — de quem quer que seja da casa) e as que
+   ficaram nas minhas definições (settings.swIgnoradas: as de antes de a marca
+   viver no imóvel, e as que não pude escrever na ficha), estas em qualquer
+   imóvel, como sempre valeram.
+   Recebe: pid — o id do imóvel ('' sem imóvel).
+   Devolve: um Set dos ids (dados.js:swIdDaChave). */
+function swIgnoradasDoImovel(pid){
+  const p=pid?prop(pid):null,ids=new Set(normSwIgnoradasDaCasa(p&&p.swIgnoradas).map(x=>x.id));
+  normSwIgnoradas((db.settings||{}).swIgnoradas).forEach(k=>{const id=swIdDaChave(k);if(id)ids.add(id)});
+  return ids;
+}
+/* Lembra as linhas do Splitwise de movimentos apagados de propósito (D127): a
+   reimportação do grupo não as repõe. Guarda-as na ficha do imóvel do
+   movimento (p.swIgnoradas, com o dia — N102), para valerem a todas as contas
+   da casa, a quem reimportar; quem não pode escrever na ficha (um colaborador
+   sem «Editar a ficha»: o servidor recusava a casa inteira) ou um movimento
+   sem imóvel guardam-nas nas definições, como antes. É quem apaga um movimento
+   que chama (movimento.js) — o «Anular a última importação» não. Não grava:
+   quem apaga grava.
    Recebe: ts — o movimento apagado, ou uma lista deles (os sem swKey não contam).
    Devolve: nada. */
 function swIgnorar(ts){
-  const ks=[].concat(ts||[]).map(t=>t?normSwKey(t.swKey):'').filter(Boolean);if(!ks.length)return;
-  db.settings.swIgnoradas=normSwIgnoradas((db.settings.swIgnoradas||[]).concat(ks));
+  const nasDefs=[];
+  [].concat(ts||[]).forEach(t=>{
+    const k=t?normSwKey(t.swKey):'';if(!k)return;
+    const p=t.propertyId?prop(t.propertyId):null;
+    if(!p||!pode(p.id,'house.edit')){nasDefs.push(k);return}
+    const l=normSwIgnoradasDaCasa(p.swIgnoradas),id=swIdDaChave(k);
+    if(!l.some(x=>x.id===id))l.push({id:id,dia:today()});
+    p.swIgnoradas=l;
+  });
+  if(nasDefs.length)db.settings.swIgnoradas=normSwIgnoradas((db.settings.swIgnoradas||[]).concat(nasDefs));
 }
 /* O contrário do swIgnorar, para o «Anular» de quem apagou: o movimento voltou
-   e a linha dele deixa de estar entre as apagadas de propósito.
+   e a linha dele deixa de estar entre as apagadas de propósito — na ficha do
+   imóvel dele e nas definições.
    Recebe: ts — o movimento reposto, ou uma lista deles.
    Devolve: nada. */
 function swDesignorar(ts){
-  const ks=new Set([].concat(ts||[]).map(t=>t?normSwKey(t.swKey):'').filter(Boolean));if(!ks.size)return;
-  db.settings.swIgnoradas=normSwIgnoradas(db.settings.swIgnoradas).filter(k=>!ks.has(k));
+  const lista=[].concat(ts||[]).filter(t=>t&&normSwKey(t.swKey));if(!lista.length)return;
+  lista.forEach(t=>{
+    const p=t.propertyId?prop(t.propertyId):null,id=swIdDaChave(t.swKey);
+    if(p&&Array.isArray(p.swIgnoradas)&&p.swIgnoradas.some(x=>x&&x.id===id)&&pode(p.id,'house.edit'))p.swIgnoradas=normSwIgnoradasDaCasa(p.swIgnoradas).filter(x=>x.id!==id);
+  });
+  const ks=new Set(lista.map(t=>normSwKey(t.swKey)));
+  if(normSwIgnoradas(db.settings.swIgnoradas).some(k=>ks.has(k)))db.settings.swIgnoradas=normSwIgnoradas(db.settings.swIgnoradas).filter(k=>!ks.has(k));
 }

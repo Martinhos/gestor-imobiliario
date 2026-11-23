@@ -265,11 +265,12 @@ describe('o alojamento local não é da app (decisão do Martinho, 2026-11-17)',
 });
 
 describe('a renda do teste das rendas moderadas escolhe as rendas pelo papel (irsReceitaDe), como o resumo', () => {
-  /* um contrato de habitação de 2026 com a renda de hoje acima do limite (2 400 €) e rendas de 2 000 € lançadas */
+  /* um contrato de habitação de 2026 com a renda de hoje acima do limite (2 400 €) e rendas de 2 000 € lançadas
+     nos dez meses que já decorreram (o dia da app é 17 de novembro: o divisor são os meses decorridos, N013) */
   function cenario() {
     imovel('casa');
     const c = contrato('M', 'casa', { rent: 2400, start: '2026-01-01', end: '' }, { estado: 'declarado', numero: '6', finalidade: 'hp' });
-    for (let m = 1; m <= 6; m++) {
+    for (let m = 1; m <= 10; m++) {
       const mm = String(m).padStart(2, '0');
       app.db.transactions.push(app.normTx({ kind: 'income', category: 'Rendas', sub: 'Renda mensal', amount: 2000, contractId: 'M', propertyId: 'casa', date: `2026-${mm}-05`, periodo: `2026-${mm}` }));
     }

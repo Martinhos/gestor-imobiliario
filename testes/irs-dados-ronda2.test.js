@@ -90,7 +90,9 @@ describe('D133 · o imóvel no estrangeiro: o país e o código da tabela X', ()
     assert.equal(app.normProp({ pais: 42 }).pais, '');
     assert.equal(app.normProp({ pais: 'Fran\u0000ça' }).pais, 'Fran ça');
     assert.equal(app.normProp({ pais: 'x'.repeat(200) }).pais.length, 60);
-    for (const lixo of ['FR', '25', '2500', 'abc', 1000, -1, 2.5, true, {}, []]) {
+    assert.equal(app.normProp({ pais: 'Brasil', paisCodigo: '76' }).paisCodigo, '076', 'a tabela escreve-o sem os zeros (N105)');
+    assert.equal(app.normProp({ pais: 'Bélgica', paisCodigo: ' 56 ' }).paisCodigo, '056');
+    for (const lixo of ['FR', '0', '000', '2500', 'abc', '7 6', 1000, -1, 2.5, true, {}, []]) {
       assert.equal(app.normProp({ pais: 'França', paisCodigo: lixo }).paisCodigo, '', JSON.stringify(lixo));
     }
   });

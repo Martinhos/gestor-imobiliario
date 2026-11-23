@@ -334,11 +334,76 @@ function fiscoAvSoDeUmDono(p,ano){
    'camada' ou 'ecra'.
    Devolve: {abrir, toca} — vazios com o serviço desligado. */
 function fiscoAvToque(servico,abrir,toca){return servicoLigado(servico)?{abrir:abrir,toca:toca}:{abrir:'',toca:''}}
+/* A ação que um aviso resolve no próprio sítio (o botão primário do cartão
+   «A tratar», fisco.js:fiscoObrigacoesCard — D8: o «É só meu» dos donos, o
+   «Marcar as N como emitidas» dos recibos), só com o serviço que ela toca
+   ligado.
+   Recebe: servico — o id do serviço; acao — o código da ação (data-click);
+   texto — o rótulo do botão; toca — 'camada' ou 'ecra' (omitido, 'camada').
+   Devolve: {acao, acaoTexto, acaoToca}, ou {} com o serviço desligado. */
+function fiscoAvAcao(servico,acao,texto,toca){return servicoLigado(servico)&&acao&&texto?{acao:acao,acaoTexto:texto,acaoToca:toca||'camada'}:{}}
+/* Os campos que um aviso pode levar além do toque (a forma combinada com o
+   fisco.js): acao, acaoTexto e acaoToca — o botão primário, que faz —, e
+   abrirTexto — o rótulo do botão do toque, quando não é o que o
+   fiscoRotuloDoAviso lhe dá. Só os que vêm preenchidos; a ação sem rótulo
+   não passa.
+   Recebe: a — o aviso; x — de onde vêm os campos (aguenta null).
+   Devolve: o aviso a, com os campos. */
+function fiscoAvExtra(a,x){
+  if(!x||typeof x!=='object')return a;
+  if(x.acao&&x.acaoTexto){a.acao=String(x.acao);a.acaoTexto=String(x.acaoTexto);a.acaoToca=String(x.acaoToca||'camada')}
+  if(x.abrirTexto&&a.abrir)a.abrirTexto=String(x.abrirTexto);
+  return a;
+}
 /* Um aviso, na forma que o fiscoAvisos devolve.
-   Recebe: texto — a frase; t — o toque (fiscoAvToque) ou null; nivel —
-   'falta', 'aviso' ou 'info'.
-   Devolve: {texto, abrir, toca, nivel}. */
-function fiscoAvNovo(texto,t,nivel){return {texto:texto,abrir:(t&&t.abrir)||'',toca:(t&&t.toca)||'',nivel:nivel||'aviso'}}
+   Recebe: texto — a frase; t — o toque (fiscoAvToque) ou null, que pode
+   trazer o abrirTexto; nivel — 'falta', 'aviso' ou 'info'; extra (opcional)
+   — a ação do próprio aviso (fiscoAvAcao).
+   Devolve: {texto, abrir, toca, nivel[, acao, acaoTexto, acaoToca, abrirTexto]}. */
+function fiscoAvNovo(texto,t,nivel,extra){
+  const a={texto:texto,abrir:(t&&t.abrir)||'',toca:(t&&t.toca)||'',nivel:nivel||'aviso'};
+  fiscoAvExtra(a,t);
+  return fiscoAvExtra(a,extra);
+}
+/* Um movimento da base pelo id.
+   Recebe: id — o id.
+   Devolve: o movimento, ou null. */
+function fiscoAvTx(id){return id?(db.transactions||[]).find(t=>t&&t.id===id)||null:null}
+/* O toque que abre os Movimentos já filtrados (navegacao.js:goMovimentos —
+   N134: o ano, o imóvel, a categoria, o tipo e o contrato), e não a lista
+   inteira.
+   Recebe: ano — o ano; pid — o id do imóvel ('' todos); cat — um id do IRS
+   ou o nome de uma categoria ('' todas); kind — 'income', 'expense' ou '';
+   contratoId (opcional) — o do contrato ('' sem filtro).
+   Devolve: {abrir, toca} (fiscoAvToque). */
+function fiscoAvVerMovimentos(ano,pid,cat,kind,contratoId){
+  return fiscoAvToque('transactions',`goMovimentos('${jsq(String(ano||''))}','${jsq(pid||'')}','${jsq(cat||'')}','${jsq(kind||'')}','${jsq(contratoId||'')}')`,'ecra');
+}
+/* O imóvel e a categoria que os movimentos de uma lista têm em comum, para
+   o filtro da lista: o imóvel de todos (o da entrada, ou o do movimento), e
+   a categoria — o id do IRS da categoria quando todos o têm (dados.js:
+   txCatIrsId), senão o nome de todos.
+   Recebe: ds — [{txId, propertyId?}].
+   Devolve: {pid, cat} — '' no que não têm em comum. */
+function fiscoAvMovsComuns(ds){
+  const ts=(ds||[]).map(d=>({d:d,t:fiscoAvTx(d&&d.txId)}));
+  const so=xs=>xs.length&&xs.every(x=>x&&x===xs[0])?xs[0]:'';
+  const pid=so(ts.map(x=>String((x.d&&x.d.propertyId)||(x.t&&x.t.propertyId)||'')));
+  const ok=ts.every(x=>x.t);
+  const cat=ok?(so(ts.map(x=>String(txCatIrsId(x.t)||'')))||so(ts.map(x=>String(x.t.category||'').trim()))):'';
+  return {pid:pid,cat:cat};
+}
+/* O toque de um aviso que aponta movimentos: com um, abre-o; com vários, os
+   Movimentos filtrados pelo ano, pelo imóvel e pela categoria que têm em
+   comum (fiscoAvMovsComuns) e pelo tipo.
+   Recebe: ds — [{txId, propertyId?}]; ano — o ano; kind — 'income',
+   'expense' ou ''; contratoId (opcional).
+   Devolve: {abrir, toca} (fiscoAvToque). */
+function fiscoAvToqueMovs(ds,ano,kind,contratoId){
+  if(ds&&ds.length===1&&ds[0]&&ds[0].txId)return fiscoAvToque('transactions',`txView('${jsq(ds[0].txId)}')`,'camada');
+  const x=fiscoAvMovsComuns(ds);
+  return fiscoAvVerMovimentos(ano,x.pid,x.cat,kind,contratoId);
+}
 /* Uma lista agrupada pelo contrato, pela ordem em que cada um aparece.
    Recebe: xs — [{contratoId, …}].
    Devolve: [[entradas de um contrato], …]. */
@@ -391,7 +456,13 @@ function fiscoAvDhd(r,L){
      segue a posição mais recente da AT: confirma-se. O toque abre o imóvel
      (as marcas imovel.*) ou a pergunta do contrato (a da gestão florestal);
    - os que contam e cuja versão traz um aviso (l.beneficios[].aviso — os 5 %
-     do 6A): só se diz, um por benefício, com os contratos dele.
+     do 6A): só se diz, um por benefício, com os contratos dele;
+   - o 6A no ano em que a reabilitação ficou concluída (o item traz
+     conclusao e desde — irs.js:irsBeneficiosAvaliados, N091): as rendas de
+     antes do dia desde vêm de um imóvel ainda por recuperar e não têm os 5 %
+     (antigo EBF art. 71.º n.º 7 a)), e a app já as conta sem eles; o 6A
+     identifica a linha inteira, por isso âmbar, a mandar confirmar com a AT
+     como as declarar (sem doutrina sobre o ano da conclusão).
    Recebe: r — o resumo; L — as linhas das rendas, uma por contrato.
    Devolve: [{texto, abrir, toca, nivel}]. */
 function fiscoAvBeneficios(r,L){
@@ -399,7 +470,16 @@ function fiscoAvBeneficios(r,L){
   (L||[]).forEach(l=>{
     const c=contract(l.contratoId);if(!c)return;
     irsBeneficiosAvaliados(c,ano).forEach(x=>{
-      const b=x&&x.beneficio;if(!b||x.aplica||!String(x.motivo||'').trim())return;
+      const b=x&&x.beneficio;
+      const iso=s=>/^\d{4}-\d{2}-\d{2}$/.test(String(s||''));
+      if(b&&x.aplica&&iso(x.desde)&&iso(x.conclusao)&&String(x.desde).slice(0,4)===String(ano)&&String(x.desde)>String(ano)+'-01-01'){
+        const toque=l.propertyId?fiscoAvToque('properties',`propView('${jsq(l.propertyId)}')`,'camada'):fiscoAvToque('contracts',`ctView('${jsq(c.id)}')`,'camada');
+        const q=String(b.quadro||'6A'),taxa=b.taxa!=null?dec(b.taxa)+' %':'a taxa do quadro '+q;
+        out.push(fiscoAvNovo('Contrato '+l.nome+': a reabilitação do imóvel ficou concluída a '+dPT(x.conclusao)+'. Os '+taxa+' do quadro '+q+' só valem nas rendas a partir de '+dPT(x.desde)
+          +': as de antes vêm de um imóvel ainda por recuperar e não os têm — a app já as conta sem eles. O quadro '+q+' identifica a linha inteira: confirma com a AT como declarar as rendas de antes da conclusão'
+          +(l.quadro?' (por exemplo, numa linha à parte do quadro '+l.quadro+', sem o '+q+')':''),toque,'aviso'));
+      }
+      if(!b||x.aplica||!String(x.motivo||'').trim())return;
       /* o motivo diz às vezes «o quadro 6A não conta» no fim: aqui di-lo o
          princípio (o da vigência fica: fala do ano seguinte) */
       const m=String(x.motivo).replace(/(, o quadro \S+ não conta|: o quadro \S+ não conta( em \d{4})?)$/,'');
@@ -411,7 +491,11 @@ function fiscoAvBeneficios(r,L){
          condições da reabilitação: o certificado, as datas, ser dono no dia */
       const piv=/\bPIV (\d+)/.exec(String(b.lei||'')),daAT=!!(piv&&/certificado|dono|começou entre|concluída|data de início|data de conclusão/.test(m));
       const marca=String(b.marca||''),k=marca.slice(marca.indexOf('.')+1);
-      const toque=marca.indexOf('imovel.')===0&&l.propertyId?fiscoAvToque('properties',`propView('${jsq(l.propertyId)}')`,'camada')
+      /* o que falha é o tipo de prédio (o 6C só num rústico — N127): a ficha
+         do imóvel, onde se vê e corrige o tipo; a pergunta do contrato fica
+         à vista enquanto estiver ligada, para a desligar */
+      const peloTipo=!!b.tipoPredio&&/^só vale num prédio/.test(m)&&!!l.propertyId;
+      const toque=(marca.indexOf('imovel.')===0||peloTipo)&&l.propertyId?fiscoAvToque('properties',`propView('${jsq(l.propertyId)}')`,'camada')
         :k==='egf'?fiscoAvToque('contracts',`ctIrParaPergunta('${jsq(c.id)}','c_fegf')`,'camada')
         :fiscoAvToque('contracts',`ctView('${jsq(c.id)}')`,'camada');
       out.push(fiscoAvNovo('Contrato '+l.nome+': o quadro '+b.quadro+' ('+String(b.curto||b.nome||'')+') está marcado, mas não conta em '+ano+' — '+m
@@ -434,12 +518,16 @@ function fiscoAvBeneficios(r,L){
    - fora do formato da AT (a falta 'código da freguesia fora do formato' do
      resumo — D136): falta;
    - de uma união de freguesias desagregada em outubro de 2025
-     (l.freguesiaUniao, nas declarações de 2025 em diante — D135): âmbar,
+     (l.freguesiaUniao, nas declarações de 2025 em diante — D135): falta,
      com as freguesias repostas pelo código e pelo nome (o nome da união não
-     se mostra: a tabela da AT tra-lo em maiúsculas e abreviado); cala-se com
-     o «Confirmei na caderneta» do imóvel (l.matrizConfirmada).
+     se mostra: a tabela da AT tra-lo em maiúsculas e abreviado). O código
+     da união deixou de existir na matriz (a AT migrou os prédios em outubro
+     de 2025 — Lei 25-A/2025), por isso nunca se dá por confirmado: o
+     «Confirmei na caderneta» do imóvel (l.matrizConfirmada) não o cala, e o
+     aviso di-lo (N087). O toque abre a ficha no código
+     (imovel.js:imvAbrirNoCampo).
    Recebe: L — as linhas das rendas, uma por contrato.
-   Devolve: [{texto, abrir, toca, nivel}]. */
+   Devolve: [{texto, abrir, toca, nivel, abrirTexto?}]. */
 function fiscoAvFreguesias(L){
   const out=[],fora={},uniao={};
   (L||[]).forEach(l=>{
@@ -450,12 +538,14 @@ function fiscoAvFreguesias(L){
       out.push(fiscoAvNovo('Imóvel '+l.imovel+': o código da freguesia, «'+String(l.freguesiaCodigo||'').trim()+'», não tem o formato da AT — são 6 caracteres, 4 algarismos e 2 algarismos ou letras, como na caderneta. Corrige-o na ficha do imóvel',pv,'falta'));
     }
     const u=l.freguesiaUniao;
-    if(uniao[l.propertyId]||!u||typeof u!=='object'||!u.codigo||String(l.matrizConfirmada||'').trim())return;
+    if(uniao[l.propertyId]||!u||typeof u!=='object'||!u.codigo)return;
     uniao[l.propertyId]=1;
     const rs=(Array.isArray(u.repostas)?u.repostas:[]).filter(x=>x&&x.codigo).map(x=>x.codigo+' '+String(x.nome||'').trim());
     const lista=rs.length<2?(rs[0]||''):rs.slice(0,-1).join(', ')+' ou '+rs[rs.length-1];
-    out.push(fiscoAvNovo('Imóvel '+l.imovel+': o código da freguesia, '+u.codigo+', é o de uma união de freguesias desagregada em outubro de 2025 (Lei 25-A/2025)'
-      +(lista?'. O prédio passou para '+(rs.length>1?'uma destas: ':'')+lista:'')+', e o artigo matricial pode ter mudado. Confirma os dois na caderneta predial atual e corrige-os na ficha do imóvel; se estão certos, marca lá «Confirmei na caderneta»',pv,'aviso'));
+    const conf=String(l.matrizConfirmada||'').trim()?' A marca «Confirmei na caderneta» não chega: este código já não está em nenhuma caderneta.':'';
+    out.push(fiscoAvNovo('Imóvel '+l.imovel+': o código da freguesia, '+u.codigo+', é o de uma união de freguesias desagregada em outubro de 2025 (Lei 25-A/2025) e deixou de existir'
+      +(lista?'. O prédio passou para '+(rs.length>1?'uma destas: ':'')+lista:'')+', e o artigo matricial pode ter mudado. Escolhe a freguesia reposta pela caderneta predial atual e corrige o código e o artigo na ficha do imóvel: é o que vai à declaração.'+conf,
+      Object.assign(fiscoAvToque('properties',`imvAbrirNoCampo('${jsq(l.propertyId)}','p_freguesiaCodigo')`,'camada'),{abrirTexto:'Corrigir o código'}),'falta'));
   });
   return out;
 }
@@ -469,7 +559,8 @@ function fiscoAvAntesDoInicio(r){
   return fiscoAvPorContrato(xs).map(ds=>{
     const um=ds.length===1,c=contract(ds[0].contratoId),nome=String(ds[0].nome||(c?ctName(c):'')),ini=String(ds[0].inicio||(c&&c.start)||'');
     const ms=[];ds.forEach(d=>{const m=String(d.mes||String(d.data||'').slice(0,7));if(/^\d{4}-\d{2}$/.test(m)&&ms.indexOf(m)<0)ms.push(m)});
-    const toque=um&&ds[0].txId?fiscoAvToque('transactions',`txView('${jsq(ds[0].txId)}')`,'camada'):fiscoAvToque('transactions',"go('transactions')",'ecra');
+    const toque=um&&ds[0].txId?fiscoAvToque('transactions',`txView('${jsq(ds[0].txId)}')`,'camada')
+      :fiscoAvVerMovimentos(r.ano,(c&&c.propertyId)||ds[0].propertyId||'','rendas','income',ds[0].contratoId);
     const antes=/^\d{4}-\d{2}-\d{2}$/.test(ini)?' ('+dPT(ini)+')':'';
     return fiscoAvNovo('Contrato '+nome+': '+(um
       ?'a renda de '+euroS(Number(ds[0].valor))+' recebida a '+dPT(ds[0].data)+' é de antes do início do contrato'+antes+' — é deste contrato? Se é uma renda antecipada, escolhe no movimento o mês da renda; se é de outro contrato, liga-a a ele. Até lá, conta nas rendas deste'
@@ -512,7 +603,8 @@ function fiscoAvRendasAbaixo(r,L){
     const enc=fiscoAvEncargosDoInquilino(c);
     const encTx=enc.length?' ('+(enc.length<2?enc[0]:enc.slice(0,-1).join(', ')+' ou '+enc[enc.length-1])+')':'';
     const empresa=ds.some(d=>d.empresa===true)?' e da declaração que a empresa inquilina entrega à AT':'';
-    const toque=ids.length===1?fiscoAvToque('transactions',`txView('${jsq(ids[0])}')`,'camada'):fiscoAvToque('transactions',"go('transactions')",'ecra');
+    const toque=ids.length===1?fiscoAvToque('transactions',`txView('${jsq(ids[0])}')`,'camada')
+      :fiscoAvVerMovimentos(r.ano,(c&&c.propertyId)||ds[0].propertyId||'','rendas','income',id);
     return fiscoAvNovo('Contrato '+nome+': '+(um?'a renda de ':'as rendas de ')+fiscoAvMeses(ms)+(ms.length>4?',':'')+(um?' ficou':' ficaram')+' abaixo da renda'+quanto
       +', com o recibo emitido. '+(um?'Foi':'Foram')+' pela renda inteira? Então o quadro '+q+' vai abaixo '+(um?'do recibo':'dos recibos')+empresa
       +': regista '+(um?'':'em cada mês ')+'a renda do recibo, e o que se descontou (a comissão da gestora, uma obra) como despesa. Se o inquilino descontou um encargo'+encTx
@@ -587,7 +679,7 @@ function fiscoAvSplitwise(r){
     out.push(fiscoAvNovo((um?'Despesa de '+ano+' importada do Splitwise com o valor já cortado pela tua quota, e com outra igual no mesmo imóvel (a mesma data e descrição): '
       :fiscoN(D.length,'despesa','despesas')+' de '+ano+' importadas do Splitwise com o valor já cortado pela tua quota, e com outra igual no mesmo imóvel (a mesma data e descrição): ')+lista(D)
       +'. Pode ser a mesma despesa importada por cada dono, com a parte de cada um, ou importada duas vezes: confirma no Splitwise e apaga a que está a mais, ou corrige o valor na ficha',
-      um?fiscoAvToque('transactions',`txView('${jsq(D[0].txId)}')`,'camada'):fiscoAvToque('transactions',"go('transactions')",'ecra'),'aviso'));
+      fiscoAvToqueMovs(D,ano,'expense'),'aviso'));
   }
   return out;
 }
@@ -702,7 +794,8 @@ function fiscoAvToqueQuotas(pid){return fiscoAvToque('properties',`imvAbrirQuota
    (fisco-resumo.js:fiscoAnosComRendaDe), desde o ano em que o período começou
    (irs.js:irsTaxaDecorrida; num DHD, o do início do contrato) até ao ano antes
    da cessação. O resumo dá-os em anosEmFalta; sem o campo, contam-se da base
-   (fora os anos que a entrada já soma, x.anos).
+   (fora os anos que a entrada já soma, x.anos, e os que deixa por
+   confirmar, x.porConfirmar — N125).
    Recebe: x — a entrada de r.regularizacoes; ano — o ano da cessação.
    Devolve: [AAAA] (números), por ordem. */
 function fiscoAvAnosEmFalta(x,ano){
@@ -711,22 +804,40 @@ function fiscoAvAnosEmFalta(x,ano){
   const dec0=x.dhd===true?null:irsTaxaDecorrida(c);
   const ini=Number(String((x.dhd===true?c.start:dec0&&dec0.desde)||'').slice(0,4));if(!ini)return [];
   const ys=fiscoAnosComRendaDe(c),ate=Math.min(ys.length?ys[0]:Number(ano),Number(ano)),out=[];
-  const somados=(Array.isArray(x.anos)?x.anos:[]).map(y=>Number(y&&y.ano));
+  const somados=(Array.isArray(x.anos)?x.anos:[]).concat(Array.isArray(x.porConfirmar)?x.porConfirmar:[]).map(y=>Number(y&&y.ano));
   for(let y=ini;y<ate;y++)if(somados.indexOf(y)<0)out.push(y);
   return out;
 }
-/* O que se junta ao aviso da regularização do n.º 20 (N031): os anos do
-   período de que a app não tem rendas, que também se regularizam, e os anos
-   somados com as regras de outro ano (anosSemRegras do resumo — a app não
-   tem as versões desses anos).
+/* Os anos da regularização do n.º 20 que a app não soma por não ter as
+   regras deles (N125): o resumo dá-os em porConfirmar [{ano, diferenca}],
+   estimados com as regras de outro ano e fora do total.
+   Recebe: x — a entrada de r.regularizacoes.
+   Devolve: [{ano, diferenca}] com diferença, por ano. */
+function fiscoAvPorConfirmar(x){
+  return (Array.isArray(x&&x.porConfirmar)?x.porConfirmar:[]).filter(y=>y&&Number(y.ano)>0&&Number(y.diferenca)>0)
+    .map(y=>({ano:Number(y.ano),diferenca:Number(y.diferenca)})).sort((a,b)=>a.ano-b.ano);
+}
+/* O que se junta ao aviso da regularização do n.º 20 (N031, N125): os anos
+   do período de que a app não tem rendas, que também se regularizam; os anos
+   que ficam por confirmar, fora do total, por a app não ter as regras deles
+   (porConfirmar, com o que dariam pelas regras de outro ano); e, num resumo
+   que ainda os soma (anosSemRegras sem porConfirmar), os anos somados com as
+   regras de outro ano, também por confirmar.
    Recebe: x — a entrada de r.regularizacoes; ano — o ano da cessação.
    Devolve: o texto, a começar por «. » ('' sem nada a juntar). */
 function fiscoAvRegularizacaoFalta(x,ano){
   const em=fiscoAvAnosEmFalta(x,ano),sr=(Array.isArray(x&&x.anosSemRegras)?x.anosSemRegras:[]).map(Number).filter(y=>y>0);
+  const pc=fiscoAvPorConfirmar(x);
   let t='';
   if(em.length)t+='. '+(em.length===1?'Falta o ano de '+em[0]+', de que':'Faltam os anos '+fiscoAvAnos(em)+', de que')+' a app não tem rendas: a diferença '
-    +(em.length===1?'dele':'deles')+(Number(x&&x.total)>0?' também se regulariza':' regulariza-se na mesma')+'. Regista no contrato as rendas em falta para a app a estimar';
-  if(sr.length){const v=irsAno(sr[0]).ano,ys=fiscoAvAnos(sr);t+='. A estimativa '+(ys.indexOf('de ')===0?'':'de ')+ys+' usa as regras de '+v+': a app não tem as desses anos'}
+    +(em.length===1?'dele':'deles')+(Number(x&&x.total)>0||pc.length?' também se regulariza':' regulariza-se na mesma')+'. Regista no contrato as rendas em falta para a app a estimar';
+  if(pc.length){
+    const v=irsAno(pc[0].ano).ano,ys=fiscoAvAnos(pc.map(y=>y.ano)),tot=Number(x&&x.totalPorConfirmar)>0?Number(x.totalPorConfirmar):sum(pc.map(y=>y.diferenca));
+    t+='. '+(pc.length===1?'O ano de '+ys+' fica':'Os anos '+ys+' ficam')+' por confirmar e fora da estimativa: a app não tem as regras '+(pc.length===1?'desse ano':'desses anos')
+      +', e com as de '+v+' '+(pc.length===1?'daria':'dariam')+' cerca de '+euroS(tot)+' ('+pc.map(y=>y.ano+': '+euroS(y.diferenca)).join('; ')+') — '
+      +'a taxa de cada ano é a da lei desse ano, e a diferença deles também se regulariza';
+  }
+  else if(sr.length){const v=irsAno(sr[0]).ano,ys=fiscoAvAnos(sr);t+='. A estimativa '+(ys.indexOf('de ')===0?'':'de ')+ys+' usa as regras de '+v+' e fica por confirmar: a app não tem as desses anos'}
   return t;
 }
 /* As rendas do ano que respeitam a meses depois do dia em que o contrato
@@ -870,7 +981,7 @@ function fiscoAvNaoAceites(r){
   const pq=ks.map(k=>FISCO_AV_SEM_DEDUCAO[k].porque);
   return [fiscoAvNovo((um?'Despesa de '+ano+' que não conta nos gastos: ':fiscoN(ds.length,'despesa','despesas')+' de '+ano+' ('+euroS(sum(ds.map(d=>Number(d.valor)||0)))+') não contam nos gastos: ')+lista
     +'. A AT não '+(um?'a':'as')+' aceita: '+pq.join('; ')+'. Se copiaste daqui gastos de '+ano+' antes desta versão, confere-os — até aí a app contava-'+(um?'a':'as'),
-    um?fiscoAvToque('transactions',`txView('${jsq(ds[0].txId)}')`,'camada'):fiscoAvToque('transactions',"go('transactions')",'ecra'),'info')];
+    fiscoAvToqueMovs(ds,ano,'expense'),'info')];
 }
 /* A tributação conjunta sem o cônjuge escolhido (D30; D5, N020): só entram as
    rendas de quem declara. O que fazer depende de haver quem escolher
@@ -891,7 +1002,10 @@ function fiscoAvNaoAceites(r){
    Recebe: r — o resumo; eu — quem declara ('' por inteiro).
    Devolve: [{texto, abrir, toca, nivel}]. */
 function fiscoAvConjuntaSemConjuge(r,eu){
-  const ano=r.ano,out=[],sit='«A tua situação em '+ano+'»',bensTx='«Os bens são comuns do casal»';
+  const ano=r.ano,out=[],sit='«A tua situação fiscal em '+ano+'»',bensTx='«Os bens são comuns do casal»';
+  /* o cartão da situação fica fechado depois dos quadros (D8, maqueta 6): o
+     toque abre-o e leva-o à vista (fisco.js:fiscoSitAbrir) */
+  const aSit=t=>Object.assign(fiscoAvToque('fisco','fiscoSitAbrir()','nada'),t?{abrirTexto:t}:{});
   const temBc=Object.prototype.hasOwnProperty.call(r,'bensComuns'),bc=r.bensComuns&&typeof r.bensComuns==='object'?r.bensComuns:null;
   const bens=temBc?!!bc:fiscoBensComuns(fiscoSituacaoDoAno(ano,eu||''));
   if(bens){
@@ -908,7 +1022,7 @@ function fiscoAvConjuntaSemConjuge(r,eu){
     out.push(fiscoAvNovo('Tributação conjunta com os bens comuns do casal: '+(lista.length?'conta como o teu cônjuge, nas linhas '+tit+', '+listaE(lista)
       +'. Se algum não é o teu cônjuge (uma casa herdada com um irmão), desliga «Os bens são comuns do casal» em '+sit+' e junta à mão no Portal a parte do teu cônjuge. '
       :'a parte '+quem+' nos imóveis em comum vai às linhas '+tit+'. ')
-      +'Os imóveis só '+quem+', que não estão na app, inserem-se à mão no Portal das Finanças',null,varios?'aviso':'info'));
+      +'Os imóveis só '+quem+', que não estão na app, inserem-se à mão no Portal das Finanças',lista.length?aSit(''):null,varios?'aviso':'info'));
     const pd=(bc&&Array.isArray(bc.porDecidir)?bc.porDecidir:[]).filter(x=>x&&x.propertyId);
     pd.forEach(x=>{
       const ns=(Array.isArray(x.nomes)?x.nomes:[]).map(n=>String(n||'').trim()).filter(Boolean);
@@ -927,7 +1041,7 @@ function fiscoAvConjuntaSemConjuge(r,eu){
   const semConta='os imóveis do teu cônjuge que não estão na app inserem-se à mão no Portal das Finanças, e uma casa que é um bem comum do casal conta-se com o cônjuge escrito na ficha como dono fora da app e '+bensTx+' ligado em '+sit;
   out.push(fiscoAvNovo(cands.length
     ?'Tributação conjunta sem o cônjuge escolhido: só entram as tuas rendas. Se o teu cônjuge tem conta na app, escolhe-o em '+sit+'; se não tem, '+semConta+'.'
-    :'Tributação conjunta sem o cônjuge na app: só entram as tuas rendas. '+semConta.charAt(0).toUpperCase()+semConta.slice(1)+'.',null,'falta'));
+    :'Tributação conjunta sem o cônjuge na app: só entram as tuas rendas. '+semConta.charAt(0).toUpperCase()+semConta.slice(1)+'.',aSit(cands.length?'Escolher o cônjuge':''),'falta'));
   return out;
 }
 /* Um imóvel com mais do que uma conta com quota em algum dia do ano em que os
@@ -1118,50 +1232,304 @@ function fiscoAvOutraQuota(r){
   return out;
 }
 
+/* ---- Os avisos da ronda 2 das correções da auditoria ao IRS de raiz
+   (KAN-150 a KAN-154): as ações no próprio aviso (D8), os toques que abrem
+   os Movimentos filtrados, as rendas estimadas e as abaixo da do contrato o
+   ano inteiro, as rendas moderadas, e os gastos que o resumo aponta sem os
+   contar (a caução devolvida sem linha, os encargos do inquilino, a divisão
+   própria, a parte arrendada). Leem o resumo pela forma combinada com o
+   fisco-resumo.js e o irs.js, com cuidado (um campo que falte é vazio). ---- */
+
+/* O nome que esta conta dá a uma categoria do IRS (dados.js:catDoIdIrs), para
+   o texto de um aviso não mandar para um nome que a conta já não tem.
+   Recebe: tk — 'cats' ou 'catsIn'; id — o id ('impostos/imposto-do-selo');
+   origem — o nome a usar sem ela na árvore.
+   Devolve: 'Categoria › Subcategoria' (ou só a categoria). */
+function fiscoAvNomeDoId(tk,id,origem){
+  const x=catDoIdIrs(tk,id);
+  return x&&x.category?(x.sub?x.category+' › '+x.sub:x.category):origem;
+}
+/* O toque do aviso do selo do contrato (D27, N134): abre a despesa nova já
+   com o imóvel, Impostos › Imposto do selo (pelo id), 10 % da renda e uma
+   descrição (movimento.js:txNovaDespesaCom). A data sugerida é a do
+   pagamento (nota do verificador da lei): hoje, enquanto o prazo do Modelo 2
+   (o fim do mês a seguir ao início) não passou no ano; depois, esse último
+   dia — o selo deduz-se no ano em que se pagou, e a pessoa corrige-o.
+   Recebe: c — o contrato (aguenta null); l — a linha; ano — o ano.
+   Devolve: {abrir, toca, abrirTexto} (fiscoAvToque). */
+function fiscoAvNovaDespesaDoSelo(c,l,ano){
+  const A=String(ano),pid=(c&&c.propertyId)||(l&&l.propertyId)||'',ini=String((c&&c.start)||(l&&l.inicio)||'');
+  const lim=/^\d{4}-\d{2}-\d{2}$/.test(ini)?fimDoMesSeguinte(ini):A+'-12-31',hoje=today();
+  const data=hoje.slice(0,4)===A&&hoje<=lim?hoje:lim;
+  const renda=Number(c&&c.rent)||0,valor=renda>0?(Math.round(renda*10)/100).toFixed(2):'';
+  const nome=String((l&&l.nome)||(c?ctName(c):'')).trim();
+  return Object.assign(fiscoAvToque('transactions',`txNovaDespesaCom('${jsq(pid)}','impostos/imposto-do-selo','${valor}','${jsq(data)}','${jsq('Imposto do selo'+(nome?' · '+nome:''))}')`,'camada'),
+    {abrirTexto:'Adicionar o selo'});
+}
+/* Os recebimentos do ano sem o recibo eletrónico marcado que o aviso dos
+   recibos conta (N062): os das linhas com l.recibosPorEmitir, de contratos
+   declarados, que vão à linha do contrato (a renda, a caução, o reembolso do
+   inquilino — fisco-resumo.js:fiscoNaLinhaDoContrato).
+   Recebe: r — o resumo.
+   Devolve: [movimentos], pela data. */
+function fiscoAvRecibosPorMarcar(r){
+  const A=String(r&&r.ano),ids={};
+  ((r&&r.linhas)||[]).forEach(l=>{if(l&&l.contratoId&&Number(l.recibosPorEmitir)>0)ids[l.contratoId]=1});
+  return (db.transactions||[]).filter(t=>{
+    if(!t||t.kind!=='income'||t.recibo||!ids[t.contractId]||!String(t.date||'').startsWith(A))return false;
+    const c=contract(t.contractId);
+    return !!c&&ctDeclarado(c)&&fiscoNaLinhaDoContrato(t);
+  }).sort((a,b)=>String(a.date)<String(b.date)?-1:String(a.date)>String(b.date)?1:0);
+}
+/* O «Marcar as N como emitidas» do aviso dos recibos (D8, N062): recalcula
+   a lista do ano com quem declara (resumoFiscal, como o aviso), fica com os
+   que eu posso alterar (prazos.js:pzPodeMarcarRecibo), pergunta com cada um
+   — marca-se o que já se emitiu no Portal das Finanças: a app não emite
+   recibos — e no OK marca-os (prazos.js:pzMarcarRecibos, com o Anular).
+   Recebe: ano — o ano da Declaração; eu — o titular do resumo do aviso
+   (r.titularId; '' por inteiro).
+   Devolve: nada — abre a confirmação (ou um toast, sem nada a marcar). */
+function fiscoAvMarcarRecibos(ano,eu){
+  const xs=fiscoAvRecibosPorMarcar(resumoFiscal(ano,String(eu||''))),ts=xs.filter(pzPodeMarcarRecibo);
+  if(!ts.length)return toast(xs.length?'Só quem os registou os pode marcar — pede-lhe que marque os recibos.':'Não há recibos por marcar em '+ano+'.');
+  const um=ts.length===1,mais=ts.length>8?ts.length-8:0,alheios=xs.length-ts.length;
+  const nome=t=>String(t.label||'').trim()||[t.category,t.sub].filter(Boolean).join(' › ')||'Renda';
+  const li=ts.slice(0,8).map(t=>`<li>${esc(nome(t))} · ${esc(dPT(t.date))}: ${esc(euroS(rendaBruta(t)))}</li>`).join('')+(mais?`<li>e mais ${mais}</li>`:'');
+  confirmModal(um?'Marcar o recibo como emitido':'Marcar os '+ts.length+' recibos como emitidos',
+    `<p>${um?'Marcas que já emitiste no Portal das Finanças o recibo de renda eletrónico deste recebimento:':'Marcas que já emitiste no Portal das Finanças o recibo de renda eletrónico de cada um destes recebimentos:'}</p><ul>${li}</ul>`
+    +`<p>A app não emite recibos: marca só os que já emitiste.</p>`
+    +(alheios?`<p>${alheios===1?'Outro foi registado':alheios+' outros foram registados'} por outra pessoa: só ela ${alheios===1?'o':'os'} pode marcar.</p>`:''),
+    ()=>pzMarcarRecibos(ts.map(t=>t.id)));
+}
+/* As rendas do ano registadas por estimativa (N079): as que o «Registar
+   estimativa» cria (web/cloud/painel.js:fillCriar) levam a etiqueta
+   «Estimativa» — todas à renda de hoje, no dia previsto de cada mês, sem
+   recibo — e a Declaração soma-as como recebidas. Um aviso por contrato com
+   rendas do ano com a etiqueta (sem olhar a maiúsculas): conferem-se com os
+   recibos e tira-se-lhes a etiqueta.
+   Recebe: r — o resumo; L — as linhas das rendas, uma por contrato.
+   Devolve: [{texto, abrir, toca, nivel}]. */
+function fiscoAvEstimativas(r,L){
+  const A=String(r.ano),out=[];
+  const est=t=>(Array.isArray(t.tags)?t.tags:[]).some(x=>String(x||'').trim().toLowerCase()==='estimativa');
+  (L||[]).forEach(l=>{
+    const c=contract(l.contratoId);if(!c)return;
+    const ts=fiscoAvRendasDe(c).filter(t=>String(t.date||'').startsWith(A)&&est(t));if(!ts.length)return;
+    const um=ts.length===1,val=euroS(sum(ts.map(rendaBruta)));
+    out.push(fiscoAvNovo('Contrato '+l.nome+': '+(um?'uma renda de '+A+' ('+val+') foi registada':fiscoN(ts.length,'renda','rendas')+' de '+A+' ('+val+') foram registadas')
+      +' por estimativa — com a renda de hoje e no dia previsto de cada mês — e '+(um?'conta':'contam')+' na Declaração como '+(um?'recebida':'recebidas')
+      +'. Confere '+(um?'a':'cada uma')+' com os recibos (o valor, o dia em que entrou, os meses que não foram pagos) e, '+(um?'conferida, tira-lhe':'conferidas, tira a cada uma')
+      +' a etiqueta «Estimativa»: Editar › Etiquetas',
+      um?fiscoAvToque('transactions',`txView('${jsq(ts[0].id)}')`,'camada'):fiscoAvVerMovimentos(A,c.propertyId||l.propertyId||'','rendas','income',c.id),'aviso'));
+  });
+  return out;
+}
+/* A renda constante abaixo da do contrato o ano inteiro (N080): a rede das
+   rendas abaixo (fisco-resumo.js:fiscoRendasAbaixo, D115) deixa passar, com a
+   folga da atualização legal, uma renda sempre uns por cento abaixo — a da
+   gestora registada já sem a comissão. Num contrato com linha, sem entrada em
+   r.rendasAbaixo: todas as rendas do ano (três meses ou mais, pelo mês a que
+   respeitam, sem o mês do início a meio nem o do fim), com o recibo emitido e
+   sem «pagamento parcial», com o mesmo valor, abaixo da renda do contrato (a
+   de hoje — c.rent) mais de 0,50 €; e nenhum mês depois com mais do que elas
+   (então a renda subiu depois, e está certo). Pergunta se a renda do
+   contrato está certa.
+   Recebe: r — o resumo; L — as linhas das rendas, uma por contrato.
+   Devolve: [{texto, abrir, toca, nivel}]. */
+function fiscoAvRendaConstante(r,L){
+  const A=String(r.ano),out=[],ja={};
+  (Array.isArray(r.rendasAbaixo)?r.rendasAbaixo:[]).forEach(x=>{if(x&&x.contratoId)ja[x.contratoId]=1});
+  (L||[]).forEach(l=>{
+    const c=contract(l.contratoId),renda=Number(c&&c.rent)||0;if(!c||ja[c.id]||!(renda>0))return;
+    const porMes={};
+    fiscoAvRendasDe(c).forEach(t=>{const m=irsMesDaRenda(t);if(/^\d{4}-\d{2}$/.test(m))(porMes[m]||(porMes[m]=[])).push(t)});
+    const ini=String(c.start||''),fim=String(fiscoFimDaVida(c)||'');
+    const proporcional=m=>(ini.slice(0,7)===m&&ini.slice(8,10)!=='01')||(!!fim&&fim.slice(0,7)===m);
+    const ms=Object.keys(porMes).sort().filter(m=>m.slice(0,4)===A&&porMes[m].some(t=>String(t.date||'').startsWith(A))&&!proporcional(m));
+    if(ms.length<3)return;
+    const val=m=>r2(sum(porMes[m].map(rendaBruta))),v=val(ms[0]);
+    if(!(renda>v+0.5)||!ms.every(m=>Math.abs(val(m)-v)<=0.5&&porMes[m].every(t=>t.recibo&&t.parcial!==true)))return;
+    const ult=ms[ms.length-1];
+    if(Object.keys(porMes).some(m=>m>ult&&val(m)>v+0.5))return;
+    out.push(fiscoAvNovo('Contrato '+l.nome+': '+(ms.length>11?'as rendas de '+A+' têm todas ':'as '+ms.length+' rendas de '+A+' têm todas ')+euroS(v)+', abaixo da renda do contrato ('+euroS(renda)+'), com o recibo emitido. '
+      +'A renda do contrato está certa? Se o recibo é de '+euroS(renda)+' (a gestora transfere-te a renda sem a comissão, ou o inquilino desconta um encargo), regista em cada mês a renda do recibo, e a comissão como despesa: '
+      +'o Anexo F leva as rendas ilíquidas, as dos recibos. Se a renda é mesmo '+euroS(v)+', corrige-a no contrato; se subiu depois de dezembro de '+A+', está certo',
+      fiscoAvVerMovimentos(A,c.propertyId||l.propertyId||'','rendas','income',c.id),'aviso'));
+  });
+  return out;
+}
+/* As rendas moderadas (DL 97/2026; D2), dos contratos com linha:
+   - N013: o que entrou (a renda do teste — irs.js:irsTesteModerada, que
+     divide o valor do ano pelos meses em vigor) e a renda do contrato ficam
+     de lados diferentes do limite (difere): a app conta o que entrou (D2 b),
+     e a AT ainda não disse qual das duas mede — âmbar, a confirmar;
+   - N054: num imóvel, os contratos em vigor ao mesmo tempo cabem cada um no
+     limite e somam mais (irs.js:irsModeradaPorFracao — os quartos de uma
+     fração): a app mede contrato a contrato (D2 c, só avisar), e a lei fala
+     do valor pago pela fração — âmbar, a confirmar.
+   Recebe: r — o resumo; L — as linhas das rendas, uma por contrato.
+   Devolve: [{texto, abrir, toca, nivel}]. */
+function fiscoAvModeradas(r,L){
+  const ano=r.ano,out=[],pids=[],mt=Number(((irsAno(ano).taxas||{}).rendaModerada||{}).taxa);
+  (L||[]).forEach(l=>{
+    const c=contract(l.contratoId);if(!c)return;
+    if(l.propertyId&&pids.indexOf(l.propertyId)<0)pids.push(l.propertyId);
+    const x=irsTesteModerada(c,ano)||{};if(x.difere!==true)return;
+    /* só quando o teste decide a taxa da linha: a app dá os 10 % (a linha
+       não tem outra mais baixa) ou não os dá (a linha fica acima deles) — um
+       contrato de duração longa ou um imóvel reabilitado já têm menos */
+    const lt=Number(l.taxa);
+    if(isFinite(mt)&&mt>0&&l.taxa!=null&&isFinite(lt)&&(x.cabe?lt<mt:lt<=mt))return;
+    const lim=euroS(Number(x.limite)||0),meses=Number(x.meses)||0;
+    const lados=x.cabe?'o que entrou cabe no limite e a renda do contrato não':'a renda do contrato cabe no limite e o que entrou não';
+    out.push(fiscoAvNovo('Contrato '+l.nome+': no limite das rendas moderadas ('+lim+' por mês), a app mede o que entrou — '+euroS(Number(x.renda)||0)+' por mês'
+      +(meses?' ('+euroS(Number(x.recebido)||0)+' em '+fiscoN(meses,'mês','meses')+' em vigor)':'')+' — e a renda do contrato é '+euroS(Number(x.rendaContrato)||0)+': '+lados
+      +'. A app '+(x.cabe?'dá':'não dá')+' a taxa de 10 % das rendas moderadas. A lei divide o valor do ano pelos meses decorridos (DL 97/2026, art. 3.º n.º 3), e a AT ainda não disse se conta o que se recebeu ou a renda do contrato: confirma-o antes de entregar'
+      +(x.cabe?'; um mês pago só em parte baixa a média':''),
+      fiscoAvToque('contracts',`ctView('${jsq(c.id)}')`,'camada'),'aviso'));
+  });
+  pids.forEach(pid=>{
+    const x=irsModeradaPorFracao(pid,ano);if(!x||typeof x!=='object')return;
+    const p=prop(pid),cs=(Array.isArray(x.contratos)?x.contratos:[]).filter(y=>y&&y.id);
+    const lista=cs.map(y=>{const c=contract(y.id);return (c?ctName(c):'Contrato')+', '+euroS(Number(y.renda)||0)}).join('; ');
+    const quando=/^\d{4}-\d{2}$/.test(String(x.mes||''))?' em '+pzMes(x.mes):'';
+    out.push(fiscoAvNovo('Imóvel '+String((p&&p.name)||'')+': '+(cs.length?'os '+cs.length+' contratos':'os contratos')+' em vigor'+quando+' somam '+euroS(Number(x.soma)||0)+' por mês'+(lista?' ('+lista+')':'')
+      +', acima do limite das rendas moderadas ('+euroS(Number(x.limite)||0)+'), e cada um cabe nele. A app mede o limite contrato a contrato e dá os 10 % a cada um; '
+      +'a lei fala do valor pago pela fração (DL 97/2026, art. 3.º n.º 1), e a AT pode medir a renda pela fração inteira: confirma-o antes de entregar',
+      fiscoAvToque('properties',`propView('${jsq(pid)}')`,'camada'),'aviso'));
+  });
+  return out;
+}
+/* A devolução da caução num ano em que o imóvel não tem rendas (D15, N024 —
+   r.caucoesSemLinha): é gasto do ano em que se devolve (OC 20256, n.º 6),
+   mesmo sem a caução ter entrado como renda (ficha 26360), mas as instruções
+   do Anexo F mandam não indicar prédios sem rendimento — a app não a põe em
+   linha nenhuma, e diz o valor e o que fazer. Um por devolução.
+   Recebe: r — o resumo.
+   Devolve: [{texto, abrir, toca, nivel}]. */
+function fiscoAvCaucoesSemLinha(r){
+  return (Array.isArray(r.caucoesSemLinha)?r.caucoesSemLinha:[]).filter(x=>x&&x.txId&&(Number(x.valor)>0||Number(x.total)>0)).map(x=>{
+    const v=Number(x.valor)>0?Number(x.valor):Number(x.total),tot=Number(x.total)>0?Number(x.total):v;
+    const ct=String(x.contrato||(x.contratoId?x.nome:'')||'').trim(),quem=ct?'Contrato '+ct:'Imóvel '+String(x.imovel||'');
+    const parte=Math.abs(tot-v)>0.005?' — a tua parte: '+euroS(v):'';
+    const vend=/^\d{4}-\d{2}-\d{2}$/.test(String(x.vendido||''))?' (vendido a '+dPT(x.vendido)+')':'';
+    return fiscoAvNovo(quem+': a caução devolvida a '+dPT(x.data)+' ('+euroS(tot)+parte+') é gasto de '+r.ano+' (Ofício-Circulado 20256), mas o imóvel '+String(x.imovel||'')+vend
+      +' não tem rendas em '+r.ano+', e a app não a conta em linha nenhuma: as instruções do Anexo F mandam não indicar prédios que não deram rendas. '
+      +'Confirma com a AT como a declarar — o resultado da categoria F é teu, de todos os teus imóveis, e um prejuízo reporta-se aos anos seguintes (CIRS art. 55.º)',
+      fiscoAvToque('transactions',`txView('${jsq(x.txId)}')`,'camada'),'aviso');
+  });
+}
+/* Os encargos que o contrato põe a cargo do inquilino e estão nos gastos
+   (N111 — r.encargosDoInquilino): se foi o senhorio a pagar, estão certos (e
+   o que o inquilino devolve é renda); se pagou o inquilino, não são gastos do
+   senhorio (CIRS art. 41.º n.º 1). As duas hipóteses, sem mandar tirar. O
+   IMI fica fora: a AT liquida-o sempre ao dono (nota do verificador de
+   impacto). Um por contrato e encargo.
+   Recebe: r — o resumo.
+   Devolve: [{texto, abrir, toca, nivel}]. */
+function fiscoAvEncargos(r){
+  const frase={condominio:'o condomínio é',seguro:'o seguro é',consumos:'a água, a luz e o gás são'};
+  return (Array.isArray(r.encargosDoInquilino)?r.encargosDoInquilino:[]).filter(x=>x&&x.contratoId&&frase[x.encargo]&&Number(x.valor)>0).map(x=>{
+    const c=contract(x.contratoId),nome=String(x.nome||(c?ctName(c):'')),n=Math.max(1,Math.round(Number(x.n)||0));
+    const enc=String(x.encargoNome||'').trim()||(ENCARGOS_DO_INQUILINO.find(e=>e.id===x.encargo)||{}).nome||x.encargo;
+    const encMin=/^[A-ZÁÉÍÓÚÂÊÔÃÕÇ]{2,}$/.test(enc)?enc:enc.charAt(0).toLowerCase()+enc.slice(1);
+    const ids=(Array.isArray(x.txIds)?x.txIds:[]).filter(Boolean);
+    const conta=Number(x.nosGastos)>0&&Math.abs(Number(x.nosGastos)-Number(x.valor))>0.005?' (na tua quota, '+euroS(Number(x.nosGastos))+')':'';
+    return fiscoAvNovo('Contrato '+nome+': o contrato diz que '+frase[x.encargo]+' do inquilino, e há '+euroS(Number(x.valor))+' de '+encMin+' nos gastos de '+r.ano+conta+' ('+fiscoN(n,'despesa','despesas')+'). '
+      +'Se foste tu a pagar, está certo — e o que o inquilino te devolve é renda; se pagou ele, não '+(n===1?'é um gasto teu: escolhe «Não dedutível» na ficha dela':'são gastos teus: escolhe «Não dedutível» na ficha de cada uma')+' (CIRS art. 41.º n.º 1)',
+      fiscoAvToqueMovs(ids.map(id=>({txId:id,propertyId:x.propertyId||''})),r.ano,'expense'),'aviso');
+  });
+}
+/* As despesas com uma divisão própria muito diferente das quotas (N115 —
+   r.divisoesProprias, ou r.divisaoPropria): a Declaração conta a quota de
+   cada dono e não a divisão (os gastos seguem a proporção das rendas, desde
+   que suportados — CIRS art. 41.º; PIV 25058). Quem pagou menos do que a
+   quota deduz uma parte que não suportou, se não acertaram contas (âmbar);
+   quem pagou mais não deduz acima da quota (cinzento). Uma por despesa.
+   Recebe: r — o resumo.
+   Devolve: [{texto, abrir, toca, nivel}]. */
+function fiscoAvDivisoes(r){
+  const xs=Array.isArray(r.divisoesProprias)?r.divisoesProprias:Array.isArray(r.divisaoPropria)?r.divisaoPropria:[];
+  return xs.filter(x=>x&&x.txId&&Number(x.valor)>0&&isFinite(Number(x.quota))&&isFinite(Number(x.divisao))).map(x=>{
+    const q=Number(x.quota),d=Number(x.divisao),v=Number(x.valor),menos=d<q;
+    const conta=Number(x.conta)>0?Number(x.conta):v*q;
+    return fiscoAvNovo(String(x.nome||'Despesa')+', '+euroS(v)+(x.imovel?' ('+String(x.imovel)+')':'')+': a divisão diz que '+(d>0?'pagaste '+fiscoAvPct(d):'não pagaste nada')
+      +', e a tua quota no imóvel é '+fiscoAvPct(q)+'. Aqui conta pela quota de cada dono — '+euroS(conta)+' nos teus gastos —, porque os gastos seguem a proporção das rendas, desde que suportados (CIRS art. 41.º; PIV 25058). '
+      +(menos?'Se não acertaram contas entre vocês, a parte que não pagaste não é gasto teu: corrige-a à mão no Portal das Finanças'
+        :'A AT não aceita deduzir acima da quota, mesmo tendo pago mais: o que pagaste a mais acerta-se entre os donos'),
+      fiscoAvToque('transactions',`txView('${jsq(x.txId)}')`,'camada'),menos?'aviso':'info');
+  });
+}
+/* A parte arrendada de um imóvel por quartos (D4, N012 — r.parteArrendada):
+   os gastos da casa contam só na parte arrendada — a da ficha
+   (p.parteArrendada), ou, por omissão, os quartos com contrato sobre o
+   total, dia a dia. A lei manda imputá-los pela área ou pelo VPT da parte
+   arrendada (CIRS art. 41.º n.º 4): só se diz (cinzento), com o atalho para
+   a indicar na ficha (imovel.js:imvAbrirNoCampo).
+   Recebe: r — o resumo.
+   Devolve: [{texto, abrir, toca, nivel, abrirTexto}]. */
+function fiscoAvParteArrendada(r){
+  return (Array.isArray(r.parteArrendada)?r.parteArrendada:[]).filter(x=>x&&x.propertyId&&Number(x.parte)>=0&&Number(x.parte)<1).map(x=>{
+    const p=prop(x.propertyId),nome=String(x.imovel||(p&&p.name)||''),g=Number(x.gastos)||0,ct=Number(x.contados);
+    const ficha=x.origem==='ficha';
+    const valores=g>0?': '+euroS(isFinite(ct)&&ct>=0?ct:g*Number(x.parte))+' dos '+euroS(g)+' de gastos do ano':'';
+    return fiscoAvNovo('Imóvel '+nome+' (por quartos): os gastos da casa contam só na parte arrendada, '+fiscoAvPct(Number(x.parte))
+      +(ficha?', a que indicaste na ficha':' — os quartos com contrato sobre o total'+(Number(x.quartos)>0?' ('+fiscoN(Number(x.quartos),'quarto','quartos')+')':'')+', dia a dia')+valores
+      +'. A lei manda contá-los pela área da parte arrendada, ou pelo valor patrimonial dela (CIRS art. 41.º n.º 4): '+(ficha?'se mudou, corrige-a na ficha do imóvel':'se a parte arrendada é outra, indica-a na ficha do imóvel'),
+      Object.assign(fiscoAvToque('properties',`imvAbrirNoCampo('${jsq(x.propertyId)}','p_parteArrendada')`,'camada'),{abrirTexto:ficha?'Corrigir a parte':'Indicar a parte'}),'info');
+  });
+}
+
 /* O que há a tratar antes de preencher o quadro, cada ponto com o nível e o
-   toque que abre a ficha onde se trata (com o serviço desligado, sem toque).
+   toque que abre a ficha onde se trata (com o serviço desligado, sem toque);
+   com vários movimentos, os Movimentos filtrados (fiscoAvToqueMovs — N134).
    Um contrato conta uma vez, mesmo com uma linha por titular ou por natureza
-   (fica a das rendas, papel 'renda'). Pela ordem: as regras do ano (D50, D49);
-   por inteiro sem sessão; a conjunta sem o cônjuge escolhido (D30, falta) e,
-   com ele, só os imóveis dele partilhados com esta conta (D31, info); os
-   contratos por indicar, sem o n.º, sem início (D43), sem finalidade (D16),
-   com inquilino pessoa coletiva (D47); o fim — sem o dia (D02,
-   fiscoAvSemCessacao), sem o motivo do quadro 10 (D09), a regularização do
-   n.º 20 (D10, e a de um DHD); o DHD (fiscoAvDhd); as rendas depois do termo
-   (D15); a comunicação da duração e o 4.2C (D12); a isenção que não conta
-   (D46); o quadro 6 (fiscoAvBeneficios); os inquilinos sem NIF nem país; os
-   imóveis sem os dados matriciais ou com várias frações (D69) e o código da
-   freguesia (fiscoAvFreguesias); o que falta ao quadro 5 (D52); os imóveis
-   por inteiro sem os donos fora da app confirmados (D08, fiscoAvSoDeUmDono)
-   e as quotas que mudaram no ano (D29, info); o Modelo 44 ou os recibos; o
-   selo do contrato (D27, fiscoAvSeloDoContrato); as rendas sem contrato
-   (D34) e as de antes do início (fiscoAvAntesDoInicio); as receitas que a
-   app não conta como renda (D05, D51, com o IHRU, fiscoAvAntesDoRau), o
-   seguro num imóvel com seguro de renda (D21) e as rendas «Fora dos totais»
-   (D19, info); a taxa escrita (D17); por contrato (fiscoAvAnaliseDasRendas),
-   as retenções (D23, D58), as rendas abaixo (fiscoAvRendasAbaixo), as
-   retenções de particulares (fiscoAvRetencoesParticulares), os meses
-   dobrados (D88), as antecipadas (D56) e os meses sem renda (D04,
-   fiscoAvCobertura); as despesas «a confirmar» (D06, D07, D24–D27, D60,
-   D61), as pagas sem contrato e as obras soltas; as obras dos 24 meses por
-   confirmar (D28), as despesas sem imóvel (D68), os reembolsos de um gasto
-   (D20), as que contam fora do período por escolha (D65, info) e as do
-   Splitwise cortadas (fiscoAvSplitwise); o AIMI (D32, D71); o reporte (Q10);
-   o Anexo J e a categoria B (fiscoAvForaDoAnexoF); e os não declarados.
-   Recebe: r — o resumo (resumoFiscal), menos os avisos, na forma da 1.4 e da
-   1.7 do plano (linhas, fora, semContrato, aConfirmar ou semRegra, cessados,
-   regularizacoes, aimi, reporte, quadro5, os movimentos apontados, anexoJ,
-   categoriaB, rendasAbaixo…). O que falte lê-se como vazio; a comunicação,
-   os meses e os contratos sem rendas, sem eles, contam-se da base.
-   Devolve: [{texto, abrir, toca, nivel}] — abrir o código do toque (''
-   sem ação); toca 'camada' ou 'ecra'; nivel 'falta' (o que a AT pede e não
-   está), 'aviso' (o que convém tratar) ou 'info' (o que só se diz). */
+   (fica a das rendas, papel 'renda'); uma linha sem contrato só tem os
+   avisos do imóvel. Pela ordem: as regras do ano (D50, D49); por inteiro sem
+   sessão; a conjunta (D30, D31); os contratos por indicar, sem o n.º, sem
+   início, sem finalidade, com inquilino empresa (D43, D16); o fim
+   (fiscoAvSemCessacao, D09, D10, N125, fiscoAvTermoNoFim, fiscoAvDhd); as
+   rendas depois do termo e do fim (D15, fiscoAvDepoisDoFim); a comunicação
+   e o 4.2C (D12); a isenção (D46, N150); o quadro 6 (fiscoAvBeneficios,
+   N091); os inquilinos (N036); os imóveis — a matriz, a freguesia
+   (fiscoAvFreguesias, N087), as frações; o quadro 5 (D52, N023); os donos e
+   as quotas (fiscoAvSoDeUmDono, com o «É só meu» — N065;
+   fiscoAvQuotasDasCasas, fiscoAvOutraQuota, D29); o Modelo 44 ou os recibos,
+   com o «Marcar as N como emitidas» (N055, N062); o selo, que abre a
+   despesa (D27, fiscoAvSeloDoContrato); as rendas sem contrato e as de antes
+   do início (D34, fiscoAvAntesDoInicio); as receitas por classificar, as de
+   outra conta e as sem imóvel (D05, D51, N006, N027, fiscoAvAntesDoRau), o
+   seguro de renda (D21) e as rendas «Fora dos totais» (D19); a taxa escrita
+   (D17); as rendas moderadas (fiscoAvModeradas); por contrato
+   (fiscoAvAnaliseDasRendas), as retenções, as rendas abaixo
+   (fiscoAvRendasAbaixo, fiscoAvRendaConstante), os meses dobrados, as
+   antecipadas, as estimadas (fiscoAvEstimativas) e os meses sem renda
+   (fiscoAvCobertura); os gastos — a confirmar (N048), os que a AT não
+   aceita (fiscoAvNaoAceites), os pagos sem contrato (N047), as obras, os sem
+   imóvel, a caução sem linha (fiscoAvCaucoesSemLinha), os reembolsos (D20,
+   N071, N072), os fora do período por escolha (D65) ou pelo «Fora dos
+   totais» (N042), os encargos do inquilino, a divisão própria e a parte
+   arrendada (fiscoAvEncargos, fiscoAvDivisoes, fiscoAvParteArrendada), o
+   Splitwise; o AIMI; o reporte; o Anexo J e a categoria B; os não declarados.
+   Recebe: r — o resumo (resumoFiscal), menos os avisos (o que falte lê-se
+   como vazio; a comunicação, os meses e os sem rendas contam-se da base).
+   Devolve: [{texto, abrir, toca, nivel[, abrirTexto, acao, acaoTexto,
+   acaoToca]}] — abrir o código do toque ('' sem ação), toca 'camada' ou
+   'ecra'; nivel 'falta', 'aviso' ou 'info'; abrirTexto o rótulo do toque
+   (sem ele, fisco.js:fiscoRotuloDoAviso); acao e acaoTexto o botão que
+   resolve o aviso no próprio sítio (D8). */
 function fiscoAvisos(r){
   const ano=r.ano,A=String(ano),F=r.fora||[],S=r.semContrato||[],obrasSoltas=r.obrasSoltas,foraDoPeriodo=r.foraDoPeriodo,semSessao=r.semSessao,hoje=today();
   let L=r.linhas||[];
-  const out=[],add=(texto,abrir,toca,nivel)=>out.push({texto:texto,abrir:abrir||'',toca:toca||'',nivel:nivel||'aviso'});
+  /* extra (opcional) traz a ação do próprio aviso e o rótulo do toque
+     (fiscoAvExtra: acao, acaoTexto, acaoToca, abrirTexto) */
+  const out=[],add=(texto,abrir,toca,nivel,extra)=>out.push(fiscoAvExtra({texto:texto,abrir:abrir||'',toca:toca||'',nivel:nivel||'aviso'},extra));
+  /* um aviso já feito (fiscoAvNovo), com tudo o que traz */
+  const addA=a=>add(a.texto,a.abrir,a.toca,a.nivel,a);
   /* o toque só se o serviço que ele abre está ligado; senão [abrir, toca] vazios */
   const se=(id,abrir,toca)=>servicoLigado(id)?[abrir,toca]:['',''];
+  /* um toque já feito (fiscoAvToque) na forma do se() */
+  const tq=t=>[(t&&t.abrir)||'',(t&&t.toca)||''];
   const v=irsAno(ano);
   if(!v.exato){
     if(v.pedido>v.ano)add('Ainda não há versão das regras de '+ano+'. Usam-se as de '+v.ano+', a mais recente, com as datas passadas para '+ano+' — as taxas e os quadros podem ter mudado.','','','aviso');
@@ -1185,7 +1553,7 @@ function fiscoAvisos(r){
     :!!(r.titularId&&typeof fiscoTitulares==='function'&&(fiscoTitulares(r.titularId,ano)||{}).semConjuge===true);
   /* sem ninguém para escolher, ou com o cônjuge sem conta dos bens comuns do
      casal, o aviso diz o que fazer (D5, fiscoAvConjuntaSemConjuge) */
-  if(semConjuge)fiscoAvConjuntaSemConjuge(r,r.titularId||fiscoEu()).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
+  if(semConjuge)fiscoAvConjuntaSemConjuge(r,r.titularId||fiscoEu()).forEach(addA);
   /* a conjunta com o cônjuge escolhido (D31): a app só vê os imóveis dele
      partilhados com esta conta; os que estão só na conta dele faltam, e
      juntam-se à mão. Só se diz (cinzento: não há nada a corrigir na app —
@@ -1204,8 +1572,16 @@ function fiscoAvisos(r){
      selo, mesmo quando a 05/02 vem antes no array (a das rendas no 4.2, a
      outra no 4.1) */
   const daRenda=l=>!l.papel||l.papel==='renda',fica={};
+  /* uma linha sem contrato (a cedência da natureza 02 num imóvel sem
+     arrendamento — N076) não tem os avisos de um contrato: só os do imóvel
+     (LP, a seguir) */
+  const semCt=L.filter(l=>l&&!l.contratoId),vistoSemCt={};
+  L=L.filter(l=>l&&l.contratoId);
   L.forEach(l=>{const x=fica[l.contratoId];if(!x||(!daRenda(x)&&daRenda(l)))fica[l.contratoId]=l});
   L=L.filter(l=>fica[l.contratoId]===l);
+  /* as linhas para os avisos dos imóveis: as dos contratos e as sem contrato,
+     uma por imóvel destas */
+  const LP=L.concat(semCt.filter(l=>l.propertyId&&!vistoSemCt[l.propertyId]&&(vistoSemCt[l.propertyId]=1)));
   const falta=(l,re)=>(l.faltas||[]).some(x=>re.test(x));
   const umCt=ls=>ls.length===1?se('contracts',`ctView('${jsq(ls[0].contratoId)}')`,'camada'):se('contracts',"go('contracts')",'ecra');
   const verCt=id=>se('contracts',`ctView('${jsq(id)}')`,'camada');
@@ -1293,8 +1669,9 @@ function fiscoAvisos(r){
   const Q43=v.quadro43||{},m43=(Q43.motivos||[]).find(x=>x&&x.regulariza);
   (Array.isArray(r.regularizacoes)?r.regularizacoes:[]).forEach(x=>{
     /* sem diferença estimada, o aviso só nasce quando faltam anos na app
-       (N031): a regularização deles é devida na mesma */
-    if(!x||!x.contratoId||(!(Number(x.total)>0)&&!fiscoAvAnosEmFalta(x,ano).length))return;
+       (N031) ou há anos por confirmar, sem as regras deles (N125): a
+       regularização deles é devida na mesma */
+    if(!x||!x.contratoId||(!(Number(x.total)>0)&&!fiscoAvAnosEmFalta(x,ano).length&&!fiscoAvPorConfirmar(x).length))return;
     const c=contract(x.contratoId),nome=x.nome||(c?ctName(c):'');
     const anos=(x.anos||[]).filter(y=>y&&Number(y.diferenca)>0).map(y=>y.ano+': '+euroS(Number(y.diferenca)));
     const estima=Number(x.total)>0?' — a app estima '+euroS(Number(x.total))+' sem os juros'+(anos.length?' ('+anos.join('; ')+')':''):'';
@@ -1308,8 +1685,8 @@ function fiscoAvisos(r){
       +estima+fiscoAvRegularizacaoFalta(x,ano),...verCt(x.contratoId),'falta');
   });
   /* o termo escrito no dia em que acabou «antes do prazo» (N098) */
-  fiscoAvTermoNoFim(r).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
-  fiscoAvDhd(r,L).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
+  fiscoAvTermoNoFim(r).forEach(addA);
+  fiscoAvDhd(r,L).forEach(addA);
   /* as rendas depois do termo, sem renovação registada: o contrato renovou-se
      sozinho (Código Civil art. 1096.º) ou as datas estão erradas (D15). O
      termo dito é o do período que acabou (N032). Só é falta quando esse
@@ -1334,7 +1711,7 @@ function fiscoAvisos(r){
       +(d.n===1?'essa renda vai':'essas rendas vão')+(d.perdeu===false?' sem a redução pela duração, que a renovação pode ter':' sem a redução do período que acabou'),...verCt(l.contratoId),'falta');
   });
   /* as rendas de meses depois do dia em que o contrato acabou (N033) */
-  fiscoAvDepoisDoFim(r,L).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
+  fiscoAvDepoisDoFim(r,L).forEach(addA);
   /* a comunicação da duração (D12), uma por período com redução — o
      contrato e cada renovação —, até 15 de fevereiro do ano seguinte ao
      início dele; feita, vale em todos os anos do período
@@ -1388,14 +1765,39 @@ function fiscoAvisos(r){
      IHRU, o toque abre a janela de o marcar (prazos.js:pzIhruPergunta) */
   L.forEach(l=>{
     const c=contract(l.contratoId);if(!c||!fiscoDe(c).isencao||typeof irsIsencaoMotivo!=='function')return;
-    const m=irsIsencaoMotivo(c,ano);if(!m)return;
+    const m=irsIsencaoMotivo(c,ano);
+    /* a isenção que conta mas fica por confirmar (irs.js:irsIsencaoAviso —
+       N150: a renda antiga só com o início escrito, posterior ao RAU) */
+    if(!m){const av=irsIsencaoAviso(c,ano);if(av)add('Contrato '+l.nome+': '+av,...verCt(c.id),'aviso');return}
     const id=fiscoDe(c).isencao,is=(v.isencoes||[]).find(x=>x&&x.id===id),nomeIs=is?(is.curto||is.nome||''):'';
     const ihru=!fiscoDe(c).ihru&&/IHRU/.test(m)&&typeof pzIhruPergunta==='function'&&typeof pzPrazoIhru==='function'&&!!pzPrazoIhru(c)
       &&(typeof pzPodeMarcar!=='function'||pzPodeMarcar(c));
     add('Contrato '+l.nome+': '+m+(nomeIs&&m.indexOf(nomeIs)<0?' ('+nomeIs+')':'')+'. As rendas dele vão à Declaração com imposto'+(ihru?'; se o enviaste a tempo, marca o dia em que o enviaste':''),
       ...(ihru?se('contracts',`pzIhruPergunta('${jsq(c.id)}')`,'camada'):verCt(c.id)),'aviso');
   });
-  fiscoAvBeneficios(r,L).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
+  /* uma isenção de programa (as do quadro 6D: PAA, RSAA, os programas
+     municipais) que conta põe o imposto da linha a 0 % — escolhida por
+     engano, tira o imposto todo sem mais sinal do que o cartão do 6D (nota
+     do verificador de impacto do N060): só se diz, com a isenção e o valor,
+     para se confirmar no contrato */
+  L.forEach(l=>{
+    const is=l.isencao&&typeof l.isencao==='object'?l.isencao:null;if(!is||String(is.quadro||'')!=='6D')return;
+    const nomeIs=String(is.nome||is.curto||'').trim();
+    add('Contrato '+l.nome+': isento de IRS'+(nomeIs?' pelo '+nomeIs:'')+', no quadro 6D: as rendas de '+ano+(Number(l.rendas)>0?' ('+euroS(Number(l.rendas))+')':'')
+      +' ficam com 0 % de imposto. Confirma no contrato que está mesmo nesse programa — escolhida por engano, a isenção tira o imposto todo',...verCt(l.contratoId),'info');
+  });
+  fiscoAvBeneficios(r,L).forEach(addA);
+  /* uma linha sem inquilino (N036): o quadro pede o NIF de cada arrendatário
+     (ou o país de quem não tem NIF português) — um contrato criado sem ele,
+     ou com o inquilino apagado depois. Só quando a linha diz que não tem
+     nenhum (inquilinos: []): sem o campo, não se sabe */
+  const semInq=L.filter(l=>Array.isArray(l.inquilinos)&&!l.inquilinos.length);
+  if(semInq.length){
+    const um=semInq.length===1,q=um&&semInq[0].quadro?'a linha do quadro '+semInq[0].quadro+' do Anexo F':'o Anexo F';
+    add((um?'Contrato '+semInq[0].nome+': sem inquilino, e '+q+' pede o NIF do inquilino'
+      :fiscoN(semInq.length,'contrato','contratos')+' sem inquilino ('+listaE(semInq.map(l=>String(l.nome||'')))+'), e o Anexo F pede o NIF do inquilino de cada um')
+      +' (ou o país de residência de quem não tem NIF português). '+(um?'Liga-o no contrato':'Liga-o em cada contrato')+'; se foi apagado, adiciona-o outra vez',...umCt(semInq),'falta');
+  }
   const vistos={};
   L.forEach(l=>(l.inquilinos||[]).forEach(t=>{
     if(vistos[t.id])return;vistos[t.id]=1;
@@ -1404,14 +1806,14 @@ function fiscoAvisos(r){
     else if(ok===null&&!String(t.pais||'').trim())add('Inquilino '+t.nome+': sem NIF nem país de residência',...se('tenants',`personView('tenant','${jsq(t.id)}')`,'camada'),'falta');
   }));
   const imv={},frac={};
-  L.forEach(l=>{
+  LP.forEach(l=>{
     if(!l.propertyId||imv[l.propertyId])return;imv[l.propertyId]=1;
     const fal=[!l.freguesiaCodigo?'código da freguesia':'',!l.tipoPredio?'tipo de prédio':'',!l.artigo?'artigo matricial':''].filter(Boolean);
     if(fal.length)add('Imóvel '+l.imovel+': sem '+listaE(fal),...se('properties',`propView('${jsq(l.propertyId)}')`,'camada'),'falta');
   });
-  fiscoAvFreguesias(L).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
+  fiscoAvFreguesias(LP).forEach(addA);
   /* mais do que uma fração no mesmo campo: a app ainda não as separa (Q3) */
-  L.forEach(l=>{
+  LP.forEach(l=>{
     if(!l.propertyId||frac[l.propertyId]||!falta(l,/^fração/))return;frac[l.propertyId]=1;
     add('Imóvel '+l.imovel+': o campo da fração tem mais do que uma («'+String(l.fracao||'').trim()+'»). No Anexo F cada fração vai numa linha, com a parte da renda que lhe cabe; a app faz uma linha por contrato, por isso divide-a por fração ao preencher',
       ...se('properties',`propView('${jsq(l.propertyId)}')`,'camada'),'falta');
@@ -1431,6 +1833,23 @@ function fiscoAvisos(r){
     add('Quadro '+(Q.sublocacao||'5')+' (sublocação), contrato '+String(x.nome||'')+': '+partes.join('; ')+(onde?'. '+onde.charAt(0).toUpperCase()+onde.slice(1):''),
       ...(doImovel?se('properties',`propView('${jsq(x.propertyId)}')`,'camada'):verCt(x.contratoId)),'falta');
   });
+  /* o quadro 5 sem a parte subarrendada dita na ficha (N023; r.quadro5[].semParte,
+     ou parteSubPorDizer): a renda paga ao senhorio que abate é só a da parte
+     sublocada (CIRS art. 8.º n.º 2 c); a 12.ª coluna do quadro 5), e sem a
+     resposta a app conta a renda inteira. Um por imóvel; âmbar, mais forte
+     quando a renda paga passa a recebida (quem subarrenda um quarto e escreve
+     a renda da casa toda fica com um rendimento negativo) */
+  const sp={},spOrdem=[];
+  Q5.forEach(x=>{if(!x.propertyId||!(x.semParte===true||x.parteSubPorDizer===true))return;if(!sp[x.propertyId]){sp[x.propertyId]=[];spOrdem.push(x.propertyId)}sp[x.propertyId].push(x)});
+  spOrdem.forEach(pid=>{
+    /* sem renda paga escrita não há nada a repartir (a falta dela já se diz) */
+    const xs=sp[pid],rec=sum(xs.map(x=>Number(x.rendaRecebida)||0)),pag=sum(xs.map(x=>Number(x.rendaPaga)||0));if(!(pag>0))return;
+    const im=String(xs[0].imovel||((prop(pid)||{}).name)||'');
+    add('Quadro '+(Q.sublocacao||'5')+' (sublocação), imóvel '+im+': a renda paga ao senhorio só abate na parte que subarrendas, e a ficha não diz se é a casa toda. A app conta a renda inteira'
+      +(pag>0?' ('+euroS(pag)+(rec>0?', contra '+euroS(rec)+' recebidos':'')+')':'')+(pag>rec&&pag>0?', e por isso o rendimento fica negativo':'')
+      +'. Se subarrendas só uma parte (um quarto), indica-a na ficha do imóvel, com a renda que pagas por essa parte',
+      ...se('properties',`imvAbrirNoCampo('${jsq(pid)}','p_sub_parte')`,'camada'),'aviso',{abrirTexto:'Responder'});
+  });
   /* as quotas (D08, D29): um imóvel que conta por inteiro nesta declaração,
      sem estar confirmado que não há donos fora da app (o
      comproprietariosFora por confirmar, fiscoAvSoDeUmDono) — cada um declara
@@ -1439,18 +1858,22 @@ function fiscoAvisos(r){
      seu dia. Os imóveis do quadro 5 ficam fora: neles és o arrendatário, e
      não o dono */
   const pids=[],vistoP={};
-  L.forEach(l=>{if(l.propertyId&&!vistoP[l.propertyId]){vistoP[l.propertyId]=1;pids.push(l.propertyId)}});
+  LP.forEach(l=>{if(l.propertyId&&!vistoP[l.propertyId]){vistoP[l.propertyId]=1;pids.push(l.propertyId)}});
+  /* D8 (maqueta 5, N065): a pergunta responde-se no próprio aviso, um por
+     imóvel e com o nome dele (nunca um «são todos só meus» para vários: um
+     imóvel herdado ou comprado a meias confirmava-se por engano) — «É só meu»
+     grava o «Não, mais ninguém» (imovel.js:imvSoMeu), «Há outros donos» abre
+     a pergunta já com o «Sim» (imovel.js:imvAbrirQuotas) */
   const aCem=pids.map(id=>prop(id)).filter(p=>p&&fiscoAvSoDeUmDono(p,ano));
-  if(aCem.length)add((aCem.length===1?'Imóvel '+aCem[0].name+': conta por inteiro nesta declaração, e não está confirmado que não há outros donos'
-    :fiscoN(aCem.length,'imóvel conta','imóveis contam')+' por inteiro nesta declaração sem estar confirmado que não há outros donos: '+listaE(aCem.map(p=>String(p.name||''))))
-    +'. Se '+(aCem.length===1?'a casa tem':'algum tem')+' donos fora da app (um irmão, um herdeiro), escreve-os com a quota de cada um na ficha '+(aCem.length===1?'do imóvel':'dele')
-    +', em «Há outros donos fora da app?» — cada um declara só a sua parte (CIRS art. 19.º); se '+(aCem.length===1?'é só tua':'são só teus')+', escolhe «Não, mais ninguém»',
-    ...(aCem.length===1?se('properties',`imvAbrirQuotas('${jsq(aCem[0].id)}')`,'camada'):se('properties',"go('properties')",'ecra')),'aviso');
+  aCem.forEach(p=>add('Imóvel '+String(p.name||'')+': há mais donos além de ti? Conta por inteiro nesta declaração. Se tem outros donos fora da app — um irmão, um herdeiro, o teu cônjuge se o imóvel está em nome dos dois —, '
+    +'escreve-os com a quota de cada um: cada dono declara só a sua parte (CIRS art. 19.º)',
+    ...se('properties',`imvAbrirQuotas('${jsq(p.id)}','sim')`,'camada'),'aviso',
+    Object.assign({abrirTexto:'Há outros donos'},fiscoAvAcao('properties',`imvSoMeu('${jsq(p.id)}')`,'É só meu'))));
   /* as quotas de cada imóvel: quem saiu, a proposta pendente, as que não
      somam 100 %, as sem data, os donos de fora por confirmar com mais do que
      uma conta (fiscoAvQuotasDasCasas); e as rendas e o IMI que contam por
      outra quota que a do dia (fiscoAvOutraQuota) */
-  fiscoAvQuotasDasCasas(r,pids,aCem).concat(fiscoAvOutraQuota(r)).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
+  fiscoAvQuotasDasCasas(r,pids,aCem).concat(fiscoAvOutraQuota(r)).forEach(addA);
   const vistoQ={};
   (r.linhas||[]).filter(l=>l&&l.propertyId&&Array.isArray(l.quotas)&&l.quotas.length>1)
     .sort((a,b)=>(a.titularId===r.titularId?0:1)-(b.titularId===r.titularId?0:1))
@@ -1465,12 +1888,19 @@ function fiscoAvisos(r){
         ...se('properties',`propView('${jsq(l.propertyId)}')`,'camada'),'info');
     });
   /* quem está dispensado dos recibos eletrónicos não tem recibos em falta: tem
-     o Modelo 44, a declaração anual das rendas (CIRS art. 115.º) */
-  const dispensa=fiscoIrsDefs().dispensaRecibos;
-  if(dispensa&&L.length)add('Modelo 44: tens dispensa dos recibos eletrónicos — entrega a declaração anual das rendas de '+ano+' até '+dPT(fiscoPrazoModelo44(ano))+', no Portal das Finanças','','','info');
+     o Modelo 44, a declaração anual das rendas (CIRS art. 115.º). A dispensa
+     é do ano da Declaração, como o cartão «A tua situação fiscal» a grava e
+     os Prazos a leem (irs-papeis.js:irsSituacao — N055; sem o ano escrito,
+     vale o campo antigo). O Modelo 44 só fala das rendas que pedem recibo
+     (prazos.js:pzPedeRecibo: as de um arrendamento rural são opcionais) */
+  const dispensa=irsSituacao(ano,r.titularId||'').dispensaRecibos===true;
+  if(dispensa&&L.some(l=>{const c=contract(l.contratoId);return !!c&&pzPedeRecibo(c)}))
+    add('Modelo 44: tens dispensa dos recibos eletrónicos — entrega a declaração anual das rendas de '+ano+' até '+dPT(fiscoPrazoModelo44(ano))+', no Portal das Finanças','','','info');
   /* o recibo pede-se à renda, à caução e ao reembolso do inquilino (CIRS art.
      115.º n.º 5 a); o l.recibosPorEmitir conta os três, D03, D20): quando há
-     cauções ou reembolsos sem recibo, o aviso di-lo */
+     cauções ou reembolsos sem recibo, o aviso di-lo. Marcam-se no próprio
+     aviso (D8, N062: «Marcar as N como emitidas», com confirmação e Anular —
+     fiscoAvMarcarRecibos), e «Ver as rendas» abre os Movimentos filtrados */
   const comRecibos=dispensa?[]:L.filter(l=>l.recibosPorEmitir>0),nRec=sum(comRecibos.map(l=>l.recibosPorEmitir));
   if(nRec){
     const ids={};comRecibos.forEach(l=>{ids[l.contratoId]=1});
@@ -1481,9 +1911,14 @@ function fiscoAvisos(r){
       else if(fiscoNaLinhaDoContrato(t)&&txCatIrsId(t)==='reembolsos')outros.reembolso=1;
     });
     const ks=(outros.caucao?['a caução']:[]).concat(outros.reembolso?['o reembolso do inquilino']:[]);
-    add(ks.length?fiscoN(nRec,'recebimento','recebimentos')+' de '+ano+' sem recibo eletrónico emitido: '+listaE(ks)+' também '+(ks.length===1?'pede':'pedem')+' recibo, como a renda'
-      :fiscoN(nRec,'renda','rendas')+' de '+ano+' sem recibo eletrónico emitido',
-      ...(comRecibos.length===1?umCt(comRecibos):se('transactions',"go('transactions')",'ecra')));
+    const um1=comRecibos.length===1,pids1=[...new Set(comRecibos.map(l=>l.propertyId||''))];
+    const ver=fiscoAvVerMovimentos(ano,pids1.length===1?pids1[0]:'',outros.reembolso?'':'rendas','income',um1?comRecibos[0].contratoId:'');
+    const marcar=nRec===1?'Marcar como emitido':ks.length?'Marcar os '+nRec+' como emitidos':'Marcar as '+nRec+' como emitidas';
+    add((ks.length?fiscoN(nRec,'recebimento','recebimentos')+' de '+ano+' sem recibo eletrónico emitido: '+listaE(ks)+' também '+(ks.length===1?'pede':'pedem')+' recibo, como a renda'
+      :fiscoN(nRec,'renda','rendas')+' de '+ano+' sem recibo eletrónico emitido')
+      +'. Se já '+(nRec===1?'emitiste o recibo':'emitiste os recibos')+' no Portal das Finanças, marca-'+(nRec===1?'o':'os')+' aqui; se não, emite-'+(nRec===1?'o':'os')+' lá primeiro',
+      ver.abrir,ver.toca,'aviso',Object.assign({abrirTexto:ks.length?'Ver os recebimentos':nRec===1?'Ver a renda':'Ver as rendas'},
+        fiscoAvRecibosPorMarcar(r).some(pzPodeMarcarRecibo)?fiscoAvAcao('transactions',`fiscoAvMarcarRecibos(${Number(ano)},'${jsq(r.titularId||'')}')`,marcar):{}));
   }
   /* o selo do contrato (10 % de uma renda, pago com o Modelo 2) é dedutível e
      esquece-se: só se o contrato começou no ano e o prazo do Modelo 2 ainda
@@ -1496,24 +1931,29 @@ function fiscoAvisos(r){
     selo[l.contratoId]=fiscoAvSeloDoContrato(contract(l.contratoId),l,ano);
     return !selo[l.contratoId].pago;
   });
-  const antesDe=semSelo.length===1?selo[semSelo[0].contratoId].antes:'';
-  if(semSelo.length)add((semSelo.length===1?'Contrato '+semSelo[0].nome+': começou em '+ano+' e não há imposto do selo nos gastos'
-    +(antesDe?' (o de '+dPT(antesDe)+' foi pago antes de o contrato se celebrar: não é o dele)':'')
-    :semSelo.length+' contratos começaram em '+ano+' sem imposto do selo nos gastos')+' — o que se paga com o Modelo 2 (10 % de uma renda) é dedutível: adiciona-o como despesa, em Impostos › Imposto do selo',
-    ...se('transactions',"go('transactions')",'ecra'));
+  /* um por contrato, e o toque abre a despesa já preenchida
+     (fiscoAvNovaDespesaDoSelo — N134) */
+  semSelo.forEach(l=>{
+    const antesDe=selo[l.contratoId].antes,t=fiscoAvNovaDespesaDoSelo(contract(l.contratoId),l,ano);
+    add('Contrato '+l.nome+': começou em '+ano+' e não há imposto do selo nos gastos'
+      +(antesDe?' (o de '+dPT(antesDe)+' foi pago antes de o contrato se celebrar: não é o dele)':'')
+      +' — o que se paga com o Modelo 2 (10 % de uma renda) é dedutível no ano em que o pagaste: adiciona-o como despesa, em '+fiscoAvNomeDoId('cats','impostos/imposto-do-selo','Impostos › Imposto do selo')+', com o dia em que o pagaste',
+      t.abrir,t.toca,'aviso',t);
+  });
   /* as rendas sem contrato são rendimento na mesma (CIRS art. 8.º): não estão
      em linha nenhuma do quadro, e é uma falta (D34) */
   const nSem=sum(S.map(s=>s.n||0)),vSem=sum(S.map(s=>Number(s.rendas)||0));
   if(nSem)add(fiscoN(nSem,'renda','rendas')+' de '+ano+' sem contrato ligado ('+euroS(vSem)+') '+(nSem===1?'não está':'não estão')+' em nenhuma linha do quadro, mas '
     +(nSem===1?'declara-se na mesma: liga-a':'declaram-se na mesma: liga-as')+' ao contrato',
-    ...(nSem===1&&S[0].ids&&S[0].ids[0]?se('transactions',`txView('${jsq(S[0].ids[0])}')`,'camada'):se('transactions',"go('transactions')",'ecra')),'falta');
-  fiscoAvAntesDoInicio(r).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
+    ...(nSem===1&&S[0].ids&&S[0].ids[0]?se('transactions',`txView('${jsq(S[0].ids[0])}')`,'camada')
+      :tq(fiscoAvVerMovimentos(ano,S.length===1&&S[0].propertyId?S[0].propertyId:'','rendas','income'))),'falta');
+  fiscoAvAntesDoInicio(r).forEach(addA);
   /* os movimentos que o resumo aponta sem os contar (D05, D19, D20, D21,
      D28, D51, D65, D68): até cinco com o nome e o valor, e o resto somado; o
      toque abre o movimento, ou os movimentos quando são vários */
   const nomeValor=d=>(String(d.nome||'').trim()||'Movimento')+', '+euroS(Number(d.valor)||0);
   const listaMov=ds=>{const resto=ds.slice(5);return ds.slice(0,5).map(nomeValor).join('; ')+(resto.length?'; e mais '+resto.length+', '+euroS(sum(resto.map(d=>Number(d.valor)||0))):'')};
-  const toqueMov=ds=>ds.length===1&&ds[0].txId?se('transactions',`txView('${jsq(ds[0].txId)}')`,'camada'):se('transactions',"go('transactions')",'ecra');
+  const toqueMov=(ds,kind)=>tq(fiscoAvToqueMovs(ds,ano,kind||''));
   const movs=x=>(Array.isArray(x)?x:[]).filter(d=>d&&Number(d.valor)>0);
   const totalDe=ds=>euroS(sum(ds.map(d=>Number(d.valor)||0)));
   /* as receitas dos imóveis da declaração que não são renda nem passivo —
@@ -1523,17 +1963,51 @@ function fiscoAvisos(r){
      uso, a publicidade, as partes comuns; uma renda paga por outro). A
      compensação do IHRU aos senhorios dos contratos anteriores ao RAU, de
      1990, não é rendimento: diz-se quando algum desses imóveis tem um
-     contrato desses (fiscoAvAntesDoRau) */
-  const PC=movs(r.porClassificar);
+     contrato desses (fiscoAvAntesDoRau). À parte:
+     - as receitas de quem declara sem imóvel, sem categoria e sem contrato
+       (semImovel — N027): uma renda registada pelo «+» geral sem escolher o
+       imóvel não entra em linha nenhuma; se é uma renda, escolhe-se o
+       imóvel, o contrato e a categoria Rendas;
+     - as registadas por outra conta da casa (o _createdBy ou o _author do
+       movimento não é quem declara — N006): diz-se quem a lançou, e o toque
+       leva a quem a pode reclassificar — o movimento, se eu o posso alterar,
+       senão a ficha de quem a lançou.
+     Os nomes das categorias são os desta conta (fiscoAvNomeDoId) */
+  const nomeRendas=fiscoAvNomeDoId('catsIn','rendas','Rendas'),nomeOutras=fiscoAvNomeDoId('catsIn','rendas/outras-receitas-prediais','Rendas › Outras receitas prediais');
+  const PC0=movs(r.porClassificar),euPC=r.titularId||meuId();
+  const autorDe=d=>{const t=fiscoAvTx(d.txId),a=t&&(t._createdBy||t._author);return typeof a==='string'&&a&&euPC&&a!==euPC?a:''};
+  const SIr=PC0.filter(d=>d.semImovel===true||(!d.propertyId&&!d.contratoId&&!String(d.categoria||'').trim()));
+  const PCa=PC0.filter(d=>SIr.indexOf(d)<0&&autorDe(d)),PC=PC0.filter(d=>SIr.indexOf(d)<0&&PCa.indexOf(d)<0);
   if(PC.length){
     const n=PC.length,um=n===1,nat=(v.naturezas||{}).outras;
     const ihru=PC.some(d=>fiscoAvAntesDoRau(d.contratoId,d.propertyId));
     add((um?'Receita de '+ano+' que a app não conta como renda: '+listaMov(PC)+'. Se é rendimento do imóvel'
       :fiscoN(n,'receita','receitas')+' de '+ano+' dos imóveis desta declaração ('+totalDe(PC)+') que a app não conta como renda: '+listaMov(PC)+'. Se são rendimentos do imóvel')
       +' (publicidade, partes comuns, um lugar de garagem, uma renda paga por outro), '+(um?'declara-se: muda-lhe':'declaram-se: muda-lhes')
-      +' a categoria para Rendas — a renda do contrato, ou Rendas › Outras receitas prediais'+(nat?' (natureza '+nat+')':'')+' — e '+(um?'liga-a':'liga-as')+' ao contrato'
+      +' a categoria para '+nomeRendas+' — a renda do contrato, ou '+nomeOutras+(nat?' (natureza '+nat+')':'')+' — e '+(um?'liga-a':'liga-as')+' ao contrato'
       +(ihru?'. A compensação do IHRU aos senhorios dos contratos anteriores a 1990 (DL 132/2023) não é rendimento: essa fica como está':''),
-      ...toqueMov(PC),'aviso');
+      ...toqueMov(PC,'income'),'aviso');
+  }
+  const porAutor={},autores=[];
+  PCa.forEach(d=>{const a=autorDe(d);if(!porAutor[a]){porAutor[a]=[];autores.push(a)}porAutor[a].push(d)});
+  autores.forEach(a=>{
+    const ds=porAutor[a],um=ds.length===1,quem=fiscoAvNomeDe(a)||'outra pessoa da casa';
+    const posso=ds.every(d=>{const t=fiscoAvTx(d.txId);return !!t&&podeEditar(t.propertyId,'tx.add',t)});
+    const ficha=!posso&&(db.owners||[]).some(o=>o&&o.id===a);
+    add((um?'Receita de '+ano+' lançada por '+quem+' noutra conta, que a app não conta como renda: '+listaMov(ds)
+      :fiscoN(ds.length,'receita','receitas')+' de '+ano+' lançadas por '+quem+' noutra conta ('+totalDe(ds)+'), que a app não conta como renda: '+listaMov(ds))
+      +'. Se '+(um?'é rendimento do imóvel, declara-se':'são rendimentos do imóvel, declaram-se')+' com a categoria '+nomeRendas+' e o contrato'
+      +(posso?': podes mudá-'+(um?'la':'las')+' na ficha, ou pedir a '+quem+' que o faça'
+        :': só quem '+(um?'a':'as')+' lançou '+(um?'a':'as')+' pode mudar — pede a '+quem+' que o faça'),
+      ...(ficha?se('owners',`personView('owner','${jsq(a)}')`,'camada'):toqueMov(ds,'income')),'aviso',
+      ficha?{abrirTexto:'Abrir proprietário'}:null);
+  });
+  if(SIr.length){
+    const um=SIr.length===1;
+    add((um?'Receita de '+ano+' sem imóvel nem categoria: '+listaMov(SIr)+'. Não entra na Declaração: se é uma renda, escolhe na ficha dela'
+      :fiscoN(SIr.length,'receita','receitas')+' de '+ano+' sem imóvel nem categoria ('+totalDe(SIr)+'): '+listaMov(SIr)+'. Não entram na Declaração: se alguma é uma renda, escolhe na ficha dela')
+      +' o imóvel, o contrato e a categoria '+nomeRendas,
+      ...toqueMov(SIr,'income'),'aviso');
   }
   /* os reembolsos do seguro num imóvel com seguro de renda no ano
      (r.seguroDeRenda, D21): podem ser a indemnização das rendas, que se
@@ -1543,9 +2017,9 @@ function fiscoAvisos(r){
     const um=SR.length===1,nat=(v.naturezas||{}).indemnizacao;
     add((um?'Reembolso do seguro de '+ano+' num imóvel com seguro de renda: '+listaMov(SR)+'. Se compensa rendas que não recebeste, é uma indemnização'
       :fiscoN(SR.length,'reembolso','reembolsos')+' do seguro de '+ano+' em imóveis com seguro de renda ('+totalDe(SR)+'): '+listaMov(SR)+'. Os que compensam rendas que não recebeste são indemnizações')
-      +(nat?' (natureza '+nat+')':'')+' e '+(um?'declara-se: muda-lhe':'declaram-se: muda-lhes')+' a categoria para Rendas › Indemnização e '+(um?'liga-a':'liga-as')+' ao contrato. '
+      +(nat?' (natureza '+nat+')':'')+' e '+(um?'declara-se: muda-lhe':'declaram-se: muda-lhes')+' a categoria para '+fiscoAvNomeDoId('catsIn','rendas/indemnizacao','Rendas › Indemnização')+' e '+(um?'liga-a':'liga-as')+' ao contrato. '
       +(um?'Se reembolsa uma despesa, abate-o a essa despesa':'Os que reembolsam uma despesa abatem-se a ela'),
-      ...toqueMov(SR),'aviso');
+      ...toqueMov(SR,'income'),'aviso');
   }
   /* as rendas numa categoria «Fora dos totais» continuam a declarar-se
      (r.rendasForaDosTotais, D19): só se diz */
@@ -1569,27 +2043,36 @@ function fiscoAvisos(r){
       :escritas.length+' contratos têm escrita uma taxa que não é a das regras de '+ano+': '+listaE(escritas.map(y=>y.l.nome+' ('+dec(y.e)+' %, a lei dá '+dec(y.lei)+' %)')))
       +'. A Declaração usa a da lei; a escrita fica só para a renda líquida',...umCt(escritas.map(y=>y.l)),'aviso');
   }
+  /* as rendas moderadas: o que entrou e a renda do contrato de lados
+     diferentes do limite (N013), e os contratos do mesmo imóvel que somam
+     mais do que ele (N054) — fiscoAvModeradas */
+  fiscoAvModeradas(r,L).forEach(addA);
   /* as retenções de cada contrato, renda a renda (D23): a app não sabe o que
-     o inquilino reteve — o recibo sabe */
-  const toqueRendas=ids=>ids.length===1?se('transactions',`txView('${jsq(ids[0])}')`,'camada'):se('transactions',"go('transactions')",'ecra');
+     o inquilino reteve — o recibo sabe. Com várias rendas, o toque abre as
+     do contrato nos Movimentos (N134) */
+  const toqueRendas=(ids,l)=>ids.length===1?se('transactions',`txView('${jsq(ids[0])}')`,'camada')
+    :tq(fiscoAvVerMovimentos(ano,(l&&l.propertyId)||'','rendas','income',(l&&l.contratoId)||''));
   const meses=xs=>{const u={};xs.forEach(y=>{u[y.mes]=1});return Object.keys(u)};
   L.forEach(l=>{
     const x=analise[l.contratoId];if(!x)return;
     const c=contract(l.contratoId),renda=Number(c&&c.rent)||0,ids=xs=>xs.map(y=>y.id);
     const nas=xs=>{const ms=meses(xs);return (ms.length===1?'na renda de ':'nas rendas de ')+fiscoAvMeses(ms)};
     if(x.retMaior.length)add('Contrato '+l.nome+': '+nas(x.retMaior)+', o retido é maior do que o que entrou. Confirma no recibo o que entrou e o que o inquilino reteve',
-      ...toqueRendas(ids(x.retMaior)),'aviso');
+      ...toqueRendas(ids(x.retMaior),l),'aviso');
     if(x.acima.length)add('Contrato '+l.nome+': '+nas(x.acima)+', o que entrou mais o retido passa a renda do contrato ('+euroS(renda)+'). Confirma no recibo: a renda ilíquida é a do recibo, e o que entrou é ela menos o retido. Se a renda subiu, atualiza-a no contrato',
-      ...toqueRendas(ids(x.acima)),'aviso');
+      ...toqueRendas(ids(x.acima),l),'aviso');
     if(x.taxa.length){
       const pcts=[],ks=[];
       x.taxa.forEach(y=>{if(pcts.indexOf(y.pct)<0)pcts.push(y.pct);(y.certas||[]).forEach(k=>{if(ks.indexOf(k)<0)ks.push(k)})});
       ks.sort((a,b)=>b-a);
       add('Contrato '+l.nome+': '+nas(x.taxa)+', o retido é '+listaE(pcts.map(p=>dec(p)+' %'))+' da renda, e não '+ks.map(k=>dec(k)+' %').join(' nem ')+'. Confirma no recibo o que o inquilino reteve',
-        ...toqueRendas(ids(x.taxa)),'aviso');
+        ...toqueRendas(ids(x.taxa),l),'aviso');
     }
   });
-  fiscoAvRendasAbaixo(r,L).concat(fiscoAvRetencoesParticulares(r)).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
+  /* as rendas abaixo com o recibo emitido (D115), a renda constante abaixo
+     da do contrato o ano inteiro (N080, fiscoAvRendaConstante) e as retenções
+     de particulares (D116) */
+  fiscoAvRendasAbaixo(r,L).concat(fiscoAvRendaConstante(r,L),fiscoAvRetencoesParticulares(r)).forEach(addA);
   /* o inquilino que devia reter e o ano sem retenção (D58): um sinal, não o
      critério legal — há a dispensa do art. 101.º-B, e abaixo do mínimo não
      se retém; cala-se com o «confirmei: não retém» da ficha (retemVisto) */
@@ -1604,14 +2087,23 @@ function fiscoAvisos(r){
       +', e o retido soma-se à renda ilíquida e vai às Retenções na fonte. Se pediste a dispensa, o recibo diz «Sem retenção»',
       ...se('tenants',`personView('tenant','${jsq(q.id)}')`,'camada'),'aviso');
   });
-  /* os meses repetidos ou com o anterior vazio (D88): a renda de outro ano
-     vai ao quadro 8, e só se sabe pelo mês a que respeita */
+  /* os meses repetidos ou com o anterior vazio (D88): um pagamento de vários
+     meses num movimento só (a renda ao trimestre, dois meses juntos) conta
+     como a renda de um mês — nos meses e no teste das rendas moderadas
+     (N013) —, e a renda de outro ano vai ao quadro 8: só se sabe pelo mês a
+     que respeita. O toque abre as rendas do contrato (N134) */
   L.forEach(l=>{
     const x=analise[l.contratoId];if(!x||!x.dobradas.length)return;
     const ds=x.dobradas.map(d=>d.falta?pzMes(d.falta)+' sem renda e '+pzMes(d.mes)+' com '+euroS(d.valor)
       :pzMes(d.mes)+' com '+d.n+' rendas ('+euroS(d.valor)+')');
-    add('Contrato '+l.nome+': '+listaE(ds)+' — confirma a que mês respeita cada renda: a de um ano anterior vai ao quadro 8',
-      ...se('transactions',"go('transactions')",'ecra'),'aviso');
+    /* um movimento a dobrar com o mês de antes vazio é um pagamento de vários
+       meses; duas rendas no mesmo mês pedem o mês de cada uma */
+    const nv=x.dobradas.filter(d=>d.falta).length,dois=x.dobradas.some(d=>!d.falta);
+    const oque=nv&&dois?'confirma a que mês respeita cada renda, e parte num movimento por mês '+(nv===1?'o pagamento':'os pagamentos')+' de vários meses'
+      :nv?(nv===1?'é um pagamento':'são pagamentos')+' de vários meses num movimento? Parte'+(nv===1?'-o':'-os')+' num movimento por mês, com o mês a que respeita cada um'
+      :'confirma a que mês respeita cada renda';
+    add('Contrato '+l.nome+': '+listaE(ds)+' — '+oque+': os meses e o limite das rendas moderadas contam-se '+(nv?'assim':'por ele')+'. Uma renda de um ano anterior vai ao quadro 8',
+      ...tq(fiscoAvVerMovimentos(ano,l.propertyId||'','rendas','income',l.contratoId)),'aviso');
   });
   /* as rendas antecipadas por lançar (D56); num imóvel fora de Portugal não
      há recibo eletrónico (vão ao Anexo J — D133) */
@@ -1622,19 +2114,27 @@ function fiscoAvisos(r){
         :'. Se as recebeste à cabeça, adiciona-as com o dia em que entraram: declaram-se no ano em que as recebeste'+rec),
       ...verCt(x.contrato.id),'aviso');
   });
+  /* as rendas do ano registadas por estimativa (N079, fiscoAvEstimativas) */
+  fiscoAvEstimativas(r,L).forEach(addA);
   /* os meses em vigor sem renda registada (D04), pelo mês a que respeitam
      (fiscoAvCobertura): a app só soma as rendas registadas, e quem começou a
      usá-la a meio do ano, recusou um planeado ou começou «a partir de hoje»
-     deixa meses de fora sem o saber. E os contratos em vigor no ano sem
-     nenhuma renda registada, que nem têm linha (o r.contratosSemRendas do
-     resumo, ou fisco.js:fiscoContratosSemRendas). Os terminados sem o dia em
-     que acabaram ficam de fora: o aviso deles vem primeiro */
+     deixa meses de fora sem o saber. Com um pagamento de vários meses num
+     movimento (os meses dobrados da análise, ou os variosMeses do teste das
+     rendas moderadas — irs.js:irsTesteModerada), não se manda registar «as
+     outras», que as duplicaria (N013): parte-se o pagamento por mês. E os
+     contratos em vigor no ano sem nenhuma renda registada, que nem têm linha
+     (o r.contratosSemRendas do resumo, ou fisco.js:fiscoContratosSemRendas).
+     Os terminados sem o dia em que acabaram ficam de fora: o aviso deles vem
+     primeiro */
   L.forEach(l=>{
     if(semDia[l.contratoId])return;
     const c=contract(l.contratoId),x=fiscoAvCobertura(c,ano,l);
     if(!c||!x.emVigor||x.comRenda>=x.emVigor)return;
+    const tm=irsTesteModerada(c,ano)||{},varios=!!((analise[l.contratoId]||{}).dobradas||[]).length||(Array.isArray(tm.variosMeses)&&tm.variosMeses.length>0);
     add('Contrato '+l.nome+': '+fiscoN(x.emVigor,'mês','meses')+' em vigor em '+ano+' e '+(x.comRenda?'só '+fiscoN(x.comRenda,'renda registada','rendas registadas'):'nenhuma renda registada desses meses')
-      +' — se recebeste as outras, regista-as; as que não recebeste não se declaram',...verCt(l.contratoId),'aviso');
+      +(varios?', mas há pagamentos de vários meses num movimento: não registes as rendas outra vez — parte cada pagamento num movimento por mês, com o mês a que respeita. Os meses que ficarem sem renda são os que faltam; as que não recebeste não se declaram'
+        :' — se recebeste as outras, regista-as; as que não recebeste não se declaram'),...verCt(l.contratoId),'aviso');
   });
   const semRendas=(Array.isArray(r.contratosSemRendas)||typeof fiscoContratosSemRendas!=='function'?(r.contratosSemRendas||[]):fiscoContratosSemRendas(r))
     .map(x=>{const id=(x&&(x.contratoId||x.id))||'',c=id?contract(id):null;return {contratoId:id,nome:String((x&&x.nome)||(c?ctName(c):''))}})
@@ -1643,33 +2143,78 @@ function fiscoAvisos(r){
     :semRendas.length+' contratos em vigor em '+ano+' sem nenhuma renda registada neste ano: '+listaE(semRendas.slice(0,5).map(x=>x.nome).concat(semRendas.length>5?[fiscoN(semRendas.length-5,'outro','outros')]:[]))
       +' — se recebeste rendas deles, regista-as ligadas a cada contrato')+'; as que não recebeste não se declaram',...umCt(semRendas),'aviso');
   /* as despesas «a confirmar» não contam em coluna nenhuma até a pessoa
-     escolher: uma por categoria, com o nome e o valor de cada despesa */
+     escolher: uma por categoria, com o nome e o valor de cada despesa, e as
+     notas do mapa (IRS_MAPA_NOTAS: a da subcategoria, ou a da categoria para
+     as que não têm a sua — N045). As pagas sem contrato em vigor no imóvel
+     (semContrato — N048) dizem-se à parte, por categoria: só o período
+     arrendado conta, e o aviso propõe «Não dedutível» em vez de mandar
+     escolher a coluna. Uma obra paga antes de um contrato que começa até 24
+     meses depois (obras24 — N011) diz o contrato. Com várias, o toque abre
+     os Movimentos da categoria (N134) */
   if(Array.isArray(r.aConfirmar)){
     const grupos={},ordem=[];
-    r.aConfirmar.forEach(d=>{const k=String(d.categoria||'').trim()||'Sem categoria';if(!grupos[k]){grupos[k]=[];ordem.push(k)}grupos[k].push(d)});
+    r.aConfirmar.forEach(d=>{if(!d)return;const k=(d.semContrato===true?'1|':'0|')+(String(d.categoria||'').trim()||'Sem categoria');if(!grupos[k]){grupos[k]=[];ordem.push(k)}grupos[k].push(d)});
     const notas=typeof IRS_MAPA_NOTAS==='object'&&IRS_MAPA_NOTAS?IRS_MAPA_NOTAS:{};
-    ordem.forEach(k=>{
-      const ds=grupos[k],n=ds.length,tot=sum(ds.map(d=>Number(d.valor)||0));
+    ordem.forEach(g=>{
+      const vazia=g.charAt(0)==='1',k=g.slice(2),ds=grupos[g],n=ds.length,tot=sum(ds.map(d=>Number(d.valor)||0));
       const semRegra=ds.every(d=>d.origem==='omissao');
-      const nome=d=>(String(d.nome||'').trim()||'Despesa')+', '+euroS(Number(d.valor)||0);
+      const nome=d=>(String(d.nome||'').trim()||'Despesa')+', '+euroS(Number(d.valor)||0)+(d.obras24===true&&String(d.contrato||'').trim()?' (antes do contrato '+String(d.contrato).trim()+')':'');
       const resto=ds.slice(5),lista=ds.slice(0,5).map(nome).join('; ')+(resto.length?'; e mais '+resto.length+', '+euroS(sum(resto.map(d=>Number(d.valor)||0))):'');
-      const subs={},ns=[];
-      ds.forEach(d=>{const s=String(d.sub||'').trim(),nt=s&&notas[k+' / '+s];if(nt&&!subs[s]){subs[s]=1;ns.push(s+': '+nt.charAt(0).toLowerCase()+nt.slice(1))}});
+      const subs={},ns=[];let daCat=false;
+      ds.forEach(d=>{
+        const s=String(d.sub||'').trim(),nt=s&&notas[k+' / '+s];
+        if(nt){if(!subs[s]){subs[s]=1;ns.push(s+': '+nt.charAt(0).toLowerCase()+nt.slice(1))}}
+        else if(!daCat&&notas[k]){daCat=true;ns.push(String(notas[k]))}
+      });
+      const ob=ds.some(d=>d.obras24===true)?(n===1?' Se é uma obra de conservação antes do arrendamento, escolhe a coluna das obras dos 24 meses':' Se alguma é uma obra de conservação antes do arrendamento, escolhe a coluna das obras dos 24 meses'):'';
+      const toque=n===1&&ds[0].txId?se('transactions',`txView('${jsq(ds[0].txId)}')`,'camada')
+        :tq(fiscoAvVerMovimentos(ano,(fiscoAvMovsComuns(ds).pid),k==='Sem categoria'?'':k,'expense'));
+      if(vazia){
+        add(k+': '+fiscoN(n,'despesa','despesas')+' de '+ano+(semRegra?' sem regra de dedução':' a confirmar')+' '+(n===1?'paga':'pagas')+' com o imóvel sem contrato em vigor'
+          +(n===1?'':' ('+euroS(tot)+')')+' — '+lista+'. Não '+(n===1?'conta':'contam')+' nos gastos: só conta o período arrendado. Escolhe «Não dedutível» na ficha '+(n===1?'dela':'de cada uma')
+          +'; se '+(n===1?'é um gasto':'alguma é um gasto')+' do contrato que acabou (o advogado que cobra as rendas em atraso dele), liga-a a esse contrato e escolhe a coluna — e confirma com a AT antes de a deduzir',
+          ...toque,'aviso');
+        return;
+      }
       add(k+': '+fiscoN(n,'despesa','despesas')+' de '+ano+(semRegra?' sem regra de dedução':' a confirmar')+(n===1?' não conta':' ('+euroS(tot)+') não contam')+' nos gastos — '+lista
         +'. Escolhe na ficha '+(n===1?'dela':'de cada uma')+' a coluna do Anexo F (ou Não dedutível), ou a regra da categoria em Definições → Categorias, etiquetas e IRS'
-        +(ns.length?'. '+ns.join(' ').replace(/\.?$/,''):''),
-        ...(n===1&&ds[0].txId?se('transactions',`txView('${jsq(ds[0].txId)}')`,'camada'):se('transactions',"go('transactions')",'ecra')),'aviso');
+        +(ns.length?'. '+ns.join(' ').replace(/\.?$/,''):'')+(ob?'.'+ob:''),
+        ...toque,'aviso');
     });
   }
   else if(r.semRegra)add(fiscoN(r.semRegra,'despesa sem regra de dedução','despesas sem regra de dedução')+' de '+ano+': escolhe a coluna do Anexo F nas Definições → Categorias, etiquetas e IRS',
     "go('settings');goSet('irs')",'ecra');
   /* as despesas das subcategorias que a AT não aceita, que deixaram de contar
      (N117, fiscoAvNaoAceites): só se diz, com o total */
-  fiscoAvNaoAceites(r).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
-  if(foraDoPeriodo)add(fiscoN(foraDoPeriodo,'despesa paga','despesas pagas')+' em '+ano+' com o imóvel sem contrato em vigor '+(foraDoPeriodo===1?'fica':'ficam')+' fora: só conta o período arrendado. Se é deste período, corrige as datas do contrato ou escolhe a coluna na ficha da despesa',
-    ...se('transactions',"go('transactions')",'ecra'));
-  if(obrasSoltas)add(fiscoN(obrasSoltas,'despesa marcada como obras dos 24 meses','despesas marcadas como obras dos 24 meses')+' de '+ano+' sem contrato a começar depois: '+(obrasSoltas===1?'fica':'ficam')+' fora até o haver',
-    ...se('transactions',"go('transactions')",'ecra'));
+  fiscoAvNaoAceites(r).forEach(addA);
+  /* as despesas pagas com o imóvel sem contrato em vigor (D9 b, N047 —
+     r.foraDoPeriodo, a lista; um resumo antigo dá só o número): só conta o
+     período arrendado. Com o nome, o valor e o imóvel de cada uma, o
+     intervalo sem contrato quando é o mesmo, e o toque abre-as. Contam se
+     forem de um contrato que acabou: ligadas a ele e com a coluna escolhida
+     (a resposta própria — N048) */
+  const FP=Array.isArray(foraDoPeriodo)?movs(foraDoPeriodo):[];
+  if(FP.length){
+    const um=FP.length===1,ims=[...new Set(FP.map(d=>String(d.imovel||'').trim()).filter(Boolean))];
+    const item=d=>nomeValor(d)+(ims.length>1&&d.imovel?' ('+String(d.imovel)+')':'');
+    const resto=FP.slice(5),lista=FP.slice(0,5).map(item).join('; ')+(resto.length?'; e mais '+resto.length+', '+totalDe(resto):'');
+    const iso=s=>/^\d{4}-\d{2}-\d{2}$/.test(String(s||''))?String(s):'';
+    const ivs=[...new Set(FP.map(d=>iso(d.semContratoDe)+'|'+iso(d.semContratoAte)))],de=ivs.length===1&&ims.length<2?ivs[0].split('|'):['',''];
+    const iv=de[0]&&de[1]?' (de '+dPT(de[0])+' a '+dPT(de[1])+')':de[0]?' (desde '+dPT(de[0])+')':de[1]?' (até '+dPT(de[1])+')':'';
+    const onde=ims.length===1?'com o imóvel '+ims[0]:'com o imóvel';
+    add((um?'Despesa de '+ano+' paga '+onde+' sem contrato em vigor'+iv+' fica fora dos gastos: '+lista
+      :fiscoN(FP.length,'despesa','despesas')+' de '+ano+' ('+totalDe(FP)+') pagas '+onde+' sem contrato em vigor'+iv+' ficam fora dos gastos: '+lista)
+      +'. Só conta o período arrendado. Se '+(um?'é':'alguma é')+' deste período, corrige as datas do contrato; se '+(um?'é':'alguma é')+' um gasto do contrato que acabou, liga-a a ele e escolhe a coluna na ficha dela',
+      ...toqueMov(FP,'expense'),'aviso');
+  }
+  else if(typeof foraDoPeriodo==='number'&&foraDoPeriodo>0){
+    const n=Math.round(foraDoPeriodo);
+    add(fiscoN(n,'despesa paga','despesas pagas')+' em '+ano+' com o imóvel sem contrato em vigor '+(n===1?'fica':'ficam')+' fora: só conta o período arrendado. Se é deste período, corrige as datas do contrato ou escolhe a coluna na ficha da despesa',
+      ...tq(fiscoAvVerMovimentos(ano,'','','expense')));
+  }
+  const OS=movs(r.obrasSoltasLista),nOS=OS.length||(typeof obrasSoltas==='number'&&obrasSoltas>0?Math.round(obrasSoltas):0);
+  if(nOS)add(fiscoN(nOS,'despesa marcada como obras dos 24 meses','despesas marcadas como obras dos 24 meses')+' de '+ano+' sem contrato a começar depois'+(OS.length?' ('+listaMov(OS)+')':'')+': '+(nOS===1?'fica':'ficam')+' fora até o haver',
+    ...(OS.length?toqueMov(OS,'expense'):tq(fiscoAvVerMovimentos(ano,'','','expense'))));
   /* as obras dos 24 meses antes do início de um contrato só contam se,
      entretanto, o imóvel não teve outro uso (CIRS art. 41.º n.º 7; PIV
      26713 — D28): por responder, ficam fora até à resposta (âmbar, o toque
@@ -1687,15 +2232,40 @@ function fiscoAvisos(r){
   const SI=movs(r.semImovel);
   if(SI.length)add((SI.length===1?'Despesa de '+ano+' sem imóvel: '+listaMov(SI)+'. Não entra nos gastos do Anexo F: se é de um imóvel arrendado, escolhe-o na ficha dela'
     :fiscoN(SI.length,'despesa','despesas')+' de '+ano+' sem imóvel ('+totalDe(SI)+') não entram nos gastos do Anexo F: '+listaMov(SI)+'. Se são de um imóvel arrendado, escolhe-o na ficha de cada uma'),
-    ...toqueMov(SI),'aviso');
+    ...toqueMov(SI,'expense'),'aviso');
+  /* a caução devolvida num ano em que o imóvel não tem rendas (D15, N024 —
+     fiscoAvCaucoesSemLinha) */
+  fiscoAvCaucoesSemLinha(r).forEach(addA);
   /* os reembolsos de um gasto (r.reembolsosGasto, D20): o do seguro não abate
      sozinho — não se sabe a que despesa pertence —, e um gasto que outro
-     pagou não é teu (CIRS art. 41.º n.º 1); o do condomínio sem contrato já
-     abateu ao condomínio do imóvel (Q7), e só se diz */
-  const RG=movs(r.reembolsosGasto),RS=RG.filter(d=>d.tipo!=='condominio'),RC=RG.filter(d=>d.tipo==='condominio'&&Number(d.abatido)>0);
-  if(RS.length)add((RS.length===1?'Reembolso do seguro de '+ano+': '+listaMov(RS)+'. Se reembolsa uma despesa que está nos gastos, abate-o a ela (diminui-lhe o valor)'
-    :fiscoN(RS.length,'reembolso','reembolsos')+' do seguro de '+ano+' ('+totalDe(RS)+'): '+listaMov(RS)+'. Os que reembolsam uma despesa que está nos gastos abatem-se a ela (diminui-lhe o valor)')
-    +': só conta o que pagaste de facto, e um gasto que outro pagou não é teu (CIRS art. 41.º n.º 1)',...toqueMov(RS),'aviso');
+     pagou não é teu (CIRS art. 41.º n.º 1); diz sempre as duas hipóteses,
+     a indemnização das rendas (natureza 05, CIRS art. 8.º n.º 2 g)) e o
+     reembolso de uma despesa, sem depender de se ver o seguro de renda
+     (N072). O do Estado (tipo 'estado' — N071) pode devolver um imposto ou uma
+     taxa deduzidos (o IMI, o selo, as taxas), e abate-se a eles; o do IRS não
+     conta — só quando o imóvel tem desses impostos nos gastos do ano
+     (impostosNosGastos), e sem prometer regra para os de um ano anterior. O do
+     condomínio sem contrato já abateu ao condomínio do imóvel (Q7), e só se
+     diz */
+  const RG=movs(r.reembolsosGasto),RC=RG.filter(d=>d.tipo==='condominio'&&Number(d.abatido)>0);
+  const RS=RG.filter(d=>d.tipo!=='condominio'&&d.tipo!=='estado');
+  const RE=RG.filter(d=>d.tipo==='estado'&&(typeof d.impostosNosGastos!=='number'||d.impostosNosGastos>0));
+  const natI=(v.naturezas||{}).indemnizacao,nomeInd=fiscoAvNomeDoId('catsIn','rendas/indemnizacao','Rendas › Indemnização');
+  if(RS.length){
+    const um=RS.length===1;
+    add((um?'Reembolso do seguro de '+ano+': '+listaMov(RS)+'. Se compensa rendas que não recebeste (um seguro de renda), é uma indemnização'+(natI?' (natureza '+natI+')':'')
+      +' e declara-se: muda-lhe a categoria para '+nomeInd+' e liga-a ao contrato. Se reembolsa uma despesa que está nos gastos, abate-o a ela (diminui-lhe o valor)'
+      :fiscoN(RS.length,'reembolso','reembolsos')+' do seguro de '+ano+' ('+totalDe(RS)+'): '+listaMov(RS)+'. Os que compensam rendas que não recebeste (um seguro de renda) são indemnizações'+(natI?' (natureza '+natI+')':'')
+      +' e declaram-se: muda-lhes a categoria para '+nomeInd+' e liga-os ao contrato. Os que reembolsam uma despesa que está nos gastos abatem-se a ela (diminui-lhe o valor)')
+      +': só conta o que pagaste de facto, e um gasto que outro pagou não é teu (CIRS art. 41.º n.º 1)',...toqueMov(RS,'income'),'aviso');
+  }
+  if(RE.length){
+    const um=RE.length===1;
+    add((um?'Reembolso do Estado de '+ano+': '+listaMov(RE)+'. Se devolve':fiscoN(RE.length,'reembolso','reembolsos')+' do Estado de '+ano+' ('+totalDe(RE)+'): '+listaMov(RE)+'. Os que devolvem')
+      +' um imposto ou uma taxa que está nos gastos (o IMI, o imposto do selo, as taxas autárquicas)'+(um?', abate-o':' abatem-se')+' a essa despesa (diminui-lhe o valor): só conta o que pagaste de facto (CIRS art. 41.º n.º 1). '
+      +'O reembolso do IRS não conta: esse fica como está. Se devolve um imposto de um ano anterior, confirma com a AT como o acertar',
+      ...toqueMov(RE,'income'),'aviso');
+  }
   if(RC.length){
     const ab=sum(RC.map(d=>Number(d.abatido)||0));
     add((RC.length===1?'O reembolso do condomínio de '+ano+' ('+listaMov(RC)+') abate':fiscoN(RC.length,'reembolso','reembolsos')+' do condomínio de '+ano+' ('+totalDe(RC)+') abatem')
@@ -1707,8 +2277,18 @@ function fiscoAvisos(r){
   const FE=movs(r.foraPorEscolha);
   if(FE.length)add((FE.length===1?'Despesa de '+ano+' paga com o imóvel sem contrato em vigor que conta nos gastos por teres escolhido a coluna na ficha: '+listaMov(FE)+'. Se não é deste período arrendado, volta a «Pela categoria» na ficha dela'
     :fiscoN(FE.length,'despesa','despesas')+' de '+ano+' pagas com o imóvel sem contrato em vigor ('+totalDe(FE)+') contam nos gastos por teres escolhido a coluna na ficha: '+listaMov(FE)+'. Se alguma não é deste período arrendado, volta a «Pela categoria» na ficha dela'),
-    ...toqueMov(FE),'info');
-  fiscoAvSplitwise(r).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
+    ...toqueMov(FE,'expense'),'info');
+  /* as despesas que o «Fora dos totais» da categoria tira do Anexo F
+     (r.despesasForaDosTotais — N042, D19): só se diz, com o caminho para as
+     contar */
+  const DF=movs(r.despesasForaDosTotais);
+  if(DF.length)add((DF.length===1?'Despesa de '+ano+' que fica fora do Anexo F porque a categoria está «Fora dos totais»: '+listaMov(DF)+'. Para a contar'
+    :fiscoN(DF.length,'despesa','despesas')+' de '+ano+' ('+totalDe(DF)+') ficam fora do Anexo F porque a categoria está «Fora dos totais»: '+listaMov(DF)+'. Para as contar')
+    +', desliga-o em Definições → Categorias, etiquetas e IRS',"go('settings');goSet('irs')",'ecra','info');
+  /* os encargos do inquilino nos gastos (N111), a divisão própria longe das
+     quotas (N115) e a parte arrendada de um imóvel por quartos (N012) */
+  fiscoAvEncargos(r).concat(fiscoAvDivisoes(r),fiscoAvParteArrendada(r)).forEach(addA);
+  fiscoAvSplitwise(r).forEach(addA);
   /* o AIMI do quadro 9 (D32, D71): o pago sem «quem pagou» numa casa com
      mais do que um dono contou inteiro para quem declara; um prédio da lista
      sem a afetação da caderneta e com contrato não habitacional pode não ser
@@ -1718,7 +2298,7 @@ function fiscoAvisos(r){
   if(semPag.length)add((semPag.length===1?'AIMI de '+euroS(Number(semPag[0].valor))+(semPag[0].imovel?' ('+semPag[0].imovel+')':'')+' sem quem o pagou: contou inteiro na tua declaração. Se o pagou outro proprietário, escolhe-o no movimento'
     :fiscoN(semPag.length,'pagamento','pagamentos')+' do AIMI ('+euroS(sum(semPag.map(x=>Number(x.valor))))+') sem quem os pagou: contaram inteiros na tua declaração. Se os pagou outro proprietário, escolhe-o em cada movimento')
     +' — o AIMI abate-se n'+q9+' só a quem o pagou',
-    ...(semPag.length===1&&semPag[0].txId?se('transactions',`txView('${jsq(semPag[0].txId)}')`,'camada'):se('transactions',"go('transactions')",'ecra')),'aviso');
+    ...(semPag.length===1&&semPag[0].txId?se('transactions',`txView('${jsq(semPag[0].txId)}')`,'camada'):tq(fiscoAvVerMovimentos(ano,'','impostos/aimi','expense'))),'aviso');
   const semAfet=(Array.isArray(aimi.afetacaoPorConfirmar)?aimi.afetacaoPorConfirmar:[]).filter(x=>x&&(x.propertyId||x.imovel));
   if(semAfet.length)add((semAfet.length===1?'Imóvel '+semAfet[0].imovel+': sem a afetação da caderneta, e com um contrato não habitacional'
     :fiscoN(semAfet.length,'imóvel','imóveis')+' sem a afetação da caderneta, e com contratos não habitacionais: '+listaE(semAfet.map(x=>String(x.imovel||''))))
@@ -1736,7 +2316,7 @@ function fiscoAvisos(r){
       +(semDados.length?', '+(semDados.length===1?'o ano de '+semDados[0]:'os anos de '+listaE(semDados.map(String)))+', em que a app não tem registos,':'')
       +' e a condição do art. 55.º n.º 8 do CIRS — os prédios darem rendas em 36 meses dos cinco anos seguintes ao prejuízo. A AT faz a conta titular a titular, com as declarações que entregaste','','','aviso');
   }
-  fiscoAvForaDoAnexoF(r).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
+  fiscoAvForaDoAnexoF(r).forEach(addA);
   if(F.length)add(fiscoN(F.length,'contrato marcado como não declarado fica','contratos marcados como não declarados ficam')+' fora deste resumo.','','','info');
   return out;
 }

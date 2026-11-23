@@ -120,7 +120,7 @@ describe('o formulário da pessoa', () => {
     const html = app.personBody();
     assert.ok(html.includes('id="pe_pais"'));
     assert.ok(html.includes('value="Espanha"'));
-    assert.match(html, /id="pe_retem" checked/);
+    assert.match(html, /id="pe_retemR" value="sim"/);
     assert.ok(html.includes('Retém IRS na fonte'));
     assert.ok(html.includes('id="pe_nifHint"'));
   });
@@ -149,7 +149,7 @@ describe('o formulário da pessoa', () => {
   test('collectPerson lê o país e, no inquilino, a retenção', () => {
     app.perKind = 'tenant';
     app.perForm = app.normPerson({ id: 't1', name: 'Ana' });
-    const repor = comCampos({ pe_name: 'Ana', pe_pais: 'França', pe_retem: true });
+    const repor = comCampos({ pe_name: 'Ana', pe_pais: 'França', pe_retemR: 'sim' });
     try { app.collectPerson(); } finally { repor(); }
     assert.equal(app.perForm.pais, 'França');
     assert.equal(app.perForm.retem, true);

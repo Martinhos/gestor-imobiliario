@@ -13,13 +13,17 @@ let pForm={};
    freguesia aceita as letras da AT (D136), e o de uma união desagregada em
    2025 por confirmar pergunta antes de gravar (imvPerguntarFreguesia, D135);
    o imóvel reabilitado (6A) pede as datas e a data de aquisição (D117), e o
-   país fora de Portugal o código da tabela X com três algarismos (D133).
+   país fora de Portugal (o interruptor «O imóvel fica fora de Portugal»)
+   pede o nome e aceita o código da tabela X com 1 a 3 algarismos (D133,
+   N105). O subarrendamento pede se é a casa toda ou uma parte e, sendo
+   parte, a renda dessa parte (N023); a parte arrendada de um imóvel por
+   quartos, se escrita, é uma percentagem até 100 (N012).
    Recebe: id (opcional) — o id do imóvel a editar; sem id, cria um imóvel novo.
    Devolve: nada — abre o modal e deixa a gravação pendurada em onSave. */
 function propModal(id){
   /* num imóvel onde só colaboro sem «Editar a ficha», a ficha é só de leitura */
   if(id&&!pode(id,'house.edit'))return propView(id);
-  foldState={};_propPaint=null;
+  foldState={};_propPaint=null;_imvForaPT=null;
   pForm=normProp(id?JSON.parse(JSON.stringify(prop(id))):null);
   imvForaIniciar('p',pForm.comproprietariosFora);
   const m=id&&imvPossoApagar(id)?menu('prop',[{label:'Apagar imóvel',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delProp('${id}')`}]):'';
@@ -29,18 +33,18 @@ function propModal(id){
     collectProp();
     if(pForm.id&&prop(pForm.id)&&!pode(pForm.id,'house.edit'))return toast(fraseSemPerm('house.edit'));
     if(!pForm.name.trim())return falhaCampo('p_name','Dá um nome ao imóvel.');
-    /* o campo vive numa dobra que pode estar fechada (display:none): o falhaCampo
-       não chega a um campo escondido, por isso abre-se a dobra primeiro */
     /* o código da AT: quatro algarismos (distrito e concelho) e dois caracteres
-       que podem ser letras (0302FE, 0308FA — D136) */
-    if(pForm.freguesiaCodigo&&!IMV_FREGUESIA_FORMATO.test(pForm.freguesiaCodigo)){
-      const f=document.getElementById('fold_reg');if(f&&!f.classList.contains('open'))toggleFold('reg');
+       que podem ser letras (0302FE, 0308FA — D136); vive no grupo do Anexo F,
+       sempre aberto */
+    if(pForm.freguesiaCodigo&&!IMV_FREGUESIA_FORMATO.test(pForm.freguesiaCodigo))
       return falhaCampo('p_freguesiaCodigo','O código da freguesia tem 6 caracteres (distrito, concelho e freguesia), como na caderneta.');
-    }
-    const errSub=imvSubErro(pForm)||imvPaisErro(pForm)||imvReabErro(pForm);
+    const errSub=imvPaisErro(pForm)||imvParteErro(pForm)||imvSubErro(pForm)||imvReabErro(pForm);
     if(errSub){
-      /* a data de aquisição está no grupo dos valores, sempre aberto */
-      const f=errSub.campo==='p_purchaseDate'?null:document.getElementById('fold_reg');if(f&&f.classList&&!f.classList.contains('open'))toggleFold('reg');
+      /* o 6A vive numa dobra que pode estar fechada (display:none): o falhaCampo
+         não chega a um campo escondido, por isso abre-se a dobra primeiro; o
+         resto (o país, a parte arrendada, o subarrendamento, a data de
+         aquisição) está em grupos sempre abertos */
+      const f=/^p_reab/.test(errSub.campo)?document.getElementById('fold_reg'):null;if(f&&f.classList&&!f.classList.contains('open'))toggleFold('reg');
       return falhaCampo(errSub.campo,errSub.msg);
     }
     /* as quotas à mão só existem sem nuvem (com ela são da proposta, cloud/utilizadores.js);
@@ -76,9 +80,10 @@ function propModal(id){
       if(!guardado&&q1.desde)imvFecharQuotas(pForm,{ownerIds:pForm.ownerIds||[],ownerShares:pForm.ownerShares||{},comproprietariosFora:null},q1.desde);
       imvGravarFormulario(id);
     };
-    /* o código de uma união de freguesias desagregada em 2025, por confirmar na
-       caderneta atual: pergunta antes de gravar (D135) */
-    const uniao=pForm.matrizConfirmada?null:imvFreguesiaUniao(pForm);
+    /* o código de uma união de freguesias desagregada em 2025: pergunta antes
+       de gravar (D135), também com a marca da caderneta — um código de união
+       já não está em nenhuma caderneta atual (N087) */
+    const uniao=imvFreguesiaUniao(pForm);
     if(uniao)return imvPerguntarFreguesia(uniao,seguir);
     seguir();
   };
@@ -117,49 +122,48 @@ function imvFreguesiaFrase(rep){
 /* O que a pergunta da união extinta corre quando a pessoa responde (a gravação
    do formulário); null sem pergunta aberta. */
 let imvFreguesiaSeguir=null;
-/* A pergunta ao guardar um imóvel com o código de uma união extinta que ainda
-   não se confirmou na caderneta (D135): corrigir o código, guardar assim, ou
-   dizer que se confirmou (grava o dia em matrizConfirmada). A app não troca o
-   código: só a caderneta diz qual das freguesias repostas é a do prédio.
+/* A pergunta ao guardar um imóvel com o código de uma união extinta (D135):
+   corrigir o código ou guardar assim. Um código de união já não está em
+   nenhuma caderneta atual, por isso não há «Confirmei na caderneta» (N087).
+   A app não troca o código: só a caderneta diz qual das freguesias repostas
+   é a do prédio.
    Recebe: rep — a união (imvFreguesiaUniao); seguir — a função que grava.
    Devolve: nada — abre a pergunta. */
 function imvPerguntarFreguesia(rep,seguir){
   imvFreguesiaSeguir=seguir;
-  openModal('Confirma o código da freguesia',`<div class="form"><div class="hint u-fs-14px">${esc(imvFreguesiaFrase(rep))}</div>
-    <div class="hint">Nas declarações de substituição de 2024 e antes, o código da união é o certo. Sem a caderneta à mão, guarda assim: a ficha e a Declaração lembram-te.</div>
-    <div class="imv-botoes"><button type="button" class="btn" data-toca="camada" data-click="imvFreguesiaCorrigir()">Corrigir o código</button></div></div>`,
-    `<button type="button" class="btn" data-toca="dados" data-click="imvFreguesiaGuardar(0)">Guardar sem confirmar</button><button type="button" class="btn primary" data-toca="dados" data-click="imvFreguesiaGuardar(1)">Confirmei na caderneta</button>`);
+  openModal('Este código de freguesia mudou',`<div class="form"><div class="hint u-fs-14px">${esc(imvFreguesiaFrase(rep))}</div>
+    <div class="hint">Nas declarações de substituição de 2024 e antes, o código da união é o certo. Sem a caderneta à mão, guarda assim: a ficha e a Declaração lembram-te.</div></div>`,
+    `<button type="button" class="btn" data-toca="dados" data-click="imvFreguesiaGuardar(0)">Guardar assim</button><button type="button" class="btn primary" data-toca="camada" data-click="imvFreguesiaCorrigir()">Corrigir o código</button>`);
 }
-/* A resposta à pergunta da união extinta: fecha-a e grava o imóvel; com
-   «Confirmei na caderneta», com o dia de hoje em matrizConfirmada.
-   Recebe: confirmei — 1 (confirmou na caderneta atual) ou 0 (guarda sem confirmar).
+/* A resposta «Guardar assim» à pergunta da união extinta: fecha-a e grava o
+   imóvel com o código como está (N087: nunca o dá por confirmado).
+   Recebe: confirmei — ignorado (o 1 de uma janela antiga grava como o 0).
    Devolve: nada. */
 function imvFreguesiaGuardar(confirmei){
   const f=imvFreguesiaSeguir;imvFreguesiaSeguir=null;
   closeModal();
-  if(confirmei)pForm.matrizConfirmada=today();
   if(f)f();
 }
-/* «Corrigir o código»: fecha a pergunta e volta ao campo do código, com a
-   dobra dos dados registais aberta.
+/* «Corrigir o código»: fecha a pergunta e volta ao campo do código, no grupo
+   do Anexo F (sempre aberto).
    Devolve: nada. */
 function imvFreguesiaCorrigir(){
   imvFreguesiaSeguir=null;
   closeModal();
-  const f=document.getElementById('fold_reg');if(f&&f.classList&&!f.classList.contains('open'))toggleFold('reg');
-  const e=document.getElementById('p_freguesiaCodigo');try{if(e&&e.focus)e.focus()}catch(x){}
+  imvFocarCampo('p_freguesiaCodigo');
 }
-/* Se o código e o artigo se confirmaram na caderneta atual (D135), com o aviso da
-   união extinta quando o código é o de uma: o pedaço do formulário por baixo do
-   código e do artigo, que se repinta sozinho enquanto se escreve (imvMatrizEscrito).
-   Só num imóvel em Portugal com o código ou o artigo escritos.
+/* Se o código e o artigo se confirmaram na caderneta atual (D135): o pedaço do
+   formulário por baixo do código e do artigo, que se repinta sozinho enquanto
+   se escreve (imvMatrizEscrito). Com o código de uma união extinta, só o aviso
+   de que mudou, sem a caixa: esse código já não está em nenhuma caderneta
+   atual (N087). Só num imóvel em Portugal com o código ou o artigo escritos.
    Recebe: p — o imóvel do formulário.
    Devolve: o HTML (texto; '' sem nada a dizer). */
 function imvMatrizHtml(p){
   if(!p||String(p.pais||'').trim()||!(p.freguesiaCodigo||String(p.matrix||'').trim()))return '';
   const rep=imvFreguesiaUniao(p),conf=p.matrizConfirmada;
-  return `${rep?`<div class="imv-nota imv-nota-aviso small">${esc(imvFreguesiaFrase(rep))}</div>`:''}
-      <label class="check"><input type="checkbox" id="p_matrizConfirmada"${conf?' checked':''}> Confirmei o código e o artigo na caderneta predial atual</label>
+  if(rep)return `<div class="imv-nota imv-nota-aviso small">${esc(imvFreguesiaFrase(rep))}</div>`;
+  return `<label class="check"><input type="checkbox" id="p_matrizConfirmada"${conf?' checked':''}> Confirmei o código e o artigo na caderneta predial atual</label>
       <div class="hint u-mt-n4px">${conf?'Confirmado a '+dPT(conf)+'. Mudar o código ou o artigo pede outra confirmação.':'Opcional. A Declaração lembra-te dos códigos que mudaram desde então.'}</div>`;
 }
 /* O código da freguesia ou o artigo mudou no formulário: guarda-os em pForm, e
@@ -171,50 +175,114 @@ function imvMatrizEscrito(){
   if(c!==imvCodigoFreguesia(pForm.freguesiaCodigo)||String(m)!==String(pForm.matrix||'')){pForm.freguesiaCodigo=c;pForm.matrix=m;pForm.matrizConfirmada=''}
   const b=document.getElementById('imv_matriz');if(b)b.innerHTML=imvMatrizHtml(pForm);
 }
-/* «Confirmei na caderneta», no cartão dos dados registais da ficha (D135): o
-   dia de hoje em matrizConfirmada.
-   Recebe: id — o id do imóvel.
-   Devolve: nada — grava e repinta. */
-function imvMatrizConfirmar(id){
-  const x=prop(id);if(!x)return;
-  if(!pode(id,'house.edit'))return toast(fraseSemPerm('house.edit'));
-  x.matrizConfirmada=today();save();render();toast('Código e artigo confirmados na caderneta atual.');
-}
-/* «Corrigir», no aviso da ficha: o formulário do imóvel com os dados registais
-   abertos e o foco no código da freguesia.
+/* «Corrigir», no aviso da ficha: o formulário do imóvel com o foco no código
+   da freguesia (imvAbrirNoCampo).
    Recebe: id — o id do imóvel.
    Devolve: nada — abre o formulário. */
-function imvMatrizCorrigir(id){
-  if(!prop(id))return;
-  propModal(id);
-  const f=document.getElementById('fold_reg');if(f&&f.classList&&!f.classList.contains('open'))toggleFold('reg');
-  const e=document.getElementById('p_freguesiaCodigo');try{if(e&&e.focus)e.focus()}catch(x){}
+function imvMatrizCorrigir(id){imvAbrirNoCampo(id,'p_freguesiaCodigo')}
+/* Abre o formulário do imóvel numa pergunta: o toque dos avisos da
+   Declaração (fisco-avisos.js) e do «Preencher» da ficha. O campo de uma
+   dobra abre-a primeiro (o falhaCampo e o foco não chegam a um campo
+   escondido); o de um seletor (sel) leva o foco ao botão dele.
+   Recebe: pid — o id do imóvel; campo — o id do campo ('p_freguesiaCodigo',
+   'p_parteArrendada', 'p_sub_parte'…).
+   Devolve: nada — abre o formulário (a ficha só de leitura, a quem não pode editar). */
+function imvAbrirNoCampo(pid,campo){
+  if(!prop(pid))return;
+  propModal(pid);
+  imvFocarCampo(campo);
 }
-/* O país do imóvel no formulário (D133): em branco é Portugal; com outro país,
-   o código da tabela X (o Anexo J pede-o) e a frase de que as rendas vão ao
-   Anexo J e não ao Anexo F. Repinta-se sozinho enquanto se escreve (imvPaisEscrito).
+/* Leva o foco a um campo do formulário do imóvel aberto, com a dobra dele
+   aberta e ao centro do ecrã.
+   Recebe: campo — o id do campo (de um sel(), o do valor: o foco vai ao botão).
+   Devolve: nada. */
+function imvFocarCampo(campo){
+  const id=String(campo||''),e=id?document.getElementById('selb_'+id)||document.getElementById(id):null;
+  if(!e)return;
+  const dobra=typeof e.closest==='function'?e.closest('.fold'):null;
+  if(dobra&&dobra.id&&!dobra.classList.contains('open'))toggleFold(dobra.id.replace(/^fold_/,''));
+  try{e.scrollIntoView({block:'center'})}catch(x){}
+  try{e.focus({preventScroll:true})}catch(x){}
+}
+/* O interruptor «O imóvel fica fora de Portugal» de cada formulário aberto
+   (D133, N058): ligado, pede o país e o código da tabela X, e esconde o que
+   é só de Portugal (o grupo do Anexo F, a freguesia, o concelho, o
+   distrito, o VPT, a afetação, o 6A e o 6B). Nasce ligado num imóvel com
+   país; a escolha vive aqui até haver país escrito. null entre formulários
+   (o propModal deita-a fora). */
+let _imvForaPT=null;
+/* O imóvel do formulário fica fora de Portugal: o interruptor ligado, ou um
+   país escrito.
+   Devolve: true ou false. */
+function imvForaDePortugal(){
+  const pid=(pForm&&pForm.id)||'',tem=!!paisDoImovel((pForm||{}).pais);
+  if(!_imvForaPT||_imvForaPT.pid!==pid)_imvForaPT={pid,on:tem};
+  return _imvForaPT.on||tem;
+}
+/* O imóvel do formulário é em Portugal (o contrário do imvForaDePortugal).
+   Recebe: p — o imóvel do formulário.
+   Devolve: true ou false. */
+function imvEmPortugal(p){return p===pForm?!imvForaDePortugal():!paisDoImovel((p||{}).pais)}
+/* O interruptor «O imóvel fica fora de Portugal» mudou: ligado, aparecem o
+   país e o código; desligado, o imóvel é em Portugal e o país e o código
+   saem (é a resposta da pessoa, não um campo escondido).
+   Devolve: nada — repinta o formulário. */
+function imvForaPTMudou(){
+  collectProp();
+  const on=chk('p_foraPT');
+  imvForaDePortugal();_imvForaPT.on=on;
+  if(!on){pForm.pais='';pForm.paisCodigo=''}
+  repaintProp();
+  /* ligado, o foco vai ao país, o campo que passou a faltar */
+  if(on)try{const e=document.getElementById('p_pais');if(e&&e.focus)e.focus({preventScroll:true})}catch(x){}
+}
+/* O interruptor do país e, ligado, o país (obrigatório) e o código da
+   tabela X (imvPaisHtml) — no primeiro grupo, por baixo da morada.
+   Recebe: p — o imóvel do formulário.
+   Devolve: o HTML do campo. */
+function imvForaPTHtml(p){
+  const on=imvForaDePortugal();
+  return `<div class="imv-campo" data-parte="fora-pt"><label class="check"><input type="checkbox" id="p_foraPT"${on?' checked':''} data-change="imvForaPTMudou()"> O imóvel fica fora de Portugal</label>
+      ${on?`<label>País <span class="req">*</span><input id="p_pais" value="${esc(p.pais||'')}" placeholder="Ex: Espanha" autocomplete="off" data-input="imvPaisEscrito()"></label>
+      <div id="imv_pais" class="imv-campo">${imvPaisHtml(p)}</div>`:''}</div>`;
+}
+/* O código do país e a frase do Anexo J de um imóvel fora de Portugal
+   (D133, N105): a tabela X das instruções escreve muitos códigos com 1 ou 2
+   algarismos (Brasil 76), e o campo aceita-os assim.
    Recebe: p — o imóvel do formulário.
    Devolve: o HTML (texto). */
 function imvPaisHtml(p){
-  if(!String(p.pais||'').trim())return '<div class="hint u-mt-n4px">Em branco: Portugal.</div>';
-  return `<label>Código do país (tabela X)<input id="p_paisCodigo" value="${esc(p.paisCodigo||'')}" inputmode="numeric" maxlength="3" placeholder="Opcional" autocomplete="off"></label>
-      <div class="hint u-mt-n4px">Um imóvel fora de Portugal não vai ao Anexo F: as rendas, os gastos e o imposto pago lá declaram-se no Anexo J (quadro 7A), com o código do país da tabela X das instruções. Sem freguesia, artigo, Modelo 2 nem recibos da AT.</div>`;
+  return `<label>Código do país na tabela X (opcional)<input id="p_paisCodigo" value="${esc(p.paisCodigo||'')}" inputmode="numeric" maxlength="3" placeholder="Ex: 724" autocomplete="off"></label>
+      <div class="hint u-mt-n4px">Um imóvel fora de Portugal não vai ao Anexo F: as rendas, os gastos e o imposto pago lá declaram-se no Anexo J (quadro 7A), com o código do país da tabela X das instruções (Espanha 724, França 250, Brasil 76). Sem freguesia, artigo, Modelo 2 nem recibos da AT.</div>`;
 }
-/* O país mudou no formulário: guarda-o em pForm e repinta só o código e a
-   frase de baixo (imvPaisHtml), para o foco ficar no campo.
+/* O país mudou no formulário: guarda-o em pForm (o código também), sem
+   repintar — o foco fica no campo.
    Devolve: nada. */
 function imvPaisEscrito(){
   const e=document.getElementById('p_paisCodigo');if(e)pForm.paisCodigo=String(e.value||'').trim();
   pForm.pais=val('p_pais');
-  const b=document.getElementById('imv_pais');if(b)b.innerHTML=imvPaisHtml(pForm);
 }
-/* O que está mal no país do formulário: o código da tabela X, se escrito, tem
-   três algarismos (dados.js:codigoDoPais).
+/* O código do país como se grava: a tabela X escreve muitos sem os zeros da
+   frente (Brasil 76, Bélgica 56), e o Anexo J leva três algarismos — 1 a 3
+   algarismos ganham os zeros (N105); o resto fica como está, para o erro.
+   Recebe: v — o que está no campo.
+   Devolve: o texto. */
+function imvCodigoPais(v){const s=String(v==null?'':v).trim();return /^\d{1,3}$/.test(s)?s.padStart(3,'0'):s}
+/* O que está mal no país do formulário: com o interruptor ligado, o país é
+   obrigatório e não pode ser Portugal (o «PT» levava o imóvel ao Anexo J);
+   o código da tabela X, se escrito, são 1 a 3 algarismos (imvCodigoPais,
+   dados.js:codigoDoPais).
    Recebe: p — o imóvel do formulário.
    Devolve: {campo, msg} ou null. */
 function imvPaisErro(p){
-  if(!p||!paisDoImovel(p.pais)||!String(p.paisCodigo||'').trim())return null;
-  return codigoDoPais(String(p.paisCodigo).trim())?null:{campo:'p_paisCodigo',msg:'O código do país tem 3 algarismos, como na tabela X das instruções do Anexo J.'};
+  if(!p)return null;
+  if(p===pForm&&imvForaDePortugal()){
+    const e=document.getElementById('p_pais'),cru=String((e&&e.value)||p.pais||'').trim();
+    if(/^(pt|prt|portugal)\.?$/i.test(cru))return {campo:'p_pais',msg:'Um imóvel em Portugal não leva país: desliga «O imóvel fica fora de Portugal».'};
+    if(!paisDoImovel(p.pais))return {campo:'p_pais',msg:'Escreve o país onde fica o imóvel.'};
+  }
+  if(!paisDoImovel(p.pais)||!String(p.paisCodigo||'').trim())return null;
+  return codigoDoPais(imvCodigoPais(p.paisCodigo))?null:{campo:'p_paisCodigo',msg:'O código do país são 1 a 3 algarismos, como na tabela X das instruções do Anexo J (o Brasil é 76).'};
 }
 /* Um benefício do quadro 6 tal como a versão das regras do ano o escreve
    (irs-AAAA.js:beneficios): as condições e os textos vêm de lá.
@@ -234,18 +302,25 @@ const IMV_NAO_HABITACAO=['comercio','servicos','industria','outros'];
    escreve), e a Loja com História (6B), só num imóvel não habitacional (ou já
    marcado, para se poder desmarcar). As condições lê-as o motor
    (irs.js:irsBeneficiosAvaliados); aqui escreve-se o que ele usa.
+   Cada um só quando conta (N058): o 6A num imóvel em Portugal, que não é
+   rústico (o tipo nasce «—»: em branco pergunta-se), de arrendamento
+   (imvArrenda — o destino ou rendas num ano que a Declaração resume) e de
+   quem é dono; a dica da lei só depois de uma resposta que não seja «Não».
+   O 6B em Portugal e de quem é dono. Marcados, ficam sempre à vista (e
+   nunca saem sozinhos: a marca de rendas já recebidas tem efeito).
    Recebe: p — o imóvel do formulário.
    Devolve: o HTML (texto). */
 function imvBeneficiosHtml(p){
   const R=p.reabilitacao||{},b=imvBeneficio('reab71'),l=imvBeneficio('lojaHistoria');
+  const pt=imvEmPortugal(p),dono=!imvSubAtivo(p);
   const tipos=[{v:'',label:'Não'},{v:'aru',label:'Sim, numa área de reabilitação urbana (ARU)'},{v:'nrau',label:'Sim, arrendado no NRAU e reabilitado'}];
-  const reab=`<label>Imóvel reabilitado (quadro 6A)${sel('p_reabTipo',R.tipo||'',tipos,'imvReabMudou','rascunho')}</label>
+  const reab=R.tipo||(pt&&dono&&p.tipoPredio!=='R'&&imvArrenda(p))?`<label>Imóvel reabilitado (quadro 6A)${sel('p_reabTipo',R.tipo||'',tipos,'imvReabMudou','rascunho')}</label>
       ${R.tipo?`<div class="row">
         <label>Início da reabilitação <span class="req">*</span><input id="p_reabInicio" type="date" value="${esc(R.inicio||'')}"></label>
         <label>Conclusão <span class="req">*</span><input id="p_reabConclusao" type="date" value="${esc(R.conclusao||'')}"></label></div>
-      <label class="check"><input type="checkbox" id="p_reabCertificado"${R.certificado?' checked':''}> Tenho o certificado da câmara do início e da conclusão</label>`:''}
-      <div class="hint${R.tipo?' u-mt-n4px':''}">${b?esc(b.texto)+' A data de aquisição, em Valores, diz se já eras dono'+(b.donoEm?' a '+imvDiaPorExtenso(b.donoEm):'')+'.'+(R.tipo&&b.aviso?' '+esc(b.aviso):''):''}</div>`;
-  const loja=l&&(IMV_NAO_HABITACAO.indexOf(p.afetacao)>-1||p.lojaComHistoria)?`<label class="check"><input type="checkbox" id="p_lojaHistoria"${p.lojaComHistoria?' checked':''}> Reconhecido como Loja com História (Lei 42/2017)</label>
+      <label class="check"><input type="checkbox" id="p_reabCertificado"${R.certificado?' checked':''}> Tenho o certificado da câmara do início e da conclusão</label>
+      <div class="hint u-mt-n4px">${b?esc(b.texto)+' A data de aquisição, em Valores, diz se já eras dono'+(b.donoEm?' a '+imvDiaPorExtenso(b.donoEm):'')+'.'+(b.aviso?' '+esc(b.aviso):''):''}</div>`:''}`:'';
+  const loja=l&&(p.lojaComHistoria||(pt&&dono&&IMV_NAO_HABITACAO.indexOf(p.afetacao)>-1))?`<label class="check"><input type="checkbox" id="p_lojaHistoria"${p.lojaComHistoria?' checked':''}> Reconhecido como Loja com História (Lei 42/2017)</label>
       <div class="hint u-mt-n4px">${esc(l.texto)} Quadro 6B.</div>`:'';
   return reab+loja;
 }
@@ -283,7 +358,11 @@ function imvGravarFormulario(id){
   /* os campos da ronda 2 na forma do dados.js:normProp: a reabilitação desmarcada
      sai inteira, e o código do país só fica com país */
   if(!(pForm.reabilitacao||{}).tipo)pForm.reabilitacao={tipo:'',inicio:'',conclusao:'',certificado:false};
-  pForm.pais=paisDoImovel(pForm.pais);pForm.paisCodigo=pForm.pais?codigoDoPais(pForm.paisCodigo):'';
+  pForm.pais=paisDoImovel(pForm.pais);pForm.paisCodigo=pForm.pais?codigoDoPais(imvCodigoPais(pForm.paisCodigo)):'';
+  /* a renda da parte subarrendada só conta com «Só uma parte» (N023); a parte
+     arrendada, um número até 100 ou nada (N012) */
+  const sub=pForm.subarrendamento||{};if(sub.parte!=='parte')sub.rendaParte=0;
+  if(!(Number(pForm.parteArrendada)>0&&Number(pForm.parteArrendada)<=100))pForm.parteArrendada=null;
   /* a pergunta pelas prestações desde o início (creditos.js) cria movimentos numa hipoteca:
      corre com os Créditos e os Movimentos ligados nesta conta; o planeado da prestação só
      com os Planeados */
@@ -496,7 +575,11 @@ function imvCab(titulo,dir){return `<div class="imv-sec-cab"><h3>${esc(titulo)}<
    O alvo de «rever» é o bloco do texto, e o «Confirmar» é irmão dele, fora:
    com a linha inteira tocável (o tornarFocavel dá-lhe role="button"), o botão
    ficava dentro de outro botão, e para um leitor de ecrã os filhos de um
-   botão são só texto — o «Confirmar» podia nem ser anunciado.
+   botão são só texto — o «Confirmar» podia nem ser anunciado. A renda que
+   pede o recibo eletrónico (planeados.js:recPedeRecibo) tem também
+   «Confirmar e emiti o recibo» (planeados.js:recConfirmarComRecibo, N062):
+   os dois botões numa fila por baixo do texto, que no telemóvel não cabem
+   ao lado dele.
    Recebe: p — o imóvel; c — o cargo (acessos.js:cargoDe).
    Devolve: o HTML do cartão, ou '' sem nada por confirmar. */
 function imvPorConfirmar(p,c){
@@ -505,11 +588,13 @@ function imvPorConfirmar(p,c){
   const rs=recActive().filter(r=>r.tx&&r.tx.propertyId===p.id);
   if(!rs.length)return '';
   const linhas=rs.map(r=>{
-    const late=recIsLate(r),conf=!recusaConfirmar(r)&&!recSemCredito(r)&&!recCreditoPago(r);
-    return `<div class="imv-linha imv-pend">
-      <div class="imv-linha-txt tap" data-toca="camada" data-click="confirmRec('${jsq(r.id)}')"><b>${esc(r.name)}</b><span class="small num">${dPT(r.next)}${r.until&&r.until!==r.next?' – '+dPT(r.until):''}${r.tx.amount?' · '+euro2(r.tx.amount):''}</span>
+    const late=recIsLate(r),conf=!recusaConfirmar(r)&&!recSemCredito(r)&&!recCreditoPago(r),q=jsq(r.id);
+    const recibo=conf&&recPedeRecibo(r);
+    const ok=conf?`<button type="button" class="btn sm primary" data-toca="dados" data-click="quickConfirmRec('${q}')">Confirmar</button>`:'';
+    return `<div class="imv-linha imv-pend${recibo?' imv-pend-recibo':''}">
+      <div class="imv-linha-txt tap" data-toca="camada" data-click="confirmRec('${q}')"><b>${esc(r.name)}</b><span class="small num">${dPT(r.next)}${r.until&&r.until!==r.next?' – '+dPT(r.until):''}${r.tx.amount?' · '+euro2(r.tx.amount):''}</span>
         <span class="badge${late?' red':''}">${late?'Em atraso':'Por confirmar'}</span></div>
-      ${conf?`<button type="button" class="btn sm primary" data-toca="dados" data-click="quickConfirmRec('${jsq(r.id)}')">Confirmar</button>`:''}</div>`;
+      ${recibo?`<div class="imv-botoes">${ok}<button type="button" class="btn sm" data-toca="dados" data-click="recConfirmarComRecibo('${q}')">Confirmar e emiti o recibo</button></div>`:ok}</div>`;
   }).join('');
   return `<div class="card imv-sec">${imvCab('Por confirmar',`<span class="small num">${rs.length}</span>`)}${linhas}</div>`;
 }
@@ -555,16 +640,26 @@ function imvQuartos(p,vCt){
 }
 /* O cartão do contrato de um imóvel arrendado inteiro: os contratos em vigor
    e os que ainda não começaram, um por linha. Por quartos, é o cartão dos
-   quartos que os mostra.
+   quartos que os mostra. Num imóvel de «Uso próprio» com contratos que não
+   acabaram, o cartão continua, com a nota de que as rendas deles contam na
+   Declaração e de que se terminam na ficha de cada um (N129): mudar o
+   destino não termina um contrato, e a ficha não pode esconder o que conta.
    Recebe: p — o imóvel; vCt — se o cargo e os serviços deixam ver os contratos.
    Devolve: o HTML do cartão, ou '' sem contratos. */
 function imvContratos(p,vCt){
-  if(!vCt||p.use!=='investimento'||p.rentalMode==='quartos')return '';
+  const proprio=p.use!=='investimento';
+  if(!vCt||(!proprio&&p.rentalMode==='quartos'))return '';
   const vivos=contractsOf(p.id).filter(ctVivo);if(!vivos.length)return '';
   const nA=vivos.filter(isActive).length,nF=vivos.length-nA;
   const sub=[nA?nA+' em vigor':'',nF?nF+' por começar':''].filter(Boolean).join(' · ');
-  return `<div class="card imv-sec">${imvCab(vivos.length===1?'Contrato':'Contratos',`<span class="small">${sub}</span>`)}${vivos.map(x=>imvLinhaContrato(x,'')).join('')}</div>`;
+  const nota=proprio?`<p class="small imv-texto">O imóvel está em «Uso próprio», mas ${vivos.length===1?'este contrato não acabou: as rendas dele contam':'estes contratos não acabaram: as rendas deles contam'} na Declaração. ${vivos.length===1?'Se acabou, termina-o na ficha do contrato':'Os que acabaram terminam-se na ficha de cada um'}, com o dia e o motivo.</p>`:'';
+  return `<div class="card imv-sec">${imvCab(vivos.length===1?'Contrato':'Contratos',`<span class="small">${sub}</span>`)}${nota}${vivos.map(x=>imvLinhaContrato(x,p.rentalMode==='quartos'?imvNomeDoQuarto(p,x):'')).join('')}</div>`;
 }
+/* O nome do quarto de um contrato, para a linha do cartão dos contratos de
+   um imóvel por quartos que passou a «Uso próprio».
+   Recebe: p — o imóvel; c — o contrato.
+   Devolve: o nome ('' sem quarto: a linha leva quem lá mora). */
+function imvNomeDoQuarto(p,c){const r=(p.rooms||[]).find(x=>x.id===c.roomId);return r?(r.name||'Quarto'):''}
 /* Um cartão por hipoteca (dos Créditos): o tipo de taxa, a taxa e as
    prestações por pagar, a prestação e o que está em dívida hoje, e os botões
    do plano de amortização (creditos.js:amortModal) e da ficha da hipoteca
@@ -609,8 +704,14 @@ function imvFixas(p,c){
    o dia em que o código e o artigo se confirmaram na caderneta e, num código
    de uma união desagregada em 2025 por confirmar, o aviso com as freguesias
    repostas e, a quem edita, «Corrigir» e «Confirmei na caderneta» (D135).
+   Num imóvel que vai ao Anexo F (imvFaltaAnexoF) o cartão aparece sempre e,
+   faltando o código da freguesia, o tipo de prédio ou o artigo, diz «Falta
+   para o Anexo F: …» com o «Preencher», que abre o formulário no primeiro
+   que falta (N057) — meses antes da época da entrega, e não só na Declaração.
+   A parte arrendada escrita (N012) e a parte subarrendada (N023) vão na
+   linha fiscal.
    Recebe: p — o imóvel; vRep — se o cargo deixa ver os valores.
-   Devolve: o HTML do cartão, ou '' sem nada escrito. */
+   Devolve: o HTML do cartão, ou '' sem nada escrito nem nada em falta. */
 function imvRegistais(p,vRep){
   const R=p.reabilitacao||{},pais=String(p.pais||'').trim();
   const reg=[pais?'país: '+pais+(p.paisCodigo?' (código '+p.paisCodigo+')':''):'',
@@ -623,15 +724,56 @@ function imvRegistais(p,vRep){
   const sub=p.subarrendamento||{};
   const benef=[R.tipo?'imóvel reabilitado ('+(R.tipo==='aru'?'ARU':'NRAU')+(R.certificado?', com certificado':', sem certificado')+') · quadro 6A':'',
     p.lojaComHistoria?'Loja com História · quadro 6B':''].filter(Boolean).map(esc).join(' · ');
+  const parteSub=sub.parte==='parte'&&Number(sub.rendaParte)>0?', dos quais '+euro2(sub.rendaParte)+' pela parte subarrendada':sub.parte==='toda'?', pela casa toda':'';
+  const pa=p.rentalMode==='quartos'&&Number(p.parteArrendada)>0?'parte arrendada: '+dec(Number(p.parteArrendada))+' % da casa':'';
   const fisco=[vRep?[p.vpt?'VPT '+euro(p.vpt):'',p.purchaseDate?'adquirido a '+dPT(p.purchaseDate):'',
-    p.vendido?'vendido a '+dPT(p.vendido):'',
-    sub.ativo?'subarrendado: pagas '+euro2(sub.rendaMensal)+'/mês ao senhorio'+(sub.nifSenhorio?' (NIF '+esc(sub.nifSenhorio)+')':''):''].filter(Boolean).join(' · '):'',benef].filter(Boolean).join(' · ');
-  const rep=p.matrizConfirmada?null:imvFreguesiaUniao(p),q=jsq(p.id),ed=rep&&!!p.id&&pode(p.id,'house.edit');
+    p.vendido?'vendido a '+dPT(p.vendido):'',pa,
+    sub.ativo?'subarrendado: pagas '+euro2(sub.rendaMensal)+'/mês ao senhorio'+parteSub+(sub.nifSenhorio?' (NIF '+esc(sub.nifSenhorio)+')':''):''].filter(Boolean).join(' · '):'',benef].filter(Boolean).join(' · ');
+  /* o código de uma união extinta avisa sempre, também com a marca da
+     caderneta, e só se corrige (N087) */
+  const rep=imvFreguesiaUniao(p),q=jsq(p.id),ed=rep&&!!p.id&&pode(p.id,'house.edit');
   const aviso=rep?`<div class="imv-nota imv-nota-aviso small">${esc(imvFreguesiaFrase(rep))}${ed?`
-      <div class="imv-botoes u-mt-12px"><button type="button" class="btn sm" data-toca="camada" data-click="imvMatrizCorrigir('${q}')">Corrigir</button><button type="button" class="btn sm" data-toca="dados" data-click="imvMatrizConfirmar('${q}')">Confirmei na caderneta</button></div>`:''}</div>`:'';
-  if(!reg&&!fisco)return '';
+      <div class="imv-botoes u-mt-12px"><button type="button" class="btn sm" data-toca="camada" data-click="imvMatrizCorrigir('${q}')">Corrigir</button></div>`:''}</div>`:'';
+  /* o que o Anexo F pede e falta (N057): a quem pode editar, o «Preencher» no primeiro */
+  const falta=imvFaltaAnexoF(p),podeEd=!!p.id&&pode(p.id,'house.edit');
+  const faltaHtml=falta.length?`<div class="imv-nota imv-nota-falta small">Falta para o Anexo F: ${esc(listaE(falta.map(f=>f.nome)))}. Vêm da caderneta predial atual ou da nota de cobrança do IMI.${podeEd?`
+      <div class="imv-botoes u-mt-12px"><button type="button" class="btn sm" data-toca="camada" data-click="imvAbrirNoCampo('${q}','${falta[0].campo}')">Preencher</button></div>`:''}</div>`:'';
+  if(!reg&&!fisco&&!faltaHtml)return '';
   return `<div class="card imv-sec">${imvCab('Dados registais e fiscais')}<div class="imv-sec-corpo">
-    ${reg?`<p class="small num"><b class="imv-rot">Registo</b> ${reg}</p>`:''}${aviso}${fisco?`<p class="small num"><b class="imv-rot">Fiscal</b> ${fisco}</p>`:''}</div></div>`;
+    ${faltaHtml}${reg?`<p class="small num"><b class="imv-rot">Registo</b> ${reg}</p>`:''}${aviso}${fisco?`<p class="small num"><b class="imv-rot">Fiscal</b> ${fisco}</p>`:''}</div></div>`;
+}
+/* O imóvel é de arrendamento para o IRS: o destino de hoje é «Arrendamento»,
+   ou teve rendas num ano que a Declaração resume (imvTeveRendasDeclaradas) —
+   um imóvel arrendado até junho e passado a «Uso próprio» tem linha no
+   Anexo F desse ano (nota do verificador da lei, N057/N058). Um vendido só
+   pelas rendas: o destino de quando era da pessoa já não diz nada.
+   Recebe: p — o imóvel (o do formulário ou o da base).
+   Devolve: true ou false. */
+function imvArrenda(p){return !!p&&((p.use==='investimento'&&!p.vendido)||imvTeveRendasDeclaradas(p))}
+/* O imóvel teve rendas num dos anos que a Declaração resume (as versões das
+   regras: irs.js:irsAnosConhecidos, hoje 2025 e 2026): um contrato dele que
+   viveu nesse ano — do início ao dia em que acabou mesmo (fisco.cessacao) ou
+   ao termo com as renovações —, ou uma renda registada nele nesse ano.
+   Recebe: p — o imóvel.
+   Devolve: true ou false. */
+function imvTeveRendasDeclaradas(p){
+  if(!p||!p.id)return false;
+  const anos=irsAnosConhecidos();if(!anos.length)return false;
+  const ini=anos[0]+'-01-01',fim=anos[anos.length-1]+'-12-31';
+  const viveu=c=>{const s=String(c.start||''),e=irsCessacao(c).data||irsFimEfetivo(c);return (!s||s<=fim)&&(!e||e>=ini)};
+  return contractsOf(p.id).some(viveu)||(db.transactions||[]).some(t=>t&&t.propertyId===p.id&&ehRenda(t)&&String(t.date||'')>=ini&&String(t.date||'')<=fim);
+}
+/* O que o Anexo F pede da caderneta e o imóvel não tem (N057): o código da
+   freguesia, o tipo de prédio e o artigo matricial, que vão em cada linha do
+   quadro das rendas — num imóvel em Portugal, de arrendamento (imvArrenda) e
+   que não seja subarrendado (o quadro 5 não os pede). A fração não falta:
+   uma moradia não a tem.
+   Recebe: p — o imóvel.
+   Devolve: [{nome, campo}] pela ordem do formulário; [] sem nada em falta. */
+function imvFaltaAnexoF(p){
+  if(!p||paisDoImovel(p.pais)||(p.subarrendamento||{}).ativo||!imvArrenda(p))return [];
+  return [!p.freguesiaCodigo?{nome:'código da freguesia',campo:'p_freguesiaCodigo'}:null,!p.tipoPredio?{nome:'tipo de prédio',campo:'p_tipoPredio'}:null,
+    !String(p.matrix||'').trim()?{nome:'artigo matricial',campo:'p_matrix'}:null].filter(Boolean);
 }
 /* A galeria das fotos de um imóvel, numa janela: as miniaturas em grelha, e
    tocar numa abre-a (componentes.js:openMeta). É o botão da capa da ficha.
@@ -755,28 +897,51 @@ function imvEurosNoCampo(v){const n=Number(v)||0;return n?dec(r2(n)):''}
    seguro e o mês dele, e por baixo a frase das prestações do IMI. Cada valor
    cria um planeado (planeados.js:syncPropRecs), e a explicação diz em que
    datas — é dos Planeados, e sem esse serviço na conta não se pede o que não
-   criaria nada.
+   criaria nada. Por baixo do condomínio, quando tem valor, a regra do fundo
+   comum de reserva (imvFraseCondominio, N044). Num imóvel subarrendado (quem
+   não é dono) o IMI não se pede, a não ser que já tenha valor (N058).
    Devolve: o HTML do grupo (texto); '' sem os Planeados. */
 function fixasSect(){
   if(!servicoLigado('recurring'))return '';
   const p=pForm,meses=[{v:0,label:'O mês em que o guardares'}].concat([...Array(12)].map((_,i)=>({v:i+1,label:nomeDoMes(i+1)})));
-  const frase=imvFraseImi(p.imi);
+  const frase=imvFraseImi(p.imi),cond=imvFraseCondominio(p.condominio),imi=!imvSubAtivo(p)||p.imi>0;
   /* o seguro e o mês dele numa fila à parte: no telemóvel ela passa a uma
      coluna (estilos.css:.imv-2col-largo), porque «O mês em que o guardares»
      não cabe em meia coluna e cortado não se lê */
   return `<div class="sect imv-grupo">
       ${imvCab('Despesas fixas do imóvel','<span class="small">viram planeados</span>')}
       <div class="imv-2col">
-        <label>IMI do prédio (€/ano)<input id="p_imi" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.imi)}" placeholder="Opcional" data-input="imvImiMudou(this.value)" autocomplete="off"></label>
-        <label>Condomínio (€/mês)<input id="p_condominio" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.condominio)}" placeholder="Opcional" autocomplete="off"></label></div>
+        ${imi?`<label>IMI do prédio (€/ano)<input id="p_imi" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.imi)}" placeholder="Opcional" data-input="imvImiMudou(this.value)" autocomplete="off"></label>`:''}
+        <label>Condomínio (€/mês)<input id="p_condominio" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.condominio)}" placeholder="Opcional" data-input="imvCondominioMudou(this.value)" autocomplete="off"></label></div>
+      <p class="hint imv-colado${cond?'':' u-d-none'}" id="imv_cond_frase" aria-live="polite">${esc(cond)}</p>
       <div class="imv-2col imv-2col-largo">
         <label>Seguro (€/ano)<input id="p_seguro" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.seguro)}" placeholder="Opcional" autocomplete="off"></label>
         <label>Mês do seguro${sel('p_seguroMes',p.seguroMes||0,meses,'','rascunho')}</label></div>
       <p class="imv-frase num${frase?'':' u-d-none'}" id="imv_imi_frase" aria-live="polite">${esc(frase)}</p>
       <div class="hint">Cada valor cria um planeado que pede confirmação na data, e o valor vive aqui: apagar o planeado apaga-o daqui.
-        O IMI é o do prédio todo: havendo mais donos, a soma das notas de todos.
+        ${imi?`O IMI é o do prédio todo: havendo mais donos, a soma das notas de todos.
         O IMI sai nas prestações da lei: até 100 € numa só, em maio; de 100 a 500 € em maio e novembro; acima de 500 € em maio, agosto e novembro — no último dia do mês.
-        O condomínio no dia 1 de cada mês; o seguro uma vez por ano, no fim do mês escolhido.</div></div>`;
+        `:''}O condomínio no dia 1 de cada mês; o seguro uma vez por ano, no fim do mês escolhido.</div></div>`;
+}
+/* A regra do fundo comum de reserva por baixo do condomínio (N044): a quota
+   cobrada traz o fundo lá dentro (pelo menos 10 %), e a AT só aceita o fundo
+   no ano em que o condomínio o gasta numa obra. O texto da regra é o do mapa
+   das categorias (dados.js:IRS_MAPA_NOTAS, o do planeado «Condomínio › Quota
+   mensal» que o campo cria): a ficha, as Definições e a despesa dizem o mesmo.
+   Recebe: v — o condomínio (número ou o texto do campo).
+   Devolve: a frase (texto, por escapar); '' sem condomínio. */
+function imvFraseCondominio(v){
+  const n=typeof v==='number'?v:num(v);
+  if(!(n>0))return '';
+  const regra=IRS_MAPA_NOTAS['Condomínio / Quota mensal']||'Se a quota inclui o fundo comum de reserva (pelo menos 10 %), regista essa parte em Fundo de reserva: só se deduz no ano em que o condomínio a gasta numa obra.';
+  return regra+' Nesse caso, escreve aqui a quota sem o fundo.';
+}
+/* O campo do condomínio mudou: mostra (ou esconde) a regra do fundo de reserva.
+   Recebe: v — o texto do campo.
+   Devolve: nada — mexe só na frase. */
+function imvCondominioMudou(v){
+  const e=document.getElementById('imv_cond_frase');if(!e)return;
+  const t=imvFraseCondominio(v);e.textContent=t;e.classList.toggle('u-d-none',!t);
 }
 /* As afetações da caderneta predial, para o seletor do formulário (D71):
    o AIMI só incide nos prédios urbanos de habitação (e nos terrenos para
@@ -793,25 +958,77 @@ function imvAfetacaoNome(v){const o=IMV_AFETACOES.find(x=>x.v&&x.v===v);return o
    Recebe: p — o imóvel (o do formulário).
    Devolve: true se os campos de dono se mostram. */
 function imvVejoCamposDeDono(p){return !p||!p.id||!prop(p.id)||souDono(p.id)}
-/* O subarrendamento no formulário (D52): «Arrendo este imóvel e subarrendo-o»
-   e, ligado, o NIF do senhorio e a renda que se lhe paga — o que o quadro 5
-   do Anexo F pede, sem gastos. Só para quem é dono (imvVejoCamposDeDono).
+/* As respostas a «Subarrendas a casa toda ou só uma parte?» (N023). */
+const IMV_SUB_PARTES=[{v:'',label:'—'},{v:'toda',label:'A casa toda'},{v:'parte',label:'Só uma parte (um quarto, por exemplo)'}];
+/* O imóvel do formulário está subarrendado (quem não é dono), com os campos
+   de dono à vista: o que esconde as quotas, a aquisição, as hipotecas, o IMI
+   e o 6A que não sejam já escritos (N058).
    Recebe: p — o imóvel do formulário.
-   Devolve: o HTML (texto); '' a quem colabora. */
+   Devolve: true ou false. */
+function imvSubAtivo(p){return !!((p||{}).subarrendamento||{}).ativo&&imvVejoCamposDeDono(p)}
+/* O subarrendamento no formulário (D52, N023, N058): «Não sou dono: arrendo-o
+   e subarrendo-o», no primeiro grupo, depois do destino — a resposta que
+   decide o que se pergunta a seguir — e, ligado, o NIF do senhorio, a renda
+   que se lhe paga pela casa e se se subarrenda a casa toda ou só uma parte;
+   sendo parte, a renda dessa parte, que é a que o quadro 5 do Anexo F
+   abate (a 12.ª coluna: «a renda paga ao senhorio, correspondente à parte
+   sublocada»). A app pede o valor e não inventa uma proporção: a lei não diz
+   o critério. Só para quem é dono (imvVejoCamposDeDono), num imóvel de
+   arrendamento (imvArrenda) ou já subarrendado.
+   Recebe: p — o imóvel do formulário.
+   Devolve: o HTML (texto); '' a quem colabora e num de uso próprio sem rendas. */
 function imvSubSect(p){
   if(!imvVejoCamposDeDono(p))return '';
   const sub=p.subarrendamento||{},on=!!sub.ativo;
-  return `<label class="check"><input type="checkbox" id="p_sub_ativo"${on?' checked':''} data-change="imvSubMudou()"> Arrendo este imóvel e subarrendo-o</label>
-      <div class="hint u-mt-n4px">Quem não é dono e subarrenda declara no quadro 5 do Anexo F a renda que recebe e a que paga ao senhorio, sem gastos.</div>
+  if(!on&&!imvArrenda(p))return '';
+  const parte=sub.parte==='parte';
+  return `<div class="imv-campo" data-parte="sub"><label class="check"><input type="checkbox" id="p_sub_ativo"${on?' checked':''} data-change="imvSubMudou()"> Não sou dono: arrendo-o ao senhorio e subarrendo-o</label>
+      <div class="hint">Quem não é dono e subarrenda declara no quadro 5 do Anexo F a renda que recebe e a que paga ao senhorio, sem gastos.</div>
       ${on?`<div class="row">
         <label>NIF do senhorio <span class="req">*</span><input id="p_sub_nif" value="${esc(sub.nifSenhorio||'')}" inputmode="numeric" maxlength="9" placeholder="Ex: 123456789" autocomplete="off"></label>
-        <label>Renda que pagas (€/mês) <span class="req">*</span><input id="p_sub_renda" type="text" inputmode="decimal" value="${imvEurosNoCampo(sub.rendaMensal)}" placeholder="Ex: 600" autocomplete="off"></label></div>`:''}`;
+        <label>Renda que pagas (€/mês) <span class="req">*</span><input id="p_sub_renda" type="text" inputmode="decimal" value="${imvEurosNoCampo(sub.rendaMensal)}" placeholder="Ex: 600" autocomplete="off"></label></div>
+      <label>Subarrendas a casa toda ou só uma parte? <span class="req">*</span>${sel('p_sub_parte',sub.parte||'',IMV_SUB_PARTES,'imvSubMudou','rascunho')}</label>
+      ${parte?`<label>Renda que pagas pela parte subarrendada (€/mês) <span class="req">*</span><input id="p_sub_rendaParte" type="text" inputmode="decimal" value="${imvEurosNoCampo(sub.rendaParte)}" placeholder="Ex: 300" autocomplete="off"></label>
+      <div class="hint">A parte da renda que corresponde ao que subarrendas (o quarto e a sua parte das zonas comuns): a que combinaste com o senhorio ou, sem isso, pela área. O quadro 5 só abate esta à renda que recebes.</div>`:''}`:''}</div>`;
 }
-/* A caixa do subarrendamento mudou: mostra (ou esconde) o NIF e a renda.
+/* «Parte da casa que se arrenda», num imóvel por quartos (N012, D4): os
+   gastos da casa inteira (o IMI, o condomínio, as obras) só contam na parte
+   arrendada (CIRS art. 41.º n.º 1 e n.º 4: pelo VPT ou, na falta, pela área
+   — um quarto não tem VPT próprio, por isso a área). Em branco, a
+   Declaração usa os quartos com contrato, dia a dia
+   (fisco-resumo.js:fiscoParteArrendadaDoAno), e a dica diz quanto dá no ano
+   corrente. Num imóvel inteiro não se pergunta (e um valor de quando era por
+   quartos não conta).
+   Recebe: p — o imóvel do formulário.
+   Devolve: o HTML do campo ('' fora de um imóvel de arrendamento por quartos). */
+function imvParteArrendadaHtml(p){
+  if(p.use!=='investimento'||p.rentalMode!=='quartos')return '';
+  const v=Number(p.parteArrendada);
+  let omissao='';
+  if(servicoLigado('fisco')&&p.id){
+    const o=fiscoParteArrendadaDoAno(p,YEAR)||{};
+    if(Number(o.arrendados)>0&&isFinite(Number(o.parte)))omissao=': em '+YEAR+', '+dec(Math.round(Number(o.parte)*1000)/10)+' %';
+  }
+  return `<div class="imv-campo" data-parte="parte"><label>Parte da casa que se arrenda (%)<input id="p_parteArrendada" type="text" inputmode="decimal" value="${isFinite(v)&&v>0?esc(dec(v)):''}" placeholder="Opcional" autocomplete="off"></label>
+      <div class="hint">Os gastos da casa inteira (o IMI, o condomínio, as obras) só contam na parte arrendada (CIRS art. 41.º). A lei manda repartir pela área: se sabes a dos quartos arrendados, com a parte deles nas zonas comuns, escreve a percentagem. Em branco, a app conta os quartos com contrato, dia a dia${omissao}.</div></div>`;
+}
+/* O que está mal na parte arrendada escrita (N012): é uma percentagem acima
+   de 0 e até 100. Só num imóvel por quartos, onde se pergunta.
+   Recebe: p — o imóvel do formulário.
+   Devolve: {campo, msg} ou null. */
+function imvParteErro(p){
+  if(!p||p.use!=='investimento'||p.rentalMode!=='quartos'||p.parteArrendada===null||p.parteArrendada===undefined)return null;
+  const v=Number(p.parteArrendada);
+  return v>0&&v<=100?null:{campo:'p_parteArrendada',msg:'A parte arrendada é uma percentagem acima de 0 e até 100.'};
+}
+/* A caixa do subarrendamento, ou a resposta da casa toda ou parte, mudou:
+   mostra (ou esconde) o que depende dela.
    Devolve: nada — repinta o formulário. */
 function imvSubMudou(){collectProp();repaintProp()}
 /* O que falta no subarrendamento ligado: o NIF do senhorio (9 algarismos
-   que passam o dígito de controlo, irs-papeis.js:nifValido) e a renda paga.
+   que passam o dígito de controlo, irs-papeis.js:nifValido), a renda paga,
+   se é a casa toda ou uma parte e, sendo parte, a renda dessa parte — nunca
+   acima da da casa (N023).
    Recebe: p — o imóvel do formulário.
    Devolve: {campo, msg} ou null. */
 function imvSubErro(p){
@@ -820,6 +1037,11 @@ function imvSubErro(p){
   const nif=String(sub.nifSenhorio||'');
   if(!/^\d{9}$/.test(nif)||!nifValido(nif))return {campo:'p_sub_nif',msg:'Escreve o NIF do senhorio (9 algarismos).'};
   if(!(Number(sub.rendaMensal)>0))return {campo:'p_sub_renda',msg:'Escreve a renda que pagas ao senhorio.'};
+  if(sub.parte!=='toda'&&sub.parte!=='parte')return {campo:'selb_p_sub_parte',msg:'Diz se subarrendas a casa toda ou só uma parte.'};
+  if(sub.parte==='parte'){
+    if(!(Number(sub.rendaParte)>0))return {campo:'p_sub_rendaParte',msg:'Escreve a renda que pagas pela parte que subarrendas.'};
+    if(Number(sub.rendaParte)>Number(sub.rendaMensal)+0.005)return {campo:'p_sub_rendaParte',msg:'A renda da parte subarrendada não pode passar a que pagas pela casa ('+euro2(sub.rendaMensal)+').'};
+  }
   return null;
 }
 /* Ponto de extensão da secção dos proprietários do formulário do imóvel.
@@ -856,9 +1078,15 @@ function donosSect(){
     <div class="hint" id="shareHint">${shareHint(owners,custom,sumSh)}</div>
     <div class="imv-botoes">
       <button type="button" class="btn sm" data-toca="camada" data-click="addPropOwner()">${ic('plus',16)} Adicionar proprietário</button></div>
-    ${imvForaHtml('p')}
+    ${imvForaNoFormulario()?imvForaHtml('p'):''}
   </div>`;
 }
+/* A pergunta «Há outros donos fora da app?» no formulário: não é de quem
+   subarrenda (não é dono: o quadro 5 não tem quotas, e a Declaração não
+   pergunta pelos donos de um imóvel do quadro 5), a não ser que já tenha
+   donos escritos (N058).
+   Devolve: true quando a pergunta se mostra. */
+function imvForaNoFormulario(){return !imvSubAtivo(pForm)||imvForaEd('p').estado==='sim'}
 /* ---------- As quotas: os de fora da app, o acerto e a data (D08, D29, D93) ----------
    Os comproprietários sem conta na app escrevem-se no formulário do imóvel
    (sem nuvem) e na proposta das quotas (com nuvem, cloud/utilizadores.js:
@@ -1162,36 +1390,54 @@ function imvSegmentado(rotulo,ops,atual,fn){
     <div class="hint imv-seg-frase">${on[2]}</div></div>`;
 }
 /* Constrói o HTML do formulário do imóvel a partir de pForm, em grupos como
-   a prancheta M-NovoImovel: o nome, a morada, o destino e o tipo de
-   arrendamento (com os quartos); os proprietários e as quotas-partes; os
-   valores; as hipotecas; as despesas fixas; e, recolhidos, as fotos, os dados
-   registais e fiscais, e o anúncio com os comentários. Só lê — quem escreve de
-   volta é collectProp().
+   a prancheta M-NovoImovel, pela ordem das respostas (N057, N058): o nome, a
+   morada e «O imóvel fica fora de Portugal» (com o país e o código da
+   tabela X), o destino (com a nota dos contratos por acabar num «Uso
+   próprio», N129), o tipo de arrendamento com os quartos e a parte
+   arrendada (N012), e «Não sou dono: arrendo-o e subarrendo-o» (N023); o
+   grupo «Para o Anexo F», sempre aberto, com o código da freguesia, o tipo
+   de prédio, o artigo e a fração ou secção; os proprietários e as
+   quotas-partes; os valores; as hipotecas; as despesas fixas; e, recolhidos,
+   as fotos, os dados registais (os do contrato em PDF, o VPT, a afetação, o
+   6A e o 6B) e o anúncio com os comentários.
+   Cada campo aparece quando as respostas de cima o fazem contar — e sempre
+   que já tem valor, para nunca se gravar um campo escondido: o que é só de
+   Portugal (imvEmPortugal), o que é de um imóvel com rendas num ano que a
+   Declaração resume (imvArrenda, e não só o destino de hoje), o que é de um
+   urbano (o tipo nasce «—» e só «Rústico» esconde) e o que é de quem é dono
+   (imvSubAtivo). Só lê — quem escreve de volta é collectProp().
    Devolve: string de HTML do formulário, pronta a inserir com innerHTML. */
 function propBody(){
-  const p=pForm,ls=p.loans||[];
+  const p=pForm,ls=p.loans||[],R=p.reabilitacao||{},sub=imvSubAtivo(p);
+  /* a aquisição e as hipotecas não são de quem subarrenda (N058) */
+  const aquisicao=!sub||p.purchase>0||!!p.purchaseDate||!!R.tipo,hipotecas=servicoLigado('credits')&&(!sub||ls.length>0);
   return `<div class="form imv-form">
     <div class="sect imv-grupo">
       <label data-parte="nome">Nome <span class="req">*</span><input id="p_name" value="${esc(p.name)}" placeholder="Ex: T2 Lisboa" autocomplete="off"></label>
       <label data-parte="morada">Morada<input id="p_addr" value="${esc(p.address)}" placeholder="Opcional" autocomplete="off"></label>
+      ${imvForaPTHtml(p)}
       ${imvSegmentado('Destino do imóvel',[['investimento','Arrendamento','Para render: tem contratos e rendas.'],['proprio','Uso próprio','Para ti ou para a família, sem rendas.']],p.use,'setUse')}
+      ${imvUsoProprioAviso(p)}
       ${p.use==='investimento'?imvSegmentado('Tipo de arrendamento',[['inteiro','Imóvel inteiro','Um contrato só, para o imóvel todo.'],['quartos','Por quartos','Um contrato por quarto.']],p.rentalMode,'setMode'):''}
       ${p.use==='investimento'&&p.rentalMode==='quartos'?`<div class="imv-campo" data-parte="quartos"><div class="flabel">Quartos (nome opcional)</div>
         <div class="imv-quartos">${(p.rooms||[]).map(r=>`<div class="roomrow" data-parte="q-${esc(r.id)}">
           <input id="p_room_${r.id}" value="${esc(r.name)}" placeholder="Ex: Quarto da varanda" aria-label="Nome do quarto (opcional)" autocomplete="off">
           <button type="button" class="btn ghost so-icone" aria-label="Remover ${esc(r.name||'o quarto')}" data-toca="rascunho" data-click="delRoom('${r.id}')">${ic('x',18)}</button></div>`).join('')}
           <button type="button" class="btn sm imv-mais" data-parte="q-mais" data-toca="rascunho" data-click="addRoom()">${ic('plus',16)} Adicionar quarto</button></div></div>`:''}
+      ${imvParteArrendadaHtml(p)}
+      ${imvSubSect(p)}
     </div>
+    ${imvAnexoFSect(p)}
     ${seccaoDosDonos()}
     <div class="sect imv-grupo">
       ${imvCab('Valores')}
       <div class="imv-2col">
         <label>Valor de mercado (€)<input id="p_value" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.value)}" placeholder="Opcional" autocomplete="off"></label>
-        <label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.purchase)}" placeholder="Opcional" autocomplete="off"></label></div>
-      <label>Data de aquisição${(p.reabilitacao||{}).tipo?' <span class="req">*</span>':''}<input id="p_purchaseDate" type="date" value="${p.purchaseDate||''}"></label>
-      <div class="hint imv-colado">Serve para o Anexo G, se um dia venderes${(p.reabilitacao||{}).tipo?', e para o quadro 6A do imóvel reabilitado':''}.</div>
+        ${aquisicao?`<label>Valor de aquisição (€)<input id="p_purchase" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.purchase)}" placeholder="Opcional" autocomplete="off"></label>`:''}</div>
+      ${aquisicao?`<label>Data de aquisição${R.tipo?' <span class="req">*</span>':''}<input id="p_purchaseDate" type="date" value="${p.purchaseDate||''}"></label>
+      <div class="hint imv-colado">Serve para o Anexo G, se um dia venderes${R.tipo?', e para o quadro 6A do imóvel reabilitado':''}.</div>`:''}
     </div>
-    ${!servicoLigado('credits')?'':`<div class="sect imv-grupo">
+    ${!hipotecas?'':`<div class="sect imv-grupo">
       ${imvCab('Hipotecas',`<span class="small num">${ls.length?(ls.length+(ls.length===1?' hipoteca · ':' hipotecas · ')+euro2(payOf(p))+'/mês'):'nenhuma'}</span>`)}
       ${ls.map((l,i)=>loanSect(l,i)).join('')}
       ${ls.length>1?`<div class="card u-bg-v-tint u-p-12px">
@@ -1202,49 +1448,84 @@ function propBody(){
     </div>`}
     ${fixasSect()}
     ${fold('photos','Fotos',fileBlock('',p.photos||[],'p_photoin','propAddPhotos','delPropPhoto',{photos:true,move:1,hint:'A primeira foto é a capa do imóvel. Arrasta pelo puxador para reordenar.'}),{icon:'photo',open:!!(p.photos||[]).length,summary:(p.photos||[]).length?p.photos.length+' foto'+(p.photos.length===1?'':'s'):'a primeira é a capa'})}
-    ${fold('reg','Dados registais e fiscais',`
-      <label>País<input id="p_pais" value="${esc(p.pais||'')}" placeholder="Opcional" autocomplete="off" data-input="imvPaisEscrito()"></label>
-      <div id="imv_pais">${imvPaisHtml(p)}</div>
-      <div class="row">
-        <label>Freguesia<input id="p_freguesia" value="${esc(p.freguesia||p.parish||'')}" placeholder="Opcional"></label>
-        <label>Concelho<input id="p_concelho" value="${esc(p.concelho||'')}" placeholder="Opcional"></label></div>
-      <div class="row3">
-        <label>Distrito<input id="p_distrito" value="${esc(p.distrito||'')}" placeholder="Opcional"></label>
-        <label>Código da freguesia (opcional)<input id="p_freguesiaCodigo" value="${esc(p.freguesiaCodigo||'')}" inputmode="text" autocapitalize="characters" spellcheck="false" maxlength="6" placeholder="Ex: 110623" autocomplete="off" data-input="imvMatrizEscrito()"></label>
-        <label>Tipo de prédio${sel('p_tipoPredio',p.tipoPredio||'',[{v:'',label:'—'},{v:'U',label:'Urbano'},{v:'R',label:'Rústico'}],'','rascunho')}</label></div>
-      <div class="row">
-        <label>Tipologia${sel('p_tipologia',p.tipologia||'',[{v:'',label:'—'}].concat(['T0','T1','T2','T3','T4','T5','T6'].map(x=>({v:x,label:x}))),'','rascunho')}</label>
-        <label>VPT (€)<input id="p_vpt" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.vpt)}" placeholder="Opcional" autocomplete="off"></label></div>
-      <label>Afetação (da caderneta)${sel('p_afetacao',p.afetacao||'',IMV_AFETACOES,'imvAfetacaoMudou','rascunho')}</label>
-      <div class="row3">
-        <label>Fração autónoma (opcional)<input id="p_fraction" value="${esc(p.fraction||'')}" placeholder="Ex: A"></label>
-        <label>Andar (opcional)<input id="p_floor" value="${esc(p.floor||'')}" placeholder="Ex: 2.º"></label>
-        <label>Descrição predial n.º (opcional)<input id="p_registry" value="${esc(p.registry)}" placeholder="Ex: 15937"></label></div>
-      <div class="row3">
-        <label>Rua<input id="p_street" value="${esc(p.street||'')}" placeholder="Opcional"></label>
-        <label>Número da porta<input id="p_doorNumber" value="${esc(p.doorNumber||'')}" placeholder="Opcional"></label>
-        <label>Código postal (opcional)<input id="p_postalCode" value="${esc(p.postalCode||'')}" placeholder="Ex: 1200-195"></label></div>
-      <label>Localidade<input id="p_locality" value="${esc(p.locality||'')}" placeholder="Opcional"></label>
-      <div class="row">
-        <label>Artigo matricial (opcional)<input id="p_matrix" value="${esc(p.matrix)}" placeholder="Ex: 4651" data-input="imvMatrizEscrito()"></label>
-        <label>Licença de utilização (opcional)<input id="p_licence" value="${esc(p.licence)}" placeholder="Ex: Alvará n.º 26/2013"></label></div>
-      <div id="imv_matriz">${imvMatrizHtml(p)}</div>
-      <div class="row3">
-        <label>Certificado energético (opcional)<input id="p_energyCert" value="${esc(p.energyCert)}" placeholder="Ex: SCE395442330"></label>
-        <label>Classe (opcional)<input id="p_energyClass" value="${esc(p.energyClass)}" placeholder="Ex: D"></label>
-        <label>Válido até<input id="p_energyValid" type="date" value="${p.energyValid||''}"></label></div>
-      <div class="hint">Usados nas cláusulas do contrato em PDF e no resumo do Anexo F. Deixa em branco o que não se aplicar — as frases correspondentes são omitidas.
-        O código da freguesia (6 caracteres), o tipo de prédio e o artigo vêm da caderneta predial atual (no Portal das Finanças) ou da nota de cobrança do IMI mais recente; o Anexo F pede-os em cada linha do quadro das rendas.
-        Em outubro de 2025 foram repostas cerca de 300 freguesias que estavam em uniões (Lei 25-A/2025): se o prédio era de uma união, o código e o artigo podem ter mudado — usa a caderneta de agora, não a da compra.
-        O VPT serve para repartir os gastos quando só se arrenda parte do imóvel. A afetação decide o AIMI: só contam os prédios urbanos de habitação e os terrenos para construção. Num imóvel que não é de habitação, pergunta-se também pela Loja com História (quadro 6B).</div>
-      ${imvBeneficiosHtml(p)}
-      ${imvSubSect(p)}`,
-      {icon:'recibo',summary:[p.pais?esc(p.pais):'',esc(p.freguesia||p.parish||''),p.freguesiaCodigo?'freguesia n.º '+esc(p.freguesiaCodigo):'',p.registry?'descrição predial n.º '+esc(p.registry):''].filter(Boolean).join(' · ')||'para o contrato e o Anexo F'})}
+    ${fold('reg','Dados registais',imvRegistaisCampos(p),
+      {icon:'recibo',summary:[esc(p.freguesia||p.parish||''),p.freguesiaCodigo?'freguesia n.º '+esc(p.freguesiaCodigo):'',p.registry?'descrição predial n.º '+esc(p.registry):''].filter(Boolean).join(' · ')||'para o contrato em PDF'})}
     ${fold('text','Anúncio e comentários',`<label>Descrição para anúncios<textarea id="p_listing" placeholder="Opcional">${esc(p.listing||'')}</textarea></label>
       ${richEditor('Comentários dos proprietários','p_notes',p.notes,'Opcional')}
       <div class="hint">Os comentários dos proprietários nunca chegam a quem colabora.</div>`,
       {icon:'lista',open:!!(p.listing||p.notes),summary:p.listing||p.notes?'com texto':'os comentários ficam entre os donos'})}
     <div class="hint">A renda, as datas e os inquilinos ficam no contrato, não aqui.</div></div>`;
+}
+/* O grupo «Para o Anexo F» do formulário, sempre aberto (N057): o código da
+   freguesia, o tipo de prédio, o artigo matricial e a fração — a
+   identificação matricial que o Anexo F pede em cada linha das rendas. Num
+   rústico, o campo da fração leva a secção (como no artigo R 155 G); o tipo
+   nunca se adivinha pela fração (a de um rústico é a secção). Aparece num
+   imóvel em Portugal de arrendamento (imvArrenda: o destino, ou rendas num
+   ano que a Declaração resume), e sempre que algum dos quatro já está
+   escrito. Os campos continuam opcionais para guardar (a regra dos
+   formulários: o exemplo com «(opcional)» no rótulo); a dica diz que o
+   Anexo F os pede, e a ficha e a Declaração dizem o que falta.
+   Recebe: p — o imóvel do formulário.
+   Devolve: o HTML do grupo ('' quando não se aplica). */
+function imvAnexoFSect(p){
+  const escrito=!!(p.freguesiaCodigo||p.tipoPredio||String(p.matrix||'').trim()||String(p.fraction||'').trim());
+  if(!escrito&&!(imvEmPortugal(p)&&imvArrenda(p)))return '';
+  const rus=p.tipoPredio==='R';
+  return `<div class="sect imv-grupo" id="imv_anexoF">
+      ${imvCab('Para o Anexo F','<span class="small">da caderneta predial</span>')}
+      <div class="imv-2col">
+        <label>Código da freguesia (opcional)<input id="p_freguesiaCodigo" value="${esc(p.freguesiaCodigo||'')}" inputmode="text" autocapitalize="characters" spellcheck="false" maxlength="6" placeholder="Ex: 110623" autocomplete="off" data-input="imvMatrizEscrito()"></label>
+        <label>Tipo de prédio${sel('p_tipoPredio',p.tipoPredio||'',[{v:'',label:'—'},{v:'U',label:'Urbano'},{v:'R',label:'Rústico'}],'imvTipoPredioMudou','rascunho')}</label></div>
+      <div class="imv-2col">
+        <label>Artigo matricial (opcional)<input id="p_matrix" value="${esc(p.matrix)}" placeholder="Ex: 4651" autocomplete="off" data-input="imvMatrizEscrito()"></label>
+        <label>${rus?'Secção (opcional)':'Fração autónoma (opcional)'}<input id="p_fraction" value="${esc(p.fraction||'')}" placeholder="Ex: ${rus?'G':'A'}" autocomplete="off"></label></div>
+      <div id="imv_matriz">${imvMatrizHtml(p)}</div>
+      <div class="hint">O código da freguesia (6 caracteres), o tipo de prédio e o artigo vêm da caderneta predial atual (no Portal das Finanças) ou da nota de cobrança do IMI mais recente; o Anexo F pede-os em cada linha do quadro das rendas. Podes guardar sem eles: a ficha e a Declaração dizem o que falta.
+        ${rus?'Num prédio rústico, a secção vai no campo da fração (no artigo R 155 G, a secção é a G).':'A fração é a letra do prédio em propriedade horizontal; uma moradia não a tem.'}
+        Em outubro de 2025 foram repostas cerca de 300 freguesias que estavam em uniões (Lei 25-A/2025): se o prédio era de uma união, o código e o artigo podem ter mudado — usa a caderneta de agora, não a da compra.</div></div>`;
+}
+/* O tipo de prédio mudou: num rústico, o campo da fração passa a «Secção» e
+   a tipologia, o andar, o certificado energético e o 6A deixam de se pedir
+   (o que já tem valor fica à vista).
+   Devolve: nada — repinta o formulário. */
+function imvTipoPredioMudou(){collectProp();repaintProp()}
+/* Os campos da dobra «Dados registais»: os do contrato em PDF (a freguesia,
+   o concelho e o distrito por extenso, a tipologia, o andar, a descrição
+   predial, a rua, a porta, o código postal, a localidade, a licença e o
+   certificado energético), o VPT, a afetação e os benefícios do quadro 6
+   (imvBeneficiosHtml). O que é só de Portugal (a freguesia, o concelho, o
+   distrito, o VPT, a afetação) sai num imóvel lá fora, o que é de um
+   urbano (a tipologia, o andar, o certificado energético) num rústico, e a
+   afetação num subarrendado — menos o que já tem valor (N058).
+   Recebe: p — o imóvel do formulário.
+   Devolve: o HTML (texto). */
+function imvRegistaisCampos(p){
+  const pt=imvEmPortugal(p),rus=p.tipoPredio==='R',sub=imvSubAtivo(p);
+  const tem=v=>!!String(v==null?'':v).trim();
+  const vpt=pt||p.vpt>0,af=(pt&&!sub)||tem(p.afetacao);
+  const fila=xs=>{const v=xs.filter(Boolean);return !v.length?'':v.length===1?v[0]:`<div class="${v.length>2?'row3':'row'}">${v.join('')}</div>`};
+  return `${fila([pt||tem(p.freguesia||p.parish)?`<label>Freguesia<input id="p_freguesia" value="${esc(p.freguesia||p.parish||'')}" placeholder="Opcional"></label>`:'',
+      pt||tem(p.concelho)?`<label>Concelho<input id="p_concelho" value="${esc(p.concelho||'')}" placeholder="Opcional"></label>`:'',
+      pt||tem(p.distrito)?`<label>Distrito<input id="p_distrito" value="${esc(p.distrito||'')}" placeholder="Opcional"></label>`:''])}
+      ${fila([!rus||tem(p.tipologia)?`<label>Tipologia${sel('p_tipologia',p.tipologia||'',[{v:'',label:'—'}].concat(['T0','T1','T2','T3','T4','T5','T6'].map(x=>({v:x,label:x}))),'','rascunho')}</label>`:'',
+      vpt?`<label>VPT (€)<input id="p_vpt" type="text" inputmode="decimal" value="${imvEurosNoCampo(p.vpt)}" placeholder="Opcional" autocomplete="off"></label>`:''])}
+      ${af?`<label>Afetação (da caderneta)${sel('p_afetacao',p.afetacao||'',IMV_AFETACOES,'imvAfetacaoMudou','rascunho')}</label>`:''}
+      ${fila([!rus||tem(p.floor)?`<label>Andar (opcional)<input id="p_floor" value="${esc(p.floor||'')}" placeholder="Ex: 2.º"></label>`:'',
+      `<label>Descrição predial n.º (opcional)<input id="p_registry" value="${esc(p.registry)}" placeholder="Ex: 15937"></label>`])}
+      <div class="row3">
+        <label>Rua<input id="p_street" value="${esc(p.street||'')}" placeholder="Opcional"></label>
+        <label>Número da porta<input id="p_doorNumber" value="${esc(p.doorNumber||'')}" placeholder="Opcional"></label>
+        <label>Código postal (opcional)<input id="p_postalCode" value="${esc(p.postalCode||'')}" placeholder="Ex: 1200-195"></label></div>
+      <div class="row">
+        <label>Localidade<input id="p_locality" value="${esc(p.locality||'')}" placeholder="Opcional"></label>
+        <label>Licença de utilização (opcional)<input id="p_licence" value="${esc(p.licence)}" placeholder="Ex: Alvará n.º 26/2013"></label></div>
+      ${!rus||tem(p.energyCert)||tem(p.energyClass)||tem(p.energyValid)?`<div class="row3">
+        <label>Certificado energético (opcional)<input id="p_energyCert" value="${esc(p.energyCert)}" placeholder="Ex: SCE395442330"></label>
+        <label>Classe (opcional)<input id="p_energyClass" value="${esc(p.energyClass)}" placeholder="Ex: D"></label>
+        <label>Válido até<input id="p_energyValid" type="date" value="${p.energyValid||''}"></label></div>`:''}
+      <div class="hint">Usados nas cláusulas do contrato em PDF. Deixa em branco o que não se aplicar — as frases correspondentes são omitidas.${vpt?' O VPT serve para repartir os gastos quando só se arrenda parte do imóvel.':''}${af?' A afetação decide o AIMI: só contam os prédios urbanos de habitação e os terrenos para construção. Num imóvel que não é de habitação, pergunta-se também pela Loja com História (quadro 6B).':''}</div>
+      ${imvBeneficiosHtml(p)}`;
 }
 // Secção de uma hipoteca no formulário: no topo, o «Ler a partir da FINE ou
 // do contrato» (fine.js:fineSect, só fora de produção); depois os campos
@@ -1336,11 +1617,17 @@ function collectProp(){
   p.ownerShares=shr;
   imvForaColher('p');
   /* o subarrendamento (D52) só o dono o vê e escreve: sem os campos no ecrã, fica o guardado */
-  const sub=Object.assign({ativo:false,nifSenhorio:'',rendaMensal:0},p.subarrendamento||{});
+  const sub=Object.assign({ativo:false,nifSenhorio:'',rendaMensal:0,parte:'',rendaParte:0},p.subarrendamento||{});
   if(has('p_sub_ativo')&&imvVejoCamposDeDono(p))sub.ativo=chk('p_sub_ativo');
   if(sub.ativo&&has('p_sub_nif'))sub.nifSenhorio=String(val('p_sub_nif')).replace(/\D/g,'').slice(0,9);
   if(sub.ativo&&has('p_sub_renda'))sub.rendaMensal=Math.max(0,Math.round(num(val('p_sub_renda'))*100)/100);
+  /* a casa toda ou uma parte e, sendo parte, a renda dela (N023) */
+  if(sub.ativo&&has('p_sub_parte')){const v=val('p_sub_parte');sub.parte=v==='toda'||v==='parte'?v:''}
+  if(sub.ativo&&sub.parte==='parte'&&has('p_sub_rendaParte'))sub.rendaParte=Math.max(0,Math.round(num(val('p_sub_rendaParte'))*100)/100);
   p.subarrendamento=sub;
+  /* a parte da casa que se arrenda num imóvel por quartos (N012): em branco, a
+     omissão (null); escrita, a percentagem (imvParteErro confere-a ao guardar) */
+  if(has('p_parteArrendada')){const s=String(val('p_parteArrendada')||'').trim();p.parteArrendada=s?imvLerQuota(s):null}
   (p.loans||[]).forEach(l=>{
     const g=k=>document.getElementById('l_'+k+'_'+l.id);
     if(g('stamp'))l.stampTax=chk('l_stamp_'+l.id);
@@ -1447,6 +1734,43 @@ function imvSegTemFoco(fn){
    Devolve: nada — mexe só no foco. */
 function imvSegFocar(fn){
   try{const b=document.querySelector('#imv_segm_'+fn+' [aria-checked="true"]');if(b)b.focus({preventScroll:true})}catch(e){}
+}
+/* «Uso próprio» num imóvel com contratos que não acabaram (N129): mudar o
+   destino não termina um contrato — as rendas dele continuam na Declaração e
+   a renda planeada continua a pedir confirmação. Por baixo do destino, o
+   formulário diz quantos há e oferece «Terminar o contrato» (a folha de
+   sempre, contrato.js:endContract, com o dia em que acabou e o motivo: o
+   quadro 10 e a comunicação da cessação dependem deles); um que ainda não
+   começou abre-se na ficha (apaga-se lá). A mudança não termina nada
+   sozinha: o dia e o motivo são da pessoa.
+   Recebe: p — o imóvel do formulário.
+   Devolve: o HTML da nota ('' sem nada a dizer). */
+function imvUsoProprioAviso(p){
+  if(p.use!=='proprio'||!p.id||!prop(p.id)||!servicoLigado('contracts')||!pode(p.id,'contract.view'))return '';
+  const vivos=contractsOf(p.id).filter(ctVivo);if(!vivos.length)return '';
+  const quem=c=>ctNames(c)+(isActive(c)?(c.end?', até '+dPT(c.end):''):c.start?', a partir de '+dPT(c.start):'');
+  const um=vivos.length===1,c0=vivos[0];
+  const frase=(um?'Este imóvel tem um contrato '+(isActive(c0)?'em vigor':'por começar')+' ('+quem(c0)+')':'Este imóvel tem '+vivos.length+' contratos que não acabaram ('+vivos.map(quem).join('; ')+')')
+    +'. Passar a «Uso próprio» não '+(um?'o':'os')+' termina: as rendas continuam na Declaração e a renda planeada continua a pedir confirmação. Se o inquilino saiu, termina primeiro o contrato, com o dia em que acabou e o motivo.';
+  const podeT=pode(p.id,'contract.add');
+  const botoes=vivos.map(c=>{const nome=um?'':' «'+ctName(c)+'»',q=jsq(c.id);
+    return isActive(c)?(podeT?`<button type="button" class="btn sm" data-toca="camada" data-click="imvTerminarDoFormulario('${q}')">Terminar o contrato${esc(nome)}</button>`:'')
+      :`<button type="button" class="btn sm" data-toca="camada" data-click="ctView('${q}')">Ver o contrato${esc(nome)}</button>`}).join('');
+  return `<div class="imv-nota imv-nota-aviso small" data-parte="uso-proprio" id="imv_uso_proprio">${esc(frase)}${botoes?`<div class="imv-botoes u-mt-12px">${botoes}</div>`:''}</div>`;
+}
+/* «Terminar o contrato», na nota do «Uso próprio» (N129): a folha de sempre
+   (contrato.js:endContract) por cima do formulário, que fica como está; ao
+   fechar a folha, o formulário repinta-se com o que tem escrito (a nota sai
+   se já não houver contratos por acabar).
+   Recebe: cid — o id do contrato.
+   Devolve: nada. */
+function imvTerminarDoFormulario(cid){
+  collectProp();
+  const form=modalTop();
+  chamarServico('contracts','endContract',cid);
+  const L=modalTop();if(!L||L===form)return;
+  const antes=L.aoFechar;
+  L.aoFechar=o=>{if(typeof antes==='function')antes(o);setTimeout(()=>{if(modalTop()===form){collectProp();repaintProp()}},0)};
 }
 // Muda o destino do imóvel (arrendamento/uso próprio) e repinta — os campos
 // visíveis dependem dele: o realce desliza, o grupo cresce até eles, e o foco
@@ -2241,16 +2565,59 @@ function imvGravarComForaNaNuvem(id,guardado,desde){
    (fisco-avisos.js) e do cartão das quotas: com mais de uma conta na casa, a
    janela das quotas (CW.proposeShares); só minha (com ou sem nuvem), o
    formulário do imóvel com a pergunta «Há outros donos fora da app?» à vista
-   (N059, N135).
-   Recebe: hid — o id do imóvel.
+   (N059, N135). Com estado 'sim' — o «Há outros donos» do aviso dos donos
+   (N065, maqueta 5) —, o formulário abre já com «Sim, fora da app» e uma
+   linha em branco para o nome e a quota (só num imóvel em que a pergunta se
+   responde no formulário; a janela das quotas pergunta o mesmo).
+   Recebe: hid — o id do imóvel; estado (opcional) — 'sim' para abrir na resposta «Sim».
    Devolve: nada. */
-function imvAbrirQuotas(hid){
+function imvAbrirQuotas(hid,estado){
   const p=prop(hid);if(!p)return;
   const nuvem=!!(window.CW&&CW.user&&typeof CW.proposeShares==='function');
   if(nuvem&&!imvSoMinhaNaNuvem(p))return CW.proposeShares(hid);
   propModal(hid);
-  const e=document.getElementById('p_fora');
+  if(estado==='sim'&&pode(hid,'house.edit')&&pForm&&pForm.id===hid&&imvForaEd('p').estado!=='sim'&&!imvSubAtivo(pForm)&&modalBodyEl())imvForaEscolha('p','sim');
+  const e=document.getElementById(estado==='sim'?'p_fn_0':'p_fora');
   if(e&&typeof e.scrollIntoView==='function')try{e.scrollIntoView({block:'center'})}catch(x){}
+  if(estado==='sim'&&e)try{e.focus({preventScroll:true})}catch(x){}
+}
+/* «É só meu», no aviso dos donos da Declaração (N065, maqueta 5 do D8,
+   fisco-avisos.js) e no cartão das quotas da ficha: responde «Não, mais
+   ninguém» à pergunta dos donos fora da app sem abrir o formulário — uma
+   resposta por imóvel, com o nome dele à vista (nunca vários de uma vez:
+   um herdado ou comprado a meias confirmava-se por engano). Vale também
+   para trás, como o «desde sempre» do formulário: os períodos das quotas
+   por confirmar passam a confirmados sem ninguém. Sem nuvem grava aqui, com
+   «Anular» (comDesfazer) a devolver o que estava; com nuvem, numa casa só
+   da minha conta, vai numa proposta de um dono só com «desde sempre»
+   (cloud/utilizadores.js:enviarProposta, o que a pergunta do formulário
+   faz: os donos de fora só o servidor os escreve). Não grava, e abre onde
+   se responde: com mais de uma conta na casa (a resposta é de todos: a
+   janela das quotas) ou com donos de fora já escritos (não os apaga:
+   imvAbrirQuotas). A quem não é dono, ou não pode editar a ficha, a recusa
+   num toast.
+   Recebe: hid — o id do imóvel.
+   Devolve: nada. */
+function imvSoMeu(hid){
+  const p=prop(hid);if(!p)return toast('Este imóvel já não existe.');
+  if(!souDono(hid)||!pode(hid,'house.edit'))return toast(fraseSemPerm('house.edit'));
+  const nuvem=!!(window.CW&&CW.user&&typeof CW.proposeShares==='function');
+  if(nuvem&&!imvSoMinhaNaNuvem(p))return CW.proposeShares(hid);
+  const fora=p.comproprietariosFora;
+  if(Array.isArray(fora)&&fora.length)return imvAbrirQuotas(hid);
+  const nome=String(p.name||'O imóvel'),frase=nome+': guardado que não há outros donos fora da app.';
+  if(nuvem){
+    const eu=meuId();
+    if(typeof enviarProposta!=='function')return toast('As quotas precisam do servidor. Tenta outra vez daqui a pouco.');
+    return Promise.resolve(enviarProposta(hid,{[eu]:100},{fora:[],desde:'sempre'}))
+      .then(()=>typeof pullNow==='function'?pullNow(true):null)
+      .then(()=>{render();toast(frase)},e=>toast('A resposta não seguiu: '+String((e&&e.message)||'tenta outra vez').replace(/\.$/,'')+'.'));
+  }
+  const antes={fora:fora===undefined?null:fora,hist:JSON.parse(JSON.stringify(p.quotasHist||[]))};
+  p.comproprietariosFora=[];
+  p.quotasHist=(p.quotasHist||[]).map(e=>e&&typeof e==='object'&&!Array.isArray(e.fora)?Object.assign({},e,{fora:[]}):e);
+  save();render();
+  comDesfazer(frase,()=>{const x=prop(hid);if(x){x.comproprietariosFora=antes.fora;x.quotasHist=antes.hist}});
 }
 /* Um estado das quotas reduzido ao que conta para o imposto: a fração da
    casa toda de cada conta (quotasEntre, com os de fora a abater) e os de
@@ -2356,12 +2723,17 @@ function imvQuotasCartao(p,c){
   const prp=nuvem&&window.CW.state?(CW.state.proposals||[]).find(x=>x.houseId===p.id):null;
   const notas=[fora===null?`Há outros donos fora da app? Está por confirmar: até responderes, a Declaração conta a casa como só ${donos.length>1?'dos donos da app':'tua'}.`:'',
     prp?'Há uma nova divisão proposta, à espera de confirmação.':''].filter(Boolean);
-  /* a resposta: a janela das quotas com mais de uma conta, o formulário num só meu (imvAbrirQuotas, N059) */
+  /* a resposta: a janela das quotas com mais de uma conta, o formulário num só meu (imvAbrirQuotas, N059);
+     por confirmar, responde-se aqui mesmo, como no aviso da Declaração (imvSoMeu, N065) — menos com
+     várias contas, em que a resposta é de todos */
+  const aqui=!prp&&fora===null&&pode(p.id,'house.edit')&&(!nuvem||donos.length<2);
   const act=prp?`propModal('${q}')`:`imvAbrirQuotas('${q}')`;
   const rot=prp?'Ver a proposta':fora===null?'Responder':'Mudar as quotas';
+  const botoes=aqui?`<button type="button" class="btn sm" data-toca="dados" data-click="imvSoMeu('${q}')">${donos.length>1?'Não há mais donos':'É só meu'}</button><button type="button" class="btn sm" data-toca="camada" data-click="imvAbrirQuotas('${q}','sim')">Há outros donos</button>`
+    :`<button type="button" class="btn sm" data-toca="camada" data-click="${act}">${rot}</button>`;
   return `<div class="card imv-sec">${imvCab('Quotas',desde?`<span class="small num">desde ${dPT(desde)}</span>`:'')}${linhas}
     ${notas.map(t=>`<p class="small imv-texto">${esc(t)}</p>`).join('')}
-    <div class="imv-botoes"><button type="button" class="btn sm" data-toca="camada" data-click="${act}">${rot}</button></div></div>`;
+    <div class="imv-botoes">${botoes}</div></div>`;
 }
 /* ---------- As quotas com nuvem: a secção do formulário e a janela da proposta ----------
    Com sessão, a secção dos proprietários do formulário é a da nuvem
@@ -2387,6 +2759,8 @@ function imvForaLinhasNuvem(lista,seta){
    Devolve: o HTML. */
 function imvQuotasSoTeu(live,myId){
   const sim=imvForaEd('p').estado==='sim';
+  /* num imóvel subarrendado a pergunta não se faz (imvForaNoFormulario, N058) */
+  if(!imvForaNoFormulario())return '';
   return imvForaHtml('p')+(sim?`<div class="hint" id="p_minhaQuota">${esc(imvPropostaMinha('p'))}</div>`:'');
 }
 /* As linhas das quotas na secção da nuvem com várias contas: a de cada uma,
@@ -2434,13 +2808,19 @@ const IMV_ENTROU_QUANDO=[{v:'sempre',label:'Sim, desde sempre'},{v:'dia',label:'
    (N017, N018): o que a casa conta até lá dito como é, a pergunta «… já era
    dono antes de entrar na app?» (desde sempre, por omissão, ou desde um dia)
    e, havendo donos fora da app, se algum deles é quem entrou
-   (imvPropostaForaConta). Fora disso, o «Desde quando valem?» só aparece
+   (imvPropostaForaConta). Quando quem entrou fui eu (um pedido de partilha
+   aceite, ou um grupo — worker/src/rotas/colaboradores.js, grupos.js), a
+   janela fala comigo: «Aceitaste a partilha de…», «Já eras dono antes de
+   entrar na app?». Fora disso, o «Desde quando valem?» só aparece
    quando a divisão muda (imvPropostaMuda, N059).
    Devolve: o HTML do corpo. */
 function imvPropostaCorpo(){
   const s=_imvProposta,um=s.parts.length<2,hoje=today(),entrada=s.entrou.length>0;
+  /* quem entrou fui eu (um pedido de partilha aceite, ou um grupo): a janela fala comigo */
+  const soEu=s.entrou.length===1&&s.entrou[0]===meuId();
   const quem=listaE(s.entrou.map(u=>'<b>'+esc(imvPropostaNome(u))+'</b>'));
-  const intro=entrada?`Acabaste de partilhar <b>${esc(s.nome||'esta casa')}</b> com ${quem}. Indica a quota de cada um, da casa toda, e desde quando ${s.entrou.length>1?'são donos':'é dono'}. Só entra em vigor quando os outros comproprietários confirmarem; até lá, a casa conta como está na ficha.`
+  const intro=entrada?(soEu?`Aceitaste a partilha de <b>${esc(s.nome||'esta casa')}</b>. Indica a quota de cada um, da casa toda, e desde quando és dono. Só entra em vigor quando os outros comproprietários confirmarem; até lá, a casa conta como está na ficha.`
+      :`Acabaste de partilhar <b>${esc(s.nome||'esta casa')}</b> com ${quem}. Indica a quota de cada um, da casa toda, e desde quando ${s.entrou.length>1?'são donos':'é dono'}. Só entra em vigor quando os outros comproprietários confirmarem; até lá, a casa conta como está na ficha.`)
     :um?'Diz se o imóvel tem outros donos fora da app, e a quota de cada um. Com uma conta só, as quotas valem logo.'
     :'Define a percentagem de cada comproprietário, da casa toda. A nova divisão só entra em vigor depois de todos confirmarem.';
   const contas=um?`<div class="hint" id="cwq_minha">${esc(imvPropostaMinha())}</div>`
@@ -2448,9 +2828,9 @@ function imvPropostaCorpo(){
   let quando;
   if(entrada){
     const dia=s.quando==='dia';
-    quando=`<label>${quem} já ${s.entrou.length>1?'eram donos':'era dono'} antes de entrar na app?${sel('cwq_quando',s.quando,IMV_ENTROU_QUANDO,'imvPropostaQuandoMudou','rascunho')}</label>
+    quando=`<label>${soEu?'Já eras dono':quem+' já '+(s.entrou.length>1?'eram donos':'era dono')} antes de entrar na app?${sel('cwq_quando',s.quando,IMV_ENTROU_QUANDO,'imvPropostaQuandoMudou','rascunho')}</label>
     ${dia?`<label>Desde que dia <span class="req">*</span><input id="cwq_desde" type="date" value="${esc(s.desde||hoje)}" max="${hoje}"></label>`:''}
-    <div class="hint">${dia?'O dia da compra, da doação ou da herança. Até à véspera, a casa conta como antes da partilha.':'As quotas valem também para trás, como se tivesse entrado na app no dia em que passou a ser dono.'}</div>`;
+    <div class="hint">${dia?'O dia da compra, da doação ou da herança. Até à véspera, a casa conta como antes da partilha.':soEu?'As quotas valem também para trás, como se tivesses entrado na app no dia em que passaste a ser dono.':'As quotas valem também para trás, como se tivesse entrado na app no dia em que passou a ser dono.'}</div>`;
   }else if(um&&!Array.isArray((prop(s.hid)||{}).comproprietariosFora)){
     /* uma conta só, com os de fora por confirmar: a única mudança é a primeira
        resposta, que pergunta desde quando no bloco dos de fora (N019) */
@@ -2471,8 +2851,8 @@ function imvPropostaForaConta(){
   const ed=imvForaEd('cwq');if(ed.estado!=='sim')return '';
   const nomes=ed.linhas.map((f,i)=>({i,nome:String(f.nome||'').trim()})).filter(x=>x.nome);
   if(!nomes.length)return '';
-  const quem=esc(imvPropostaNome(s.entrou[0]));
-  return `<div class="hint">${quem} era um dos donos fora da app? Assim, a quota passa para a conta e sai dos de fora.</div>
+  const quem=esc(imvPropostaNome(s.entrou[0])),soEu=s.entrou[0]===meuId();
+  return `<div class="hint">${soEu?'Eras um dos donos fora da app? Assim, a quota passa para a tua conta e sai dos de fora.':quem+' era um dos donos fora da app? Assim, a quota passa para a conta e sai dos de fora.'}</div>
     <div class="imv-botoes">${nomes.map(x=>`<button type="button" class="btn sm" data-toca="rascunho" data-click="imvPropostaForaEConta(${x.i})">Sim, era ${esc(x.nome)}</button>`).join('')}</div>`;
 }
 /* «Sim, era …»: o dono fora da app da linha i é a conta que entrou — sai dos

@@ -74,6 +74,15 @@ function renda(a, date, amount, extra) {
 const guardar = (a) => a.txGuardar(null);
 /* a última janela aberta */
 const topo = (j) => j[j.length - 1];
+/* A posição de uma escolha da pergunta pelo rótulo (a ordem muda quando a retenção vem à cabeça).
+   Recebe: j — a janela da pergunta; rotulo — o texto da escolha.
+   Devolve: o índice (para o _pick). */
+function escolha(j, rotulo) {
+  const rs = [...String(j.b).matchAll(/<b class="u-d-block u-fs-14px">([^<]*)<\/b>/g)].map((m) => m[1]);
+  const i = rs.indexOf(rotulo);
+  assert.ok(i > -1, 'a escolha «' + rotulo + '» está na pergunta: ' + rs.join(' | '));
+  return i;
+}
 const rendasDoMes = (a, mes) => a.db.transactions.filter((t) => t.contractId === 'C1' && a.mesDaRenda(t) === mes);
 const despesas = (a) => a.db.transactions.filter((t) => t.kind === 'expense');
 /* o resumo de 2026: as rendas e os gastos que contam */
@@ -236,13 +245,14 @@ describe('D115 · a renda paga só em parte fica em dívida, e o planeado contin
     assert.notEqual(topo(janelas) && topo(janelas).t, PERGUNTA, 'sem planeado nesse mês não há com que comparar');
   });
 
-  test('sem planeado da renda (automático desligado) não pergunta', () => {
+  /* sem planeado, a renda do mês corrente compara com a do contrato (N080): era «não pergunta» */
+  test('sem planeado da renda (automático desligado), a renda deste mês abaixo da do contrato pergunta', () => {
     const { janelas } = monta(app, { autoRec: false });
     app.syncAllContractRecs();
     app.txModal({ kind: 'income', propId: 'p1', ctId: 'C1' });
     app.tForm.amount = 500;
     guardar(app);
-    assert.notEqual(topo(janelas) && topo(janelas).t, PERGUNTA);
+    assert.equal(topo(janelas).t, PERGUNTA);
   });
 
   test('a caução não é a renda do mês: não pergunta', () => {
@@ -317,9 +327,10 @@ describe('D114 · o encargo descontado na renda: a despesa uma vez, e o planeado
   });
 
   test('o IMI descontado sem planeado nesse mês vai direto à despesa no IMI', () => {
-    monta(app);
+    const { janelas } = monta(app);
     confirmarCom(app, 900);
-    app._pick(ENCARGO);
+    /* faltam 10 % da renda: a retenção das rendas moderadas vem à cabeça (N081), e o encargo procura-se pelo nome */
+    app._pick(escolha(topo(janelas), 'Encargo do imóvel pago pelo inquilino'));
     app._pick(1);           // o IMI
     assert.equal(app.tForm.kind, 'expense');
     assert.equal(app.irsColunaDe(app.tForm).col, 'imi');
@@ -405,13 +416,15 @@ describe('Q13 / D114 · o encargo a cargo do inquilino não se pede enquanto o c
 });
 
 describe('D116 e D112 · os textos dos campos da renda', () => {
+  /* o «Retido na fonte» só aparece quando conta, e a frase da gestora saiu da dica (N016, maqueta 2) */
   test('o «Retido na fonte» diz o que é retenção, e a renda conta pelo recibo', () => {
     monta(app);
+    app.db.tenants[0].retem = true;
     app.syncAllContractRecs();
     app.txModal({ kind: 'income', propId: 'p1', ctId: 'C1' });
     const h = app.txFiscoSect().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
     assert.match(h, /só o IRS que o inquilino reteve e entregou à AT por ti/);
-    assert.match(h, /a comissão da gestora e os descontos não são retenção/);
+    assert.doesNotMatch(h, /a comissão da gestora/, 'a pergunta da renda abaixo é que a trata');
     assert.match(h, /O montante é a renda do recibo menos o retido na fonte/);
     assert.doesNotMatch(h, /a renda bruta é o montante mais isto/, 'a dica que convidava a escrever ali a comissão');
   });

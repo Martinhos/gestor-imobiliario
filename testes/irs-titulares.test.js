@@ -149,8 +149,11 @@ describe('D29 — as quotas com data: cada renda pela quota do seu dia', () => {
     assert.equal(app.fiscoQuotaNoAno(p, '', 2026), 0);
     assert.equal(app.fiscoQuotaNoAno(p, 'ana', 2025), 1);
     const r = app.resumoFiscal(2026, 'ana');
-    assert.equal(r.imoveis, 0);
-    assert.equal(r.linhas.length, 0);
+    assert.equal(r.imoveis, 0, 'o imóvel já não é da declaração de 2026');
+    // N022: a renda recebida depois da venda é rendimento do ano em que entra (CIRS art. 8.º n.º 1): tem linha, com a venda dita
+    assert.equal(r.linhas.length, 1);
+    perto(r.linhas[0].rendas, 500, 0.01);
+    assert.equal(r.linhas[0].vendido, '2025-10-01');
     perto(app.resumoFiscal(2025, 'ana').totais.rendas, 6000, 0.01);
     p.vendido = '2026-01-01';
     assert.equal(app.fiscoQuotaNoAno(p, 'ana', 2026), 1, 'no dia da venda ainda era dela');

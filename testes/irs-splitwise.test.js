@@ -285,8 +285,10 @@ describe('D127 — a chave de cada linha, as apagadas, o «Só desde» e os anos
     const dito = importar(csv([...grupo, '2026-02-10,Condomínio 2026,Condomínio,1200.00,EUR,1200.00,-1200.00']), { desde: '' });
     assert.deepEqual(dito.toasts, ['1 despesa importada · 1 repetida ignorada.']);
     assert.deepEqual(gastos(2025, 'ana'), antes);
+    /* as apagadas vivem na ficha do imóvel (N102) */
+    assert.equal(app.db.properties.find((p) => p.id === 'v1').swIgnoradas.length, 2);
     app.swDesignorar(apagadas.slice(0, 1));
-    assert.equal(app.db.settings.swIgnoradas.length, 1, 'o Anular de quem apagou devolve a linha');
+    assert.equal(app.db.properties.find((p) => p.id === 'v1').swIgnoradas.length, 1, 'o Anular de quem apagou devolve a linha');
   });
 
   test('o «Só desde» por omissão só corta com despesas importadas sem a chave, e pela data delas', () => {
@@ -375,7 +377,7 @@ test('o exemplo de categoria de receitas e o mapa não falam de alojamento local
 });
 
 describe('apagar uma linha importada fica entre as apagadas de propósito, e o Anular tira-a (D127)', () => {
-  test('o delTx guarda a chave em settings.swIgnoradas, e o Anular repõe o movimento e tira a chave', () => {
+  test('o delTx guarda a chave na ficha do imóvel (N102), e o Anular repõe o movimento e tira a chave', () => {
     limpar(app);
     const avisos = [];
     app.save = () => {}; app.render = () => {}; app.closeAllModals = () => {};
@@ -385,12 +387,14 @@ describe('apagar uma linha importada fica entre as apagadas de propósito, e o A
     app.db.transactions = [app.normTx({ id: 'SW1', kind: 'expense', label: 'Condomínio 2025', amount: 1200, propertyId: 'P1', date: '2025-02-10', swKey: chave })];
     app.delTx('SW1');
     assert.equal(app.db.transactions.length, 0);
-    assert.deepEqual([...app.db.settings.swIgnoradas], [app.normSwKey(chave)], 'reimportar o grupo não a repõe');
+    assert.deepEqual([...app.db.properties[0].swIgnoradas.map((x) => x.id)], [app.swIdDaChave(chave)], 'reimportar o grupo não a repõe');
+    assert.equal(app.db.properties[0].swIgnoradas[0].dia, '2026-11-17', 'com o dia em que se apagou');
+    assert.deepEqual([...app.db.settings.swIgnoradas], [], 'e não nas definições de quem apagou');
     const anular = avisos.pop();
     assert.equal(anular.m, 'Movimento apagado.');
     anular.o.fn();
     assert.equal(app.db.transactions.length, 1, 'o Anular repõe o movimento');
-    assert.deepEqual([...app.db.settings.swIgnoradas], [], 'e a linha deixa de estar entre as apagadas');
+    assert.deepEqual([...app.db.properties[0].swIgnoradas], [], 'e a linha deixa de estar entre as apagadas');
   });
 });
 

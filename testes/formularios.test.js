@@ -104,7 +104,7 @@ describe('«Opcional» nos formulários', () => {
     conferir('dívida recebida', abertas[1].b, { obrigatorios: ['t_label', 't_amount'], exemplos: { t_creditor: true }, deixados: ['t_sp_', 't_pp_'] });
     // uma renda com contrato traz a secção do IRS
     app.db.contracts = [app.normContract({ id: 'C1', propertyId: 'P1', rent: 500, tenantIds: ['I1'], start: '2020-01-01' })];
-    app.txModal({ kind: 'income', propId: 'P1', ctId: 'C1' });
+    app.txModal({ kind: 'income', propId: 'P1', ctId: 'C1', preset: { retencao: 10 } });
     const renda = conferir('renda', abertas[2].b, { obrigatorios: ['t_label', 't_amount'], deixados: ['t_sp_', 't_pp_'] });
     assert.equal(renda.find((c) => c.id === 't_retencao').placeholder, 'Opcional');
   });

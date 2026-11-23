@@ -164,7 +164,9 @@ describe('o CSV leva o que o IRS pede', () => {
   });
 
   test('uma despesa leva a coluna do Anexo F pelo nome; o que não é despesa nem renda vai vazio', () => {
-    assert.equal(row('Pintura do quarto')[0][col('coluna_irs')], 'Conservação e manutenção');
+    // o CSV diz o que a Declaração faz à despesa, como a ficha (N113): a pintura do exemplo é de antes do
+    // arrendamento do quarto, e vai às obras dos 24 meses desse contrato, não à conservação do ano
+    assert.equal(row('Pintura do quarto')[0][col('coluna_irs')], 'Obras dos 24 meses');
     assert.equal(row('Substituição do esquentador')[0][col('coluna_irs')], 'Conservação e manutenção');
     assert.equal(row('Quota do condomínio')[0][col('coluna_irs')], 'Condomínio');
     assert.equal(row('IMI ' + YEAR)[0][col('coluna_irs')], 'IMI');

@@ -137,7 +137,7 @@ describe('o ano e o contrato (D50, D43, D16, D69, D17, D34)', () => {
     ct();
     const dois = avisos(resumo([], { semContrato: [{ propertyId: 'p1', imovel: 'T2 Arroios', rendas: 1500, n: 2, ids: ['x1', 'x2'] }] }), /sem contrato/);
     igual(dois, [{ texto: '2 rendas de 2026 sem contrato ligado (' + app.euroS(1500) + ') não estão em nenhuma linha do quadro, mas declaram-se na mesma: liga-as ao contrato',
-      abrir: "go('transactions')", toca: 'ecra', nivel: 'falta' }]);
+      abrir: "goMovimentos('2026','p1','rendas','income','')", toca: 'ecra', nivel: 'falta' }]); // N134: as rendas do imóvel, e não a lista inteira
     const uma = avisos(resumo([], { semContrato: [{ propertyId: 'p1', imovel: 'T2 Arroios', rendas: 750.5, n: 1, ids: ['x1'] }] }), /sem contrato/);
     assert.equal(uma[0].texto, '1 renda de 2026 sem contrato ligado (' + app.euroS(750.5) + ') não está em nenhuma linha do quadro, mas declara-se na mesma: liga-a ao contrato');
     assert.equal(uma[0].abrir, "txView('x1')"); assert.equal(uma[0].toca, 'camada');
@@ -179,7 +179,7 @@ describe('as rendas de cada contrato (D15, D23, D58, D88, D56)', () => {
     assert.equal(a.length, 1, 'um contrato conta uma vez, mesmo com uma linha por titular');
     assert.equal(a[0].texto, 'Contrato Loja: nas rendas de janeiro, fevereiro e março de 2026, o que entrou mais o retido passa a renda do contrato (' + app.euroS(1000)
       + '). Confirma no recibo: a renda ilíquida é a do recibo, e o que entrou é ela menos o retido. Se a renda subiu, atualiza-a no contrato');
-    assert.equal(a[0].nivel, 'aviso'); assert.equal(a[0].abrir, "go('transactions')"); assert.equal(a[0].toca, 'ecra');
+    assert.equal(a[0].nivel, 'aviso'); assert.equal(a[0].abrir, "goMovimentos('2026','p1','rendas','income','C1')"); assert.equal(a[0].toca, 'ecra'); // N134
     assert.doesNotMatch(a[0].texto, /regist/, 'nunca «regista»');
     // uma só: o toque abre-a
     app.db.transactions = app.db.transactions.filter((t) => t.id === 'r1' || t.id === 'r4');
@@ -292,14 +292,15 @@ describe('as rendas de cada contrato (D15, D23, D58, D88, D56)', () => {
     renda('dez', 'C1', '2026-01-08', 1000);          // a de dezembro de 2025, sem o mês dito
     renda('jan', 'C1', '2026-01-30', 1000);
     const a = avisos(resumo([linha(c)]), /quadro 8/);
-    igual(a, [{ texto: 'Contrato Loja: janeiro de 2026 com 2 rendas (' + app.euroS(2000) + ') — confirma a que mês respeita cada renda: a de um ano anterior vai ao quadro 8',
-      abrir: "go('transactions')", toca: 'ecra', nivel: 'aviso' }]);
+    // N013, N134: diz que os meses e o limite das rendas moderadas se contam pelo mês de cada renda, e o toque abre as do contrato
+    igual(a, [{ texto: 'Contrato Loja: janeiro de 2026 com 2 rendas (' + app.euroS(2000) + ') — confirma a que mês respeita cada renda: os meses e o limite das rendas moderadas contam-se por ele. Uma renda de um ano anterior vai ao quadro 8',
+      abrir: "goMovimentos('2026','p1','rendas','income','C1')", toca: 'ecra', nivel: 'aviso' }]);
     // fevereiro sem renda e março a dobrar
     app.db.transactions = [];
     renda('jan', 'C1', '2026-01-05', 1000);
     renda('mar', 'C1', '2026-03-05', 2000);
     assert.equal(avisos(resumo([linha(c)]), /quadro 8/)[0].texto,
-      'Contrato Loja: fevereiro de 2026 sem renda e março de 2026 com ' + app.euroS(2000) + ' — confirma a que mês respeita cada renda: a de um ano anterior vai ao quadro 8');
+      'Contrato Loja: fevereiro de 2026 sem renda e março de 2026 com ' + app.euroS(2000) + ' — é um pagamento de vários meses num movimento? Parte-o num movimento por mês, com o mês a que respeita cada um: os meses e o limite das rendas moderadas contam-se assim. Uma renda de um ano anterior vai ao quadro 8');
     // abril em dois pagamentos que somam a renda: nada
     app.db.transactions = [];
     renda('a1', 'C1', '2026-04-05', 600); renda('a2', 'C1', '2026-04-25', 400);
@@ -347,7 +348,7 @@ describe('as despesas a confirmar (D06, D07, D24–D27, D60, D61)', () => {
     const s = avisos(r, /^Seguros:/), q = avisos(r, /^Condomínio:/);
     igual(s, [{ texto: 'Seguros: 2 despesas de 2026 a confirmar (' + app.euroS(370.5) + ') não contam nos gastos — Seguro do prédio, ' + app.euroS(250) + '; Seguro do elevador, ' + app.euroS(120.5)
       + '. Escolhe na ficha de cada uma a coluna do Anexo F (ou Não dedutível), ou a regra da categoria em Definições → Categorias, etiquetas e IRS',
-      abrir: "go('transactions')", toca: 'ecra', nivel: 'aviso' }]);
+      abrir: "goMovimentos('2026','p1','Seguros','expense','')", toca: 'ecra', nivel: 'aviso' }]); // N134: os Seguros do imóvel
     assert.equal(q[0].texto, 'Condomínio: 1 despesa de 2026 a confirmar não conta nos gastos — Obras do telhado, ' + app.euroS(800)
       + '. Escolhe na ficha dela a coluna do Anexo F (ou Não dedutível), ou a regra da categoria em Definições → Categorias, etiquetas e IRS. Quota extraordinária: escolhe Conservação e manutenção no ano em que o condomínio paga a obra');
     assert.equal(q[0].abrir, "txView('q1')"); assert.equal(q[0].toca, 'camada');

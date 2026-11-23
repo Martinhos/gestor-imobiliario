@@ -140,7 +140,7 @@ describe('as marcas de migração das definições sobem à nuvem uma vez', () =
     assert.equal(ops[0].base.irsMapaV, null, 'a base diz que o servidor não tinha a marca');
     assert.equal(ops[0].base.irsMapa['Seguros'], 'outros', 'e o valor de antes da migração');
     const s = await definicoesNoServidor(env, A);
-    assert.equal(s.irsMapaV, 2);
+    assert.equal(s.irsMapaV, 3);
     assert.equal(s.catsV, 2);
     assert.equal(s.irsMapa['Seguros'], 'confirmar');
     assert.equal(s.irsMapa['Água, luz e gás'], 'confirmar');
@@ -179,7 +179,7 @@ describe('as marcas de migração das definições sobem à nuvem uma vez', () =
     const app0 = carregarTudo();
     const s = copia(app0.blank.settings);
     delete s.theme;
-    await dadoGlobal(env, A, 'settings', 'main', Object.assign(s, { catsV: 3, irsMapaV: 2 }));
+    await dadoGlobal(env, A, 'settings', 'main', Object.assign(s, { catsV: 3, irsMapaV: 3 }));
     const { app, esp } = aparelho(env, A, app0);
     await ler(app, env, A);
     assert.equal(app.db.settings.catsV, 3, 'uma marca maior fica como está');
@@ -222,7 +222,7 @@ describe('as marcas de migração das definições sobem à nuvem uma vez', () =
     const s = await definicoesNoServidor(env, A);
     assert.equal(s.irsMapa['Seguros'], 'outros');
     assert.equal(s.growth, 3);
-    assert.equal(s.irsMapaV, 2);
+    assert.equal(s.irsMapaV, 3);
   });
 
   test('o arranque com a base por migrar guardada: espera pela primeira leitura, e só então leva a migração', async () => {
@@ -240,7 +240,7 @@ describe('as marcas de migração das definições sobem à nuvem uma vez', () =
     await ler(app, env, A);
     await app.pushNow();
     assert.equal(opsDasDefinicoes(esp).length, 1);
-    assert.equal((await definicoesNoServidor(env, A)).irsMapaV, 2);
+    assert.equal((await definicoesNoServidor(env, A)).irsMapaV, 3);
   });
 
   test('a leitura que não mudou nada (um 304) devolve a frescura à base, e as definições sobem', async () => {
@@ -262,7 +262,7 @@ describe('as marcas de migração das definições sobem à nuvem uma vez', () =
     const B = await conta(env, 'Bruno');
     const s = copia(carregarTudo().blank.settings);
     delete s.theme;
-    await dadoGlobal(env, B, 'settings', 'main', Object.assign(s, { catsV: 2, irsMapaV: 2 }));
+    await dadoGlobal(env, B, 'settings', 'main', Object.assign(s, { catsV: 2, irsMapaV: 3 }));
     const { app, esp } = aparelho(env, A);
     await ler(app, env, A);
     // a Ana sai sem enviar; o Bruno entra no mesmo aparelho
@@ -279,8 +279,8 @@ describe('as marcas de migração das definições sobem à nuvem uma vez', () =
     app.loadSnap();
     await ler(app, env, A);
     await app.pushNow();
-    assert.equal((await definicoesNoServidor(env, A)).irsMapaV, 2);
-    assert.equal((await definicoesNoServidor(env, B)).irsMapaV, 2);
+    assert.equal((await definicoesNoServidor(env, A)).irsMapaV, 3);
+    assert.equal((await definicoesNoServidor(env, B)).irsMapaV, 3);
   });
 });
 
@@ -416,10 +416,12 @@ const api = (env, quem, path, method, corpo) => resp(pedir(env, quem, path, meth
    Devolve: a promessa de { env, A, B, cid }. */
 async function noGrupo(comLigacao) {
   const { env, A, B, cid } = await partilhada();
-  if (!comLigacao) await env.DB.prepare('DELETE FROM shares WHERE connection_id = ?').bind(cid).run();
   assert.equal((await api(env, A, '/api/shared-groups/G1', 'PUT', { name: 'Família' })).status, 201);
   await env.DB.prepare('INSERT INTO shared_group_members (group_id, user_id, joined_at) VALUES (?, ?, ?)').bind('G1', B.id, Date.now()).run();
   assert.equal((await api(env, A, '/api/shared-groups/G1/houses', 'PUT', { houseIds: ['H1'] })).status, 200);
+  // a ligação sai depois de a casa estar no grupo: o Bruno nunca deixa de a
+  // ter, e pôr a casa no grupo não é uma entrada dele (não fecha período)
+  if (!comLigacao) await env.DB.prepare('DELETE FROM shares WHERE connection_id = ?').bind(cid).run();
   return { env, A, B, cid };
 }
 

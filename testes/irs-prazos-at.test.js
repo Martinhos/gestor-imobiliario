@@ -8,8 +8,9 @@
 // valer três anos depois da celebração; o recibo emite-se quando se recebe; a
 // atualização legal da renda não se comunica; um contrato de antes de abril
 // de 2015 não tem Modelo 2; o envio ao IHRU marca-se com o dia; os recibos
-// pedem-se pelo papel da receita (a caução e o reembolso do inquilino sim, a
-// indemnização e o reembolso do condomínio sem contrato não); e a dispensa dos
+// pedem-se pelo papel da receita (a caução, o reembolso do inquilino e as outras
+// receitas prediais sim, a indemnização e o reembolso do condomínio sem contrato
+// não); e a dispensa dos
 // recibos e o Modelo 44 de cada ano são os da situação desse ano.
 //
 // O dia da app é fixo (2026-11-13); os prazos leem o `hoje` que se lhes passa.
@@ -333,11 +334,15 @@ describe('os recibos pelo papel da receita (D03, D20, D21)', () => {
     assert.equal(app.prazosDe(h).length, 0);
   });
 
-  test('a indemnização e as outras receitas prediais não têm recibo de renda', () => {
+  /* N077: as outras receitas prediais (natureza 02: a cedência de uso, a publicidade, as partes comuns) pedem recibo,
+     como a renda (CIRS art. 115.º n.º 5 a)); a indemnização (alínea g) do art. 8.º n.º 2) continua sem ele */
+  test('a indemnização não tem recibo de renda; as outras receitas prediais têm', () => {
     monta();
     receita('R1', '2026-08-05', { sub: 'Indemnização', amount: 3000, recibo: false });
     receita('R2', '2026-08-06', { sub: 'Outras receitas prediais', amount: 100, recibo: false });
-    assert.deepEqual(doTipo(h, 'recibos'), []);
+    const r = doTipo(h, 'recibos');
+    assert.deepEqual(r.map((p) => p.chave.split(':')[1]), ['R2']);
+    assert.match(r[0].sub, /a cedência de uso \(de parte do prédio, para publicidade, das partes comuns\) também pede recibo eletrónico, ou entra no Modelo 44/);
   });
 
   test('o Anexo F de um ano só com a caução avisa na mesma', () => {

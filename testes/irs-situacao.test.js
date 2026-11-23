@@ -79,11 +79,12 @@ function montaAnaERui() {
   app.render = () => {};
 }
 
-/* O cartão da situação de um ano, com um resumo feito à mão (o cartão só lê
-   o ano, quem declara e se é por inteiro).
+/* O cartão da situação de um ano, aberto (desde a D8 fecha numa linha com
+   «Mudar»), com um resumo feito à mão (o cartão só lê o ano, quem declara e
+   se é por inteiro).
    Recebe: ano — o ano; extra (opcional) — o que muda no resumo.
    Devolve: o HTML do cartão. */
-const cartao = (ano, extra) => app.fiscoSituacaoCard(Object.assign({ ano, titularId: 'ana', titulares: ['ana'], porInteiro: false }, extra || {}));
+const cartao = (ano, extra) => app.fiscoSituacaoCard(Object.assign({ ano, titularId: 'ana', titulares: ['ana'], porInteiro: false }, extra || {}), true);
 
 describe('D91: a situação é de cada ano', () => {
   beforeEach(montaAnaERui);
@@ -229,13 +230,15 @@ describe('D31 e D70: as notas da conjunta', () => {
     assert.doesNotMatch(t, /O teu cônjuge/);
   });
 
-  test('a nota fixa das letras F e D1/AF1/DG1 fica, com e sem a conjunta', () => {
+  /* N063 (D8): a letra F do óbito só com a conjunta; a dos dependentes vale em conjunta e em
+     separado, e fica à parte */
+  test('a nota das letras: a F só com a conjunta, as D1/AF1/DG1 com e sem ela', () => {
     for (const conj of [true, false]) {
       app.db.settings.irs = app.normIrsDefs({ porAno: { 2025: { conjunta: conj } } });
       const t = textoDe(cartao(2025));
-      assert.match(t, /A app só escreve as letras A e B\./);
       assert.match(t, /D1, AF1 ou DG1/);
-      assert.match(t, /muda a letra no Portal das Finanças/);
+      assert.match(t, /A app só escreve A e B: essa letra muda-se no Portal das Finanças\./);
+      if (conj) assert.match(t, /levam a letra F/); else assert.doesNotMatch(t, /óbito|letra F/);
     }
   });
 });
@@ -244,6 +247,9 @@ describe('D111: o limite da dispensa dos recibos', () => {
   beforeEach(montaAnaERui);
   /* um valor em euros como o texto o lê (os espaços do formato juntos num) */
   const eur = (n) => app.euro2(n).replace(/\s+/g, ' ');
+
+  /* a nota de quem tem dispensa mostra-se a pedido (N063): o «Quem tem dispensa?» */
+  beforeEach(() => { app.fiscoSitDispensaVer = true; });
 
   test('em 2026: as rendas de 2025 até 1 045,00 € (duas vezes o IAS de 2025), e não o de 2026', () => {
     const t = textoDe(cartao(2026));
@@ -290,6 +296,9 @@ function resumoFeito(totais, extra) {
   }, extra);
 }
 
+/* a linha das taxas do continente, à vista no imposto (N120) */
+const AC = 'taxas do continente; nos Açores a AT aplica menos 30 %';
+
 describe('D73: o KPI do imposto com os prejuízos de anos anteriores', () => {
   beforeEach(() => { limpar(app); app.db.owners.push(app.normPerson({ id: 'ana', name: 'Ana' })); });
 
@@ -300,8 +309,10 @@ describe('D73: o KPI do imposto com os prejuízos de anos anteriores', () => {
   test('o imposto é o depois do reporte (5 850 €, e não 7 200 €), com a linha do prejuízo, e a falta conta com ele', () => {
     const k = kpiDe(app.fiscoKpis(resumoFeito({ imposto: 7200, impostoDepoisDoReporte: 5850, retencoes: 600 }, { reporte })), 'Imposto estimado');
     assert.equal(k.valor, app.euro(5850));
-    assert.deepEqual(k.pes, ['prejuízos de anos anteriores: −' + app.euro(5400), 'já retido ' + app.euro(600) + ' · falta ' + app.euro(5250)]);
-    assert.match(k.expl, /Os prejuízos de anos anteriores que a app conhece \(5\s400\s€\) abatem ao rendimento deste ano, o mais antigo primeiro e titular a titular \(CIRS art\. 55\.º\): o imposto estimado desce 1\s350\s€\./);
+    /* N123: o que abateu é ao rendimento, e diz-se quanto desce o imposto; as taxas do continente no fim (N120) */
+    assert.deepEqual(k.pes, ['depois dos prejuízos de anos anteriores: −' + app.euro(5400) + ' ao rendimento (−' + app.euro(1350) + ' de imposto)',
+      'já retido ' + app.euro(600) + ' · falta ' + app.euro(5250), AC]);
+    assert.match(k.expl, /O imposto estimado das linhas é 7\s200\s€; os prejuízos de anos anteriores que a app conhece \(5\s400\s€\) abatem ao rendimento deste ano, o mais antigo primeiro e titular a titular \(CIRS art\. 55\.º\): o imposto desce 1\s350\s€, e depois dos prejuízos de anos anteriores fica em 5\s850\s€/);
     assert.match(k.expl, /Pode faltar informação — imóveis fora da app, anos sem registos, a condição dos 36 meses de rendas nos cinco anos seguintes —, e a AT faz a conta na liquidação\./);
   });
 
@@ -310,10 +321,10 @@ describe('D73: o KPI do imposto com os prejuízos de anos anteriores', () => {
     const extra = { titulares: ['ana', 'bruno'], variosTitulares: true,
       linhas: [{ contratoId: 'C1', titularId: 'ana', titular: 'A' }, { contratoId: 'C2', titularId: 'bruno', titular: 'B' }] };
     let k = kpiDe(app.fiscoKpis(resumoFeito({ impostoDepoisDoReporte: 6850 }, Object.assign({ reporte: dois }, extra))), 'Imposto estimado');
-    assert.equal(k.pes[0], 'prejuízos de anos anteriores: A −' + app.euro(1000) + ' · B −' + app.euro(400));
+    assert.equal(k.pes[0], 'depois dos prejuízos de anos anteriores: A −' + app.euro(1000) + ' · B −' + app.euro(400) + ' ao rendimento (−' + app.euro(350) + ' de imposto)');
     const um = { porTitular: { bruno: { usado: 400, imposto: 100 }, ana: { usado: 0, imposto: 0 } }, usado: 400, imposto: 100, anosSemDados: [] };
     k = kpiDe(app.fiscoKpis(resumoFeito({ impostoDepoisDoReporte: 7100 }, Object.assign({ reporte: um }, extra))), 'Imposto estimado');
-    assert.equal(k.pes[0], 'prejuízos de anos anteriores do titular B: −' + app.euro(400));
+    assert.equal(k.pes[0], 'depois dos prejuízos de anos anteriores do titular B: −' + app.euro(400) + ' ao rendimento (−' + app.euro(100) + ' de imposto)');
   });
 
   test('um resumo sem o impostoDepoisDoReporte abate o r.reporte.imposto; sem reporte, nada muda', () => {
@@ -321,10 +332,11 @@ describe('D73: o KPI do imposto com os prejuízos de anos anteriores', () => {
     assert.equal(k.valor, app.euro(5850));
     k = kpiDe(app.fiscoKpis(resumoFeito({ imposto: 7200 })), 'Imposto estimado');
     assert.equal(k.valor, app.euro(7200));
-    assert.deepEqual(k.pes, ['sem englobamento']);
+    assert.deepEqual(k.pes, ['sem englobamento', AC]);
     assert.doesNotMatch(k.expl, /anos anteriores/);
     k = kpiDe(app.fiscoKpis(resumoFeito({ imposto: 7200, impostoDepoisDoReporte: 7200 }, { reporte: { porTitular: {}, usado: 0, imposto: 0, anosSemDados: [2023] } })), 'Imposto estimado');
-    assert.deepEqual(k.pes, ['sem englobamento'], 'sem nada a abater, sem linha');
+    assert.deepEqual(k.pes, ['sem englobamento', AC], 'sem nada a abater, sem linha');
+    assert.match(k.expl, /Prejuízos de anos que não estão na app \(de 2023\) não entram nesta estimativa/, 'só no porquê (N124)');
   });
 
   test('o abate do AIMI nunca passa do imposto depois do reporte', () => {
@@ -332,8 +344,8 @@ describe('D73: o KPI do imposto com os prejuízos de anos anteriores', () => {
     const k = kpiDe(app.fiscoKpis(resumoFeito({ imposto: 3000, impostoDepoisDoReporte: 500, retencoes: 100 },
       { aimi, reporte: { porTitular: { ana: { usado: 10000, imposto: 2500 } }, usado: 10000, imposto: 2500, anosSemDados: [] } })), 'Imposto estimado');
     assert.equal(k.valor, app.euro(500));
-    assert.deepEqual(k.pes, ['prejuízos de anos anteriores: −' + app.euro(10000), 'depois do AIMI: ~' + app.euro(0) + ' (estimativa)',
-      'já retido ' + app.euro(100) + ' · a receber ' + app.euro(100)]);
+    assert.deepEqual(k.pes, ['depois dos prejuízos de anos anteriores: −' + app.euro(10000) + ' ao rendimento (−' + app.euro(2500) + ' de imposto)', 'depois do AIMI: ~' + app.euro(0) + ' (estimativa)',
+      'já retido ' + app.euro(100) + ' · a receber ' + app.euro(100), AC]);
   });
 });
 
@@ -344,7 +356,7 @@ describe('D10: a regularização do quadro 10 soma-se à parte', () => {
     const k = kpiDe(app.fiscoKpis(resumoFeito({ imposto: 3000, impostoDepoisDoReporte: 3000, regularizacao: 900, retencoes: 500 })), 'Imposto estimado');
     assert.equal(k.valor, app.euro(3000), 'o número principal é o do ano');
     assert.deepEqual(k.pes, ['com a regularização do quadro 10: ~' + app.euro(3900) + ' (+' + app.euro(900) + ', estimativa sem juros)',
-      'já retido ' + app.euro(500) + ' · falta ' + app.euro(3400)]);
+      'já retido ' + app.euro(500) + ' · falta ' + app.euro(3400), AC]);
     assert.match(k.expl, /regulariza-se nesta declaração, com juros compensatórios \(CIRS art\. 72\.º\)\. A app soma a diferença à parte, sem os juros, e a falta a pagar já a conta\./);
   });
 
@@ -352,7 +364,7 @@ describe('D10: a regularização do quadro 10 soma-se à parte', () => {
     let k = kpiDe(app.fiscoKpis(resumoFeito({ imposto: 3000 }, { regularizacoes: [{ contratoId: 'C1', nome: 'X', anos: [], total: 250.5 }, { total: 100 }] })), 'Imposto estimado');
     assert.equal(k.pes[0], 'com a regularização do quadro 10: ~' + app.euro(3350.5) + ' (+' + app.euro(350.5) + ', estimativa sem juros)');
     k = kpiDe(app.fiscoKpis(resumoFeito({ imposto: 3000, regularizacao: 0 }, { regularizacoes: [] })), 'Imposto estimado');
-    assert.deepEqual(k.pes, ['sem englobamento']);
+    assert.deepEqual(k.pes, ['sem englobamento', AC]);
     assert.doesNotMatch(k.expl, /regulariza/);
   });
 });

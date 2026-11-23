@@ -349,7 +349,13 @@ describe('o fim e a vida do contrato pelo motor (irsFimEfetivo, irsFimReal)', ()
     app.cForm = app.normContract(copia(app.contract('C1')));
     const f = app.fiscoSect();
     assert.match(f, /id="c_fisen"/);
-    for (const x of app.irsAno(2026).isencoes.filter((i) => i.pede)) assert.ok(opcoes('c_fisen').includes(x.id), x.id);
+    // as que servem à data de celebração (2024): o ex-alojamento local sim; a renda antiga
+    // (celebrada até 1990, lida só na celebração escrita) já não se oferece a um contrato de 2024
+    for (const x of app.irsAno(2026).isencoes.filter((i) => i.pede)) {
+      const serve = (!x.desde || x.desde <= '2024-02-20') && (!x.celebradoAte || x.celebradoAte >= '2024-02-20');
+      assert.equal(opcoes('c_fisen').includes(x.id), serve, x.id);
+    }
+    assert.ok(opcoes('c_fisen').includes('al'), 'o 6F (celebrado em 2024) volta');
     assert.ok(opcoes('c_fisen').includes('paa'), 'controlo: as outras estão');
     assert.match(f, /<div id="c_fnrauBox" hidden>/, 'a pergunta só com a isenção dela');
   });

@@ -93,7 +93,7 @@ describe('D02, D39, D42 — os gastos contam até ao dia em que o contrato acabo
     condominio(app, 2026);
     const r = app.resumoFiscal(2026, 'ana');
     perto(linha(r, 'C1').gastos.condominio, 150, 1e-9);
-    assert.equal(r.foraDoPeriodo, 9);
+    assert.equal(r.foraDoPeriodo.length, 9);
     assert.equal(app.fiscoHaviaContrato('v1', '2026-03-31'), true);
     assert.equal(app.fiscoHaviaContrato('v1', '2026-04-01'), false);
   });
@@ -110,7 +110,7 @@ describe('D02, D39, D42 — os gastos contam até ao dia em que o contrato acabo
     assert.equal(linha(r25, 'C1').taxa, 15);
     const r = app.resumoFiscal(2026, 'ana');
     perto(linha(r, 'C1').gastos.condominio, 250, 1e-9);
-    assert.equal(r.foraDoPeriodo, 7);
+    assert.equal(r.foraDoPeriodo.length, 7);
   });
 
   test('um terminado sem data nenhuma não diz quando acabou: não se adivinha', () => {
@@ -128,7 +128,7 @@ describe('D02, D39, D42 — os gastos contam até ao dia em que o contrato acabo
     condominio(app, 2026, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     const r = app.resumoFiscal(2026, 'ana');
     perto(linha(r, 'C1').gastos.condominio, 550, 1e-9);
-    assert.equal(r.foraDoPeriodo, 0);
+    assert.equal(r.foraDoPeriodo.length, 0);
   });
 });
 
@@ -147,20 +147,21 @@ describe('D15, D41 — cada renda paga a taxa do troço do mês a que respeita',
     assert.equal(l.segmentos[0].semRenovacao, true);
     perto(l.segmentos[0].rendas, 27500, 1e-9);
     perto(l.gastos.condominio, 550, 1e-9, 'o contrato continua em vigor: os gastos são do período arrendado');
-    assert.equal(r.foraDoPeriodo, 0);
+    assert.equal(r.foraDoPeriodo.length, 0);
   });
 
-  test('renovado a meio do ano (23 % e depois 15 %): o imposto reparte-se, a taxa mostrada é a do último troço', () => {
+  test('renovado a meio do ano (23 % e depois 13 %, D1): o imposto reparte-se, a taxa mostrada é a do último troço', () => {
     imovel(app);
     contrato(app, { start: '2020-07-01', end: '2030-06-30', rent: 2500,
       fisco: { estado: 'declarado', numero: '111', finalidade: 'hp', renovacoes: [{ inicio: '2025-07-01', fim: '2030-06-30' }] } });
     rendas(app, 'C1', 2025, 2500);
     const l = linha(app.resumoFiscal(2025, 'ana'), 'C1');
     assert.equal(l.quadro, '4.2');
-    assert.equal(l.taxa, 15);
-    perto(l.imposto, 15000 * 0.23 + 15000 * 0.15, 1e-9);
+    /* a renovação que atravessa a mudança de regime: 13 %, como a AT (OC 20268/2024, ponto 8) */
+    assert.equal(l.taxa, 13);
+    perto(l.imposto, 15000 * 0.23 + 15000 * 0.13, 1e-9);
     assert.deepEqual(json(l.segmentos.map((s) => [s.de, s.ate, s.taxa, s.rendas, s.imposto, s.reducao, s.semRenovacao])),
-      [['2025-01-01', '2025-06-30', 23, 15000, 3450, true, false], ['2025-07-01', '2025-12-31', 15, 15000, 2250, true, false]]);
+      [['2025-01-01', '2025-06-30', 23, 15000, 3450, true, false], ['2025-07-01', '2025-12-31', 13, 15000, 1950, true, false]]);
     perto(l.segmentos.reduce((s, x) => s + x.imposto, 0), l.imposto, 1e-9, 'o imposto da linha é a soma dos troços');
   });
 
@@ -303,10 +304,11 @@ describe('D10 — a regularização do n.º 20: a taxa da duração decorrida, s
     const dec = app.irsTaxaDecorrida(app.contract('C1'));
     assert.equal(dec.taxa, 25, '30 meses não chegam a escalão nenhum: a taxa base');
     const r = app.resumoFiscal(2026, 'ana');
-    // N031: com o início do período, os anos que a app não tem (nenhum) e os somados com as regras de outro ano (2024)
-    assert.deepEqual(json(r.regularizacoes), [{ contratoId: 'C1', nome: 'C1', desde: '2024-01-01', anos: [{ ano: 2024, diferenca: 4500 }, { ano: 2025, diferenca: 4500 }], total: 9000,
-      anosEmFalta: [], anosSemRegras: [2024] }]);
-    perto(r.totais.regularizacao, 9000, 1e-9);
+    // N031: com o início do período, os anos que a app não tem (nenhum); N125: 2024 não tem versão das
+    // regras — estima-se à parte («por confirmar») e não se soma ao total
+    assert.deepEqual(json(r.regularizacoes), [{ contratoId: 'C1', nome: 'C1', desde: '2024-01-01', anos: [{ ano: 2025, diferenca: 4500 }], total: 4500,
+      porConfirmar: [{ ano: 2024, diferenca: 4500 }], totalPorConfirmar: 4500, anosEmFalta: [], anosSemRegras: [2024] }]);
+    perto(r.totais.regularizacao, 4500, 1e-9);
     const l = linha(r, 'C1');
     assert.equal(l.quadro, '4.2', 'a linha fica no 4.2: o 4.2A e o quadro 10 dizem-no à AT');
     assert.equal(l.taxa, 25);

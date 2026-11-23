@@ -104,11 +104,12 @@ describe('o PDF do Anexo F', () => {
     assert.ok(t.includes('1 500,00 €'), 'gastos dedutíveis: IMI 300 + condomínio 1200');
     const T = r.totais;
     assert.ok(t.includes(app.fiscoPdfEuro(T.liquido)), 'o líquido da página');
-    assert.ok(t.includes(app.fiscoPdfEuro(T.imposto) + ' · sem englobamento'), 'o imposto estimado da página');
+    // o valor parte em linhas no cartão: lê-se junto; com a ressalva dos Açores (N120)
+    assert.ok(t.join(' ').includes(app.fiscoPdfEuro(T.imposto) + ' · sem englobamento · taxas do continente; nos Açores a AT aplica menos 30 %'), 'o imposto estimado da página');
     // o 4.1, campo a campo, e o total dele
     const q41 = junto.slice(junto.indexOf('Quadro 4.1 ·'), junto.indexOf('Quadro 4.2 ·'));
     for (const s of ['Arroios · T2 Arroios', '111', '01/01/2020', '25 % · taxa base', '110623', 'U', '4651', 'A',
-      'Tiago · NIF 123 456 789', '07 · arrendamento habitacional', '12 500,00 €', '500,00 €', '300,00 €', 'Total do quadro 4.1']) {
+      'Tiago · NIF 123456789', '07 · arrendamento habitacional', '12 500,00 €', '500,00 €', '300,00 €', 'Total do quadro 4.1']) {
       assert.ok(q41.split('\n').includes(s), 'no 4.1: ' + s);
     }
     // o 4.2, com o 4.2A, o 4.2B, o 4.2C e a falta do artigo

@@ -447,11 +447,13 @@ describe('N037 — o «Só desde» por omissão e as despesas lançadas tarde', 
     assert.doesNotMatch(h, /<td>15\/01\/2026<\/td>/, 'a já importada não se lista');
   });
 
-  test('numa casa com outra conta o corte por omissão continua, até as apagadas viverem no imóvel', () => {
+  /* as apagadas de propósito vivem no imóvel (N102): numa casa com outra conta o
+     corte por omissão segue a regra das casas só minhas */
+  test('numa casa com outra conta o corte por omissão é o das casas só minhas: as apagadas vivem no imóvel', () => {
     app.CW = { user: { id: 'ana' } };
     importar(csv([jan, mar], 'Date,Description,Category,Cost,Currency,Ana,Bruno'), { prop: 'v1', desde: '' });
     lote('2026-04-10');
-    assert.equal(app.swDesdeOmissao('v1'), '2026-04-10');
+    assert.equal(app.swDesdeOmissao('v1'), '');
     assert.equal(app.swDesdeOmissao('v2'), '');
   });
 });

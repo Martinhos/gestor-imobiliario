@@ -199,12 +199,17 @@ function vDashboard(){
      €/mês»), como o «Total contratado» ao lado; os stocks (valor de mercado,
      dívida, património) ficam ao euro, como no canvas */
   const amortizado=m.amort?`<div class="vg-kpi-extra num">+${euro2(m.amort)} amortizados</div>`:'';
+  /* a renda líquida só dos contratos com estimativa do imposto: o Anexo J e a
+     categoria B sem taxa escrita não têm (irs.js:irsLiquidaParaMostrar), e a
+     nota diz quantos ficaram de fora em vez de os somar à taxa errada */
+  const liquidas=act.map(c=>irsLiquidaParaMostrar(c)),semEstimativa=liquidas.filter(v=>v==null).length;
   const portItens=[
     {rot:'Imóveis · contratos ativos',val:pm.props.length+' · '+act.length,so:'estreito'},
     {rot:'Imóveis',val:pm.props.length,so:'largo'},
     {rot:'Contratos ativos',val:act.length,so:'largo'},
     {rot:'Renda contratada',val:euro2(sum(act.map(c=>c.rent)))+'<span class="small">/mês</span>'},
-    {rot:'Renda líquida de impostos (estim.)',val:euro2(sum(act.map(c=>netRent(c))))+'<span class="small">/mês</span>',so:'largo'},
+    {rot:'Renda líquida de impostos (estim.)',val:euro2(sum(liquidas.filter(v=>v!=null)))+'<span class="small">/mês</span>',so:'largo',
+      nota:semEstimativa?(semEstimativa===1?'fica de fora um contrato sem estimativa do imposto':'ficam de fora '+semEstimativa+' contratos sem estimativa do imposto'):''},
     {rot:'Valor de mercado',val:euro(pm.value)},
     {rot:'Valor de aquisição',val:euro(pm.purchase),so:'largo'},
     {rot:'Em dívida',val:euro(pm.debt)},

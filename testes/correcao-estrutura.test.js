@@ -74,7 +74,7 @@ describe('o antigo auxiliares.js, partido por domínio', () => {
     assert.match(ler('web/app/componentes.js'), /^function toast\(m,op\)/m, 'o aviso vive com os outros componentes');
     assert.match(ler('web/app/saldos.js'), /^function balancesDetail\(pid\)/m, 'a janela dos saldos vive com as contas');
     assert.match(ler('web/app/ambito.js'), /^let ownerFilter='',dashProp='';/m, 'o estado do filtro vive à parte das funções puras');
-    assert.match(ler('web/app/irs-papeis.js'), /^function irsColunaDe\(t\)/m);
+    assert.match(ler('web/app/irs-papeis.js'), /^function irsColunaDe\(t(?:,\w+)?\)/m);
     assert.equal(app.euro2(1250.5), '1 250,50 €');
     assert.equal(app.dPT('2028-03-15'), '15/03/2028');
   });

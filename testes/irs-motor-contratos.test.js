@@ -92,9 +92,9 @@ describe('Q1 · o regime de 2023 também segue o OC: cada renovação desce a pa
     assert.equal(app.irsReducao(c, 2045).taxa, 5, 'renovado por 10: os 10 % do escalão subiam a taxa — fica 5');
   });
 
-  test('os casos que a Q1 não decide ficam na taxa do escalão da renovação (pendentes de decisão)', () => {
+  test('a renovação que atravessa a mudança de regime desce a partir do regime novo desde o início (D1, OC 20268/2024); a que vem de um período sem redução fica na taxa do escalão', () => {
     const cruza = ct({ start: '2020-07-01', end: '2030-06-30' }, { renovacoes: renov([['2025-07-01', '2030-06-30']]) });
-    assert.equal(app.irsReducao(cruza, 2026).taxa, 15, 'do regime de 2019 (23 %) para uma renovação de 5 anos no de 2023');
+    assert.equal(app.irsReducao(cruza, 2026).taxa, 13, 'do regime de 2019 (23 %) para uma renovação de 5 anos no de 2023: 25 − 10 − 2');
     const curto = ct({ start: '2024-01-01', end: '2031-12-31' }, { renovacoes: renov([['2027-01-01', '2031-12-31']]) });
     assert.equal(app.irsReducao(curto, 2025), null, 'três anos no regime de 2023: sem redução');
     assert.equal(app.irsReducao(curto, 2028).taxa, 15, 'renovado por 5 depois de um período sem redução');
@@ -190,9 +190,9 @@ describe('D15 · rendas depois do termo sem renovação registada', () => {
 describe('D41 · uma renovação a meio do ano parte o ano em dois', () => {
   test('5 anos de 2020-07 (23 %) renovado a 2025-07 por 5: cada metade com a sua taxa', () => {
     const c = ct({ start: '2020-07-01', end: '2030-06-30' }, { renovacoes: renov([['2025-07-01', '2030-06-30']]) });
-    igual(trocos(c, 2025), [['2025-01-01', '2025-06-30', 0, 23, 'duracao', false, true], ['2025-07-01', '2025-12-31', 1, 15, 'duracao', false, true]]);
+    igual(trocos(c, 2025), [['2025-01-01', '2025-06-30', 0, 23, 'duracao', false, true], ['2025-07-01', '2025-12-31', 1, 13, 'duracao', false, true]]);
     assert.equal(app.irsTaxaNaData(c, '2025-03-15').taxa, 23);
-    assert.equal(app.irsTaxaNaData(c, '2025-09-01').taxa, 15);
+    assert.equal(app.irsTaxaNaData(c, '2025-09-01').taxa, 13, 'a renovação atravessa a mudança de regime: 13 % (D1)');
     assert.equal(app.irsTaxaNaData(c, '2019-09-01'), null, 'antes do contrato');
     assert.equal(app.irsTaxaNaData(c, 'ontem'), null);
   });
@@ -207,7 +207,7 @@ describe('D41 · uma renovação a meio do ano parte o ano em dois', () => {
   test('a renda vai ao último troço do mês a que respeita (o contrato que faz anos a meio do mês)', () => {
     const c = ct({ start: '2020-06-15', end: '2030-06-14' }, { renovacoes: renov([['2025-06-15', '2030-06-14']]) });
     assert.equal(app.irsTaxaDaRenda(c, { date: '2025-05-20' }).taxa, 23, 'a de maio é do período inicial');
-    assert.equal(app.irsTaxaDaRenda(c, { date: '2025-07-02', periodo: '2025-06' }).taxa, 15, 'a de junho já é da renovação');
+    assert.equal(app.irsTaxaDaRenda(c, { date: '2025-07-02', periodo: '2025-06' }).taxa, 13, 'a de junho já é da renovação (13 %, D1)');
     const termo = ct({ start: '2020-06-15', end: '2025-06-14' });
     assert.equal(app.irsTaxaDaRenda(termo, { date: '2025-06-20' }).semRenovacao, true, 'a do mês do termo cai depois dele');
     assert.equal(app.irsTaxaDaRenda(termo, { date: '2019-06-20' }), null, 'antes do contrato');
@@ -288,10 +288,15 @@ describe('D48 · o limite das rendas moderadas testa-se com as rendas do ano', (
     assert.equal(t.taxa, 10); assert.equal(t.motivo, 'moderada');
   });
 
-  test('três meses em atraso por lançar não baixam a média', () => {
+  test('os meses que ainda não chegaram não baixam a média; um mês decorrido por pagar baixa-a, e o teste di-lo (D2: o que se recebeu)', () => {
+    meses(10, 2250);
+    assert.equal(app.irsRendaMensalDoTeste(c(), 2026), 2250, 'o dia da app é 17 de novembro: dez meses decorridos, dez rendas');
+    limpar(app);
     meses(9, 2250);
-    assert.equal(app.irsRendaMensalDoTeste(c(), 2026), 2250);
+    assert.equal(app.irsRendaMensalDoTeste(c(), 2026), 2025, 'outubro por pagar: 20 250 € ÷ 10 meses');
     assert.equal(app.irsTaxa(c(), 2026).taxa, 10);
+    const t = copia(app.irsTesteModerada(c(), 2026));
+    assert.equal(t.difere, true, 'a renda do contrato (2 307,60 €) fica acima do limite e o que entrou abaixo');
   });
 
   test('a renda bruta conta (com a retenção) e cada renda vai ao mês a que respeita', () => {

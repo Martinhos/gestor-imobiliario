@@ -59,7 +59,7 @@ describe('as versões por ano dos rendimentos', () => {
       assert.ok(v.modelo.texto.length > 40);
       assert.equal(v.taxas.habitacional, 25); assert.equal(v.taxas.naoHabitacional, 28);
       igualA(v.colunas, ['conservacao', 'condominio', 'imi', 'selo', 'taxas', 'outros']);
-      igualA(v.naturezas, { habitacional: '07', naoHabitacional: '06', indemnizacao: '05', outras: '02', dhd: '01' });
+      igualA(v.naturezas, { habitacional: '07', naoHabitacional: '06', indemnizacao: '05', outras: '02', dhd: '01', mobiliario: '03' });
       assert.ok(v.novidades.length >= 1 && v.passos.length >= 5);
       v.passos.forEach((p) => assert.ok(p.titulo && p.texto.length > 20));
       v.passos.forEach((p) => assert.doesNotMatch(p.texto, /\b(?:19|20)\d{2}\b/, 'os passos não escrevem anos: ' + p.titulo));
@@ -225,16 +225,18 @@ describe('o resumo do Anexo F', () => {
   const renda = (id, contractId, date, amount, extra) => app.db.transactions.push(app.normTx(Object.assign({ id, kind: 'income', category: 'Rendas', amount: amount || 500, date, propertyId: 'p1', contractId, recibo: true }, extra)));
   const gasto = (id, category, date, amount, extra) => app.db.transactions.push(app.normTx(Object.assign({ id, kind: 'expense', category, amount, date, propertyId: 'p1' }, extra)));
 
-  test('os gastos do imóvel repartem-se também pelas rendas que ficam fora (não declaradas e sem contrato), e essa parte não entra', () => {
+  test('os gastos do imóvel repartem-se pelas rendas que ficam fora (não declaradas e, nos gastos sem contrato identificável, as sem contrato), e essa parte não entra', () => {
     casa();
     app.db.contracts.push(app.normContract({ id: 'c1', propertyId: 'p1', tenantIds: ['t1'], rent: 500, start: '2025-01-01', fisco: { estado: 'declarado', numero: '1' } }));
     app.db.contracts.push(app.normContract({ id: 'c2', propertyId: 'p1', tenantIds: ['t2'], rent: 500, start: '2025-01-01', fisco: { estado: 'naoDeclarado' } }));
     renda('r1', 'c1', '2025-03-01'); renda('r2', 'c2', '2025-03-01'); renda('r3', null, '2025-04-01');
     gasto('d1', 'Condomínio', '2025-03-10', 150);
+    gasto('d2', 'Impostos', '2025-05-10', 150, { sub: 'IMI' });
     const r = app.resumoFiscal(2025, '');
     assert.equal(r.linhas.length, 1);
-    perto(r.linhas[0].gastos.condominio, 50, 1e-9, 'um terço: 500 de 1 500');
-    perto(r.totais.gastos.condominio, 50, 1e-9);
+    perto(r.linhas[0].gastos.condominio, 75, 1e-9, 'o condomínio vai aos contratos em vigor no dia (D4, N049): metade, e a do não declarado não entra');
+    perto(r.totais.gastos.condominio, 75, 1e-9);
+    perto(r.linhas[0].gastos.imi, 50, 1e-9, 'o IMI não tem contrato identificável: um terço, 500 de 1 500, com a renda sem contrato');
   });
 
   test('só o período arrendado conta: o condomínio com o imóvel vazio fica fora e diz-se; o IMI conta; a coluna escolhida à mão manda', () => {
@@ -244,14 +246,15 @@ describe('o resumo do Anexo F', () => {
     gasto('d1', 'Condomínio', '2025-03-10', 100);
     gasto('d2', 'Condomínio', '2025-08-10', 100);
     gasto('d3', 'Impostos', '2025-05-10', 300, { sub: 'IMI' });
-    gasto('d4', 'Seguros', '2025-02-01', 80, { irsCol: 'outros' });
+    gasto('d4', 'Condomínio', '2025-02-01', 80, { irsCol: 'outros' });
+    gasto('d5', 'Seguros', '2025-02-01', 60, { irsCol: 'outros' });
     const r = app.resumoFiscal(2025, '');
     perto(r.linhas[0].gastos.condominio, 100, 1e-9);
     perto(r.linhas[0].gastos.imi, 300, 1e-9, 'CIRS art. 41.º n.º 5: o IMI do ano em que o imóvel deu rendas');
-    perto(r.linhas[0].gastos.outros, 80, 1e-9, 'escolhida à mão: a pessoa decidiu');
-    assert.equal(r.foraDoPeriodo, 1);
+    perto(r.linhas[0].gastos.outros, 80, 1e-9, 'escolhida à mão numa categoria que já decide a coluna: a pessoa decidiu (D65)');
+    assert.equal(r.foraDoPeriodo.length, 2, 'o condomínio com o imóvel vazio, e o seguro «a confirmar» com a coluna escolhida e sem contrato (N048: escolher a coluna classifica, não fura o período)');
     const a = r.avisos.find((x) => /sem contrato em vigor/.test(x.texto));
-    assert.ok(a && /só conta o período arrendado/.test(a.texto));
+    assert.ok(a && /só conta o período arrendado/i.test(a.texto));
   });
 
   test('o 4.2 leva os contratos com redução pela duração, com as datas do 4.2A; o 4.1 os outros; a natureza e a taxa são do ano', () => {

@@ -553,7 +553,9 @@ primeira que encontra apanha a linha errada: prefere l.papel === 'renda'.
 
 ## Um caminho novo que apaga movimentos tem de chamar o swIgnorar
 A importação do Splitwise salta as linhas que a pessoa apagou de propósito
-pela chave delas (t.swKey), guardada em settings.swIgnoradas. Quem a escreve
+pela chave delas (t.swKey), guardada na ficha do imóvel do movimento
+(p.swIgnoradas, por um resumo da chave), ou nas definições
+(settings.swIgnoradas) quando quem apaga não pode escrever a ficha. Quem a escreve
 é quem apaga: o movimento.js:delTx e o movimento.js:apagarLote chamam o
 splitwise.js:swIgnorar antes de tirar o movimento, e o Anular deles o
 splitwise.js:swDesignorar. Um sítio novo que apague movimentos escolhidos e
@@ -573,3 +575,30 @@ deixou de estar nas antigas sem chave — entrava repetida. O
 splitwise.js:swPrepare procura também a chave sem a categoria. Quem
 escrever outra chave fora da importação usa a mesma forma, ou acrescenta a
 procura dela ao swPrepare.
+
+## O gerar-docs não vê um comentário com mais de 39 linhas
+O scripts/gerar-docs.js:funcoesDe procura o `/*` do comentário de uma função
+até 39 linhas acima dela. Um bloco mais comprido não é visto, e a função
+conta como sem comentário: o gerador falha com «sem comentário», o
+testes/docs.test.js também, e a culpa parece ser de quem não escreveu nada.
+Morde quando se acrescenta um parágrafo a um comentário que já era grande
+(o do fisco-avisos.js:fiscoAvisos, o do fisco-exportar.js:fiscoCsvTexto).
+Encurta-se o comentário, ou leva-se o pormenor para dentro da função; não se
+sobe o limite, que é o que impede o gerador de agarrar o comentário da
+função de cima.
+
+## O atributo hidden não esconde um .btn nem um label
+A folha de estilos não tem uma regra `[hidden]` geral, e as regras que dão
+`display` a um .btn ou a um label ganham ao estilo do browser: um
+`<button class="btn" hidden>` continua à vista. O que abre e fecha pela
+resposta de uma pergunta vai embrulhado numa `<div hidden>` simples (as
+caixas do contrato.js:ctCaixaSegue), ou leva uma regra própria
+`.x[hidden]{display:none}`, como o .colab-perms.
+
+## O normQuotasHist tira a marca entrada
+A casa normalizada no cliente (dados.js:normQuotasHist) guarda os períodos
+das quotas sem a marca `entrada` que o servidor escreve quando alguém entra
+numa casa. Quem precisa de saber quem entrou lê o JSON que o servidor
+mandou, `CW.state.houses[].data`, depois do pullNow, e não a casa da base
+(cloud/partilha.js:entradasPorResponder): lida da base, a entrada nunca
+abria a janela das quotas.

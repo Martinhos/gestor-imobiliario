@@ -153,8 +153,9 @@ describe('o resumo do quadro 4.1', () => {
     const a = r.avisos.find((x) => /recibo/.test(x.texto));
     assert.ok(a, 'há um aviso');
     assert.match(a.texto, /^2 rendas de 2024 sem recibo/);
-    assert.equal(a.abrir, "ctView('C1')");
-    assert.equal(a.toca, 'camada');
+    /* abre as rendas do contrato nos Movimentos (N134) */
+    assert.equal(a.abrir, "goMovimentos('2024','v1','rendas','income','C1')");
+    assert.equal(a.toca, 'ecra', 'muda de ecrã');
   });
 
   test('uma despesa sem regra de dedução não conta: fica a confirmar, com o nome e o valor (D61)', () => {
@@ -164,7 +165,8 @@ describe('o resumo do quadro 4.1', () => {
     perto(r.linhas[0].gastos.outros, 0, 1e-9, 'na dúvida a app não deduz: já não conta em Outros');
     assert.equal(r.aConfirmar.length, 1);
     assert.deepEqual(JSON.parse(JSON.stringify(r.aConfirmar[0])), { txId: t.id, nome: 'Coisa', data: ANO + '-06-10', valor: 50,
-      propertyId: 'v1', imovel: 'T2 Arroios', categoria: 'Coisas várias', sub: '', origem: 'omissao' });
+      propertyId: 'v1', imovel: 'T2 Arroios', categoria: 'Coisas várias', sub: '', origem: 'omissao',
+      semContrato: false, semContratoDe: '', semContratoAte: '' });
     // uma despesa marcada à mão com a coluna manda sobre a categoria, e conta
     mov({ kind: 'expense', category: 'Coisas várias', amount: 70, irsCol: 'taxas', date: ANO + '-06-11' });
     const r2 = app.resumoFiscal(ANO, '');
@@ -183,7 +185,8 @@ describe('o resumo do quadro 4.1', () => {
     assert.equal(r.semContrato[0].n, 2);
     perto(r.linhas[0].rendas, 12500, 1e-9, 'não entram na linha');
     const a = r.avisos.find((x) => /sem contrato/.test(x.texto));
-    assert.equal(a.abrir, "go('transactions')");
+    /* abre as rendas do imóvel nos Movimentos (N134) */
+    assert.equal(a.abrir, "goMovimentos('2024','v1','rendas','income','')");
   });
 
   test('os gastos de um imóvel com dois contratos repartem-se pelas rendas de cada um', () => {
@@ -410,12 +413,16 @@ describe('a barra, a partilha e os cartões dos quadros', () => {
     assert.doesNotMatch(app.vFisco(), /Partilhar resumo/);
   });
 
-  test('no quadro, cada contrato é um cartão sem tabela, o total vem no fim e o NIF não parte entre linhas', () => {
+  test('no quadro, cada contrato é um cartão sem tabela, sem total com uma linha só, e o NIF não parte entre linhas', () => {
     const html = app.vFisco();
     const q = html.slice(html.indexOf('Quadro 4.1 · sem redução pela duração'));
     assert.doesNotMatch(q.slice(0, q.indexOf('</section>')), /<table/, 'o quadro já não é uma tabela larga');
-    assert.match(q, /<b>Total do quadro 4\.1<\/b><span class="small">1 contrato<\/span>/);
-    assert.ok(html.includes('<dt>NIF do inquilino<span class="small">Tiago</span></dt><dd><span class="u-ws-nowrap">' + app.fmtNIF('123456789') + '</span></dd>'));
+    /* D8 (maqueta 6): com uma linha só no quadro, o total repetia-a; volta com duas ou mais */
+    assert.doesNotMatch(q.slice(0, q.indexOf('</section>')), /Total do quadro 4\.1/);
+    /* o NIF numa caixa que não parte entre linhas (os grupos de algarismos por dentro são da página) */
+    const m = html.match(/<dt>NIF do inquilino<span class="small">Tiago<\/span><\/dt><dd><span class="u-ws-nowrap">(.*?)<\/dd>/);
+    assert.ok(m, 'o NIF do inquilino está numa caixa que não parte');
+    assert.equal(m[1].replace(/<[^>]+>/g, '').replace(/\s/g, ''), '123456789');
   });
 });
 

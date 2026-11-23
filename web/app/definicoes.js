@@ -45,6 +45,10 @@ function ultimaImportacao(){
    Declaração: o resumoFiscal já escolhe os imóveis dos titulares, e o
    exportarSoMeu tirava-lhe o imóvel do cônjuge partilhado como colaboração
    (D75). Por baixo dele, o que fica por tratar na Declaração (notaDoCsvDoAnexo, D34).
+   O cartão da cópia diz o que repor faz: sem sessão substitui os dados do aparelho;
+   com sessão é registo a registo, e o que outros registaram e o que é mais recente
+   do que a cópia fica (copias.js:planoDaReposicao, N004). O do Splitwise diz que se
+   lança o custo dos donos (D11, N038).
    Recebe: nada.
    Devolve: o HTML (texto) da subpágina, sem o Voltar. */
 function vImport(){
@@ -57,7 +61,9 @@ function vImport(){
     <div class="def-botoes"><button class="btn primary" data-toca="nada" data-click="exportarSoMeu(driveSave)">${ic('down',18)} Guardar cópia</button>
       <button class="btn" data-toca="camada" data-click="driveOpen()">Repor uma cópia</button>
       ${typeof window!=='undefined'&&window.Android?`<button class="btn ghost" data-toca="camada" data-click="bkPasteBox()">Colar cópia</button>`:''}</div>
-    <p class="small">Repor substitui tudo o que está na app e mostra antes quantos registos traz.</p></section>`;
+    <p class="small">${sessao
+      ?'Repor traz de volta o que a cópia tem e mostra antes o que muda; o que outros registaram e o que é mais recente do que a cópia fica.'
+      :'Repor substitui os dados deste aparelho pelos da cópia e mostra antes o que sai.'}</p></section>`;
   const exportar=`<section class="card def-bloco"><h3>Exportar</h3>
     <p class="small">CSV que abre no Excel com os acentos certos.</p>
     <div class="def-botoes"><button class="btn" data-toca="nada" data-click="exportarSoMeu(downloadCsv)">Movimentos (CSV)</button>
@@ -66,7 +72,7 @@ function vImport(){
     ${fora?`<p class="small">Imóveis onde só colaboras ficam de fora da cópia e do CSV dos movimentos${anexo?'; o do Anexo F é o mesmo da Declaração, com os imóveis de quem declara contigo':''}.</p>`:''}</section>`;
   const splitwise=`<section class="card def-bloco"><div class="def-bloco-cab"><h3>Importar do Splitwise</h3>
       ${ult?`<button class="btn sm ghost" data-toca="dados" data-risco="destroi" data-click="undoImport()">Anular a última importação (${ult.n} ${ult.n===1?'movimento':'movimentos'}${ult.data?', '+ult.data:''})</button>`:''}</div>
-    <p class="small">No Splitwise: abre o grupo → <b>Export as spreadsheet</b> → guarda o CSV. A seguir escolhes o imóvel e desde quando, e vês as despesas antes de as importar. A app lança o custo total de cada uma; a Declaração conta a tua quota do imóvel.</p>
+    <p class="small">No Splitwise: abre o grupo → <b>Export as spreadsheet</b> → guarda o CSV. A seguir escolhes o imóvel e desde quando, e vês as despesas antes de as importar. A app lança o custo de cada uma — sem a parte de quem não é dono, se o grupo tiver o inquilino — e a Declaração conta a tua quota do imóvel.</p>
     <div class="def-ficheiro">
       <input type="file" id="swFile" class="u-d-none" data-change="swPick(this)">
       <button class="btn primary" data-toca="camada" data-click="swEscolherFicheiro()">Escolher ficheiro</button>
@@ -572,17 +578,29 @@ function colunaDoAimi(){
 /* O que o «Fora dos totais» faz a uma categoria no Anexo F. Tira-a dos totais e
    dos gráficos e, quase sempre, também da Declaração; diz só o que o resumo faz
    (fisco-resumo.js). Nas receitas, as Rendas (pelo id, e todas as subcategorias
-   delas) continuam a declarar-se: o resumo escolhe-as pelo
-   irs-papeis.js:irsReceitaDe, que ignora o «Fora dos totais» dentro delas (D19);
-   as outras receitas saem. Nos gastos (irs-papeis.js:irsColunaDe), o IMI e o
+   delas) e o reembolso do inquilino continuam a declarar-se, e os reembolsos que
+   devolvem um gasto (do seguro, do condomínio, do Estado num imóvel) continuam a
+   abater-lhe — o do condomínio ligado a um contrato é renda: o resumo escolhe-os
+   pelo irs-papeis.js:irsReceitaDe, que ignora o «Fora dos totais» neles (D19,
+   N078/D12); as outras receitas saem. Nos gastos (irs-papeis.js:irsColunaDe), o IMI e o
    imposto do selo (IRS_DESPESAS_SEMPRE) e a devolução da caução continuam a
    contar, e a devolução de renda continua a abater às rendas
    (irs-papeis.js:irsDevolucaoDeRenda não olha ao «Fora dos totais», D53).
    Recebe: tk — a árvore; cat — a categoria; sub (opcional) — a subcategoria.
-   Devolve: 'tudo' (continua a declarar-se), 'parte' (a categoria dos Impostos
-   ou das Devoluções: só algumas subcategorias continuam) ou '' (sai do Anexo F). */
+   Devolve: 'tudo' (continua a declarar-se), 'abate' (um reembolso que continua a
+   abater na Declaração ao gasto que devolve: o do seguro, o do condomínio — ligado a
+   um contrato, renda —, o do Estado num imóvel), 'parte' (a categoria dos Impostos,
+   das Devoluções ou dos Reembolsos: só algumas subcategorias continuam) ou '' (sai
+   do Anexo F). */
 function defForaDeclara(tk,cat,sub){
-  if(tk==='catsIn')return catIrsId(tk,cat)==='rendas'?'tudo':'';
+  if(tk==='catsIn'){
+    const cid=catIrsId(tk,cat);
+    if(cid==='rendas')return 'tudo';
+    if(cid!=='reembolsos')return '';
+    if(!sub)return 'parte';
+    const sid=catIrsId(tk,cat,sub);
+    return sid==='reembolsos/inquilino'?'tudo':['reembolsos/condominio','reembolsos/seguro','reembolsos/estado'].indexOf(sid)>-1?'abate':'';
+  }
   if(tk!=='cats')return '';
   const cid=catIrsId(tk,cat);
   const sempre=IRS_DESPESAS_SEMPRE.concat(['devolucoes/caucao','devolucoes/renda']);
@@ -591,21 +609,53 @@ function defForaDeclara(tk,cat,sub){
 }
 /* A nota de uma linha da tabela das categorias, por baixo dela: o que o «Fora
    dos totais» ligado deixa no Anexo F (defForaDeclara) e a nota da regra de
-   origem da coluna (dados.js:IRS_MAPA_NOTAS — a quota extraordinária, o
-   multirriscos, a caldeira; D24, D25, D07).
+   origem da coluna (dados.js:IRS_MAPA_NOTAS — a quota mensal e o fundo de
+   reserva, a quota extraordinária, o multirriscos, a caldeira, as obras; D24,
+   D25, D07, N011, N044, N045). Numa categoria de pagamentos fora dos totais, a
+   nota diz que as despesas saem também do Anexo F (N042: a decisão D19 fica,
+   mas não em silêncio); nos Impostos, que só o IMI e o selo ficam. Nos
+   Reembolsos, o que fica na Declaração: o do inquilino como renda, os que
+   devolvem um gasto a abater-lhe (N078, D12). Numa subcategoria, a nota da regra
+   igual à da categoria não se repete.
    Recebe: tk — a árvore; cat — a categoria; sub — a subcategoria ('' na da
    categoria); fora — o «Fora dos totais» está ligado nela (ou na categoria).
    Devolve: o HTML (texto) da nota, ou '' sem nada a dizer. */
 function notaDaCategoria(tk,cat,sub,fora){
-  const ps=[];
+  const ps=[],q=sb=>'«'+sb+'»';
   const dec=fora?defForaDeclara(tk,cat,sub):'';
+  /* um reembolso que devolve um gasto: o que fica na Declaração, pelo id */
+  const abate=s=>{const sid=catIrsId(tk,cat,s);
+    return sid==='reembolsos/condominio'?'Sai dos totais e dos gráficos, mas continua na Declaração: ligado a um contrato é renda; sem contrato abate ao condomínio.'
+      :sid==='reembolsos/estado'?'Sai dos totais e dos gráficos, mas num imóvel continua a abater na Declaração ao imposto que devolve; o reembolso do IRS fica fora.'
+      :'Sai dos totais e dos gráficos, mas continua a abater na Declaração ao gasto que devolve.'};
   if(dec==='tudo')ps.push('Sai dos totais e dos gráficos, mas continua a declarar-se no Anexo F.');
+  else if(dec==='abate')ps.push(abate(sub));
   else if(dec==='parte'){
-    const ds=((db.settings[tk]||{})[cat]||[]).filter(sb=>defForaDeclara(tk,cat,sb)==='tudo');
-    ps.push('Sai dos totais e dos gráficos'+(ds.length?'; no Anexo F, '+listaE(ds.map(sb=>'«'+sb+'»'))+(ds.length===1?' continua':' continuam')+' a declarar-se.':'.'));
+    const arv=(db.settings[tk]||{})[cat]||[],cid=catIrsId(tk,cat);
+    const ds=arv.filter(sb=>defForaDeclara(tk,cat,sb)==='tudo'),da=arv.filter(sb=>defForaDeclara(tk,cat,sb)==='abate');
+    let t='Sai dos totais e dos gráficos';
+    if(tk==='catsIn'){
+      /* os Reembolsos: o do inquilino é renda; os que devolvem um gasto abatem-lhe */
+      const ids=da.map(sb=>catIrsId(tk,cat,sb)),ressalvas=[];
+      if(ids.indexOf('reembolsos/condominio')>-1)ressalvas.push('o do condomínio ligado a um contrato é renda');
+      if(ids.indexOf('reembolsos/estado')>-1)ressalvas.push('o do Estado, só num imóvel: o do IRS fica fora');
+      const partes=[];
+      if(ds.length)partes.push(listaE(ds.map(q))+(ds.length===1?' continua':' continuam')+' a declarar-se como renda');
+      if(da.length)partes.push(listaE(da.map(q))+(da.length===1?' continua':' continuam')+' a abater ao gasto que '+(da.length===1?'devolve':'devolvem')+(ressalvas.length?' ('+ressalvas.join('; ')+')':''));
+      if(partes.length)t+='; na Declaração, '+partes.join(', e ');
+      t+='.';
+      if(cid==='reembolsos')t+=' Um reembolso sem subcategoria sai da Declaração.';
+    }else{
+      if(ds.length)t+='; no Anexo F, '+listaE(ds.map(q))+(ds.length===1?' continua':' continuam')+' a declarar-se';
+      t+='.';
+      /* as Devoluções ficam todas (irsColunaDe olha à categoria delas) */
+      if(cid!=='devolucoes')t+=' As outras despesas saem do Anexo F e não contam na Declaração.';
+    }
+    ps.push(t);
   }
-  const chave=sub?cat+' / '+sub:cat;
-  if(tk==='cats'&&typeof IRS_MAPA_NOTAS!=='undefined'&&Object.prototype.hasOwnProperty.call(IRS_MAPA_NOTAS,chave))ps.push(IRS_MAPA_NOTAS[chave]);
+  else if(fora&&tk==='cats')ps.push('Sai dos totais, dos gráficos e do Anexo F: estas despesas não contam na Declaração.');
+  const chave=sub?cat+' / '+sub:cat,tem=k=>Object.prototype.hasOwnProperty.call(IRS_MAPA_NOTAS,k);
+  if(tk==='cats'&&tem(chave)&&!(sub&&tem(cat)&&IRS_MAPA_NOTAS[cat]===IRS_MAPA_NOTAS[chave]))ps.push(IRS_MAPA_NOTAS[chave]);
   return ps.length?`<p class="small def-cat-nota">${esc(ps.join(' '))}</p>`:'';
 }
 /* De cada categoria do IRS ao nome dela com o artigo, para as perguntas «Esta
@@ -823,19 +873,21 @@ function cartaoDasEtiquetas(){
    lei pede de cada gasto — o mesmo que o guia de declarar as rendas e as
    regras de origem (dados.js:IRS_MAPA0) dizem (D07, D24–D27, D60): o
    multirriscos facultativo, os eletrodomésticos (reparar também), o fundo de
-   reserva, o IMT e o selo da compra, os registos e a avaliação não se deduzem;
-   os consumos, os honorários, a caldeira e a quota extraordinária dependem do
-   caso. É a regra por omissão: a coluna escolhida na ficha de uma despesa
+   reserva (também o que vem dentro da quota mensal, N044), o IMT e o selo da
+   compra, os registos e a avaliação não se deduzem; os consumos, os honorários,
+   a caldeira, a quota extraordinária e as obras que não são conservação por
+   natureza (sem subcategoria, cozinha, casa de banho, remodelação — N011, N045)
+   dependem do caso. É a regra por omissão: a coluna escolhida na ficha de uma despesa
    manda sobre a da categoria (irs-papeis.js:irsColunaDe), e o que fica «a
    confirmar» não conta até a pessoa a escolher.
    Recebe: nada.
    Devolve: o HTML (texto) do cartão. */
 function cartaoDoArt41(){
   return `<section class="card def-bloco def-art41"><h3>O que o art. 41.º do CIRS deixa deduzir</h3>
-    <p><b class="pos">Dedutível:</b> conservação e manutenção, as quotas do condomínio, IMI, imposto do selo do contrato, taxas autárquicas, seguro de renda, comissão da imobiliária, certificado energético.</p>
-    <p><b class="neg">Não dedutível:</b> juros e outros gastos do crédito, depreciações, mobiliário, eletrodomésticos — comprar, trocar ou reparar, o esquentador incluído —, decoração, o seguro multirriscos facultativo, o fundo comum de reserva enquanto o condomínio não o gastar numa obra, o IMT e o imposto do selo da compra, os registos e a avaliação, o Adicional ao IMI (abate ao imposto, no quadro 9) e beneficiações — uma cozinha nova, uma remodelação que acrescenta valor.</p>
-    <p><b class="amber">A confirmar em cada despesa:</b> a água, a luz, o gás e a Internet (só se o contrato os incluir na renda e a Modelo 2 o disser), os honorários de advogado e de contabilista, a caldeira (a inspeção e a manutenção da instalação deduzem-se; reparar ou trocar o aparelho não), a quota extraordinária para obras (em Conservação e manutenção, no ano em que o condomínio paga a obra) e o que não tem regra.</p>
-    <p class="small">Conta o que pagaste enquanto o imóvel esteve arrendado, com fatura com o teu NIF e a identificação do imóvel. A coluna escolhida na ficha de uma despesa manda sobre a da categoria. O que está a confirmar não conta em coluna nenhuma até a escolheres na ficha da despesa: a Declaração lista essas despesas em «A tratar antes de entregar».</p></section>`;
+    <p><b class="pos">Dedutível:</b> conservação e manutenção — reparar ou substituir o que já existe: pintura, canalização, eletricidade, janelas —, as quotas do condomínio (sem o fundo comum de reserva: se a quota o inclui, regista essa parte em Fundo de reserva), IMI, imposto do selo do contrato, taxas autárquicas, seguro de renda, comissão da imobiliária, certificado energético.</p>
+    <p><b class="neg">Não dedutível:</b> juros e outros gastos do crédito, depreciações, mobiliário, eletrodomésticos — comprar, trocar ou reparar, o esquentador incluído —, decoração, o seguro multirriscos facultativo, o fundo comum de reserva enquanto o condomínio não o gastar numa obra, o IMT e o imposto do selo da compra, os registos e a avaliação, o Adicional ao IMI (abate ao imposto, no quadro 9) e as beneficiações, que acrescentam valor — uma ampliação, uma cozinha ou uma casa de banho novas, ar condicionado, painéis solares, uma reabilitação profunda.</p>
+    <p><b class="amber">A confirmar em cada despesa:</b> as obras sem subcategoria, as da cozinha e da casa de banho e as remodelações (reparar ou substituir o que já existia — armários fixos, bancada, loiças — é conservação; o que acrescenta valor não), a água, a luz, o gás e a Internet (só se o contrato os incluir na renda e a Modelo 2 o disser), os honorários de advogado e de contabilista, a caldeira (a inspeção e a manutenção da instalação deduzem-se; reparar ou trocar o aparelho não), a quota extraordinária para obras (em Conservação e manutenção, no ano em que o condomínio paga a obra) e o que não tem regra.</p>
+    <p class="small">Conta o que pagaste enquanto o imóvel esteve arrendado, com fatura com o teu NIF e a identificação do imóvel: a comissão e o certificado pagos antes do início do contrato ficam de fora. O IMI e o imposto do selo são a exceção: contam os do ano em que o imóvel deu rendas, mesmo pagos com ele vazio (art. 41.º n.º 5). A coluna escolhida na ficha de uma despesa manda sobre a da categoria. O que está a confirmar não conta em coluna nenhuma até a escolheres na ficha da despesa: a Declaração lista essas despesas em «A tratar antes de entregar».</p></section>`;
 }
 /* A página «Categorias, etiquetas e IRS» (o canvas de 2026-10,
    D-DefCategorias): as duas árvores num segmentado — Pagamentos e Receitas,
@@ -858,7 +910,7 @@ function vCats(forcar){
     <button class="btn primary" data-toca="camada" data-click="addCat('${jsq(tk)}')">${ic('plus',18)} Nova categoria</button></span></div>
   ${cartaoDasCategoriasDoIrs()}
   ${tabelaDeCategorias(tk)}
-  <p class="hint def-nota">O número é quantos movimentos usam a categoria. Apagar uma categoria não apaga movimentos — ficam sem categoria. Mudar o nome a uma categoria não muda o que a Declaração faz com ela. «Fora dos totais» tira-os do Anexo F${tk==='cats'?' — salvo o IMI, o imposto do selo do contrato e as devoluções da caução e de renda, que continuam a declarar-se —':' — salvo as rendas, que continuam a declarar-se —'} e deixa-os na lista, mas não somam.</p>
+  <p class="hint def-nota">O número é quantos movimentos usam a categoria. Apagar uma categoria não apaga movimentos — ficam sem categoria. Mudar o nome a uma categoria não muda o que a Declaração faz com ela. «Fora dos totais» tira-os do Anexo F${tk==='cats'?' — salvo o IMI, o imposto do selo do contrato e as devoluções da caução e de renda, que continuam a declarar-se —':' — salvo as rendas e os reembolsos, que continuam na Declaração: o do inquilino como renda, os do seguro, do condomínio e do Estado a abater ao gasto que devolvem —'} e deixa-os na lista, mas não somam.</p>
   ${tk==='cats'?`<div class="def-repor"><button type="button" class="def-ligacao" data-toca="dados" data-risco="destroi" data-click="resetIrsMapa()">Repor as colunas do Anexo F</button></div>`:''}
   <div class="def-par">${cartaoDasEtiquetas()}${cartaoDoArt41()}</div>`;
 }

@@ -99,7 +99,7 @@ describe('o fim dos contratos (N031, N032, N033, N098, N101)', () => {
       anosEmFalta: [2018, 2019, 2020, 2021, 2022, 2023], anosSemRegras: [2024] }] });
     const b = avisosMao(r, /motivo do senhorio/);
     assert.match(b[0].texto, /Faltam os anos de 2018 a 2023, de que a app não tem rendas/);
-    assert.match(b[0].texto, /A estimativa de 2024 usa as regras de 2025: a app não tem as desses anos$/);
+    assert.match(b[0].texto, /A estimativa de 2024 usa as regras de 2025 e fica por confirmar: a app não tem as desses anos$/);
   });
 
   test('N032: um contrato sem redução que se renova sozinho tem só uma nota, com o termo do contrato', () => {
@@ -306,7 +306,7 @@ describe('a conjunta com o cônjuge sem conta (N020) e a quota de outro dia (N06
     assert.equal(a[0].nivel, 'falta');
     assert.doesNotMatch(a[0].texto, /Escolhe-o em/);
     assert.match(a[0].texto, /Os imóveis do teu cônjuge que não estão na app inserem-se à mão no Portal das Finanças/);
-    assert.match(a[0].texto, /«Os bens são comuns do casal» ligado em «A tua situação em 2026»/);
+    assert.match(a[0].texto, /«Os bens são comuns do casal» ligado em «A tua situação fiscal em 2026»/);
     imovel({ comproprietariosFora: [{ id: 'f1', nome: 'Rui', quota: 25 }, { id: 'f2', nome: 'Rita', quota: 25 }] });
     const b = avisosMao(resumoMao({ semConjuge: true, titulares: ['ana', 'conjuge~ana'], conjugeFora: { id: 'conjuge~ana', nome: 'Bruno', letra: 'B' },
       bensComuns: { imoveis: [], porDecidir: [{ propertyId: 'v1', imovel: 'T2 Arroios', nomes: ['Rui', 'Rita'] }], soMeus: [] } }), /conjunta|cônjuge/);
@@ -318,7 +318,7 @@ describe('a conjunta com o cônjuge sem conta (N020) e a quota de outro dia (N06
     const c = avisosMao(resumoMao({ semConjuge: true, titulares: ['ana', 'conjuge~ana'], conjugeFora: { id: 'conjuge~ana', nome: '', letra: 'B' },
       bensComuns: { imoveis: [{ propertyId: 'v1', imovel: 'T2 Arroios', nome: 'Bruno', quota: 50 }, { propertyId: 'v2', imovel: 'T3 Lumiar', nome: 'Rui', quota: 50 }], porDecidir: [], soMeus: [] } }), /^Tributação conjunta/);
     assert.equal(c[0].texto, 'Tributação conjunta com os bens comuns do casal: conta como o teu cônjuge, nas linhas do titular B, Bruno (T2 Arroios) e Rui (T3 Lumiar). '
-      + 'Se algum não é o teu cônjuge (uma casa herdada com um irmão), desliga «Os bens são comuns do casal» em «A tua situação em 2026» e junta à mão no Portal a parte do teu cônjuge. '
+      + 'Se algum não é o teu cônjuge (uma casa herdada com um irmão), desliga «Os bens são comuns do casal» em «A tua situação fiscal em 2026» e junta à mão no Portal a parte do teu cônjuge. '
       + 'Os imóveis só do teu cônjuge, que não estão na app, inserem-se à mão no Portal das Finanças');
     assert.equal(c[0].nivel, 'aviso');
   });

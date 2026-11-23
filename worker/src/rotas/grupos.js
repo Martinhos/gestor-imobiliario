@@ -39,6 +39,14 @@
    vê-la. Pôr a casa no grupo outra vez (PUT …/houses, uma casa que entra)
    desfaz a saída de todos os membros dele.
 
+   Entrar e sair por um grupo contam para as quotas como numa ligação
+   (rotas/conexoes.js): quem ganha uma casa (o dono aceita-o no grupo, ou um
+   imóvel entra nele) fecha o período das quotas na véspera
+   (fecharQuotasDeQuemEntrou, N018); quem a perde (sai, é removido, o imóvel
+   sai do grupo, o grupo é apagado) fecha-o com a quota a passar aos que
+   ficam, e cada um que fica é avisado de quem saiu — menos quem fez a
+   mudança (fecharQuotasDeQuemSaiu, D6).
+
    Regras de segurança que este ficheiro cumpre (as de colaboradores.js):
    - guarda-se só o SHA-256 do token da ligação; o token em claro vive no URL
      da criação e em mais lado nenhum (a auditoria leva o prefixo do hash);
@@ -65,7 +73,7 @@ import { json, err, body, now, badId, clientIp, idsDeCasas } from '../lib/http.j
 import { rateLimit } from '../lib/limites.js';
 import { servicosDesligados, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
 import { passarSeTodosAceitaram } from './casas.js';
-import { donosAntes, fecharQuotasDeQuemSaiu } from './conexoes.js';
+import { donosAntes, fecharQuotasDeQuemSaiu, fecharQuotasDeQuemEntrou } from './conexoes.js';
 
 /* As casas de um grupo, agora (para os pedidos de transferir o controlo que
    esperavam por quem as perde: casas.js:passarSeTodosAceitaram).
@@ -461,8 +469,10 @@ export async function rotasGrupos(c) {
     ]);
     await auditar(env, eu, 'grupo.apagar', id, g.name);
     // quem via casas só por este grupo deixou de ser comproprietário delas:
-    // o período das quotas fecha, e os pedidos de passar o controlo acertam-se
-    await fecharQuotasDeQuemSaiu(env, donos);
+    // o período das quotas fecha, cada um que fica numa casa é avisado de
+    // quem saiu dela (menos eu, que apaguei: D6), e os pedidos de passar o
+    // controlo acertam-se
+    await fecharQuotasDeQuemSaiu(env, donos, undefined, me);
     await passarSeTodosAceitaram(env, perdidas);
     return json({ ok: true });
   }
@@ -551,7 +561,9 @@ export async function rotasGrupos(c) {
   // POST …/requests/:uid/accept | reject. Só o dono decide — a um membro, o
   // mesmo 404 de um grupo que não existe. Cada escrita só pega se o pedido
   // ainda estiver pendente (um cancelamento ao mesmo tempo ganha): aceitar
-  // mete o membro e marca o pedido no mesmo lote, tudo ou nada.
+  // mete o membro e marca o pedido no mesmo lote, tudo ou nada. Depois, cada
+  // casa do grupo que ele ganhou fecha o período das quotas na véspera
+  // (conexoes.js:fecharQuotasDeQuemEntrou, N018).
 
   if (seg.length === 6 && seg[3] === 'requests' && method === 'POST' && (seg[5] === 'accept' || seg[5] === 'reject')) {
     if (!dono) return err(404, ERRO_GRUPO);
@@ -570,6 +582,9 @@ export async function rotasGrupos(c) {
       await auditar(env, eu, 'grupo.pedido.recusar', uid, id);
       return json({ ok: true });
     }
+    // os donos das casas do grupo antes de quem entra: as que ele ganha
+    // fecham o período das quotas na véspera (N018), como uma partilha
+    const donos = await donosAntes(env, await idsDasCasasDoGrupo(env, id));
     const [, marcado] = await env.DB.batch([
       env.DB.prepare(
         `INSERT OR IGNORE INTO shared_group_members (group_id, user_id, joined_at)
@@ -580,6 +595,7 @@ export async function rotasGrupos(c) {
     ]);
     if (!(marcado && marcado.meta && marcado.meta.changes > 0)) return err(404, ERRO_PEDIDO);
     await auditar(env, eu, 'grupo.pedido.aceitar', uid, id);
+    await fecharQuotasDeQuemEntrou(env, donos);
     return json({ ok: true });
   }
 
@@ -632,9 +648,11 @@ export async function rotasGrupos(c) {
       await env.DB.prepare('SELECT house_id, added_at FROM shared_group_houses WHERE group_id = ? AND added_by = ?')
         .bind(id, me.id).all()
     ).results.map((r) => [r.house_id, r.added_at]));
-    // os donos das que saem, para o período das quotas fechar onde alguém as perde
+    // os donos das que saem, para o período das quotas fechar onde alguém as
+    // perde; e os das que entram, para fechar onde alguém as ganha (N018)
     const saem = [...antes.keys()].filter((h) => !houseIds.includes(h));
     const donos = await donosAntes(env, saem);
+    const donosDasNovas = await donosAntes(env, houseIds.filter((h) => !antes.has(h)));
     const t = now();
     const stmts = [env.DB.prepare('DELETE FROM shared_group_houses WHERE group_id = ? AND added_by = ?').bind(id, me.id)];
     for (const h of houseIds) {
@@ -652,7 +670,10 @@ export async function rotasGrupos(c) {
     }
     await env.DB.batch(stmts);
     await auditar(env, eu, 'grupo.imoveis', id, houseIds.join(','));
-    await fecharQuotasDeQuemSaiu(env, donos);
+    // quem perde uma casa minha deixa o aviso aos que ficam (menos eu, que a
+    // tirei: D6); quem a ganha fecha o período na véspera
+    await fecharQuotasDeQuemSaiu(env, donos, undefined, me);
+    await fecharQuotasDeQuemEntrou(env, donosDasNovas);
     await passarSeTodosAceitaram(env, saem);
     return json({ ok: true });
   }
@@ -674,7 +695,8 @@ export async function rotasGrupos(c) {
     const donos = await donosAntes(env, [hid]);
     await env.DB.prepare('DELETE FROM shared_group_houses WHERE group_id = ? AND house_id = ?').bind(id, hid).run();
     await auditar(env, eu, 'grupo.remover-imovel', id, hid);
-    await fecharQuotasDeQuemSaiu(env, donos);
+    // cada um que fica com a casa é avisado de quem a perdeu (menos eu: D6)
+    await fecharQuotasDeQuemSaiu(env, donos, undefined, me);
     await passarSeTodosAceitaram(env, [hid]);
     return json({ ok: true });
   }
@@ -697,8 +719,11 @@ export async function rotasGrupos(c) {
     ]);
     if (sair) await auditar(env, eu, 'grupo.sair', id, g.owner_id);
     else await auditar(env, eu, 'grupo.remover', uid, id);
-    // quem sai perde as casas do grupo, e os outros as que ele pôs: o período das quotas fecha
-    await fecharQuotasDeQuemSaiu(env, donos);
+    // quem sai perde as casas do grupo, e os outros as que ele pôs: o período
+    // das quotas fecha, e cada um que fica é avisado de quem saiu — menos eu,
+    // que saí ou removi (D6); quem foi removido fica com os avisos das casas
+    // dele, de que os outros saíram
+    await fecharQuotasDeQuemSaiu(env, donos, undefined, me);
     await passarSeTodosAceitaram(env, perdidas);
     return json({ ok: true });
   }

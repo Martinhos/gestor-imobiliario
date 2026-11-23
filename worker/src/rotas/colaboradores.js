@@ -23,6 +23,7 @@ import { randomToken, sha256hex } from '../auth.js';
 import { auditar } from '../lib/auditoria.js';
 import { normalizarPerms } from '../lib/permissoes.js';
 import { canAccessHouse, avisoDeSaida, limparSaida } from '../lib/acesso.js';
+import { donosAntes, fecharQuotasDeQuemEntrou } from './conexoes.js';
 import { recordReport } from '../lib/relatos.js';
 import { json, err, body, now, badId, clientIp, idsDeCasas } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
@@ -678,7 +679,10 @@ export async function rotasColaboradores(c) {
       }
       /* a semântica de «partilhar casa» de sempre: uma conexão aceite entre
          os dois e a casa dentro dela — o dono da ligação passa a
-         comproprietário */
+         comproprietário. Os donos de antes leem-se primeiro: se ele entra
+         mesmo (não chegava já à casa por outra porta), o período das quotas
+         fecha na véspera, como numa partilha (N018) */
+      const donos = await donosAntes(env, [p.house_id]);
       let conn = await env.DB.prepare(
         `SELECT id, status FROM connections
           WHERE (requester_id = ?1 AND target_id = ?2) OR (requester_id = ?2 AND target_id = ?1)`
@@ -702,6 +706,7 @@ export async function rotasColaboradores(c) {
         .bind(now(), id));
       await env.DB.batch(stmts);
       await auditar(env, eu, 'partilha.pedido.aceitar', p.from_user, p.house_id);
+      await fecharQuotasDeQuemEntrou(env, donos);
       return json({ ok: true, connectionId: conn.id, houseId: p.house_id });
     }
   }

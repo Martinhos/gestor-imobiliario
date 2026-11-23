@@ -459,7 +459,8 @@ describe('as Projeções', () => {
     perto(r.rows[1].exp, 1200 * 1.02, 0.001);
     perto(r.rows[1].irs, 1200, 1e-9, 'sem aumento, o IRS não muda');
     perto(r.rows[0].cf, 12000 - 1200 - 1200 - r.rows[0].loan, 0.001);
-    igual(Object.keys(r.base).sort(), ['fora', 'foraAno', 'foraPorCat', 'n', 'op', 'porCat']);
+    igual(Object.keys(r.base).sort(), ['fora', 'foraAno', 'foraPorCat', 'moderada', 'n', 'op', 'porCat', 'semEst']);
+    assert.equal(r.base.semEst, 0, 'nenhum contrato sem estimativa (N052)');
     perto(r.base.op, 1200); assert.equal(r.base.n, 1);
     perto(r.base.fora, 8000); assert.equal(r.base.foraAno, ANO - 1);
     // a taxa escrita no contrato manda, e um contrato longo paga menos

@@ -79,14 +79,15 @@ describe('irsReceitaDe · a tabela da §1.5, linha a linha', () => {
   });
 
   test('D20 + Q7 · Reembolsos › Condomínio sem contrato e › Seguro: reembolsoGasto (abate ao gasto), sem pedir o contrato', () => {
-    igual(papel(receita('Reembolsos', 'Condomínio')), { papel: 'reembolsoGasto', natureza: null });
-    igual(papel(receita('Reembolsos', 'Seguro')), { papel: 'reembolsoGasto', natureza: null });
-    igual(papel(receita('Reembolsos', 'Seguro', { contractId: 'C1' })), { papel: 'reembolsoGasto', natureza: null }, 'o seguro, mesmo ligado ao contrato');
+    igual(papel(receita('Reembolsos', 'Condomínio')), { papel: 'reembolsoGasto', natureza: null, tipo: 'condominio' });
+    igual(papel(receita('Reembolsos', 'Seguro')), { papel: 'reembolsoGasto', natureza: null, tipo: 'seguro' });
+    igual(papel(receita('Reembolsos', 'Seguro', { contractId: 'C1' })), { papel: 'reembolsoGasto', natureza: null, tipo: 'seguro' }, 'o seguro, mesmo ligado ao contrato');
   });
 
-  test('D20 · Reembolsos › Estado e Empréstimos recebidos: fora (o Estado não é tratado como os outros reembolsos)', () => {
-    igual(papel(receita('Reembolsos', 'Estado')), { papel: 'fora', natureza: null });
-    igual(papel(receita('Reembolsos', 'Estado', { contractId: 'C1' })), { papel: 'fora', natureza: null });
+  test('D20 · Reembolsos › Estado sem imóvel (o do IRS) e Empréstimos recebidos: fora; o do Estado num imóvel abate a um gasto (N071)', () => {
+    igual(papel(receita('Reembolsos', 'Estado', { propertyId: null })), { papel: 'fora', natureza: null });
+    igual(papel(receita('Reembolsos', 'Estado')), { papel: 'reembolsoGasto', natureza: null, tipo: 'estado' }, 'um IMI devolvido no imóvel');
+    igual(papel(receita('Reembolsos', 'Estado', { contractId: 'C1' })), { papel: 'reembolsoGasto', natureza: null, tipo: 'estado' });
     igual(papel(receita('Empréstimos recebidos', 'Família')), { papel: 'fora', natureza: null });
     igual(papel(receita('Empréstimos recebidos', 'Outro', { contractId: 'C1' })), { papel: 'fora', natureza: null });
   });
@@ -152,11 +153,15 @@ describe('irsReceitaDe · as categorias pelo identificador, e o «Fora dos totai
     igual(papel(receita('Rendas', 'Indemnização', { contractId: 'C1' })), { papel: 'indemnizacao', natureza: '05' });
   });
 
-  test('fora das Rendas o countsInTotals vale: fora dos totais é fora; uma «Caução» noutra categoria vai a por classificar', () => {
+  test('fora das Rendas e dos Reembolsos com papel na Declaração o countsInTotals vale: fora dos totais é fora; uma «Caução» noutra categoria vai a por classificar', () => {
     excluir('catsIn', 'Outras receitas');
     igual(papel(receita('Outras receitas', '', { contractId: 'C1' })), { papel: 'fora', natureza: null });
     excluir('catsIn', 'Reembolsos', 'Inquilino');
-    igual(papel(receita('Reembolsos', 'Inquilino', { contractId: 'C1' })), { papel: 'fora', natureza: null });
+    igual(papel(receita('Reembolsos', 'Inquilino', { contractId: 'C1' })), { papel: 'renda', natureza: '07' }, 'o reembolso do inquilino é renda (N078, D12)');
+    excluir('catsIn', 'Reembolsos', 'Seguro');
+    igual(papel(receita('Reembolsos', 'Seguro')), { papel: 'reembolsoGasto', natureza: null, tipo: 'seguro' }, 'e o que devolve um gasto continua a abater-lhe');
+    excluir('catsIn', 'Reembolsos');
+    igual(papel(receita('Reembolsos', '')), { papel: 'fora', natureza: null }, 'sem subcategoria, fora dos totais, sai');
     app.db.settings.catsIn['Garagem'] = ['Caução'];
     igual(papel(receita('Garagem', 'Caução', { contractId: 'C1' })), { papel: 'porClassificar', natureza: null },
       'o isPassivo lê a caução pelo id (N074): uma «Caução» da pessoa vai ao aviso, e não sai em silêncio');

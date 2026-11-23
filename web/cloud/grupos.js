@@ -199,7 +199,10 @@ function pedidoDeGrupoResolvido(gid, uid) {
    pessoa passa a membro, comproprietária dos imóveis do grupo — ou …/reject.
    É o que o «Aceitar» e o «Recusar» da janela do grupo, do cartão «Pedidos
    por responder» e do sino têm em comum. Um pedido que já não existe (404:
-   a pessoa cancelou entretanto) diz-se e sai da lista na mesma.
+   a pessoa cancelou entretanto) diz-se e sai da lista na mesma. Aceite, cada
+   imóvel do grupo em que o servidor fechou o período das quotas com a
+   entrada dela abre a janela das quotas, uma de cada vez, a perguntar desde
+   quando é dona (partilha.js:abrirJanelasDaEntrada, N018).
    Recebe: gid — o id do grupo; uid — o id de quem pediu; aceitar — true
    para aceitar, false para recusar.
    Devolve: nada — chama a API, avisa, tira o pedido e sincroniza (a janela
@@ -217,7 +220,9 @@ function responderPedidoDeGrupo(gid, uid, aceitar) {
       pedidoDeGrupoResolvido(gid, uid);
       if (aceitar) toast(nome + ' entrou no grupo' + (grupo ? ' «' + grupo + '»' : '') + '.', { ms: 5000 });
       else toast('Pedido recusado.');
-      return aposAcaoNoGrupo(gid);
+      return aposAcaoNoGrupo(gid).then(function () {
+        if (aceitar) abrirJanelasDaEntrada((grupoPartilhado(gid) || {}).ids || [], [uid]);
+      });
     })
     .catch(function (e) {
       toast(e.message, { ms: 6000 });
@@ -394,7 +399,10 @@ CW.grupoRenomear = function (id) {
 /* «Adicionar os meus imóveis…»: a janela com as minhas casas (cwMinha) em caixas,
    as que já estão no grupo marcadas; guardar envia o conjunto inteiro
    (PUT …/houses {houseIds} substitui o que EU pus — os imóveis dos outros
-   não se tocam por aqui).
+   não se tocam por aqui). Cada imóvel que entra e em que o servidor fechou
+   o período das quotas com a entrada de outros membros abre a janela das
+   quotas, uma de cada vez, a perguntar desde quando são donos
+   (partilha.js:abrirJanelasDaEntrada, N018).
    Recebe: id — o id do grupo.
    Devolve: nada — abre a janela e deixa a gravação em onSave. */
 CW.grupoImoveis = function (id) {
@@ -411,11 +419,18 @@ CW.grupoImoveis = function (id) {
   openModal('Adicionar os meus imóveis', body);
   onSave = function () {
     var ids = casasMarcadas('cwg_h_');
+    var antes = (g.ids || []).slice(), eu = meuId();
+    var entram = ids.filter(function (h) { return antes.indexOf(h) < 0; });
     api('PUT', '/api/shared-groups/' + encodeURIComponent(id) + '/houses', { houseIds: ids })
       .then(function () {
         closeModal();
         toast(ids.length ? 'Imóveis no grupo atualizados.' : 'Os teus imóveis saíram do grupo.');
         return aposAcaoNoGrupo(id);
+      })
+      .then(function () {
+        var agora = grupoPartilhado(id) || g;
+        var outros = (agora._membros || []).map(function (m) { return m.id; }).filter(function (u) { return u && u !== eu; });
+        abrirJanelasDaEntrada(entram, outros);
       })
       .catch(function (e) { toast(e.message, { ms: 6000 }); });
   };

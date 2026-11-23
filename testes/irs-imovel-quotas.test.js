@@ -123,8 +123,9 @@ describe('D08 — os comproprietários fora da app, sem nuvem', () => {
     let f = app.propFicha('v1');
     assert.match(f, /<h3>Quotas<\/h3>/);
     assert.match(f, /por confirmar/);
-    // o caminho é o imvAbrirQuotas (o mesmo dos avisos da Declaração): sem nuvem, o formulário com a pergunta
-    assert.match(f, /data-click="imvAbrirQuotas\('v1'\)"/);
+    // por confirmar, responde-se no cartão (N065): «É só meu» grava, «Há outros donos» abre o formulário no «Sim»
+    assert.match(f, /data-click="imvSoMeu\('v1'\)">É só meu</);
+    assert.match(f, /data-click="imvAbrirQuotas\('v1','sim'\)">Há outros donos</);
     app.imvAbrirQuotas('v1');
     assert.equal(abertas.at(-1).t, 'Editar imóvel');
     assert.match(abertas.at(-1).b, /id="p_foraEstado"/);
@@ -533,10 +534,10 @@ describe('D100 — o cashflow das Projeções diz que o IRS é sobre a renda bru
 });
 
 describe('D52, D32 e D71 — o subarrendamento, o IMI do prédio e a afetação', () => {
-  test('«Arrendo este imóvel e subarrendo-o» pede o NIF do senhorio e a renda paga, e grava-os', () => {
+  test('«Não sou dono: arrendo-o ao senhorio e subarrendo-o» pede o NIF do senhorio, a renda paga e se é a casa toda, e grava-os', () => {
     const { abertas, avisos } = local();
     abrirForm('v1');
-    assert.match(abertas[0].b, /Arrendo este imóvel e subarrendo-o/);
+    assert.match(abertas[0].b, /Não sou dono: arrendo-o ao senhorio e subarrendo-o/);
     assert.doesNotMatch(abertas[0].b, /p_sub_nif/, 'desligado, sem os campos');
     el('p_sub_ativo').checked = true;
     app.imvSubMudou();
@@ -553,7 +554,10 @@ describe('D52, D32 e D71 — o subarrendamento, o IMI do prédio e a afetação'
     assert.equal(avisos.at(-1), 'Escreve a renda que pagas ao senhorio.');
     escreve('p_sub_renda', '600');
     app.onSave();
-    igual(app.prop('v1').subarrendamento, { ativo: true, nifSenhorio: '123456789', rendaMensal: 600 });
+    assert.equal(avisos.at(-1), 'Diz se subarrendas a casa toda ou só uma parte.');
+    escreve('p_sub_parte', 'toda');
+    app.onSave();
+    igual(app.prop('v1').subarrendamento, { ativo: true, nifSenhorio: '123456789', rendaMensal: 600, parte: 'toda', rendaParte: 0 });
   });
 
   test('o IMI da ficha diz que é o do prédio todo, a soma das notas de todos', () => {

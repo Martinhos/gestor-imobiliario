@@ -18,6 +18,11 @@ const TABS=[
   {id:'settings',icon:'gear',label:'Definições',sub:'Tema, categorias e etiquetas'}
 ];
 let tab='dashboard',txFilter='',txProp='',txPaid='',txCat='',txSub='',txNoPayer=true,txSearch='',txDe='',txAte='',txSort='date',txDir='desc',repProp='',setPage='';
+/* O filtro dos Movimentos por um contrato (o id; '' sem filtro). Não tem
+   seletor no painel: só o põe quem chega de um aviso (goMovimentos), e mostra-se
+   num chip com o × (lista-movimentos.js:txChipsHtml). Sai ao deixar os
+   Movimentos (go), para não ficar a filtrar às escondidas na visita seguinte. */
+let txCt='';
 const SUBPAGE={tema:{label:'Tema',sub:'Claro, escuro ou o do telemóvel'},
                cats:{label:'Tipos de movimento',sub:'Como classificas o que entra e sai'},
                filtros:{label:'Filtros comuns',sub:'Define uma vez, aplica em qualquer vista'},
@@ -456,6 +461,8 @@ function go(id){
   /* um separador de um serviço desligado nesta conta não abre: diz-se
      porquê e fica-se onde se está (um atalho antigo, um endereço guardado) */
   if(typeof separadorLigado==='function'&&!separadorLigado(id)){toast(hintServicoDesligado(servicoDoSeparador(id)));return}
+  /* o filtro do contrato é de quem veio de um aviso: sair dos Movimentos tira-o */
+  if(id!=='transactions')txCt='';
   const area=areaDe(id);if(area)_ultimoNaArea[area]=id;
   /* Quem chega pelo dedo já esteve à vista: o carrossel pintou-o a entrar
      (sepVizinho). Os gráficos não se desenham outra vez nem os números contam
@@ -466,6 +473,38 @@ function go(id){
      tem o acompanhamento das peças */
   if(!lado||id===tab||typeof deslizarPainel!=='function')return pintar();
   return deslizarPainel(pintar,lado,desde);
+}
+/* Os Movimentos já filtrados, para um aviso levar ao sítio onde se resolve
+   (N134): o ano, o imóvel, a categoria, o tipo e o contrato. O go não leva
+   o filtro como segundo argumento — os embrulhos da nuvem (nucleo.js,
+   ajuda.js) chamam-no só com o id —: escreve-se o filtro e depois vai-se,
+   como o salto dos indicadores da visão geral (cloud/painel.js:kpiToTx). Os
+   outros filtros (a pesquisa, quem pagou, as etiquetas) saem, para a lista
+   mostrar o que o aviso diz. A categoria pode vir pelo id do IRS (o nome
+   que esta conta lhe dá, dados.js:catDoIdIrs — um id de subcategoria filtra
+   as duas; um que a conta não tem não filtra) ou pelo nome desta conta. Um
+   contrato que não existe ou que não posso ver não filtra.
+   Só textos nos argumentos, para se chamar de uma ação.
+   Recebe: ano — 'AAAA' ou ''; pid — o id do imóvel, ou ''; cat — o id do
+   IRS ('impostos/imposto-do-selo', 'rendas'…), o nome de uma categoria desta
+   conta, ou ''; kind — o tipo ('income', 'expense'…, ou ''); ct (opcional)
+   — o id do contrato, ou ''.
+   Devolve: nada — muda os filtros e vai para os Movimentos. */
+function goMovimentos(ano,pid,cat,kind,ct){
+  const y=String(ano==null?'':ano),c=String(cat==null?'':cat).trim(),k=String(kind==null?'':kind);
+  txFilter=['income','expense','loan','debt','owed','repay','settle'].indexOf(k)>-1?k:'';
+  txProp=pid&&prop(pid)?String(pid):'';
+  txCat='';txSub='';txPaid='';txNoPayer=true;txSearch='';
+  if(typeof txEtiq!=='undefined')txEtiq=[];
+  if(/^\d{4}$/.test(y)){txDe=y+'-01-01';txAte=y+'-12-31'}else{txDe='';txAte=''}
+  if(c&&CATS_DO_IRS.indexOf(c)>-1){
+    const tk=Object.values(CATS_IRS_ORIGEM.catsIn).indexOf(c)>-1?'catsIn':'cats',n=catDoIdIrs(tk,c);
+    if(n){txCat=n.category;txSub=n.sub||''}
+  }else if(c&&['catsIn','cats'].some(tk=>{const a=db.settings[tk];return !!a&&typeof a==='object'&&Object.prototype.hasOwnProperty.call(a,c)}))txCat=c;
+  const x=ct?contract(ct):null;
+  txCt=x&&pode(x.propertyId,'contract.view')?x.id:'';
+  if(txCt&&!txProp)txProp=x.propertyId;
+  go('transactions');
 }
 /* ---- deslizar entre os separadores de uma área ----
    No telemóvel, os separadores de uma área (Imóveis, Grupos, Contratos,

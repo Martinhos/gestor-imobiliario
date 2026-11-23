@@ -118,10 +118,12 @@ registarAnoIrs({
   ias:522.5,
   /* A retenção na fonte das rendas (CIRS art. 101.º n.º 1 e)): 25 %, que os
      avisos conferem renda a renda (fisco-avisos.js:fiscoAvRetencaoCerta). Em
-     2025 não há a taxa das rendas moderadas. O mínimo abaixo do qual não se
-     retém fica por confirmar na fonte (INCERTO): sem ele, a app não acusa
-     nada abaixo de nenhum valor. */
-  retencao:{taxa:25,moderada:null,moderadaDesde:'',minimo:null,minimoDesde:''},
+     2025 não há a taxa das rendas moderadas. O mínimo: o art. 101.º-B n.º 1
+     d), na redação do DL 49/2025 (em vigor a 1 de julho de 2025), dispensa
+     de retenção as categorias B, E e F sempre que cada retenção seja
+     inferior a 25 € (cirs_rep/irs101b.aspx); na redação até junho a alínea só
+     falava da categoria E (5 €): antes de julho não há mínimo nas rendas. */
+  retencao:{taxa:25,moderada:null,moderadaDesde:'',minimo:25,minimoDesde:'2025-07-01'},
   taxas:{
     habitacional:25,
     naoHabitacional:28,
@@ -137,6 +139,14 @@ registarAnoIrs({
          baixa entre ele e os 25 % até ao termo ou à renovação (Lei 56/2023,
          art. 50.º n.º 8) */
       {desde:'2019-01-01',ate:'2023-10-06',escaloes:[{meses:240,taxa:10,n:5},{meses:120,taxa:14,n:4},{meses:60,taxa:23,n:3,porRenovacao:5,minimo:14},{meses:24,taxa:26,n:2,porRenovacao:2,minimo:14}]}],
+      /* O regime de cada período escolhe-o o motor (irs.js:irsCadeia): o do
+         contrato pela data de celebração (as instruções do 4.2: contratos
+         «celebrados a partir de 1 de janeiro de 2019»; OC 20268/2024, ponto
+         2 b): «celebrados a partir de 07.10.2023»), o de uma renovação pelo
+         dia em que começa. A renovação de um contrato do regime de 2019 com
+         redução que começa no regime novo conta-se como se o regime novo
+         valesse desde o início (OC 20268/2024, pontos 7 e 8: o contrato de 5
+         anos de 2019 renovado em 2024 por 5 anos paga 25 − 10 − 2 = 13 %). */
     rendaModerada:null,
     /* CIRS art. 72.º n.º 23 (rendimentos de 2024 em diante): os contratos de
        habitação celebrados desde 1 de janeiro de 2024 com a renda mensal acima
@@ -178,12 +188,19 @@ registarAnoIrs({
      isentas contam só para a taxa dos outros rendimentos (EBF art. 71.º-A n.º
      3). Os programas são todos de arrendamento habitacional (instruções do
      6D: «contratos de arrendamento habitacional»).
+     As datas de baixo (N150): o PAA só existe para os contratos celebrados
+     desde 1 de julho de 2019 (instruções do 6D); o ex-alojamento local pede
+     o contrato celebrado e registado entre 1 de janeiro de 2023 e 31 de
+     dezembro de 2024 (OC 20268/2024, ponto 13 a); PIV 25740); a renda antiga
+     é de contratos celebrados antes do RAU (EBF art. 46.º-A n.º 1).
      INCERTO (6H): a data em que o RAU (DL 321-B/90, de 15 de outubro) entrou
      em vigor — umas fontes dizem 14, outras 18 de novembro de 1990 —, por
-     isso a versão não a escreve: a pergunta do contrato (fisco.nrau3536)
-     já diz «anterior ao RAU». */
+     isso o corte fica no fim de 1990 (o mais seguro), e lê-se só na data de
+     celebração escrita (`datasPelaCelebracao`): quem herdou ou comprou o
+     prédio com o inquilino escreve muitas vezes no início o dia em que
+     passou a senhorio, e aí a app avisa em vez de cortar. */
   isencoes:[
-    {id:'paa',nome:'Programa de Apoio ao Arrendamento (PAA)',curto:'PAA',quadro:'6D',codigo:'01',lei:'DL 68/2019, art. 20.º',finalidade:['hp','hnp'],
+    {id:'paa',nome:'Programa de Apoio ao Arrendamento (PAA)',curto:'PAA',quadro:'6D',codigo:'01',lei:'DL 68/2019, art. 20.º',desde:'2019-07-01',finalidade:['hp','hnp'],
       texto:'Contrato inscrito no Programa de Apoio ao Arrendamento (o antigo Arrendamento Acessível), no IHRU: as rendas ficam isentas de IRS enquanto o contrato estiver no programa.'},
     {id:'pma',nome:'Programa municipal de arrendamento acessível (PMA)',curto:'programa municipal',quadro:'6D',codigo:'02',lei:'EBF art. 71.º-A',finalidade:['hp','hnp'],
       texto:'Contrato celebrado num programa municipal de habitação a renda acessível: as rendas ficam isentas de IRS durante o contrato.'},
@@ -194,17 +211,19 @@ registarAnoIrs({
        isentos pelo período de duração do contrato; quadro 6H, com o campo do
        4.1 (instruções do Anexo F). */
     {id:'prerau',nome:'Renda antiga: contrato anterior ao RAU, sujeito ao NRAU',curto:'renda antiga (anterior ao RAU)',quadro:'6H',codigo:'',semCodigo:true,lei:'EBF art. 46.º-A',
-      pede:'nrau3536',finalidade:['hp','hnp'],
+      pede:'nrau3536',celebradoAte:'1990-12-31',datasPelaCelebracao:true,finalidade:['hp','hnp'],
       texto:'Contrato de habitação celebrado antes do Regime do Arrendamento Urbano (o RAU, de 1990) e que ficou sujeito aos artigos 35.º ou 36.º do NRAU — o inquilino com rendimentos baixos, ou com 65 ou mais anos ou deficiência de 60 % ou mais: as rendas ficam isentas de IRS enquanto o contrato durar.'},
     /* EBF art. 74.º-A: imóvel em alojamento local registado e afeto a esse fim
-       até 31/12/2022, passado a arrendamento para habitação permanente com o
+       a 31/12/2022, passado a arrendamento para habitação permanente com o
        contrato celebrado e inscrito no Portal das Finanças até 31/12/2024
        (n.º 1); rendimentos até 31/12/2029 (n.º 2); quadro 6F, com o campo do
-       4.1. A data de inscrição no Portal não está no contrato da app: a
-       pergunta fisco.alRegistado2022 junta as duas condições. */
+       4.1. A AT lê o contrato celebrado e registado desde 1/1/2023 (OC
+       20268/2024, ponto 13 a) e d); PIV 25740, que recusou um AL fechado em
+       setembro de 2022). A data de inscrição no Portal não está no contrato
+       da app: a pergunta fisco.alRegistado2022 junta as condições. */
     {id:'al',nome:'Ex-alojamento local passado a arrendamento',curto:'ex-alojamento local',quadro:'6F',codigo:'',semCodigo:true,lei:'EBF art. 74.º-A',
-      pede:'alRegistado2022',celebradoAte:'2024-12-31',ateAno:2029,finalidade:['hp'],
-      texto:'Imóvel que estava em alojamento local registado até 31 de dezembro de 2022 e passou a arrendamento para habitação permanente, com o contrato celebrado e inscrito no Portal das Finanças até 31 de dezembro de 2024: as rendas ficam isentas de IRS até às de 2029.'}],
+      pede:'alRegistado2022',desde:'2023-01-01',celebradoAte:'2024-12-31',ateAno:2029,finalidade:['hp'],
+      texto:'Imóvel que estava em alojamento local registado e afeto a esse fim a 31 de dezembro de 2022 e passou a arrendamento para habitação permanente, com o contrato celebrado e inscrito no Portal das Finanças entre 1 de janeiro de 2023 e 31 de dezembro de 2024: as rendas ficam isentas de IRS até às de 2029.'}],
   colunas:['conservacao','condominio','imi','selo','taxas','outros'],
   /* os nomes das colunas no impresso do 4.1 e do 4.2, com os dois grupos */
   colunasNomes:{
@@ -219,7 +238,9 @@ registarAnoIrs({
      antenas, partes comuns: art. 8.º n.º 2 d) e e)). O dhd é o código da
      prestação mensal de um direito real de habitação duradoura no quadro 4.3
      (a tabela inteira, com a caução, está no quadro43). */
-  naturezas:{habitacional:'07',naoHabitacional:'06',indemnizacao:'05',outras:'02',dhd:'01'},
+  /* mobiliario: o aluguer dos móveis pago à parte do arrendamento (CIRS art.
+     8.º n.º 2 b)), que a dica dos móveis do contrato cita */
+  naturezas:{habitacional:'07',naoHabitacional:'06',indemnizacao:'05',outras:'02',dhd:'01',mobiliario:'03'},
   naturezasTexto:{'01':'Arrendamento (anos de 2015 a 2022)','02':'Cedência de uso do prédio ou de parte dele, que não arrendamento',
     '03':'Aluguer de maquinismos e mobiliários instalados no imóvel locado',
     '04':'Constituição, a título oneroso, de direitos reais de gozo temporários, ainda que vitalícios, sobre prédios rústicos, urbanos ou mistos',
@@ -283,9 +304,12 @@ registarAnoIrs({
      PIV 28153 (a mais recente; a PIV 30890 diz o mesmo), e a linha avisa
      (`aviso`). INCERTO: a parte de um imóvel comprada depois de 6/10/2023
      (PIV 28189 e 30028 recusam-na) — a app olha só para a data de compra do
-     imóvel; e as rendas de um ano em que a reabilitação acabou a meio (a app
-     dá os 5 % ao ano inteiro). Campos 01 a 05 do quadro 6A (instruções). O
-     n.º 7 não distingue a finalidade: o não habitacional também paga 5 %.
+     imóvel. No ano em que a reabilitação acabou a meio, os 5 % só valem nas
+     rendas dos meses depois da conclusão (as de antes não vêm de um imóvel
+     «recuperado»: a letra da alínea a); irs.js:irsInicioDaReabilitacao), e
+     a Declaração avisa — a AT não tem doutrina sobre esse ano. Campos 01 a 05
+     do quadro 6A (instruções). O n.º 7 não distingue a finalidade: o não
+     habitacional também paga 5 %.
 
      6B — EBF art. 59.º-I n.º 2 (aditado pela Lei 114/2017): os gastos do
      art. 41.º n.º 7 do CIRS (as obras dos 24 meses antes do arrendamento) em

@@ -1883,8 +1883,12 @@ body.sel-on #hdrFilt.mov-hdr-sel{display:none}
 /* a ação no canto da cabeça de um cartão: depois da .vg-ligacao, que lhe
    apagava a margem da esquerda */
 .vg-cab-acao{margin-left:auto;align-self:center}
-/* o «Marcar como …» de um prazo da AT, ao lado do ✕ (prazos.js:prazosCard) */
-.vg-feito{flex:0 0 auto;white-space:nowrap}
+/* o «Marcar como …» de um prazo da AT, ao lado do ✕ (prazos.js:prazosCard);
+   numa coluna estreita desce para uma segunda linha, à direita, com o ✕, em
+   vez de apertar o título até a palavra mais longa sair da caixa */
+.vg-feito{flex:0 0 auto;white-space:nowrap;margin:4px 0 8px auto}
+.vg-item:has(.vg-feito){flex-wrap:wrap}
+.vg-item:has(.vg-feito)>.vg-item-abrir{flex:1 1 220px}
 @media(pointer:coarse){.btn.sm.vg-feito{min-height:44px}}
 /* uma ligação no canto lê-se na linha de base do título, como no canvas
    («Portefólio» · «Avaliação»): ao centro, com os 44px do dedo, descia 11px; a
@@ -2171,7 +2175,7 @@ button.vg-item-abrir:active{background:var(--press)}
 .imv-fmorada{margin:0;font-size:15px;color:var(--muted)}
 .imv-donos{margin:0;font-size:14px;color:var(--ink)}
 .imv-nota{padding:12px 14px;border-radius:14px;background:var(--chip);color:var(--ink)}
-.imv-nota.imv-nota-aviso{background:var(--warn-soft);color:var(--ink);border-left:3px solid var(--warn)}
+.imv-nota.imv-nota-aviso,.imv-nota.imv-nota-falta{background:var(--warn-soft);color:var(--ink);border-left:3px solid var(--warn)}
 .imv-nota-podes{display:block;margin-top:4px;color:var(--muted)}
 .card.imv-numeros{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;padding:14px}
 @media(min-width:900px){.card.imv-numeros{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));padding:18px}}
@@ -2202,6 +2206,8 @@ button.vg-item-abrir:active{background:var(--press)}
 .imv-linha.imv-pend{align-items:stretch;padding:0 14px 0 0}
 .imv-pend>.imv-linha-txt{justify-content:center;padding:10px 0 10px 14px}
 .imv-pend>.btn{align-self:center}
+.imv-linha.imv-pend.imv-pend-recibo{flex-wrap:wrap}
+.imv-pend-recibo>.imv-botoes{flex:1 0 100%;padding:0 0 10px 14px}
 .imv-linha-txt{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:2px}
 .imv-linha-txt>b{font-weight:600;overflow-wrap:anywhere}
 .imv-linha-txt>.badge{margin-top:2px}
@@ -2983,10 +2989,10 @@ a.pes-liga:focus-visible,.pes-kv.tap:focus-visible,.pes-linha-f.tap:focus-visibl
    parte em linhas e um nome que não caiba sozinho numa linha parte dentro do
    chip — nunca reticências; o visto só no aceso, que a cor sozinha não chega;
    no dedo, 44px */
-.pago-por .chip{white-space:normal;max-width:100%;text-align:left;padding:6px 14px;line-height:1.25}
-.pago-por .chip svg{display:none}
-.pago-por .chip.on svg{display:block}
-@media(pointer:coarse){.pago-por .chip{min-height:44px}}
+.pago-por .chip,.pes-retem .chip{white-space:normal;max-width:100%;text-align:left;padding:6px 14px;line-height:1.25}
+.pago-por .chip svg,.pes-retem .chip svg{display:none}
+.pago-por .chip.on svg,.pes-retem .chip.on svg{display:block}
+@media(pointer:coarse){.pago-por .chip,.pes-retem .chip{min-height:44px}}
 .mov-grelha{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 10px}
 .mov-ligado .selbtn{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-text);font-weight:600}
 .mov-ligado .selbtn svg{color:var(--accent-text)}
@@ -3194,7 +3200,7 @@ body.sel-on #hdrFilt.lst-hdr-sel{display:none}
 .plan-pend-linha .plan-txt.tap:active{background:var(--press)}
 .plan-valor{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto}
 .plan-num{font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
-.plan-acoes{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex:0 0 auto;margin-left:auto}
+.plan-acoes{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;flex:0 1 auto;max-width:100%;margin-left:auto}
 @media(max-width:520px){
   .plan-pend-cab{padding:14px}
   .plan-pend-linhas.list{padding:0 14px}
@@ -3646,9 +3652,8 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .fis-kpis>.kpi:last-child .value{color:var(--side-ink)}
 .fis-kpis>.kpi:last-child .expl{border-top-color:var(--side-line)}
 .fis-kpis>.kpi:last-child::after{background:var(--side-on);color:var(--side-ink)}
-/* as obrigações à esquerda, a situação e os prazos empilhados à direita: com
-   três cartões em duas colunas, o terceiro ficava sozinho numa fila, com um
-   buraco ao lado; numa coluna só, um por baixo do outro */
+/* a grelha de «A tratar» (a situação fiscal e os prazos passaram para depois
+   dos quadros, D8): numa coluna só em ecrãs estreitos */
 .fis-grelha{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:14px;align-items:start}
 .fis-grelha>.fis-tratar{grid-row:span 2}
 .fis-tratar{gap:10px}
@@ -3667,9 +3672,12 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .fis-ob .fis-num{flex:0 0 26px;width:26px;justify-content:center;padding:0}
 .fis-ob p{flex:1 1 200px;min-width:0;font-size:14.5px}
 .fis-ob .btn{flex:0 0 auto;margin-left:auto}
+.fis-ob .fis-ob-acoes{flex:0 0 auto;margin-left:auto}
+.fis-ob .fis-ob-acoes>.btn{margin-left:0}
 /* a situação fiscal em linhas (M-SituacaoFiscal): interruptores e o A/B */
 .fis-sit{gap:0;padding:0;overflow:hidden}
 .fis-sit .ana-cab{padding:16px 16px 10px}
+.fis-sit:not(.aberta)>.ana-cab{padding-bottom:16px}
 .fis-linha{display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 16px;border-top:1px solid var(--line)}
 .fis-linha-txt{flex:1;min-width:0;margin:0}
 .fis-linha-txt b{display:block;font-weight:600}
@@ -3753,7 +3761,8 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 }
 @media(max-width:520px){
   .ana-barra{gap:8px}
-  .fis-ob .btn{margin-left:38px}
+  .fis-ob .btn,.fis-ob .fis-ob-acoes{margin-left:38px}
+  .fis-ob .fis-ob-acoes>.btn{margin-left:0}
   /* o botão do canto do cabeçalho (o ⓘ das contas) fica à direita do título
      e do subtítulo, em vez de cair numa fila só dele por baixo */
   .ana-cab:has(>.ana-extra){display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px}
@@ -6089,3 +6098,8 @@ label.fine-lido>input,label.fine-lido .selbtn{border-color:var(--accent);box-sha
 .mov-seccao+.mov-seccao{padding-top:16px;border-top:1px solid var(--line)}
 @media(pointer:coarse){.mov-chips>.chip.limpar{position:relative}.mov-chips>.chip.limpar::after{content:"";position:absolute;inset:-5px 0}}
 /* === fim: o painel dos filtros em secções sem nome === */
+/* os valores a copiar para o Portal (formato.js:fmtCopiavel): os separadores dos
+   milhares e o € desenham-se aqui, e o que se copia sai limpo (N107) */
+.cp-g::before{content:"\202F"}
+.cp-eur{white-space:nowrap}
+.cp-eur::after{content:"\202F€"}

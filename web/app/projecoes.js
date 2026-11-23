@@ -38,9 +38,11 @@ function mesesEmVigor(c,ano){
    dos contratos ativos com o aumento anual de cada um, o IRS sobre elas — a
    renda bruta, sem abater os gastos dedutíveis, e o cabeçalho di-lo
    (projDespesasTxt, D100) — à taxa
-   de cada contrato no ano da coluna (irs.js:taxRateOf, com as regras da versão
-   desse ano — a mesma da «renda líquida de impostos»; conta no ano das rendas,
-   embora se pague no seguinte), as despesas previstas
+   de cada contrato no ano da coluna (projTaxaDoAno: a escrita, ou a das
+   regras da versão desse ano com a renda projetada desse ano — o limite das
+   rendas moderadas testa-se com ela, N121; conta no ano das rendas, embora se
+   pague no seguinte; sem estimativa num contrato do Anexo J ou da categoria
+   B, N052), as despesas previstas
    (metricas.js:despesasPrevistas — os planeados de despesa levados ao ano) com
    a inflação, as prestações segundo o plano de cada hipoteca (param quando o
    crédito acaba) e o cashflow; mais a dívida no fim de cada ano e o que ficou
@@ -48,9 +50,11 @@ function mesesEmVigor(c,ano){
    Recebe: pid — id do imóvel, 'g:ID' de um grupo, ou null/vazio para o âmbito todo.
    Devolve: {rows, act, debtY, base} — rows é um array de {yr, rent, irs, exp, loan, cf, per}
    (per: a renda de cada contrato, pela ordem de act); act os contratos ativos da vista;
-   debtY a dívida no fim de cada ano; base {op, porCat, n, fora, foraPorCat, foraAno} — as
-   despesas previstas por ano e por categoria, quantos planeados entraram, e as de uma vez
-   do último ano completo (o total, por categoria, e o ano). */
+   debtY a dívida no fim de cada ano; base {op, porCat, n, fora, foraPorCat, foraAno, semEst,
+   moderada} — as despesas previstas por ano e por categoria, quantos planeados entraram, e
+   as de uma vez do último ano completo (o total, por categoria, e o ano); quantos contratos
+   ficaram sem IRS estimado (Anexo J ou categoria B sem taxa escrita); e {limite, ate} das
+   rendas moderadas quando algum ano do horizonte as tem (senão null). */
 function projRows(pid){
   const s=db.settings,n=Math.max(1,Math.round(s.years)),pps=pidProps(pid);
   /* ctVivo: quem corta por datas é o mesesEmVigor, ano a ano. Filtrar à
@@ -59,7 +63,10 @@ function projRows(pid){
      contrato ativo» e não mostrava projeção nenhuma. */
   const act=db.contracts.filter(c=>ctVivo(c)&&inScope(c.propertyId)&&pps.some(p=>p.id===c.propertyId));
   const prev=despesasPrevistas(pid),uma=despesasDeUmaVez(pid);
-  const base={op:prev.op,porCat:prev.porCat,n:prev.n,fora:uma.fora,foraPorCat:uma.foraPorCat,foraAno:uma.ano},rows=[];
+  const mods=[...Array(n)].map((_,i)=>{const m=irsAno(YEAR+i).taxas.rendaModerada;return m&&YEAR+i<=Number(m.ate)?m:null}).filter(Boolean);
+  const base={op:prev.op,porCat:prev.porCat,n:prev.n,fora:uma.fora,foraPorCat:uma.foraPorCat,foraAno:uma.ano,
+    semEst:act.filter(c=>!(Number(c.taxRate)>0)&&irsSemEstimativa(c)).length,
+    moderada:mods.length?{limite:Number(mods[0].limiteMensal),ate:Number(mods[mods.length-1].ate)}:null},rows=[];
   /* prestações previstas: vêm do plano de cada hipoteca e param quando o crédito acaba */
   const sched=[...Array(n)].map((_,i)=>sum(pps.map(p=>sh(p)*sum(liveLoans(p).map(l=>{
     const a=amort(l),from=i*12,to=Math.min((i+1)*12,a.rows.length);
@@ -68,22 +75,44 @@ function projRows(pid){
   })))));
   for(let i=0;i<n;i++){
     const yr=YEAR+i;
-    const per=act.map(c=>{
-      const meses=mesesEmVigor(c,yr);
-      if(!meses)return 0;
-      /* o aumento conta a partir do ano em que o contrato começa: um que só
-         arranca em 2028 não pode aparecer com dois aumentos já aplicados */
+    /* a renda mensal de cada contrato nesse ano, com o aumento: o aumento conta
+       a partir do ano em que o contrato começa — um que só arranca em 2028 não
+       pode aparecer com dois aumentos já aplicados */
+    const mensal=act.map(c=>{
       const desde=Math.max(YEAR,c.start?Number(String(c.start).slice(0,4)):YEAR);
-      const anos=Math.max(0,yr-desde);
-      return c.rent*sh(prop(c.propertyId))*meses*Math.pow(1+((c.increase==null?s.growth:c.increase)/100),anos);
+      return c.rent*Math.pow(1+((c.increase==null?s.growth:c.increase)/100),Math.max(0,yr-desde));
     });
-    /* a taxa do ano de cada coluna (a dos 10 % das rendas moderadas acaba em 2029) */
-    const rent=sum(per),irs=sum(per.map((v,j)=>v*taxRateOf(act[j],yr)/100)),exp=base.op*Math.pow(1+s.inflation/100,i),ln=sched[i];
+    const per=act.map((c,j)=>{
+      const meses=mesesEmVigor(c,yr);
+      return meses?mensal[j]*sh(prop(c.propertyId))*meses:0;
+    });
+    /* a taxa do ano de cada coluna, com a renda projetada (a dos 10 % das
+       rendas moderadas acaba em 2029, e uma renda que passa o limite perde-a) */
+    const rent=sum(per),irs=sum(per.map((v,j)=>v?v*projTaxaDoAno(act[j],yr,mensal[j])/100:0)),exp=base.op*Math.pow(1+s.inflation/100,i),ln=sched[i];
     rows.push({yr:YEAR+i,rent,irs,exp,loan:ln,cf:rent-irs-exp-ln,per});
   }
   const debtY=[...Array(n)].map((_,i)=>sum(pps.map(p=>sh(p)*sum(liveLoans(p).map(l=>{
     const a=amort(l,(i+1)*12);return a.rows.length?a.rows[a.rows.length-1].bal:0})))));
   return {rows,act,debtY,base};
+}
+/* A taxa do IRS de um contrato num ano da projeção, sobre a renda bruta: a
+   escrita no contrato, ou a das regras desse ano (irs.js:irsRate) com a
+   renda projetada desse ano no lugar da de hoje — o limite das rendas
+   moderadas testa-se com ela (N121: uma renda que passa os 2 300 € perde os
+   10 %; o limite é o de hoje, e pode subir por portaria). Num imóvel
+   subarrendado o imposto é só sobre a diferença para a renda paga ao
+   senhorio (irs.js:irsSublocacaoMensal, na proporção de hoje). Um contrato
+   sem estimativa (irs.js:irsSemEstimativa: Anexo J, categoria B) e sem taxa
+   escrita não tem IRS projetado (N052); o cabeçalho conta-os.
+   Recebe: c — o contrato; yr — o ano; renda — a renda mensal projetada do
+   contrato nesse ano (antes da quota-parte).
+   Devolve: a taxa efetiva em % sobre a renda bruta (número ≥ 0). */
+function projTaxaDoAno(c,yr,renda){
+  const escrita=Number(c.taxRate)>0;
+  if(!escrita&&irsSemEstimativa(c))return 0;
+  const t=escrita?Number(c.taxRate):irsRate(Object.assign({},c,{rent:renda}),yr);
+  const sub=irsSublocacaoMensal(c);
+  return sub&&sub.renda>0?t*sub.diferenca/sub.renda:t;
 }
 /* Os nomes das categorias que mais pesam, para o meio de uma frase: as três
    primeiras e reticências se houver mais. Ficam com a maiúscula: «Água, luz e gás»
@@ -112,7 +141,11 @@ function projDespesasTxt(base){
     :'';
   /* sobre a renda bruta: os gastos que se deduzem não se descontam aqui, e o
      imposto a sério é menor (D100) */
-  const irs='IRS sobre as rendas brutas, à taxa de cada contrato: o IMI, o condomínio e as obras baixam-no na declaração, e aqui não se descontam. Conta no ano das rendas — a declaração entrega-se de abril a junho e paga-se até 31 de agosto do ano seguinte.';
+  const irs='IRS sobre as rendas brutas, à taxa de cada contrato: o IMI, o condomínio e as obras baixam-no na declaração, e aqui não se descontam. Conta no ano das rendas — a declaração entrega-se de abril a junho e paga-se até 31 de agosto do ano seguinte.'
+    /* N121: o limite das rendas moderadas testa-se com a renda projetada de cada ano, e é o de hoje */
+    +(base.moderada?' Os 10 % das rendas de habitação até '+euro(base.moderada.limite)+' por mês (até '+base.moderada.ate+') testam-se com a renda projetada de cada ano: o limite é o de hoje, e pode subir por portaria.':'')
+    /* N052: os contratos sem estimativa do imposto ficam sem IRS, e diz-se quantos */
+    +(base.semEst>0?' '+(base.semEst===1?'Um contrato fica':base.semEst+' contratos ficam')+' sem IRS estimado (imóvel fora de Portugal ou rendas da categoria B): escreve a taxa no contrato para o contar.':'');
   /* o «ainda» só faz sentido depois das despesas previstas */
   const fora=base.fora>0?` Em ${base.foraAno} gastaste${base.n>0?' ainda':''} <b>${euro(base.fora)}</b> em despesas de uma vez (${esc(projNomesCats(base.foraPorCat))}), que não se projetam.`:'';
   const porta=base.n>0&&servicoLigado('recurring')?`<button type="button" class="btn sm" data-toca="ecra" data-click="go('recurring')">Ver planeados</button>`:'';

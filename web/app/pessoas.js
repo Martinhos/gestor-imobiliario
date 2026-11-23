@@ -1,5 +1,9 @@
 /* ================= PESSOAS (inquilinos e proprietários) ================= */
 let perForm={},perKind='tenant',perAfter=null;
+/* A pergunta da retenção foi aberta à mão neste formulário (a ligação «Este
+   inquilino retém IRS?», ou um NIF de empresa escrito): um repinte (juntar
+   um documento) não a volta a esconder. Volta a false a cada formulário. */
+let perRetemAberta=false;
 /* Posso mesmo alterar a ficha desta pessoa?
 
    Num inquilino é a regra de sempre: quem o adicionou, ou o dono. Num
@@ -178,15 +182,17 @@ function pesLinhasDaPessoa(p,kind){
 /* O que a ficha de um inquilino diz da retenção na fonte: que retém, quando a
    ficha o diz; num NIF de empresa ou de outra entidade que não uma pessoa
    (irs-papeis.js:nifColetivo — um sinal, não o critério da lei), que está por
-   confirmar, ou que se confirmou que não retém (retemVisto, D58). Num NIF de
-   pessoa, nada.
+   confirmar; e que se confirmou que não retém (retemVisto, D58), seja qual
+   for o NIF (o formulário pergunta-o também a um empresário em nome
+   individual: N128). Num NIF de pessoa sem resposta, nada.
    Recebe: p — o inquilino.
    Devolve: o texto da linha (sem HTML), ou ''. */
 function pesRetencaoTexto(p){
   if(!p)return '';
   if(p.retem)return 'retém IRS ao pagar a renda';
+  if(p.retemVisto)return 'confirmaste que não retém';
   if(!nifColetivo(p.nif))return '';
-  return p.retemVisto?'confirmaste que não retém':'por confirmar: uma empresa com contabilidade organizada retém IRS ao pagar a renda';
+  return 'por confirmar: uma empresa com contabilidade organizada retém IRS ao pagar a renda';
 }
 /* O «Confirmei: não retém» na ficha de um inquilino empresa (D58): só num NIF
    coletivo que a ficha não diz que retém nem já se confirmou, e a quem pode
@@ -437,7 +443,10 @@ function casasPartilhadasDaFicha(kind,p){
    fecho normal — é assim que o contrato cria um inquilino sem perder o fluxo.
    Quem não é dono de imóvel nenhum só cria fichas presas a um imóvel onde
    pode «Adicionar inquilinos» (senão a ficha ficava privada e nunca chegava
-   ao dono): com um só, fica esse; com vários, escolhe-se primeiro.
+   ao dono): com um só, fica esse; com vários, escolhe-se primeiro. Um
+   inquilino que passa a reter IRS propõe, depois de guardar e com os
+   Planeados ligados, levar a retenção ao planeado da renda
+   (planeados.js:recPropoeRetencaoDoInquilino) — não no caminho do `after`.
    Recebe: kind — 'owner' ou 'tenant', diz que lista se usa; id (opcional) —
    id da ficha a editar, sem ele cria uma nova; after (opcional) — função
    chamada com o id da ficha depois de guardar; houseId (opcional) — o imóvel
@@ -459,7 +468,7 @@ function personModal(kind,id,after,houseId){
   const _p=id?((kind==='owner'?db.owners:db.tenants)||[]).find(x=>x.id===id):null;
   if(kind==='tenant'&&_p&&!podeEditarInquilino(_p))return personView(kind,id);
   if(kind==='owner'&&_p&&!personEditavel('owner',_p))return personView(kind,id);
-  perKind=kind;perAfter=after||null;
+  perKind=kind;perAfter=after||null;perRetemAberta=false;
   const listOf=kind==='owner'?db.owners:db.tenants,orig=id?listOf.find(x=>x.id===id):null;
   perForm=normPerson(orig?JSON.parse(JSON.stringify(orig)):null);
   if(!orig&&houseId&&kind==='tenant')perForm.houseId=houseId;
@@ -472,19 +481,24 @@ function personModal(kind,id,after,houseId){
     if(perKind==='tenant'){const recusa=motivoRecusa(casaDoInquilino(orig||perForm),'tenant.add',orig);if(recusa)return toast(recusa)}
     const list=perKind==='owner'?db.owners:db.tenants;
     const i=list.findIndex(x=>x.id===perForm.id);
+    /* o inquilino passou a reter (N081): depois de gravar, propõe levar a
+       retenção ao planeado da renda (planeados.js:recPropoeRetencaoDoInquilino) */
+    const passouAReter=perKind==='tenant'&&perForm.retem===true&&!(orig&&orig.retem===true);
     if(i<0)list.push(perForm);else list[i]=perForm;
     save();
     const cb=perAfter,nid=perForm.id;perAfter=null;
     if(cb){cb(nid);return}
     closeModal();render();
-    if(i>-1)return toast('Ficha guardada.');
+    if(i>-1)toast('Ficha guardada.');
     /* nova: o aviso diz quem se adicionou e leva o «Ver» para a ficha */
-    const k=perKind;
-    avisoComVer(k==='owner'?'Proprietário adicionado.':'Inquilino adicionado.',k==='owner'?'owners':'tenants',()=>personView(k,nid));
+    else{const k=perKind;avisoComVer(k==='owner'?'Proprietário adicionado.':'Inquilino adicionado.',k==='owner'?'owners':'tenants',()=>personView(k,nid))}
+    if(passouAReter&&servicoLigado('recurring'))recPropoeRetencaoDoInquilino(nid);
   };
 }
 // HTML do formulário da ficha, montado a partir de perForm. Proprietários
-// não têm a secção de documentos nem as notas.
+// não têm a secção de documentos nem as notas, nem a retenção na fonte. O país
+// só aparece quando conta (pessoas.js:pessoaPedePais), e a retenção do
+// inquilino é uma pergunta de três respostas (pessoas.js:pessoaRetemHtml).
 // Devolve: string com o HTML do formulário da ficha.
 function personBody(){
   const t=perForm;
@@ -505,11 +519,10 @@ function personBody(){
       <label>Validade do CC<input id="pe_ccv" type="date" value="${t.ccValid||''}"></label></div>
     <label>NIF<input id="pe_nif" value="${esc(t.nif)}" placeholder="Opcional" inputmode="numeric" data-input="pessoaNifEscrito()" autocomplete="off"></label>
     <div class="hint u-mt-n4px" id="pe_nifHint"${pessoaNifHint(t.nif,t.pais)?'':' hidden'}>${esc(pessoaNifHint(t.nif,t.pais))}</div>
-    <label>País (opcional; só sem NIF português)<input id="pe_pais" value="${esc(t.pais)}" placeholder="Ex: Espanha" data-input="pessoaNifEscrito()" autocomplete="off"></label>
-    <div class="hint u-mt-n4px">Sem NIF português, o Anexo F identifica a pessoa pelo país.</div>
-    ${perKind==='tenant'?`<label class="check"><input type="checkbox" id="pe_retem" ${t.retem?'checked':''}> Retém IRS na fonte</label>
-    <div id="pe_retemVistoL"${pessoaPedeRetemVisto(t.nif,t.retemVisto)?'':' hidden'}><label class="check"><input type="checkbox" id="pe_retemVisto" ${t.retemVisto?'checked':''}> Confirmei que não retém</label></div>
-    <div class="hint u-mt-n4px">Uma empresa com contabilidade organizada retém IRS ao pagar a renda. A retenção regista-se em cada renda; aqui fica só o aviso. Se confirmaste que não retém, a Declaração deixa de o perguntar.</div>`:''}
+    <div id="pe_paisL"${pessoaPedePais(t.nif,t.pais)?'':' hidden'}>
+      <label>País (opcional)<input id="pe_pais" value="${esc(t.pais)}" placeholder="Ex: Espanha" data-input="pessoaNifEscrito()" autocomplete="off"></label>
+      <div class="hint u-mt-8px">Sem NIF português, o Anexo F identifica a pessoa pelo país.</div></div>
+    ${perKind==='tenant'?pessoaRetemHtml(t):''}
     <label>Morada fiscal (opcional)<textarea id="pe_addr" class="u-minh-66px" placeholder="Ex: Rua das Flores 12, 1200-195 Lisboa">${esc(t.taxAddress)}</textarea></label>
     <div class="hint">A morada com rua, número, código postal e localidade. Estes dados identificam as partes no contrato em PDF; o NIF e o país entram no resumo do Anexo F.</div>`,
       {icon:'contract',summary:[t.nif?'NIF '+esc(fmtNIF(t.nif)):'',t.cc?'CC':''].filter(Boolean).join(' · ')||'para o contrato'})}
@@ -540,21 +553,80 @@ function pessoaNifHint(nif,pais){
   if(ler){const e=document.getElementById('pe_nifHint');if(e){e.textContent=txt;e.hidden=!txt}}
   return txt;
 }
-/* Escreveu-se no NIF ou no país: refaz a dica do NIF (pessoaNifHint) e mostra
-   ou esconde o «Confirmei que não retém», que só faz sentido num NIF de
-   empresa (pessoaPedeRetemVisto).
-   Devolve: nada — mexe na dica e na caixa, no ecrã. */
+/* Escreveu-se no NIF ou no país: refaz a dica do NIF (pessoaNifHint), mostra
+   o país só quando ele conta (pessoaPedePais) — sem o esconder enquanto se
+   escreve nele — e, num inquilino, abre a pergunta da retenção quando o NIF
+   passa a ser de uma pessoa coletiva (pessoaRetemVisivel). Uma pergunta
+   aberta não se fecha ao escrever: quem a abriu, ou já lhe respondeu,
+   continua a vê-la.
+   Devolve: nada — mexe na dica, no país e na pergunta, no ecrã. */
 function pessoaNifEscrito(){
   pessoaNifHint();
-  const l=document.getElementById('pe_retemVistoL');
-  if(l)l.hidden=!pessoaPedeRetemVisto(val('pe_nif'),chk('pe_retemVisto'));
+  const nif=val('pe_nif'),pa=document.getElementById('pe_paisL');
+  const noPais=!!document.activeElement&&document.activeElement.id==='pe_pais';
+  if(pa&&!noPais)pa.hidden=!pessoaPedePais(nif,val('pe_pais'));
+  if(nifColetivo(nif))pessoaRetemAbrir();
 }
-/* O «Confirmei que não retém» aparece no formulário de um inquilino? Num NIF
-   coletivo (irs-papeis.js:nifColetivo), e sempre que já está marcado — para se
-   poder desmarcar.
-   Recebe: nif — o NIF escrito; visto — se já está marcado.
+/* O país aparece no formulário de uma pessoa? Só quando conta para o Anexo F,
+   que identifica pelo país quem não tem NIF português: com o NIF em branco
+   ou que não é um NIF português válido (irs-papeis.js:nifValido), ou com o
+   país já escrito — para se poder ler e apagar (N128).
+   Recebe: nif — o NIF escrito; pais — o país escrito.
    Devolve: true ou false. */
-function pessoaPedeRetemVisto(nif,visto){return !!visto||nifColetivo(nif)}
+function pessoaPedePais(nif,pais){return !!String(pais||'').trim()||nifValido(nif)!==true}
+/* A pergunta da retenção na fonte está à vista no formulário do inquilino, sem
+   a ligação «Este inquilino retém IRS?» (N128)? Num NIF de pessoa coletiva
+   (irs-papeis.js:nifColetivo — um sinal, não o critério da lei), num
+   inquilino de um contrato não habitacional, e sempre que já tem resposta
+   (retém, ou confirmou-se que não retém). Num NIF de pessoa fica atrás da
+   ligação: um empresário em nome individual com contabilidade organizada
+   também retém (CIRS art. 101.º n.º 1), mas a maior parte não.
+   Recebe: t — o inquilino (a ficha do formulário).
+   Devolve: true ou false. */
+function pessoaRetemVisivel(t){
+  if(!t)return false;
+  if(t.retem===true||t.retemVisto===true||nifColetivo(t.nif))return true;
+  return !!t.id&&contractsOfTenant(t.id).some(c=>fiscoDe(c).finalidade==='nh');
+}
+/* As três respostas da retenção na fonte, pela ordem em que se mostram.
+   O valor é o do #pe_retemR: 'sim' (retém), 'nao' (confirmou-se que não
+   retém: retemVisto, D58) ou '' (por confirmar). */
+const PES_RETEM=[['sim','Retém'],['nao','Não retém'],['','Por confirmar']];
+/* A retenção na fonte no formulário do inquilino (N128): uma pergunta só, de
+   três respostas — «Retém», «Não retém», «Por confirmar» —, em chips (como o
+   «Pago por» do movimento), à vista quando conta (pessoaRetemVisivel); senão,
+   a ligação «Este inquilino retém IRS?» abre-a (pessoaRetemAbrir). A resposta
+   vive no #pe_retemR, que o collectPerson lê; a retenção de cada renda
+   regista-se na renda.
+   Recebe: t — o inquilino (a ficha do formulário).
+   Devolve: o HTML (texto). */
+function pessoaRetemHtml(t){
+  const v=t.retem===true?'sim':t.retemVisto===true?'nao':'',ve=perRetemAberta||pessoaRetemVisivel(t);
+  return `<div id="pe_retemLig"${ve?' hidden':''}><button type="button" class="ct-ligacao" data-toca="nada" data-click="pessoaRetemAbrir()">Este inquilino retém IRS?</button></div>
+    <div id="pe_retemBox"${ve?'':' hidden'}><span class="flabel" id="pe_retemRot">Retém IRS na fonte?</span><input type="hidden" id="pe_retemR" value="${v}">
+      <div class="chips-fila pes-retem" role="radiogroup" aria-labelledby="pe_retemRot">${PES_RETEM.map(([k,r])=>{const on=v===k;
+        return `<button type="button" role="radio" aria-checked="${on}" class="chip${on?' on':''}" data-v="${k}" data-toca="rascunho" data-click="pessoaRetem('${k}')">${ic('check',14)}<span>${r}</span></button>`}).join('')}</div>
+      <div class="hint u-mt-8px">Retém quem tem, ou devia ter, contabilidade organizada: uma empresa, e às vezes um empresário em nome individual. O que retém regista-se em cada renda; aqui fica só se retém. Com «Não retém», a Declaração deixa de o perguntar.</div></div>`;
+}
+/* Toque na ligação «Este inquilino retém IRS?» (ou um NIF de pessoa coletiva
+   acabado de escrever): mostra a pergunta e esconde a ligação, e lembra-o
+   para os repintes deste formulário (perRetemAberta). Não repinta.
+   Devolve: nada — mexe no ecrã. */
+function pessoaRetemAbrir(){
+  const b=document.getElementById('pe_retemBox'),l=document.getElementById('pe_retemLig');
+  if(!b)return;
+  b.hidden=false;if(l)l.hidden=true;perRetemAberta=true;
+}
+/* Toque numa resposta da retenção: escreve no #pe_retemR e acende o chip
+   tocado. Não repinta o formulário: o resto não depende disto.
+   Recebe: v — 'sim', 'nao' ou ''.
+   Devolve: nada — mexe no campo e nos chips. */
+function pessoaRetem(v){
+  const k=v==='sim'||v==='nao'?v:'',h=document.getElementById('pe_retemR');if(h)h.value=k;
+  const g=document.querySelector('#pe_retemBox .pes-retem');
+  if(g)[].slice.call(g.querySelectorAll('[role="radio"]')).forEach(b=>{const on=(b.getAttribute('data-v')||'')===k;
+    b.setAttribute('aria-checked',on?'true':'false');b.classList.toggle('on',on)});
+}
 // Copia os campos do modal para perForm. Chamar antes de repintar ou de
 // mexer nos documentos, senão perde-se o que o utilizador escreveu.
 // Devolve: nada — só atualiza o objeto perForm.
@@ -564,10 +636,10 @@ function collectPerson(){
   t.gender=val('pe_gender');t.marital=val('pe_marital');t.nationality=val('pe_nat');
   t.birth=val('pe_birth');t.cc=val('pe_cc');t.ccValid=val('pe_ccv');
   t.nif=val('pe_nif');t.taxAddress=val('pe_addr');t.pais=val('pe_pais');
-  if(document.getElementById('pe_retem'))t.retem=chk('pe_retem');   /* só o inquilino tem a caixa; num proprietário fica o que estava */
-  /* «confirmei que não retém» (D58): só num NIF coletivo, e nunca com o «retém» ligado */
-  if(document.getElementById('pe_retemVisto'))t.retemVisto=chk('pe_retemVisto');
-  t.retemVisto=t.retemVisto===true&&!t.retem&&nifColetivo(t.nif);
+  /* a retenção (N128): só o inquilino tem a pergunta; num proprietário fica o
+     que estava. «Não retém» é o retemVisto (D58), nunca com o «retém» */
+  if(document.getElementById('pe_retemR')){const r=val('pe_retemR');t.retem=r==='sim';t.retemVisto=r==='nao'}
+  t.retemVisto=t.retemVisto===true&&!t.retem;
   if(document.getElementById('pe_notes'))t.notes=val('pe_notes');
   (t.files||[]).forEach(f=>{const e=document.getElementById('fn_'+f.id);if(e)f.name=e.value});
 }

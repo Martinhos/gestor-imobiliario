@@ -195,7 +195,7 @@ describe('N008: o quadro 10 com a matriz, o titular e o NIF do inquilino', () =>
     assert.equal(campoDe(b, 'Freguesia (código)'), '110621');
     assert.equal(campoDe(b, 'Artigo matricial'), '7000');
     assert.equal(campoDe(b, 'Titular'), 'A');
-    assert.equal(campoDe(b, 'Inquilino'), 'Tiago · NIF ' + app.fmtNIF('123456789'));
+    assert.equal(campoDe(b, 'Inquilino'), 'Tiago · NIF 123456789', 'o NIF que se copia, sem espaços (N107)');
   });
 
   test('lê os campos que o resumo põe em cada entrada (os das linhas do 4.x), com o país de um inquilino de fora e o que falta', async () => {

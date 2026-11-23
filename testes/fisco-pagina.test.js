@@ -68,7 +68,15 @@ function cartaoDe(html, nome) {
    Devolve: o HTML do <dd>, ou null. */
 function valorDe(h, campo) {
   const m = new RegExp('<dt>' + campo.replace(/[()]/g, '\\$&') + '(?:<span class="small">[^<]*</span>)?</dt><dd>(.*?)</dd>').exec(h);
-  return m ? m[1] : null;
+  return m ? semCopia(m[1]) : null;
+}
+/* um valor que se copia limpo (formato.js:fmtCopiavel, N107: os separadores no CSS) de
+   volta ao texto do euro2 e do fmtNIF, para o comparar com eles */
+function semCopia(h) {
+  const sep = app.euro2(1000).charAt(1), fim = app.euro2(1).slice(-2, -1), menos = app.euro2(-1).charAt(0), sepNif = app.fmtNIF('123456789').charAt(3);
+  const grupos = (gs, s) => gs.replace(/<span class="cp-g">(\d{3})<\/span>/g, s + '$1');
+  return String(h).replace(/<span class="cp-eur">(-?)(\d+)((?:<span class="cp-g">\d{3}<\/span>)*)(,\d+)?<\/span>/g,
+    (x, neg, a, gs, dec) => (neg ? menos : '') + a + grupos(gs, sep) + (dec || '') + fim + '€').replace(/<span class="cp-g">(\d{3})<\/span>/g, sepNif + '$1');
 }
 
 /* abre a janela do botão de partilha com o pickModal apanhado
@@ -157,13 +165,13 @@ describe('a barra', () => {
 });
 
 describe('o que saiu', () => {
-  test('sem o cartão azul, sem a dobra do guia e sem o englobamento; a grelha só com três cartões', () => {
+  test('sem o cartão azul, sem a dobra do guia e sem o englobamento; a grelha só com «A tratar» (D8, maqueta 6)', () => {
     const html = app.vFisco();
     assert.doesNotMatch(html, /fis-regras|fiscoVerGuia|fold_fiscoGuia|Como preencher, passo a passo|O que mudou em|Englobar ou não/);
     for (const f of ['fiscoAnoCard', 'fiscoVerGuia', 'fiscoGuiaCard', 'fiscoEnglobamentoCard', 'fiscoEscolherAno', 'fiscoLinhaHtml'])
       assert.equal(typeof app[f], 'undefined', f + ' saiu');
     const g = html.slice(html.indexOf('class="fis-grelha"'), html.indexOf('fiscoPilha'));
-    assert.equal((g.match(/<section class="card ana-cartao/g) || []).length, 3, 'A tratar, A tua situação fiscal e os Prazos da AT');
+    assert.equal((g.match(/<section class="card ana-cartao/g) || []).length, 1, 'só «A tratar»: a situação e os prazos vêm depois dos quadros');
     assert.match(g, /<section class="card ana-cartao fis-tratar">/);
   });
 
@@ -216,7 +224,7 @@ describe('um cartão por quadro', () => {
     // as rendas e o imposto de cada contrato, e o total do quadro
     const l1 = r.linhas.find((x) => x.contratoId === 'C1');
     assert.ok(res1.includes('<div class="fis-qr-num"><b>' + app.euro2(l1.rendas) + '</b><span class="small">imposto estimado ' + app.euro2(l1.imposto) + '</span></div>'));
-    assert.match(res1, /<b>Total do quadro 4\.1<\/b><span class="small">1 contrato · líquido /);
+    assert.doesNotMatch(res1, /Total do quadro 4\.1/, 'com uma linha só, sem o total que a repetia (D8, maqueta 6)');
     assert.match(res1, /T2 Arroios · art\. 4651 · fr\. A · n\.º 1234567 · 25 % taxa base/, 'o imóvel, o n.º na AT e a taxa');
     assert.match(res2, /<span class="fis-qr-falta"><span class="badge red">N\.º do contrato na AT<\/span> <span class="small">\+3<\/span><\/span>/, 'o que falta num selo');
     // tocar numa linha do resumo abre o contrato
@@ -261,7 +269,10 @@ describe('os quadros em cartões', () => {
     assert.doesNotMatch(c, /fis-ctc-falta/, 'nada falta');
   });
 
-  test('o total do quadro no fim, com as somas das linhas', () => {
+  test('o total do quadro no fim, com as somas das linhas (com mais de uma linha)', () => {
+    app.db.contracts.push(app.normContract({ id: 'C3', name: 'Arroios quarto', propertyId: 'v1', tenantIds: ['t1'], rent: 400, start: '2024-01-01', active: true,
+      fisco: { estado: 'declarado', numero: '7654321', finalidade: 'hp' } }));
+    for (let i = 1; i <= 12; i++) mov({ kind: 'income', category: 'Rendas', amount: 400, contractId: 'C3', recibo: true, date: ANO + '-' + String(i).padStart(2, '0') + '-07' });
     const html = app.vFisco(), r = app.resumoFiscal(ANO, '');
     const q0 = quadroDe(html, '4.1'), q = q0.slice(q0.indexOf('Os campos, contrato a contrato'));
     const t = q.slice(q.indexOf('<b>Total do quadro 4.1</b>'));
@@ -296,7 +307,7 @@ describe('os quadros em cartões', () => {
     assert.equal(valorDe(c, 'Início'), '01/03/2024');
     assert.equal(valorDe(c, 'Termo'), '28/02/2034');
     assert.equal(valorDe(c, 'Última renovação'), '—');
-    assert.match(html, /<b>Total do quadro 4\.2<\/b>/);
+    assert.doesNotMatch(html, /<b>Total do quadro 4\.2<\/b>/, 'uma linha só no 4.2: sem o total (D8, maqueta 6)');
   });
 
   test('um NIF que não bate certo vai como está, com o selo; o cartão abre o contrato', () => {

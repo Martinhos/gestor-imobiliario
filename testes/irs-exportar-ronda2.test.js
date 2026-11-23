@@ -171,7 +171,7 @@ describe('D120 — o quadro 4.3 do direito real de habitação duradoura', () =>
     assert.ok(b.includes(app.fiscoPdfTxt(nome('gastos'))), 'o grupo dos gastos obrigatórios');
     assert.equal(campoDe(b, nome('condominio', 'gastos')), euro(600));
     assert.equal(campoDe(b, app.fiscoPdfTxt(nome('cessacao'))), '—');
-    assert.equal(campoDe(b, 'Morador'), 'Tiago · NIF 123 456 789');
+    assert.equal(campoDe(b, 'Morador'), 'Tiago · NIF 123456789', 'o NIF que se copia, sem espaços (N107)');
     assert.match(campoDe(b, 'Estimativa da app'), /^líquido 5 400,00 € · imposto estimado 270,00 €/);
     assert.ok(cartao(p, 'Total do quadro 4.3'), 'o total do quadro');
     assert.ok(!cartao(p, 'Total do quadro 4.1'), 'nada no 4.1');
@@ -340,33 +340,33 @@ describe('D134 — as rendas da categoria B fora do Anexo F', () => {
 });
 
 describe('D135 — o código de uma união de freguesias extinta em 2025', () => {
-  test('em 2026 o PDF diz «confirmar» em vez do código; o texto e o CSV levam a falta', async () => {
+  test('em 2026 o PDF diz «trocar» em vez do código; o texto e o CSV levam a falta', async () => {
     imovel({ freguesiaCodigo: '130812' }); contrato();
     rendas(1000);
     const l = app.resumoFiscal(ANO).linhas[0];
     assert.ok(l.freguesiaUniao, 'o resumo marca a união');
     const t = app.fiscoTexto();
-    assert.ok(t.includes('freguesia 130812 (a confirmar)'));
-    assert.ok(t.includes('Falta: código da freguesia e artigo a confirmar na caderneta predial atual (130812 é o código de uma união de freguesias desagregada em outubro de 2025 (Lei 25-A/2025): o prédio passou para uma destas: 130818 Leça da Palmeira ou 130820 Matosinhos, e o artigo pode ter mudado).'));
+    assert.ok(t.includes('freguesia 130812 (a trocar: deixou de existir)'));
+    assert.ok(t.includes('Falta: código da freguesia e artigo a trocar pelos da caderneta predial atual (130812 é o código de uma união de freguesias que deixou de existir em outubro de 2025 (Lei 25-A/2025): o prédio passou para uma destas: 130818 Leça da Palmeira ou 130820 Matosinhos, e o artigo pode ter mudado).'));
     const c = csv().quadros[0];
     assert.equal(c.freguesia, '130812');
-    assert.match(c.faltas, /^código da freguesia e artigo a confirmar na caderneta predial atual/);
+    assert.match(c.faltas, /^código da freguesia e artigo a trocar pelos da caderneta predial atual/);
     assert.equal(c.freguesia_repostas, '130818 Leça da Palmeira / 130820 Matosinhos');
     const b = cartao(await pdf(), 'Arroios · T2 Arroios');
-    assert.match(campoDe(b, 'Freguesia (código)'), /^confirmar · 130812 é o código de uma união de freguesias desagregada em outubro de 2025/);
-    assert.match(campoDe(b, 'Artigo matricial'), /^4651 · pode ter mudado: confirma na caderneta predial atual/);
+    assert.match(campoDe(b, 'Freguesia (código)'), /^trocar · 130812 é o código de uma união de freguesias que deixou de existir em outubro de 2025/);
+    assert.match(campoDe(b, 'Artigo matricial'), /^4651 · pode ter mudado: vê-o na caderneta predial atual/);
   });
 
-  test('confirmado na caderneta, o código fica e diz-se o dia; em 2024 não há marca', async () => {
+  test('a marca da caderneta não cala o código de uma união (N087); em 2024 não há marca', async () => {
     imovel({ freguesiaCodigo: '130812', matrizConfirmada: '2026-11-20' }); contrato({ start: '2024-01-01' });
     rendas(1000);
     rendas(1000, M12, {}, 2024);
     const t = app.fiscoTexto();
-    assert.ok(t.includes('freguesia 130812 (confirmada na caderneta a 20/11/2026)'));
-    assert.ok(!t.includes('a confirmar na caderneta'));
+    assert.ok(t.includes('freguesia 130812 (a trocar: deixou de existir)'));
+    assert.ok(!t.includes('confirmada na caderneta'));
     assert.equal(csv().quadros[0].matriz_confirmada, '2026-11-20');
     const b = cartao(await pdf(), 'Arroios · T2 Arroios');
-    assert.equal(campoDe(b, 'Freguesia (código)'), '130812 · confirmado na caderneta predial a 20/11/2026');
+    assert.match(campoDe(b, 'Freguesia (código)'), /^trocar · 130812/);
     const t24 = app.fiscoTexto(app.resumoFiscal(2024));
     assert.ok(t24.includes('freguesia 130812 · U'), 'nas declarações de 2024 o código da união é o certo');
     assert.equal(csv(2024).quadros[0].freguesia_repostas, '');

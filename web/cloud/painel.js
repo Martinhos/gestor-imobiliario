@@ -417,6 +417,13 @@ function fillAbrir(r) {
     var per = EVERY_WORD[r.every] || 'período';
     // o plano começa antes da compra da casa: as datas começam nela, e diz-se porquê
     var compra = planoAntesDaCompra(r);
+    /* as rendas de um contrato vão à Declaração do IRS como rendas recebidas
+       (N079): a janela diz que são estimativas a conferir com os recibos, e
+       que a etiqueta se tira de cada uma depois de conferida — a Declaração
+       avisa enquanto houver rendas do ano com ela (fisco-avisos.js) */
+    var renda = (r.tx || {}).kind === 'income' && !!(r.tx || {}).contractId;
+    var ctR = renda ? contract(r.tx.contractId) : null;
+    var atualiza = !!ctR && ctR.increase != null && Number(ctR.increase) !== 0;
     body = '<div class="form">' +
       '<div class="hint">Vais registar <b>' + n + '</b> movimento' + (n === 1 ? '' : 's') +
       ' de <b>' + esc(r.name) + '</b>, de <b>' + dPT(dates[0]) + '</b> a <b>' + dPT(dates[n - 1]) + '</b>, ' +
@@ -425,8 +432,11 @@ function fillAbrir(r) {
       (compra ? '<div class="hint">O imóvel foi comprado a <b>' + compra + '</b>: antes disso não há nada a registar.</div>' : '') +
       fillLista(dates, val0, r.every) +
       '<div class="hint u-bl-3px-solid-v-warn u-pl-10px">' +
-      '<b>Isto é uma estimativa.</b> Confere e corrige depois o que não bater certo: atrasos, aumentos ou meses por pagar.</div>' +
-      '<div class="hint">Ficam marcados com a etiqueta <b>Estimativa</b> — procura por “estimativa” nos Movimentos para os veres todos.</div>' +
+      (renda
+        ? '<b>Isto é uma estimativa, e entra na Declaração do IRS como rendas recebidas</b>, cada uma no dia de pagamento do seu mês. Confere-as com os recibos: o valor' + (atualiza ? ' (antes da última atualização a renda era outra)' : '') + ', o dia em que entrou e os meses que não foram pagos.</div>' +
+          '<div class="hint">Ficam com a etiqueta <b>Estimativa</b>: tira-a de cada uma depois de a conferires (Editar, na renda). Enquanto houver rendas com ela, a Declaração avisa.</div>'
+        : '<b>Isto é uma estimativa.</b> Confere e corrige depois o que não bater certo: atrasos, aumentos ou meses por pagar.</div>' +
+          '<div class="hint">Ficam marcados com a etiqueta <b>Estimativa</b> — procura por “estimativa” nos Movimentos para os veres todos.</div>') +
       '<div class="stat u-mt-6px"><span>Total a registar<span id="fill_conta"></span></span><b id="fill_total">' + euro2(Math.round(val0 * n * 100) / 100) + '</b></div></div>';
   }
   /* a outra resposta: não registar o que ficou para trás e começar hoje

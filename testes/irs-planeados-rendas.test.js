@@ -135,13 +135,19 @@ describe('D22 · a renda de dezembro confirmada em janeiro pergunta o dia em que
     assert.equal(app.modalStack.length, 1, 'a pergunta continua aberta');
   });
 
-  test('no mesmo ano não pergunta: regista no dia de hoje com o mês previsto', () => {
-    const { c } = monta(app, { start: '2025-12-01', payDay: 2 });
+  test('a renda de janeiro do ano de hoje também pergunta (pode ter entrado em dezembro, N146): com o dia de hoje, regista hoje com o mês previsto', async () => {
+    const { c, janelas } = monta(app, { start: '2025-12-01', payDay: 2 });
     renda(app, '2025-12-02');
     app.syncAllContractRecs();
     const r = app.ctRecOf(c);
     assert.equal(r.next, '2026-01-02');
+    const n = app.db.transactions.length;
     app.quickConfirmRec(r.id);
+    await tique();
+    assert.equal(app.db.transactions.length, n, 'pergunta antes de registar');
+    assert.equal(janelas[janelas.length - 1].t, 'Em que dia entrou?');
+    elementos(app).rec_dia.value = HOJE;
+    app.recConfirmarNoDia(r.id);
     const t = app.db.transactions[app.db.transactions.length - 1];
     igual({ date: t.date, periodo: t.periodo }, { date: HOJE, periodo: '2026-01' });
   });

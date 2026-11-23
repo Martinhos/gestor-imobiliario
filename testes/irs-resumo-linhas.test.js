@@ -315,7 +315,7 @@ describe('D61 e os gastos — o que está «a confirmar» não conta, e fica lis
     assert.ok(Object.keys(l.gastos).every((k) => Number.isFinite(l.gastos[k])), 'nenhuma coluna estranha nas linhas');
     assert.equal(r.aConfirmar.length, 2);
     assert.deepEqual(json(r.aConfirmar[0]), { txId: t.id, nome: 'Seguro anual', data: '2026-02-01', valor: 240, propertyId: 'v1',
-      imovel: 'T2 Arroios', categoria: 'Seguros', sub: '', origem: 'categoria' });
+      imovel: 'T2 Arroios', categoria: 'Seguros', sub: '', origem: 'categoria', semContrato: false, semContratoDe: '', semContratoAte: '' });
     assert.equal(r.aConfirmar[1].nome, 'Outros');
     assert.equal(r.semRegra, 0, 'o semRegra conta só as sem regra nenhuma');
     perto(l.liquido, 12000, 1e-9);

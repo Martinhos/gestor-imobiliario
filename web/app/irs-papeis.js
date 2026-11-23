@@ -43,14 +43,15 @@ const IRS_DESPESAS_SEMPRE=['impostos/imi','impostos/imposto-do-selo'];
    despesa com os nomes de outra conta procura no mapa os nomes que esta conta dá a
    esse id (irsChavesDoMapa) — o IMI que a outra dona gravou em «Impostos e taxas ›
    IMI» cai na coluna do IMI.
-   Recebe: t — o movimento.
+   Recebe: t — o movimento; semFora (opcional) — true para ler a coluna como se a
+   categoria não estivesse fora dos totais (irsColunaSemFora).
    Devolve: {col, origem} — col é um id de IRS_COLUNAS ou 'confirmar'; origem é 'tipo',
    'lei', 'excluido', 'movimento', 'sub', 'categoria' ou 'omissao'. */
-function irsColunaDe(t){
+function irsColunaDe(t,semFora){
   if(!t||t.kind!=='expense')return {col:'nao',origem:'tipo'};
   const sid=txCatIrsId(t,true),cid=txCatIrsId(t);
   if(sid==='impostos/aimi')return {col:'nao',origem:'lei'};
-  if(!countsInTotals(t)&&cid!=='devolucoes'&&IRS_DESPESAS_SEMPRE.indexOf(sid)<0)return {col:'nao',origem:'excluido'};
+  if(!semFora&&!countsInTotals(t)&&cid!=='devolucoes'&&IRS_DESPESAS_SEMPRE.indexOf(sid)<0)return {col:'nao',origem:'excluido'};
   /* a coluna escrita no movimento: escolhida à mão, ou a que ficou ao apagar a
      subcategoria (também 'confirmar' — N043) */
   if(t.irsCol&&(t.irsCol==='confirmar'||IRS_COLUNAS.some(c=>c[0]===t.irsCol)))return {col:t.irsCol,origem:'movimento'};
@@ -61,6 +62,31 @@ function irsColunaDe(t){
   if(cat&&sub&&ok(cat+' / '+sub))return {col:m[cat+' / '+sub],origem:'sub'};
   if(cat&&ok(cat))return {col:m[cat],origem:'categoria'};
   return {col:'confirmar',origem:'omissao'};
+}
+/* A coluna que uma despesa teria se a categoria dela não estivesse «Fora dos
+   totais» (N042): o «Fora dos totais» tira-a do Anexo F (decisão D19), e quem
+   o diz — a lista das despesas tiradas por isso, a ficha, o formulário — diz
+   também o que ela contava. Numa despesa que não está fora, é o irsColunaDe.
+   Recebe: t — o movimento.
+   Devolve: {col, origem}, como o irsColunaDe (nunca a origem 'excluido'). */
+function irsColunaSemFora(t){return irsColunaDe(t,true)}
+/* A subcategoria decide a coluna do Anexo F nesta categoria (N133, D8)? Quando
+   a categoria sem subcategoria fica «a confirmar» (a regra dela, ou nenhuma —
+   lida como se não estivesse fora dos totais) e alguma subcategoria dela, na
+   árvore desta conta, tem regra própria que não é «a confirmar» (no mapa, ou o
+   AIMI, fixo): nos Impostos o IMI vai ao IMI e o selo ao selo, nos Seguros a
+   renda garantida a Outros. Aí a opção vazia da subcategoria não é
+   «indiferente»: sem ela a despesa não conta.
+   Recebe: kind — o tipo do movimento ('expense'; os outros não têm coluna);
+   cat — a categoria, com o nome desta conta.
+   Devolve: true ou false. */
+function irsSubDecide(kind,cat){
+  const c=String(cat||'').trim();
+  if(kind!=='expense'||!c)return false;
+  if(irsColunaSemFora({kind:'expense',category:c,sub:''}).col!=='confirmar')return false;
+  const subs=(db.settings&&db.settings.cats&&Array.isArray(db.settings.cats[c]))?db.settings.cats[c]:[];
+  const m=irsMapa(),propria=k=>Object.prototype.hasOwnProperty.call(m,k)&&m[k]!=='confirmar'&&IRS_MAPA_VALORES.some(x=>x[0]===m[k]);
+  return subs.some(s=>catIrsId('cats',c,s)==='impostos/aimi'||propria(c+' / '+s));
 }
 /* Os nomes por que o mapa das colunas se lê numa despesa: os dela, quando são os
    desta conta para o mesmo id (o caso de sempre, e também as categorias sem id);
@@ -92,14 +118,18 @@ const irsColunaNome=col=>{if(col==='confirmar')return 'A confirmar';const c=IRS_
      Indemnização 'indemnizacao' (natureza 05, art. 8.º n.º 2 g), D21), as Outras
      receitas prediais 'outra' (natureza 02, D51); a Renda mensal, a Renda em atraso,
      sem subcategoria ou uma subcategoria da pessoa, 'renda'.
-   · Fora das Rendas o «Fora dos totais» vale (o countsInTotals, com o isPassivo dos
-     Empréstimos recebidos): uma receita fora dos totais é 'fora'. Uma subcategoria
-     «Caução» numa categoria da pessoa já não é passivo (o isPassivo lê a caução pelo
-     id, N074): vai a 'porClassificar', com o aviso, como o resto dessa categoria.
-   · Reembolsos (pelo id) — do inquilino, e do condomínio com contrato ligado: 'renda'
-     (art. 8.º n.º 2 a), com recibo); do condomínio sem contrato e do seguro:
-     'reembolsoGasto' (abate ao gasto reembolsado; sem aviso a pedir o contrato, Q7);
-     do Estado: 'fora'; sem subcategoria ou uma da pessoa: 'porClassificar'.
+   · Reembolsos (pelo id), qualquer que seja o «Fora dos totais» (N078, D12): do
+     inquilino, e do condomínio com contrato ligado, 'renda' (art. 8.º n.º 2 a), com
+     recibo); do condomínio sem contrato, do seguro e do Estado num imóvel (um IMI, um
+     selo ou uma taxa devolvidos: N071), 'reembolsoGasto' (abate ao gasto reembolsado,
+     ou o aviso pede-o; sem aviso a pedir o contrato, Q7), com o tipo ('condominio',
+     'seguro', 'estado'); do Estado sem imóvel (o reembolso do IRS), 'fora'.
+   · Fora disso, o «Fora dos totais» vale (o countsInTotals, com o isPassivo dos
+     Empréstimos recebidos): uma receita fora dos totais é 'fora' — também um
+     Reembolso sem subcategoria ou com uma da pessoa, que dentro dos totais é
+     'porClassificar'. Uma subcategoria «Caução» numa categoria da pessoa já não é
+     passivo (o isPassivo lê a caução pelo id, N074): vai a 'porClassificar', com o
+     aviso, como o resto dessa categoria.
    · Empréstimos recebidos (pelo nome): 'fora'.
    · Sem categoria: 'renda' com contrato (como hoje), 'porClassificar' sem ele.
    · Outras receitas, Subsídios e apoios e as categorias da pessoa: 'porClassificar'.
@@ -108,9 +138,10 @@ const irsColunaNome=col=>{if(col==='confirmar')return 'A confirmar';const c=IRS_
    outras receitas prediais vêm da versão do ano (irs.js:irsNaturezasDoAno); nos outros
    papéis, null.
    Recebe: t — o movimento.
-   Devolve: {papel, natureza} — papel 'renda', 'caucao', 'indemnizacao', 'outra',
+   Devolve: {papel, natureza, tipo?} — papel 'renda', 'caucao', 'indemnizacao', 'outra',
    'reembolsoGasto', 'fora', 'porClassificar', ou '' quando não é uma receita;
-   natureza um código ('07', '05'…) ou null. */
+   natureza um código ('07', '05'…) ou null; tipo só no 'reembolsoGasto':
+   'condominio', 'seguro' ou 'estado'. */
 function irsReceitaDe(t){
   if(!t||t.kind!=='income')return {papel:'',natureza:null};
   const cat=String(t.category||'').trim();
@@ -127,14 +158,21 @@ function irsReceitaDe(t){
     if(sid==='rendas/outras-receitas-prediais')return papel('outra',daVersao('outras'));
     return papel('renda',daLinha());
   }
-  if(!countsInTotals(t)||cat==='Empréstimos recebidos')return papel('fora');
+  /* os Reembolsos com papel na Declaração não saem dela com o «Fora dos totais»
+     (uma escolha dos gráficos — N078, D12): o do inquilino e o do condomínio com
+     contrato são renda; o do condomínio sem contrato, o do seguro e o do Estado
+     num imóvel abatem a um gasto (o do Estado pode ser um imposto deduzido que
+     voltou — IMI, selo, taxas, N071); sem imóvel, o do Estado é o do IRS, e fica
+     fora */
   if(cid==='reembolsos'){
-    if(sid==='reembolsos/inquilino')return papel('renda',daLinha());
-    if(sid==='reembolsos/condominio')return temCt?papel('renda',daLinha()):papel('reembolsoGasto');
-    if(sid==='reembolsos/seguro')return papel('reembolsoGasto');
-    if(sid==='reembolsos/estado')return papel('fora');
-    return papel('porClassificar');
+    if(sid==='reembolsos/inquilino'||(sid==='reembolsos/condominio'&&temCt))return papel('renda',daLinha());
+    const gasto=tipo=>Object.assign(papel('reembolsoGasto'),{tipo:tipo});
+    if(sid==='reembolsos/condominio')return gasto('condominio');
+    if(sid==='reembolsos/seguro')return gasto('seguro');
+    if(sid==='reembolsos/estado')return t.propertyId||t.groupId||t.todos?gasto('estado'):papel('fora');
   }
+  if(!countsInTotals(t)||cat==='Empréstimos recebidos')return papel('fora');
+  if(cid==='reembolsos')return papel('porClassificar');
   if(!cat&&temCt)return papel('renda',daLinha());
   return papel('porClassificar');
 }

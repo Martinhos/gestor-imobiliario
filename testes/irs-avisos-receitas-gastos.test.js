@@ -123,7 +123,8 @@ describe('D05, D51 — as receitas que a app não conta como renda', () => {
       + 'Se são rendimentos do imóvel (publicidade, partes comuns, um lugar de garagem, uma renda paga por outro), declaram-se: muda-lhes a categoria para Rendas — '
       + 'a renda do contrato, ou Rendas › Outras receitas prediais (natureza 02) — e liga-as ao contrato');
     assert.equal(a[0].nivel, 'aviso');
-    assert.equal(a[0].abrir, "go('transactions')");
+    // N134: os Movimentos filtrados (o ano, o imóvel, as receitas), e não a lista inteira
+    assert.equal(a[0].abrir, "goMovimentos('2026','v1','','income','')");
     assert.doesNotMatch(a[0].texto, /IHRU/, 'sem contrato anterior ao RAU não se fala do IHRU');
   });
 
@@ -154,7 +155,9 @@ describe('D20 — os reembolsos de um gasto', () => {
     rendas(1000);
     const t = mov({ kind: 'income', category: 'Reembolsos', sub: 'Seguro', amount: 1200, date: '2026-05-10', label: 'Seguradora' });
     const a = avisos(/^Reembolso do seguro de 2026:/);
-    assert.deepEqual(a, [{ texto: 'Reembolso do seguro de 2026: Seguradora, 1 200 €. Se reembolsa uma despesa que está nos gastos, abate-o a ela (diminui-lhe o valor): '
+    // N072: diz sempre as duas hipóteses — a indemnização das rendas e o reembolso de uma despesa
+    assert.deepEqual(a, [{ texto: 'Reembolso do seguro de 2026: Seguradora, 1 200 €. Se compensa rendas que não recebeste (um seguro de renda), é uma indemnização (natureza 05) '
+      + 'e declara-se: muda-lhe a categoria para Rendas › Indemnização e liga-a ao contrato. Se reembolsa uma despesa que está nos gastos, abate-o a ela (diminui-lhe o valor): '
       + 'só conta o que pagaste de facto, e um gasto que outro pagou não é teu (CIRS art. 41.º n.º 1)', abrir: `txView('${t.id}')`, toca: 'camada', nivel: 'aviso' }]);
   });
 
@@ -225,10 +228,12 @@ describe('D08 — o imóvel por inteiro sem os donos fora da app confirmados', (
     imovel({ comproprietariosFora: null }); contrato();
     rendas(800);
     const a = avisos(/por inteiro nesta declaração/);
-    // o toque abre a pergunta das quotas (imovel.js:imvAbrirQuotas — N135)
-    assert.deepEqual(a, [{ texto: 'Imóvel T2 Arroios: conta por inteiro nesta declaração, e não está confirmado que não há outros donos. Se a casa tem donos fora da app (um irmão, um herdeiro), '
-      + 'escreve-os com a quota de cada um na ficha do imóvel, em «Há outros donos fora da app?» — cada um declara só a sua parte (CIRS art. 19.º); se é só tua, escolhe «Não, mais ninguém»',
-      abrir: "imvAbrirQuotas('v1')", toca: 'camada', nivel: 'aviso' }]);
+    // D8 (N065): pergunta-se no próprio aviso — «É só meu» grava a resposta
+    // (imovel.js:imvSoMeu), «Há outros donos» abre a pergunta já com o «Sim»
+    // (imovel.js:imvAbrirQuotas)
+    assert.deepEqual(a, [{ texto: 'Imóvel T2 Arroios: há mais donos além de ti? Conta por inteiro nesta declaração. Se tem outros donos fora da app — um irmão, um herdeiro, '
+      + 'o teu cônjuge se o imóvel está em nome dos dois —, escreve-os com a quota de cada um: cada dono declara só a sua parte (CIRS art. 19.º)',
+      abrir: "imvAbrirQuotas('v1','sim')", toca: 'camada', nivel: 'aviso', abrirTexto: 'Há outros donos', acao: "imvSoMeu('v1')", acaoTexto: 'É só meu', acaoToca: 'camada' }]);
   });
 
   test('com «Não, mais ninguém», com os de fora escritos ou com dois donos na app, não', () => {
@@ -295,7 +300,9 @@ describe('do resumo novo — a linha das rendas, os recibos e o quadro 5', () =>
     const l05 = linhaMao({ papel: 'indemnizacao', natureza: '05', quadro: '4.1', recibosPorEmitir: 0, rendas: 900 });
     const lr = linhaMao({ quadro: '4.2', natureza: '07', taxa: 10, recibosPorEmitir: 2 });
     const a = avisosMao(resumoMao({ linhas: [l05, lr] }), /sem recibo/);
-    assert.deepEqual(a, [{ texto: '2 rendas de 2026 sem recibo eletrónico emitido', abrir: "ctView('C1')", toca: 'camada', nivel: 'aviso' }]);
+    // N062, N134: «Ver as rendas» abre as do contrato nos Movimentos (sem rendas na base, não há o que marcar)
+    assert.deepEqual(a, [{ texto: '2 rendas de 2026 sem recibo eletrónico emitido. Se já emitiste os recibos no Portal das Finanças, marca-os aqui; se não, emite-os lá primeiro',
+      abrir: "goMovimentos('2026','v1','rendas','income','C1')", toca: 'ecra', nivel: 'aviso', abrirTexto: 'Ver as rendas' }]);
   });
 
   test('a caução e o reembolso do inquilino sem recibo: o aviso diz que também pedem recibo', () => {
@@ -304,21 +311,24 @@ describe('do resumo novo — a linha das rendas, os recibos e o quadro 5', () =>
     mov({ kind: 'income', category: 'Rendas', sub: 'Caução', amount: 2000, contractId: 'C1', date: '2026-01-02' });
     mov({ kind: 'income', category: 'Reembolsos', sub: 'Inquilino', amount: 240, contractId: 'C1', date: '2026-06-20' });
     const a = avisos(/sem recibo eletrónico/);
-    assert.deepEqual(a, [{ texto: '2 recebimentos de 2026 sem recibo eletrónico emitido: a caução e o reembolso do inquilino também pedem recibo, como a renda',
-      abrir: "ctView('C1')", toca: 'camada', nivel: 'aviso' }]);
+    // N062: marcam-se no próprio aviso; «Ver os recebimentos» abre os do contrato
+    assert.deepEqual(a, [{ texto: '2 recebimentos de 2026 sem recibo eletrónico emitido: a caução e o reembolso do inquilino também pedem recibo, como a renda. '
+      + 'Se já emitiste os recibos no Portal das Finanças, marca-os aqui; se não, emite-os lá primeiro',
+      abrir: "goMovimentos('2026','v1','','income','C1')", toca: 'ecra', nivel: 'aviso', abrirTexto: 'Ver os recebimentos',
+      acao: "fiscoAvMarcarRecibos(2026,'ana')", acaoTexto: 'Marcar os 2 como emitidos', acaoToca: 'camada' }]);
   });
 
   test('só rendas sem recibo: o texto de sempre', () => {
     imovel(); contrato();
     rendas(1000, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     rendas(1000, [11, 12], { recibo: false });
-    assert.equal(avisos(/sem recibo eletrónico/)[0].texto, '2 rendas de 2026 sem recibo eletrónico emitido');
+    assert.equal(avisos(/sem recibo eletrónico/)[0].texto, '2 rendas de 2026 sem recibo eletrónico emitido. Se já emitiste os recibos no Portal das Finanças, marca-os aqui; se não, emite-os lá primeiro');
   });
 
   test('o quadro 5 sem o NIF do senhorio nem a renda paga: falta, com o toque na ficha do imóvel', () => {
     imovel({ subarrendamento: { ativo: true, nifSenhorio: '', rendaMensal: 0 } }); contrato({ rent: 900 });
     rendas(900);
-    assert.deepEqual(avisos(/^Quadro 5/), [{ texto: 'Quadro 5 (sublocação), contrato C1: sem NIF do senhorio e renda paga ao senhorio. '
+    assert.deepEqual(avisos(/^Quadro 5 \(sublocação\), contrato/), [{ texto: 'Quadro 5 (sublocação), contrato C1: sem NIF do senhorio e renda paga ao senhorio. '
       + 'O NIF do senhorio e a renda que lhe pagas escrevem-se na ficha do imóvel, no subarrendamento', abrir: "propView('v1')", toca: 'camada', nivel: 'falta' }]);
   });
 
@@ -326,7 +336,8 @@ describe('do resumo novo — a linha das rendas, os recibos e o quadro 5', () =>
     app.db.tenants[0].nif = '123456788';
     imovel({ subarrendamento: { ativo: true, nifSenhorio: '123456789', rendaMensal: 600 } }); contrato({ rent: 900 });
     rendas(900);
-    assert.deepEqual(avisos(/^Quadro 5/), [{ texto: 'Quadro 5 (sublocação), contrato C1: o NIF do inquilino Tiago não bate certo. '
+    // a parte subarrendada por dizer é outro aviso, do imóvel (N023)
+    assert.deepEqual(avisos(/^Quadro 5 \(sublocação\), contrato/), [{ texto: 'Quadro 5 (sublocação), contrato C1: o NIF do inquilino Tiago não bate certo. '
       + 'O inquilino liga-se no contrato, e o NIF ou o país dele escrevem-se na ficha do inquilino', abrir: "ctView('C1')", toca: 'camada', nivel: 'falta' }]);
   });
 });

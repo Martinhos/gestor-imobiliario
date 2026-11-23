@@ -609,9 +609,42 @@ function selLVaoJunto(nc, nt) {
   return (nc + nt === 1 ? 'Vai junto ' : 'Vão junto ') + partes.join(' e ') + '.';
 }
 
+/* O que a Declaração perde quando os contratos marcados se apagam (N036),
+   como no apagar de um (contrato.js:delContract): com um só, o aviso dele
+   (contrato.js:ctAvisoDeApagar — as rendas de um ano por entregar ficam sem
+   contrato, a linha perde a taxa, as datas e a cessação, e o «Terminar
+   contrato», que sai da seleção antes de abrir); com vários, numa frase
+   curta, quanto fica sem contrato em cada um e o que a linha perde, e que um
+   contrato que acabou se termina em vez de se apagar. Um contrato «não
+   declarado» já está fora da Declaração.
+   Recebe: cs — os contratos que se apagam (objetos de db.contracts).
+   Devolve: o HTML (nomes escapados), ou '' quando a Declaração não perde nada. */
+function selLAvisoContratos(cs) {
+  if (!servicoLigado('contracts') || !cs.length) return '';
+  if (cs.length === 1) return ctAvisoDeApagar(cs[0], 'CW.selLSair();');
+  var anos = {}, terminados = 0;
+  var com = cs.filter(function (c) { return !ctNaoDeclarado(c); })
+    .map(function (c) { return { c: c, rs: ctRendasPorEntregar(c) }; }).filter(function (x) { return x.rs.length; });
+  if (!com.length) return '';
+  com.forEach(function (x) {
+    x.rs.forEach(function (r) { anos[r.ano] = 1; });
+    if (x.c.active === false || !!irsCessacao(x.c).data) terminados++;
+  });
+  var as = Object.keys(anos).sort(), umAno = as.length === 1, todos = terminados === com.length;
+  var cada = com.map(function (x) {
+    return '«' + esc(ctName(x.c)) + '»' + esc(ctValorPorEntregar(x.c, x.rs));
+  });
+  return 'As rendas de ' + listaE(as) + ' de ' + listaE(cada) + ' ficam sem contrato, e a Declaração do IRS ' +
+    (umAno ? 'desse ano, ainda por entregar, perde' : 'desses anos, ainda por entregar, perde') + ' a linha de cada um: a taxa e as datas' +
+    (todos ? ' e a cessação.' : terminados ? ', e a cessação nos que já terminaram.' : '.') +
+    (todos ? (com.length === 1 ? ' Já está terminado: assim, fica na Declaração com o dia em que acabou.' : ' Já estão terminados: assim, ficam na Declaração com o dia em que acabaram.')
+      : ' Se um contrato acabou, termina-o em vez de o apagar: fica na Declaração com o dia em que acabou.');
+}
+
 /* Apagar em massa, com os números à vista e o Anular por baixo: um imóvel
    arrasta os contratos e os movimentos dele (e dos que não criei saio:
-   selLApagarImoveis); um contrato deixa os movimentos, só desligados.
+   selLApagarImoveis); um contrato deixa os movimentos, só desligados, e a
+   confirmação diz o que a Declaração perde (selLAvisoContratos).
    Devolve: nada — pede confirmação; só depois apaga e oferece o Anular. */
 CW.selLApagar = function () {
   var ids = Object.keys(CW.selL.ids);
@@ -624,10 +657,11 @@ CW.selLApagar = function () {
   if (tipo === 'grp') return selLApagarGrupos(ids);
   if (tipo === 'prop') return selLApagarImoveis(ids);
 
-  // contratos: os movimentos ficam, só se desligam
+  // contratos: os movimentos ficam, só se desligam; a Declaração perde a linha deles (N036)
   var recs = (db.recurring || []).filter(function (r) { return r.auto && r.tx && ids.indexOf(r.tx.contractId) > -1; });
+  var aviso = selLAvisoContratos(db.contracts.filter(function (c) { return ids.indexOf(c.id) > -1; }));
   confirmModal('Apagar ' + ids.length + (ids.length === 1 ? ' contrato' : ' contratos'),
-    'Os movimentos ficam, mas deixam de estar ligados a eles.',
+    'Os movimentos ficam, mas deixam de estar ligados a eles.' + (aviso ? ' ' + aviso : ''),
     function () {
       var copia = {
         cs: JSON.parse(JSON.stringify(db.contracts.filter(function (c) { return ids.indexOf(c.id) > -1; }))),
@@ -653,22 +687,72 @@ CW.selLApagar = function () {
 };
 
 /* O que sair de vários imóveis que não criei faz, numa frase só (com um,
-   é a da ficha: imovel.js:imvFraseSaida): as permissões são retiradas, saem
-   da lista, o registado fica; nos de compropriedade a quota vai para os
-   restantes e os saldos e o IRS passam a contar com as quotas novas; não se
-   desfaz, e como se volta.
+   é a da ficha: imovel.js:imvFraseSaida), e o mesmo que ela diz: as
+   permissões são retiradas, saem da lista, o registado fica; nos de
+   compropriedade a quota passa aos restantes a partir de hoje — as quotas de
+   antes ficam guardadas até ontem, e o IRS dos outros conta com elas nos
+   dias em que eras dono —, os saldos passam a contar com as novas, e os
+   imóveis saem da tua Declaração do IRS, também nos anos em que foste dono,
+   com o PDF e o CSV dos anos por entregar à mão (imovel.js:imvExportarAno,
+   D29, N067); não se desfaz, e como se volta.
    Recebe: ps — os imóveis (objetos de db.properties), dois ou mais.
-   Devolve: a frase (HTML, com os nomes escapados). */
+   Devolve: a frase (HTML, com os nomes escapados, e os botões da exportação). */
 function selLSaidaFrase(ps) {
   var nomes = listaE(ps.map(function (p) { return '<b>' + esc(p.name || 'Sem nome') + '</b>'; }));
   var co = ps.filter(function (p) { return souDono(p.id); }), col = ps.length - co.length;
   var f = 'Sais de ' + nomes + ': as tuas permissões neles são retiradas e saem da tua lista. O que lá registaste fica.';
+  var exportar = '';
   if (co.length) {
-    f += ' ' + (co.length === 1 ? 'Em <b>' + esc(co[0].name || 'Sem nome') + '</b>, que tens em compropriedade,' : 'Nos ' + co.length + ' que tens em compropriedade,') +
-      ' a tua quota é dividida pelos restantes na proporção das quotas deles, e os saldos e o IRS passam a contar com as quotas novas, também nos movimentos já registados.';
+    var um = co.length === 1, nomeCo = um ? '<b>' + esc(co[0].name || 'Sem nome') + '</b>' : '';
+    f += ' ' + (um ? 'Em ' + nomeCo + ', que tens em compropriedade,' : 'Nos ' + co.length + ' que tens em compropriedade,') +
+      ' a tua quota é dividida pelos restantes na proporção das quotas deles (sem quotas escritas, em partes iguais), a partir de hoje. ' +
+      'As quotas de antes ficam guardadas até ontem: o IRS dos outros conta com elas nos dias em que eras dono, e os saldos passam a contar com as novas, também nos movimentos já registados.';
+    var cids = co.map(function (p) { return p.id; });
+    var anos = servicoLigado('fisco') && servicoLigado('properties') ? imvAnosPorEntregar().filter(function (a) {
+      return (db.transactions || []).some(function (t) { return cids.indexOf(t.propertyId) > -1 && String(t.date || '').indexOf(String(a)) === 0; });
+    }) : [];
+    f += ' ' + (um ? nomeCo + ' deixa' : 'Deixam') + ' de entrar na tua Declaração do IRS, também nos anos em que foste dono' +
+      (anos.length ? ': antes de saíres, guarda o PDF ou o CSV ' + listaE(anos.map(function (a) { return 'de ' + a; })) : '') + '.';
+    if (anos.length) exportar = '<div class="imv-botoes u-mt-12px">' + anos.map(function (a) {
+      return '<button type="button" class="btn" data-toca="nada" data-click="imvExportarAno(\'pdf\',' + a + ')">PDF de ' + a + '</button>' +
+        '<button type="button" class="btn" data-toca="nada" data-click="imvExportarAno(\'csv\',' + a + ')">CSV de ' + a + '</button>';
+    }).join('') + '</div>';
   }
   return f + ' Não se desfaz: para voltares a um deles, ' + (co.length && col ? 'o dono tem de te enviar um convite novo ou voltar a partilhá-lo contigo.'
-    : co.length ? 'quem o criou tem de voltar a partilhá-lo contigo.' : 'pede ao dono um convite novo.');
+    : co.length ? 'quem o criou tem de voltar a partilhá-lo contigo.' : 'pede ao dono um convite novo.') + exportar;
+}
+
+/* Quem mais perde os imóveis meus que se apagam (N067): num imóvel com outros
+   donos na app, o imóvel desaparece também para eles — sai da lista e da
+   Declaração do IRS de cada um, também nos meses em que foram donos —, e o
+   servidor deixa-lhes um aviso (worker/src/lib/acesso.js:apagarCasa). Com um
+   só imóvel na pergunta, a frase do apagar de um (imovel.js:
+   imvAvisoDeApagarPartilhado); com vários, os nomes e os donos de cada um. A
+   quem pode, «Transferir o controlo» em vez de apagar: a folha da
+   transferência dos marcados (CW.selLTransferir, que sai da seleção depois).
+   Recebe: meus — os imóveis que criei e se apagam; total — quantos imóveis
+   vão na pergunta (os meus e os de outros).
+   Devolve: o HTML (frase e botão; nomes escapados), ou '' sem outros donos. */
+function selLAvisoPartilhados(meus, total) {
+  var eu = meuId();
+  var com = meus.map(function (p) { return { p: p, outros: (p.ownerIds || []).filter(function (u) { return u && u !== eu; }) }; })
+    .filter(function (x) { return x.outros.length; });
+  if (!com.length) return '';
+  var nomes = function (us) { return listaE(us.map(function (u) { return '<b>' + esc(nomeUtilizador(u)) + '</b>'; })); };
+  var frase;
+  if (com.length === 1) {
+    var x = com[0], um = x.outros.length === 1;
+    frase = (total === 1 ? 'O imóvel' : '<b>' + esc(x.p.name || 'Sem nome') + '</b>') + ' desaparece também para ' + nomes(x.outros) +
+      (um ? ', que deixa de o ter na lista e na Declaração do IRS, também nos meses em que foi dono, e recebe um aviso.'
+        : ', que deixam de o ter na lista e na Declaração do IRS, também nos meses em que foram donos, e recebem um aviso.');
+  } else {
+    frase = listaE(com.map(function (y) { return '<b>' + esc(y.p.name || 'Sem nome') + '</b> (de ' + nomes(y.outros) + ')'; })) +
+      ' desaparecem também para os outros donos, que deixam de os ter na lista e na Declaração do IRS, também nos meses em que foram donos, e recebem um aviso.';
+  }
+  var transf = com.filter(function (y) { return imvPossoTransferir(y.p.id); }), u1 = transf.length === 1;
+  if (!transf.length) return frase;
+  return frase + ' Se só queres deixar de ' + (u1 ? 'o' : 'os') + ' gerir, transfere o controlo: ' + (u1 ? 'o imóvel continua' : 'os imóveis continuam') + ' para os outros donos.' +
+    '<div class="imv-botoes u-mt-12px"><button type="button" class="btn" data-toca="camada" data-click="closeModal();CW.selLTransferir()">Transferir o controlo</button></div>';
 }
 
 /* O que apagar os imóveis marcados vai fazer, numa confirmação só, como a
@@ -677,7 +761,9 @@ function selLSaidaFrase(ps) {
    só com os meus ou só com os de outros, «Apagar 1 imóvel e sair de 2» com
    os dois; a frase diz o que vai junto com os meus (selLVaoJunto), o que
    sair dos outros faz (imovel.js:imvFraseSaida com um, selLSaidaFrase com
-   vários) e, com os dois, que o Anular só repõe os meus. Com rendas de um ano
+   vários) e, com os dois, que o Anular só repõe os meus. Nos meus com outros
+   donos na app, diz quem mais os perde e propõe transferir o controlo
+   (selLAvisoPartilhados, N067), como o apagar de um. Com rendas de um ano
    por entregar nos meus, diz quanto sai da Declaração e propõe marcá-los
    vendidos (imovel.js:imvAvisoDeApagarVarios), como o apagar de um.
    Recebe: meus, outros — os imóveis (objetos de db.properties) que criei e
@@ -691,6 +777,9 @@ function selLImoveisFrase(meus, outros, nc, nt) {
   if (m) {
     partes.push(!mix ? selLVaoJunto(nc, nt)
       : (m === 1 ? 'O teu <b>' + esc(meus[0].name || 'Sem nome') + '</b> é apagado.' : 'Os ' + m + ' teus são apagados.') + ' ' + selLVaoJunto(nc, nt));
+    // os outros donos perdem-nos também: diz-se quem, e propõe-se a transferência (N067)
+    var partilhados = servicoLigado('properties') ? selLAvisoPartilhados(meus, m + o) : '';
+    if (partilhados) partes.push(partilhados);
     // as rendas de um ano por entregar saem da Declaração: diz-se quanto, e propõe-se o vendido (D33)
     var aviso = servicoLigado('properties') ? imvAvisoDeApagarVarios(meus, 'CW.selLSair();') : '';
     if (aviso) partes.push(aviso);
@@ -846,13 +935,49 @@ function selLQuemPode(lista, tipo, ids) {
   return { ok: ok, fora: fora, recusa: recusa };
 }
 
+/* O que a Declaração perde quando os inquilinos marcados se apagam (N036),
+   como na ficha (pessoas.js:delPerson): com um só, o aviso dele
+   (contrato.js:ctAvisoDeApagarInquilino — a linha do contrato com rendas de
+   um ano por entregar fica sem ele, e o Anexo F pede o NIF dele; nos
+   contratos em vigor, «Terminar contrato», que sai da seleção antes de
+   abrir); com vários, numa frase curta, cada um que tenha contratos com
+   rendas de um ano por entregar, com os contratos e o valor (a quem vê os
+   movimentos: contrato.js:ctValorPorEntregar). Um contrato «não declarado»
+   não conta. Só com os Contratos ligados.
+   Recebe: ps — os inquilinos que se apagam (objetos de db.tenants).
+   Devolve: o HTML (nomes escapados), ou '' quando a Declaração não perde nada. */
+function selLAvisoInquilinos(ps) {
+  if (!servicoLigado('contracts') || !ps.length) return '';
+  if (ps.length === 1) return ctAvisoDeApagarInquilino(ps[0].id, 'CW.selLSair();');
+  var anos = {}, cada = [], vivos = 0;
+  ps.forEach(function (p) {
+    var cs = contractsOfTenant(p.id).filter(function (c) { return !ctNaoDeclarado(c); })
+      .map(function (c) { return { c: c, rs: ctRendasPorEntregar(c) }; }).filter(function (x) { return x.rs.length; });
+    if (!cs.length) return;
+    cs.forEach(function (x) {
+      x.rs.forEach(function (r) { anos[r.ano] = 1; });
+      if (x.c.active !== false && !irsCessacao(x.c).data) vivos++;
+    });
+    cada.push('<b>' + esc(p.name || '(sem nome)') + '</b> (' + cs.map(function (x) {
+      return '«' + esc(ctName(x.c)) + '»' + esc(ctValorPorEntregar(x.c, x.rs)).replace(/^ \((.*)\)$/, ', $1');
+    }).join('; ') + ')');
+  });
+  if (!cada.length) return '';
+  var as = Object.keys(anos).sort(), um = cada.length === 1, umAno = as.length === 1;
+  return 'A Declaração do IRS de ' + listaE(as) + ', ainda por entregar, tem rendas dos contratos de ' + listaE(cada) +
+    ': sem ' + (um ? 'esta ficha' : 'estas fichas') + ', a linha de cada contrato fica sem o inquilino, e o Anexo F pede o NIF dele. Guarda-' +
+    (um ? 'a' : 'as') + ' até entregares ' + (umAno ? 'essa declaração.' : 'essas declarações.') +
+    (vivos ? ' Se saíram, termina os contratos em vez de apagar as fichas: ficam na Declaração com eles, nos anos em que lá moraram.' : '');
+}
+
 /* Apagar vários inquilinos, com as regras do pessoas.js:delPerson a cada um
    (selLRecusa): a ficha sai da lista e o id sai dos contratos, que ficam.
    Ao contrário do delPerson, há Anular — repõe as fichas e o lugar de cada
    uma nos contratos —, e por isso os documentos só saem do IndexedDB quando
    o Anular expira. A confirmação diz quantos contratos ficam sem eles (só
    com os Contratos ligados nesta conta: desligados, o id sai deles na mesma,
-   mas a pergunta não os nomeia).
+   mas a pergunta não os nomeia) e o que a Declaração perde
+   (selLAvisoInquilinos, N036).
    Recebe: ids — os ids marcados (array).
    Devolve: nada — pede confirmação; só depois apaga e oferece o Anular. */
 function selLApagarInquilinos(ids) {
@@ -864,7 +989,8 @@ function selLApagarInquilinos(ids) {
   // como o delPerson: o nome de quem sai, quando é um só
   var quem = n === 1 ? 'Apagar “' + esc(q.ok[0].name || '(sem nome)') + '”? ' : '';
   var frase = !comCt ? '' : nc ? (n === 1 ? 'Sai de ' : 'Saem de ') + nc + (nc === 1 ? ' contrato, que se mantém.' : ' contratos, que se mantêm.') : 'Sem contratos ligados.';
-  confirmModal('Apagar ' + n + (n === 1 ? ' inquilino' : ' inquilinos'), ((quem + frase).trim() || 'As fichas saem da lista.') + selLFora(q.fora), function () {
+  var aviso = nc ? selLAvisoInquilinos(q.ok) : '';
+  confirmModal('Apagar ' + n + (n === 1 ? ' inquilino' : ' inquilinos'), ((quem + frase).trim() || 'As fichas saem da lista.') + selLFora(q.fora) + (aviso ? ' ' + aviso : ''), function () {
     var copia = {
       ts: JSON.parse(JSON.stringify(q.ok)),
       ligados: db.contracts.filter(tem).map(function (c) { return { id: c.id, ids: (c.tenantIds || []).slice() }; }),

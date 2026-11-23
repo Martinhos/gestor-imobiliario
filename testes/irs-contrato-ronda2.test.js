@@ -3,7 +3,7 @@
 // sem aviso nenhum nos contratos sem termo (D120); o arrendamento de um
 // prédio rústico a uma entidade de gestão florestal, com o quadro 6C (D119);
 // as rendas tributadas na categoria B, à parte do «não declarado», que
-// guardam o Modelo 2 e os recibos (D134); o imóvel fora de Portugal, com o
+// guardam o Modelo 2 mas não os recibos de renda (D134); o imóvel fora de Portugal, com o
 // imposto pago lá e sem os prazos da AT (D133); a dica sem isenção que aponta
 // para a ficha do imóvel nos reabilitados (D118); e os encargos a cargo do
 // inquilino (o Q13).
@@ -196,8 +196,10 @@ describe('as rendas tributadas na categoria B (D134)', () => {
   test('o interruptor no bloco fiscal grava fisco.categoriaB sem mexer no estado', () => {
     monta(app);
     const h = form(app);
-    assert.match(h, /<b>Rendas tributadas na categoria B<\/b><span class="small">Liga-o se optaste pela categoria B para as rendas \(CIRS art\. 4\.º n\.º 1 n\), na declaração de início ou de alterações de atividade\), ou se o imóvel está afeto à tua atividade empresarial ou profissional \(art\. 3\.º n\.º 2 a\)\)\. As rendas saem do Anexo F e declaram-se no Anexo B ou C; o contrato continua com o Modelo 2 e os recibos\.<\/span><\/span><input type="checkbox" role="switch" class="ct-sw" id="c_fcatb" data-change="liveNet\(\)">/);
-    domCom(app, { c_rent: '800', c_fcatb: true });
+    // a pergunta da atividade aberta, dentro da particularidade fiscal (N015, D7)
+    assert.match(h, /<b>Tens atividade aberta com estas rendas na categoria B\?<\/b><\/span><input type="checkbox" role="switch" class="ct-sw" id="c_fcatb" data-change="liveNet\(\)">/);
+    assert.match(h, /<div class="hint ct-colado" id="c_fcatbHint">Só com atividade aberta: se optaste por tributar estas rendas na categoria B \(CIRS art\. 4\.º n\.º 1 n\), na declaração de início ou de alterações de atividade\), ou se o imóvel está afeto à tua atividade empresarial ou profissional \(art\. 3\.º n\.º 2 a\)\)\./);
+    domCom(app, { c_rent: '800', c_fpart: true, c_fcatb: true });
     app.collectCt();
     assert.equal(app.cForm.fisco.categoriaB, true);
     assert.equal(app.cForm.fisco.estado, 'declarado');
@@ -207,17 +209,19 @@ describe('as rendas tributadas na categoria B (D134)', () => {
     const c = monta(app, { start: '2024-03-01', end: '2034-02-28', fisco: { categoriaB: true } });
     const t = texto(app.ctAtDaFicha(c));
     assert.match(t, /Categoria B fora do Anexo F · Anexo B ou C/);
-    assert.match(t, /declaram-se no Anexo B ou C, com a tua atividade, e não no Anexo F\. O Modelo 2 e os recibos continuam\./);
+    // o Modelo 2 fica; os recibos de renda não se emitem: o documento é a fatura (N029)
+    assert.match(t, /declaram-se no Anexo B ou C, com a tua atividade, e não no Anexo F\. O contrato continua com o Modelo 2; os recibos de renda eletrónicos não se emitem \(Portaria 98-A\/2015, art\. 5\.º n\.º 1\)/);
     assert.doesNotMatch(t, /quadro 4\.[12]|15 de fevereiro/);
     assert.match(texto(app.ctValoresDaFicha(c)), /Imposto — categoria B · sem estimativa/);
   });
 
-  test('prazos: os recibos continuam, a comunicação de fevereiro não, e a entrega diz o Anexo B (ou C)', () => {
+  test('prazos: sem recibos de renda nem comunicação de fevereiro, e a entrega diz o Anexo B (ou C)', () => {
     monta(app, { start: '2025-03-01', end: '2035-02-28', fisco: { categoriaB: true } });
     receita(app, 'R1', '2025-03-01', { recibo: true });
     receita(app, 'R2', '2026-10-01');
     assert.equal(doTipo('2026-01-20', 'fev15').length, 0, 'sem taxa autónoma não há redução a comunicar');
-    assert.equal(doTipo('2026-11-17', 'recibos').length, 1, 'o recibo de outubro continua');
+    // a Portaria 98-A/2015, art. 5.º n.º 1, só pede o recibo de renda a quem não optou pela categoria B (N029)
+    assert.equal(doTipo('2026-11-17', 'recibos').length, 0, 'o recibo de renda não se pede: o documento é a fatura');
     const i = doTipo('2026-04-01', 'irs');
     assert.equal(i.length, 1);
     assert.equal(i[0].titulo, 'Entregar o IRS — Anexo B (ou C) de 2025');
@@ -261,8 +265,10 @@ describe('o imóvel fora de Portugal (D133)', () => {
   test('por indicar, a dica fala do Anexo J e não do Modelo 2', () => {
     monta(app, { start: '2026-10-01', end: '', fisco: { estado: '' } }, paris);
     const h = form(app);
-    assert.match(h, /Vais declarar as rendas deste imóvel no IRS\? Fora de Portugal não há Modelo 2/);
-    assert.doesNotMatch(h, /Comunicaste este contrato às Finanças/);
+    // a pergunta no rótulo do grupo, e as respostas que lhe respondem (N061)
+    assert.match(h, /<span class="flabel" id="c_fiscoRot">Vais declarar estas rendas no IRS\?<\/span>/);
+    assert.match(h, /Fora de Portugal não há Modelo 2: as rendas vão ao Anexo J/);
+    assert.doesNotMatch(h, /Comunicaste este contrato às Finanças|Já o comunicaste às Finanças/);
   });
 
   test('os prazos do Código Civil não se avisam: a lei é a do país do imóvel (Roma I), e a ficha e o formulário dizem-no', () => {
@@ -303,14 +309,16 @@ describe('a dica sem isenção e os reabilitados (D118)', () => {
 });
 
 describe('os encargos a cargo do inquilino (Q13)', () => {
-  test('um interruptor por encargo de ENCARGOS_DO_INQUILINO, com a dica da suspensão do planeado', () => {
+  test('um interruptor por encargo do imóvel de ENCARGOS_DO_INQUILINO, os consumos numa escolha, com a dica da suspensão do planeado', () => {
     monta(app, { encargosInquilino: ['imi'] });
     app.cForm = app.normContract(copia(app.contract('C1')));
     const h = app.ctBody();
     assert.match(h, /<div class="flabel" id="c_encRot">Encargos a cargo do inquilino<\/div>/);
-    for (const e of app.ENCARGOS_DO_INQUILINO) {
+    // os consumos já não são um interruptor: uma escolha só com «A renda inclui os consumos» (N126)
+    for (const e of app.ENCARGOS_DO_INQUILINO.filter((x) => x.id !== 'consumos')) {
       assert.match(h, new RegExp('<b>' + e.nome + '</b></span><input type="checkbox" role="switch" class="ct-sw" id="c_enc_' + e.id + '"' + (e.id === 'imi' ? ' checked' : '') + '>'), e.id);
     }
+    assert.match(h, /<label>Água, luz e gás<div class="sel" id="sel_c_fconsumos">/);
     assert.match(h, /Enquanto o contrato estiver em vigor, os planeados do IMI e do condomínio deste imóvel, e o do seguro da ficha do imóvel, ficam suspensos: não se pedem nem se confirmam\./);
   });
 

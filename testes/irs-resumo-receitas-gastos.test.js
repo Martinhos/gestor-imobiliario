@@ -73,7 +73,7 @@ describe('D03 — a caução é renda do ano em que se recebe, e a devolução �
     mov({ kind: 'expense', category: 'Devoluções ao inquilino', sub: 'Devolução da caução', amount: 1600, date: '2026-07-05' });
     const r = resumo();
     perto(linhaDe(r).gastos.outros, 1600, 1e-9);
-    assert.equal(r.foraDoPeriodo, 0, 'não é uma despesa da casa vazia');
+    assert.equal(r.foraDoPeriodo.length, 0, 'não é uma despesa da casa vazia');
   });
 });
 
@@ -297,8 +297,11 @@ describe('D52 — a sublocação vai ao quadro 5, sem gastos', () => {
     perto(q.liquido, 3600, 1e-9);
     assert.equal(q.nifSenhorio, '123456789');
     assert.equal(q.natureza, '02', 'subarrendamento habitacional');
-    perto(q.imposto, 900, 1e-9);
-    perto(r.totais.imposto, 900, 1e-9, 'o imposto estimado conta com o quadro 5');
+    // N053: em 2026 o quadro 5 testa as rendas moderadas como as linhas (900 € ≤ 2 300 €): 10 % da diferença, por confirmar pela AT
+    assert.equal(q.motivoTaxa, 'moderada');
+    assert.equal(q.moderadaPorConfirmar, true);
+    perto(q.imposto, 360, 1e-9);
+    perto(r.totais.imposto, 360, 1e-9, 'o imposto estimado conta com o quadro 5');
     perto(r.totais.quadro5.rendaRecebida, 10800, 1e-9);
     perto(r.totais.rendas, 0, 1e-9, 'as rendas dos quadros 4.1 e 4.2 não');
   });
@@ -312,7 +315,7 @@ describe('D65 — as despesas da casa vazia que contam por a coluna ter sido esc
     const t = mov({ kind: 'expense', category: 'Condomínio', sub: 'Quota mensal', amount: 250, irsCol: 'condominio', date: '2026-04-10', label: 'Condomínio de abril' });
     const r = resumo();
     perto(linhaDe(r).gastos.condominio, 250, 1e-9);
-    assert.equal(r.foraDoPeriodo, 1);
+    assert.equal(r.foraDoPeriodo.length, 1);
     assert.deepEqual(json(r.foraPorEscolha.map((x) => [x.txId, x.nome, x.valor])), [[t.id, 'Condomínio de abril', 250]]);
   });
 });

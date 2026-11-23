@@ -140,7 +140,11 @@ function ctMoldeDaRenda(c){
    pegar: quem adiciona um contrato antigo, já acabado, ficava sem maneira de
    registar as rendas dele de uma vez (KAN-132). Este é o plano que ele teria,
    sem ir para db.recurring: o molde da renda, mensal, no dia do pagamento, do
-   início ao fim do contrato (ou até hoje, num terminado sem fim escrito).
+   início ao dia em que o contrato acabou mesmo (a cessação, fisco.cessacao —
+   irs.js:irsCessacao), ou ao termo estipulado (c.end) quando não a há, ou até
+   hoje, num terminado sem fim escrito. Contava sempre até ao c.end, e um
+   contrato que acabou a 30/06 com o termo em 2029 pedia as rendas de julho a
+   hoje, que nunca existiram (N031).
    Recebe: c — o contrato.
    Devolve: o plano ({id, virtual, every, next, end, name, tx}), ou null quando
    o contrato não terminou, não tem renda nem início, ou tem planeado. */
@@ -149,7 +153,7 @@ function ctPlanoTerminado(c){
   if(ctRecOf(c))return null;
   const from=Math.max(1,Math.min(31,c.payDay||1)),tx=ctMoldeDaRenda(c);
   return {id:'ct-fim:'+c.id,virtual:true,every:'month',next:dayInMonth(Number(c.start.slice(0,4)),Number(c.start.slice(5,7))-1,from),
-    until:'',end:c.end||today(),name:tx.label,tx};
+    until:'',end:irsCessacao(c).data||c.end||today(),name:tx.label,tx};
 }
 /* As rendas que faltam a um contrato terminado: as datas do plano dele
    (ctPlanoTerminado) sem renda registada nesse mês (datasEmFalta).
@@ -271,6 +275,121 @@ function recRendaComRetencao(r,c){
   if(difere(bruto,renda)&&difere(a,renda)&&bruto>0)ret=r2(ret*renda/bruto);
   ret=Math.min(ret,renda);
   return {amount:r2(renda-ret),retencao:ret};
+}
+/* A renda do contrato num mês, quando se sabe que é a de hoje (c.rent): sem
+   atualização anual (c.increase vazio ou 0), desde o início do contrato; com
+   ela, desde o último aniversário do início até hoje — antes dele a renda
+   era outra, e a app não guarda a história. É a renda com que o Confirmar
+   (recAbaixoDoContrato) e o formulário da renda (movimento.js:txRendaAbaixo,
+   N080) comparam o que entra: um planeado com o que a gestora transfere
+   (950 € numa renda de 1 000 €) não é a renda do recibo.
+   Recebe: c — o contrato; mes — 'AAAA-MM'.
+   Devolve: a renda em euros (número), ou 0 quando não se sabe (antes do
+   início, antes da última atualização, sem renda). */
+function recRendaDoContrato(c,mes){
+  const renda=r2(Number((c||{}).rent)||0),ini=String((c||{}).start||'');
+  if(!(renda>0)||!/^\d{4}-\d{2}$/.test(String(mes||'')))return 0;
+  const temIni=/^\d{4}-\d{2}-\d{2}$/.test(ini);
+  if(temIni&&mes<ini.slice(0,7))return 0;
+  if(c.increase==null||Number(c.increase)===0||!temIni)return renda;
+  const h=today();let y=Number(h.slice(0,4));
+  if(String(y)+ini.slice(4)>h)y--;
+  const desde=y<Number(ini.slice(0,4))?ini.slice(0,7):String(y)+ini.slice(4,7);
+  return mes>=desde?renda:0;
+}
+/* A renda seguinte com a retenção que a anterior teve (N081). Com janeiro e
+   fevereiro registados com o retido na fonte e o planeado sem retenção, o
+   Confirmar de março gravava a renda sem ela, e o aviso da Declaração calava-
+   se (já havia retenções no ano). A proposta: a última renda registada deste
+   contrato antes do mês do planeado (pelo mês a que respeita, sem as pagas só
+   em parte) teve retenção, e o planeado não tem; a mesma taxa sobre a renda
+   do contrato nesse mês (recRendaDoContrato) ou, sem ela, sobre o montante
+   do planeado.
+   Recebe: r — o planeado.
+   Devolve: {amount, retencao, mes, retAntes, brutaAntes} — o que entra, o
+   retido, o mês da renda anterior e o que ela teve —, ou null. */
+function recRetencaoProposta(r){
+  const t=(r&&r.tx)||{},mes=recPeriodo(r);
+  if(t.kind!=='income'||!t.contractId||!mes||(Number(t.retencao)||0)>0)return null;
+  const c=contract(t.contractId);
+  if(!c||irsReceitaDe(Object.assign({},t,{date:r.next})).papel!=='renda')return null;
+  const ant=(db.transactions||[]).filter(x=>x&&x.contractId===c.id&&ehRenda(x)&&!x.parcial&&mesDaRenda(x)<mes)
+    .sort((a,b)=>mesDaRenda(b).localeCompare(mesDaRenda(a))||String(b.date||'').localeCompare(String(a.date||'')))[0];
+  const ret=ant?r2(Number(ant.retencao)||0):0,bruta=ant?r2(rendaBruta(ant)):0;
+  if(!(ret>0)||!(bruta>0))return null;
+  const base=r2(recRendaDoContrato(c,mes)||Number(t.amount)||0);
+  if(!(base>0))return null;
+  const nova=Math.min(base,r2(base*ret/bruta));
+  return {amount:r2(base-nova),retencao:nova,mes:mesDaRenda(ant),retAntes:ret,brutaAntes:bruta};
+}
+/* Leva a retenção na fonte ao planeado da renda de um contrato: a taxa sobre
+   a renda do contrato, e o montante passa a ser o que entra (D23; o
+   syncContractRec mantém-na quando a renda muda, recRendaComRetencao). Só a
+   quem pode alterar o planeado.
+   Recebe: c — o contrato; taxa — a percentagem da renda retida (ex.: 25).
+   Devolve: true se mudou o planeado; false sem planeado, sem renda, sem
+   permissão ou com uma taxa fora de (0, 100). */
+function recLevarRetencao(c,taxa){
+  const r=c?ctRecOf(c):null,tx=Number(taxa),renda=r2(Number((c||{}).rent)||0);
+  if(!r||!r.tx||!(tx>0)||tx>=100||!(renda>0))return false;
+  if(!podeEditar(c.propertyId,'rec.add',r))return false;
+  const ret=r2(renda*tx/100);
+  r.tx.retencao=ret;r.tx.amount=r2(renda-ret);
+  return true;
+}
+/* As taxas de retenção que um contrato pode ter num ano: as do bloco
+   retencao da versão desse ano (irs-AAAA.js), pelo fisco-avisos.js:
+   fiscoAvRetencaoCerta quando a Declaração está nesta conta (a renda
+   moderada só nas rendas que cabem nela); sem ela, a taxa geral.
+   Recebe: c — o contrato; ano — o ano (número).
+   Devolve: {taxas:[%], minimo:€} — taxas vazio quando a versão não as diz. */
+function recTaxasDeRetencao(c,ano){
+  const certa=servicoLigado('fisco')?fiscoAvRetencaoCerta(c,{date:today()},ano):null;
+  if(certa)return {taxas:certa.taxas.filter(x=>Number(x)>0),minimo:Number(certa.minimo)||0};
+  const R=(irsAno(ano)||{}).retencao;
+  return {taxas:R&&Number(R.taxa)>0?[Number(R.taxa)]:[],minimo:0};
+}
+/* Ao marcar «Retém IRS na fonte» na ficha de um inquilino (pessoas.js),
+   propõe levar a retenção ao planeado da renda dos contratos dele que estão
+   em vigor e cujo planeado ainda não a tem (N081): sem isto, cada Confirmar
+   registava a renda inteira sem retido, e as Retenções na fonte do Anexo F
+   ficavam a 0 €. Uma folha com a taxa (ou as taxas) do ano e «Agora não»;
+   escolhida, recLevarRetencao em cada um, com Anular. Uma retenção abaixo do
+   mínimo da versão não se propõe.
+   Recebe: tid — o id do inquilino.
+   Devolve: true se abriu a pergunta; false quando não há o que propor. */
+function recPropoeRetencaoDoInquilino(tid){
+  if(!tid)return false;
+  const ano=Number(today().slice(0,4));
+  const alvos=(db.contracts||[]).filter(c=>c&&(c.tenantIds||[]).indexOf(tid)>-1&&Number(c.rent)>0&&(ctVivo(c)||ctRendaDepoisDoTermo(c)))
+    .map(c=>({c,r:ctRecOf(c),tx:recTaxasDeRetencao(c,ano)}))
+    .filter(x=>x.r&&x.r.tx&&!((Number(x.r.tx.retencao)||0)>0)&&x.tx.taxas.length&&podeEditar(x.c.propertyId,'rec.add',x.r));
+  if(!alvos.length)return false;
+  const taxas=[...new Set([].concat(...alvos.map(x=>x.tx.taxas)))].sort((a,b)=>b-a);
+  const um=alvos.length===1?alvos[0]:null;
+  const cabe=(x,tx)=>x.tx.taxas.indexOf(tx)>-1&&!(x.tx.minimo>0&&r2(Number(x.c.rent)*tx/100)<x.tx.minimo);
+  const moderada=Number(((irsAno(ano)||{}).retencao||{}).moderada)||0;
+  const opts=taxas.filter(tx=>alvos.some(x=>cabe(x,tx))).map(tx=>{
+    const ret=um?r2(Number(um.c.rent)*tx/100):0;
+    return {v:tx,label:'Reter '+dec(tx)+' %'+(taxas.length>1&&tx===moderada?' (renda moderada)':''),icon:'check',
+      sub:um?euro2(r2(Number(um.c.rent)-ret))+' entram e '+euro2(ret)+' ficam retidos, em cada renda.'
+        :'Nas rendas planeadas de '+listaE(alvos.filter(x=>cabe(x,tx)).map(x=>ctName(x.c)))+'.'};
+  });
+  if(!opts.length)return false;
+  opts.push({v:0,label:'Agora não',icon:'x',sub:'O planeado fica sem retenção: o retido regista-se em cada renda, ao confirmar.'});
+  const nomes=listaE(alvos.map(x=>ctName(x.c)));
+  pickModal('O inquilino retém IRS: e a renda planeada?',opts,o=>{
+    closeModal();
+    if(!o||!(o.v>0))return;
+    const antes=alvos.map(x=>({id:x.r.id,amount:x.r.tx.amount,retencao:x.r.tx.retencao}));
+    const feitos=alvos.filter(x=>cabe(x,o.v)&&recLevarRetencao(x.c,o.v));
+    if(!feitos.length)return;
+    save();buildNav();render();
+    comDesfazer('A renda planeada passa a ter '+dec(o.v)+' % retidos na fonte.',()=>{
+      antes.forEach(a=>{const r=(db.recurring||[]).find(y=>y.id===a.id);if(r&&r.tx){r.tx.amount=a.amount;r.tx.retencao=a.retencao}});
+    });
+  },`<div class="hint u-fs-14px">Quem retém entrega à AT parte da renda por ti, e o recibo diz quanto. ${um?'A renda planeada de '+esc(nomes)+', '+euro2(um.c.rent)+', está':'As rendas planeadas de '+esc(nomes)+' estão'} sem retenção: com ela, o Confirmar regista o que entra e o retido, e as Retenções na fonte do Anexo F ficam certas.</div>`);
+  return true;
 }
 /* Varre as recorrências automáticas de contratos: apaga as órfãs (o contrato
    já não existe) e sincroniza cada contrato com syncContractRec. Uma
@@ -564,7 +683,11 @@ function recDaRendaNoMes(c,mes,recId){
    parte (t.parcial): a renda do planeado (montante mais retenção) menos as
    rendas desse contrato já registadas nesse mês (mesDaRenda); a retenção do
    resto é a do planeado menos a já retida. É o que o Confirmar regista, em
-   vez da renda inteira outra vez.
+   vez da renda inteira outra vez. Um planeado abaixo da renda do contrato
+   (o que a gestora transfere, N080) conta a renda do contrato quando ela se
+   sabe nesse mês (recRendaDoContrato): o pagamento parcial de 950 € num
+   planeado de 950 € deixava um resto de 0, e o Confirmar seguinte pedia a
+   renda inteira outra vez.
    Recebe: r — o planeado.
    Devolve: {amount, retencao} do resto, ou null quando não há renda nenhuma
    desse mês (ou o planeado não é de uma renda de contrato). */
@@ -573,7 +696,8 @@ function recRestoDaRenda(r){
   if(t.kind!=='income'||!t.contractId||!mes)return null;
   const ja=(db.transactions||[]).filter(x=>x.contractId===t.contractId&&ehRenda(x)&&mesDaRenda(x)===mes);
   if(!ja.length)return null;
-  const bruto=r2((Number(t.amount)||0)+(Number(t.retencao)||0)),resto=r2(bruto-sum(ja.map(rendaBruta)));
+  const c=contract(t.contractId);
+  const bruto=Math.max(r2((Number(t.amount)||0)+(Number(t.retencao)||0)),c?recRendaDoContrato(c,mes):0),resto=r2(bruto-sum(ja.map(rendaBruta)));
   if(!(resto>0.005))return null;
   const ret=Math.min(resto,Math.max(0,r2((Number(t.retencao)||0)-sum(ja.map(x=>Number(x.retencao)||0)))));
   return {amount:r2(resto-ret),retencao:ret};
@@ -978,13 +1102,25 @@ function recPeriodo(r){
    O encargo que um contrato em vigor põe a cargo do inquilino não se confirma
    (recSuspensaPeloInquilino, Q13), e a renda de um mês pago só em parte
    regista o resto (recRestoDaRenda, D115).
-   Recebe: id — o id da recorrência a confirmar; dia (opcional) — o dia
-   AAAA-MM-DD em que o dinheiro entrou, já perguntado (recConfirmarNoDia);
-   sem ele, hoje.
+   Numa renda, antes de registar, as perguntas que mudam o que se regista,
+   uma de cada vez e só quando é o caso: o mês anterior com duas rendas (uma
+   delas pode ser esta, paga antes do dia: N146, recDuasRendasAntes); a
+   retenção que a renda anterior teve e o planeado não tem (N081,
+   recRetencaoProposta); o planeado abaixo da renda do contrato (N080,
+   recAbaixoDoContrato); e o dia em que entrou (D22). As respostas seguem no
+   `o` para a pergunta seguinte. Com o recibo (o «Confirmar e emiti o
+   recibo», recConfirmarComRecibo, D8), a renda nasce com ele marcado.
+   Recebe: id — o id da recorrência a confirmar; o (opcional) — as respostas
+   já dadas: {dia — o dia AAAA-MM-DD em que entrou (sem ele, hoje); recibo —
+   true para marcar o recibo eletrónico; duas — o mês anterior já
+   respondido; ret — a retenção aceite ({amount, retencao}) ou false;
+   abaixo — a renda do contrato aceite ({amount, retencao}) ou false}; um
+   texto em vez do objeto é o dia (a forma de antes).
    Devolve: nada — regista o movimento, grava e redesenha (ou abre a pergunta). */
-function quickConfirmRec(id,dia){
+function quickConfirmRec(id,o){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
-  dia=/^\d{4}-\d{2}-\d{2}$/.test(String(dia||''))?String(dia):'';
+  o=typeof o==='string'?{dia:o}:o&&typeof o==='object'?o:{};
+  const dia=/^\d{4}-\d{2}-\d{2}$/.test(String(o.dia||''))?String(o.dia):'';
   const recusa=recusaConfirmar(r);if(recusa)return toast(recusa);
   if(recDepoisDaVenda(r,r.next))return toast('O imóvel foi vendido a '+dPT(recVendidoEm(r))+': o planeado já não pede nada depois disso.');
   const sus=recSuspensaPeloInquilino(r,r.next);if(sus)return toast(recFraseDoInquilino(sus));
@@ -1001,48 +1137,240 @@ function quickConfirmRec(id,dia){
     const mes=r.next;recAdvance(r);save();buildNav();render();
     return toast('Já havia a renda deste contrato de '+mesPt(mes)+' — o planeado saltou para o seguinte.');
   }
-  /* a renda de dezembro confirmada em janeiro: o ano do IRS é o do dia em que
-     entrou, e esse pergunta-se. Abre depois de quem chamou acabar: o «Pede
-     atenção» refaz a janela dele a seguir ao Confirmar (notificacoes.js), e a
-     pergunta tem de ficar por cima */
-  if(!dia&&recPedeODia(r)){setTimeout(()=>recPerguntarDia(id),0);return}
+  /* depois de um pagamento parcial, o que entra é o resto da renda, e não ela
+     outra vez (D115): as perguntas de baixo não são para ele */
+  const resto=recRestoDaRenda(r);
+  /* As perguntas abrem depois de quem chamou acabar: o «Pede atenção» refaz
+     a janela dele a seguir ao Confirmar (notificacoes.js), e a pergunta tem
+     de ficar por cima */
+  if(!resto&&!o.duas){const d=recDuasRendasAntes(r);if(d){setTimeout(()=>recPerguntarDuas(id,o,d),0);return}}
+  if(!resto&&o.ret===undefined){const p=recRetencaoProposta(r);if(p){setTimeout(()=>recPerguntarRetencao(id,o,p),0);return}}
+  /* o que entra: o resto, a retenção aceite, a renda do contrato aceite, ou o planeado */
+  const v=resto?{amount:resto.amount,retencao:resto.retencao}:o.abaixo?o.abaixo:o.ret?o.ret:null;
+  if(!resto&&o.abaixo===undefined){
+    const a=recAbaixoDoContrato(r,v||{amount:r.tx.amount,retencao:r.tx.retencao});
+    if(a){setTimeout(()=>recPerguntarAbaixo(id,o,a),0);return}
+  }
+  /* a renda de dezembro confirmada em janeiro (ou a de janeiro, que pode ter
+     entrado em dezembro): o ano do IRS é o do dia em que entrou, e esse
+     pergunta-se; as respostas de cima esperam por ele (recRespostas) */
+  if(!dia&&recPedeODia(r)){recRespostas={id,o};setTimeout(()=>recPerguntarDia(id),0);return}
   /* um planeado de um grupo ou de «Todos os imóveis» entra partido por imóvel,
      como pelo formulário (movimento.js:registarMolde); o que não se parte
      (um grupo sem imóveis) não avança o planeado */
   const mol=recTx(r,dia||today()),periodo=recPeriodo(r);if(periodo)mol.periodo=periodo;
-  /* depois de um pagamento parcial, o que entra é o resto da renda, e não ela outra vez (D115) */
-  const resto=recRestoDaRenda(r);if(resto){mol.amount=resto.amount;mol.retencao=resto.retencao}
+  if(v){mol.amount=v.amount;mol.retencao=v.retencao}
+  /* o «Confirmar e emiti o recibo» (D8): só onde a renda o pede */
+  if(o.recibo&&recPedeRecibo(r,dia||today()))mol.recibo=true;
   const reg=registarMolde(mol);if(reg.erro)return toast(reg.erro);
   reg.partes.forEach(t=>{if(t.kind==='loan')applyLoan(t);db.transactions.push(t)});
   /* o movimento nasce aqui: o «Ver» abre a ficha dele (de vários imóveis, a primeira parte, que a ficha lê como o lote) */
   const nid=reg.partes[0].id;
-  recAdvance(r);save();buildNav();render();avisoComVer('Movimento confirmado.','transactions',()=>chamarServico('transactions','txView',nid));
+  recAdvance(r);save();buildNav();render();
+  avisoComVer(mol.recibo?'Renda confirmada, com o recibo eletrónico emitido.':'Movimento confirmado.','transactions',()=>chamarServico('transactions','txView',nid));
+}
+/* As respostas de um Confirmar que espera pela pergunta do dia (a última):
+   {id, o} — o planeado e o que já se respondeu (quickConfirmRec, confirmRec).
+   O «Confirmar» da folha do dia (recConfirmarNoDia) leva-as consigo; um
+   Confirmar novo de outro planeado substitui-as. null sem nenhum à espera. */
+let recRespostas=null;
+/* O «Confirmar e emiti o recibo» do Confirmar da renda (D8, maqueta 4): o
+   mesmo Confirmar, com o recibo eletrónico marcado na renda que nasce — num
+   toque, sem abrir o formulário e o «Editar» da renda depois (N062). As
+   perguntas do quickConfirmRec seguem como no Confirmar.
+   Recebe: id — o id do planeado.
+   Devolve: nada — confirma (ou abre a pergunta). */
+function recConfirmarComRecibo(id){quickConfirmRec(id,{recibo:true})}
+/* O Confirmar deste planeado cria uma renda que pede o recibo de renda
+   eletrónico? Uma receita de um contrato com o papel que o pede
+   (prazos.js:PZ_PAPEIS_RECIBO: a renda, a caução e as outras receitas
+   prediais da natureza 02; nunca a caução de um
+   direito real de habitação duradoura, pzCaucaoDoDhd), num contrato cujas
+   rendas o pedem (prazos.js:pzPedeRecibo: declarado, fora da categoria B e do
+   arrendamento rural, num imóvel em Portugal), sem a dispensa dos recibos no
+   ano do dia em que entra (irs-papeis.js:irsSituacao). É o que mostra o
+   «Confirmar e emiti o recibo» (D8) e o que o deixa marcar.
+   Recebe: r — o planeado; dia (opcional) — o dia AAAA-MM-DD da renda (hoje
+   por omissão).
+   Devolve: true ou false. */
+function recPedeRecibo(r,dia){
+  const t=(r&&r.tx)||{};
+  if(t.kind!=='income'||!t.contractId)return false;
+  const c=contract(t.contractId);if(!c)return false;
+  const d=/^\d{4}-\d{2}-\d{2}$/.test(String(dia||''))?String(dia):today();
+  const papel=irsReceitaDe(Object.assign({},t,{date:d})).papel;
+  if(PZ_PAPEIS_RECIBO.indexOf(papel)<0||pzCaucaoDoDhd(papel,c)||!pzPedeRecibo(c))return false;
+  return !irsSituacao(Number(d.slice(0,4))).dispensaRecibos;
+}
+/* O mês antes de outro.
+   Recebe: mes — 'AAAA-MM'.
+   Devolve: 'AAAA-MM'. */
+function recMesAnterior(mes){
+  const y=Number(String(mes).slice(0,4)),m=Number(String(mes).slice(5,7));
+  return m>1?y+'-'+String(m-1).padStart(2,'0'):(y-1)+'-12';
+}
+/* O mês antes do da renda deste planeado tem duas rendas do contrato, e a
+   segunda pode ser a deste mês, paga antes do dia (N146): a de dezembro paga
+   a 28/11 e registada pelo «+» com o mês da data ficou como a segunda de
+   novembro, e o planeado volta a pedir dezembro — quem a confirmava por
+   hábito registava uma renda que não recebeu. Só com duas ou mais rendas
+   inteiras (sem as pagas só em parte) que juntas passam de uma renda e meia
+   do planeado, e só quando posso alterar a mais recente.
+   Recebe: r — o planeado.
+   Devolve: {mes, t, n} — o mês anterior, a renda mais recente dele e quantas
+   tem —, ou null. */
+function recDuasRendasAntes(r){
+  const tx=(r&&r.tx)||{},mes=recPeriodo(r);
+  if(tx.kind!=='income'||!tx.contractId||!mes)return null;
+  const c=contract(tx.contractId);if(!c)return null;
+  const ant=recMesAnterior(mes);
+  const rs=(db.transactions||[]).filter(x=>x&&x.contractId===c.id&&ehRenda(x)&&!x.parcial&&mesDaRenda(x)===ant)
+    .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+  if(rs.length<2)return null;
+  const bruto=r2((Number(tx.amount)||0)+(Number(tx.retencao)||0));
+  if(bruto>0&&sum(rs.map(rendaBruta))<bruto*1.5)return null;
+  const t=rs[rs.length-1];
+  return podeEditar(t.propertyId,'tx.add',t)?{mes:ant,t,n:rs.length}:null;
+}
+/* A pergunta do mês anterior com duas rendas (recDuasRendasAntes): a mais
+   recente é a deste mês — passa a ser dela, e não se regista outra
+   (recEraDesteMes) — ou regista-se esta (o Confirmar segue).
+   Recebe: id — o id do planeado; o — as respostas já dadas; d — o que o
+   recDuasRendasAntes devolveu.
+   Devolve: nada — abre a folha. */
+function recPerguntarDuas(id,o,d){
+  const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
+  const este=pzMes(recPeriodo(r)),antes=pzMes(d.mes),quando=dPT(d.t.date);
+  pickModal(antes.charAt(0).toUpperCase()+antes.slice(1)+' tem '+d.n+' rendas deste contrato',[
+    {v:'era',label:'A de '+quando+' é a de '+este,icon:'check',sub:'Passa a ser a renda de '+este+', e não se regista outra.'},
+    {v:'nova',label:'Registar a renda de '+este,icon:'plus',sub:'As '+d.n+' são de '+antes+', e a de '+este+' entrou agora.'}],
+    x=>{closeModal();if(x&&x.v==='era')recEraDesteMes(id,d.t.id);else quickConfirmRec(id,Object.assign({},o,{duas:true}));recRefazAtencao()},
+    `<div class="hint u-fs-14px">A renda de ${esc(este)} pode já ter entrado: a de ${quando} (${euro2(rendaBruta(d.t))}) ficou como renda de ${esc(antes)}.</div>`);
+}
+/* «É a deste mês», na pergunta das duas rendas: a renda mais recente do mês
+   anterior passa a ser a do mês do planeado (o periodo), o planeado passa à
+   seguinte sem registar nada, com Anular.
+   Recebe: id — o id do planeado; tid — o id da renda.
+   Devolve: nada — grava e redesenha. */
+function recEraDesteMes(id,tid){
+  const r=(db.recurring||[]).find(x=>x.id===id),t=(db.transactions||[]).find(x=>x.id===tid);
+  if(!r||!t)return;
+  const mes=recPeriodo(r),antesT=t.periodo||'',antesR=JSON.parse(JSON.stringify(r));
+  t.periodo=mes;
+  recAdvance(r);save();buildNav();render();
+  comDesfazer('A renda de '+dPT(t.date)+' passou a ser a de '+pzMes(mes)+'.',()=>{
+    const x=(db.transactions||[]).find(y=>y.id===tid);if(x)x.periodo=antesT;
+    const i=(db.recurring||[]).findIndex(y=>y.id===id);
+    if(i>-1)db.recurring[i]=antesR;else{db.recurring=db.recurring||[];db.recurring.push(antesR)}
+  });
+}
+/* A pergunta da retenção (recRetencaoProposta): a renda anterior teve o
+   retido na fonte e o planeado não o tem. «Também teve» regista a renda com a
+   mesma taxa e leva-a ao planeado (para não voltar a perguntar); «Não teve»
+   regista o planeado como está.
+   Recebe: id — o id do planeado; o — as respostas já dadas; p — a proposta.
+   Devolve: nada — abre a folha. */
+function recPerguntarRetencao(id,o,p){
+  const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
+  const base=r2(Number(r.tx.amount)||0),ant=pzMes(p.mes);
+  pickModal('A renda de '+ant+' teve retenção na fonte',[
+    {v:'sim',label:'Também teve: '+euro2(p.amount)+' e '+euro2(p.retencao)+' retidos',icon:'check',sub:'O planeado passa a pedir a renda com a retenção.'},
+    {v:'nao',label:'Não teve: '+euro2(base),icon:'x',sub:'Regista o que o planeado diz, sem retenção.'}],
+    x=>{
+      closeModal();
+      if(x&&x.v==='sim'){
+        const rr=(db.recurring||[]).find(y=>y.id===id);
+        if(rr&&rr.tx&&podeEditar((rr.tx||{}).propertyId,'rec.add',rr)){rr.tx.amount=p.amount;rr.tx.retencao=p.retencao}
+        quickConfirmRec(id,Object.assign({},o,{ret:{amount:p.amount,retencao:p.retencao}}));
+      }else quickConfirmRec(id,Object.assign({},o,{ret:false}));
+      recRefazAtencao();
+    },
+    `<div class="hint u-fs-14px">Em ${esc(ant)}, o inquilino reteve ${euro2(p.retAntes)} de ${euro2(p.brutaAntes)} e entregou-os à AT por ti (vêm no recibo). O IRS conta a renda inteira, e o retido vai às Retenções na fonte. E esta renda?</div>`);
+}
+/* O planeado de uma renda está abaixo da renda do contrato (N080)? Quem
+   escreve no planeado o que a gestora transfere (950 € numa renda de
+   1 000 €) confirmava doze meses sem pergunta, e a Declaração ficava com a
+   renda líquida. Só numa renda de contrato do mês corrente ou do anterior —
+   onde o formulário (movimento.js:txRendaAbaixo) também compara com a renda
+   do contrato —, e só quando ela se sabe (recRendaDoContrato).
+   Recebe: r — o planeado; v — o que se vai registar ({amount, retencao}).
+   Devolve: {renda, bruto} — a renda do contrato e a do planeado —, ou null. */
+function recAbaixoDoContrato(r,v){
+  const t=(r&&r.tx)||{},mes=recPeriodo(r);
+  if(t.kind!=='income'||!t.contractId||!mes)return null;
+  const c=contract(t.contractId);
+  if(!c||irsReceitaDe(Object.assign({},t,{date:r.next})).papel!=='renda')return null;
+  const hoje=today().slice(0,7);
+  if(mes>hoje||mes<recMesAnterior(hoje))return null;
+  const renda=recRendaDoContrato(c,mes),bruto=r2((Number((v||{}).amount)||0)+(Number((v||{}).retencao)||0));
+  return renda>0&&bruto>0&&renda-bruto>0.005?{renda,bruto}:null;
+}
+/* A pergunta do planeado abaixo da renda do contrato (recAbaixoDoContrato):
+   «A renda é a do contrato» regista-a (com a retenção na mesma proporção) e
+   o planeado passa a pedi-la; «Entraram X» abre a renda no formulário, cujo
+   Guardar pergunta porquê — pagamento parcial, comissão da gestora, retenção
+   ou outro desconto (movimento.js:txPerguntarRendaAbaixo).
+   Recebe: id — o id do planeado; o — as respostas já dadas; a — o que o
+   recAbaixoDoContrato devolveu.
+   Devolve: nada — abre a folha. */
+function recPerguntarAbaixo(id,o,a){
+  const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
+  const v=o.ret?o.ret:{amount:r2(Number(r.tx.amount)||0),retencao:r2(Number(r.tx.retencao)||0)};
+  const ret=v.retencao>0?r2(v.retencao*a.renda/a.bruto):0,cheia={amount:r2(a.renda-ret),retencao:ret};
+  const c=contract(r.tx.contractId);
+  pickModal('O planeado está abaixo da renda do contrato',[
+    {v:'inteira',label:'A renda é a do contrato: '+euro2(a.renda),icon:'check',sub:'Regista-a, e o planeado passa a pedir esta renda.'},
+    {v:'menos',label:'Entraram '+euro2(v.amount),icon:'pen',sub:'Abre a renda para dizeres porquê: pagamento parcial, comissão da gestora, retenção ou outro desconto.'}],
+    x=>{
+      closeModal();
+      if(x&&x.v==='inteira'){
+        const rr=(db.recurring||[]).find(y=>y.id===id);
+        if(rr&&rr.tx&&podeEditar((rr.tx||{}).propertyId,'rec.add',rr)){rr.tx.amount=cheia.amount;rr.tx.retencao=cheia.retencao}
+        quickConfirmRec(id,Object.assign({},o,{abaixo:cheia}));
+      }else if(x)confirmRec(id,Object.assign({},o,{valores:v}));
+      recRefazAtencao();
+    },
+    `<div class="hint u-fs-14px">A renda do contrato ${esc(ctName(c))} é ${euro2(a.renda)}, e este planeado regista ${euro2(a.bruto)}. O IRS conta a renda do recibo, antes da comissão da gestora e de descontos, que se registam à parte, como despesa.</div>`);
+}
+/* Depois de uma resposta às perguntas do Confirmar, o «Pede atenção» de
+   baixo refaz-se, como depois do Confirmar dele: a linha com o mês já
+   confirmado confirmava outro ao segundo toque.
+   Devolve: nada. */
+function recRefazAtencao(){
+  const top=modalTop();
+  if(top&&top.title==='Pede atenção')notifModal(_atencaoFiltro);
 }
 /* O «Confirmar» de uma renda pergunta o dia em que entrou? Só numa renda (o
    papel da Declaração, irs-papeis.js:irsReceitaDe: a renda e a caução, que
    contam no ano em que se recebem) cujo dia previsto (r.next) é de outro ano
    que hoje: a de dezembro confirmada em janeiro entrou em dezembro ou em
-   janeiro, e cada um é a Declaração de um ano diferente. No mesmo ano a data
-   de hoje serve (o ano do IRS é o mesmo). As prestações e as despesas não
-   perguntam (decisão do Martinho, D22).
+   janeiro, e cada um é a Declaração de um ano diferente (D22, decisão do
+   Martinho). E na renda de janeiro confirmada em janeiro (N146): paga antes
+   do dia — o regime supletivo do Código Civil (art. 1075.º n.º 2) vence-a no
+   1.º dia útil do mês anterior —, pode ter entrado ainda em dezembro, e é do
+   IRS desse ano. Nos outros meses do mesmo ano a data de hoje serve (o ano do
+   IRS é o mesmo). As prestações e as despesas não perguntam.
    Recebe: r — o planeado.
    Devolve: true ou false. */
 function recPedeODia(r){
-  const t=(r&&r.tx)||{},n=String((r&&r.next)||'');
-  if(t.kind!=='income'||!/^\d{4}-\d{2}-\d{2}$/.test(n)||n.slice(0,4)===today().slice(0,4))return false;
+  const t=(r&&r.tx)||{},n=String((r&&r.next)||''),h=today();
+  if(t.kind!=='income'||!/^\d{4}-\d{2}-\d{2}$/.test(n))return false;
+  if(n.slice(0,4)===h.slice(0,4)&&n.slice(5,7)!=='01')return false;
   const papel=irsReceitaDe(Object.assign({},t,{date:n})).papel;
   return papel==='renda'||papel==='caucao';
 }
 /* A pergunta do dia em que a renda entrou (recPedeODia): uma folha só com o
    dia, por preencher — é ele que decide o ano da Declaração, e um valor já
    escrito confirmava-se sem ninguém o ler. O mês a que respeita fica o
-   previsto (recPeriodo).
+   previsto (recPeriodo). Na renda de janeiro do ano de hoje, diz que a que
+   entrou ainda em dezembro é do IRS do ano anterior.
    Recebe: id — o id do planeado.
    Devolve: nada — abre a folha. */
 function recPerguntarDia(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
+  const n=String(r.next||''),janeiro=n.slice(0,4)===today().slice(0,4);
   openModal('Em que dia entrou?',
-    `<div class="form"><div class="hint u-fs-14px"><b>${esc(r.name)}</b>, prevista para ${dPT(r.next)}, conta no IRS do ano em que a recebeste, e não no do mês a que respeita. Indica o dia em que entrou.</div>
+    `<div class="form"><div class="hint u-fs-14px"><b>${esc(r.name)}</b>, prevista para ${dPT(r.next)}, conta no IRS do ano em que a recebeste, e não no do mês a que respeita${janeiro?': se entrou ainda em dezembro, é do IRS de '+(Number(n.slice(0,4))-1):''}. Indica o dia em que entrou.</div>
     <label>Dia em que entrou <span class="req">*</span><input id="rec_dia" type="date" value="" max="${today()}"></label>
     <div class="hint u-mt-n6px">O mês a que respeita fica o da renda prevista, ${esc(mesPt(r.next))}.</div></div>`,
     `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button>`+
@@ -1050,9 +1378,10 @@ function recPerguntarDia(id){
 }
 /* O «Confirmar» da pergunta do dia (recPerguntarDia): o dia é obrigatório,
    não passa de hoje nem fica antes da compra da casa (a regra do formulário
-   do movimento); fecha a folha e confirma com esse dia (quickConfirmRec). O
-   «Pede atenção» de baixo refaz-se, como depois do Confirmar dele: a linha
-   com o mês já confirmado confirmava outro ao segundo toque.
+   do movimento); fecha a folha e segue com esse dia e as respostas que
+   esperavam por ele (recRespostas): o Confirmar (quickConfirmRec) ou, vindo
+   do «Rever» e do «Confirmar» da ficha, o formulário com esse dia
+   (confirmRec). O «Pede atenção» de baixo refaz-se (recRefazAtencao).
    Recebe: id — o id do planeado.
    Devolve: nada — confirma, ou diz o erro junto ao campo. */
 function recConfirmarNoDia(id){
@@ -1061,10 +1390,11 @@ function recConfirmarNoDia(id){
   if(dia>today())return falhaCampo('rec_dia','O dia em que entrou não pode ser depois de hoje.');
   const r=(db.recurring||[]).find(x=>x.id===id),compra=r?compraDaCasa((r.tx||{}).propertyId):'';
   if(compra&&dia<compra)return falhaCampo('rec_dia','O imóvel foi comprado a '+dPT(compra)+': uma receita não pode ser de antes.');
+  const o=Object.assign({},recRespostas&&recRespostas.id===id?recRespostas.o:{},{dia});
+  recRespostas=null;
   closeModal();
-  quickConfirmRec(id,dia);
-  const top=modalTop();
-  if(top&&top.title==='Pede atenção')notifModal(_atencaoFiltro);
+  if(o.rever)confirmRec(id,o);else quickConfirmRec(id,o);
+  recRefazAtencao();
 }
 // Silencia ou reativa a recorrência: silenciada fica em Planeados à espera de
 // confirmação, mas sem avisos nem contagem no menu. Grava e redesenha.
@@ -1095,18 +1425,36 @@ function recusaConfirmar(r){
    formulário tirava-o da data de hoje (movimento.js:prefill). Num mês pago
    só em parte, o montante e a retenção são o resto (recRestoDaRenda); o
    encargo que o inquilino paga não abre (recSuspensaPeloInquilino).
-   Recebe: id — o id da recorrência a confirmar.
-   Devolve: nada — abre o formulário do movimento em modo de confirmação. */
-function confirmRec(id){
+   É o «Rever», o «Confirmar» da ficha do planeado (recView) e o toque no
+   «Por confirmar» da ficha do imóvel. Numa renda que pede o dia em que
+   entrou (recPedeODia: a de dezembro em janeiro, a de janeiro), pergunta-o
+   primeiro, como o Confirmar (N026): o formulário abria com o dia de hoje, e
+   a renda de dezembro guardada assim ia à Declaração do ano seguinte; abre
+   depois com o dia dito, e o Guardar não volta a perguntar enquanto a data
+   for essa (movimento.js, txModo.diaPerguntado). Com a renda anterior a ter o
+   retido na fonte e o planeado sem ele, abre já com a retenção
+   (recRetencaoProposta, N081), que se vê e se corrige no campo.
+   Recebe: id — o id da recorrência a confirmar; o (opcional) — as respostas
+   do Confirmar ({dia, recibo, ret, valores: o montante e a retenção com que
+   abre}).
+   Devolve: nada — abre o formulário do movimento em modo de confirmação (ou a pergunta do dia). */
+function confirmRec(id,o){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
+  o=typeof o==='string'?{dia:o}:o&&typeof o==='object'?o:{};
+  const dia=/^\d{4}-\d{2}-\d{2}$/.test(String(o.dia||''))?String(o.dia):'';
   const recusa=recusaConfirmar(r);if(recusa)return toast(recusa);
   if(recDepoisDaVenda(r,r.next))return toast('O imóvel foi vendido a '+dPT(recVendidoEm(r))+': o planeado já não pede nada depois disso.');
   const sus=recSuspensaPeloInquilino(r,r.next);if(sus)return toast(recFraseDoInquilino(sus));
-  const preset=Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:today(),label:r.tx.label||r.name});
+  if(!dia&&recPedeODia(r)){recRespostas={id,o:Object.assign({},o,{rever:true})};setTimeout(()=>recPerguntarDia(id),0);return}
+  const preset=Object.assign({},JSON.parse(JSON.stringify(r.tx)),{date:dia||today(),label:r.tx.label||r.name});
   const periodo=recPeriodo(r);if(periodo)preset.periodo=periodo;
   /* depois de um pagamento parcial, o formulário abre com o resto (D115) */
-  const resto=recRestoDaRenda(r);if(resto){preset.amount=resto.amount;preset.retencao=resto.retencao}
-  txModal({kind:r.tx.kind,propId:r.tx.propertyId,ctId:r.tx.contractId,preset,modo:'confirmar',recId:id});
+  const resto=recRestoDaRenda(r);
+  if(resto){preset.amount=resto.amount;preset.retencao=resto.retencao}
+  else if(o.valores){preset.amount=o.valores.amount;preset.retencao=o.valores.retencao}
+  else{const p=o.ret===false?null:o.ret||recRetencaoProposta(r);if(p){preset.amount=p.amount;preset.retencao=p.retencao}}
+  if(o.recibo&&recPedeRecibo(r,dia||today()))preset.recibo=true;
+  txModal({kind:r.tx.kind,propId:r.tx.propertyId,ctId:r.tx.contractId,preset,modo:'confirmar',recId:id,diaPerguntado:dia});
 }
 /* Onde fica o movimento de um molde (um planeado ou um modelo), na ficha e no
    cartão: o imóvel; o grupo; «Todos os imóveis» num molde de todos os imóveis
@@ -1188,6 +1536,8 @@ function recView(id){
     menu:()=>{const x=(db.recurring||[]).find(y=>y.id===id);if(!x)return '';
       const it=[];
       if(podeConf)it.push({label:'Confirmar sem rever',icon:'check',toca:'dados',act:`quickConfirmRec('${jsq(id)}')`});
+      /* o «Confirmar e emiti o recibo» (D8), sem rever, na renda que o pede */
+      if(podeConf&&recPedeRecibo(x))it.push({label:'Confirmar e emiti o recibo',icon:'check',toca:'dados',act:`recConfirmarComRecibo('${jsq(id)}')`});
       if(podeEditar(hid,'rec.add',x,'confirmar'))it.push({label:x.muted?'Reativar avisos':'Silenciar',icon:'clock',toca:'dados',act:`skipRec('${jsq(id)}')`});
       if(podeConf&&podeEd)it.push({label:'Editar',icon:'pen',toca:'camada',act:`editRec('${jsq(id)}')`});
       if(podeEditar(hid,'rec.add',x,true))it.push({label:'Apagar',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delRec('${jsq(id)}')`});
@@ -1553,6 +1903,8 @@ function pendLinha(r){
   const ok=podeEditar(t.propertyId,'rec.add',r,'confirmar'),recusa=recusaConfirmar(r),conf=!recusa&&!semCred&&!pago;
   const id=jsq(r.id),onde=imovelDoMolde(t),itens=pendMenuItens(r,ok,!recusa);
   const acoes=(conf?`<button type="button" class="btn sm primary" data-toca="dados" data-click="quickConfirmRec('${id}')">${ic('check',16)} Confirmar</button>`:'')
+    /* a renda de um contrato que pede o recibo eletrónico: o segundo botão (D8, maqueta 4) */
+    +(conf&&recPedeRecibo(r)?`<button type="button" class="btn sm" data-toca="dados" data-click="recConfirmarComRecibo('${id}')">Confirmar e emiti o recibo</button>`:'')
     +(recusa?'':`<button type="button" class="btn sm" data-toca="camada" data-click="confirmRec('${id}')">Rever</button>`)
     +(itens.length?menu('pend_'+r.id,itens):'');
   return `<div class="plan-pend-linha" data-fk="rec:${esc(r.id)}">
@@ -1866,7 +2218,10 @@ function recCracha(){
 function lpPlaneado(a){
   const id=a[1],r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
   const hid=(r.tx||{}).propertyId,conf=podeEditar(hid,'rec.add',r,'confirmar'),edita=podeEditar(hid,'rec.add',r),opts=[];
-  if(recPorConfirmar(r)&&!recusaConfirmar(r))opts.push({label:'Confirmar',icon:'check',act:()=>quickConfirmRec(id)});
+  if(recPorConfirmar(r)&&!recusaConfirmar(r)){
+    opts.push({label:'Confirmar',icon:'check',act:()=>quickConfirmRec(id)});
+    if(recPedeRecibo(r))opts.push({label:'Confirmar e emiti o recibo',icon:'check',act:()=>recConfirmarComRecibo(id)});
+  }
   if(conf)opts.push({label:r.muted?'Reativar avisos':'Silenciar',icon:'clock',act:()=>skipRec(id)});
   lpExtrasDe('rec',a).forEach(o=>opts.push(o));
   if(edita)opts.push({label:'Editar',icon:'pen',act:()=>editRec(id)},{label:'Apagar',icon:'trash',act:()=>delRec(id)});

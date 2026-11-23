@@ -375,8 +375,9 @@ describe('a conjunta sem o cônjuge e o AIMI do quadro 9 (D30, D32, D71)', () =>
   test('a conjunta ligada sem o cônjuge escolhido é uma falta: só entram as tuas rendas', () => {
     // sem ninguém para escolher (D5, N020): diz o que fazer, em vez de mandar escolher
     const texto = 'Tributação conjunta sem o cônjuge na app: só entram as tuas rendas. Os imóveis do teu cônjuge que não estão na app inserem-se à mão no Portal das Finanças, '
-      + 'e uma casa que é um bem comum do casal conta-se com o cônjuge escrito na ficha como dono fora da app e «Os bens são comuns do casal» ligado em «A tua situação em 2026».';
-    assert.deepEqual(avisos(resumo([], { semConjuge: true }), /conjunta/), [{ texto, abrir: '', toca: '', nivel: 'falta' }]);
+      + 'e uma casa que é um bem comum do casal conta-se com o cônjuge escrito na ficha como dono fora da app e «Os bens são comuns do casal» ligado em «A tua situação fiscal em 2026».';
+    // o toque abre o cartão da situação, que fica fechado depois dos quadros (D8, maqueta 6)
+    assert.deepEqual(avisos(resumo([], { semConjuge: true }), /conjunta/), [{ texto, abrir: 'fiscoSitAbrir()', toca: 'nada', nivel: 'falta' }]);
     assert.equal(avisos(resumo([], { semConjuge: false }), /conjunta/).length, 0);
     // sem o campo no resumo, pergunta-se aos titulares de quem declara
     app.db.owners.push(app.normPerson({ id: 'o2', name: 'Rui' }));
@@ -384,7 +385,9 @@ describe('a conjunta sem o cônjuge e o AIMI do quadro 9 (D30, D32, D71)', () =>
     assert.equal(app.fiscoTitulares('o1', 2026).semConjuge, true, 'a forma dos titulares');
     const comQuem = avisos(resumo([], { titularId: 'o1' }), /conjunta/);
     assert.equal(comQuem.length, 1);
-    assert.match(comQuem[0].texto, /^Tributação conjunta sem o cônjuge escolhido: só entram as tuas rendas\. Se o teu cônjuge tem conta na app, escolhe-o em «A tua situação em 2026»; se não tem, /);
+    assert.match(comQuem[0].texto, /^Tributação conjunta sem o cônjuge escolhido: só entram as tuas rendas\. Se o teu cônjuge tem conta na app, escolhe-o em «A tua situação fiscal em 2026»; se não tem, /);
+    assert.equal(comQuem[0].abrir, 'fiscoSitAbrir()');
+    assert.equal(comQuem[0].abrirTexto, 'Escolher o cônjuge');
     app.db.settings.irs.porAno = { 2026: { conjunta: true, conjugeId: 'o2', minhaLetra: 'A' } };
     app.db.properties[0].ownerIds = ['o1', 'o2'];
     assert.equal(avisos(resumo([], { titularId: 'o1' }), /conjunta/).length, 0, 'com o cônjuge escolhido');
@@ -396,7 +399,7 @@ describe('a conjunta sem o cônjuge e o AIMI do quadro 9 (D30, D32, D71)', () =>
       abrir: "txView('x1')", toca: 'camada', nivel: 'aviso' }]);
     const dois = avisos(resumo([], { aimi: { semPagador: [{ txId: 'x1', imovel: 'A', valor: 700 }, { txId: 'x2', imovel: 'B', valor: 300 }] } }), /AIMI/);
     assert.ok(dois[0].texto.startsWith('2 pagamentos do AIMI (' + app.euroS(1000) + ') sem quem os pagou: contaram inteiros na tua declaração'), dois[0].texto);
-    assert.equal(dois[0].abrir, "go('transactions')");
+    assert.equal(dois[0].abrir, "goMovimentos('2026','','impostos/aimi','expense','')", 'N134: os Movimentos filtrados pelo AIMI');
     const af = avisos(resumo([], { aimi: { afetacaoPorConfirmar: [{ propertyId: 'p1', imovel: 'T2 Arroios' }] } }), /afetação/);
     assert.deepEqual(af, [{ texto: 'Imóvel T2 Arroios: sem a afetação da caderneta, e com um contrato não habitacional — o quadro 9 (AIMI) conta-o, mas um prédio de comércio, serviços ou indústria não entra. Escreve a afetação na ficha do imóvel',
       abrir: "propView('p1')", toca: 'camada', nivel: 'aviso' }]);

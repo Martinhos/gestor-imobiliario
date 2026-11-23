@@ -58,6 +58,41 @@ const dPT=iso=>{const t=String(iso||'').slice(0,10);
    Devolve: o texto, ex.: «123 456 789». */
 const fmtNIF=v=>{const t=String(v||'').replace(/\D/g,'');
   return t.length===9?t.replace(/(\d{3})(\d{3})(\d{3})/,'$1 $2 $3'):String(v||'')};
+/* Um NIF como se copia para o Portal das Finanças: os nove algarismos
+   seguidos, sem espaços (o campo do Portal tem nove casas, e um «123 456 789»
+   colado corta-se em «123 456 7»). O que não tiver nove algarismos fica como
+   foi escrito, aparado — para se ver o erro.
+   Recebe: v — o NIF (texto ou número; aguenta vazio).
+   Devolve: o texto, ex.: «123456789». */
+const nifCopia=v=>{const t=String(v??'').replace(/\D/g,'');return t.length===9?t:String(v??'').trim()};
+/* Um valor em euros como se copia para um campo do Portal: duas casas com a
+   vírgula, sem o separador dos milhares nem o €, e o hífen-menos de teclado
+   nos negativos (o sinal tipográfico do money não se cola num campo de
+   número).
+   Recebe: v — o valor em euros (número, ou texto convertível; o que não for
+   número conta como 0).
+   Devolve: o texto, ex.: «18750,00», «-50,00». */
+const euroCopia=v=>{const n=Number(v)||0;return (n<0?'-':'')+Math.abs(n).toFixed(2).replace('.',',')};
+/* O HTML de um valor que se lê com o formato da app e se copia limpo para o
+   Portal: um valor em euros do money (com ou sem cêntimos) e um NIF do fmtNIF
+   ficam com os algarismos e a vírgula no texto, e os separadores — o espaço
+   fino dos milhares, os espaços do NIF e o « €» do fim — desenhados pelo CSS
+   (.cp-g::before e .cp-eur::after, no estilos.css), que o browser não copia:
+   copia-se «18750,00» e «123456789», e o toque longo no telemóvel apanha o
+   número inteiro. Um negativo leva o hífen-menos de teclado. Qualquer outro
+   texto sai só escapado (esc).
+   Recebe: texto — o valor como a app o escreve (euro2, euro, fmtNIF, ou
+   outro texto; nulo vale vazio).
+   Devolve: o HTML (string), ex.: «18<span class="cp-g">750</span>,00» dentro
+   de um <span class="cp-eur">. */
+function fmtCopiavel(texto){
+  const s=String(texto??''),g=x=>`<span class="cp-g">${x}</span>`;
+  const e=/^([−-]?)(\d{1,3})((?: \d{3})*)(?:,(\d+))? €$/.exec(s);
+  if(e)return `<span class="cp-eur">${e[1]?'-':''}${e[2]}${e[3].split(' ').filter(Boolean).map(g).join('')}${e[4]!=null?','+e[4]:''}</span>`;
+  const n=/^(\d{3}) (\d{3}) (\d{3})$/.exec(s);
+  if(n)return n[1]+g(n[2])+g(n[3]);
+  return esc(s);
+}
 /* O número do cartão de cidadão legível: os oito dígitos, um espaço e o resto
    (controlo e letras) em maiúsculas; o que não tiver essa forma fica como foi
    escrito.

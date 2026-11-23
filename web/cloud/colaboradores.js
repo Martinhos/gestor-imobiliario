@@ -518,7 +518,9 @@ function pedidoDoEstado(id) {
 }
 
 // Aceita um pedido de partilha (POST /api/share-requests/:id/accept): passo a
-// comproprietário do imóvel de quem pediu.
+// comproprietário do imóvel de quem pediu. Se o servidor fechou o período das
+// quotas com a minha entrada, abre-se a janela das quotas a perguntar desde
+// quando já era dono (partilha.js:abrirJanelasDaEntrada, N018).
 // Recebe: id — o id do pedido.
 // Devolve: nada — chama a API, avisa e sincroniza.
 CW.pedidoAceitar = function (id) {
@@ -529,7 +531,10 @@ CW.pedidoAceitar = function (id) {
         (p && p.fromName ? ', de ' + p.fromName : '') + '.', { ms: 5000 });
       return pullNow(true);
     })
-    .then(function () { render(); })
+    .then(function () {
+      render();
+      if (p && p.houseId) abrirJanelasDaEntrada([p.houseId], [meuId()]);
+    })
     .catch(function (e) { toast(e.message); });
 };
 

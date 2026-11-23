@@ -104,8 +104,8 @@ async function fecharQuotasDeUmaCasa(env, hid, eram, row, ficam, agora, quem) {
 }
 
 /* Depois de uma mudança que pode dar uma casa a mais alguém (partilhá-la
-   numa ligação; as outras portas — um grupo, um pedido de partilha aceite —
-   podem chamá-la da mesma maneira), fecha o período das quotas de cada casa
+   numa ligação, aceitar alguém num grupo, adicionar casas a um grupo, um
+   pedido de partilha aceite — grupos.js, colaboradores.js), fecha o período das quotas de cada casa
    que ganhou donos, na véspera (acesso.js:fecharQuotasNaEntrada, N018): o
    «antes» fica com os donos de então, e quem entrou não era dono nesses dias
    até a proposta seguinte dizer desde quando («desde sempre» tira o

@@ -36,8 +36,8 @@
    o imposto é a estimativa sem englobamento, à taxa de cada contrato.
 
    O que só o senhorio sabe vive nas definições, ano a ano
-   (db.settings.irs.porAno, «A tua situação fiscal em AAAA» no topo da
-   página, lida por irs-papeis.js:irsSituacao): a tributação conjunta, o
+   (db.settings.irs.porAno, «A tua situação fiscal em AAAA», numa linha
+   depois dos quadros, lida por irs-papeis.js:irsSituacao): a tributação conjunta, o
    cônjuge e a minha letra no Rosto (A ou B — sem conjunta é sempre A), a
    dispensa dos recibos eletrónicos (que obriga ao Modelo 44) e os números da
    demonstração do AIMI. O guia de como declarar, com o
@@ -53,18 +53,20 @@
    e a frase de quem é a declaração — a tua, sem seletor de proprietário
    (fiscoTitulares); a barra só com as ações da página (o guia de preenchimento,
    que é o público, e o botão de partilha com o CSV e o PDF); os cinco números
-   do ano; a grelha com «A tratar antes de entregar» (que diz também quando o
-   ano não tem versão própria das regras), «A tua situação fiscal» e os
-   prazos da AT; um cartão por quadro, o 4.1, o 4.2 e o 4.3 (o direito real
-   de habitação duradoura, D120), cada um com onde se preenche, o resumo dos
-   seus contratos e os campos de cada contrato (com o 4.2A, o 4.2B e o 4.2C
-   no do 4.2); o quadro 5 da sublocação (D52); os isentos do 6D, os
-   benefícios do 6A, do 6B e do 6C (D117, D121, D119), as obras dos 24 meses
-   (e as por confirmar), as rendas de anos anteriores, o AIMI do quadro 9, os
-   contratos que acabaram no quadro 10 (pela ordem do impresso: 8, 9, 10), o
+   do ano; «A tratar antes de entregar» (que diz também quando o ano não tem
+   versão própria das regras); um cartão por quadro, pela ordem do Anexo F
+   (a maqueta 6 do D8): o 4.1, o 4.2 e o 4.3 (o direito real de habitação
+   duradoura, D120), cada um com onde se preenche, o resumo dos seus
+   contratos e os campos de cada contrato (com o 4.2A, o 4.2B e o 4.2C no do
+   4.2); o quadro 5 da sublocação (D52); os benefícios do 6A, do 6B e do 6C
+   (D117, D121, D119) e os isentos do 6D, do 6F e do 6H, as obras dos 24
+   meses das linhas (e as por confirmar), as rendas de anos anteriores, o
+   AIMI do quadro 9, os contratos que acabaram no quadro 10 (8, 9, 10), o
    Anexo J dos imóveis fora de Portugal (D133), as rendas da categoria B fora
    do Anexo F (D134), o que ficou fora por escolha e as rendas sem contrato;
-   e, no fim, o aviso de responsabilidade (fiscoAvisoCard). Sem imóveis
+   depois «A tua situação fiscal» numa linha com «Mudar» (fiscoSituacaoCard),
+   os prazos da AT só quando há algum na janela de aviso (fisPrazosCard) e,
+   no fim, o aviso de responsabilidade (fiscoAvisoCard). Sem imóveis
    diz-o e aponta a saída; sem rendas no ano (nem nos quadros 4, nem no
    quadro 5, nem fora do Anexo F) e sem nada no quadro 10 (os contratos que
    acabaram no ano, r.cessados, e a regularização do n.º 20,
@@ -125,12 +127,18 @@ function vFisco(){
      1fr: um item de grelha não encolhe abaixo do seu conteúdo, e a tabela do
      resumo, mais larga do que o ecrã, alargava a página em vez de rolar
      dentro do .tablewrap. */
-  const Q=r.versao.quadros,q43=fiscoQuadroDhd(r);
+  /* A ordem da maqueta 6 (D8): os números, «A tratar», os quadros pela ordem
+     do Anexo F (4.1, 4.2, 4.3, 5, o 6 — 6A a 6C e depois 6D, 6F, 6H —, as
+     obras dos 24 meses das linhas, 8, 9, 10), o Anexo J, a categoria B e o
+     que fica fora; depois a situação fiscal numa linha com «Mudar», e os
+     prazos da AT só quando há algum na janela de aviso. */
+  const Q=r.versao.quadros,q43=fiscoQuadroDhd(r),prazos=fisPrazosLista();
   return panel+`<div class="ana fis">`+fisBarra()+fiscoKpis(r)
-    +`<div class="fis-grelha">`+fiscoObrigacoesCard(r)+fiscoSituacaoCard(r)+fisPrazosCard()+`</div>`
+    +`<div class="fis-grelha">`+fiscoObrigacoesCard(r,prazos.length>0)+`</div>`
     +`<div class="fiscoPilha u-d-grid u-gtc-minmax-0-1fr u-g-14px">`
-    +fiscoQuadroCard(r,Q.semReducao)+fiscoQuadroCard(r,Q.comReducao)+(q43?fiscoQuadroCard(r,q43):'')+fiscoQuadro5Card(r)+fiscoIsentosCard(r)+fiscoBeneficiosCard(r)+fiscoObrasCard(r)
+    +fiscoQuadroCard(r,Q.semReducao)+fiscoQuadroCard(r,Q.comReducao)+(q43?fiscoQuadroCard(r,q43):'')+fiscoQuadro5Card(r)+fiscoBeneficiosCard(r)+fiscoIsentosCard(r)+fiscoObrasCard(r)
     +fiscoAnosAnterioresCard(r)+fiscoAimiCard(r)+fiscoQuadro10Card(r)+fiscoAnexoJCard(r)+fiscoCategoriaBCard(r)+fiscoForaCard(r)+fiscoSemContratoCard(r)+fisNadaForaCard(r)+`</div>`
+    +fiscoSituacaoCard(r)+fisPrazosCard(prazos)
     +fiscoAvisoCard()+`</div>`;
 }
 /* Os contratos que estiveram em vigor no ano sem nenhuma renda registada
@@ -215,31 +223,32 @@ function fiscoPartilha(){
 }
 /* Os cinco números do ano à cabeça (a prancheta), em cartões com explicação
    ao toque: rendas ilíquidas, retenções na fonte, gastos dedutíveis (com as
-   obras dos 24 meses), o rendimento líquido (sem o dos contratos isentos, que
-   o rodapé diz) e o imposto estimado, em destaque — os totais dos quadros,
-   antes de os ler linha a linha. O imposto é o do resumo depois de abater os
-   prejuízos de anos anteriores que a app conhece (fiscoImpostoDoKpi: o
-   totais.impostoDepoisDoReporte, titular a titular, nunca negativo — Q10,
-   D73), com uma linha a dizer o prejuízo que abateu, de cada titular em
-   conjunta (fiscoReportePorTitular); o prejuízo deste ano diz-se de cada
-   titular, com a letra em conjunta (fisco-exportar.js:fiscoPrejuizos, o mesmo
-   do PDF e do texto, que lê o totais.porTitular). Com o AIMI no quadro 9, uma
-   linha diz o imposto depois do abate que o cartão dele estima (nunca mais do
-   que o imposto depois do reporte), sem mudar o número principal. Com um
-   contrato do 4.2 que acabou por motivo do senhorio (quadro 10, código 01),
-   a regularização das reduções soma-se à parte, numa linha, como estimativa
-   sem juros (totais.regularizacao, D10). A falta a pagar conta com os três.
-   As rendas ilíquidas são a renda do recibo, antes da retenção, da comissão
-   e de descontos (D112), e levam a caução do ano em que se recebe (D03), os
-   reembolsos do inquilino e as indemnizações, menos as rendas devolvidas; as
-   de um imóvel subarrendado (o quadro 5, D52) dizem-se numa linha à parte, e
-   o imposto e as retenções delas já estão nos do resumo. As do Anexo J e da
-   categoria B (D133, D134) também se dizem à parte, e não estão nos números
-   nem no imposto (fiscoKpiForaDoF). Com o 6B ou o 6C, o rendimento líquido
-   diz numa linha o que o imposto conta (fiscoKpiLiquidoDoImposto), e o
-   porquê do imposto diz os 5 % do 6A e do 4.3 (D118). A regularização de um
-   direito real de habitação duradoura cessado por acordo soma-se como a do
-   quadro 10, com o quadro 4.3 a dizê-lo (D120).
+   obras dos 24 meses), o rendimento líquido (sem o dos isentos, que o rodapé
+   diz) e o imposto estimado, em destaque. O imposto é o do resumo depois dos
+   prejuízos de anos anteriores que a app conhece (fiscoImpostoDoKpi, Q10,
+   D73), com a linha «depois dos prejuízos de anos anteriores: −4 000 € ao
+   rendimento (−760 € de imposto)», de cada titular em conjunta
+   (fiscoReportePorTitular) — o par de nomes das exportações (N123); o
+   prejuízo deste ano diz-se de cada titular (fisco-exportar.js:
+   fiscoPrejuizos). Com o AIMI no quadro 9, uma linha diz o imposto depois do
+   abate (nunca mais do que o de depois do reporte); com a regularização do
+   quadro 10 (código 01, D10) ou de um direito real de habitação duradoura
+   cessado por acordo (o 4.3, D120), uma linha soma-a à parte, estimativa sem
+   juros. A falta a pagar conta com os três. As rendas ilíquidas são a renda
+   do recibo, antes da retenção, da comissão e de descontos (D112), com a
+   caução do ano em que se recebe (D03), os reembolsos e as indemnizações,
+   menos as devolvidas; as do quadro 5 (D52), do Anexo J e da categoria B
+   (D133, D134, fiscoKpiForaDoF) dizem-se à parte. Com o 6B ou o 6C, o
+   líquido diz o que o imposto conta (fiscoKpiLiquidoDoImposto); o porquê do
+   imposto diz os 5 % do 6A e do 4.3 (D118). À vista, ao lado do imposto: as
+   taxas do continente (nos Açores a AT aplica-as 30 % mais baixas, N120) e,
+   com rendas no Anexo J ou na categoria B, que a app não as estima (N051).
+   Num ano sem regras (fiscoSemRegras, N050) o imposto é «—», «sem regras de
+   AAAA», sem reporte, AIMI, regularização nem falta a pagar; sem nenhuma
+   linha do Anexo F e com rendas no J ou na B, «sem estimativa», e não 0 €
+   (N051). O porquê diz ainda os prejuízos dos anos da janela que não estão
+   na app (r.reporte.anosSemDados, N124) e que os benefícios do EBF caem com
+   dívidas às Finanças ou à Segurança Social (fiscoKpiBeneficiosEbf, N151).
    Recebe: r — o resumo (resumoFiscal).
    Devolve: o HTML da grelha (string). */
 function fiscoKpis(r){
@@ -277,11 +286,16 @@ function fiscoKpis(r){
   const seis=trib!=null?' Com os benefícios do quadro 6 o imposto conta outro valor: no 6C as rendas contam 50 % e no 6B as obras dos 24 meses 110 % — o imposto estimado parte de '+euro(trib)+'. Os quadros levam os valores por inteiro, e é a AT que aplica o fator pelo campo do quadro 6.':'';
   const porqueLiq=(!pre.length?'As rendas ilíquidas menos os gastos dedutíveis, linha a linha.'+(trib!=null?'':' É sobre isto que se paga o imposto.')
     :(varios?'Cada titular tem o seu resultado: o prejuízo de um não abate às rendas do outro, e o imposto sai só das rendas de quem não teve prejuízo. ':'As rendas não chegaram para os gastos. ')+reporte)+seis;
-  /* a linha do reporte: o prejuízo de anos anteriores que abateu, de cada
-     titular em conjunta (rev6 §6.1: «Prejuízos de anos anteriores: −X €») */
-  const repTxt=!repUsado?'':!varios?'prejuízos de anos anteriores: −'+euro(repUsado)
-    :rep.length===1?'prejuízos de anos anteriores'+(rep[0].letra?' do titular '+esc(rep[0].letra):'')+': −'+euro(rep[0].usado)
-    :'prejuízos de anos anteriores: '+rep.map(x=>(x.letra?esc(x.letra)+' ':'')+'−'+euro(x.usado)).join(' · ');
+  /* a linha do reporte: o número de cima é o de depois dos prejuízos de anos
+     anteriores (D73); o que abateram é ao rendimento, de cada titular em
+     conjunta, e diz-se quanto desceu o imposto (N123: o mesmo par de nomes
+     das exportações — «Imposto estimado» é o das linhas, «depois dos
+     prejuízos de anos anteriores» o de depois) */
+  const repTxt=!repUsado?'':'depois dos prejuízos de anos anteriores'
+    +(!varios?': −'+euro(repUsado)
+      :rep.length===1?(rep[0].letra?' do titular '+esc(rep[0].letra):'')+': −'+euro(rep[0].usado)
+      :': '+rep.map(x=>(x.letra?esc(x.letra)+' ':'')+'−'+euro(x.usado)).join(' · '))
+    +' ao rendimento'+(repImposto>0?' (−'+euro(repImposto)+' de imposto)':'');
   const linhaRep=repTxt?`<div class="foot">${repTxt}</div>`:'';
   /* a linha do AIMI: o imposto depois do abate, ou que falta um VPT para o estimar */
   const linhaAimi=!a?'':a.abate==null?`<div class="foot">abate do AIMI por estimar: falta um VPT</div>`
@@ -293,12 +307,28 @@ function fiscoKpis(r){
   const regDhd=regs.some(x=>x.dhd),reg10=!regs.length||regs.some(x=>!x.dhd);
   const qsReg=listaE((reg10?[Q10]:[]).concat(regDhd&&q43?[esc(q43)]:[]));
   const linhaReg=reg>0?`<div class="foot">com a regularização ${qsReg.indexOf(' e ')>-1?'dos quadros':'do quadro'} ${qsReg}: ~${euro(r2(depois+reg))} (+${euro(reg)}, estimativa sem juros)</div>`:'';
-  const porqueImp='O rendimento líquido de cada linha à taxa que a lei de '+r.ano+' dá ao contrato, somado titular a titular: as perdas de uma linha abatem às rendas das outras do mesmo titular, nunca às de outro titular, e o imposto nunca é negativo. '+(T5&&Number(T5.n)>0?'Conta também a diferença positiva de cada linha do quadro '+esc(Q5)+' (a sublocação). ':'')
+  /* sem as regras do ano não há estimativa nenhuma (D50, N050); sem nenhuma
+     linha do Anexo F (nem do quadro 5) e com rendas no Anexo J ou na
+     categoria B, o imposto não é 0 € — é «sem estimativa» (N051) */
+  const semRegras=fiscoSemRegras(r);
+  const temF=(r.linhas||[]).some(Boolean)||(Array.isArray(r.quadro5)&&r.quadro5.some(Boolean));
+  const foraNomes=(fx.anexoJ>0?['do Anexo J']:[]).concat(fx.categoriaB>0?['da categoria B']:[]);
+  const semEst=!semRegras&&!temF&&foraNomes.length>0&&!(reg>0);
+  const impLinhas=r2(Math.max(0,Number(T.imposto)||0));
+  /* os prejuízos dos anos da janela que não estão na app (N124): só na
+     explicação, nunca em «A tratar» — vale para quase todas as contas */
+  const asd=(r.reporte&&Array.isArray(r.reporte.anosSemDados)?r.reporte.anosSemDados:[]).map(Number).filter(y=>y>0);
+  const ebf=fiscoKpiBeneficiosEbf(r);
+  const porqueImp=semRegras?'A app não tem as regras de '+r.ano+': as taxas e os quadros desse ano eram outros, e a app não estima o imposto, o que os prejuízos de anos anteriores e o AIMI abatem, a regularização nem a falta a pagar. O valor certo é o da liquidação da AT.'
+    :semEst?'Não há rendas no Anexo F em '+r.ano+'. '+listaE((fx.anexoJ>0?['as rendas de imóveis fora de Portugal (Anexo J) dependem do país, da convenção e do englobamento']:[]).concat(fx.categoriaB>0?['as da categoria B (Anexo B ou C) seguem as regras da tua atividade']:[])).replace(/^./,c=>c.toUpperCase())+': a app não as estima. O valor certo é o da liquidação da AT.'
+    :'O rendimento líquido de cada linha à taxa que a lei de '+r.ano+' dá ao contrato, somado titular a titular: as perdas de uma linha abatem às rendas das outras do mesmo titular, nunca às de outro titular, e o imposto nunca é negativo. '+(T5&&Number(T5.n)>0?'Conta também a diferença positiva de cada linha do quadro '+esc(Q5)+' (a sublocação). ':'')
     +(tem6A||tem43?(tem6A&&tem43?'As rendas de imóveis reabilitados (quadro 6A) e a prestação mensal de um direito real de habitação duradoura (quadro '+esc(q43)+') pagam 5 %. ':tem6A?'As rendas de imóveis reabilitados (quadro 6A) pagam 5 %. ':'A prestação mensal de um direito real de habitação duradoura (quadro '+esc(q43)+') paga 5 %. '):'')
     +(trib!=null?'No 6C as rendas contam 50 %, e no 6B as obras dos 24 meses 110 %. ':'')
-    +'É uma estimativa sem englobamento, com as taxas nacionais: quem reside nos Açores tem as taxas 30 % mais baixas, e a AT aplica-as pela residência. O valor certo é o da liquidação da AT. As retenções do inquilino abatem a isto.'
+    +'É uma estimativa sem englobamento, com as taxas do continente: a quem reside nos Açores a AT aplica-as 30 % mais baixas, pela residência. O valor certo é o da liquidação da AT. As retenções do inquilino abatem a isto.'
+    +(ebf?' '+ebf:'')
     +(fx.anexoJ>0||fx.categoriaB>0?' Não conta '+listaE((fx.anexoJ>0?['as rendas de imóveis fora de Portugal (Anexo J)']:[]).concat(fx.categoriaB>0?['as da categoria B (Anexo B ou C)']:[]))+': a app não as estima.':'')
-    +(repUsado?' Os prejuízos de anos anteriores que a app conhece ('+euro(repUsado)+') abatem ao rendimento deste ano, o mais antigo primeiro e titular a titular (CIRS art. 55.º): o imposto estimado desce '+euro(repImposto)+'. Pode faltar informação — imóveis fora da app, anos sem registos, a condição dos 36 meses de rendas nos cinco anos seguintes —, e a AT faz a conta na liquidação.':'')
+    +(repUsado?' O imposto estimado das linhas é '+euro(impLinhas)+'; os prejuízos de anos anteriores que a app conhece ('+euro(repUsado)+') abatem ao rendimento deste ano, o mais antigo primeiro e titular a titular (CIRS art. 55.º): o imposto desce '+euro(repImposto)+', e depois dos prejuízos de anos anteriores fica em '+euro(imposto)+' — o número de cima. Pode faltar informação — imóveis fora da app, anos sem registos, a condição dos 36 meses de rendas nos cinco anos seguintes —, e a AT faz a conta na liquidação.'
+      :asd.length&&impLinhas>0?' Prejuízos de anos que não estão na app ('+fiscoKpiAnos(asd)+') não entram nesta estimativa; a AT abate-os na liquidação.':'')
     +(a?' O AIMI pago abate ao imposto (quadro '+Q9+'): a app estima a parte dos prédios arrendados e limita-a ao imposto estimado das rendas. É a leitura da app; a lei fala da coleta à taxa de 28 %, e a conta certa é a da AT.'+(abate>0&&T.retencoes?' A falta a pagar já conta com este abate.':''):'')
     +(reg>0&&reg10?' Um contrato com redução pela duração que acabou antes do prazo por motivo do senhorio (quadro '+Q10+') perde a redução do período em que acabou: a diferença para a taxa da duração que decorreu regulariza-se nesta declaração, com juros compensatórios (CIRS art. 72.º).':'')
     +(reg>0&&regDhd?' Um direito real de habitação duradoura que cessou por acordo das partes (quadro '+esc(q43)+') perde os 5 % desde o início: a diferença para a taxa base regulariza-se nesta declaração, com juros compensatórios (CIRS art. 72.º n.º 20).':'')
@@ -308,12 +338,23 @@ function fiscoKpis(r){
   const porqueRendas='A renda do recibo, antes da retenção, da comissão e de descontos: o que entrou como renda mais o que o inquilino reteve na fonte, no ano em que foi recebida. Se uma gestora te transfere a renda já sem a comissão, a renda é a do recibo e a comissão é um gasto, na coluna Outros. Conta com a caução, que é renda do ano em que a recebes (a de um direito real de habitação duradoura não), os reembolsos que o inquilino te pagou, as indemnizações que compensam rendas e as outras receitas prediais, menos as rendas que devolveste. É o valor que vai aos quadros 4.1, 4.2 e 4.3; os empréstimos recebidos ficam de fora.'
     +(rec5?' As rendas de um imóvel que subarrendas vão ao quadro '+esc(Q5)+', à parte: o rendimento delas é a diferença para a renda que pagas ao senhorio.':'')
     +(fx.anexoJ>0?' As de um imóvel fora de Portugal vão ao Anexo J, e não estão aqui.':'')+(fx.categoriaB>0?' As da categoria B vão ao Anexo B ou C, e não estão aqui.':'');
+  /* o cartão do imposto: sem regras, «—» e «sem regras de AAAA» (N050); sem
+     linhas do Anexo F, «sem estimativa» (N051); senão o imposto, as linhas
+     do reporte, do AIMI e da regularização, as rendas que não estima (N051),
+     o retido e a falta, e as taxas do continente (N120) — à vista, fora do
+     porquê */
+  const linhaFora=foraNomes.length?`<div class="foot">sem as rendas ${listaE(foraNomes)}: a app não as estima</div>`:'';
+  const retido=T.retencoes?'já retido '+euro(T.retencoes)+' · '+(aPagar>=0?'falta '+euro(aPagar):'a receber '+euro(-aPagar)):'sem englobamento';
+  const acores=impLinhas>0||reg>0?'taxas do continente; nos Açores a AT aplica menos 30 %':'';
+  const kpiImp=semRegras?kpi('Imposto estimado','—','','sem regras de '+r.ano,porqueImp)
+    :semEst?kpi('Imposto estimado','sem estimativa','','a app não estima as rendas '+listaE(foraNomes),porqueImp)
+    :kpi('Imposto estimado',euro(imposto),'',acores,porqueImp,null,null,{extra:linhaRep+linhaAimi+linhaReg+linhaFora+`<div class="foot">${retido}</div>`});
   return `<div class="grid fis-kpis">
     ${kpi('Rendas ilíquidas',euro(T.rendas),'',fiscoN(fiscoNContratos(r.linhas),'contrato','contratos')+' em '+r.ano,porqueRendas,null,null,{extra:linha5+linhaJ+linhaB})}
     ${kpi('Retenções na fonte',euro(T.retencoes),'',T.retencoes?'retidas pelos inquilinos':'nenhuma registada','O que os inquilinos retiveram na fonte e entregaram à AT por ti, como está nos movimentos'+(T5&&Number(T5.retencoes)>0?' — com as do quadro '+esc(Q5)+', a sublocação':'')+'. Já conta nas rendas ilíquidas e abate ao imposto.')}
-    ${kpi('Gastos dedutíveis',euro(g),'',T.obras24?'com '+euro(T.obras24)+' de obras dos 24 meses':'conservação, condomínio, IMI, selo, taxas e outros','As colunas de gastos dos quadros, pela regra de cada categoria (Definições → Categorias, etiquetas e IRS), só do período em que o imóvel esteve arrendado, e as obras de conservação dos 24 meses antes de um contrato. Ficam fora os juros, o mobiliário, o AIMI e as obras que acrescentam valor. Para o IRS conta a quota de cada um no imóvel, e não quem pagou nem a divisão escolhida no movimento (CIRS art. 19.º).')}
+    ${kpi('Gastos dedutíveis',euro(g),'',T.obras24?'com '+euro(T.obras24)+' de obras dos 24 meses':'conservação, condomínio, IMI, selo, taxas e outros','As colunas de gastos dos quadros, pela regra de cada categoria (Definições → Categorias, etiquetas e IRS), só do período em que o imóvel esteve arrendado — salvo o IMI e o imposto do selo, que contam os pagos no ano em que o imóvel deu rendas, mesmo com ele vazio (CIRS art. 41.º n.º 5) —, e as obras de conservação dos 24 meses antes de um contrato. Ficam fora os juros, o mobiliário, o AIMI e as obras que acrescentam valor. Para o IRS conta a quota de cada um no imóvel, e não quem pagou nem a divisão escolhida no movimento (CIRS art. 19.º).')}
     ${kpi('Rendimento líquido',euro(T.liquido),T.liquido<0?'neg':'',pePre||(T.isentos.n?'sem os '+euro(T.isentos.liquido)+' isentos (6D)':'rendas menos gastos'),porqueLiq,null,null,{extra:linhaTrib})}
-    ${kpi('Imposto estimado',euro(imposto),'',T.retencoes?'já retido '+euro(T.retencoes)+' · '+(aPagar>=0?'falta '+euro(aPagar):'a receber '+euro(-aPagar)):'sem englobamento',porqueImp,null,null,{extra:linhaRep+linhaAimi+linhaReg})}</div>`;
+    ${kpiImp}</div>`;
 }
 /* As rendas do ano que saem do Anexo F, para o KPI das rendas: as do Anexo J
    (imóveis fora de Portugal, totais.anexoJ — D133) e as da categoria B
@@ -326,6 +367,42 @@ function fiscoKpiForaDoF(r){
   const de=(k,lista)=>{const t=T[k]&&T[k].rendas;if(t!=null&&isFinite(Number(t)))return r2(Math.max(0,Number(t)));
     return r2(Math.max(0,sum((Array.isArray(lista)?lista:[]).map(x=>Number(x&&x.rendas)||0))))};
   return {anexoJ:de('anexoJ',r&&r.anexoJ),categoriaB:de('categoriaB',r&&r.categoriaB)};
+}
+/* Os anos da janela do reporte que não estão na app, como a frase do porquê
+   do imposto os diz (N124) — a mesma regra das notas do PDF e do texto: anos
+   seguidos «de 2019 a 2024», um só «de 2019», com buracos a lista «de 2019,
+   2021 e 2023».
+   Recebe: anos — os anos (números ou 'AAAA').
+   Devolve: o texto ('' sem anos). */
+function fiscoKpiAnos(anos){
+  const ys=[...new Set((anos||[]).map(Number).filter(y=>y>0))].sort((a,b)=>a-b);
+  if(!ys.length)return '';
+  if(ys.length===1)return 'de '+ys[0];
+  const seguidos=ys.every((y,i)=>!i||y===ys[i-1]+1);
+  return seguidos?'de '+ys[0]+' a '+ys[ys.length-1]:'de '+listaE(ys.map(String));
+}
+/* A frase do porquê do imposto sobre os benefícios do EBF (N151): a taxa de
+   10 % das rendas moderadas (EBF art. 45.º-C — numa linha, num troço com
+   rendas ou numa entrada do quadro 5), as isenções (as linhas do 6D, do 6F e
+   do 6H) e os benefícios do 6A, do 6B e do 6C só valem sem dívidas por
+   regularizar às Finanças e à Segurança Social (EBF art. 14.º n.os 5 e 6;
+   PIV 30751). As reduções pela duração (CIRS art. 72.º) não são do EBF, e
+   não se dizem.
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: a frase (texto, com ponto final), ou '' sem nenhum destes. */
+function fiscoKpiBeneficiosEbf(r){
+  const ls=((r&&r.linhas)||[]).filter(Boolean),q5=Array.isArray(r&&r.quadro5)?r.quadro5.filter(Boolean):[];
+  const comRendas=s=>s&&(s.rendas==null||Number(s.rendas)>0);
+  const mod=ls.some(l=>!l.isencao&&(l.motivoTaxa==='moderada'||(Array.isArray(l.segmentos)&&l.segmentos.some(s=>comRendas(s)&&s.motivo==='moderada'))))
+    ||q5.some(x=>x.motivoTaxa==='moderada');
+  const ise=ls.some(l=>l.isencao);
+  const seis=[...new Set(ls.filter(l=>!l.isencao).reduce((a,l)=>a.concat(fiscoBeneficiosDe(l).map(b=>String(b.quadro))),[]))].sort();
+  const tx=dec(Number((((r&&r.versao&&r.versao.taxas)||{}).rendaModerada||{}).taxa)||10);
+  const bs=(mod?['a taxa de '+tx+' % das rendas moderadas']:[]).concat(ise?['as isenções']:[]).concat(seis.length?['os benefícios do quadro '+listaE(seis)]:[]);
+  if(!bs.length)return '';
+  const um=bs.length===1&&mod;
+  const lista=listaE(bs);
+  return lista.charAt(0).toUpperCase()+lista.slice(1)+(um?' é um benefício fiscal: só vale':' são benefícios fiscais: só valem')+' sem dívidas por regularizar às Finanças e à Segurança Social (EBF art. 14.º).';
 }
 /* O líquido sobre que o imposto se estima, quando é outro que o dos quadros
    (o KPI do rendimento líquido): com o 6C as rendas contam 50 % e com o 6B as
@@ -380,8 +457,11 @@ function fiscoRegularizacao(r){
   const rs=Array.isArray(r&&r.regularizacoes)?r.regularizacoes:[];
   return r2(Math.max(0,sum(rs.map(x=>Number(x&&x.total)||0))));
 }
-/* O rótulo do botão de um aviso, pelo sítio que ele abre: a ficha de um
-   contrato, de um inquilino, de um imóvel ou de um movimento, uma pergunta
+/* O rótulo do botão de um aviso, pelo sítio que ele abre: a situação fiscal
+   da página (fiscoSitAbrir), os movimentos filtrados (navegacao.js:
+   goMovimentos), a despesa do selo já preenchida (txNovaDespesaCom), a
+   ficha de um contrato, de um proprietário, de um inquilino, de um imóvel ou
+   de um movimento, uma pergunta
    do contrato (o «Responder» de contrato.js:ctIrParaPergunta), as quotas de
    um imóvel (imovel.js:imvAbrirQuotas, a janela das quotas ou a pergunta dos
    donos fora da app), a lista dos contratos, dos imóveis ou dos movimentos,
@@ -395,7 +475,11 @@ function fiscoRotuloDoAviso(abrir){
   if(/^fiscoAvReporSplitwise\(/.test(a))return 'Repor o total';
   if(/^imvAbrirQuotas\(/.test(a))return 'Indicar as quotas';
   if(/^ctResponderEmpresa\(/.test(a)||/^ctIrParaPergunta\(/.test(a))return 'Responder';
+  if(/^fiscoSitAbrir\(/.test(a))return 'Abrir a situação fiscal';
+  if(/^goMovimentos\(/.test(a))return 'Ver os movimentos';
+  if(/^txNovaDespesaCom\(/.test(a))return 'Adicionar o selo';
   if(/^ctView\(/.test(a))return 'Abrir contrato';
+  if(/^personView\(\s*'owner'/.test(a))return 'Abrir proprietário';
   if(/^personView\(/.test(a))return 'Abrir inquilino';
   if(/^propView\(/.test(a))return 'Abrir imóvel';
   if(/^txView\(/.test(a))return 'Abrir movimento';
@@ -411,20 +495,30 @@ function fiscoRotuloDoAviso(abrir){
    trata; o dos não declarados fica sem botão, que não há nada a tratar. Sem
    avisos não afirma que não falta nada — a app só vê o que se registou (uma
    renda que entrou e não se registou não se vê) —: diz que não encontrou
-   nada em falta nos dados registados.
-   Recebe: r — o resumo (resumoFiscal).
+   nada em falta nos dados registados. Um aviso pode trazer dois botões (a
+   folha dos avisos, D8): a ação que o resolve ali mesmo (a.acao com o
+   rótulo a.acaoTexto — «É só meu», «Marcar como emitido» —, primário, à
+   frente) e o que abre o sítio (a.abrir, com o rótulo a.abrirTexto, ou o
+   do fiscoRotuloDoAviso). O fim do cartão aponta os Prazos da AT só quando
+   eles estão na página (com algum prazo na janela de aviso).
+   Recebe: r — o resumo (resumoFiscal); temPrazos (opcional) — true quando
+   a página mostra os Prazos da AT (sem ele, pergunta-se ao fisPrazosLista).
    Devolve: o HTML do cartão (string). */
-function fiscoObrigacoesCard(r){
+function fiscoObrigacoesCard(r,temPrazos){
   const cor={falta:'red',aviso:'amber',info:'grey'};
-  const row=(a,i)=>`<div class="fis-ob"><span class="badge ${cor[a.nivel]||'amber'} fis-num">${i+1}</span><p>${esc(a.texto)}</p>${a.abrir
-    ?`<button type="button" class="btn sm" data-toca="${esc(a.toca||'camada')}" data-click="${a.abrir}">${fiscoRotuloDoAviso(a.abrir)}</button>`:''}</div>`;
+  if(temPrazos===undefined)temPrazos=fisPrazosLista().length>0;
+  const abrir=a=>a.abrir?`<button type="button" class="btn sm" data-toca="${esc(a.toca||'camada')}" data-click="${a.abrir}">${a.abrirTexto?esc(a.abrirTexto):fiscoRotuloDoAviso(a.abrir)}</button>`:'';
+  const botoes=a=>a.acao&&a.acaoTexto
+    ?`<span class="chips-fila fis-ob-acoes"><button type="button" class="btn sm primary" data-toca="${esc(a.acaoToca||'camada')}" data-click="${a.acao}">${esc(a.acaoTexto)}</button>${abrir(a)}</span>`
+    :abrir(a);
+  const row=(a,i)=>`<div class="fis-ob"><span class="badge ${cor[a.nivel]||'amber'} fis-num">${i+1}</span><p>${esc(a.texto)}</p>${botoes(a)}</div>`;
   const nTratar=r.avisos.filter(a=>a.nivel!=='info').length;
   const corpo=r.avisos.length?`<div class="fis-obs">${r.avisos.map(row).join('')}</div>`
     :`<p class="hint">Não encontrámos nada em falta nos dados que registaste. Confirma que todas as rendas que recebeste em ${r.ano} estão registadas: as que não estão, a app não as vê.</p>`;
   /* o selo da contagem cola-se ao título (a prancheta), em vez de fugir para o canto */
   return fisCartao('A tratar antes de entregar'+(nTratar?` <span class="badge amber">${nTratar}</span>`:''),
     r.avisos.length?fiscoN(r.avisos.length,'ponto','pontos')+' de '+r.ano:'Nada encontrado em falta em '+r.ano,
-    corpo+`<p class="hint">A app resume, não declara: o que falta fica escrito aqui e ao pé de cada linha dos quadros. Os prazos com data estão nos Prazos da AT.</p>`,
+    corpo+`<p class="hint">A app resume, não declara: o que falta fica escrito aqui e ao pé de cada linha dos quadros.${temPrazos?' Os prazos com data estão nos Prazos da AT, depois dos quadros.':''}</p>`,
     'fis-tratar');
 }
 /* O cartão «Prazos da AT»: os prazos da AT que já entraram na janela de aviso
@@ -443,11 +537,13 @@ function fiscoObrigacoesCard(r){
    e o que abre a ficha, por baixo do texto. Mostra os cinco primeiros; os
    outros estão nos Prazos da visão geral. Nada antes de o estado chegar
    (espera.js:sabemosOEstado): um prazo silenciado noutro aparelho voltava.
-   Devolve: o HTML do cartão (string). */
-function fisPrazosCard(){
-  const AT={modelo2:1,cessacao:1,recibos:1,irs:1,fev15:1,rsaa:1,modelo44:1,elementos:1};
-  if(!sabemosOEstado())return '';
-  const lista=prazosAtivos().filter(p=>AT[p.tipo]);
+   Sem nenhum prazo na janela de aviso, não se escreve (D8 h, maqueta 6: o
+   cartão vazio «Nada para já» saiu).
+   Recebe: lista (opcional) — os prazos (fisPrazosLista); sem ela, pede-os.
+   Devolve: o HTML do cartão (string), ou '' sem prazos. */
+function fisPrazosCard(lista){
+  if(!Array.isArray(lista))lista=fisPrazosLista();
+  if(!lista.length)return '';
   /* o selo pelo prazos.js, que é da base (um aviso sem data diz «Sem prazo», e não «Hoje») */
   const selo=p=>`<span class="badge ${pzSelo(p)}">${esc(pzQuando(p))}</span>`;
   const tocaDe=a=>/^go\(/.test(a)?'ecra':'camada';
@@ -460,9 +556,19 @@ function fisPrazosCard(){
     }
     return `<div class="fis-pz${abre?' tap':''}"${abre?` data-toca="${tocaDe(p.abrir)}" data-click="${p.abrir}"`:''}><div>${txt}</div>${selo(p)}</div>`};
   const mais=lista.length-5;
-  const corpo=lista.length?`<div class="fis-pzs">${lista.slice(0,5).map(row).join('')}</div>${mais>0?`<p class="hint">E ${fiscoN(mais,'outro','outros')} nos Prazos da visão geral.</p>`:''}`
-    :`<p class="hint">Nenhum prazo da AT na janela de aviso. Os da entrega, do Modelo 2 e dos recibos aparecem aqui com antecedência.</p>`;
-  return fisCartao('Prazos da AT',lista.length?fiscoN(lista.length,'prazo','prazos')+' na janela de aviso':'Nada para já',corpo,'fis-prazos');
+  const corpo=`<div class="fis-pzs">${lista.slice(0,5).map(row).join('')}</div>${mais>0?`<p class="hint">E ${fiscoN(mais,'outro','outros')} nos Prazos da visão geral.</p>`:''}`;
+  return fisCartao('Prazos da AT',fiscoN(lista.length,'prazo','prazos')+' na janela de aviso',corpo,'fis-prazos');
+}
+/* Os prazos da AT que o cartão «Prazos da AT» mostra (fisPrazosCard): os
+   ativos (prazos.js:prazosAtivos) do Modelo 2, da cessação, dos recibos, da
+   entrega do Anexo F, da comunicação de fevereiro, do envio ao IHRU, do
+   Modelo 44 e dos elementos mínimos — nenhum antes de o estado chegar
+   (espera.js:sabemosOEstado).
+   Devolve: os prazos (array, pela ordem do prazosAtivos). */
+function fisPrazosLista(){
+  const AT={modelo2:1,cessacao:1,recibos:1,irs:1,fev15:1,rsaa:1,modelo44:1,elementos:1};
+  if(!sabemosOEstado())return [];
+  return prazosAtivos().filter(p=>p&&AT[p.tipo]);
 }
 /* Os proprietários dos imóveis com rendas no ano que vejo com a Avaliação
    aberta pelo cargo, pela ordem em que aparecem: os primeiros da escolha do
@@ -519,24 +625,36 @@ function fiscoLimiteDispensa(ano){
    se inserem à mão no Portal das Finanças. A dispensa dos recibos eletrónicos
    noutro interruptor, com quem está dispensado nesse ano — o limite com o IAS
    do ano anterior (fiscoLimiteDispensa, D111) — e o Modelo 44 que isso obriga
-   a entregar. Uma nota fixa diz as letras que a app não escreve (F no ano do
-   óbito do cônjuge, D1/AF1/DG1 dos dependentes, D70): a correção faz-se no
-   Portal. Outra diz que as rendas da categoria B (a opção do CIRS art. 4.º
-   n.º 1 n), ou o imóvel afeto à atividade, art. 3.º n.º 2 a)) não vão ao
-   Anexo F, e que se marcam no contrato (D134). Grava logo (fiscoSetSituacao, fiscoSetConjuge) em
+   a entregar (só com a dispensa ligada, ou ao tocar em «Quem tem dispensa?»
+   — fiscoSitVerDispensa, N063; o arrendamento rural à parte: as rendas dele
+   não pedem recibo, mas isso não dispensa os outros contratos nem obriga ao
+   Modelo 44, N030). As letras que a app não escreve (D70) dizem-se onde
+   contam: a F do ano do óbito do cônjuge só com a conjunta ligada; as D1,
+   AF1 e DG1 das rendas de um dependente, que valem em conjunta e em
+   separado, numa nota à parte. Grava logo (fiscoSetSituacao, fiscoSetConjuge) em
    settings.irs.porAno, que vai com as definições. Sem saber quem és (por
    inteiro), não há cônjuge a escolher, e diz-se.
-   Recebe: r — o resumo (resumoFiscal).
+   O cartão vem depois dos quadros e fechado numa linha (D8, maqueta 6): o
+   título, o resumo da situação (fiscoSituacaoResumo — «Em separado, titular
+   A · recibos eletrónicos») e o botão «Mudar» (fiscoSitMudar), que abre o
+   resto no sítio; aberto, o botão diz «Fechar». Abre sozinho quando há uma
+   escolha por fazer — a conjunta ligada sem cônjuge, havendo quem escolher
+   —, até a pessoa o fechar; o fiscoSitAbrir abre-o de um aviso. Fechado, o
+   corpo fica na página com o atributo hidden (nada se grava escondido: só
+   se mostra o que já lá está, e o resumo di-lo).
+   Recebe: r — o resumo (resumoFiscal); aberto (opcional) — true ou false
+   para o desenhar aberto ou fechado; sem ele, o estado da página
+   (fiscoSitAberta).
    Devolve: o HTML do cartão (string). */
-function fiscoSituacaoCard(r){
+function fiscoSituacaoCard(r,aberto){
   const ano=Number(r.ano),eu=r.porInteiro?'':String(r.titularId||'');
   const s=irsSituacao(ano,eu);
   const interruptor=(id,campo,on,nome)=>`<button type="button" class="interruptor" role="switch" id="${id}" aria-checked="${on?'true':'false'}" aria-label="${nome}" data-toca="dados" data-click="fiscoSetSituacao(${ano},'${campo}',${on?'false':'true'})"></button>`;
-  let conj='';
+  let conj='',escolhido='',cands=[];
   if(s.conjunta&&!eu)conj=`<p class="hint fis-sit-nota">Sem saber qual dos proprietários és, não há cônjuge a escolher: entra na tua conta para a Declaração juntar a tua parte e a do cônjuge.</p>`;
   else if(s.conjunta){
-    const cands=fiscoCandidatosConjuge(ano,eu),nomeDe=o=>(owner(o)||{}).name||'';
-    const escolhido=s.conjugeId&&cands.indexOf(s.conjugeId)>-1?s.conjugeId:'';
+    cands=fiscoCandidatosConjuge(ano,eu);const nomeDe=o=>(owner(o)||{}).name||'';
+    escolhido=s.conjugeId&&cands.indexOf(s.conjugeId)>-1?s.conjugeId:'';
     const campo=cands.length
       ?`<label class="fis-sit-nota fis-sit-campo">O teu cônjuge${sel('fiscoConjuge',escolhido,[{v:'',label:'Ninguém escolhido'}].concat(cands.map(o=>({v:o,label:nomeDe(o)}))),'fiscoSetConjuge','dados')}</label>`
       :`<p class="hint fis-sit-nota">Não há outro proprietário nesta app para escolher como cônjuge: o teu cônjuge não tem conta, ou não é proprietário de nenhum imóvel que vês aqui. Os imóveis só dele inserem-se à mão no Portal das Finanças, com a letra dele.</p>`;
@@ -549,20 +667,84 @@ function fiscoSituacaoCard(r){
     <p class="hint fis-sit-nota">A e B são a posição de cada um no Rosto da declaração: sujeito passivo A e sujeito passivo B. A letra não muda as rendas que entram: a conjunta junta as tuas e as do cônjuge, e cada linha do Anexo F leva a letra de quem é a renda. Um imóvel dos dois vai em duas linhas, uma por titular, cada uma com a sua quota-parte.</p>
     <p class="hint fis-sit-nota">${escolhido?'Entram só os imóveis do cônjuge que vês nesta app, os partilhados contigo. Os que estão só na conta do cônjuge não chegam aqui: junta-os no Portal das Finanças, a partir do PDF ou do CSV da Declaração dessa conta.'
       :fiscoBensComuns(s)?'Os imóveis só do cônjuge, que não estão nesta app, inserem-se à mão no Portal das Finanças, com a letra dele.'
-      :'Sem cônjuge escolhido, a Declaração tem só as tuas rendas. Os imóveis só do cônjuge, que não estão nesta app, inserem-se à mão no Portal das Finanças, com a letra dele.'}</p>`;
+      :'Sem cônjuge escolhido, a Declaração tem só as tuas rendas. Os imóveis só do cônjuge, que não estão nesta app, inserem-se à mão no Portal das Finanças, com a letra dele.'}</p>
+    <p class="hint fis-sit-nota">No ano do óbito do cônjuge, com a opção pela conjunta, as rendas que eram só dele levam a letra F e um imóvel dos dois vai em A. A app só escreve A e B: essa letra muda-se no Portal das Finanças.</p>`;
   }
   const herdada=s.deAno&&s.deAno!==String(ano)?' A de '+ano+' vem de '+esc(s.deAno)+'.':'';
+  /* aberto: o que se pediu, senão o estado da página; sem nenhum dos dois,
+     só com uma escolha por fazer (a conjunta sem cônjuge, havendo quem) */
+  const porFazer=s.conjunta&&!!eu&&!escolhido&&cands.length>0&&!fiscoBensComuns(s);
+  const open=typeof aberto==='boolean'?aberto:fiscoSitAberta===true||fiscoSitAberta===false?fiscoSitAberta:porFazer;
+  /* a nota da dispensa: com a dispensa ligada, ou a pedido (N063); o rural à
+     parte, sem o pôr entre quem tem dispensa (N030) */
+  const notaDispensa=`<p class="hint fis-sit-nota" id="fiscoSitDispensaNota" tabindex="-1">Em ${ano} tem dispensa quem a 31 de dezembro de ${ano-1} tinha 65 anos ou mais, ou quem não tem nem é obrigado a ter caixa postal eletrónica e recebeu rendas de ${ano-1} até ${fiscoLimiteDispensa(ano)} — ou não as recebeu e não conta passar esse valor em ${ano} (Portaria 98-A/2015, art. 5.º). Quem se dispensa entrega o Modelo 44, a declaração anual das rendas de ${ano}, até ao fim de fevereiro de ${ano+1}. Quem passa recibos eletrónicos na mesma fica na regra geral: deixa isto desligado.</p>
+    <p class="hint fis-sit-nota">As rendas de um arrendamento rural não pedem recibo eletrónico (art. 5.º n.º 3 a)): isso marca-se no contrato, e não aqui, e não te dispensa dos recibos dos outros contratos; podes declará-las no Modelo 44, se quiseres.</p>`;
+  const dispensa=s.dispensaRecibos||fiscoSitDispensaVer?notaDispensa
+    :`<p class="fis-sit-nota"><button type="button" class="btn sm" id="fiscoSitQuemDispensa" data-toca="nada" data-click="fiscoSitVerDispensa()" aria-expanded="false" aria-controls="fiscoSitDispensaNota">Quem tem dispensa?</button></p>`;
+  const mudar=`<button type="button" class="btn sm" id="fiscoSitMudar" data-toca="nada" data-click="fiscoSitMudar(${open?'false':'true'})" aria-expanded="${open?'true':'false'}" aria-controls="fiscoSitCorpo">${open?'Fechar':'Mudar'}</button>`;
   /* as linhas dos interruptores são <label>: tocar no texto (a linha inteira,
      60px) chega ao botão, como nas outras listas de interruptores — o botão
      sozinho tem 28px de altura. Dentro de um <label> o texto vai em <span>. */
-  return fisCartao('A tua situação fiscal em '+ano,'O que só tu sabes e muda o Anexo F de '+ano+'. Grava ao mexer.',
-    `<label class="fis-linha fis-linha-toque"><span class="fis-linha-txt"><b>Tributação conjunta</b><span class="small">Casados ou unidos de facto</span></span>${interruptor('fiscoConjunta','conjunta',s.conjunta,'Tributação conjunta')}</label>
+  return fisCartao('A tua situação fiscal em '+ano,open?'O que só tu sabes e muda o Anexo F de '+ano+'. Grava ao mexer.':fiscoSituacaoResumo(r,s),
+    `<div class="fis-sit-corpo" id="fiscoSitCorpo"${open?'':' hidden'}><label class="fis-linha fis-linha-toque"><span class="fis-linha-txt"><b>Tributação conjunta</b><span class="small">Casados ou unidos de facto</span></span>${interruptor('fiscoConjunta','conjunta',s.conjunta,'Tributação conjunta')}</label>
     <p class="hint fis-sit-nota">Em conjunta há uma só declaração, e cada linha do Anexo F diz de quem é a renda: A ou B. Em separado cada um entrega o seu Anexo F, e é sempre A.</p>${conj}
-    <p class="hint fis-sit-nota">A app só escreve as letras A e B. No ano do óbito do cônjuge, com a opção pela conjunta, as rendas que eram só dele levam F e um imóvel dos dois vai em A; as rendas de um dependente levam D1, AF1 ou DG1, como no quadro 6B do rosto. Nesses casos, muda a letra no Portal das Finanças.</p>
+    <p class="hint fis-sit-nota">As rendas de um dependente declaram-se com a letra dele — D1, AF1 ou DG1, como no quadro 6B do rosto —, em conjunta ou em separado. A app só escreve A e B: essa letra muda-se no Portal das Finanças.</p>
     <label class="fis-linha fis-linha-toque"><span class="fis-linha-txt"><b>Tenho dispensa dos recibos de renda eletrónicos</b></span>${interruptor('fiscoDispensa','dispensaRecibos',s.dispensaRecibos,'Dispensa dos recibos de renda eletrónicos')}</label>
-    <p class="hint fis-sit-nota">Em ${ano} tem dispensa quem a 31 de dezembro de ${ano-1} tinha 65 anos ou mais, ou quem não tem nem é obrigado a ter caixa postal eletrónica e recebeu rendas de ${ano-1} até ${fiscoLimiteDispensa(ano)} — e o arrendamento rural (Portaria 98-A/2015, art. 5.º). Quem se dispensa entrega o Modelo 44, a declaração anual das rendas de ${ano}, até ao fim de fevereiro de ${ano+1}. Quem passa recibos eletrónicos na mesma fica na regra geral: deixa isto desligado.</p>
-    <p class="hint fis-sit-nota">As rendas na categoria B — porque optaste por ela (CIRS art. 4.º n.º 1 n)) ou porque o imóvel está afeto à tua atividade empresarial ou profissional (art. 3.º n.º 2 a)) — não vão ao Anexo F: marca-as em cada contrato, em «Rendas tributadas na categoria B», e a Declaração mostra-as à parte, para o Anexo B ou C.</p>
-    <p class="hint fis-sit-nota">Cada ano tem a sua situação, a do último dia do ano (CIRS art. 13.º): o que mudas aqui vale para ${ano} e para os anos seguintes que não tenham a sua, e nunca muda os anteriores.${herdada}</p>`,'fis-sit');
+    ${dispensa}
+    <p class="hint fis-sit-nota">Cada ano tem a sua situação, a do último dia do ano (CIRS art. 13.º): o que mudas aqui vale para ${ano} e para os anos seguintes que não tenham a sua, e nunca muda os anteriores.${herdada}</p></div>`,'fis-sit'+(open?' aberta':''),mudar);
+}
+/* O resumo da situação fiscal de um ano numa linha, para o cartão fechado
+   (fiscoSituacaoCard, maqueta 6): em separado ou em conjunta — com quem e a
+   minha letra no Rosto, com os bens comuns do casal ou sem cônjuge
+   escolhido — e se passo os recibos eletrónicos ou tenho a dispensa deles.
+   Recebe: r — o resumo (resumoFiscal); s — a situação do ano (irsSituacao).
+   Devolve: o texto (HTML seguro), ex.: «Em separado, titular A · recibos
+   eletrónicos». */
+function fiscoSituacaoResumo(r,s){
+  const eu=r&&!r.porInteiro?String(r.titularId||''):'';
+  s=s||{};
+  const letra=s.minhaLetra==='B'?'B':'A';
+  const cj=s.conjunta&&eu&&s.conjugeId&&s.conjugeId!==eu&&(db.owners||[]).some(o=>o&&o.id===s.conjugeId)?s.conjugeId:'';
+  const quem=!s.conjunta?'Em separado, titular A'
+    :!eu?'Em conjunta'
+    :cj?'Em conjunta com '+esc((owner(cj)||{}).name||'o teu cônjuge')+', és o titular '+letra
+    :fiscoBensComuns(s)?'Em conjunta, com os bens comuns do casal, és o titular '+letra
+    :'Em conjunta, sem o cônjuge escolhido';
+  return quem+' · '+(s.dispensaRecibos?'dispensa dos recibos eletrónicos':'recibos eletrónicos');
+}
+/* O estado do cartão da situação fiscal na página (fiscoSituacaoCard): null
+   enquanto a pessoa não o abriu nem fechou (abre sozinho só com uma escolha
+   por fazer), true aberto, false fechado; e se a nota de quem tem dispensa
+   dos recibos foi pedida (fiscoSitVerDispensa). Duram enquanto a janela
+   estiver aberta, como as dobras (componentes.js:foldState). */
+let fiscoSitAberta=null,fiscoSitDispensaVer=false;
+/* O «Mudar» e o «Fechar» do cartão da situação fiscal: abre-o ou fecha-o e
+   redesenha a página, com o foco no mesmo botão (fisRepintar, pelo id).
+   Recebe: abrir — true para abrir, false para fechar.
+   Devolve: nada — muda o estado e redesenha. */
+function fiscoSitMudar(abrir){
+  fiscoSitAberta=abrir===true;
+  fisRepintar(false);
+}
+/* Abre o cartão da situação fiscal a partir de outro sítio da página (um
+   aviso de «A tratar» que pede uma escolha nele) e leva-o à vista.
+   Devolve: nada — abre, redesenha e rola até ao cartão. */
+function fiscoSitAbrir(){
+  fiscoSitAberta=true;
+  fisRepintar(false);
+  const b=document.getElementById('fiscoSitMudar'),e=document.getElementById('fiscoSitCorpo'),c=e&&e.parentNode?e.parentNode:e;
+  if(b&&typeof b.focus==='function')try{b.focus({preventScroll:true})}catch(x){}
+  if(c&&typeof c.scrollIntoView==='function')try{c.scrollIntoView({block:'start'})}catch(x){}
+}
+/* O «Quem tem dispensa?» do cartão da situação fiscal: mostra a nota de
+   quem tem dispensa dos recibos eletrónicos sem ligar a dispensa (N063), e
+   redesenha com o foco na primeira linha da nota.
+   Devolve: nada — muda o estado e redesenha. */
+function fiscoSitVerDispensa(){
+  fiscoSitDispensaVer=true;
+  fisRepintar(false);
+  const n=document.getElementById('fiscoSitDispensaNota');
+  if(n&&typeof n.focus==='function')try{n.focus({preventScroll:true})}catch(x){}
 }
 /* A escolha «Os bens são comuns do casal» no cartão da situação (D5), em
    conjunta sem cônjuge com conta escolhido — o caso de um casal em que só um

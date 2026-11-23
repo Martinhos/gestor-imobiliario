@@ -340,7 +340,7 @@ describe('o quadro 8 (D55) e as isenções (D18)', () => {
     const q8 = comCampo(p, 'Benfica longo · de 2023');
     assert.equal(campoDe(q8, 'Benfica longo · de 2023 · retenções'), euro(3000));
     assert.equal(campoDe(q8, 'Benfica longo · de 2024 · retenções'), undefined, 'sem retenções, sem a linha');
-    assert.ok(p.ditos.some((s) => /no 8B também as retenções e os gastos de cada ano/.test(s) && /um pagamento de vários anos regista-se num movimento por ano/.test(s)));
+    assert.ok(p.ditos.some((s) => /no 8B também as retenções na fonte e os gastos desse ano/.test(s) && /um pagamento de vários anos regista-se num movimento por ano/.test(s)));
     assert.equal(csv().quadros[0].anos_anteriores_retencoes, '2023:3000,00 2024:0,00');
     const t = app.fiscoTexto();
     assert.ok(t.includes('de anos anteriores: 2023 ' + app.euro2(12000) + ' (retenções ' + app.euro2(3000) + '), 2024 ' + app.euro2(12000) + '\n'), 'sem retenções, sem o parêntese');
@@ -562,9 +562,10 @@ describe('o abate dos prejuízos de anos anteriores (Q10, D73)', () => {
     const depois = Math.round((app.resumoFiscal(ANO).totais.imposto - 200) * 100) / 100;
     assert.ok(antes > 200, 'o cenário tem imposto para abater');
     const t = app.fiscoTexto();
-    assert.ok(t.includes('Prejuízos de anos anteriores: abatem ' + app.euro2(2000) + ' ao rendimento líquido; o imposto estimado desce ' + app.euro2(200) + ' e fica em ' + app.euro2(depois) + '.'));
+    // N123: «imposto estimado» é o das linhas; o de depois é «depois dos prejuízos de anos anteriores»
+    assert.ok(t.includes('Prejuízos de anos anteriores: abatem ' + app.euro2(2000) + ' ao rendimento líquido; o imposto desce ' + app.euro2(200) + ': depois dos prejuízos de anos anteriores, ' + app.euro2(depois) + '.'));
     assert.ok(t.includes('Ficam ' + app.euro2(300) + ' para os anos seguintes.'));
-    assert.match(t, /anos sem registos \(2021 e 2022\) e a condição de os prédios darem rendas 36 meses/);
+    assert.match(t, /anos sem registos \(de 2021 a 2022\) e a condição de os prédios darem rendas 36 meses/);
     const c = csv(), rep = c.rows.find((x) => x.declarado === 'reporte');
     assert.ok(rep, 'a linha de rodapé do reporte');
     assert.equal(rep.reporte_abatido, '2000,00');

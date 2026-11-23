@@ -23,14 +23,16 @@ let txModo={modo:'tx'};
    'owed', 'repay' ou 'settle'; 'income' por omissão); propId e ctId o imóvel e
    o contrato a pré-escolher; preset os campos do movimento para preencher à
    partida (dos filtros, de um botão «Pagar», de um planeado ou de um modelo);
-   o resto é o modo (txModo).
+   o resto é o modo (txModo); diaPerguntado é o dia em que a renda entrou, já
+   perguntado por quem abriu (planeados.js:confirmRec), para o Guardar não o
+   voltar a perguntar (txPedeODia).
    Devolve: nada — abre o modal do movimento e liga o guardar. */
 function txModal(o){
   if(arguments.length>1)throw new Error('txModal: passa um objeto ({id, kind, propId, ctId, preset…}); a forma por posições saiu');
   if(typeof o==='string')o={id:o};
   else if(!o||typeof o!=='object')o={};
   const id=o.id||null;
-  foldState={};
+  foldState={};txMemoDoDestino={};
   /* Quem não pode alterar recebe a FICHA, e não este formulário com os campos
      apagados. E antes do openModal: não se decora uma janela já aberta,
      escolhe-se qual é a janela a abrir. */
@@ -40,7 +42,8 @@ function txModal(o){
      parte dele ao meu alcance; senão a ficha, que diz porquê */
   if(_t&&(!podeEditar(_t.propertyId,'tx.add',_t)||recusaDoLote(_t)))return txView(id);
   const modo=['confirmar','rec','tpl'].indexOf(o.modo)>-1?o.modo:'tx';
-  txModo={modo,recId:o.recId||null,tplId:o.tplId||null,alsoTx:!!o.alsoTx,every:o.every||'month',until:o.until||'',recEnd:o.recEnd||'',tplName:o.tplName||''};
+  txModo={modo,recId:o.recId||null,tplId:o.tplId||null,alsoTx:!!o.alsoTx,every:o.every||'month',until:o.until||'',recEnd:o.recEnd||'',tplName:o.tplName||'',
+    diaPerguntado:/^\d{4}-\d{2}-\d{2}$/.test(String(o.diaPerguntado||''))?String(o.diaPerguntado):''};
   /* sem imóvel escolhido: com um só imóvel onde posso adicionar fica esse; quem não
      é dono de nenhum não tem «Sem imóvel» e fica com o primeiro permitido —
      senão o seletor mostrava o primeiro e o movimento gravava-se sem imóvel */
@@ -72,9 +75,13 @@ function txTitulo(){
    que é comum aos modos e entrega ao guardar do modo (txGuardarPlaneado,
    txGuardarModelo, txGuardarMovimento). A distribuição de um pagamento de
    crédito sai aqui da função pura (distribuicaoDe), uma vez, com o que está
-   no formulário — pintar o cartão não a escreve. Uma renda abaixo da do
-   planeado desse mês, ainda sem resposta, pergunta porquê antes de gravar
-   (txRendaAbaixo, txPerguntarRendaAbaixo).
+   no formulário — pintar o cartão não a escreve. Pede, pela ordem do
+   formulário, o imóvel e o contrato de uma receita nova quando é preciso
+   escolhê-los (txPedeImovel, txPedeContrato) e a resposta da nota de IMI
+   (txPartePorResponder). Uma renda de outro ano com a data de hoje pergunta o
+   dia em que entrou (txPedeODia); uma renda abaixo da renda desse mês, ainda
+   sem resposta, pergunta porquê antes de gravar (txRendaAbaixo,
+   txPerguntarRendaAbaixo).
    Recebe: id — o id do movimento em edição (null num novo).
    Devolve: nada — grava e fecha, ou diz o que falta (ou abre a pergunta). */
 function txGuardar(id){
@@ -98,10 +105,23 @@ function txGuardar(id){
   if(semMontante)tForm.amount=0;
   else if(!(tForm.amount>0))return falhaCampo('t_amount','Indica um montante.');
   if(!tForm.label.trim())return falhaCampo('t_label','Escreve uma descrição.');
+  /* uma receita nova numa conta com contratos em vigor: o imóvel escolhe-se, ou
+     «Sem imóvel» de propósito — sem imóvel, uma renda não ia a linha nenhuma (N027) */
+  if(txPedeImovel(tForm)&&!tForm.propertyId&&!tForm.groupId&&!tForm.todos&&!tForm._semImovel)
+    return falhaCampo('t_prop','Escolhe o imóvel desta receita, ou «Sem imóvel» se não é de nenhum.');
+  /* num imóvel com mais de um contrato em vigor (quartos), o contrato escolhe-se, ou
+     «Não é de nenhum contrato» de propósito: uma renda é sempre de um contrato (N083) */
+  if(txPedeContrato(tForm)&&!tForm.contractId&&!tForm._semContrato)
+    return falhaCampo('t_ct','Escolhe o contrato desta receita, ou «Não é de nenhum contrato».');
   /* uma renda em atraso é de outro mês, e é o mês que a leva ao ano certo (o quadro 8): sem ele não se grava (D54) */
   if(txPedeMesDaRenda(tForm)&&!tForm.periodo)return falhaCampo('t_periodo','Indica o mês a que a renda em atraso respeita.');
   const compra=txDataAntesDaCompra(id);
   if(compra)return falhaCampo('t_date','O imóvel foi comprado a '+compra+': uma receita não pode ser de antes.');
+  /* o NIF de quem paga uma cedência (natureza 02) vai ao Anexo F: um erro de dedo fica à vista (N076) */
+  if(tForm.kind==='income'&&String(tForm.pagadorNif||'')&&nifValido(tForm.pagadorNif)===false)
+    return falhaCampo('t_pagadorNif','Este NIF não bate certo: confere os dígitos.');
+  /* a nota de IMI de uma casa com mais de um dono: o IMI do prédio ou a minha nota, sem omissão (N041) */
+  if(txPartePorResponder(tForm))return falhaCampo('t_parte','Diz se é o IMI do prédio todo ou a tua nota de IMI.');
   /* com hipotecas vivas, um pagamento de crédito sem hipoteca ia parar à conta errada ou a nenhuma */
   if(tForm.kind==='loan'&&!tForm.loanId&&liveLoans(prop(tForm.propertyId)).length)return falhaCampo('t_loan','Indica a hipoteca.');
   if(tForm.kind==='settle'){
@@ -130,6 +150,9 @@ function txGuardar(id){
   }
   if(planeado)return txGuardarPlaneado();
   if(m.modo==='tpl')return txGuardarModelo();
+  /* a renda de dezembro confirmada em janeiro com a data de hoje: pergunta o dia
+     em que entrou, que é o que decide o ano do IRS (N026, D22) */
+  if(txPedeODia(id))return txPerguntarDia();
   /* uma renda abaixo da do planeado desse mês pergunta porquê, uma vez; a que
      já respondeu «Pagamento parcial» grava-se assim, e a que deixou de estar
      abaixo deixa de ser parcial (D112–D115) */
@@ -171,6 +194,89 @@ function txDataAntesDaCompra(id){
 function txMinDaData(t){
   if(!servicoLigado('properties')||t.kind!=='income'||!t.propertyId||t.groupId||t.todos)return '';
   return minDaCompra(t.propertyId,t.date);
+}
+/* O imóvel de uma receita nova escolhe-se, em vez de ficar «Sem imóvel»
+   calado (N027)? Numa receita nova registada pelo formulário (o modo 'tx'),
+   de quem pode registar sem imóvel, numa conta com algum contrato em vigor
+   num imóvel onde pode adicionar: aí uma renda sem imóvel não ia a linha
+   nenhuma da Declaração. O seletor abre em «— escolhe o imóvel —», com
+   «Sem imóvel» como escolha (t._semImovel); com um imóvel só, ele já vem
+   escolhido (txModal). Alterar um movimento não pergunta.
+   Recebe: t — o movimento do formulário (tForm).
+   Devolve: true ou false. */
+function txPedeImovel(t){
+  if(!t||t.kind!=='income'||t._edit||txModo.modo!=='tx'||!podeSemImovel()||!servicoLigado('contracts'))return false;
+  return casasComo('tx.add').some(p=>activeContracts(p.id).length>0);
+}
+/* O contrato de uma receita nova escolhe-se (N083)? Num imóvel com mais de um
+   contrato em vigor (os quartos, a loja e a casa no mesmo artigo), numa
+   receita nova do formulário: uma renda é sempre de um contrato, e «Sem
+   contrato» à cabeça gravava-a fora do quadro. O seletor abre em «— escolhe
+   o contrato —», com «Não é de nenhum contrato» como escolha (t._semContrato).
+   Recebe: t — o movimento do formulário (tForm).
+   Devolve: true ou false. */
+function txPedeContrato(t){
+  if(!t||t.kind!=='income'||t._edit||txModo.modo!=='tx'||!t.propertyId||!servicoLigado('contracts'))return false;
+  return activeContracts(t.propertyId).length>1;
+}
+/* A nota de IMI de uma casa com mais de um dono está por responder (N041,
+   D9 c)? Numa despesa nova de IMI (pelo id) onde a pergunta aparece
+   (txNotaPropriaAplica): é o IMI do prédio todo, ou a minha nota? Sem
+   omissão — na compropriedade cada dono recebe a sua nota, já pela quota; no
+   bem comum do casal a nota é uma só, do prédio. Um planeado que já diz «a
+   minha nota» conta como respondido; alterar, ou guardar um planeado ou um
+   modelo, não pergunta.
+   Recebe: t — o movimento do formulário (tForm).
+   Devolve: true quando falta a resposta. */
+function txPartePorResponder(t){
+  if(!t||t._edit||t._parteRespondida||t.notaPropria===true||txModo.modo==='rec'||(txModo.modo==='tpl'&&!txModo.alsoTx))return false;
+  return txCatIrsId(t,true)==='impostos/imi'&&txParteVisivel(t);
+}
+/* O Guardar pergunta o dia em que a renda entrou (N026)? A regra do Confirmar
+   rápido (planeados.js:recPedeODia, D22) no formulário: numa renda ou numa
+   caução nova (o papel do irs-papeis.js:irsReceitaDe) com o mês a que respeita
+   de outro ano que a data, quando a data é ainda a de hoje — a que o
+   formulário traz — e veio de um planeado: a confirmar, ou registada com o
+   mês sugerido pelo planeado (txSugereMesDaRenda). A renda de dezembro
+   confirmada em janeiro entrou num dos dois anos, e cada um é uma Declaração.
+   Não volta a perguntar o dia já respondido (t._diaRespondido), nem o que quem
+   abriu o formulário já perguntou (txModo.diaPerguntado), a não ser que a
+   data tenha mudado.
+   Recebe: id — o id do movimento em edição (null num novo).
+   Devolve: true ou false. */
+function txPedeODia(id){
+  const t=tForm,m=txModo,d=String(t.date||''),p=String(t.periodo||'');
+  if(id||t._edit||t._diaRespondido||t.kind!=='income'||!/^\d{4}-\d{2}$/.test(p)||!/^\d{4}-\d{2}-\d{2}$/.test(d))return false;
+  if(d!==today()||p.slice(0,4)===d.slice(0,4)||(m.diaPerguntado&&d===m.diaPerguntado))return false;
+  if(!(m.modo==='confirmar'||(m.modo==='tx'&&!!t._aP&&p===t._aP)))return false;
+  const papel=irsReceitaDe(t).papel;
+  return papel==='renda'||papel==='caucao';
+}
+/* A pergunta do dia em que a renda entrou, por cima do formulário (a folha do
+   planeados.js:recPerguntarDia): só o dia, por preencher — um valor já escrito
+   confirmava-se sem ninguém o ler. O mês a que respeita fica o que está.
+   Só numa receita nova (txPedeODia): o Guardar que se segue é de um novo.
+   Devolve: nada — abre a folha. */
+function txPerguntarDia(){
+  const t=tForm;
+  openModal('Em que dia entrou?',
+    `<div class="form"><div class="hint u-fs-14px"><b>${esc(t.label||'Esta renda')}</b>, de ${esc(mesPt(t.periodo))}, conta no IRS do ano em que a recebeste, e não no do mês a que respeita. Indica o dia em que entrou.</div>
+    <label>Dia em que entrou <span class="req">*</span><input id="tx_dia" type="date" value="" max="${today()}"></label></div>`,
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button>`+
+    `<button class="btn primary" data-toca="dados" data-click="txConfirmarDia()">Confirmar</button>`);
+}
+/* O «Confirmar» da pergunta do dia (txPerguntarDia): o dia é obrigatório e não
+   passa de hoje (a compra da casa confere-a o Guardar); fecha a folha, põe o
+   dia no formulário e guarda outra vez.
+   Devolve: nada — guarda, ou diz o erro junto ao campo. */
+function txConfirmarDia(){
+  const dia=String(val('tx_dia')||'');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(dia))return falhaCampo('tx_dia','Indica o dia em que a renda entrou.');
+  if(dia>today())return falhaCampo('tx_dia','O dia em que entrou não pode ser depois de hoje.');
+  closeModal();
+  tForm.date=dia;tForm._diaRespondido=true;
+  repaintTx();
+  txGuardar(null);
 }
 /* Se o montante do formulário aberto pode ficar vazio: só num modelo que se
    guarda sozinho (o modo 'tpl' sem alsoTx). Com alsoTx regista-se também o
@@ -270,27 +376,61 @@ function txGuardarMovimento(id){
    que falta, o imóvel e o mês — o que as escolhas (txRendaAbaixoEscolha)
    precisam depois de a folha abrir. null sem pergunta aberta. */
 let txAbaixo=null;
-/* Esta renda fica abaixo da do planeado desse mês? Só numa renda (o papel do
-   irs-papeis.js:irsReceitaDe) ligada a um contrato, com o planeado da renda
-   com a ocorrência no mês a que ela respeita (planeados.js:recDaRendaNoMes —
-   o que confirmo, ou o do contrato): a renda em vigor nesse mês é o montante
-   dele mais a retenção, e nunca o c.rent de hoje. Contam as outras rendas do
-   mesmo contrato e mês já registadas (um pagamento parcial e o resto). Sem
-   Planeados ligados, ou sem planeado nesse mês, não pergunta.
+/* Esta renda fica abaixo da renda desse mês? Só numa renda (o papel do
+   irs-papeis.js:irsReceitaDe) ligada a um contrato. A renda do mês é a do
+   planeado da renda com a ocorrência no mês a que ela respeita
+   (planeados.js:recDaRendaNoMes — o que confirmo, ou o do contrato: o
+   montante dele mais a retenção). No mês corrente e no anterior conta também
+   a renda do contrato (txRendaDoContratoNoMes), que aí é a que está em vigor
+   — com planeado, a maior das duas (o planeado escrito com o que a gestora
+   transfere, abaixo da renda); sem planeado nesse mês (os Planeados
+   desligados, a renda automática desligada no contrato, um contrato
+   terminado), só ela (N080). Num mês mais antigo, sem planeado nesse mês, não
+   pergunta: a renda de hoje pode já ter a atualização. Contam as outras
+   rendas do mesmo contrato e mês já registadas (um pagamento parcial e o
+   resto).
    Recebe: id — o id do movimento em edição (null num novo).
    Devolve: null, ou {renda, ja, falta, mes} — a renda do mês, o que as outras
    rendas desse mês já somam, o que falta (euros) e o mês ('AAAA-MM'). */
 function txRendaAbaixo(id){
   const t=tForm;
-  if(t.kind!=='income'||!t.contractId||!servicoLigado('recurring'))return null;
+  if(t.kind!=='income'||!t.contractId)return null;
   if(irsReceitaDe(t).papel!=='renda')return null;
   const c=contract(t.contractId),mes=mesDaRenda(t);
-  const r=c?recDaRendaNoMes(c,mes,txModo.modo==='confirmar'?txModo.recId:null):null;
-  if(!r)return null;
-  const renda=r2((Number(r.tx.amount)||0)+(Number(r.tx.retencao)||0));
+  if(!c||!/^\d{4}-\d{2}$/.test(mes))return null;
+  const r=servicoLigado('recurring')?recDaRendaNoMes(c,mes,txModo.modo==='confirmar'?txModo.recId:null):null;
+  let renda=r?r2((Number(r.tx.amount)||0)+(Number(r.tx.retencao)||0)):0;
+  if(txMesRecente(mes))renda=Math.max(renda,txRendaDoContratoNoMes(c,mes));
+  if(!(renda>0))return null;
   const outras=(db.transactions||[]).filter(x=>x.id!==id&&x.id!==t.id&&x.contractId===c.id&&ehRenda(x)&&mesDaRenda(x)===mes);
   const ja=r2(sum(outras.map(rendaBruta))),falta=r2(renda-ja-rendaBruta(t));
   return falta>0.005?{renda,ja,falta,mes}:null;
+}
+/* O mês é o corrente ou o anterior (pelo dia de hoje)?
+   Recebe: mes — 'AAAA-MM'.
+   Devolve: true ou false. */
+function txMesRecente(mes){
+  const h=today(),y=Number(h.slice(0,4)),m=Number(h.slice(5,7));
+  const ant=m===1?(y-1)+'-12':y+'-'+String(m-1).padStart(2,'0');
+  return mes===h.slice(0,7)||mes===ant;
+}
+/* A renda do contrato em vigor num mês, para comparar uma renda sem planeado
+   nesse mês (N080): a do planeados.js:recRendaDoContrato, com os Planeados
+   ligados; sem eles, o c.rent quando não há atualização anual registada
+   depois desse mês — com o c.increase, o aniversário do início deste ano já
+   passado e o mês antes dele, a renda desse mês era outra, e não se sabe.
+   Recebe: c — o contrato; mes — 'AAAA-MM'.
+   Devolve: euros (a renda bruta), ou 0 quando não se sabe. */
+function txRendaDoContratoNoMes(c,mes){
+  if(!c||!/^\d{4}-\d{2}$/.test(String(mes||'')))return 0;
+  if(servicoLigado('recurring'))return Math.max(0,Number(recRendaDoContrato(c,mes))||0);
+  const renda=Number(c.rent)||0,ini=String(c.start||'');
+  if(!(renda>0)||(/^\d{4}-\d{2}/.test(ini)&&mes<ini.slice(0,7)))return 0;
+  if(c.increase!=null&&c.increase!==''&&/^\d{4}-\d{2}/.test(ini)){
+    const h=today(),aniv=h.slice(0,4)+ini.slice(4,7);
+    if(aniv<=h.slice(0,7)&&ini.slice(0,7)<aniv&&mes<aniv)return 0;
+  }
+  return renda;
 }
 /* Os descontos que a pergunta da renda abaixo conhece: o rótulo e a
    explicação da escolha, o ícone, a descrição da despesa, a categoria
@@ -319,21 +459,57 @@ const TX_DESCONTOS_RENDA={
    despesa do desconto (txRendaAbaixoDesconto). O IRS conta a renda do recibo,
    antes da retenção, da comissão e de descontos; a despesa deduz-se pela
    coluna dela, uma vez. «Voltar» devolve ao formulário, para corrigir o
-   montante.
+   montante. A retenção na fonte é uma terceira saída (N081): à cabeça quando
+   é a razão provável (txRetencaoProvavel), no fim nos outros casos, e fora
+   quando o que falta fica abaixo do mínimo de uma retenção.
    Recebe: id — o id do movimento em edição (null num novo); a — o que o
    txRendaAbaixo devolveu.
    Devolve: nada — abre a folha da escolha. */
 function txPerguntarRendaAbaixo(id,a){
   txAbaixo={id:id||null,falta:a.falta,renda:a.renda,mes:a.mes,pid:tForm.propertyId,camada:modalTop()};
-  const D=TX_DESCONTOS_RENDA,f=euro2(a.falta);
-  const opts=[{v:'parcial',label:'Pagamento parcial',sub:'Faltam '+f+': ficam em dívida, e o planeado continua a pedir esta renda.',icon:'clock'}]
+  const D=TX_DESCONTOS_RENDA,f=euro2(a.falta),rp=txRetencaoProvavel(tForm,a);
+  const ret=rp.oferece?[{v:'retencao',label:'O inquilino reteve IRS na fonte',sub:'Os '+f+' são o IRS que ele reteve e entregou à AT por ti: ficam no retido, e a renda conta inteira. Se o recibo diz «Sem retenção», não é isto.',icon:'recibo'}]:[];
+  const c=contract(tForm.contractId),comPlaneado=!!c&&servicoLigado('recurring')&&!!ctRecOf(c);
+  const opts=(rp.cabeca?ret:[]).concat([{v:'parcial',label:'Pagamento parcial',sub:'Faltam '+f+': ficam em dívida'+(comPlaneado?', e o planeado continua a pedir esta renda.':'.'),icon:'clock'}])
     .concat(['comissao','conservacao','melhoria'].map(k=>({v:k,label:D[k].label,sub:D[k].sub,icon:D[k].icon})))
     .concat([{v:'encargo',label:'Encargo do imóvel pago pelo inquilino',sub:'O condomínio, o IMI, o seguro ou a água, luz e gás.',icon:'building'},
-      {v:'outro',label:D.outro.label,sub:D.outro.sub,icon:D.outro.icon}]);
+      {v:'outro',label:D.outro.label,sub:D.outro.sub,icon:D.outro.icon}])
+    .concat(rp.cabeca?[]:ret);
   pickModal('Entrou menos do que a renda: porquê?',opts,txRendaAbaixoEscolha,
     `<div class="hint u-fs-14px">A renda de ${esc(mesPt(a.mes))} é ${euro2(a.renda)}, e faltam ${f}. O IRS conta a renda do recibo, antes da retenção, da comissão e de descontos: num desconto registas a renda inteira e o desconto como despesa.</div>`);
 }
-/* Uma escolha da pergunta da renda abaixo: o pagamento parcial grava já; o
+/* A retenção na fonte explica o que falta (N081)? Só retém quem tem, ou deve
+   ter, contabilidade organizada (CIRS art. 101.º n.º 1): a saída vai à cabeça
+   quando um inquilino do contrato retém (txInquilinoRetem) ou quando o que
+   falta é uma das taxas certas da renda do mês, com um euro de folga — as do
+   bloco `retencao` da versão do ano, lidas pelo fisco-avisos.js:
+   fiscoAvRetencaoCerta (os 25 %, e os 10 % das rendas moderadas quando o
+   contrato cabe nelas); sem a Declaração ligada, a taxa geral da versão. Não
+   se oferece quando o que falta fica abaixo do mínimo de uma retenção
+   (art. 101.º-B n.º 1 d)): aí o inquilino não retém.
+   Recebe: t — a renda do formulário (tForm); a — o que o txRendaAbaixo devolveu ({renda, falta}).
+   Devolve: {oferece, cabeca} — true/false cada um. */
+function txRetencaoProvavel(t,a){
+  const c=t.contractId?contract(t.contractId):null,ano=anoIrs(String(t.date||'').slice(0,4)),d=String(t.date||'');
+  const R=(irsAno(ano)||{}).retencao;
+  let certa=null;
+  if(c&&servicoLigado('fisco'))certa=fiscoAvRetencaoCerta(c,t,ano);
+  else if(R&&typeof R==='object'&&Number(R.taxa)>0)certa={taxas:[Number(R.taxa)],minimo:Number(R.minimo)>0&&(!R.minimoDesde||d>=String(R.minimoDesde))?Number(R.minimo):0};
+  const falta=Number(a&&a.falta)||0,renda=Number(a&&a.renda)||0;
+  if(certa&&certa.minimo&&falta<certa.minimo-0.005)return {oferece:false,cabeca:false};
+  const bate=!!certa&&renda>0&&(certa.taxas||[]).some(k=>Math.abs(falta-renda*Number(k)/100)<=1);
+  return {oferece:true,cabeca:txInquilinoRetem(c)||bate};
+}
+/* Algum inquilino do contrato retém IRS na fonte? A ficha diz «Retém IRS na
+   fonte», ou o NIF é de pessoa coletiva (irs-papeis.js:nifColetivo — um
+   sinal, nunca o critério legal) sem o «confirmei: não retém» (retemVisto).
+   Recebe: c — o contrato (aguenta null).
+   Devolve: true ou false. */
+function txInquilinoRetem(c){
+  return !!c&&ctTenants(c).some(p=>p&&(p.retem===true||(nifColetivo(p.nif)&&p.retemVisto!==true)));
+}
+/* Uma escolha da pergunta da renda abaixo: o pagamento parcial grava já; a
+   retenção na fonte grava a renda com o que falta no retido (N081); o
    encargo do imóvel pergunta qual (ENCARGOS_DO_INQUILINO); o resto é um
    desconto (txRendaAbaixoDesconto).
    Recebe: o — a opção escolhida ({v}).
@@ -341,6 +517,8 @@ function txPerguntarRendaAbaixo(id,a){
 function txRendaAbaixoEscolha(o){
   const a=txAbaixo;if(!a||!o)return;
   if(o.v==='parcial'){txRendaAbaixoFecha();txAbaixo=null;tForm.parcial=true;return txGuardarMovimento(a.id)}
+  /* a retenção: o montante fica o que entrou, e o que falta vai ao retido (N081) */
+  if(o.v==='retencao'){txRendaAbaixoFecha();txAbaixo=null;tForm.retencao=r2((Number(tForm.retencao)||0)+a.falta);tForm.parcial=false;return txGuardarMovimento(a.id)}
   if(o.v!=='encargo')return txRendaAbaixoDesconto(o.v,false);
   /* a escolha seguinte fica no lugar desta (o pickModal guarda uma escolha de
      cada vez): o «Voltar» dela devolve ao formulário */
@@ -443,6 +621,9 @@ function prefill(){
       if(l)set(loanCalc(l).total,'Prestação '+(l.name?l.name+' · ':'')+p.name);
     }
   }
+  /* o contrato escolhido à mão numa receita sem categoria traz a categoria da
+     renda, mesmo com o montante já escrito (N083: os quartos) */
+  if(tForm.kind==='income'&&tForm.contractId&&tForm._ctEscolhido&&!tForm.category&&servicoLigado('contracts'))txSugereCategoriaDaRenda();
   /* o mês a que a renda respeita, depois do contrato (que pode ter vindo da sugestão de cima) */
   txSugereMesDaRenda();
 }
@@ -460,21 +641,46 @@ function prefill(){
    Devolve: nada — mexe no tForm. */
 function txSugereContratoDaRenda(c){
   if(!c||tForm.contractId||tForm._ctEscolhido||!servicoLigado('contracts'))return;
-  if(tForm.category&&catIrsId('income',tForm.category)!=='rendas')return;
+  if(tForm.category&&txCatIrsId(tForm)!=='rendas')return;
   tForm.contractId=c.id;tForm._aC=c.id;
   txSugereCategoriaDaRenda();
 }
 /* A categoria de uma renda sugerida: Rendas › Renda mensal, achadas pelo id
    (dados.js:catIrsId — o nome pode ser outro nesta conta), e só onde a
    pessoa ainda não escolheu: sem categoria, as duas; em Rendas sem
-   subcategoria, só a Renda mensal. Uma conta sem elas fica sem sugestão.
-   Marca o que sugeriu em _aCat e _aSub (para o keepTyped).
+   subcategoria, só a Renda mensal. Num contrato que já tinha acabado na data
+   da receita (txContratoAcabou: a renda que o ex-inquilino paga depois do
+   fim, N025), a sugestão é a Renda em atraso — o mês a que respeita fica
+   obrigatório, e quem o sabe é a pessoa. Uma conta sem elas fica sem
+   sugestão. Marca o que sugeriu em _aCat e _aSub (para o keepTyped).
    Devolve: nada — mexe no tForm. */
 function txSugereCategoriaDaRenda(){
   const t=tForm;if(t.kind!=='income')return;
-  const r=txCatDoId('income','rendas/renda-mensal');if(!r)return;
+  const c=t.contractId?contract(t.contractId):null;
+  const r=txCatDoId('income',txContratoAcabou(c,t.date)?'rendas/renda-em-atraso':'rendas/renda-mensal')||txCatDoId('income','rendas/renda-mensal');
+  if(!r)return;
   if(!t.category){t.category=r.category;t.sub=r.sub;t._aCat=r.category;t._aSub=r.sub;return}
   if(t.category===r.category&&!t.sub){t.sub=r.sub;t._aSub=r.sub}
+}
+/* O último dia em que um contrato esteve em vigor, para o seletor do contrato
+   de uma receita: o da cessação (irs.js:irsCessacao, que o «Terminar» grava),
+   e num terminado sem ela o c.end (o «Terminar» antigo escrevia lá o dia).
+   Num contrato que continua (mesmo com o termo passado sem «Renovar…»), ''.
+   Recebe: c — o contrato (aguenta null).
+   Devolve: 'AAAA-MM-DD', ou ''. */
+function txFimDoContrato(c){
+  if(!c)return '';
+  const x=irsCessacao(c).data;if(x)return x;
+  return c.active===false?String(c.end||''):'';
+}
+/* O contrato já tinha acabado nesta data? O dia de fim real
+   (txFimDoContrato) antes da data — ou um terminado sem data nenhuma.
+   Recebe: c — o contrato (aguenta null); data — 'AAAA-MM-DD' (vazio: hoje).
+   Devolve: true ou false. */
+function txContratoAcabou(c,data){
+  if(!c)return false;
+  const d=/^\d{4}-\d{2}-\d{2}$/.test(String(data||''))?String(data):today(),f=txFimDoContrato(c);
+  return f?f<d:c.active===false;
 }
 /* O nome que uma categoria do IRS tem nesta conta, pelo id fixo dela
    (dados.js:catIrsId, CATS_DO_IRS): a categoria e a subcategoria da árvore
@@ -499,6 +705,11 @@ function txCatDoId(kind,id){
    contrato (planeados.js:ctRecOf — o cursor dele, já vencido, e ainda sem
    renda lançada); sem ele fica em branco, que é o da data. Numa «Renda em
    atraso» não se sugere nada: o mês é obrigatório, e quem o sabe é a pessoa.
+   A renda paga antes do dia previsto (N146: a de dezembro paga a 28 de
+   novembro, o regime supletivo do Código Civil): com o mês da data já pago
+   (rendaJaLancada) e o planeado a vencer nos 31 dias depois da data, o mês é
+   o do planeado (marcado também em _aPAdiantada, para a dica o dizer) — senão
+   ficava a segunda renda do mês da data, e o mês certo continuava por pagar.
    Só numa renda nova com contrato, e nunca por cima do que lá está; marca o
    que sugeriu em _aP (o keepTyped e a troca para «Renda em atraso» desfazem-no).
    Devolve: nada — mexe no tForm. */
@@ -508,14 +719,20 @@ function txSugereMesDaRenda(){
   const c=contract(t.contractId);
   if(!c||!servicoLigado('recurring'))return;
   const r=ctRecOf(c);
-  if(!r||r.muted||!/^\d{4}-\d{2}-\d{2}$/.test(String(r.next||''))||r.next>today())return;
+  if(!r||r.muted||!/^\d{4}-\d{2}-\d{2}$/.test(String(r.next||'')))return;
   if(rendaJaLancada(c,r.next))return;
-  t.periodo=r.next.slice(0,7);t._aP=t.periodo;
+  if(r.next<=today()){t.periodo=r.next.slice(0,7);t._aP=t.periodo;return}
+  const d=/^\d{4}-\d{2}-\d{2}$/.test(String(t.date||''))?t.date:today();
+  if(r.next.slice(0,7)<=d.slice(0,7)||!rendaJaLancada(c,d))return;
+  const dias=(Date.UTC(+r.next.slice(0,4),+r.next.slice(5,7)-1,+r.next.slice(8,10))-Date.UTC(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10)))/864e5;
+  if(dias>31)return;
+  t.periodo=r.next.slice(0,7);t._aP=t.periodo;t._aPAdiantada=true;
 }
-/* É uma «Renda em atraso» (Rendas › Renda em atraso, pelo id)?
+/* É uma «Renda em atraso» (Rendas › Renda em atraso, pelo id do movimento:
+   dados.js:txCatIrsId — a marca, a árvore, o nome de origem; N006)?
    Recebe: t — o movimento.
    Devolve: true ou false. */
-function txRendaEmAtraso(t){return !!t&&t.kind==='income'&&!!t.sub&&catIrsId('income',t.category,t.sub)==='rendas/renda-em-atraso'}
+function txRendaEmAtraso(t){return !!t&&t.kind==='income'&&!!t.sub&&txCatIrsId(t,true)==='rendas/renda-em-atraso'}
 /* O mês a que a renda respeita é obrigatório neste formulário? Numa «Renda em
    atraso» registada ou confirmada (D54); num planeado ou num modelo o campo
    nem está, porque o mês é de cada renda.
@@ -537,7 +754,7 @@ function keepTyped(){
   if(t._aC&&t.contractId===t._aC)t.contractId=null;
   /* a subcategoria sugerida sai; a categoria só com ela (uma subcategoria escolhida à mão não fica sem a sua) */
   if(t._aSub&&t.sub===t._aSub){t.sub='';if(t._aCat&&t.category===t._aCat)t.category=''}
-  ['_aP','_aC','_aCat','_aSub'].forEach(k=>{delete t[k]});
+  ['_aP','_aPAdiantada','_aC','_aCat','_aSub'].forEach(k=>{delete t[k]});
 }
 /* O corpo da ficha de um movimento: o que se sabe sobre ele, para ler.
 
@@ -573,18 +790,19 @@ function txFicha(id){
      e o recibo eletrónico — este só num contrato declarado, porque só aí a AT
      o espera, e nas receitas que o pedem: a renda, a caução e o reembolso do
      inquilino (irs-papeis.js:irsReceitaDe, as mesmas que o resumo conta nos
-     recibos por emitir). Numa despesa: a coluna do Anexo F, e de onde veio a
-     decisão. */
-  const papelIrs=t.kind==='income'&&ct?irsReceitaDe(t).papel:'';
-  const renda=t.kind==='income',recibo=(papelIrs==='renda'||papelIrs==='caucao')&&ctDeclarado(ct);
-  const col=t.kind==='expense'?irsColunaDe(t):null;
-  const quadroAimi=((irsAno(anoIrs(String(t.date||'').slice(0,4)))||{}).quadros||{}).aimi;
-  const origem=col?({movimento:'escolhida neste movimento',sub:'pela subcategoria',categoria:'pela categoria',
-    omissao:'sem regra: escolhe a coluna',lei:'fixo por lei: vai ao '+(quadroAimi?'quadro '+quadroAimi:'quadro do AIMI'),excluido:'não conta: categoria fora dos totais'}[col.origem]||''):'';
-  /* «a confirmar» pela categoria: não conta até se escolher a coluna (D61, D07) */
-  const origemTxt=col&&col.col==='confirmar'&&(col.origem==='categoria'||col.origem==='sub')?origem+': escolhe a coluna':origem;
-  /* a divisão própria não muda o IRS: lá conta a quota de cada um no imóvel (D95) */
-  const divisaoPropria=verDivisao&&(t.kind==='income'||t.kind==='expense')&&!!(t.split&&t.split.mode&&t.split.mode!=='quota');
+     recibos por emitir; prazos.js:pzPedeRecibo — não na categoria B nem num
+     arrendamento rural) e a cedência de uso (txPedeRecibo, N077). E o papel
+     dela na Declaração, numa linha «Anexo F»
+     (txAnexoFDaReceita, N144). Numa despesa: a coluna do Anexo F, e de onde
+     veio a decisão — ou o que a Declaração lhe faz, quando a deixa de fora ou
+     a leva às obras dos 24 meses (txAnexoFDaDespesa, N113); só quando a
+     despesa toca um imóvel arrendado (txAnexoFAplica, N064). */
+  const papelIrs=t.kind==='income'?irsReceitaDe(t).papel:'';
+  const renda=t.kind==='income',recibo=txPedeRecibo(t);
+  const anexoF=t.kind==='expense'?(txAnexoFAplica(t)?txAnexoFDaDespesa(t):''):renda?txAnexoFDaReceita(t):'';
+  /* a divisão própria não muda o IRS: lá conta a quota de cada um no imóvel (D95);
+     «só a minha parte» já não é cortada pela quota, e a frase não se diz */
+  const divisaoPropria=verDivisao&&(t.kind==='income'||t.kind==='expense')&&!!(t.split&&t.split.mode&&t.split.mode!=='quota')&&t.notaPropria!==true;
   return ficha([
     {tipo:'nota',valor:esc(lote?recusaDoLote(t):motivoRecusa(t.propertyId,'tx.add',t))},
     /* a cor do valor é a da lista (txTomDoTipo): a prestação roxa, a dívida em
@@ -646,15 +864,120 @@ function txFicha(id){
       valor:(function(){const r=creditorBalances(t.propertyId).find(x=>x.creditor===cred);
         return r?'Recebido '+euro2(r.received)+' · devolvido '+euro2(r.repaid)+' · falta <b>'+euro2(r.due)+'</b>':''})()}:null,
     {rotulo:'Categoria',valor:esc([t.category,t.sub].filter(Boolean).join(' / '))},
-    col?{rotulo:'Anexo F',valor:esc(irsColunaNome(col.col))+(origemTxt?' <span class="small u-fw-400">'+esc(origemTxt)+'</span>':'')}:null,
-    t.kind==='expense'&&t.notaPropria?{rotulo:'Nota de IMI',valor:'A minha nota: conta inteira para quem a pagou'}:null,
+    anexoF?{rotulo:'Anexo F',valor:anexoF}:null,
+    renda&&String(t.pagadorNif||'')?{rotulo:'NIF de quem paga',valor:esc(t.pagadorNif)}:null,
+    renda&&String(t.cedenciaNumero||'')?{rotulo:'N.º da cedência',valor:esc(t.cedenciaNumero)}:null,
+    t.kind==='expense'&&t.notaPropria?(txCatIrsId(t,true)==='impostos/imi'
+      ?{rotulo:'Nota de IMI',valor:'A minha nota: conta inteira para quem a pagou'}
+      :{rotulo:'Parte',valor:'Só a minha parte: conta inteira para quem a pagou'}):null,
     (t.tags||[]).length?{rotulo:'Etiquetas',valor:(t.tags||[]).map(esc).join(' · ')}:null,
-    !countsInTotals(t)?{tipo:'nota',valor:isPassivo(t)
+    /* a caução não entra nos totais da app, mas no IRS é renda do ano em que se recebe (N144, D03) */
+    !countsInTotals(t)?{tipo:'nota',valor:papelIrs==='caucao'
+      ?'Não entra nos totais nem no resultado: é dinheiro que se devolve. No IRS conta como renda do ano em que a recebes.'
+      :isPassivo(t)
       ?'Não entra nos totais nem no resultado: é dinheiro que se devolve — uma caução ou um empréstimo recebido.'
       :'Não entra nos totais nem no resultado.'}:null,
     {tipo:'lista',rotulo:'Anexos',valor:txAnexosDaFicha(t)},
     String(t.notes||'').trim()?{tipo:'bloco',rotulo:'Comentários',valor:rich(t.notes)}:null,
   ]);
+}
+/* O papel de uma receita na Declaração, para a linha «Anexo F» da ficha
+   (N144), pelo irs-papeis.js:irsReceitaDe: a renda (na linha do contrato, ou
+   sem contrato e fora das linhas), a caução (renda do ano em que se recebe,
+   OC 20256/2023), a indemnização e as outras receitas prediais (com a
+   natureza da versão do ano), o reembolso que abate a um gasto, o que não se
+   declara e o que está por classificar. Só com a Declaração ligada.
+   Recebe: t — a receita.
+   Devolve: o HTML do valor (já escapado), ou ''. */
+function txAnexoFDaReceita(t){
+  if(!t||t.kind!=='income'||!servicoLigado('fisco'))return '';
+  const r=irsReceitaDe(t),n=r.natureza?'natureza '+r.natureza:'';
+  /* a ficha já põe o valor a negrito: o papel e, pequeno, o que lhe acontece */
+  const linha=(a,b)=>esc(a)+(b?' <span class="small u-fw-400">'+esc(b)+'</span>':'');
+  if(r.papel==='renda')return t.contractId?linha('Renda','na linha do contrato'):linha('Renda sem contrato','liga-a ao contrato: sem ele não vai a nenhuma linha do quadro');
+  if(r.papel==='caucao')return linha('Caução','conta como renda do ano em que a recebes');
+  if(r.papel==='indemnizacao')return linha('Indemnização que compensa rendas',n);
+  if(r.papel==='outra')return linha('Outras receitas prediais',n);
+  if(r.papel==='reembolsoGasto')return linha('Reembolso de um gasto','abate a esse gasto, e não é renda');
+  if(r.papel==='fora')return linha('Não se declara','');
+  if(r.papel==='porClassificar')return linha('Por classificar','a Declaração não a conta: se é uma renda, escolhe a categoria Rendas e o contrato');
+  return '';
+}
+/* O que a Declaração faz a uma despesa, para a linha «Anexo F» da ficha
+   (N113): a coluna e de onde veio a decisão; e, quando a Declaração a deixa
+   de fora (sem contrato em vigor nesse dia, um imóvel sem rendas no ano) ou a
+   leva às obras dos 24 meses de um contrato, o que lhe faz — pela função
+   única do resumo (fisco-resumo.js:fiscoDespesaNaDeclaracao), a mesma do CSV
+   e da Declaração. O AIMI vai ao quadro dele.
+   Recebe: t — a despesa.
+   Devolve: o HTML do valor (já escapado), ou ''. */
+function txAnexoFDaDespesa(t){
+  const col=irsColunaDe(t);
+  const quadroAimi=((irsAno(anoIrs(String(t.date||'').slice(0,4)))||{}).quadros||{}).aimi;
+  const origem=({movimento:'escolhida neste movimento',sub:'pela subcategoria',categoria:'pela categoria',
+    omissao:'sem regra: escolhe a coluna',lei:'fixo por lei: vai ao '+(quadroAimi?'quadro '+quadroAimi:'quadro do AIMI'),excluido:'não conta: categoria fora dos totais'}[col.origem]||'');
+  /* «a confirmar» pela categoria: não conta até se escolher a coluna (D61, D07) */
+  const origemTxt=col.col==='confirmar'&&(col.origem==='categoria'||col.origem==='sub')?origem+': escolhe a coluna':origem;
+  const x=txDestinoDaDespesa(t);
+  if(x&&x.motivo&&['nao','confirmar'].indexOf(x.motivo)<0){
+    /* a ficha já põe o valor a negrito: o nome do destino e, pequeno, porquê */
+    const nome=x.conta?(irsColunaNome(x.col)||(x.col==='obras24'?'Obras antes do arrendamento':'')):'Fora da Declaração';
+    const porque=String(x.texto||'').replace(/^Fora da Declaração:\s*/,'');
+    return esc(nome)+(porque?' <span class="small u-fw-400">'+esc(porque)+'</span>':'');
+  }
+  return esc(irsColunaNome(col.col))+(origemTxt?' <span class="small u-fw-400">'+esc(origemTxt)+'</span>':'');
+}
+/* O que a Declaração faz a esta despesa (fisco-resumo.js:fiscoDespesaNaDeclaracao,
+   N113), lido com cuidado: só com a Declaração ligada, e um erro dela não
+   parte a ficha nem o formulário. Serve também o tForm, que ainda não está
+   na base (uma cópia normalizada).
+   Recebe: t — a despesa.
+   Devolve: {col, origem, conta, motivo, contrato, parte, ano, data, texto} ou null. */
+function txDestinoDaDespesa(t,memo){
+  if(!t||t.kind!=='expense'||!servicoLigado('fisco'))return null;
+  try{const x=fiscoDespesaNaDeclaracao(normTx(JSON.parse(JSON.stringify(t))),memo||undefined);return x&&typeof x==='object'?x:null}catch(e){return null}
+}
+/* O que o resumo guarda por ano para a função da despesa (os imóveis com
+   linha), enquanto o formulário está aberto: a despesa do formulário ainda
+   não está na base e não o muda, e cada repintura refazia o resumo do ano.
+   Nasce vazio a cada txModal, e esvazia-se quando a base muda por baixo (um
+   envio da nuvem, outra base): txMemoDaBase. */
+let txMemoDoDestino={};
+/* O memo do txMemoDoDestino para a base de agora: o mesmo enquanto a base, os
+   movimentos e os contratos são os mesmos; senão, um novo.
+   Devolve: o objeto do memo. */
+function txMemoDaBase(){
+  const m=txMemoDoDestino,k=[(db.transactions||[]).length,(db.contracts||[]).length].join(':');
+  if(!m||m._db!==db||m._k!==k){txMemoDoDestino={};Object.defineProperty(txMemoDoDestino,'_db',{value:db});Object.defineProperty(txMemoDoDestino,'_k',{value:k})}
+  return txMemoDoDestino;
+}
+/* A coluna do Anexo F diz-se nesta despesa (N064)? Só quando a despesa toca um
+   imóvel que é de arrendamento nessa altura: que não é de uso próprio, ou que
+   teve contrato no ano da despesa (ou começa um nos dois anos seguintes — as
+   obras dos 24 meses) ou rendas nesse ano; o destino de hoje não decide
+   (nota do verificador da lei). Sem imóvel, ou com a Declaração desligada,
+   nada — a não ser que a despesa já tenha a coluna escolhida, que nunca fica
+   escondida. O AIMI tem sempre a frase dele.
+   Recebe: t — a despesa (do formulário ou da base).
+   Devolve: true ou false. */
+function txAnexoFAplica(t){
+  if(!t||t.kind!=='expense')return false;
+  if(t.irsCol||irsColunaDe(Object.assign({},t,{irsCol:''})).origem==='lei')return true;
+  if(!servicoLigado('fisco'))return false;
+  const ps=t.propertyId?[prop(t.propertyId)].filter(Boolean):(t.groupId||t.todos)?txProps(t):[];
+  if(!ps.length)return false;
+  const d=/^\d{4}-\d{2}-\d{2}$/.test(String(t.date||''))?t.date:today(),Y=Number(d.slice(0,4));
+  return ps.some(p=>p.use!=='proprio'||txArrendadoNoAno(p.id,Y));
+}
+/* O imóvel esteve arrendado num ano, para os gastos? Um contrato que viveu
+   nesse ano (do início ao fim real, txFimDoContrato) ou que começa nos dois
+   anos seguintes (as obras dos 24 meses), ou rendas registadas nesse ano.
+   Recebe: pid — o id do imóvel; Y — o ano (número).
+   Devolve: true ou false. */
+function txArrendadoNoAno(pid,Y){
+  const ini=Y+'-01-01',ate=(Y+2)+'-12-31';
+  if((db.contracts||[]).some(c=>c&&c.propertyId===pid&&c.start&&c.start<=ate&&(!txFimDoContrato(c)||txFimDoContrato(c)>=ini)))return true;
+  return (db.transactions||[]).some(x=>x&&x.propertyId===pid&&String(x.date||'').startsWith(String(Y))&&ehRenda(x));
 }
 /* Os anexos na ficha de um movimento: uma linha por ficheiro, com o nome, e
    tocar abre-o (componentes.js:openMeta — uma imagem numa janela, um PDF
@@ -669,6 +992,25 @@ function txAnexosDaFicha(t){
   const fs=pode(t.propertyId,'file.view')?(t.files||[]):[];
   if(!fs.length)return '';
   return `<div class="ct-lista-anexos mov-anexos-lista">${fs.map(f=>`<button type="button" class="ct-anexo" data-toca="camada" data-click="openMeta('${jsq(f.id)}')">${ic('clip',18)}<span>${esc(f.name||'ficheiro')}</span>${ic('chevR',16)}</button>`).join('')}</div>`;
+}
+/* Uma despesa nova já preenchida, para um aviso a abrir com um toque (N134: o
+   imposto do selo do primeiro ano de um contrato). A ação só passa textos — um
+   objeto fica fora da gramática —, e é esta que monta o preset do txModal. A
+   categoria vem pelo id do IRS, com o nome que esta conta lhe dá (txCatDoId);
+   uma conta que não a tem fica sem categoria.
+   Recebe: pid — o id do imóvel ('' sem imóvel); catId — o id do IRS
+   ('impostos/imposto-do-selo'…) ou ''; valor — o montante (número ou texto;
+   '' sem sugestão); data — 'AAAA-MM-DD' ('' é hoje); label — a descrição ('' sem ela).
+   Devolve: nada — abre o formulário (ou diz porque não pode). */
+function txNovaDespesaCom(pid,catId,valor,data,label){
+  const id=pid&&prop(pid)?String(pid):null;
+  if(id&&!pode(id,'tx.add'))return toast(fraseSemPerm('tx.add'));
+  const preset={},cat=catId?txCatDoId('expense',String(catId)):null,v=num(valor);
+  if(cat){preset.category=cat.category;preset.sub=cat.sub}
+  if(v>0)preset.amount=r2(v);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(String(data||'')))preset.date=String(data);
+  if(String(label||'').trim())preset.label=String(label).trim();
+  txModal({kind:'expense',propId:id,preset});
 }
 /* O «Editar» da ficha de um movimento. A chamada ao txModal leva um objeto,
    como todas as outras, e um objeto literal fica fora da gramática das ações:
@@ -720,7 +1062,9 @@ function txView(id){
    «Todos» num molde de quem já só tem um imóvel —, para o seletor não
    mostrar uma coisa e gravar outra. Quem só
    colabora não ganha nenhuma opção nova. Um imóvel vendido antes da data do
-   movimento não aparece (txVendidoNaData, D33).
+   movimento não aparece (txVendidoNaData, D33). Numa receita nova de uma
+   conta com contratos em vigor (txPedeImovel, N027), a primeira opção é «—
+   escolhe o imóvel —» e «Sem imóvel» ('__sem__') é uma escolha.
    Recebe: t — o movimento do formulário (tForm).
    Devolve: array de {v, label}, com {div:true} antes dos grupos, para o sel(). */
 function opcoesDoImovel(t){
@@ -731,7 +1075,8 @@ function opcoesDoImovel(t){
   if(t.groupId&&!gs.some(o=>o.v==='g:'+t.groupId)){const g=grp(t.groupId);gs.push({v:'g:'+t.groupId,label:g?'Grupo · '+g.name:'Grupo que não está nesta conta'})}
   /* os vendidos antes da data do movimento saem (D33); o já escolhido fica sempre */
   const casas=propOptsPara(planeado?'rec.add':'tx.add',t.propertyId).filter(o=>o.v===t.propertyId||!txVendidoNaData(prop(o.v),t));
-  return (meu?[{v:'',label:settle?'Todos os imóveis':'Sem imóvel'}]:[])
+  const sem=txPedeImovel(t)?[{v:'',label:'— escolhe o imóvel —'},{v:'__sem__',label:'Sem imóvel'}]:[{v:'',label:settle?'Todos os imóveis':'Sem imóvel'}];
+  return (meu?sem:[])
     .concat(todos&&!settle?[{v:'*',label:'Todos os imóveis'}]:[])
     .concat(casas)
     .concat(gdiv(gs));
@@ -751,6 +1096,63 @@ function txVendidoNaData(p,t){
   const d=/^\d{4}-\d{2}-\d{2}$/.test(String(t&&t.date||''))?t.date:today();
   return v<d;
 }
+/* Os contratos que o seletor de uma receita oferece (N025): os que ainda não
+   acabaram (ctVivo — a caução e as rendas antecipadas recebem-se antes do
+   início), os que continuam depois do termo sem a renovação registada (o
+   ctEstado dá-os por terminados, e não acabaram), os que acabaram desde o
+   início do ano antes do anterior ao da data — a renda em atraso paga depois
+   do fim, a indemnização pela ocupação, o seguro de renda —, e sempre o já
+   ligado. Primeiro os vivos, depois os outros, do que acabou mais tarde para
+   o que acabou mais cedo. Só com os Contratos ligados e um imóvel escolhido.
+   Recebe: t — o movimento do formulário (tForm).
+   Devolve: os contratos (array). */
+function txContratosDaReceita(t){
+  if(!servicoLigado('contracts')||!t||!t.propertyId)return [];
+  const d=/^\d{4}-\d{2}-\d{2}$/.test(String(t.date||''))?t.date:today(),desde=(Number(d.slice(0,4))-2)+'-01-01';
+  const fim=c=>txFimDoContrato(c);
+  const cs=contractsOf(t.propertyId).filter(c=>c.id===t.contractId||ctVivo(c)||c.active!==false||!fim(c)||fim(c)>=desde);
+  const vivo=c=>ctVivo(c)||c.active!==false;
+  return cs.filter(vivo).concat(cs.filter(c=>!vivo(c)).sort((a,b)=>String(fim(b)).localeCompare(String(fim(a)))));
+}
+/* As opções do seletor do contrato de uma receita: «Sem contrato» à cabeça
+   (era «Todos os contratos», que não dizia que a receita ficava fora do
+   quadro); num imóvel com mais de um contrato em vigor (txPedeContrato, N083)
+   «— escolhe o contrato —», com «Não é de nenhum contrato» ('__nenhum__')
+   como escolha. Cada contrato diz se começa depois, se já terminou (e
+   quando: N025) ou se o termo passou sem a renovação registada.
+   Recebe: t — o movimento do formulário (tForm); acs — os contratos (txContratosDaReceita).
+   Devolve: array de {v, label} para o sel(). */
+function txOpcoesDoContrato(t,acs){
+  const pede=txPedeContrato(t);
+  const rot=c=>{
+    const e=ctEstado(c),f=txFimDoContrato(c);
+    if(e==='futuro'&&c.start)return ctName(c)+' · começa a '+dPT(c.start);
+    if(e!=='terminado')return ctName(c);
+    if(c.active===false)return ctName(c)+(f?' · terminou a '+dPT(f):' · terminado');
+    return ctName(c)+(c.end?' · termo a '+dPT(c.end):'');
+  };
+  return [{v:'',label:pede?'— escolhe o contrato —':'Sem contrato'}]
+    .concat(acs.map(c=>({v:c.id,label:rot(c)})))
+    .concat(pede?[{v:'__nenhum__',label:'Não é de nenhum contrato'}]:[]);
+}
+/* O que é a subcategoria de uma receita, por baixo dela (N143), pelo id:
+   numa Indemnização, que só a que compensa rendas não recebidas vai ao Anexo
+   F (CIRS art. 8.º n.º 2 g)) e que a de danos não é renda; nas Outras
+   receitas prediais, o que são (a cedência de uso que não é arrendamento,
+   art. 8.º n.º 2 d) e e)); com a natureza da versão do ano
+   (irs.js:irsNaturezasDoAno). Num reembolso do condomínio, o que o contrato
+   ligado muda (com ele é o inquilino, e é renda; sem ele abate ao gasto).
+   Recebe: t — o movimento do formulário (tForm), uma receita.
+   Devolve: o HTML da dica, ou ''. */
+function txDicaDaReceita(t){
+  if(!t||t.kind!=='income')return '';
+  const sid=txCatIrsId(t,true),n=irsNaturezasDoAno(anoIrs(String(t.date||'').slice(0,4)))||{};
+  let s='';
+  if(sid==='rendas/indemnizacao')s='Só o que compensa rendas que não recebeste (a mora, a ocupação depois do fim do contrato, o seguro de renda) vai ao Anexo F'+(n.indemnizacao?', com a natureza '+n.indemnizacao:'')+'. Uma indemnização por danos no imóvel ou no recheio não é renda: abate à despesa da reparação. O que ficou da caução para pagar danos já contou como renda no ano em que a recebeste.';
+  else if(sid==='rendas/outras-receitas-prediais')s='A cedência de uso do imóvel, ou de parte dele, que não é arrendamento: a publicidade, uma antena, as partes comuns. Vai ao Anexo F'+(n.outras?' com a natureza '+n.outras:'')+', na linha de quem te paga.';
+  else if(sid==='reembolsos/condominio')s=t.contractId?'Com contrato: é o inquilino a reembolsar-te o condomínio, e conta como renda.':'Sem contrato: é o condomínio a devolver-te, e abate ao gasto do condomínio. Se é o inquilino a reembolsar-te, liga-o ao contrato: conta como renda.';
+  return s?`<div class="hint u-mt-n6px">${esc(s)}</div>`:'';
+}
 /* A dica por baixo de «Todos os imóveis»: por quantos imóveis se divide, os
    que eram meus na data do movimento (imoveisDeTodos). Num planeado ou num
    modelo a data é a de cada movimento que dele se registar.
@@ -766,20 +1168,22 @@ function dicaDeTodos(t){
    são os dessa data: a dica, a divisão entre imóveis e quem pagou mudam com
    ela, e o formulário repinta-se com o que já está escrito. Com um imóvel
    vendido entre os meus, o seletor do imóvel depende da data
-   (txVendidoNaData, D33): repinta-se também. De resto só muda a dica da
-   coluna do Anexo F, que diz se a despesa é de uma altura sem contrato
-   (txContaForaDoContrato, D65), sem repintar.
+   (txVendidoNaData, D33): repinta-se também. Numa despesa também: a coluna
+   do Anexo F depende da data — se se diz (txAnexoFAplica), a opção das obras
+   dos 24 meses e a dica (txDicaDaColunaHtml, D65). De resto nada muda.
    Devolve: nada — repinta o modal, ou só a dica. */
 function txDataMudou(){
   collectTx();
   if(tForm.todos){prefill();return repaintTx()}
-  if((db.properties||[]).some(p=>p&&p.vendido))return repaintTx();
+  if(tForm.kind==='expense'||(db.properties||[]).some(p=>p&&p.vendido))return repaintTx();
   txRefazDicaDaColuna();
 }
-/* A frase do art. 19.º numa divisão própria (D95): os Saldos seguem a divisão
-   e quem pagou, a Declaração segue a quota de cada um no imóvel. Vai na ficha
-   do movimento e por baixo da divisão no formulário. */
-const TX_IRS_QUOTA='Para o IRS conta a quota de cada um no imóvel, não quem pagou nem a divisão escolhida aqui (CIRS art. 19.º).';
+/* A frase da quota numa divisão própria (D95): os Saldos seguem a divisão e
+   quem pagou, a Declaração segue a quota de cada um no imóvel. Vai na ficha
+   do movimento e por baixo da divisão no formulário. Sem artigo: o art. 19.º
+   do CIRS é o das rendas, e nos gastos a regra é a dos gastos suportados
+   (art. 41.º), que a AT imputa pela quota-parte (N115). */
+const TX_IRS_QUOTA='Para o IRS, a app conta a quota de cada dono no imóvel, e não quem pagou nem a divisão escolhida aqui.';
 const SPLIT_MODES=[['equal','Partes iguais','o mesmo para cada proprietário'],['quota','Quotas do imóvel','pela quota-parte de cada um'],['pct','Quotas a definir','em partes: quem tem 2 paga o dobro de quem tem 1 (2 e 1 → 2/3 e 1/3)'],['percent','Percentagem','percentagem de cada um; devem somar 100'],['amount','Valor certo','montante de cada um; têm de somar o total'],['adjust','Ajuste','um extra por cima da parte igual: tira-se ao total o extra de cada um, o resto divide-se em partes iguais por todos e cada um soma o seu (15 € com 5 de extra para um de dois → 10 € e 5 €)']];
 /* Monta o HTML do formulário do movimento a partir do tForm. Os campos variam com o tipo
    (contrato nas rendas, hipoteca e distribuição nos créditos, credor nas dívidas a terceiros,
@@ -787,10 +1191,11 @@ const SPLIT_MODES=[['equal','Partes iguais','o mesmo para cada proprietário'],[
    Só devolve a string; quem a põe no DOM é o openModal ou o repaintTx.
    Devolve: o HTML do formulário (string). */
 function txBody(){
-  /* os contratos que ainda não acabaram, e não só os em vigor: a caução e as
-     rendas antecipadas de um contrato recebem-se ANTES de ele começar, e sem
-     isto esse dinheiro não tinha a que se ligar */
-  const t=tForm,p=prop(t.propertyId),acs=servicoLigado('contracts')&&t.propertyId?contractsOf(t.propertyId).filter(ctVivo):[];
+  /* os contratos de uma receita (txContratosDaReceita): os que ainda não
+     acabaram — a caução e as rendas antecipadas recebem-se antes do início —,
+     os que acabaram há pouco — a renda em atraso e a indemnização chegam
+     depois do fim (N025) — e sempre o já ligado */
+  const t=tForm,p=prop(t.propertyId),acs=t.kind==='income'?txContratosDaReceita(t):[];
   const lns=liveLoans(p);
   const curLoan=t.kind==='loan'&&t.loanId?findLoan(p,t.loanId):null;
   /* com várias vivas e nenhuma escolhida, a primeira opção pede a escolha; uma hipoteca que não
@@ -810,7 +1215,8 @@ function txBody(){
   const owOpts=[{v:'',label:'Todos os proprietários'}].concat(ows.map(o=>({v:o.id,label:rotuloDoDono(o,ows.length)})));
   const planeado=txModo.modo==='rec',modelo=txModo.modo==='tpl',tom=txTomDoTipo(t.kind),montanteOpc=txMontanteOpcional();
   const repor=calcLoanTotal()!=null&&Math.abs((num(t.amount)||0)-calcLoanTotal())>0.011;
-  const imovel=`<label>Imóvel${podeSemImovel()?'':' <span class="req">*</span>'}${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:(t.todos?'*':'')),opcoesDoImovel(t),'onPropChange','rascunho')}</label>`;
+  const pedeImovel=txPedeImovel(t);
+  const imovel=`<label>Imóvel${podeSemImovel()&&!pedeImovel?'':' <span class="req">*</span>'}${sel('t_prop',t.propertyId||(t.groupId?'g:'+t.groupId:(t.todos?'*':(t._semImovel&&pedeImovel?'__sem__':''))),opcoesDoImovel(t),'onPropChange','rascunho')}</label>`;
   /* O formulário do canvas (M-Novo movimento): o tipo num segmentado, o
      montante grande, e os campos em grupos — o que foi (montante, descrição,
      data, imóvel, quem pagou), como se classifica (categoria, coluna do Anexo
@@ -828,10 +1234,12 @@ function txBody(){
       ${montanteOpc?'<div class="hint u-mt-n6px">Em branco, escreves o montante quando usares o modelo.</div>':''}
       <label>Descrição <span class="req">*</span><input id="t_label" value="${esc(t.label)}" placeholder="Ex: ${t.kind==='income'?'Renda de agosto':t.kind==='loan'?'Prestação de agosto':t.kind==='owed'?'Empréstimo para obras':t.kind==='repay'?'Devolução de parte do empréstimo':t.kind==='settle'?'Acerto entre proprietários':'Condomínio'}" autocomplete="off"></label>
       ${planeado?imovel:`<div class="mov-par"><label>Data<input id="t_date" type="date" value="${esc(t.date)}" data-change="txDataMudou()"${txMinDaData(t)}></label>${imovel}</div>`}
-      ${(!settle&&!t.propertyId&&!t.groupId&&!t.todos&&podeSemImovel())?'<div class="hint u-mt-n6px">Conta nos totais, mas não na avaliação de nenhum imóvel.</div>':''}
+      ${(!settle&&!t.propertyId&&!t.groupId&&!t.todos&&podeSemImovel())?(pedeImovel&&!t._semImovel
+        ?'<div class="hint u-mt-n6px">Uma renda sem imóvel não entra na Declaração: escolhe o imóvel, e o contrato. «Sem imóvel» é para o que não é de nenhum.</div>'
+        :'<div class="hint u-mt-n6px">Conta nos totais, mas não na avaliação de nenhum imóvel.</div>'):''}
       ${t.todos&&!t.propertyId?`<div class="hint u-mt-n6px">${esc(dicaDeTodos(t))}</div>`:''}
-      ${t.kind==='income'&&acs.length?`<label>Contrato${sel('t_ct',t.contractId||'',[{v:'',label:'Todos os contratos'}].concat(acs.map(c=>({v:c.id,label:ctName(c)+(ctEstado(c)==='futuro'&&c.start?' · começa a '+dPT(c.start):'')}))),'onCtChange','rascunho')}</label>`:''}
-      ${t.kind==='income'&&(t.contractId||t.category==='Rendas'||catIrsId('income',t.category)==='rendas')?txFiscoSect():''}
+      ${t.kind==='income'&&acs.length?`<label>Contrato${txPedeContrato(t)?' <span class="req">*</span>':''}${sel('t_ct',t.contractId||(t._semContrato&&txPedeContrato(t)?'__nenhum__':''),txOpcoesDoContrato(t,acs),'onCtChange','rascunho')}</label>`:''}
+      ${t.kind==='income'&&(t.contractId||txCatIrsId(t)==='rendas')?txFiscoSect():''}
       ${t.kind==='loan'&&lnOpts.length?`<label>Hipoteca${lns.length?' <span class="req">*</span>':''}${sel('t_loan',t.loanId||'',lnOpts,'onLoanChange','rascunho')}</label>`:''}
       ${t.kind==='loan'?`<div id="loanHint">${loanHint()}</div>`:''}
       ${credit?`<label>${t.kind==='owed'?'De quem recebo':'A quem pago'} (opcional)<input id="t_creditor" value="${esc(t.creditor||'')}" placeholder="Ex: Pai" autocomplete="off" list="creditorList" data-input="refreshCredHint()">
@@ -847,9 +1255,10 @@ function txBody(){
     ${settle?'':`<div class="sect mov-grp" id="fold_cat">
       <div class="${subs.length||t.category?'row':''}">
         <label>Categoria${sel('t_cat',t.category,[{v:'',label:'— sem categoria —'}].concat(catKeys.map(c=>({v:c,label:c}))).concat([{v:'__new__',label:'+ Criar categoria…'}]),'onCatChange','rascunho')}</label>
-        ${subs.length||t.category?`<label>Subcategoria${sel('t_sub',t.sub,[{v:'',label:'— indiferente —'}].concat(subs.map(x=>({v:x,label:x}))).concat([{v:'__new__',label:'+ Criar subcategoria…'}]),'onSubChange','rascunho')}</label>`:''}</div>
-      ${t.kind==='expense'?txColunaHtml(t):''}
-      ${t.kind==='expense'&&txNotaPropriaAplica(t)?txNotaPropriaLinha(!!t.notaPropria):''}
+        ${subs.length||t.category?`<label>Subcategoria${sel('t_sub',t.sub,[{v:'',label:irsSubDecide(t.kind,t.category)?'— escolhe —':'— indiferente —'}].concat(subs.map(x=>({v:x,label:x}))).concat([{v:'__new__',label:'+ Criar subcategoria…'}]),'onSubChange','rascunho')}</label>`:''}</div>
+      ${t.kind==='income'?txDicaDaReceita(t):''}
+      ${t.kind==='expense'&&txAnexoFAplica(t)?txColunaHtml(t):''}
+      ${t.kind==='expense'&&txParteVisivel(t)?txParteHtml(t):''}
       <div class="mov-etiquetas"><div class="flabel">Etiquetas</div>${tagField((t.tags||[]).map(g=>({id:g,label:g})),'Adicionar','addTxTag()','delTxTag','')}</div>
     </div>`}
     ${(!settle&&(t.groupId||t.todos)&&txProps(t).length>1)?psplitSect():''}
@@ -996,13 +1405,20 @@ function refreshCredHint(){const e=document.getElementById('credHint');if(e){tFo
    declarado à AT, porque só aí ela o espera — se o recibo eletrónico já foi
    emitido. Vai logo a seguir ao contrato, porque é dele que depende.
    Numa «Renda em atraso» o mês é obrigatório (D54), com o asterisco; o mês
-   sugerido pelo planeado, quando não é o da data, diz de onde veio. Por
-   baixo da retenção, a conta do que entrou quando o montante ficou na renda
-   do contrato (txDicaDaRetencao, D23), num span que se refaz a cada tecla.
-   A dica diz que a renda conta pelo recibo, antes da retenção, da comissão e
-   de descontos, e que no retido só entra o IRS que o inquilino entregou à AT
-   (D112, D116); numa renda paga só em parte (t.parcial), que o resto fica em
-   dívida.
+   sugerido pelo planeado, quando não é o da data, diz de onde veio (e, numa
+   renda paga antes do dia, que o mês da data já tinha renda: N146); a data
+   é o dia em que a renda entrou, que decide o ano do IRS (N026).
+   O «Retido na fonte» só aparece quando conta (txRetencaoAberta, N016 —
+   maqueta 2 do D8): só retém quem tem contabilidade organizada, e um valor
+   escrito ali por engano (a comissão da gestora) abatia ao imposto. Nos
+   outros casos fica a ligação «O inquilino reteve IRS?», sempre à vista (um
+   empresário em nome individual retém com um NIF de pessoa), que o abre. Por
+   baixo do campo, a conta do que entrou quando o montante ficou na renda do
+   contrato (txDicaDaRetencao, D23), num span que se refaz a cada tecla, e
+   que no retido só entra o IRS que o inquilino entregou à AT (D116). Numa
+   cedência de uso (natureza 02), quem paga e o n.º da cedência
+   (txCedenciaHtml, N076). Numa renda paga só em parte (t.parcial), que o
+   resto fica em dívida.
    Devolve: string com o HTML da secção. */
 function txFiscoSect(){
   const t=tForm,c=t.contractId?contract(t.contractId):null;
@@ -1010,16 +1426,85 @@ function txFiscoSect(){
      de cada renda (não estão em TX_TPL_KEYS): mostrá-los aqui era um campo
      que não grava. Ficam para o movimento que se confirma. */
   const fixo=txModo.modo!=='rec'&&txModo.modo!=='tpl',atraso=txPedeMesDaRenda(t);
-  const ret=txDicaDaRetencao(t);
+  const ret=txDicaDaRetencao(t),abre=txRetencaoAberta(t),outra=irsReceitaDe(t).papel==='outra';
   /* o mês sugerido pelo planeado (txSugereMesDaRenda) que não é o da data diz de onde veio */
   const doPlaneado=fixo&&!atraso&&!!t._aP&&t.periodo===t._aP&&t.periodo!==String(t.date||'').slice(0,7);
-  return `<div class="${fixo?'row':''}">
+  const dicaMes=!fixo?'':atraso?'Numa renda em atraso, o mês a que respeita é o que a leva ao ano certo. '
+    :(doPlaneado?(t._aPAdiantada?'O mês da data já tem a renda deste contrato: esta fica como a de '+mesPt(t.periodo)+'. Corrige-o se for outra. '
+      :'O mês é o da renda mais antiga por confirmar deste contrato: corrige-o se esta renda é de outro. '):'')+'Mês em branco: o da data. ';
+  const dicaData=fixo?'A data é o dia em que a renda entrou: é ela que decide o ano do IRS. ':'';
+  const dicaRet=abre?'O montante é a renda do recibo menos o retido na fonte. No retido entra só o IRS que '+(outra?'quem te paga':'o inquilino')+' reteve e entregou à AT por ti (vem no recibo).':'';
+  return `<div class="${fixo&&abre?'row':''}">
       ${fixo?`<label>Mês a que respeita${atraso?' <span class="req">*</span>':' (opcional)'}<input id="t_periodo" type="month" value="${esc(t.periodo||'')}" placeholder="Ex: 2026-08"></label>`:''}
-      <label>Retido na fonte (€)<input id="t_retencao" type="text" inputmode="decimal" value="${t.retencao?dec(t.retencao):''}" placeholder="Opcional" data-input="txRetencaoEscrita()" autocomplete="off"></label></div>
-    <div class="hint u-mt-n6px">${fixo?(atraso?'Numa renda em atraso, o mês a que respeita é o que a leva ao ano certo. ':(doPlaneado?'O mês é o da renda mais antiga por confirmar deste contrato: corrige-o se esta renda é de outro. ':'')+'Mês em branco: o da data. '):''}O montante é a renda do recibo menos o retido na fonte. No retido entra só o IRS que o inquilino reteve e entregou à AT por ti (vem no recibo); a comissão da gestora e os descontos não são retenção: registam-se à parte, como despesa.</div>
-    <div class="hint u-mt-n6px" id="t_retDica"${ret?'':' hidden'}><span class="amber">${esc(ret)}</span></div>
-    ${fixo&&t.parcial?'<div class="hint u-mt-n6px">Pagamento parcial: o resto da renda fica em dívida, e o planeado continua a pedi-lo.</div>':''}
-    ${fixo&&ctDeclarado(c)?txReciboLinha(!!t.recibo):''}`;
+      ${abre?`<label>Retido na fonte (€)<input id="t_retencao" type="text" inputmode="decimal" value="${t.retencao?dec(t.retencao):''}" placeholder="Opcional" data-input="txRetencaoEscrita()" autocomplete="off"></label>`:''}</div>
+    ${dicaMes||dicaData||dicaRet?`<div class="hint u-mt-n6px">${esc(dicaMes+dicaData+dicaRet)}</div>`:''}
+    ${abre?`<div class="hint u-mt-n6px" id="t_retDica"${ret?'':' hidden'}><span class="amber">${esc(ret)}</span></div>`
+      :`<div><button type="button" class="ct-ligacao" data-toca="rascunho" data-click="txAbrirRetencao()">${outra?'Quem te paga reteve IRS?':'O inquilino reteve IRS?'}</button></div>`}
+    ${txCedenciaHtml(t)}
+    ${fixo&&t.parcial?`<div class="hint u-mt-n6px">Pagamento parcial: o resto da renda fica em dívida${c&&servicoLigado('recurring')&&ctRecOf(c)?', e o planeado continua a pedi-lo':''}.</div>`:''}
+    ${fixo&&txPedeRecibo(t)?txReciboLinha(!!t.recibo):''}`;
+}
+/* Esta receita pede o recibo de renda eletrónico (CIRS art. 115.º n.º 5 a))?
+   A renda, a caução e o reembolso do inquilino (os papéis do irs-papeis.js:
+   irsReceitaDe que o resumo conta nos recibos por emitir) num contrato que o
+   pede (prazos.js:pzPedeRecibo: declarado, não na categoria B nem num
+   arrendamento rural, num imóvel em Portugal); e a cedência de uso que não é
+   arrendamento (natureza 02, N077), que pede recibo também, com as mesmas
+   exceções — o contrato a que esteja ligada não tem de estar declarado, e sem
+   contrato basta o imóvel ser em Portugal. A indemnização não pede recibo.
+   Recebe: t — o movimento (do formulário ou da base).
+   Devolve: true ou false. */
+function txPedeRecibo(t){
+  if(!t||t.kind!=='income')return false;
+  const papel=irsReceitaDe(t).papel,c=t.contractId?contract(t.contractId):null;
+  if(papel==='renda'||papel==='caucao')return !!c&&pzPedeRecibo(c);
+  if(papel!=='outra')return false;
+  const pid=(c&&c.propertyId)||t.propertyId;
+  return !!pid&&!pzForaDePortugal(pid)&&!(c&&(pzCategoriaB(c)||pzArrendamentoRural(c)));
+}
+/* O «Retido na fonte» está à vista (N016, maqueta 2 do D8)? Quando o movimento
+   já tem retenção (um campo com valor nunca fica escondido), quando a pessoa
+   tocou em «O inquilino reteve IRS?» (t._retAberta), quando um inquilino do
+   contrato retém ou tem NIF de pessoa coletiva (txInquilinoRetem), quando o
+   contrato é não habitacional (o inquilino é quase sempre uma empresa —
+   irs.js:irsFinalidade), quando o planeado da renda já tem retenção (o que se
+   confirma, o que se edita, ou o do contrato) e, numa cedência de uso, quando
+   quem paga tem NIF de pessoa coletiva.
+   Recebe: t — o movimento do formulário (tForm).
+   Devolve: true ou false. */
+function txRetencaoAberta(t){
+  if(!t||Number(t.retencao)>0||t._retAberta)return true;
+  const c=t.contractId?contract(t.contractId):null;
+  if(nifColetivo(t.pagadorNif))return true;
+  if(!c)return false;
+  if(txInquilinoRetem(c)||irsFinalidade(c)==='nh')return true;
+  const m=txModo,rid=(m.modo==='confirmar'||m.modo==='rec')&&m.recId?m.recId:null;
+  const r=rid?(db.recurring||[]).find(x=>x.id===rid):(servicoLigado('recurring')?ctRecOf(c):null);
+  return !!(r&&r.tx&&Number(r.tx.retencao)>0);
+}
+/* A ligação «O inquilino reteve IRS?»: abre o «Retido na fonte» (t._retAberta)
+   e repinta, com o que já está escrito.
+   Devolve: nada — repinta o formulário. */
+function txAbrirRetencao(){
+  collectTx();tForm._retAberta=true;repaintTx();
+  const e=document.getElementById('t_retencao');if(e)try{e.focus()}catch(x){}
+}
+/* Quem paga uma cedência de uso que não é arrendamento (natureza 02: a
+   publicidade, a antena, as partes comuns — N076, D12): o NIF dele e o n.º do
+   contrato dessa cedência, ambos opcionais, que a linha 02 da Declaração usa
+   no lugar do inquilino e do contrato de arrendamento. Só numa receita das
+   Outras receitas prediais (pelo id), ou numa que já os tem — um campo com
+   valor nunca fica escondido.
+   Recebe: t — o movimento do formulário (tForm).
+   Devolve: o HTML (texto), ou ''. */
+function txCedenciaHtml(t){
+  if(!t||t.kind!=='income')return '';
+  const tem=String(t.pagadorNif||'')||String(t.cedenciaNumero||'');
+  if(irsReceitaDe(t).papel!=='outra'&&!tem)return '';
+  return `<div class="row">
+      <label>NIF de quem paga<input id="t_pagadorNif" type="text" inputmode="numeric" maxlength="11" value="${esc(t.pagadorNif||'')}" placeholder="Opcional" autocomplete="off"></label>
+      <label>N.º da cedência<input id="t_cedenciaNumero" type="text" maxlength="40" value="${esc(t.cedenciaNumero||'')}" placeholder="Opcional" autocomplete="off"></label></div>
+    <div class="hint u-mt-n6px">Quem te paga esta cedência (o operador, a agência, o condomínio) e o n.º do contrato dela, se o tiver: vão à linha da Declaração no lugar do inquilino e do contrato de arrendamento.</div>`;
 }
 /* A conta da retenção, por baixo do campo (D23): o montante é o que entrou,
    e a renda ilíquida é o montante mais o retido. Quem escreve a retenção e
@@ -1062,25 +1547,57 @@ function txRefazDicaDaRetencao(){
 function txReciboLinha(on){
   return `<label class="ct-sw-linha mov-recibo"><span class="ct-sw-txt"><b>Recibo eletrónico emitido</b><span class="small">Emite-se no Portal das Finanças quando a renda entra; ligado, o aviso cala-se.</span></span><input type="checkbox" role="switch" class="ct-sw" id="t_recibo"${on?' checked':''}></label>`;
 }
-/* A coluna do Anexo F de uma despesa, no formulário: o seletor, com a
-   primeira opção a dizer o que a categoria dá («Pela categoria: …»), e a
-   dica por baixo (txDicaDaColunaHtml, num div com id que se refaz sem
-   repintar). O que a categoria deixa a confirmar di-lo — «a confirmar —
-   escolhe a coluna» —, porque não conta até a pessoa escolher (D61, D07). O
-   AIMI não tem seletor: a lei tira-o dos gastos e ele vai ao quadro do AIMI
-   (irs-papeis.js:irsColunaDe, origem 'lei'; D66). Uma despesa com a coluna
-   escrita «a confirmar» (a subcategoria que a dava foi apagada, N043) tem
-   essa opção no seletor: sem ela, abrir e gravar o formulário apagava-a.
+/* A coluna do Anexo F de uma despesa, no formulário (N064, maqueta 3 do D8),
+   só onde ela conta (txAnexoFAplica). Onde a categoria (ou a subcategoria)
+   decide, uma linha de leitura — «Conta no Anexo F como Condomínio (pela
+   categoria)» — com «Mudar», que abre o seletor (txMudarColuna). O seletor
+   está aberto quando é preciso escolher: a categoria deixa a despesa «a
+   confirmar» ou não tem regra (não conta até a pessoa escolher, D61, D07), ou
+   o movimento já tem a coluna escolhida à mão; a primeira opção diz o que a
+   categoria dá («Pela categoria: …»). A opção das obras dos 24 meses só num
+   dia sem contrato em vigor no imóvel (CIRS art. 41.º n.º 7), ou já
+   escolhida. O AIMI não tem coluna: a lei tira-o dos gastos e ele vai ao
+   quadro do AIMI (irs-papeis.js:irsColunaDe, origem 'lei'; D66); uma
+   categoria «Fora dos totais» não conta (D19), e a linha di-lo em vez de
+   «Não dedutível», que parecia a lei a recusá-la (N042). Uma despesa com a
+   coluna escrita «a confirmar» (a subcategoria que a dava foi apagada, N043)
+   tem essa opção no seletor: sem ela, abrir e gravar o formulário apagava-a.
+   A dica por baixo é a do txDicaDaColunaHtml, num div com id que se refaz
+   sem repintar.
    Recebe: t — o movimento do formulário (tForm), uma despesa.
    Devolve: o HTML (texto). */
 function txColunaHtml(t){
   const pela=irsColunaDe(Object.assign({},t,{irsCol:''}));
   if(pela.origem==='lei')return `<div class="mov-campo"><span class="flabel">Anexo F</span><div class="hint">${esc(txFraseDoAimi(t))}</div></div>`;
+  const dica=`<div class="hint u-mt-n6px" id="t_irsDica">${txDicaDaColunaHtml(t)}</div>`;
+  if(pela.origem==='excluido')return `<div class="mov-campo mov-anexof"><span class="flabel">Anexo F</span><p class="mov-anexof-linha u-m-0">${esc('Fora dos totais: não conta no Anexo F.')}</p>${dica}</div>`;
+  if(!txColunaAberta(t)){
+    const de=pela.origem==='sub'?'pela subcategoria':'pela categoria';
+    const diz=pela.col==='nao'?'<b>Não dedutível</b>: não conta no Anexo F ('+esc(de)+')':'Conta no Anexo F como <b>'+esc(irsColunaNome(pela.col))+'</b> ('+esc(de)+')';
+    return `<div class="mov-campo mov-anexof"><span class="flabel">Anexo F</span>
+      <p class="mov-anexof-linha u-d-flex u-ai-center u-fxw-wrap u-g-8px u-m-0"><span>${diz}</span><button type="button" class="ct-ligacao" data-toca="rascunho" data-click="txMudarColuna()">Mudar</button></p>${dica}</div>`;
+  }
   const primeira=pela.col==='confirmar'?'Pela categoria: a confirmar — escolhe a coluna':'Pela categoria: '+irsColunaNome(pela.col);
   const escrita=t.irsCol==='confirmar'?[{v:'confirmar',label:'A confirmar — escolhe a coluna'}]:[];
-  return `<label>Coluna no Anexo F${sel('t_irscol',t.irsCol||'',[{v:'',label:primeira}].concat(escrita,IRS_COLUNAS.map(x=>({v:x[0],label:x[1]}))),'onIrsCol','rascunho')}</label>
-      <div class="hint u-mt-n6px" id="t_irsDica">${txDicaDaColunaHtml(t)}</div>`;
+  /* as obras dos 24 meses são de antes de um arrendamento: num dia com contrato em vigor não se oferecem */
+  const d=String(t.date||''),comContrato=t.irsCol!=='obras24'&&!!t.propertyId&&servicoLigado('fisco')&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&fiscoHaviaContrato(t.propertyId,d);
+  const cols=IRS_COLUNAS.filter(x=>!(comContrato&&x[0]==='obras24'));
+  return `<label>Coluna no Anexo F${sel('t_irscol',t.irsCol||'',[{v:'',label:primeira}].concat(escrita,cols.map(x=>({v:x[0],label:x[1]}))),'onIrsCol','rascunho')}</label>
+      ${dica}`;
 }
+/* O seletor da coluna do Anexo F está aberto (N064)? Quando é preciso
+   escolher — a regra da categoria é «a confirmar», ou não há regra — ou a
+   despesa já tem a coluna escolhida à mão (um campo com valor nunca fica
+   escondido), ou a pessoa tocou em «Mudar» (t._colAberta).
+   Recebe: t — o movimento do formulário (tForm), uma despesa.
+   Devolve: true ou false. */
+function txColunaAberta(t){
+  return !!t.irsCol||!!t._colAberta||irsColunaDe(Object.assign({},t,{irsCol:''})).col==='confirmar';
+}
+/* O «Mudar» da linha da coluna do Anexo F: abre o seletor e repinta, com o
+   que já está escrito.
+   Devolve: nada — repinta o formulário. */
+function txMudarColuna(){collectTx();tForm._colAberta=true;repaintTx()}
 /* A frase do AIMI no formulário e na ficha: não é um gasto do Anexo F e vai
    ao quadro dele, com o n.º do quadro da versão do ano da despesa
    (irs.js:irsAno, quadros.aimi).
@@ -1090,22 +1607,54 @@ function txFraseDoAimi(t){
   const q=((irsAno(anoIrs(String((t&&t.date)||'').slice(0,4)))||{}).quadros||{}).aimi;
   return 'O AIMI não entra nos gastos do Anexo F: vai ao '+(q?'quadro '+q:'quadro do AIMI')+'.';
 }
-/* A dica por baixo da coluna do Anexo F: a regra geral do art. 41.º; numa
-   despesa que a categoria deixa a confirmar, a nota da regra (dados.js:
-   IRS_MAPA_NOTAS) e que não conta até se escolher; e, com a coluna escolhida
-   à mão numa data em que o imóvel não tinha contrato, o efeito dessa escolha
-   (txContaForaDoContrato, D65).
+/* A dica por baixo da coluna do Anexo F. Com o seletor aberto, a regra geral
+   do art. 41.º. Numa despesa que a categoria deixa a confirmar, que não conta
+   até se escolher — e, quando é a subcategoria que decide (irs-papeis.js:
+   irsSubDecide: nos Impostos, nos Seguros), que é ela que se escolhe (N133);
+   a nota da regra (dados.js:IRS_MAPA_NOTAS) nas que a têm, também nas que
+   decidem (o fundo de reserva do condomínio). E, a âmbar, o que a Declaração
+   faz à despesa quando não é só a coluna (txFraseDoDestino): paga sem
+   contrato em vigor, conta por a coluna ter sido escolhida (D65) ou não
+   conta; ou vai às obras dos 24 meses de um contrato, por confirmar (N112).
    Recebe: t — o movimento do formulário (tForm), uma despesa.
    Devolve: o HTML da dica (texto). */
 function txDicaDaColunaHtml(t){
-  const out=[esc('Só o que pagaste para obter a renda entra. Juros, mobiliário, eletrodomésticos e obras que acrescentam valor ficam de fora.')];
-  if(!t.irsCol&&irsColunaDe(Object.assign({},t,{irsCol:''})).col==='confirmar'){
-    const cat=String(t.category||'').trim(),sub=String(t.sub||'').trim();
-    const nota=(sub&&IRS_MAPA_NOTAS[cat+' / '+sub])||IRS_MAPA_NOTAS[cat]||'';
-    out.push(esc((nota?nota+' ':'')+'Até escolheres a coluna (ou «Não dedutível»), não conta na Declaração.'));
-  }
-  if(txContaForaDoContrato(t))out.push('<span class="amber">'+esc('Esta despesa é de uma altura sem contrato: com a coluna escolhida, conta na Declaração.')+'</span>');
+  const out=[],pela=irsColunaDe(Object.assign({},t,{irsCol:''}));
+  const cat=String(t.category||'').trim(),sub=String(t.sub||'').trim();
+  const nota=(sub&&IRS_MAPA_NOTAS[cat+' / '+sub])||IRS_MAPA_NOTAS[cat]||'';
+  if(txColunaAberta(t))out.push(esc('Só o que pagaste para obter a renda entra. Juros, mobiliário, eletrodomésticos e obras que acrescentam valor ficam de fora.'));
+  if(!t.irsCol&&pela.col==='confirmar'){
+    if(!sub&&irsSubDecide('expense',cat))out.push(esc('A subcategoria decide a coluna do Anexo F: escolhe-a, ou escolhe a coluna. Até lá, não conta na Declaração.'));
+    else out.push(esc((nota?nota+' ':'')+'Até escolheres a coluna (ou «Não dedutível»), não conta na Declaração.'));
+  }else if(!t.irsCol&&nota&&pela.origem!=='excluido')out.push(esc(nota));
+  const fora=txFraseDoDestino(t);
+  if(fora)out.push('<span class="amber">'+esc(fora)+'</span>');
   return out.join(' ');
+}
+/* O que a Declaração faz a uma despesa do formulário, quando não é só a
+   coluna (N112, N113): pela função única do resumo (txDestinoDaDespesa) — as
+   obras dos 24 meses de um contrato (contam no ano do início dele, com a
+   resposta «o imóvel esteve só à espera de inquilino»), a coluna escolhida
+   que a faz contar sem contrato em vigor (D65), ou a falta de contrato que a
+   deixa de fora. Sem a função (a Declaração desligada, ou uma versão sem
+   ela), as mesmas contas daqui: fisco-resumo.js:fiscoObra24De e
+   txContaForaDoContrato.
+   Recebe: t — o movimento do formulário (tForm), uma despesa.
+   Devolve: a frase (por escapar), ou ''. */
+function txFraseDoDestino(t){
+  const D65='Esta despesa é de uma altura sem contrato: com a coluna escolhida, conta na Declaração.';
+  const obras=c=>'Vai às obras antes do arrendamento'+(c?' do contrato '+ctName(c)+(c.start?', na Declaração de '+String(c.start).slice(0,4):''):'')+': conta se responderes, no contrato, que o imóvel esteve só à espera de inquilino.';
+  if(!t||t.kind!=='expense'||!servicoLigado('fisco'))return '';
+  const x=txDestinoDaDespesa(t,txMemoDaBase());
+  if(x){
+    if(x.motivo==='obras24')return obras(x.contrato&&x.contrato.id?contract(x.contrato.id):null);
+    if(x.motivo==='porEscolha')return D65;
+    if(x.motivo==='semContrato')return 'Esta despesa é de uma altura sem contrato: não conta na Declaração.';
+    return '';
+  }
+  const o=fiscoObra24De(t,irsColunaDe(t).col),k=Object.keys(o);
+  if(k.length)return obras((o[k[0]]||[])[0]||null);
+  return txContaForaDoContrato(t)?D65:'';
 }
 /* A coluna escolhida à mão faz contar uma despesa paga sem contrato em vigor
    no imóvel (decisão de 2026-10-08: a escolha do movimento manda sobre a regra
@@ -1115,7 +1664,9 @@ function txDicaDaColunaHtml(t){
    obras dos 24 meses, nem «Não dedutível»), a despesa é de um imóvel, nenhum
    contrato dele estava em vigor na data (fisco-resumo.js:fiscoHaviaContrato,
    o mesmo que a Declaração usa) e algum viveu nesse ano — sem nenhum, o
-   imóvel não tem linha na Declaração desse ano e a despesa não conta. Sem a
+   imóvel não tem linha na Declaração desse ano e a despesa não conta. Uma
+   obra dos 24 meses de um contrato (fisco-resumo.js:fiscoObra24De) não conta
+   por ter a coluna: vai às obras dele, por confirmar (N112). Sem a
    Declaração ligada nesta conta não há o que dizer (nem o código dela).
    Recebe: t — o movimento do formulário (tForm).
    Devolve: true ou false. */
@@ -1126,35 +1677,63 @@ function txContaForaDoContrato(t){
   if(!servicoLigado('contracts')||!/^\d{4}-\d{2}-\d{2}$/.test(d)||irsColunaDe(t).origem!=='movimento')return false;
   const Y=d.slice(0,4),fim=c=>String(irsFimReal(c)||'');
   const doAno=(db.contracts||[]).some(c=>c.propertyId===t.propertyId&&c.start&&c.start.slice(0,4)<=Y&&(!fim(c)||fim(c).slice(0,4)>=Y));
-  if(!doAno)return false;
+  if(!doAno||Object.keys(fiscoObra24De(t,t.irsCol)).length)return false;
   return !fiscoHaviaContrato(t.propertyId,d);
 }
-/* O interruptor «É a minha nota de IMI» (D32): numa casa com mais de um dono a
-   AT manda a cada um a sua nota, já pela quota; registada como IMI do prédio,
-   a Declaração cortava-a outra vez pela quota. Ligado, grava t.notaPropria —
-   conta inteira para quem a pagou. A linha de interruptor do recibo
-   (txReciboLinha), num cartão que se toca inteiro.
-   Recebe: on — se está ligado.
-   Devolve: o HTML da linha. */
-function txNotaPropriaLinha(on){
-  return `<label class="ct-sw-linha mov-recibo"><span class="ct-sw-txt"><b>É a minha nota de IMI</b><span class="small">Ligado: a nota que as Finanças te mandaram, já pela tua quota, conta inteira para quem a pagou. Desligado: é o IMI do prédio todo, repartido pela quota de cada um.</span></span><input type="checkbox" role="switch" class="ct-sw" id="t_notaPropria"${on?' checked':''}></label>`;
+/* A pergunta da parte (N041, D9 c), numa despesa de um imóvel com mais de um
+   dono (txParteVisivel): «É o total da casa» — a Declaração conta a
+   quota de cada dono — ou «É só a minha parte» — conta inteira para quem a
+   pagou, sem a cortar outra vez pela quota (t.notaPropria, D32). Quem tem
+   donos fora da app regista naturalmente o que pagou, e a Declaração cortava-o
+   em silêncio. No IMI as escolhas dizem a nota: na compropriedade cada dono
+   recebe a sua, já pela quota; no bem comum do casal é uma só, do prédio — e
+   numa despesa nova a resposta é obrigatória (txPartePorResponder), sem
+   nenhuma escolhida. Nas outras despesas a omissão é «o total da casa», à
+   vista. Dois botões que se tocam (txParte) e um campo escondido com a
+   resposta ('1', '0', ou '' por responder), que o collectTx lê.
+   Recebe: t — o movimento do formulário (tForm).
+   Devolve: o HTML (texto). */
+function txParteHtml(t){
+  const imi=txCatIrsId(t,true)==='impostos/imi',porResponder=txPartePorResponder(t),minha=t.notaPropria===true;
+  const p=prop(t.propertyId),d=/^\d{4}-\d{2}-\d{2}$/.test(String(t.date||''))?t.date:today();
+  const q=p?Number(quotasFiscais(p,d)[t.paidBy||meuId()])||0:0,pct=q>0&&q<1?' (a tua é '+dec(Math.round(q*1000)/10)+' %)':'';
+  const ops=imi?[[0,'É o IMI do prédio todo','repartido pela quota de cada dono'+pct],[1,'É a minha nota de IMI','a que as Finanças te mandaram, já pela tua quota: conta inteira para quem a pagou']]
+    :[[0,'É o total da casa','a Declaração conta a quota de cada dono'+pct],[1,'É só a minha parte','conta inteira para quem a pagou, sem a cortar pela quota']];
+  const v=porResponder?'':minha?'1':'0';
+  return `<div class="mov-campo"><span class="flabel" id="t_parteL">${imi?'Esta nota de IMI':'Este valor'}${imi&&!t._edit?' <span class="req">*</span>':''}</span><input type="hidden" id="t_notaPropria" value="${v}">
+    <div class="seg c2" id="t_parte" role="radiogroup" aria-labelledby="t_parteL">${ops.map(([k,l,sb])=>{const on=v===String(k);
+      return `<button type="button" class="opt${on?' on':''}" role="radio" aria-checked="${on}" data-toca="rascunho" data-click="txParte(${k})"><b>${esc(l)}</b><small>${esc(sb)}</small></button>`}).join('')}</div></div>`;
 }
-/* O interruptor da nota própria do IMI faz sentido neste movimento? Uma
-   despesa de Impostos › IMI (pelo id, dados.js:catIrsId) de um imóvel com mais
-   de um dono na data — os donos com conta e os de fora da app
+/* Um toque na pergunta da parte (txParteHtml): grava a resposta no tForm e
+   repinta (as dicas da divisão dependem dela).
+   Recebe: k — 1 (só a minha parte, ou a minha nota de IMI) ou 0 (o total da casa).
+   Devolve: nada — repinta o formulário. */
+function txParte(k){collectTx();tForm.notaPropria=k===1;tForm._parteRespondida=true;repaintTx()}
+/* A pergunta da parte faz sentido neste movimento (N041)? Uma despesa de um
+   imóvel com mais de um dono na data — os donos com conta e os de fora da app
    (saldos.js:quotasFiscais, quotasForaNaData). Num grupo, em «Todos os
-   imóveis» ou sem imóvel não há nota de ninguém.
+   imóveis» ou sem imóvel não há parte de ninguém. Era só o IMI (D32).
    Recebe: t — o movimento do formulário (tForm).
    Devolve: true ou false. */
 function txNotaPropriaAplica(t){
   if(!t||t.kind!=='expense'||!t.propertyId||t.groupId||t.todos)return false;
-  if(catIrsId('expense',t.category,t.sub)!=='impostos/imi')return false;
   const p=prop(t.propertyId);if(!p)return false;
   const d=/^\d{4}-\d{2}-\d{2}$/.test(String(t.date||''))?t.date:today();
   const q=quotasFiscais(p,d);
   const n=Object.keys(q).filter(o=>Number(q[o])>0).length;
   const fora=quotasForaNaData(p,d).length;
   return n+fora>1;
+}
+/* A pergunta da parte está à vista? Onde faz sentido (txNotaPropriaAplica) e
+   onde a coluna do Anexo F conta (txAnexoFAplica: um imóvel arrendado nessa
+   altura, com a Declaração ligada), menos no AIMI, que não é gasto; e sempre
+   que a despesa já diz «só a minha parte» — uma resposta nunca fica escondida.
+   Recebe: t — o movimento do formulário (tForm).
+   Devolve: true ou false. */
+function txParteVisivel(t){
+  if(!txNotaPropriaAplica(t))return false;
+  if(t.notaPropria===true)return true;
+  return txAnexoFAplica(t)&&irsColunaDe(Object.assign({},t,{irsCol:''})).origem!=='lei';
 }
 /* Mudou a coluna do Anexo F escolhida à mão: guarda-a no tForm. Vazio é
    «pela categoria», e o seletor já mostra o rótulo novo — não há que
@@ -1196,7 +1775,7 @@ function splitSect(ows){
       <input id="t_sp_${o.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[o.id]!=null&&parts[o.id]!==''?dec(parts[o.id]):''}" placeholder="Ex: ${exemploDaParte(mode)}" aria-label="Parte de ${esc(o.name)}" data-input="refreshSplit()" autocomplete="off">
       <span class="pc">${mode==='pct'?'partes':mode==='percent'?'%':'€'}</span></div>`).join('')}</div>`}
     <div id="splitHint" class="mov-divisao-dica" aria-live="polite">${splitHint(ows)}</div>
-    ${mode!=='quota'&&(t.kind==='income'||t.kind==='expense')?`<div class="hint">${esc(TX_IRS_QUOTA)}</div>`:''}</div>`;
+    ${mode!=='quota'&&(t.kind==='income'||t.kind==='expense')&&t.notaPropria!==true?`<div class="hint">${esc(TX_IRS_QUOTA)}</div>`:''}</div>`;
 }
 /* As partes de uma divisão, como o canvas as mostra: cada uma com o nome, a
    percentagem do total e o valor; a barra das proporções; e, por baixo, «Soma
@@ -1294,13 +1873,17 @@ function collectSplit(){
 /* A divisão entre imóveis (de um grupo, ou de «Todos os imóveis»), num grupo
    do formulário como a dos donos: o título com quantos imóveis são, «Como se
    divide» e, nos modos que o pedem, um campo por imóvel; por baixo, as partes
-   e se a soma bate certo (psplitHint).
+   e se a soma bate certo (psplitHint). Entre frações do mesmo prédio, a frase
+   da permilagem (saldos.js:psplitFrasePermilagem, N114): os encargos comuns
+   repartem-se por ela.
    Devolve: o HTML do grupo (string). */
 function psplitSect(){
   const t=tForm,ps=txProps(t),sp=t.psplit||{mode:'equal',parts:{}},mode=sp.mode||'equal',parts=sp.parts||{};
+  const perm=psplitFrasePermilagem(ps);
   return `<div class="sect mov-grp mov-divisao" id="fold_psplit">
     <div class="mov-grp-cab"><b>Divisão entre imóveis</b><span class="small">${ps.length} imóveis</span></div>
     <label class="mov-rot-fraco">Como se divide${sel('t_psplit',mode,PSPLIT_MODES.map(m=>({v:m[0],label:m[1]})),'onPsplitSel','rascunho')}</label>
+    ${perm?`<div class="hint u-mt-n6px">${esc(perm)}</div>`:''}
     ${['equal','value','purchase'].indexOf(mode)>-1?'':`<div class="form u-g-7px">${ps.map(p=>`<div class="ownrow"><span class="avatar u-w-30px u-h-30px u-fs-11px u-fx-0-0-30px">${ic('building',15)}</span>
       <span class="nm">${esc(p.name)}</span>
       <input id="t_pp_${p.id}" type="text" inputmode="decimal" class="u-w-84px u-fx-0-0-84px" value="${parts[p.id]!=null&&parts[p.id]!==''?dec(parts[p.id]):''}" placeholder="Ex: ${exemploDaParte(mode)}" aria-label="Parte de ${esc(p.name)}" data-input="refreshPsplit()" autocomplete="off">
@@ -1578,7 +2161,7 @@ function limparDoTipo(de,para){
   const t=tForm,divida=k=>k==='owed'||k==='repay';
   if(de===para)return;
   if(de==='loan'&&para!=='loan'){t.loanId=null;t.payType='prestacao';['interest','stamp','principal','fee','_splitTouched'].forEach(x=>{delete t[x]})}
-  if(de==='income'&&para!=='income'){t.contractId=null;t.periodo='';t.recibo=false;t.retencao=0}
+  if(de==='income'&&para!=='income'){t.contractId=null;t.periodo='';t.recibo=false;t.retencao=0;delete t.pagadorNif;delete t.cedenciaNumero}
   if(de==='expense'&&para!=='expense')t.irsCol='';
   if(divida(de)&&!divida(para))t.creditor='';
   if(para==='settle')t.split=null;
@@ -1592,19 +2175,22 @@ function limparDoTipo(de,para){
    para o novo contexto.
    Devolve: nada — atualiza o tForm e repinta o modal. */
 function onPropChange(){keepTyped();
-  const v=val('t_prop')||'';
+  const w=val('t_prop')||'',v=w==='__sem__'?'':w;
+  tForm._semImovel=w==='__sem__';
   tForm.groupId=String(v).startsWith('g:')?v.slice(2):null;
   tForm.todos=v==='*';
   tForm.propertyId=(tForm.groupId||tForm.todos)?null:(v||null);
-  tForm.contractId=null;tForm.loanId=null;tForm.split=null;delete tForm._ctEscolhido;
+  tForm.contractId=null;tForm.loanId=null;tForm.split=null;delete tForm._ctEscolhido;delete tForm._semContrato;
   delete tForm.interest;delete tForm.stamp;delete tForm.principal;
   tForm.psplit=(tForm.groupId||tForm.todos)?{mode:'equal',parts:{}}:null;
   prefill();repaintTx()}
 /* Mudou o contrato: volta a sugerir a renda e a descrição do contrato
-   escolhido. A escolha é da pessoa (_ctEscolhido): «Todos os contratos»
-   escolhido à mão não volta a ganhar o contrato sugerido (D05).
+   escolhido, e numa receita sem categoria a da renda (N083). A escolha é da
+   pessoa (_ctEscolhido): «Sem contrato» escolhido à mão não volta a ganhar o
+   contrato sugerido (D05); «Não é de nenhum contrato» ('__nenhum__') é uma
+   escolha (_semContrato).
    Devolve: nada — atualiza o tForm e repinta o modal. */
-function onCtChange(){keepTyped();tForm.contractId=val('t_ct')||null;tForm._ctEscolhido=true;prefill();repaintTx()}
+function onCtChange(){keepTyped();const v=val('t_ct')||'';tForm.contractId=v&&v!=='__nenhum__'?v:null;tForm._semContrato=v==='__nenhum__';tForm._ctEscolhido=true;prefill();repaintTx()}
 // Mudou a hipoteca: descarta a distribuição anterior e sugere a prestação da nova.
 // Devolve: nada — atualiza o tForm e repinta o modal.
 function onLoanChange(){keepTyped();tForm.loanId=val('t_loan')||null;delete tForm.interest;delete tForm.stamp;delete tForm.principal;prefill();repaintTx()}
@@ -1658,7 +2244,8 @@ function onSubChange(){
 function collectTx(){
   const t=tForm;
   t.label=val('t_label');t.amount=num(val('t_amount'));t.date=val('t_date')||today();
-  if(document.getElementById('t_prop')){const v=val('t_prop')||'';t.groupId=String(v).startsWith('g:')?v.slice(2):null;t.todos=v==='*';t.propertyId=(t.groupId||t.todos)?null:(v||null)}
+  /* «Sem imóvel» escolhido de propósito ('__sem__', N027) é um movimento sem imóvel */
+  if(document.getElementById('t_prop')){const w=val('t_prop')||'',v=w==='__sem__'?'':w;t._semImovel=w==='__sem__';t.groupId=String(v).startsWith('g:')?v.slice(2):null;t.todos=v==='*';t.propertyId=(t.groupId||t.todos)?null:(v||null)}
   if(document.getElementById('t_notes'))t.notes=richVal('t_notes');
   if(document.getElementById('t_loan'))t.loanId=val('t_loan')||null;
   /* os juros e o capital da tabela: contam como escritos à mão numa edição ou depois de lhes mexer */
@@ -1670,7 +2257,8 @@ function collectTx(){
   collectSplit();collectPsplit();
   if(document.getElementById('t_cat')){const v=val('t_cat');if(v!=='__new__')t.category=v}
   if(document.getElementById('t_sub')){const v=val('t_sub');if(v!=='__new__')t.sub=v}
-  if(document.getElementById('t_ct'))t.contractId=val('t_ct')||null;
+  /* «Não é de nenhum contrato» escolhido de propósito ('__nenhum__', N083) é sem contrato */
+  if(document.getElementById('t_ct')){const v=val('t_ct')||'';t._semContrato=v==='__nenhum__';t.contractId=v&&v!=='__nenhum__'?v:null}
   /* o que o IRS pergunta: cada campo só quando está no ecrã, e no formato do
      normTx — o mês aceita 'AAAA-MM' (o input de mês) e 'MM/AAAA' (onde o
      browser o dá como texto); o resto fica vazio, e não uma data inventada */
@@ -1680,11 +2268,18 @@ function collectTx(){
   }
   if(document.getElementById('t_retencao'))t.retencao=Math.max(0,num(val('t_retencao'))||0);
   if(document.getElementById('t_recibo'))t.recibo=chk('t_recibo');
+  /* quem paga uma cedência (natureza 02, N076): só algarismos no NIF; um campo
+     vazio que nunca teve valor não cria o campo no movimento */
+  const lerTexto=(id,k,f)=>{if(!document.getElementById(id))return;const v=f(String(val(id)||''));if(v||t[k]!==undefined)t[k]=v};
+  lerTexto('t_pagadorNif','pagadorNif',s=>s.replace(/\D/g,'').slice(0,9));
+  lerTexto('t_cedenciaNumero','cedenciaNumero',s=>s.trim().slice(0,40));
   if(document.getElementById('t_irscol'))t.irsCol=val('t_irscol')||'';
   /* o AIMI não tem seletor da coluna (D66): uma escolha antiga não fica gravada escondida */
   if(t.kind==='expense'&&irsColunaDe(t).origem==='lei')t.irsCol='';
-  /* a nota própria do IMI só onde o interruptor faz sentido (D32): fora disso não fica ligada às escondidas */
-  if(document.getElementById('t_notaPropria'))t.notaPropria=chk('t_notaPropria');
+  /* a parte (N041; a nota própria do IMI, D32): '1' só a minha parte, '0' o
+     total da casa, '' por responder; só onde a pergunta faz sentido — fora
+     disso não fica ligada às escondidas */
+  if(document.getElementById('t_notaPropria')){const v=String(val('t_notaPropria')||'');if(v==='1'||v==='0'){t.notaPropria=v==='1';t._parteRespondida=true}}
   if(!txNotaPropriaAplica(t))t.notaPropria=false;
   /* os campos do planeado e do modelo são do modo, e não do movimento */
   const m=txModo;

@@ -153,7 +153,9 @@ describe('N031 — a regularização do n.º 20 diz os anos do período que a ap
     [2022, 2023, 2024, 2025].forEach((y) => rendas('C1', y, 3000));
     rendas('C1', 2026, 3000, [1, 2, 3, 4, 5, 6]);
     const g = app.resumoFiscal(2026, 'ana').regularizacoes[0];
-    assert.deepEqual(json(g.anos.map((a) => a.ano)), [2022, 2023, 2024, 2025]);
+    // N125: só os anos com versão das regras somam; 2022 a 2024 ficam à parte, por confirmar
+    assert.deepEqual(json(g.anos.map((a) => a.ano)), [2025]);
+    assert.deepEqual(json(g.porConfirmar.map((a) => a.ano)), [2022, 2023, 2024]);
     assert.deepEqual(json(g.anosEmFalta), [2020, 2021]);
     assert.deepEqual(json(g.anosSemRegras), [2022, 2023, 2024], 'a app só tem as regras de 2025 e de 2026');
     assert.equal(g.desde, '2020-01-01');

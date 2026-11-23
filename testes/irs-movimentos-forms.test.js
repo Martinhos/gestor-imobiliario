@@ -181,7 +181,16 @@ describe('D54 · o mês a que a renda respeita', () => {
       assert.equal(a.tForm.date, '2026-01-20');
       assert.equal(a.tForm.periodo, '2025-12', 'o do planeado por confirmar mais antigo, e não o da data');
       assert.match(a.txFiscoSect(), /O mês é o da renda mais antiga por confirmar deste contrato: corrige-o se esta renda é de outro\./);
-      const novo = guardar(a);
+      /* o mês de 2025 com a data de hoje (2026): o Guardar pergunta o dia em que entrou (N026) */
+      const antes = a.db.transactions.length;
+      guardar(a);
+      assert.equal(a.db.transactions.length, antes, 'não grava antes da resposta');
+      const desfaz = camposNoEcra(a, { tx_dia: '2026-01-20' });
+      const real = a.collectTx;
+      a.collectTx = () => {};
+      try { a.txConfirmarDia(); } finally { desfaz(); a.collectTx = real; }
+      const novo = a.db.transactions[a.db.transactions.length - 1];
+      assert.equal(novo.date, '2026-01-20', 'entrou mesmo em janeiro');
       assert.equal(novo.periodo, '2025-12');
       const r = a.resumoFiscal(2026, 'eu');
       assert.deepEqual(JSON.parse(JSON.stringify(r.linhas[0].anosAnteriores)), [{ ano: 2025, valor: 800, retencoes: 0 }], 'vai ao quadro 8');
@@ -248,8 +257,10 @@ describe('a coluna do Anexo F no formulário e na ficha', () => {
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'p1', category: 'Manutenção e reparações', sub: 'Caldeira / AVAC', date: '2026-03-01' });
     html = texto(app.txBody());
     assert.ok(html.includes(app.IRS_MAPA_NOTAS['Manutenção e reparações / Caldeira / AVAC']), 'a nota da regra');
+    /* onde a categoria decide, uma linha de leitura com «Mudar» em vez do seletor (N064) */
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'p1', category: 'Condomínio', date: '2026-03-01' });
-    assert.match(app.txBody(), /Pela categoria: Condomínio</);
+    assert.match(texto(app.txBody()), /Conta no Anexo F como Condomínio \(pela categoria\) Mudar/);
+    assert.doesNotMatch(app.txBody(), /id="t_irscol"/);
     // a ficha
     const x = lancar(app, { kind: 'expense', label: 'Coima', amount: 150, category: 'Outros', date: '2026-03-01' });
     assert.match(texto(app.txFicha(x.id)), /Anexo F A confirmar pela categoria: escolhe a coluna/);
@@ -293,13 +304,14 @@ describe('D32 · a nota própria do IMI, e D95 · a quota que o IRS segue', () =
     a.db.properties[0].ownerIds = ['eu', 'rui'];
   }
 
-  test('o interruptor só numa casa com mais de um dono, e só no IMI', () => {
+  /* a nota própria do IMI passou a ser a pergunta da parte, em qualquer despesa de uma casa com mais de um dono (N041) */
+  test('a pergunta só numa casa com mais de um dono; no IMI fala da nota', () => {
     meias(app);
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'p1', category: 'Impostos', sub: 'IMI', date: '2026-05-31', amount: 2000 });
-    assert.match(app.txBody(), /<input type="checkbox" role="switch" class="ct-sw" id="t_notaPropria">/);
+    assert.match(app.txBody(), /<input type="hidden" id="t_notaPropria" value="">/, 'numa nota nova de IMI, nenhuma escolhida');
     assert.match(app.txBody(), /É a minha nota de IMI/);
     app.tForm.sub = 'Imposto do selo';
-    assert.doesNotMatch(app.txBody(), /t_notaPropria/, 'só no IMI');
+    assert.match(app.txBody(), /É só a minha parte/, 'também nas outras despesas');
     app.db.properties[0].ownerIds = ['eu'];
     app.tForm.sub = 'IMI';
     assert.doesNotMatch(app.txBody(), /t_notaPropria/, 'com um dono só, a nota é a do prédio');
@@ -307,24 +319,25 @@ describe('D32 · a nota própria do IMI, e D95 · a quota que o IRS segue', () =
     assert.match(app.txBody(), /id="t_notaPropria"/, 'um comproprietário fora da app também conta');
   });
 
-  test('ligado grava-se, e a ficha di-lo; fora do IMI de vários donos não fica ligado', () => {
+  test('«a minha nota» grava-se, e a ficha di-lo; numa casa de um dono só não fica ligada', () => {
     meias(app);
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'p1', category: 'Impostos', sub: 'IMI', date: '2026-05-31', amount: 2000, label: 'IMI' });
-    let desfaz = camposNoEcra(app, { t_label: 'IMI', t_amount: '2000', t_date: '2026-05-31', t_notaPropria: true });
+    let desfaz = camposNoEcra(app, { t_label: 'IMI', t_amount: '2000', t_date: '2026-05-31', t_notaPropria: '1' });
     try { app.collectTx(); } finally { desfaz(); }
     assert.equal(app.tForm.notaPropria, true);
     const x = guardar(app);
     assert.equal(x.notaPropria, true);
     assert.match(texto(app.txFicha(x.id)), /Nota de IMI A minha nota: conta inteira para quem a pagou/);
+    app.db.properties[0].ownerIds = ['eu'];
     app.tForm = app.normTx({ kind: 'expense', propertyId: 'p1', category: 'Condomínio', date: '2026-05-31', amount: 50, label: 'Cond' });
-    desfaz = camposNoEcra(app, { t_label: 'Cond', t_amount: '50', t_date: '2026-05-31', t_notaPropria: true });
+    desfaz = camposNoEcra(app, { t_label: 'Cond', t_amount: '50', t_date: '2026-05-31', t_notaPropria: '1' });
     try { app.collectTx(); } finally { desfaz(); }
     assert.equal(app.tForm.notaPropria, false);
   });
 
   test('D95 · a ficha de um movimento com divisão própria diz que o IRS segue a quota', () => {
     meias(app);
-    const frase = 'Para o IRS conta a quota de cada um no imóvel, não quem pagou nem a divisão escolhida aqui (CIRS art. 19.º).';
+    const frase = 'Para o IRS, a app conta a quota de cada dono no imóvel, e não quem pagou nem a divisão escolhida aqui.';
     const x = lancar(app, { kind: 'expense', label: 'Pintura', amount: 1000, category: 'Manutenção e reparações', date: '2026-04-01', paidBy: 'eu', split: { mode: 'amount', parts: { eu: 1000, rui: 0 } } });
     assert.ok(texto(app.txFicha(x.id)).includes(frase));
     const y = lancar(app, { kind: 'expense', label: 'Pintura', amount: 1000, category: 'Manutenção e reparações', date: '2026-04-01', paidBy: 'eu' });
@@ -351,19 +364,21 @@ describe('o inquilino empresa e o estrangeiro', () => {
     assert.doesNotMatch(app.personFicha('tenant', 't1'), /pesNaoRetem|Retenção na fonte/);
   });
 
-  test('D58 · no formulário a caixa só aparece num NIF de empresa, e nunca com o «retém»', () => {
+  /* a caixa passou a uma pergunta de três respostas no pessoas.js (#pe_retemR: 'sim', 'nao', '') — N128, da folha textos */
+  test('D58 · no formulário a pergunta está à vista num NIF de empresa, e «Não retém» grava retemVisto', () => {
     casa(app);
     app.perKind = 'tenant';
     app.perForm = app.normPerson({ id: 'e1', name: 'Empresa', nif: '503004642' });
-    assert.match(app.personBody(), /<div id="pe_retemVistoL"><label class="check"><input type="checkbox" id="pe_retemVisto" >/);
+    assert.match(app.personBody(), /<div id="pe_retemBox"><span class="flabel" id="pe_retemRot">[^<]*<\/span><input type="hidden" id="pe_retemR" value="">/);
     app.perForm = app.normPerson({ id: 'p9', name: 'Ana', nif: '123456789' });
-    assert.match(app.personBody(), /id="pe_retemVistoL" hidden/);
+    assert.match(app.personBody(), /id="pe_retemBox" hidden/);
     app.perForm = app.normPerson({ id: 'e1', name: 'Empresa' });
-    let desfaz = camposNoEcra(app, { pe_name: 'Empresa', pe_nif: '503004642', pe_retemVisto: true });
+    let desfaz = camposNoEcra(app, { pe_name: 'Empresa', pe_nif: '503004642', pe_retemR: 'nao' });
     try { app.collectPerson(); } finally { desfaz(); }
     assert.equal(app.perForm.retemVisto, true);
-    desfaz = camposNoEcra(app, { pe_name: 'Empresa', pe_nif: '503004642', pe_retem: true, pe_retemVisto: true });
+    desfaz = camposNoEcra(app, { pe_name: 'Empresa', pe_nif: '503004642', pe_retemR: 'sim' });
     try { app.collectPerson(); } finally { desfaz(); }
+    assert.equal(app.perForm.retem, true);
     assert.equal(app.perForm.retemVisto, false, 'quem retém não «não retém»');
   });
 

@@ -63,12 +63,16 @@ registarAnoIrs({
      2 × 537,13 = 1 074,26 €. */
   ias:537.13,
   /* A retenção na fonte das rendas (CIRS art. 101.º n.º 1 e)): 25 %; nas
-     rendas moderadas de habitação (o 10 % do rendaModerada, alínea f)
-     acrescentada pelo DL 97/2026) 10 %. O dia em que a alínea f) começa a
-     valer na retenção não está confirmado (INCERTO): com o moderadaDesde
-     vazio a app aceita as duas taxas o ano todo e nunca acusa os 25 %. O
-     mínimo abaixo do qual não se retém fica por confirmar (INCERTO). */
-  retencao:{taxa:25,moderada:10,moderadaDesde:'',minimo:null,minimoDesde:''},
+     rendas moderadas de habitação (o 10 % do rendaModerada) 10 %, pela
+     alínea f) que o DL 97/2026, de 20 de maio, acrescentou. O DL não diz o dia
+     em que entra em vigor: o 5.º dia depois da publicação (Lei 74/98, art.
+     2.º n.º 2), 25 de maio de 2026; as alterações ao CIRS produzem efeitos
+     desde 1 de janeiro (art. 18.º n.º 2), mas até ele sair nenhum inquilino
+     podia reter 10 %. Antes do moderadaDesde a app aceita as duas taxas (a
+     retenção não volta atrás); desde ele, nas rendas moderadas, só os 10 %.
+     O mínimo: 25 € por retenção, o ano inteiro (CIRS art. 101.º-B n.º 1 d),
+     na redação do DL 49/2025) — nas rendas a 10 %, até 250 € de renda. */
+  retencao:{taxa:25,moderada:10,moderadaDesde:'2026-05-25',minimo:25,minimoDesde:''},
   taxas:{
     habitacional:25,
     naoHabitacional:28,
@@ -90,6 +94,13 @@ registarAnoIrs({
        contrato de 2024 se mede pela tabela nova não é claro, e o Anexo F de
        2026 ainda não saiu para o dizer. */
     limiteRendaAlta:{desde:'2024-01-01',percentagem:150,
+      /* DL 97/2026, art. 14.º b): «para os efeitos previstos em todas as
+         normas legais e regulamentares e em todos os atos e contratos em
+         vigor», desde 1 de setembro de 2026 as referências aos limites da
+         Portaria 176/2019 consideram-se reportadas aos do art. 4.º do anexo
+         III (o RSAA). A frase que a página e o formulário escrevem depois da
+         lista das portarias (D3, sem HTML): */
+      nota:'Desde 1 de setembro de 2026, as referências aos limites da Portaria 176/2019 leem-se, em todas as normas e contratos em vigor, como os limites do arrendamento acessível (DL 97/2026, art. 14.º b)): nas rendas de 2026, a AT pode medir pelos novos também os contratos celebrados antes. Confirma nas instruções do 4.2C.',
       portaria:[
         {desde:'2024-01-01',ate:'2026-08-31',portaria:'Portaria 176/2019',valoresDa:'Portaria 176/2019',
           texto:'os limites gerais por tipologia e concelho das tabelas 1 e 2 do anexo I à Portaria 176/2019, de 6 de junho'},
@@ -118,31 +129,40 @@ registarAnoIrs({
      próprio (o art. 14.º a) do DL manda ler as referências ao PAA como feitas
      ao RSAA, o que pode querer dizer o código 01); fica vazio até a portaria
      sair. INCERTO, pela mesma razão: o RSAA não está nas tabelas do quadro 10
-     de 2025 (regime e motivos). */
+     de 2025 (regime e motivos).
+     O prazo mínimo do RSAA (anexo III, art. 5.º n.os 1 e 2: três anos na
+     residência permanente, três meses na temporária) confere-se no período
+     inicial (`prazoMinimo`, em meses por finalidade); um contrato sem termo
+     não chumba. INCERTO: a residência temporária do RSAA pede ainda um fim
+     especial transitório e o inquilino com residência fiscal noutro concelho
+     (art. 3.º n.º 1 b)), e a renda até ao limite da portaria (art. 4.º) — a
+     app não os pergunta; o texto da isenção di-los.
+     As datas de baixo do PAA (1/7/2019) e do ex-alojamento local (1/1/2023)
+     e o corte da renda antiga, como no irs-2025.js (N150). */
   isencoes:[
     {id:'paa',nome:'Programa de Apoio ao Arrendamento (PAA)',curto:'PAA',quadro:'6D',codigo:'01',lei:'DL 68/2019, art. 20.º; DL 97/2026, art. 15.º',
-      celebradoAte:'2026-08-31',finalidade:['hp','hnp'],
+      desde:'2019-07-01',celebradoAte:'2026-08-31',finalidade:['hp','hnp'],
       texto:'Contrato que já estava no Programa de Apoio ao Arrendamento: o programa acabou a 1 de setembro de 2026, mas estes contratos mantêm a isenção de IRS. Um contrato celebrado depois não pode ser do PAA.'},
     {id:'rsaa',nome:'Regime Simplificado de Arrendamento Acessível (RSAA)',curto:'RSAA',quadro:'6D',codigo:'',lei:'DL 97/2026, anexo III; Portaria 454/2026/1',
-      desde:'2026-09-01',pedeIhru:true,prazoIhru:'01-15',finalidade:['hp','hnp'],
-      texto:'Contrato de habitação celebrado desde 1 de setembro de 2026, com a renda até ao limite da tipologia no concelho da Portaria 454/2026/1 (mais 10 % com estacionamento privativo e mais 10 % com certificado energético A ou superior; nos celebrados até 13 de outubro de 2026, os valores da Portaria 176/2019), e com pelo menos 3 anos (3 meses na residência temporária). A cópia do contrato e o comprovativo da comunicação às Finanças vão à plataforma do IHRU até 15 de janeiro do ano seguinte ao da celebração; sem isso não há isenção.'},
+      desde:'2026-09-01',pedeIhru:true,prazoIhru:'01-15',prazoMinimo:{hp:36,hnp:3},finalidade:['hp','hnp'],
+      texto:'Contrato de habitação celebrado desde 1 de setembro de 2026, com a renda até ao limite da tipologia no concelho da Portaria 454/2026/1 (mais 10 % com estacionamento privativo e mais 10 % com certificado energético A ou superior; nos celebrados até 13 de outubro de 2026, os valores da Portaria 176/2019), e com pelo menos 3 anos (3 meses na residência temporária, com um fim transitório e o inquilino com residência fiscal noutro concelho). A cópia do contrato e o comprovativo da comunicação às Finanças vão à plataforma do IHRU até 15 de janeiro do ano seguinte ao da celebração; sem isso não há isenção.'},
     {id:'pma',nome:'Programa municipal de arrendamento acessível (PMA)',curto:'programa municipal',quadro:'6D',codigo:'02',lei:'EBF art. 71.º-A',finalidade:['hp','hnp'],
       texto:'Contrato celebrado num programa municipal de habitação a renda acessível: as rendas ficam isentas de IRS durante o contrato.'},
     {id:'pmae',nome:'Programa municipal de alojamento estudantil (PMAE)',curto:'alojamento estudantil municipal',quadro:'6D',codigo:'03',lei:'EBF art. 71.º-A',finalidade:['hp','hnp'],
       texto:'Contrato celebrado num programa municipal de alojamento para estudantes: as rendas ficam isentas de IRS durante o contrato.'},
     {id:'prerau',nome:'Renda antiga: contrato anterior ao RAU, sujeito ao NRAU',curto:'renda antiga (anterior ao RAU)',quadro:'6H',codigo:'',semCodigo:true,lei:'EBF art. 46.º-A',
-      pede:'nrau3536',finalidade:['hp','hnp'],
+      pede:'nrau3536',celebradoAte:'1990-12-31',datasPelaCelebracao:true,finalidade:['hp','hnp'],
       texto:'Contrato de habitação celebrado antes do Regime do Arrendamento Urbano (o RAU, de 1990) e que ficou sujeito aos artigos 35.º ou 36.º do NRAU — o inquilino com rendimentos baixos, ou com 65 ou mais anos ou deficiência de 60 % ou mais: as rendas ficam isentas de IRS enquanto o contrato durar.'},
     {id:'al',nome:'Ex-alojamento local passado a arrendamento',curto:'ex-alojamento local',quadro:'6F',codigo:'',semCodigo:true,lei:'EBF art. 74.º-A',
-      pede:'alRegistado2022',celebradoAte:'2024-12-31',ateAno:2029,finalidade:['hp'],
-      texto:'Imóvel que estava em alojamento local registado até 31 de dezembro de 2022 e passou a arrendamento para habitação permanente, com o contrato celebrado e inscrito no Portal das Finanças até 31 de dezembro de 2024: as rendas ficam isentas de IRS até às de 2029.'}],
+      pede:'alRegistado2022',desde:'2023-01-01',celebradoAte:'2024-12-31',ateAno:2029,finalidade:['hp'],
+      texto:'Imóvel que estava em alojamento local registado e afeto a esse fim a 31 de dezembro de 2022 e passou a arrendamento para habitação permanente, com o contrato celebrado e inscrito no Portal das Finanças entre 1 de janeiro de 2023 e 31 de dezembro de 2024: as rendas ficam isentas de IRS até às de 2029.'}],
   colunas:['conservacao','condominio','imi','selo','taxas','outros'],
   colunasNomes:{
     apos:{titulo:'Após início do arrendamento',conservacao:'Conservação e manutenção',condominio:'Condomínio',imi:'Imposto municipal sobre imóveis',selo:'Imposto do selo',taxas:'Taxas autárquicas',outros:'Outros'},
     obras:{titulo:'Com obras de conservação e manutenção',inicioContrato:'Data de início do contrato de arrendamento (ano, mês)',inicioGastos:'Data de início dos gastos (ano, mês)',valor:'Valor'},
     /* a última coluna das linhas do 4.1 e do 4.2, nos contratos em vigor antes de 2022 (D76) */
     atualizacao:'Atualização da renda superior a 1,02?'},
-  naturezas:{habitacional:'07',naoHabitacional:'06',indemnizacao:'05',outras:'02',dhd:'01'},
+  naturezas:{habitacional:'07',naoHabitacional:'06',indemnizacao:'05',outras:'02',dhd:'01',mobiliario:'03'},
   naturezasTexto:{'01':'Arrendamento (anos de 2015 a 2022)','02':'Cedência de uso do prédio ou de parte dele, que não arrendamento',
     '03':'Aluguer de maquinismos e mobiliários instalados no imóvel locado',
     '04':'Constituição, a título oneroso, de direitos reais de gozo temporários, ainda que vitalícios, sobre prédios rústicos, urbanos ou mistos',

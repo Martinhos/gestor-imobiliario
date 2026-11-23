@@ -20,7 +20,9 @@
    quando o contrato acaba antes; o dia em que acabou mesmo é o
    fisco.cessacao (irsFimReal). A taxa conta-se período a período, cada
    renovação a partir da do período anterior (OC 20217/2020, também no regime
-   de 2023 — decisão do Martinho, 2026-11-17), e o ano parte-se nos troços em
+   de 2023 — decisão do Martinho, 2026-11-17; a que atravessa a mudança de
+   regime conta o regime novo desde o início, OC 20268/2024 — D1,
+   2026-11-23), o regime do contrato pela data de celebração, e o ano parte-se nos troços em
    que vale cada taxa (irsSegmentosDoAno). A comunicação da duração faz-se uma
    vez por período (irsComunicacaoDoAno), não todos os anos.
 
@@ -204,18 +206,47 @@ function irsNumeroDoEscalao(regime,e){
   if(Number(e.n)>0)return Number(e.n);
   return 5-((regime&&regime.escaloes)||[]).filter(x=>x.meses>e.meses).length;
 }
+/* O passo da cadeia num período: o escalão da duração dele no regime dado e
+   a taxa que lhe cabe, vindo de um período com a taxa `ant` (null: nenhum
+   com redução antes dele). Cada renovação conta isolada, pelo escalão da
+   SUA duração, e desce − porRenovacao pontos a partir da taxa anterior, até
+   ao `minimo` do escalão; os escalões sem passo (10 e 20 anos) dão a sua
+   taxa; uma renovação nunca fica pior do que a taxa do seu escalão; e a que
+   daria mais alta do que a anterior mantém a anterior (OC 20217/2020, ponto
+   II).
+   Recebe: reg — o regime ({escaloes}); meses — a duração do período; ant —
+   a taxa do período anterior (ou null).
+   Devolve: {taxa, escalao}, ou null quando a duração não chega a escalão
+   nenhum. */
+function irsPassoDaCadeia(reg,meses,ant){
+  const e=((reg&&reg.escaloes)||[]).slice().sort((x,y)=>y.meses-x.meses).find(x=>meses>=x.meses);
+  if(!e)return null;
+  let t=e.taxa;
+  if(ant!=null&&e.porRenovacao)t=Math.max(Number(e.minimo)||0,Math.min(e.taxa,ant-e.porRenovacao));
+  if(ant!=null&&t>ant)t=ant;
+  return {taxa:t,escalao:e};
+}
 /* A taxa pela duração de cada período de um contrato, pela ordem dos
-   períodos (CIRS art. 72.º n.os 2 a 5; OC 20217/2020). O regime é o da data
-   em que o período começou (os regimes da versão, cada um com `desde`/`ate`),
-   e o escalão o da duração dele. Cada renovação conta isolada, pelo escalão
-   da SUA duração, e a descida dela aplica-se à taxa do período anterior:
-   − porRenovacao pontos até ao `minimo` do escalão; os escalões sem passo
-   (10 e 20 anos) dão a sua taxa. Três regras à volta: um período sem
-   redução antes dele (o inicial, um anterior a 2019, um curto demais) dá a
-   taxa do escalão; uma renovação nunca fica pior do que a taxa do seu
-   escalão; e a que daria mais alta do que a anterior mantém a anterior (OC,
-   ponto II). Isto vale para os dois regimes (decisão do Martinho,
-   2026-11-17); no de 2023 o `minimo` é o limite global dos 10 pontos.
+   períodos (CIRS art. 72.º n.os 2 a 5; OC 20217/2020), passo a passo
+   (irsPassoDaCadeia). O regime (os da versão, cada um com `desde`/`ate`) é o
+   da data em que o contrato foi celebrado, no período inicial — a lei
+   aplica cada regime aos contratos «celebrados» desde a sua data (Lei
+   56/2023 art. 50.º n.º 7, OC 20268/2024 ponto 2 b); as instruções do 4.2
+   para o de 2019) —, com o início de recurso quando a celebração não está
+   escrita; numa renovação, o do dia em que ela começa (as renovações
+   «verificadas» desde a data). Um contrato celebrado antes de 2019 fica sem
+   redução no período inicial, mesmo que comece depois.
+   A renovação que atravessa a mudança de regime (começada no regime de 2023
+   num contrato que vinha do de 2019 já com redução, abaixo da taxa base do
+   ano) conta como se o regime novo valesse desde o início (OC 20268/2024,
+   pontos 7 e 8; decisão do Martinho D1, 2026-11-23): a taxa de partida é a
+   que os períodos de antes teriam no regime novo — 5 anos dão 15 %, e a
+   renovação de 5 anos desce para 13 % —, e as seguintes descem a partir
+   dela. Vindo de um período SEM redução (26 % num contrato de 3 anos), o
+   ofício não diz nada: a renovação desce a partir da taxa anterior, como no
+   resto (fica `abInitio` false). Isto vale para os dois regimes (decisão do
+   Martinho, 2026-11-17); no de 2023 o `minimo` é o limite global dos 10
+   pontos.
    Sem fim, sem regime ou sem escalão, o período não tem redução, e o
    seguinte começa de novo. A taxa aqui é a do regime — no de 2019 pode
    passar os 25 % (26 % num contrato de 3 anos): quem decide se é redução é
@@ -224,22 +255,29 @@ function irsNumeroDoEscalao(regime,e){
    Recebe: c — o contrato; ano (opcional) — o ano dos rendimentos (a versão
    de onde se leem os regimes).
    Devolve: [{inicio, fim, meses, taxa (null sem redução), n, regime,
-   escalao}], um por período de irsPeriodos. */
+   escalao, abInitio}], um por período de irsPeriodos — abInitio true na
+   renovação contada pelo regime novo desde o início. */
 function irsCadeia(c,ano){
-  const regs=(irsAno(ano).taxas.duracao)||[];
-  let ant=null;
-  return irsPeriodos(c).map(p=>{
-    const o={inicio:p.inicio,fim:p.fim,meses:0,taxa:null,n:0,regime:null,escalao:null};
-    const reg=p.inicio&&p.fim?regs.find(r=>p.inicio>=r.desde&&(!r.ate||p.inicio<=r.ate)):null;
-    if(!reg){ant=null;return o}
+  const v=irsAno(ano),regs=(v.taxas.duracao)||[],base=Number(v.taxas.habitacional)||25;
+  const cel=/^\d{4}-\d{2}-\d{2}$/.test(String(fiscoDe(c).celebracao||''))?String(fiscoDe(c).celebracao):'';
+  const ps=irsPeriodos(c),regDe=d=>regs.find(r=>d>=r.desde&&(!r.ate||d<=r.ate))||null;
+  let ant=null,regAnt=null,ini=0;
+  return ps.map((p,k)=>{
+    const o={inicio:p.inicio,fim:p.fim,meses:0,taxa:null,n:0,regime:null,escalao:null,abInitio:false};
+    const reg=p.inicio&&p.fim?regDe(k===0&&cel?cel:p.inicio):null;
+    if(!reg){ant=null;regAnt=null;ini=k+1;return o}
     o.meses=irsMeses(p.inicio,p.fim);
-    const e=reg.escaloes.slice().sort((x,y)=>y.meses-x.meses).find(x=>o.meses>=x.meses);
-    if(!e){ant=null;return o}
-    let t=e.taxa;
-    if(ant!=null&&e.porRenovacao)t=Math.max(Number(e.minimo)||0,Math.min(e.taxa,ant-e.porRenovacao));
-    if(ant!=null&&t>ant)t=ant;
-    o.taxa=t;o.regime=reg;o.escalao=e;o.n=irsNumeroDoEscalao(reg,e);
-    ant=t;
+    let a=ant;
+    if(a!=null&&regAnt&&reg!==regAnt&&String(reg.desde)>String(regAnt.desde)&&base>a){
+      /* os períodos de antes, desde o início desta cadeia, contados no regime novo */
+      a=null;
+      for(let j=ini;j<k;j++){const x=irsPassoDaCadeia(reg,irsMeses(ps[j].inicio,ps[j].fim),a);a=x?x.taxa:null}
+      o.abInitio=true;
+    }
+    const x=irsPassoDaCadeia(reg,o.meses,a);
+    if(!x){ant=null;regAnt=null;ini=k+1;o.abInitio=false;return o}
+    o.taxa=x.taxa;o.regime=reg;o.escalao=x.escalao;o.n=irsNumeroDoEscalao(reg,x.escalao);
+    ant=x.taxa;regAnt=reg;
     return o;
   });
 }
@@ -315,13 +353,22 @@ function irsReducao(c,ano){
    confirmado (o `pede` da versão), para o meio de uma frase. */
 const IRS_PEDE_TEXTO={
   nrau3536:'sem confirmares que o contrato está sujeito aos arts. 35.º ou 36.º do NRAU, a isenção não conta',
-  alRegistado2022:'sem confirmares o registo do alojamento local e a inscrição do contrato nos prazos da lei, a isenção não conta'};
+  alRegistado2022:'sem confirmares que o alojamento local estava registado e afeto a esse fim a 31/12/2022, e a inscrição do contrato nos prazos da lei, a isenção não conta'};
 /* A isenção de um contrato num ano, condição a condição. A isenção é a que o
    bloco fiscal indica (fisco.isencao), se a versão desse ano a tem na lista
    (irs-AAAA.js:isencoes — o RSAA só existe desde 2026); depois cada condição
    que a versão escreve nela:
    - desde / celebradoAte — o contrato celebrado (fisco.celebracao, senão o
-     início) nesse intervalo (o RSAA desde 1/9/2026; o PAA até 31/8/2026);
+     início) nesse intervalo (o RSAA desde 1/9/2026; o PAA de 1/7/2019 a
+     31/8/2026; o ex-alojamento local de 2023 a 2024). Com
+     `datasPelaCelebracao` (a renda antiga, anterior ao RAU), as datas leem-se
+     só na celebração escrita: sem ela, um início fora do intervalo não corta
+     — quem herdou ou comprou o prédio com o inquilino escreve muitas vezes o
+     dia em que passou a senhorio — e diz-se em `aviso`, para confirmar;
+   - prazoMinimo — {finalidade: meses}: a duração mínima do contrato (o
+     período inicial, do início ao termo estipulado) por finalidade (o RSAA:
+     3 anos na residência permanente, 3 meses na temporária — DL 97/2026,
+     anexo III, art. 5.º). Um contrato sem termo não chumba;
    - ateAno — as rendas até esse ano (o ex-alojamento local até 2029);
    - finalidade — a finalidade do contrato (texto ou lista; por indicar
      conta como habitação permanente, como na taxa);
@@ -335,25 +382,43 @@ const IRS_PEDE_TEXTO={
    Sem data de celebração, as condições de datas não se verificam (a
    Declaração aponta a data em falta).
    Recebe: c — o contrato (aguenta null); ano (opcional) — o ano dos rendimentos.
-   Devolve: {is, motivo} — is a isenção da versão quando todas passam (senão
-   null); motivo '' ou a frase da primeira condição que falha (minúscula, sem
-   ponto final). */
+   Devolve: {is, motivo, aviso} — is a isenção da versão quando todas passam
+   (senão null); motivo '' ou a frase da primeira condição que falha
+   (minúscula, sem ponto final); aviso '' ou, com a isenção a contar, a frase
+   do que fica por confirmar (o início escrito depois do RAU, sem a
+   celebração). */
 function irsIsencaoAvaliada(c,ano){
   const f=fiscoDe(c),id=f.isencao;
-  if(!c||!id)return {is:null,motivo:''};
+  if(!c||!id)return {is:null,motivo:'',aviso:''};
   const a=anoIrs(ano),is=(irsAno(a).isencoes||[]).find(x=>x&&x.id===id)||null;
-  const falha=m=>({is:null,motivo:m}),dia=x=>dPT(x)||String(x);
+  const falha=m=>({is:null,motivo:m,aviso:''}),dia=x=>dPT(x)||String(x);
   if(!is){
     const outra=irsAnosConhecidos().map(y=>(IRS_ANOS[y].isencoes||[]).find(x=>x&&x.id===id)).find(Boolean);
     return falha('a isenção escolhida'+(outra?' ('+(outra.curto||outra.nome)+')':'')+' não existe nas regras de '+a);
   }
-  const cel=f.celebracao||c.start||'';
-  if(is.desde&&cel&&cel<is.desde)return falha('a isenção só vale para contratos celebrados desde '+dia(is.desde));
-  if(is.celebradoAte&&cel&&cel>is.celebradoAte)return falha('a isenção só vale para contratos celebrados até '+dia(is.celebradoAte));
+  const celEscrita=/^\d{4}-\d{2}-\d{2}$/.test(String(f.celebracao||''))?String(f.celebracao):'';
+  const cel=celEscrita||c.start||'',soInicio=!!is.datasPelaCelebracao&&!celEscrita;
+  let aviso='';
+  const datas=[];
+  if(is.desde&&cel&&cel<is.desde)datas.push('a isenção só vale para contratos celebrados desde '+dia(is.desde));
+  if(is.celebradoAte&&cel&&cel>is.celebradoAte)datas.push('a isenção só vale para contratos celebrados até '+dia(is.celebradoAte));
+  if(datas.length){
+    if(!soInicio)return falha(datas[0]);
+    aviso='o início escrito no contrato ('+dia(c.start)+') é posterior ao que a isenção pede ('+datas[0].replace(/^a isenção só vale para /,'')+'): se o contrato é mais antigo (herdaste ou compraste o prédio com o inquilino), escreve a data de celebração; se não, a isenção não se aplica';
+  }
   if(is.ateAno&&a>Number(is.ateAno))return falha('a isenção só vale para as rendas até '+is.ateAno);
+  const fin=irsFinalidade(c)||'hp';
   if(is.finalidade){
-    const fs=[].concat(is.finalidade),fin=irsFinalidade(c)||'hp';
+    const fs=[].concat(is.finalidade);
     if(fs.indexOf(fin)<0)return falha('a isenção só vale para contratos de '+fs.map(x=>{const n=FISCO_FINALIDADES.find(y=>y[0]===x);return n?n[1].toLowerCase():x}).join(' ou '));
+  }
+  const pm=is.prazoMinimo&&typeof is.prazoMinimo==='object'?Number(is.prazoMinimo[fin])||0:0;
+  if(pm>0){
+    const p0=irsPeriodos(c)[0]||{},meses=p0.inicio&&p0.fim?irsMeses(p0.inicio,p0.fim):0;
+    if(p0.inicio&&p0.fim&&meses<pm){
+      const dur=pm%12===0?(pm/12===1?'um ano':pm/12+' anos'):(pm===1?'um mês':pm+' meses');
+      return falha('a isenção pede um contrato de pelo menos '+dur+(fin==='hnp'?' na residência temporária':' na habitação permanente')+', e este tem '+(meses===1?'um mês':meses+' meses'));
+    }
   }
   for(const campo of [].concat(is.pede||[])){
     if(f[campo]!==true)return falha(is.pedeTexto||IRS_PEDE_TEXTO[campo]||'falta confirmar no contrato uma condição da isenção');
@@ -364,7 +429,7 @@ function irsIsencaoAvaliada(c,ano){
     if(env&&prazo&&env>prazo)return falha('o contrato foi ao IHRU depois de '+dia(prazo)+': a isenção não conta');
     if(!env&&(!prazo||today()>prazo))return falha('sem a data do envio ao IHRU, a isenção não conta');
   }
-  return {is:is,motivo:''};
+  return {is:is,motivo:'',aviso:aviso};
 }
 /* A isenção de um contrato num ano, quando todas as condições da versão
    passam (irsIsencaoAvaliada).
@@ -378,6 +443,12 @@ function irsIsencao(c,ano){return irsIsencaoAvaliada(c,ano).is}
    Devolve: '' (sem isenção escolhida, ou ela conta) ou a frase, ex.: «sem a
    data do envio ao IHRU, a isenção não conta». */
 function irsIsencaoMotivo(c,ano){return irsIsencaoAvaliada(c,ano).motivo}
+/* O que fica por confirmar numa isenção que conta num ano: a frase do
+   `aviso` de irsIsencaoAvaliada (a renda antiga com só o início escrito,
+   posterior ao RAU), para «A tratar» e para a ficha.
+   Recebe: c — o contrato (aguenta null); ano (opcional) — o ano dos rendimentos.
+   Devolve: '' ou a frase (minúscula, sem ponto final). */
+function irsIsencaoAviso(c,ano){return irsIsencaoAvaliada(c,ano).aviso||''}
 /* Os benefícios do quadro 6 que não são isenções (6A, 6B, 6C — a lista
    `beneficios` da versão do ano), condição a condição, para um contrato num
    ano. Só entram os que o imóvel ou o contrato marcam (`marca`:
@@ -394,7 +465,11 @@ function irsIsencaoMotivo(c,ano){return irsIsencaoAvaliada(c,ano).motivo}
    - tipos, certificado, inicioDesde/inicioAte, concluida — a reabilitação do
      imóvel (p.reabilitacao: {tipo, inicio, conclusao, certificado}): o tipo
      da lista, o certificado da câmara, o início no intervalo e a conclusão
-     até 31 de dezembro do ano;
+     até 31 de dezembro do ano; no ano da conclusão, a taxa só vale nas
+     rendas dos meses depois dela (irsInicioDaReabilitacao: `desde` no item,
+     e irsSegmentosDoAno parte o ano nesse dia — a linha continua uma só,
+     que o 6A identifica inteira); concluída em dezembro depois do dia 1,
+     não vale nesse ano;
    - donoEm — a data de compra do imóvel (purchaseDate) até esse dia (a PIV
      28153: dono a 6 de outubro de 2023); sem ela não se sabe, e não vale;
    - tipoPredio — o tipo do prédio ('R' rústico);
@@ -404,9 +479,11 @@ function irsIsencaoMotivo(c,ano){return irsIsencaoAvaliada(c,ano).motivo}
      início) até esse dia, e o ano dos rendimentos dentro dos `anos` a contar
      do ano da celebração (o 6C: 12 anos).
    Recebe: c — o contrato (aguenta null); ano (opcional) — o ano dos rendimentos.
-   Devolve: [{beneficio, aplica, motivo}] — beneficio o da versão; aplica
-   true quando todas as condições passam; motivo '' ou a frase da primeira
-   que falha (minúscula, sem ponto final), para «A tratar». [] sem nada
+   Devolve: [{beneficio, aplica, motivo[, conclusao, desde]}] — beneficio o da
+   versão; aplica true quando todas as condições passam; motivo '' ou a
+   frase da primeira que falha (minúscula, sem ponto final), para «A
+   tratar»; no ano da conclusão da reabilitação (com aplica), conclusao a
+   data dela e desde o dia em que a taxa começa ('AAAA-MM-01'). [] sem nada
    marcado. */
 function irsBeneficiosAvaliados(c,ano){
   if(!c)return [];
@@ -438,6 +515,8 @@ function irsBeneficiosAvaliados(c,ano){
         const con=data(R.conclusao);
         if(!con)return 'sem a data de conclusão da reabilitação, '+Q;
         if(con>a+'-12-31')return 'a reabilitação só ficou concluída a '+dia(con)+': '+Q+' em '+a;
+        const des=irsInicioDaReabilitacao(con);
+        if(des>a+'-12-31')return 'a reabilitação só ficou concluída a '+dia(con)+': os '+dec(b.taxa)+' % começam nas rendas de janeiro de '+des.slice(0,4)+', e as de '+a+' ficam fora do quadro '+b.quadro;
       }
       if(b.donoEm){
         const pd=data(p&&p.purchaseDate);
@@ -457,10 +536,30 @@ function irsBeneficiosAvaliados(c,ano){
       }
       return '';
     };
-    const motivo=falha();
-    out.push({beneficio:b,aplica:!motivo,motivo:motivo});
+    const motivo=falha(),item={beneficio:b,aplica:!motivo,motivo:motivo};
+    /* o ano da conclusão: as rendas de antes não vêm de um imóvel recuperado */
+    if(!motivo&&b.concluida){
+      const con=data(R.conclusao),des=con?irsInicioDaReabilitacao(con):'';
+      if(con&&con>=a+'-01-01'&&des>a+'-01-01'){item.conclusao=con;item.desde=des}
+    }
+    out.push(item);
   });
   return out;
+}
+/* O dia a partir do qual as rendas de um imóvel reabilitado têm a taxa do 6A
+   (o antigo art. 71.º n.º 7 do EBF: as rendas «inteiramente decorrentes» do
+   arrendamento de um imóvel recuperado): o 1.º dia do mês a seguir ao da
+   conclusão — a renda do mês da conclusão ainda paga, em parte, um imóvel em
+   obras —, ou o próprio dia quando a conclusão é a 1 de um mês. A leitura é
+   prudente; a AT não tem doutrina sobre o ano da conclusão, e a Declaração
+   avisa nesse ano.
+   Recebe: con — a data de conclusão 'AAAA-MM-DD'.
+   Devolve: 'AAAA-MM-DD', ou '' sem data válida. */
+function irsInicioDaReabilitacao(con){
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(con||''));if(!m)return '';
+  if(m[3]==='01')return con;
+  const y=Number(m[1]),n=Number(m[2]);
+  return n<12?y+'-'+String(n+1).padStart(2,'0')+'-01':(y+1)+'-01-01';
 }
 /* Os benefícios do quadro 6 (6A, 6B, 6C) que valem para a linha de um
    contrato num ano: os de irsBeneficiosAvaliados com todas as condições
@@ -470,6 +569,17 @@ function irsBeneficiosAvaliados(c,ano){
    Devolve: [{id, quadro, campos, …}] — os benefícios da versão (os próprios
    objetos: não se mexe neles). */
 function irsBeneficios(c,ano){return irsBeneficiosAvaliados(c,ano).filter(x=>x.aplica).map(x=>x.beneficio)}
+/* Os benefícios do quadro 6 que valem num troço do ano: os de
+   irsBeneficiosAvaliados que se aplicam e cujo `desde` (o 6A no ano da
+   conclusão) não é depois do primeiro dia do troço. Sem dia, os do ano
+   (irsBeneficios).
+   Recebe: c — o contrato (aguenta null); ano — o ano dos rendimentos; de
+   (opcional) — o primeiro dia do troço 'AAAA-MM-DD'.
+   Devolve: [benefício da versão] (os próprios objetos). */
+function irsBeneficiosDoTroco(c,ano,de){
+  const d=/^\d{4}-\d{2}-\d{2}$/.test(String(de||''))?String(de):'';
+  return irsBeneficiosAvaliados(c,ano).filter(x=>x.aplica&&(!d||!x.desde||d>=x.desde)).map(x=>x.beneficio);
+}
 /* O mês a que uma renda respeita: o `periodo` ('AAAA-MM') quando o tem, senão
    o mês da data — a mesma regra do planeados.js:mesDaRenda (a de agosto paga
    a 3 de setembro é de agosto), aqui na base do IRS.
@@ -479,34 +589,137 @@ function irsMesDaRenda(t){
   const p=String((t&&t.periodo)||'');
   return /^\d{4}-\d{2}$/.test(p)?p:String((t&&t.date)||'').slice(0,7);
 }
-/* A renda mensal com que se testa o limite das rendas moderadas num ano (DL
-   97/2026, art. 3.º: o valor anual a dividir pelos meses decorridos, com os
-   móveis, os equipamentos e os serviços pagos à parte). É a média das rendas
-   brutas do contrato por mês a que respeitam, só nos meses do ano com renda
-   lançada — uma renda em atraso por pagar não baixa a média —, mais o
-   fisco.extrasMensais; sem rendas nesse ano, a renda do contrato (c.rent)
-   mais os extras. Nunca soma as rendas recebidas a dividir por 12, e não
-   olha para a renda de hoje quando o ano tem rendas (a atualização de 2027
-   não muda a taxa de 2026). As rendas são as do contrato com o papel de renda
-   na Declaração (irs-papeis.js:irsReceitaDe, como o resumo): também as «Fora
-   dos totais» das Rendas e o reembolso do inquilino; a caução não (é renda do
-   ano em que se recebe no Anexo F, mas não é a renda do contrato que o limite
-   mede — decisão do Martinho de 2026-11-17), nem a indemnização e as outras
-   receitas prediais (naturezas 05 e 02).
+/* Os meses de um ano que já decorreram com o contrato em vigor (DL 97/2026,
+   art. 3.º n.º 3: «o número de meses decorridos em cada ano»): de max(o
+   início, a compra do imóvel, 1 de janeiro) a min(o último dia em que viveu
+   — irsFimReal —, a venda do imóvel, 31 de dezembro), cada mês tocado (um
+   contrato que começa a 20 de setembro conta setembro), e só os meses antes
+   do de hoje — o mês corrente conta quando já tem renda (quem chama junta-o).
+   A compra e a venda cortam porque as rendas de antes e de depois não são de
+   quem declara (o resumo também não as conta).
+   Recebe: c — o contrato (aguenta null); ano — o ano dos rendimentos.
+   Devolve: ['AAAA-MM'] por ordem, ou null quando não se sabe (sem início, ou
+   terminado sem data nenhuma). */
+function irsMesesDecorridos(c,ano){
+  if(!c||!/^\d{4}-\d{2}-\d{2}$/.test(String(c.start||'')))return null;
+  const A=String(anoIrs(ano)),fimReal=irsFimReal(c);
+  if(c.active===false&&!fimReal)return null;
+  const p=c.propertyId?(db.properties||[]).find(x=>x&&x.id===c.propertyId):null;
+  let ini=A+'-01-01',fim=A+'-12-31';
+  [c.start,p&&p.purchaseDate].forEach(x=>{if(/^\d{4}-\d{2}-\d{2}$/.test(String(x||''))&&x>ini)ini=x});
+  [fimReal,p&&p.vendido].forEach(x=>{if(/^\d{4}-\d{2}-\d{2}$/.test(String(x||''))&&x<fim)fim=x});
+  const hoje=today().slice(0,7),out=[];
+  for(let m=ini.slice(0,7);m<=fim.slice(0,7)&&m<hoje;){
+    out.push(m);
+    const y=Number(m.slice(0,4)),n=Number(m.slice(5,7));
+    m=n<12?y+'-'+String(n+1).padStart(2,'0'):(y+1)+'-01';
+  }
+  return out;
+}
+/* O teste das rendas moderadas de um contrato num ano (EBF art. 45.º-C; DL
+   97/2026, art. 3.º), com o que a Declaração precisa para o explicar.
+   A renda mensal do teste mede o que se recebeu (decisão do Martinho D2,
+   2026-11-23): o valor das rendas do ano a dividir pelos meses decorridos
+   com o contrato em vigor (irsMesesDecorridos, mais os meses que já têm
+   renda) — e não pelos meses com renda lançada: um pagamento de três meses
+   num movimento não triplica a renda, e um mês por pagar baixa a média.
+   Mais os móveis e serviços pagos à parte (fisco.extrasMensais). Sem rendas
+   no ano, ou sem meses (um contrato que ainda não começou, um que acabou
+   antes), é a renda do contrato (c.rent) mais os extras. As rendas são as do
+   contrato com o papel de renda (irs-papeis.js:irsReceitaDe, como o resumo),
+   pelo mês a que respeitam: também as «Fora dos totais» das Rendas e o
+   reembolso do inquilino; a caução não (decisão do Martinho de 2026-11-17),
+   nem a indemnização e as outras receitas prediais (naturezas 05 e 02).
+   Quando o que entrou e a renda do contrato ficam de lados diferentes do
+   limite, a taxa segue o que entrou e `difere` di-lo (o aviso da
+   Declaração). `variosMeses` aponta os meses com vez e meia a renda do
+   contrato ou mais (um pagamento de vários meses num movimento, ou duas
+   rendas no mesmo mês): aí não há rendas «em falta» a registar.
+   Recebe: c — o contrato (aguenta null); ano (opcional) — o ano dos rendimentos.
+   Devolve: null quando a versão do ano não tem rendas moderadas, o ano passa
+   o `ate` dela, ou o contrato não é de habitação (nh, dhd) ou está isento;
+   senão {renda, recebido, meses, mesesComRenda, rendaContrato, limite, cabe,
+   cabeContrato, difere, semRendas, variosMeses:[{mes, valor, n}]}. */
+function irsTesteModerada(c,ano){
+  if(!c)return null;
+  const a=anoIrs(ano),m=irsAno(a).taxas.rendaModerada;
+  if(!m||a>Number(m.ate))return null;
+  const fin=irsFinalidade(c);if(fin==='nh'||fin==='dhd'||irsIsencao(c,a))return null;
+  return irsTesteModeradaBruto(c,a,m);
+}
+/* O miolo do teste das rendas moderadas (irsTesteModerada), sem olhar para
+   a finalidade nem para a isenção: a conta com o limite dado.
+   Recebe: c — o contrato; a — o ano (número); m — {limiteMensal} (o
+   rendaModerada da versão; sem ele, o limite fica 0).
+   Devolve: {renda, recebido, meses, mesesComRenda, rendaContrato, limite,
+   cabe, cabeContrato, difere, semRendas, variosMeses}. */
+function irsTesteModeradaBruto(c,a,m){
+  const A=String(a),f=fiscoDe(c),extra=Math.max(0,Number(f.extrasMensais)||0),porMes={},nPorMes={};
+  (db.transactions||[]).forEach(t=>{
+    if(!t||t.kind!=='income'||!c.id||t.contractId!==c.id)return;
+    if(irsReceitaDe(t).papel!=='renda')return;
+    const mes=irsMesDaRenda(t);if(mes.slice(0,4)!==A)return;
+    porMes[mes]=(porMes[mes]||0)+rendaBruta(t);nPorMes[mes]=(nPorMes[mes]||0)+1;
+  });
+  const comRenda=Object.keys(porMes).sort(),recebido=Math.round(comRenda.reduce((s,x)=>s+porMes[x],0)*100)/100;
+  const dec0=irsMesesDecorridos(c,a),todos={};
+  (dec0||[]).concat(comRenda).forEach(x=>{todos[x]=1});
+  const meses=Object.keys(todos).length,rent=Math.max(0,Number(c.rent)||0),rendaContrato=rent+extra;
+  const semRendas=!(recebido>0)||!meses;
+  const renda=semRendas?rendaContrato:Math.max(0,recebido/meses)+extra;
+  const lim=Number(m&&m.limiteMensal)||0,cabeR=x=>x>0&&Math.round(x*100)<=Math.round(lim*100);
+  const cabe=cabeR(renda),cabeContrato=cabeR(rendaContrato);
+  const variosMeses=rent>0?comRenda.filter(x=>porMes[x]>=rent*1.5).map(x=>({mes:x,valor:Math.round(porMes[x]*100)/100,n:nPorMes[x]})):[];
+  return {renda:renda,recebido:recebido,meses:meses,mesesComRenda:comRenda.length,rendaContrato:rendaContrato,limite:lim,
+    cabe:cabe,cabeContrato:cabeContrato,difere:!semRendas&&rendaContrato>0&&cabe!==cabeContrato,semRendas:semRendas,variosMeses:variosMeses};
+}
+/* A renda mensal com que se testa o limite das rendas moderadas num ano: a
+   de irsTesteModeradaBruto (o que entrou a dividir pelos meses decorridos,
+   mais os extras; sem rendas, a renda do contrato) — também num ano sem
+   rendas moderadas na versão, para quem só quer o número.
    Recebe: c — o contrato; ano (opcional) — o ano dos rendimentos.
    Devolve: euros por mês (número ≥ 0). */
 function irsRendaMensalDoTeste(c,ano){
   if(!c)return 0;
-  const a=String(anoIrs(ano)),f=fiscoDe(c),extra=Math.max(0,Number(f.extrasMensais)||0),porMes={};
-  ((typeof db!=='undefined'&&db&&db.transactions)||[]).forEach(t=>{
-    if(!t||t.kind!=='income'||!c.id||t.contractId!==c.id)return;
-    if(irsReceitaDe(t).papel!=='renda')return;
-    const m=irsMesDaRenda(t);if(m.slice(0,4)!==a)return;
-    porMes[m]=(porMes[m]||0)+rendaBruta(t);
-  });
-  const ms=Object.keys(porMes);
-  const media=ms.length?ms.reduce((s,m)=>s+porMes[m],0)/ms.length:(Number(c.rent)||0);
-  return Math.max(0,media)+extra;
+  const a=anoIrs(ano);
+  return irsTesteModeradaBruto(c,a,irsAno(a).taxas.rendaModerada).renda;
+}
+/* Os quartos (ou partes) do mesmo imóvel arrendados em contratos à parte que,
+   juntos, passam o limite das rendas moderadas, cada um cabendo nele (D2 c,
+   decisão do Martinho de 2026-11-23: a taxa continua a testar-se contrato a
+   contrato, e a Declaração avisa). O DL 97/2026 mede a renda pela
+   «totalidade do valor pago pelo prédio … ou fração autónoma» (art. 3.º n.º
+   1) e só conta «os imóveis» com renda moderada (art. 2.º n.º 2); a AT não
+   disse se soma os contratos da mesma fração. Conta, mês a mês no ano, os
+   contratos do imóvel em vigor nesse mês com o teste das rendas moderadas
+   (irsTesteModerada: de habitação e não isentos), cada um pela renda do seu
+   teste.
+   Recebe: pid — o id do imóvel; ano (opcional) — o ano dos rendimentos.
+   Devolve: null, ou {propertyId, mes, soma, limite, contratos:[{id, renda}]}
+   — mes o primeiro mês em que passa ('AAAA-MM'), soma a maior soma do ano,
+   contratos os em vigor nesse mês. */
+function irsModeradaPorFracao(pid,ano){
+  if(!pid)return null;
+  const a=anoIrs(ano),A=String(a),cs=(db.contracts||[]).filter(c=>c&&c.propertyId===pid&&c.start);
+  if(cs.length<2)return null;
+  const ts=cs.map(c=>({c:c,t:irsTesteModerada(c,a)})).filter(x=>x.t);
+  if(ts.length<2)return null;
+  /* os contratos em vigor num mês (um terminado sem data nenhuma não diz quando viveu: fica de fora) */
+  const vivosEm=mes=>{
+    const ini=mes+'-01',fim=irsSomaDias(irsSomaDias(ini,31).slice(0,8)+'01',-1);
+    return ts.filter(x=>{const f=irsFimReal(x.c);return x.c.start<=fim&&(!f||f>=ini)&&!(x.c.active===false&&!f)});
+  };
+  let primeiro='',soma=0;const lim=ts[0].t.limite;
+  for(let n=1;n<=12;n++){
+    const mes=A+'-'+String(n).padStart(2,'0'),vivos=vivosEm(mes);
+    if(vivos.length<2||!vivos.every(x=>x.t.cabe))continue;
+    const s=Math.round(vivos.reduce((z,x)=>z+x.t.renda,0)*100)/100;
+    if(Math.round(s*100)<=Math.round(lim*100))continue;
+    if(!primeiro)primeiro=mes;
+    if(s>soma)soma=s;
+  }
+  if(!primeiro)return null;
+  return {propertyId:pid,mes:primeiro,soma:soma,limite:lim,contratos:vivosEm(primeiro).map(x=>({id:x.c.id,renda:x.t.renda}))};
 }
 /* A taxa de um contrato num ano com um período dado em vigor — o miolo de
    irsTaxa e de cada troço de irsSegmentosDoAno. A isenção vem antes de tudo
@@ -521,11 +734,16 @@ function irsRendaMensalDoTeste(c,ano){
    reabilitado com o 6A (irsBeneficios, um benefício com `taxa`) paga essa
    taxa quando não é mais alta do que a outra — sem redução, para a linha
    ficar no 4.1 com o 6A e nunca ir ao 4.2 (instruções do 6A: identifica
-   campos do 4.1).
+   campos do 4.1); no ano da conclusão, só nos troços desde o mês a seguir a
+   ela (irsBeneficiosDoTroco, com o primeiro dia do troço).
+   É também a taxa das regras do ano da Declaração para uma renda de outro
+   ano num contrato que não viveu nesse ano (N014): o resumo pede-a com o
+   período do contrato a que a renda respeita.
    Recebe: c — o contrato (aguenta null); ano — o ano dos rendimentos; i —
-   o índice do período (-1: nenhum, depois do termo sem renovação).
+   o índice do período (-1: nenhum, depois do termo sem renovação); de
+   (opcional) — o primeiro dia do troço 'AAAA-MM-DD' (sem ele, o ano inteiro).
    Devolve: {taxa, motivo, reducao[, isencao][, beneficio]} como irsTaxa. */
-function irsTaxaDoPeriodo(c,ano,i){
+function irsTaxaDoPeriodo(c,ano,i,de){
   const a=anoIrs(ano),T=irsAno(a).taxas,is=c?irsIsencao(c,a):null,fin=c?irsFinalidade(c):'';
   if(is)return {taxa:0,motivo:'isento',reducao:null,isencao:is};
   if(fin==='dhd')return {taxa:T.dhd!=null?T.dhd:T.habitacional,motivo:'dhd',reducao:null};
@@ -540,9 +758,62 @@ function irsTaxaDoPeriodo(c,ano,i){
       if(renda>0&&Math.round(renda*100)<=Math.round(m.limiteMensal*100))out={taxa:m.taxa,motivo:'moderada',reducao:r};
     }
   }
-  const b=c?irsBeneficios(c,a).find(x=>x&&x.taxa!=null&&Number(x.taxa)<=out.taxa):null;
+  const b=c?irsBeneficiosDoTroco(c,a,de).find(x=>x&&x.taxa!=null&&Number(x.taxa)<=out.taxa):null;
   if(b)out={taxa:Number(b.taxa),motivo:'reabilitacao',reducao:null,beneficio:b};
   return out;
+}
+/* O subarrendamento de um contrato: o bloco do imóvel dele quando a pessoa
+   arrenda o imóvel e o subarrenda (p.subarrendamento.ativo) — os contratos
+   dele vão ao quadro 5 (D52), e não ao 4.1 nem ao 4.2.
+   Recebe: c — o contrato (aguenta null).
+   Devolve: o bloco ({ativo, nifSenhorio, rendaMensal…}), ou null. */
+function irsSubarrendamentoDe(c){
+  const p=c&&c.propertyId?(db.properties||[]).find(x=>x&&x.id===c.propertyId):null;
+  const s=p&&p.subarrendamento;
+  return s&&typeof s==='object'&&!Array.isArray(s)&&s.ativo===true?s:null;
+}
+/* A taxa do quadro 5 (a sublocação: CIRS art. 8.º n.º 2 c), art. 72.º),
+   sobre a diferença entre a renda recebida e a paga ao senhorio — a regra
+   única da Declaração (fisco-resumo.js:fiscoQuadro5) e da ficha, da lista,
+   da Avaliação e das Projeções (irsTaxa). O não habitacional paga a taxa da
+   versão; a habitação, a das rendas moderadas quando a versão a tem, o ano
+   está dentro dela e a renda do subarrendatário cabe no limite
+   (irsTesteModeradaBruto: o DL 97/2026 inclui o «subarrendamento
+   habitacional», art. 2.º n.º 1 b); a AT ainda não o confirmou, e
+   `porConfirmar` di-lo), senão a base. Sem a redução pela duração (o quadro
+   5 não tem onde a pôr: INCERTO, decisão da vaga 3) nem a isenção (o irsTaxa
+   põe-na antes).
+   Recebe: c — o contrato (aguenta null); ano (opcional) — o ano dos rendimentos.
+   Devolve: null sem subarrendamento ativo (ou num DHD); senão {taxa, motivo
+   ('nh'|'base'|'moderada'), porConfirmar, reducao:null, sublocacao:true}. */
+function irsTaxaDoSubarrendamento(c,ano){
+  if(!c||!irsSubarrendamentoDe(c))return null;
+  const a=anoIrs(ano),T=irsAno(a).taxas,fin=irsFinalidade(c);
+  if(fin==='dhd')return null;
+  if(fin==='nh')return {taxa:T.naoHabitacional,motivo:'nh',porConfirmar:false,reducao:null,sublocacao:true};
+  const m=T.rendaModerada;
+  if(m&&a<=Number(m.ate)&&Number(m.taxa)<Number(T.habitacional)&&irsTesteModeradaBruto(c,a,m).cabe)
+    return {taxa:Number(m.taxa),motivo:'moderada',porConfirmar:true,reducao:null,sublocacao:true};
+  return {taxa:T.habitacional,motivo:'base',porConfirmar:false,reducao:null,sublocacao:true};
+}
+/* A renda de um mês de um contrato subarrendado partida no que conta para o
+   imposto (CIRS art. 8.º n.º 2 c): só a diferença): a renda do contrato, a
+   parte da renda paga ao senhorio que lhe cabe — a do imóvel inteiro
+   (subarrendamento.rendaMensal), ou a da parte subarrendada quando só se
+   subarrenda parte (parte 'parte' com rendaParte), repartida pelos
+   contratos do imóvel em vigor hoje na proporção da renda (como o quadro 5)
+   — e a diferença (nunca negativa).
+   Recebe: c — o contrato (aguenta null).
+   Devolve: null sem subarrendamento ativo; senão {renda, paga, diferenca}
+   em euros por mês. */
+function irsSublocacaoMensal(c){
+  const s=irsSubarrendamentoDe(c);if(!s)return null;
+  const renda=Math.max(0,Number(c.rent)||0);
+  const total=s.parte==='parte'&&Number(s.rendaParte)>0?Number(s.rendaParte):Math.max(0,Number(s.rendaMensal)||0);
+  const vivos=(db.contracts||[]).filter(x=>x&&x.propertyId===c.propertyId&&x.id!==c.id&&isActive(x));
+  const soma=renda+vivos.reduce((z,x)=>z+Math.max(0,Number(x.rent)||0),0);
+  const paga=Math.round((soma>0?total*renda/soma:total)*100)/100;
+  return {renda:renda,paga:paga,diferenca:Math.max(0,Math.round((renda-paga)*100)/100)};
 }
 /* A taxa especial do IRS sobre as rendas de um contrato num ano, e porquê
    (CIRS art. 72.º; EBF art. 45.º-C), no período em vigor nesse ano
@@ -560,18 +831,25 @@ function irsTaxaDoPeriodo(c,ano,i){
    redução do período que acabou não passa para as rendas seguintes:
    `semRenovacao` diz-o. Um ano com uma renovação a meio parte-se em
    irsSegmentosDoAno; aqui fica a taxa do último período.
+   Um contrato num imóvel subarrendado (depois da isenção) tem a taxa do
+   quadro 5, sobre a diferença (irsTaxaDoSubarrendamento): a ficha e a lista
+   dizem a mesma que a Declaração. Os troços (irsSegmentosDoAno) não mudam.
    É a estimativa: a taxa escrita no contrato manda sobre ela (taxRateOf),
    fora da Declaração.
    Recebe: c — o contrato (aguenta null); ano (opcional) — o ano dos rendimentos.
    Devolve: {taxa, motivo, reducao} — motivo é 'isento', 'dhd',
    'reabilitacao', 'nh', 'base', 'duracao' ou 'moderada'; reducao o que
    irsReducao devolveu (ou null), mesmo quando a moderada ganha, porque é ela
-   que manda o contrato para o quadro 4.2 (null no isento, no DHD e na
-   reabilitação); no isento há ainda isencao, a da versão; na reabilitação
-   beneficio, o da versão (o 6A); depois do termo sem renovação,
+   que manda o contrato para o quadro 4.2 (null no isento, no DHD, na
+   reabilitação e na sublocação); no isento há ainda isencao, a da versão;
+   na reabilitação beneficio, o da versão (o 6A); na sublocação
+   sublocacao:true e porConfirmar; depois do termo sem renovação,
    semRenovacao:true. */
 function irsTaxa(c,ano){
-  const a=anoIrs(ano),i=c?irsPeriodoDoAno(c,a):-1,out=irsTaxaDoPeriodo(c,a,i);
+  const a=anoIrs(ano);
+  const sub=c&&!irsIsencao(c,a)?irsTaxaDoSubarrendamento(c,a):null;
+  if(sub)return sub;
+  const i=c?irsPeriodoDoAno(c,a):-1,out=irsTaxaDoPeriodo(c,a,i);
   if(c&&i<0&&c.active!==false&&!irsCessacao(c).data)out.semRenovacao=true;
   return out;
 }
@@ -585,7 +863,8 @@ function irsTaxa(c,ano){
    quando a renda cabe) — a renovação automática do Código Civil (art. 1096.º)
    não se adivinha. A AT reparte assim as rendas de um ano com uma renovação
    a meio (OC 20217/2020, ponto III): cada renda vai ao troço do mês a que
-   respeita.
+   respeita. No ano da conclusão de uma reabilitação do 6A, o troço parte-se
+   também no dia em que os 5 % começam (irsBeneficiosAvaliados: `desde`).
    Recebe: c — o contrato (aguenta null); ano (opcional) — o ano dos rendimentos.
    Devolve: [{de, ate, periodo, taxa, motivo, reducao, semRenovacao[, isencao][, beneficio]}]
    — periodo o índice em irsPeriodos (null depois do termo); motivo o de
@@ -599,8 +878,12 @@ function irsSegmentosDoAno(c,ano){
   if(!ate0||ate0>fimA)ate0=fimA;
   if(ate0<de0)return [];
   const out=[];
+  /* os dias em que um benefício de taxa começa a meio do ano (o 6A no ano da conclusão) */
+  const cortes=irsBeneficiosAvaliados(c,a).filter(x=>x.aplica&&x.desde&&x.beneficio&&x.beneficio.taxa!=null).map(x=>x.desde);
   const troco=(de,ate,i)=>{
-    const t=irsTaxaDoPeriodo(c,a,i==null?-1:i),s={de:de,ate:ate,periodo:i,taxa:t.taxa,
+    const d=cortes.find(x=>x>de&&x<=ate);
+    if(d){troco(de,irsVespera(d),i);troco(d,ate,i);return}
+    const t=irsTaxaDoPeriodo(c,a,i==null?-1:i,de),s={de:de,ate:ate,periodo:i,taxa:t.taxa,
       motivo:i==null&&t.motivo==='base'?'semRenovacao':t.motivo,reducao:t.reducao,semRenovacao:i==null};
     if(t.isencao)s.isencao=t.isencao;
     if(t.beneficio)s.beneficio=t.beneficio;
@@ -715,7 +998,8 @@ function irsPrazosDeComunicacao(c){
   const com=fiscoDe(c).comunicacoes||{};
   return irsPeriodos(c).map((p,i)=>{
     if(!/^\d{4}-/.test(p.inicio))return null;
-    const a=Number(p.inicio.slice(0,4)),t=irsTaxaDoPeriodo(c,a,i);
+    /* a taxa do período no dia em que começa: no ano da conclusão de um 6A, antes dela a redução conta */
+    const a=Number(p.inicio.slice(0,4)),t=irsTaxaDoPeriodo(c,a,i,p.inicio);
     if(!t.reducao)return null;
     const chave=String(a);
     return {periodoInicio:p.inicio,chave:chave,prazo:irsAno(a).prazos.comunicacaoDuracao,data:com[chave]||''};
@@ -750,6 +1034,7 @@ function irsRate(c,ano){return irsTaxa(c,ano).taxa}
    Devolve: o texto curto. */
 function irsTaxaPorque(c,ano){
   const t=irsTaxa(c,ano);
+  if(t.sublocacao)return t.motivo==='moderada'?'sublocação, renda moderada':t.motivo==='nh'?'sublocação, não habitacional':'sublocação';
   if(t.motivo==='reabilitacao')return (t.beneficio&&t.beneficio.curto)||'imóvel reabilitado';
   if(t.motivo==='dhd')return 'habitação duradoura (DHD)';
   return t.motivo==='isento'?'isento':t.motivo==='nh'?'não habitacional':t.motivo==='duracao'?'pela duração':t.motivo==='moderada'?'renda moderada':'taxa base';
@@ -778,14 +1063,59 @@ function irsTaxasTexto(ano){
    Devolve: a taxa em percentagem (número). */
 const taxRateOf=(c,ano)=>Number(c.taxRate)>0?Number(c.taxRate):irsRate(c,ano);
 /* A renda mensal de um contrato depois do imposto, à taxa que se lhe aplica
-   (taxRateOf).
+   (taxRateOf). Num imóvel subarrendado o imposto é só sobre a diferença
+   para a renda paga ao senhorio (irsSublocacaoMensal; CIRS art. 8.º n.º 2
+   c)).
    Recebe: c — o contrato; ano (opcional) — o ano dos rendimentos.
    Devolve: euros (número). */
-const netRent=(c,ano)=>c.rent*(1-taxRateOf(c,ano)/100);
-/* A renda líquida mensal dos contratos em vigor de um imóvel, no ano corrente.
+const netRent=(c,ano)=>{const s=irsSublocacaoMensal(c),t=taxRateOf(c,ano)/100;return s?s.renda-s.diferenca*t:c.rent*(1-t)};
+/* A renda líquida mensal dos contratos em vigor de um imóvel, no ano
+   corrente, só dos que têm estimativa (irsLiquidaParaMostrar: sem os do
+   Anexo J e da categoria B sem taxa escrita).
    Recebe: p — o imóvel.
    Devolve: euros (número). */
-const netRentOf=p=>sum(activeContracts(p.id).map(c=>netRent(c)));
+const netRentOf=p=>sum(activeContracts(p.id).map(c=>irsLiquidaParaMostrar(c)).filter(x=>x!=null));
+/* O contrato cujas rendas não têm a taxa especial do Anexo F, e por isso
+   nenhuma estimativa do imposto (D133, D134): as tributadas na categoria B
+   (Anexo B ou C, com a atividade) — a marca conta em qualquer estado menos
+   no «Não declarado» (N056: a categoria B não depende de o contrato estar
+   comunicado, e o formulário mostra a marca sempre que está ligada) e ganha
+   ao país, como no fisco-resumo.js:fiscoForaDoAnexoF —, e as de um imóvel
+   fora de Portugal (Anexo J, com o imposto pago lá). A regra é da base — a
+   lista, a Avaliação, a Visão geral e as Projeções perguntam-na sem os
+   Contratos ligados; o contrato.js:ctSemEstimativa delega nela.
+   Recebe: c — o contrato (aguenta null).
+   Devolve: 'catB', 'fora' ou ''. */
+function irsSemEstimativa(c){
+  if(!c)return '';
+  const f=fiscoDe(c);
+  if(f.categoriaB===true&&f.estado!=='naoDeclarado')return 'catB';
+  return pzForaDePortugal(c.propertyId)?'fora':'';
+}
+/* A taxa de um contrato para mostrar fora da Declaração (a lista dos
+   contratos, a Avaliação, as Projeções): a escrita no contrato, quando a
+   há; sem ela, «sem estimativa» num contrato do Anexo J ou da categoria B
+   (irsSemEstimativa — a categoria B nunca recebe os 28 % do não
+   habitacional); senão a estimativa do ano (irsRate) e porquê.
+   Recebe: c — o contrato (aguenta null); ano (opcional) — o ano dos rendimentos.
+   Devolve: {taxa (número, ou null sem estimativa), escrita, semEstimativa
+   ('fora'|'catB'|''), porque (texto curto: «escrita no contrato», «Anexo J
+   · sem estimativa», «categoria B · sem estimativa» ou o de irsTaxaPorque)}. */
+function irsTaxaParaMostrar(c,ano){
+  if(!c)return {taxa:null,escrita:false,semEstimativa:'',porque:''};
+  if(Number(c.taxRate)>0)return {taxa:Number(c.taxRate),escrita:true,semEstimativa:'',porque:'escrita no contrato'};
+  const s=irsSemEstimativa(c);
+  if(s)return {taxa:null,escrita:false,semEstimativa:s,porque:s==='fora'?'Anexo J · sem estimativa':'categoria B · sem estimativa'};
+  return {taxa:irsRate(c,ano),escrita:false,semEstimativa:'',porque:irsTaxaPorque(c,ano)};
+}
+/* A renda líquida mensal de um contrato para mostrar fora da Declaração: a
+   de netRent, ou null quando não há taxa para a fazer (irsTaxaParaMostrar).
+   Recebe: c — o contrato (aguenta null); ano (opcional) — o ano dos rendimentos.
+   Devolve: euros por mês (número), ou null sem estimativa. */
+function irsLiquidaParaMostrar(c,ano){
+  if(!c||(!(Number(c.taxRate)>0)&&irsSemEstimativa(c)))return null;
+  return netRent(c,ano);
+}
 
 /* o bloco fiscal de um contrato, sempre completo (um contrato que ainda não passou pelo
    normContract não o tem)

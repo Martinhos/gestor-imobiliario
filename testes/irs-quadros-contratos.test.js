@@ -339,14 +339,23 @@ describe('D50 · sem regras do ano', () => {
 });
 
 describe('D78 · o 4.2C cita a portaria da versão', () => {
-  test('pela data de celebração: 176/2019 num contrato de 2024, 454/2026/1 num de outubro de 2026', () => {
+  /* desde a D3 (N092) a página diz as portarias do ano com as datas, como o PDF, e não a da
+     data de celebração: nas rendas de 2026 a AT pode medir pelos limites novos também os
+     contratos celebrados antes de setembro */
+  test('em 2026, num contrato de 2024 e num de outubro de 2026: as duas portarias com as datas', () => {
     const r = resumoAMao(2026);
     const l = linhaDe(r, 'L1');
-    assert.match(texto(app.fiscoReducoesHtml(r, [l])), /Portaria 176\/2019/);
-    const novo = Object.assign({}, l, { celebracao: '2026-10-20' });
-    const t = texto(app.fiscoReducoesHtml(r, [novo]));
-    assert.match(t, /Portaria 454\/2026\/1/);
-    assert.doesNotMatch(t, /176\/2019/);
+    for (const x of [l, Object.assign({}, l, { celebracao: '2026-10-20' })]) {
+      const t = texto(app.fiscoReducoesHtml(r, [x]));
+      assert.match(t, /até 31\/08\/2026, os limites gerais por tipologia e concelho das tabelas 1 e 2 do anexo I à Portaria 176\/2019/);
+      assert.match(t, /desde 14\/10\/2026, os limites máximos de renda do arrendamento acessível por tipologia e concelho, do anexo à Portaria 454\/2026\/1/);
+    }
+  });
+
+  test('sem o resumo, a função ainda dá a portaria da data de celebração', () => {
+    const v = app.irsAno(2026), L23 = v.taxas.limiteRendaAlta;
+    assert.match(app.fiscoLimitesDoN23(L23, [{ nome: 'X', celebracao: '2024-03-01' }]), /Portaria 176\/2019/);
+    assert.doesNotMatch(app.fiscoLimitesDoN23(L23, [{ nome: 'X', celebracao: '2026-10-20' }]), /176\/2019/);
   });
 });
 

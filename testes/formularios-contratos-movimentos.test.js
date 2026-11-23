@@ -231,7 +231,9 @@ describe('o contrato', () => {
       exemplos: { c_name: true, c_tax: EX + '10', c_inc: EX + '2,5', c_iban: true, c_omail: true, c_ophone: true, c_tmail: true, c_tphone: true },
       deixados: ['invn_', 'invq_', 'keyn_', 'keyq_', 'fn_'] });
     assert.match(html, /Em branco: <b id="c_taxVazio">10 %<\/b>, a estimativa para \d{4}\./);
-    assert.match(html, /desce na habitação permanente pela duração: 15 % com 5 anos, 10 % com 10 anos, 5 % com 20 anos ou mais/, 'as taxas da duração saem da versão do ano');
+    // a lista das taxas do ano saiu da dica do campo (N130): a caixa da líquida diz a estimada
+    assert.doesNotMatch(html, /desce na habitação permanente pela duração/, 'sem a lista das taxas do ano');
+    assert.match(html, /Na Declaração conta sempre a taxa da lei de cada ano: a que escreves aqui serve só para a renda líquida\./);
     assert.match(html, /Aumento em branco: 2,5 % ao ano nas projeções/);
     assert.equal(ph(html, 'c_rent'), EX + '450');
     assert.equal(ph(html, 'c_iban'), EX + 'PT50 0002 0123 1234 5678 9015 4');

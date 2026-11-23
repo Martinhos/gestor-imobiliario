@@ -56,7 +56,15 @@ function cartao(html, titulo) {
    Devolve: o HTML do <dd>, ou null. */
 function valorDe(h, campo) {
   const m = new RegExp('<dt>' + campo.replace(/[().]/g, '\\$&') + '(?:<span class="small">[^<]*</span>)?</dt><dd>(.*?)</dd>').exec(h);
-  return m ? m[1] : null;
+  return m ? semCopia(m[1]) : null;
+}
+/* um valor que se copia limpo (formato.js:fmtCopiavel, N107: os separadores no CSS) de
+   volta ao texto do euro2 e do fmtNIF, para o comparar com eles */
+function semCopia(h) {
+  const sep = app.euro2(1000).charAt(1), fim = app.euro2(1).slice(-2, -1), menos = app.euro2(-1).charAt(0), sepNif = app.fmtNIF('123456789').charAt(3);
+  const grupos = (gs, s) => gs.replace(/<span class="cp-g">(\d{3})<\/span>/g, s + '$1');
+  return String(h).replace(/<span class="cp-eur">(-?)(\d+)((?:<span class="cp-g">\d{3}<\/span>)*)(,\d+)?<\/span>/g,
+    (x, neg, a, gs, dec) => (neg ? menos : '') + a + grupos(gs, sep) + (dec || '') + fim + '€').replace(/<span class="cp-g">(\d{3})<\/span>/g, sepNif + '$1');
 }
 
 beforeEach(() => {
@@ -113,12 +121,14 @@ describe('N040 · um ano só com o quadro 10', () => {
     rendas('L1', 2024, 1000); rendas('L1', 2025, 1000);
     const r = app.resumoFiscal(2026);
     assert.equal(r.linhas.length, 0, 'controlo: sem linhas em 2026');
-    assert.equal(app.fiscoRegularizacao(r), 480, 'controlo: a regularização de 2024 e 2025');
+    /* o valor é o do resumo: desde a ronda 2 (N125) só os anos com regras na app se somam */
+    const reg = app.fiscoRegularizacao(r);
+    assert.ok(reg > 0, 'controlo: há regularização');
     const html = app.vFisco(), t = texto(html);
     assert.doesNotMatch(t, /Sem rendas em 2026/);
     assert.match(t, /com a regularização do quadro 10/);
     assert.match(t, /Acabou antes do prazo por motivo do senhorio/);
-    assert.ok(t.includes('estimativa sem juros: ' + texto(app.euro2(480))), 'a diferença no cartão do quadro 10');
+    assert.ok(t.includes('estimativa sem juros: ' + texto(app.euro2(reg))), 'a diferença no cartão do quadro 10');
   });
 
   test('a guarda conta também um resumo só com a regularização (feito à mão)', () => {

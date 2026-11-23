@@ -21,6 +21,15 @@
    alojamento local, que a app não trata, por decisão do Martinho), a renda que se declara quando não chega inteira
    (D112, D113), os 5 % da reabilitação e os quadros 4.3, 6A, 6B e 6C (D118)
    e a caderneta atual depois da reposição das freguesias (D137).
+   A 2026-11-23 (segunda auditoria de raiz, ronda 2 das correções) o guia
+   passou a dizer o que a Declaração faz: o recibo eletrónico salvo nas rendas
+   de um arrendamento rural e nas da categoria B (N029, N093), o IMI e o selo
+   fora do período arrendado (N094), o regime de 2019 e o n.º 24 nos contratos
+   longos (N095), o quadro 10 dos programas de arrendamento (N155), os
+   benefícios fiscais e as dívidas (N151), a cozinha e a casa de banho «a
+   confirmar» (N045) e os gastos de antes do contrato, que na dúvida não se
+   abatem (N046, decisão D9 b do Martinho). O Martinho verifica-as antes de
+   promover.
 
    A parte 4 (a regra geral, o que podes, o que não podes, o que pede
    cuidado, os documentos) e os quatro pontos do Anexo F na parte 3 são o
@@ -59,7 +68,7 @@ export const CAMINHO_GUIA = '/guias/declarar-rendas';
 // a última verificação do texto contra as fontes: a data de modificação do Article e
 // do mapa do sítio (a ficha da página escreve-a por extenso, «Verificado a», pela
 // dataPorExtenso: as duas mudam juntas)
-export const GUIA_REVISTO = '2026-11-17';
+export const GUIA_REVISTO = '2026-11-23';
 // o dia em que o guia saiu, a data de publicação do Article (não muda com as revisões)
 const GUIA_PUBLICADO = '2026-11-09';
 
@@ -256,6 +265,30 @@ const SEGUIR = 'M9 6l6 6-6 6';
      da gestora).
    O «cerca de 300» das freguesias repostas é de propósito: a imprensa falou
    de 302, e a tabela da AT tem 303 linhas.
+   As da segunda auditoria de raiz (2026-11-23, ronda 2 das correções),
+   abertas nesse dia (a página da AT pelo texto em vigor e os PDF da AT lidos
+   em pdftotext):
+   - ebf14: n.º 5 a) e b), os impostos ou contribuições por pagar, sem
+     reclamação, impugnação ou oposição com garantia; n.º 6, os benefícios
+     automáticos não se aplicam no ano em que isso acontece; n.º 7 a), nos
+     impostos sobre o rendimento conta o fim do ano, se se mantiver no fim
+     do prazo de audição da liquidação (N151);
+   - oc20268: o Ofício-Circulado 20268, de 2024-03-12, ponto 4 (os contratos
+     de 2 a menos de 5 anos mantêm a taxa inferior a 25 % até ao termo ou à
+     renovação, o n.º 8 do artigo 50.º da Lei 56/2023), ponto 6 (o regime
+     novo é dos contratos e renovações desde 7 de outubro de 2023, o n.º 7),
+     pontos 7 e 8 (na renovação, a redução conta-se a partir dos 25 %; o
+     exemplo dos 13 %) e ponto 5 c) (o n.º 24) (N095);
+   - o processo 26713 (despacho de 2024-08-29), ponto 7: antes do
+     arrendamento, só as obras de conservação e manutenção dos 24 meses
+     (N046, com o 1115/2017 em sentido contrário no certificado energético);
+   - e, já na lista, a portaria98a (art. 5.º n.º 1, o recibo é de quem não
+     optou pela categoria B; n.º 3 a), as rendas do arrendamento rural; art.
+     8.º n.º 4, o Modelo 44 delas por opção — N029, N093, N030), o cirs115
+     (n.º 1 a), a fatura, a fatura-recibo ou o recibo da categoria B), o
+     cirs41 (n.º 5, o IMI e o selo — N094), a Lei 56/2023 (art. 50.º n.os 7 e
+     8), o cirs72 (n.º 24), o anexoF (os quadros 4.2B e 10 — N155) e os
+     processos 1115/2017 e 4074/2017 (a cozinha e a casa de banho — N045).
    As da parte 4, do texto do Martinho, verificadas a 2026-11-08. */
 const FONTES = [
   { id: 'cirs8', nome: 'AT, Código do IRS, artigo 8.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs8.aspx' },
@@ -302,11 +335,14 @@ const FONTES = [
   { id: 'cimi113', nome: 'AT, Código do IMI, artigo 113.º', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cimi/Pages/cimi113.aspx' },
   { id: 'reposicao', nome: 'AT, «Reposição de freguesias agregadas 2025»: a tabela de correspondência', url: 'https://info.portaldasfinancas.gov.pt/pt/destaques/Paginas/Reposicao-freguesias-agregadas-2025-tab-correspondencia.aspx' },
   { id: 'lei25a', nome: 'AT, Lei n.º 25-A/2025: a reposição das freguesias agregadas', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/legislacao/diplomas_legislativos/Documents/lei-25-a-2025.pdf' },
+  { id: 'ebf14', nome: 'AT, Estatuto dos Benefícios Fiscais, artigo 14.º', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/bf_rep/Pages/ebf-artigo-14-ordm-.aspx' },
+  { id: 'oc20268', nome: 'AT, Ofício-Circulado n.º 20268, de 12 de março de 2024: a Lei n.º 56/2023 e as rendas', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/legislacao/instrucoes_administrativas/Documents/Oficio_circulado_20268_2024.pdf' },
   { id: 'cirs41', nome: 'AT, Código do IRS, artigo 41.º, redação vigente', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs41.aspx' },
   { nome: 'AT, página de apoio sobre rendimentos prediais', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_ao_contribuinte/Cidadaos/Rendimentos/Prediais/Paginas/default.aspx' },
   { nome: 'AT, Informação Vinculativa, processo 1115/2017: certificado energético, seguro, IMI, condomínio e reparações', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/rendimento/cirs/Documents/PIV_11676_Cat_F_Despesas_elegiveis_certificado_energetico_pintura_proporcionalidade_mensal_IMI.pdf' },
   { nome: 'AT, Informação Vinculativa, processo 4074/2017: instalações, sanita e eletrodomésticos', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/rendimento/cirs/Documents/PIV_12846.pdf' },
   { nome: 'AT, Informação Vinculativa, processo 615/2016: mediação e gestão imobiliária', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/rendimento/cirs/Documents/PIV_10049_Cat_F_despesas_com_agencia_imobiliaria_intermediacao_e_gestao_do_arrendamento.pdf' },
+  { nome: 'AT, Informação Vinculativa, processo 26713: os gastos de antes do arrendamento e a reconstrução de um imóvel', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/rendimento/cirs/Documents/PIV_26713.pdf' },
   { nome: 'AT, Informação Vinculativa, processo 27168: fundo comum de reserva', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/rendimento/cirs/Documents/PIV_27168.pdf' },
   { nome: 'AT, Informação Vinculativa, processo 23002: água, luz e gás', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/rendimento/cirs/Documents/PIV_23002.pdf' },
   { nome: 'AT, Informação Vinculativa, processo 28509: água, eletricidade e Internet', url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/informacoes_vinculativas/rendimento/cirs/Documents/PIV_28509.pdf' },
@@ -337,6 +373,10 @@ const DEDUCOES = [
     ] },
     { p: 'E há gastos que a lei deixa de fora com todas as letras: os gastos financeiros, as depreciações, o ' +
       'mobiliário, os eletrodomésticos, os artigos de conforto ou decoração e o Adicional ao IMI (AIMI).' },
+    // N094 (2026-11-23): o período arrendado e a exceção do IMI e do selo (artigo 41.º, n.º 5)
+    { p: 'Contam os gastos do tempo em que o imóvel esteve arrendado, como pedem as instruções do Anexo F. O IMI e ' +
+      'o imposto do selo são a exceção: contam os que pagaste no ano em que o imóvel deu rendas, mesmo que no dia ' +
+      'do pagamento estivesse vazio (artigo 41.º, n.º 5).' },
     { fonte: 'cirs41', texto: 'Fonte principal: artigo 41.º do Código do IRS, AT.' },
   ] },
 
@@ -367,8 +407,8 @@ const DEDUCOES = [
         'Reparação de infiltrações e telhado.',
         'Canalização e instalação elétrica.',
         'Reparação ou substituição de portas e janelas integradas no imóvel.',
-        'Reparação ou substituição de armários fixos e bancadas de cozinha, desde que não sejam tratados como mobiliário.',
-        'Substituição de sanita.',
+        // N045 (2026-11-23): os armários, as bancadas e a sanita passaram para «O que pede cuidado» (Cozinha e
+        // casa de banho): repor o que havia deduz-se, uma cozinha ou casa de banho nova não
         'Inspeção da instalação de gás.',
         'Restauro, reparação e limpeza ligados à conservação do edifício.',
       ] },
@@ -377,10 +417,11 @@ const DEDUCOES = [
       'As obras de conservação e manutenção que pagaste nos 24 meses antes de o arrendamento começar, desde que, ' +
         'entretanto, não tenhas usado o imóvel para outro fim que não o de o arrendar.',
     ] }] },
+    // N046 (2026-11-23): pagos antes de o contrato começar, a AT responde nos dois sentidos — vê «O que pede cuidado»
     { grupo: 'Serviços ligados ao arrendamento', blocos: [{ sim: [
-      'O certificado energético, porque precisas dele para arrendar.',
-      'A comissão da imobiliária por te encontrar inquilino, se os documentos mostrarem, sem margem para dúvidas, a ' +
-        'ligação ao contrato e ao imóvel.',
+      'O certificado energético e a comissão da imobiliária por te encontrar inquilino, pagos com o imóvel ' +
+        'arrendado — a comissão, se os documentos mostrarem, sem margem para dúvidas, a ligação ao contrato e ao ' +
+        'imóvel. Pagos antes de o arrendamento começar, vê «O que pede cuidado».',
       'A gestão do arrendamento por uma imobiliária, com a mesma prova e a mesma ligação direta.',
     ] }] },
     { grupo: 'Situação especial: mudança da habitação própria', blocos: [
@@ -441,6 +482,21 @@ const DEDUCOES = [
     { nota: 'Obras de melhoria ou ampliação', texto: 'A conservação e a manutenção abatem-se; uma ampliação, uma ' +
       'valorização ou uma transformação de fundo podem não se abater. Se a fatura junta reparação e melhoria, pede ao ' +
       'empreiteiro que separe os materiais e a mão de obra de cada intervenção.' },
+    // N045 (2026-11-23): a cozinha e a casa de banho dependem do que se fez
+    { nota: 'Cozinha e casa de banho', texto: 'Depende do que fizeste. Reparar ou substituir o que já lá estava é ' +
+      'conservação: a AT já aceitou a reparação ou a substituição dos armários fixos e das bancadas da cozinha, desde ' +
+      'que não sejam tratados como mobiliário, e a substituição da sanita (informações vinculativas, processos ' +
+      '1115/2017 e 4074/2017). Uma cozinha ou uma casa de banho nova, que acrescenta ao que havia e valoriza o ' +
+      'imóvel, é uma melhoria, e pode não se abater; os eletrodomésticos nunca se abatem. Guarda a fatura ' +
+      'discriminada e as fotografias do antes e do depois.' },
+    // N046 (2026-11-23, decisão D9 b do Martinho): na dúvida, não se abatem
+    { nota: 'Gastos pagos antes de o arrendamento começar', texto: 'Antes de o arrendamento começar, só as obras de ' +
+      'conservação e manutenção dos 24 meses anteriores têm regra própria (artigo 41.º, n.º 7). O certificado ' +
+      'energético, a comissão da imobiliária e os anúncios pagos antes do início do contrato não têm resposta certa: ' +
+      'a AT já aceitou o certificado energético, por ser obrigatório para arrendar (informação vinculativa, processo ' +
+      '1115/2017), e noutra resposta disse que, antes do arrendamento, só as obras de conservação e manutenção se ' +
+      'abatem (processo 26713, de 2024). Na dúvida, não os abatas. Se o valor for alto, pede uma resposta escrita no ' +
+      'e-balcão ou uma informação vinculativa.' },
   ] },
 
   { id: 'documentos', titulo: 'Os documentos a guardar', blocos: [
@@ -547,6 +603,11 @@ const GUIA = [
           'Arrendamento Urbano, enquanto o contrato durar. Não são todos os contratos antigos: só os que ficaram ' +
           'nesse regime. Identificam-se no quadro 6H (artigo 46.º-A do Estatuto dos Benefícios Fiscais).',
       ] },
+      // N151 (2026-11-23): os benefícios fiscais caem com dívidas por regularizar (EBF, artigo 14.º)
+      { p: 'Os benefícios fiscais — as isenções, a taxa de 10 % das rendas moderadas e os dos quadros 6A a 6C, ' +
+        'que vês na parte 3 — só valem num ano se, no fim dele, não tiveres dívidas por regularizar às Finanças nem ' +
+        'à Segurança Social: impostos ou contribuições por pagar, sem reclamação, impugnação ou oposição com ' +
+        'garantia (artigo 14.º, n.os 5 a 7, do Estatuto dos Benefícios Fiscais).' },
     ] },
     { grupo: 'Os contratos longos', blocos: [
       { p: 'Num contrato de arrendamento para habitação permanente, a taxa autónoma baixa quanto mais longo for o ' +
@@ -557,6 +618,20 @@ const GUIA = [
         'De 10 a menos de 20 anos: menos 15 pontos percentuais.',
         '20 anos ou mais: menos 20 pontos percentuais.',
       ] },
+      // N095 (2026-11-23): o regime de 2019 dos contratos de antes de 7 de outubro de 2023, o recálculo na
+      // renovação (o exemplo é o do ofício-circulado, ponto 8) e o n.º 24
+      { p: 'Estas são as reduções da Lei n.º 56/2023, a partir dos 25 %, para os contratos celebrados ou renovados ' +
+        'desde 7 de outubro de 2023. Um contrato celebrado ou renovado de 1 de janeiro de 2019 a 6 de outubro de 2023 ' +
+        'mantém as reduções do regime anterior, que contavam a partir dos 28 %, até à renovação seguinte (Lei ' +
+        'n.º 56/2023, artigo 50.º, n.º 7): 23 % num contrato de 5 a menos de 10 anos, por exemplo. Os de 2 a menos ' +
+        'de 5 anos, que no regime novo deixaram de ter redução, mantêm a taxa que tinham, se for mais baixa do que ' +
+        '25 %, até ao fim do prazo ou à renovação (artigo 50.º, n.º 8). Na primeira renovação desde 7 de outubro de ' +
+        '2023, a redução conta-se de novo a partir dos 25 %, como se o contrato tivesse sido feito já no regime ' +
+        'novo: um contrato de 5 anos de 2019, renovado em 2024 por mais 5, fica com 13 % (25 %, menos 10 pontos ' +
+        'e menos 2 pela renovação) (Ofício-Circulado n.º 20268, de 12 de março de 2024, pontos 4 e 6 a 8).' },
+      { p: 'Num contrato novo com uma destas reduções, se a renda for inferior, em pelo menos 5 pontos percentuais, à ' +
+        'do contrato anterior sobre o mesmo imóvel, a taxa desce mais 5 pontos (artigo 72.º, n.º 24). No Anexo F, ' +
+        'indicas as duas rendas no quadro 4.2B (instruções do quadro 4.2B).' },
       { p: 'A redução não vale para os contratos de arrendamento habitacional feitos desde 1 de janeiro de 2024 cuja ' +
         'renda mensal exceda em 50 % os limites gerais de preço de renda por tipologia e concelho (artigo 72.º, ' +
         'n.º 23). Até 31 de agosto de 2026 esses limites eram os da Portaria n.º 176/2019. Desde 1 de setembro de ' +
@@ -626,8 +701,11 @@ const GUIA = [
           'habitacional.',
         'As retenções na fonte de IRS feitas sobre essas rendas.',
         'O NIF português do inquilino ou, se ele não o tiver, o código do país.',
+        // N094 (2026-11-23): o IMI e o selo pelo ano em que o prédio deu rendas, sem o período (artigo 41.º, n.º 5)
         'Os gastos suportados e pagos no ano, enquanto o prédio esteve arrendado, cada um na sua coluna: conservação ' +
-          'e manutenção, condomínio, IMI pago no ano, imposto do selo, taxas autárquicas e outros.',
+          'e manutenção, condomínio, IMI, imposto do selo, taxas autárquicas e outros. O IMI e o imposto do selo são ' +
+          'a exceção: contam os que pagaste no ano, mesmo com o prédio vazio, desde que ele tenha dado rendas ' +
+          'tributadas nesse ano (artigo 41.º, n.º 5; vê a parte 4).',
         'As obras de conservação e manutenção pagas nos 24 meses antes do arrendamento, nas colunas próprias, só no ' +
           'ano em que o arrendamento começa.',
       ] },
@@ -699,8 +777,10 @@ const GUIA = [
         'Quadro 9: o Adicional ao IMI (AIMI) dos prédios que te deram rendas. Não entra nos gastos da linha, mas abate-se ' +
           'ao imposto, até a um limite: indicas cada prédio, com o valor patrimonial tributário, e os totais da ' +
           'liquidação do AIMI (artigo 78.º, n.º 1, alínea l), do Código do IRS; artigo 135.º-I do Código do IMI).',
-        'Quadro 10: os contratos para habitação permanente que tiveram redução de taxa e acabaram, com a data e o motivo ' +
-          'do fim.',
+        // N155 (2026-11-23): também os do Programa de Apoio ao Arrendamento e dos programas municipais, com isenção
+        'Quadro 10: os contratos para habitação permanente que tiveram redução de taxa, e os do Programa de Apoio ao ' +
+          'Arrendamento (Decreto-Lei n.º 68/2019) ou de um programa municipal com isenção, que acabaram ou saíram do ' +
+          'programa, com a data e o motivo (instruções do quadro 10).',
       ] },
     ] },
     { grupo: 'Se os gastos passarem as rendas', blocos: [
@@ -716,12 +796,19 @@ const GUIA = [
       { info: [
         'Desde 1 de julho de 2025, não há retenção na fonte sobre as rendas quando o valor de cada retenção seria ' +
           'inferior a 25 € (artigo 101.º-B, n.º 1, alínea d), na redação do Decreto-Lei n.º 49/2025).',
+        // N029, N093, N030 (2026-11-23): sem recibo nas rendas de um arrendamento rural (o Modelo 44 delas é uma
+        // opção) e nas da categoria B (o documento é o da atividade); e a outra hipótese da dispensa do n.º 2
         'Desde 1 de julho de 2025, a declaração anual das rendas (Modelo 44) entrega-se até ao fim de fevereiro do ' +
           'ano seguinte, e já não até ao fim de janeiro (artigo 115.º, n.º 5, alínea b), na mesma redação). Não é ' +
-          'uma escolha: o recibo de renda eletrónico de cada renda é obrigatório, e o Modelo 44 é só de quem está ' +
-          'dispensado dele e não o passa — quem não tem nem é obrigado a ter caixa postal eletrónica e, no ano ' +
-          'anterior, não recebeu mais de duas vezes o IAS em rendas, ou quem tinha 65 anos ou mais a 31 de dezembro ' +
-          'do ano anterior (Portaria n.º 98-A/2015, artigos 5.º e 8.º).',
+          'uma escolha: o recibo de renda eletrónico de cada renda é obrigatório, salvo nas rendas de um arrendamento ' +
+          'rural (agrícola, florestal ou de campanha) e nas que tributas na categoria B, que levam a fatura, a ' +
+          'fatura-recibo ou o recibo da tua atividade (artigo 115.º, n.º 1, alínea a)). E o Modelo 44 é só de quem ' +
+          'está dispensado dele e não o passa — quem não tem nem é obrigado a ter caixa postal eletrónica e, no ano ' +
+          'anterior, não recebeu mais de duas vezes o IAS em rendas (ou não as recebeu e não conta passar esse ' +
+          'valor), ou quem tinha 65 anos ou mais a 31 de dezembro do ano anterior (Portaria n.º 98-A/2015, artigos ' +
+          '5.º e 8.º). As rendas de um arrendamento rural podes declará-las no Modelo 44, se quiseres; isso não te ' +
+          'dispensa dos recibos das outras rendas (artigo 5.º, n.º 3, alínea a), e artigo 8.º, n.º 4, da mesma ' +
+          'portaria).',
         'Desde 1 de agosto de 2025, se não comunicares o contrato à AT no prazo, o inquilino pode comunicá-lo ele. A obrigação ' +
           'continua a ser tua (artigo 60.º, n.os 1 e 4, do Código do Imposto do Selo; Portaria n.º 106/2025/1).',
       ] },

@@ -149,7 +149,7 @@ describe('o mapa categoria → coluna do Anexo F', () => {
     assert.equal(m['Seguros / Vida (crédito)'], 'nao');
     assert.equal(m['Condomínio'], 'condominio');
     assert.equal(m['Manutenção e reparações'], 'conservacao');
-    assert.equal(m['Obras e benfeitorias / Cozinha'], 'nao', 'beneficiação não é conservação');
+    assert.equal(m['Obras e benfeitorias / Cozinha'], 'confirmar', 'depende do que se fez: conservação ou beneficiação (N045)');
     // o mapa aceita também o 'confirmar' (IRS_MAPA_VALORES); o irsCol de um movimento não
     Object.values(m).forEach((col) => assert.ok(app.IRS_MAPA_VALORES.some((c) => c[0] === col), col + ' é uma coluna que existe'));
   });

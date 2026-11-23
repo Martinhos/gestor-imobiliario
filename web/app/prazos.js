@@ -18,7 +18,8 @@
    os começados desde 1 de abril de 2015; os de antes têm o registo dos
    elementos mínimos, sem prazo —, e a cessação até ao fim do mês seguinte ao
    dia em que o contrato acabou mesmo), o recibo eletrónico de cada renda,
-   caução ou reembolso do inquilino (passa-se quando se recebe), a entrega do
+   caução, reembolso do inquilino ou outra receita predial (passa-se quando
+   se recebe), a entrega do
    Anexo F e a comunicação de fevereiro dos contratos com redução de taxa
    pela duração — uma vez por período, o contrato e cada renovação, e outra
    na cessação (Portaria 110/2019) —, estas duas com as datas da versão do
@@ -27,12 +28,15 @@
    quando se marcam com o dia, no próprio aviso. E o Modelo 44 de quem está
    dispensado do recibo eletrónico nesse ano (irs-papeis.js:irsSituacao,
    escolhido na página Declaração) — que, por isso mesmo, deixa de ser
-   avisado dos recibos por emitir. Um contrato que o senhorio marcou como
+   avisado dos recibos por emitir. Um recibo por emitir marca-se como emitido
+   no próprio aviso (pzMarcarRecibos). Um contrato que o senhorio marcou como
    «não declarado» é uma escolha dele: nenhum destes prazos nasce dele, e
    nenhum texto o julga. Um imóvel fora de Portugal não tem prazos da AT (as
-   rendas vão ao Anexo J); as rendas da categoria B guardam o Modelo 2 e os
-   recibos, sem a comunicação de fevereiro; e a caução de um direito real de
-   habitação duradoura não pede recibo. */
+   rendas vão ao Anexo J); as rendas da categoria B guardam o Modelo 2, sem
+   os recibos de renda (o documento é o da atividade) nem a comunicação de
+   fevereiro; as de um arrendamento rural não pedem recibo; e a caução de um
+   direito real de habitação duradoura também não. A cessação comunicada à AT
+   não dispensa o quadro 10 do Anexo F: os avisos dela dizem-no. */
 
 // dias de antecedência com que cada tipo de prazo começa a avisar
 const PZ_ANTECEDENCIA = { oposicao: 150, fim: 60, aumento: 45, cc: 60, energia: 90, taxa: 90, spread: 60,
@@ -58,13 +62,16 @@ const PZ_LEI_DO_PAIS='Os prazos do contrato seguem a lei do país do imóvel (Re
 const PZ_MODELO2_DESDE = '2015-04-01';
 
 /* As receitas que vão ao Anexo F (irs-papeis.js:irsReceitaDe) e, delas, as que
-   pedem o recibo de renda eletrónico (CIRS art. 115.º n.º 5 a)): a renda, a
-   caução (a AT trata-a como renda do ano em que se recebe, OC 20256) e o
-   reembolso do inquilino, que o papel já dá como renda. A indemnização e as
-   outras receitas prediais vão ao Anexo F sem recibo de renda; o reembolso
-   que abate a um gasto, o que fica fora e o que está por classificar não vão. */
+   pedem o recibo de renda eletrónico (CIRS art. 115.º n.º 5 a): todas as
+   importâncias das alíneas a) a e) e h) do art. 8.º n.º 2, «ainda que a título
+   de caução»): a renda, a caução (a AT trata-a como renda do ano em que se
+   recebe, OC 20256), o reembolso do inquilino, que o papel já dá como renda,
+   e as outras receitas prediais (natureza 02: a cedência de uso de parte do
+   prédio, a publicidade, as partes comuns — N077). A indemnização (alínea g))
+   vai ao Anexo F sem recibo de renda; o reembolso que abate a um gasto, o que
+   fica fora e o que está por classificar não vão. */
 const PZ_PAPEIS_ANEXO_F = ['renda', 'caucao', 'indemnizacao', 'outra'];
-const PZ_PAPEIS_RECIBO = ['renda', 'caucao'];
+const PZ_PAPEIS_RECIBO = ['renda', 'caucao', 'outra'];
 
 /* Uma data local como 'AAAA-MM-DD', sem passar pelo toISOString: esse
    converte para UTC e, com o horário de verão, meia-noite local vira o dia
@@ -214,13 +221,55 @@ function pzForaDePortugal(pid){
 /* As rendas do contrato tributam-se na categoria B (fisco.categoriaB, num
    contrato declarado): a opção do CIRS art. 4.º n.º 1 n) ou o imóvel afeto à
    atividade (art. 3.º n.º 2 a)). Saem do Anexo F, mas o contrato continua com
-   o Modelo 2 e os recibos; sem taxa autónoma não há redução pela duração, e
-   por isso não há comunicação de fevereiro (D134).
+   o Modelo 2 (CIS art. 60.º, para todos os contratos); o recibo de renda
+   eletrónico não se emite — é só de quem não optou pela categoria B
+   (Portaria 98-A/2015, art. 5.º n.º 1): o documento é a fatura, a
+   fatura-recibo ou o recibo da atividade (CIRS art. 115.º n.º 1 a)). Sem taxa
+   autónoma não há redução pela duração, e por isso não há comunicação de
+   fevereiro (D134).
    Recebe: c — o contrato (aguenta null).
    Devolve: true ou false. */
 function pzCategoriaB(c){
   const f=c?fiscoDe(c):null;
   return !!f&&f.estado==='declarado'&&f.categoriaB===true;
+}
+
+/* O contrato é de um arrendamento rural — agrícola, florestal ou de campanha
+   (fisco.arrendamentoRural, a pergunta do formulário do contrato num prédio
+   rústico: contrato.js)? As rendas dele não pedem o recibo de renda
+   eletrónico (Portaria 98-A/2015, art. 5.º n.º 3 a)): é uma dispensa dessas
+   rendas, não da pessoa — os outros contratos continuam a pedi-lo —, e o
+   Modelo 44 delas é opcional (art. 8.º n.º 4). Um contrato gravado antes da
+   pergunta não tem o campo: não é rural.
+   Recebe: c — o contrato (aguenta null).
+   Devolve: true ou false. */
+function pzArrendamentoRural(c){
+  const f=c?fiscoDe(c):null;
+  return !!f&&f.arrendamentoRural===true;
+}
+
+/* As rendas (e a caução) deste contrato pedem o recibo de renda eletrónico
+   (CIRS art. 115.º n.º 5 a))? Num contrato declarado de um imóvel em
+   Portugal, salvo as da categoria B (pzCategoriaB: o documento é o da
+   atividade) e as de um arrendamento rural (pzArrendamentoRural). A dispensa
+   da pessoa (65 anos ou mais, ou sem caixa postal eletrónica e com poucas
+   rendas) é de cada ano e lê-se à parte (irs-papeis.js:irsSituacao). É a
+   mesma regra para os prazos, a Declaração, o Confirmar da renda e o
+   movimento.
+   Recebe: c — o contrato (aguenta null).
+   Devolve: true ou false. */
+function pzPedeRecibo(c){
+  return !!c&&ctDeclarado(c)&&!pzCategoriaB(c)&&!pzArrendamentoRural(c)&&!pzForaDePortugal(c.propertyId);
+}
+
+/* Posso marcar o recibo eletrónico desta receita como emitido? Quem pode
+   alterar o movimento (como o «Editar» da ficha: movimento.js:txView), com
+   os Movimentos ligados nesta conta. Uma parte de um movimento dividido por
+   vários imóveis (t.lote) altera-se na ficha dele, com as regras do lote.
+   Recebe: t — a receita (aguenta null).
+   Devolve: true ou false. */
+function pzPodeMarcarRecibo(t){
+  return !!t&&!t.lote&&servicoLigado('transactions')&&!!podeEditar(t.propertyId,'tx.add',t);
 }
 
 /* A receita é a caução de um direito real de habitação duradoura? A caução
@@ -231,6 +280,22 @@ function pzCategoriaB(c){
    Devolve: true ou false. */
 function pzCaucaoDoDhd(papel,c){
   return papel==='caucao'&&!!c&&fiscoDe(c).finalidade==='dhd';
+}
+
+/* A frase dos avisos da cessação sobre o quadro 10 do Anexo F (o verificador
+   do N001): um contrato com redução de taxa pela duração, ou com a isenção
+   de um programa de arrendamento (irs.js:irsRegimeQuadro10), vai ao quadro 10
+   da declaração do ano em que acabou, com a data e o motivo — e comunicar a
+   cessação à AT (o Modelo 2, a Portaria 110/2019) não o dispensa. O número do
+   quadro é o da versão desse ano (irs-AAAA.js).
+   Recebe: c — o contrato; dia — o dia em que acabou ('AAAA-MM-DD').
+   Devolve: a frase, com o espaço à frente; '' quando o contrato não vai ao
+   quadro 10. */
+function pzQuadro10Frase(c,dia){
+  const a=Number(String(dia||'').slice(0,4));
+  if(!c||!a||!irsRegimeQuadro10(c,a))return '';
+  const q=String((irsAno(a).quadros||{}).cessados||'');
+  return ' Comunicar a cessação não dispensa '+(q?'o quadro '+q:'o quadro dos contratos que acabaram')+' do Anexo F de '+a+': o contrato vai lá, com a data e o motivo.';
 }
 
 /* Quem pode marcar uma coisa feita num contrato (a comunicação de fevereiro, o
@@ -251,26 +316,31 @@ function pzPodeMarcar(c){return !!c&&!!podeEditar(c.propertyId,'contract.add',c)
    de antes, um aviso sem data: os elementos mínimos e o n.º); a cessação de
    quem acabou mesmo, pelo dia em que acabou (pzDiaDaCessacao), só do ano de
    hoje ou do anterior (pzCessacaoRecente), nunca a de um ativo com o termo
-   passado, que se renovou; os recibos das receitas que os
-   pedem (PZ_PAPEIS_RECIBO) dos últimos três meses, desde o dia em que se
-   receberam, salvo com a dispensa nesse ano; o Anexo F do ano anterior; o 15
+   passado, que se renovou, e com a frase do quadro 10 quando o contrato vai
+   lá (pzQuadro10Frase); os recibos das receitas que os
+   pedem (PZ_PAPEIS_RECIBO) dos contratos cujas rendas os pedem (pzPedeRecibo:
+   nem as da categoria B nem as de um arrendamento rural), dos últimos três
+   meses, desde o dia em que se receberam, salvo com a dispensa nesse ano, com
+   o «Marcar como emitido» no aviso (pzMarcarRecibos); o Anexo F do ano anterior; o 15
    de fevereiro dos declarados com redução pela duração, um por período por
    marcar (irs.js:irsPrazosDeComunicacao), haja ou não rendas, enquanto o
    período pesar numa declaração por entregar, e outro no ano seguinte à
    cessação de um período com redução; o envio ao IHRU do RSAA, até se marcar
-   o dia; e o Modelo 44 de quem teve a dispensa no ano anterior. Nada nasce
+   o dia; e o Modelo 44 de quem teve a dispensa no ano anterior, se nele
+   houve rendas que pediam recibo. Nada nasce
    de um contrato «não declarado», e nenhum prazo da AT de um imóvel fora de
    Portugal (pzForaDePortugal: as rendas dele vão ao Anexo J, que a entrega
-   do IRS diz). As rendas da categoria B (pzCategoriaB) guardam o Modelo 2 e
-   os recibos, sem a comunicação de fevereiro, e vão ao Anexo B ou C; a
+   do IRS diz). As rendas da categoria B (pzCategoriaB) guardam o Modelo 2,
+   sem os recibos de renda nem a comunicação de fevereiro, e vão ao Anexo B ou C; a
    caução de um direito real de habitação duradoura não é renda nem pede
    recibo (pzCaucaoDoDhd).
    Recebe: hoje (opcional) — data ISO de referência; sem ela usa o dia real.
    Devolve: lista de {chave, tipo, titulo, sub, alvo, dias, urg, abrir}, do
    mais urgente para o menos e os sem data no fim; `abrir` é código para o
    data-click do cartão. Alguns têm ainda acao e acaoTexto (o «feito» que se
-   marca no próprio aviso, só para quem pode alterar o contrato: código para
-   o data-click e o texto do botão), semData (true no aviso sem prazo: alvo
+   marca no próprio aviso, só para quem pode alterar o contrato — ou, no do
+   recibo, o movimento: código para o data-click e o texto do botão),
+   semData (true no aviso sem prazo: alvo
    é o hoje, dias 0, urg 'info') ou evento ('inicio', 'renovacao' ou
    'cessacao', no 15 de fevereiro). */
 function prazosDe(hoje){
@@ -341,8 +411,9 @@ function prazosDe(hoje){
   const vivoEm=c=>c.active!==false&&!(c.end&&c.end<h)&&!irsCessacao(c).data;
   const desde=pzIso(new Date(ano,Number(h.slice(5,7))-1-3,1));   // primeiro dia de há três meses
   /* os anexos das rendas do ano anterior: o F, o J (imóveis fora de Portugal,
-     D133) e o B ou C (as rendas da categoria B, D134) */
-  let houveRendasEmY=false,houveRecibosEmY=false,houveJEmY=false,houveBEmY=false;
+     D133) e o B ou C (as rendas da categoria B, D134); e, para o Modelo 44, as
+     que pedem recibo e as de um arrendamento rural (que ele leva por opção) */
+  let houveRendasEmY=false,houveRecibosEmY=false,houveJEmY=false,houveBEmY=false,houveRuralEmY=false;
   (db.transactions||[]).forEach(t=>{
     if(!t||!t.date)return;
     const papel=irsReceitaDe(t).papel;
@@ -357,21 +428,34 @@ function prazosDe(hoje){
     const pede=PZ_PAPEIS_RECIBO.indexOf(papel)>-1;
     /* uma renda sem contrato (ou de contrato entretanto apagado) é renda na
        mesma: conta para o Anexo F, e a página Declaração lista-a à parte. As
-       da categoria B vão ao Anexo B ou C, com o recibo como as outras */
-    if(doAno){if(pzCategoriaB(c))houveBEmY=true;else houveRendasEmY=true;if(pede)houveRecibosEmY=true}
+       da categoria B vão ao Anexo B ou C, sem recibo de renda (o documento é
+       o da atividade: Portaria 98-A/2015, art. 5.º n.º 1); as de um
+       arrendamento rural vão ao Anexo F sem recibo (art. 5.º n.º 3 a)) e, no
+       Modelo 44, só por opção (art. 8.º n.º 4): nenhuma das duas o acende */
+    const catB=pzCategoriaB(c),rural=pzArrendamentoRural(c);
+    if(doAno){
+      if(catB)houveBEmY=true;else houveRendasEmY=true;
+      if(pede&&!catB&&!rural)houveRecibosEmY=true;
+      if(pede&&rural&&!catB)houveRuralEmY=true;
+    }
     /* o recibo é de quitação: passa-se quando se recebe (CIRS art. 115.º n.º
        5 a); a lei não lhe dá outro prazo, e o «fim do mês seguinte» que aqui
        havia era o do Modelo 2). Uma receita com data à frente ainda não se
-       recebeu */
-    if(c&&ctDeclarado(c)&&pede&&!t.recibo&&t.date>=desde&&t.date<=h&&!dispensaEm(Number(t.date.slice(0,4)))){
+       recebeu. Só nas rendas que o pedem (pzPedeRecibo), e marca-se como
+       emitido no próprio aviso (pzMarcarRecibos), a quem pode alterar o
+       movimento */
+    if(c&&pzPedeRecibo(c)&&pede&&!t.recibo&&t.date>=desde&&t.date<=h&&!dispensaEm(Number(t.date.slice(0,4)))){
       const reembolso=txCatIrsId(t)==='reembolsos';
       const o=papel==='caucao'
-        ?'Caução recebida a '+dPT(t.date)+': a AT trata-a como renda do ano em que a recebes, com recibo eletrónico. Emite-o no Portal das Finanças e marca-o no movimento.'
+        ?'Caução recebida a '+dPT(t.date)+': a AT trata-a como renda do ano em que a recebes, com recibo eletrónico. Emite-o no Portal das Finanças e marca-o como emitido.'
+        :papel==='outra'
+        ?'Receita predial recebida a '+dPT(t.date)+': a cedência de uso (de parte do prédio, para publicidade, das partes comuns) também pede recibo eletrónico, ou entra no Modelo 44 de quem tem a dispensa. Emite-o no Portal das Finanças e marca-o como emitido.'
         :reembolso
-          ?'Reembolso do inquilino recebido a '+dPT(t.date)+': para a AT é renda, com recibo eletrónico. Emite-o no Portal das Finanças e marca-o no movimento.'
-          :'Renda de '+pzMes(t.periodo||t.date)+' recebida a '+dPT(t.date)+': emite o recibo eletrónico no Portal das Finanças — passa-se quando se recebe — e marca-o no movimento.';
+          ?'Reembolso do inquilino recebido a '+dPT(t.date)+': para a AT é renda, com recibo eletrónico. Emite-o no Portal das Finanças e marca-o como emitido.'
+          :'Renda de '+pzMes(t.periodo||t.date)+' recebida a '+dPT(t.date)+': emite o recibo eletrónico no Portal das Finanças — passa-se quando se recebe — e marca-o como emitido.';
       poe('recibos',t.id+':'+t.date,t.date,'Recibo de renda por emitir — '+nomeDe(c),o,
-        servicoLigado('transactions')?`txView('${jsq(t.id)}')`:'',true);
+        servicoLigado('transactions')?`txView('${jsq(t.id)}')`:'',true,
+        pzPodeMarcarRecibo(t)?{acao:`pzMarcarRecibos('${jsq(t.id)}')`,acaoTexto:'Marcar como emitido'}:null);
     }
   });
   (db.contracts||[]).forEach(c=>{
@@ -424,13 +508,17 @@ function prazosDe(hoje){
        duração a comunicar em fevereiro (D134) */
     const fimR=pzDiaDaCessacao(c,h),segR=fimR&&!catB?irsTaxaNaData(c,fimR):null,comRed=!!(segR&&segR.reducao);
     const fev15Ces=comRed?irsAno(Number(fimR.slice(0,4))).prazos.comunicacaoDuracao:'';
+    /* o quadro 10 do Anexo F do ano em que acabou (os contratos com redução
+       pela duração ou com a isenção de um programa: irs.js:irsRegimeQuadro10):
+       comunicar a cessação à AT não o dispensa, e os avisos dizem-no */
+    const q10=fimR&&!catB?pzQuadro10Frase(c,fimR):'';
     /* a de antes do ano anterior fica calada (pzCessacaoRecente) */
     if(fimR&&pzCessacaoRecente(fimR,h)){
       const alvo=fimDoMesSeguinte(fimR);
       poe('cessacao',c.id+':'+alvo,alvo,'Comunicar a cessação à AT — '+nome,
         'Até '+dPT(alvo)+', o fim do mês seguinte ao da cessação: o contrato acabou a '+dPT(fimR)+'. O Modelo 2 também serve para a cessação.'
         +(fev15Ces?' Como tinha redução de taxa pela duração, a data e o motivo comunicam-se ainda no Portal das Finanças até '+dPT(fev15Ces)+'.':'')
-        +' Depois de a comunicares, silencia este aviso.',
+        +q10+' Depois de a comunicares, silencia este aviso.',
         abrir,true);
     }
     /* a comunicação da duração (Portaria 110/2019 art. 2.º b); FAQ 5936 da
@@ -462,16 +550,19 @@ function prazosDe(hoje){
     });
     if(fev15Ces&&fimR>=iniY){
       poe('fev15',c.id+':'+fev15Ces+':cessacao',fev15Ces,'Comunicar a cessação do contrato à AT (Portaria 110/2019) — '+nome,
-        'O contrato acabou a '+dPT(fimR)+' e tinha redução de taxa pela duração: até '+dPT(fev15Ces)+', comunica a data e o motivo da cessação no Portal das Finanças. Depois de comunicar, silencia este aviso.',
+        'O contrato acabou a '+dPT(fimR)+' e tinha redução de taxa pela duração: até '+dPT(fev15Ces)+', comunica a data e o motivo da cessação no Portal das Finanças.'+q10+' Depois de comunicar, silencia este aviso.',
         abrir,true,{evento:'cessacao'});
     }
   });
   /* o Modelo 44: só para quem a página Declaração diz estar dispensado do
-     recibo eletrónico no ano anterior, e só quando nele houve rendas */
+     recibo eletrónico no ano anterior, e só quando nele houve rendas que o
+     pediam (sem as da categoria B nem as de um arrendamento rural: Portaria
+     98-A/2015, art. 8.º n.os 1 e 4); as rurais podem ir nele, por opção */
   if(dispensaEm(Y)&&houveRecibosEmY){
     const fev=pzIso(new Date(ano,2,0)),alvo=fev>=PZ_MODELO44.fevereiroDesde?fev:ano+'-01-31';
     poe('modelo44',String(Y),alvo,'Modelo 44 — as rendas de '+Y,
-      'Quem tem dispensa do recibo de renda eletrónico entrega, até '+dPT(alvo)+', a declaração anual das rendas (Modelo 44) no Portal das Finanças: as rendas recebidas em '+Y+', discriminadas. É ela que faz as vezes dos recibos que não se emitiram.',
+      'Quem tem dispensa do recibo de renda eletrónico entrega, até '+dPT(alvo)+', a declaração anual das rendas (Modelo 44) no Portal das Finanças: as rendas recebidas em '+Y+', discriminadas. É ela que faz as vezes dos recibos que não se emitiram.'
+      +(houveRuralEmY?' As de um arrendamento rural não pedem recibo: podes declará-las no Modelo 44, se quiseres.':''),
       servicoLigado('fisco')?"go('fisco')":'',true);
   }
   /* a entrega do IRS diz os anexos das rendas do ano: o F, o B ou C das da
@@ -646,6 +737,34 @@ function pzMarcarIhru(id){
   });
 }
 
+/* «Marcar como emitido» do aviso «Recibo de renda por emitir» (N062; a
+   Declaração chama-a com as de um ano: fisco-avisos.js): o recibo eletrónico
+   de cada receita fica marcado como emitido (t.recibo), o que a pessoa diz
+   que já fez no Portal das Finanças — a app nunca emite recibos. Um toque,
+   sem janela: grava e redesenha, e o «Anular» devolve-as a por emitir. Só as
+   que ainda não o tinham e que a pessoa pode alterar (a permissão volta a
+   ver-se agora); as outras — e as partes de um movimento dividido por vários
+   imóveis, que se alteram na ficha dele — ficam de fora, e o aviso di-lo. Sem
+   nenhuma que possa marcar, diz porquê e não muda nada.
+   Recebe: ids — o id de uma receita, ou um array de ids.
+   Devolve: nada. */
+function pzMarcarRecibos(ids){
+  const lista=(Array.isArray(ids)?ids:[ids]).map(String);
+  const ts=lista.map(id=>(db.transactions||[]).find(t=>t&&t.id===id)).filter(t=>t&&!t.recibo);
+  if(!ts.length)return;
+  const ok=[],recusas=[];
+  ts.forEach(t=>{const r=t.lote?'Este movimento divide-se por vários imóveis: marca o recibo na ficha dele.':motivoRecusa(t.propertyId,'tx.add',t);
+    if(r)recusas.push(r);else ok.push(t)});
+  if(!ok.length)return toast(recusas[0]);
+  const marcados=ok.map(t=>t.id),n=ok.length,fora=recusas.length;
+  ok.forEach(t=>{t.recibo=true});
+  save();render();
+  comDesfazer((n===1?'Recibo marcado como emitido.':n+' recibos marcados como emitidos.')
+    +(fora?' '+fora+(fora===1?' ficou':' ficaram')+' de fora: '+recusas[0].replace(/\.$/,'').replace(/^./,x=>x.toLowerCase())+'.':''),()=>{
+    marcados.forEach(id=>{const t=(db.transactions||[]).find(x=>x.id===id);if(t)t.recibo=false});
+  });
+}
+
 /* O que falta (ou o que já passou) para um prazo, dito por extenso como o
    selo o mostra: «Passou há 17 dias», «É hoje», «Falta 1 dia», «Faltam 14 dias»;
    num aviso sem data, «Sem prazo».
@@ -688,7 +807,8 @@ function pzPartes(p){
    cartão que se recolhia (fechado, dizia quantos; aberto, ocupava o ecrã):
    com quatro linhas curtas e o resto a um toque, já não há o que recolher.
    Um prazo que se resolve no próprio aviso (o «Marcar como enviado» do IHRU,
-   o «Marcar como comunicada» de fevereiro) leva o botão antes do ✕.
+   o «Marcar como comunicada» de fevereiro, o «Marcar como emitido» do
+   recibo) leva o botão antes do ✕.
    Devolve: o HTML do cartão (texto), ou '' quando não há prazos na janela. */
 function prazosCard(){
   /* o mesmo guarda do sino (espera.js:sabemosOEstado): um prazo silenciado

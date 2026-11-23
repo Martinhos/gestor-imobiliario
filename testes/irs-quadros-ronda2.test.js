@@ -70,7 +70,15 @@ function cartao(html, titulo) {
 function valorDe(h, campo) {
   const re = new RegExp('<dt>' + campo.replace(/[()?.*+\[\]]/g, '\\$&') + '(?:<span class="small">[^<]*</span>)?</dt><dd>(.*?)</dd>');
   const m = re.exec(h);
-  return m ? m[1] : null;
+  return m ? semCopia(m[1]) : null;
+}
+/* um valor que se copia limpo (formato.js:fmtCopiavel, N107: os separadores no CSS) de
+   volta ao texto do euro2 e do fmtNIF, para o comparar com eles */
+function semCopia(h) {
+  const sep = app.euro2(1000).charAt(1), fim = app.euro2(1).slice(-2, -1), menos = app.euro2(-1).charAt(0), sepNif = app.fmtNIF('123456789').charAt(3);
+  const grupos = (gs, s) => gs.replace(/<span class="cp-g">(\d{3})<\/span>/g, s + '$1');
+  return String(h).replace(/<span class="cp-eur">(-?)(\d+)((?:<span class="cp-g">\d{3}<\/span>)*)(,\d+)?<\/span>/g,
+    (x, neg, a, gs, dec) => (neg ? menos : '') + a + grupos(gs, sep) + (dec || '') + fim + '€').replace(/<span class="cp-g">(\d{3})<\/span>/g, sepNif + '$1');
 }
 /* O subtítulo pequeno de um campo, pelo rótulo exato. */
 function subDe(h, campo) {
@@ -203,8 +211,10 @@ describe('D117, D121, D119 — os cartões do 6A, do 6B e do 6C, com o campo do 
     assert.match(textoDe(q), /A AT considera estas obras em 110 %/);
     assert.match(textoDe(q), new RegExp('Obras dos 24 meses ?' + textoDe(app.euro2(1000))));
     const c = textoDe(cartao(h, 'Quadro 4.1'));
-    assert.match(c, new RegExp('líquido ' + textoDe(app.euro2(11000)) + ' · no imposto ' + textoDe(app.euro2(10900))));
+    /* uma linha só: sem o total do quadro (D8, maqueta 6); o líquido do imposto diz-se no
+       cartão do contrato e no KPI */
     assert.match(c, new RegExp('o imposto estimado conta ' + textoDe(app.euro2(10900))));
+    assert.ok(kpiDe(h, 'Rendimento líquido').pes.some((p) => textoDe(p) === 'no imposto: ' + textoDe(app.euro(10900)) + ' (quadro 6)'));
   });
 
   test('6C: as rendas a 50 % — o cartão, e o KPI do líquido deixa de dizer que é a base do imposto', () => {
@@ -249,7 +259,9 @@ describe('D133 — o cartão «Anexo J · quadro 7A», sem imposto estimado', ()
     assert.doesNotMatch(textoDe(q), /imposto estimado [0-9]/, 'sem estimativa (Q12)');
     assert.match(textoDe(q), /A app não estima o imposto destas rendas/);
     assert.ok(kpiDe(h, 'Rendas ilíquidas').pes.some((p) => /no Anexo J, quadro 7A/.test(p)));
-    assert.match(textoDe(kpiDe(h, 'Imposto estimado').expl), /Não conta as rendas de imóveis fora de Portugal \(Anexo J\)/);
+    /* só o Anexo J, sem linhas do Anexo F: o imposto é «sem estimativa», e não 0 € (N051) */
+    assert.match(h, /<div class="label">Imposto estimado<\/div><div class="value ">sem estimativa<\/div>/);
+    assert.match(textoDe(kpiDe(h, 'Imposto estimado').expl), /As rendas de imóveis fora de Portugal \(Anexo J\) dependem do país, da convenção e do englobamento: a app não as estima/);
   });
 
   test('sem o código do país, o campo falta', () => {
@@ -274,34 +286,37 @@ describe('D134 — «Fora do Anexo F · categoria B» e a frase de «A tua situa
     assert.ok(kpiDe(h, 'Rendas ilíquidas').pes.some((p) => /na categoria B \(Anexo B ou C\)/.test(p)));
   });
 
-  test('«A tua situação fiscal» diz que as rendas da categoria B não vão ao Anexo F e onde se marcam', () => {
+  /* N063 (D8): a nota da categoria B saiu de «A tua situação fiscal» — dizem-na o contrato
+     (a pergunta da categoria B) e o cartão «Fora do Anexo F · categoria B» */
+  test('«A tua situação fiscal» já não fala da categoria B; o cartão dela diz onde se marca', () => {
     imovel(); contrato();
     rendas(1000);
-    const s = textoDe(app.fiscoSituacaoCard(resumo()));
-    assert.match(s, /As rendas na categoria B — porque optaste por ela \(CIRS art\. 4\.º n\.º 1 n\)\) ou porque o imóvel está afeto à tua atividade/);
-    assert.match(s, /«Rendas tributadas na categoria B»/);
+    const s = textoDe(app.fiscoSituacaoCard(resumo(), true));
+    assert.doesNotMatch(s, /categoria B/);
+    const r = Object.assign(resumo(), { categoriaB: [{ contratoId: 'C1', nome: 'Arroios', imovel: 'T2 Arroios', rendas: 12000, n: 12, quota: 1 }] });
+    assert.match(textoDe(app.fiscoCategoriaBCard(r)), /A marca muda-se na ficha do contrato\./);
   });
 });
 
 describe('D135, D137 — a união de freguesias extinta e a caderneta atual', () => {
-  test('2026: o código da união a âmbar, o artigo «pode ter mudado», e as freguesias repostas na nota', () => {
+  test('2026: o código da união é falta, o artigo «pode ter mudado», e as freguesias repostas na nota', () => {
     imovel({ freguesiaCodigo: '010123' }); contrato();
     rendas(1000);
     const q = cartao(pagina(), 'Quadro 4.1');
-    assert.equal(valorDe(q, 'Freguesia (código)'), '010123 <span class="badge amber">confirma na caderneta atual</span>');
+    assert.equal(valorDe(q, 'Freguesia (código)'), '010123 <span class="badge red">troca pelo da caderneta atual</span>');
     assert.equal(subDe(q, 'Freguesia (código)'), 'união de freguesias extinta em 2025');
     assert.equal(valorDe(q, 'Artigo'), '4651 <span class="badge amber">pode ter mudado</span>');
-    assert.match(textoDe(q), /O código 010123 é o de uma união de freguesias desagregada em outubro de 2025 \(Lei 25-A\/2025\): o prédio passou para uma destas — 010128 Agadão, 010132 Belazaima do Chão ou 010134 Castanheira do Vouga/);
+    assert.match(textoDe(q), /O código 010123 é o de uma união de freguesias que deixou de existir em outubro de 2025 \(Lei 25-A\/2025\): o prédio passou para uma destas — 010128 Agadão, 010132 Belazaima do Chão ou 010134 Castanheira do Vouga/);
     assert.match(textoDe(q), /caderneta predial atual/);
   });
 
-  test('confirmado na caderneta: sem âmbar, com o dia', () => {
+  test('a marca da caderneta não o cala: um código de união já não está em nenhuma caderneta (N087)', () => {
     imovel({ freguesiaCodigo: '010123', matrizConfirmada: '2026-11-02' }); contrato();
     rendas(1000);
     const q = cartao(pagina(), 'Quadro 4.1');
-    assert.equal(valorDe(q, 'Freguesia (código)'), '010123');
-    assert.equal(subDe(q, 'Freguesia (código)'), 'confirmado na caderneta a 02/11/2026');
-    assert.equal(valorDe(q, 'Artigo'), '4651');
+    assert.equal(valorDe(q, 'Freguesia (código)'), '010123 <span class="badge red">troca pelo da caderneta atual</span>');
+    assert.doesNotMatch(textoDe(q), /confirmad[oa] na caderneta|Confirmaste/);
+    assert.equal(valorDe(q, 'Artigo'), '4651 <span class="badge amber">pode ter mudado</span>');
   });
 
   test('2024 (uma substituição): o código da união é o certo, sem nada a dizer', () => {
@@ -312,12 +327,15 @@ describe('D135, D137 — a união de freguesias extinta e a caderneta atual', ()
     assert.doesNotMatch(textoDe(q), /desagregada|repostas cerca de 300/);
   });
 
-  test('D137: sem o código, o campo diz que vem da caderneta atual; a dica do quadro fala da reposição', () => {
+  test('D137: sem o código, o campo diz que vem da caderneta atual; a dica do quadro fala da reposição só com uma união extinta (N066)', () => {
     imovel({ freguesiaCodigo: '' }); contrato();
     rendas(1000);
     const q = cartao(pagina(), 'Quadro 4.1');
     assert.equal(subDe(q, 'Freguesia (código)'), 'da caderneta predial atual');
-    assert.match(textoDe(q), /copiam-se da caderneta predial atual ou da nota de cobrança do IMI mais recente: em outubro de 2025 foram repostas/);
+    assert.doesNotMatch(textoDe(q), /foram repostas cerca de 300/, 'sem união extinta, a dica não fala da reposição');
+    const r = resumo();
+    r.linhas = r.linhas.map((l) => Object.assign({}, l, { freguesiaUniao: { codigo: '010123', repostas: [] } }));
+    assert.match(textoDe(app.fiscoQuadroCard(r, '4.1')), /copiam-se da caderneta predial atual ou da nota de cobrança do IMI mais recente: em outubro de 2025 foram repostas/);
   });
 
   test('D136: o código fora do formato é falta no campo', () => {

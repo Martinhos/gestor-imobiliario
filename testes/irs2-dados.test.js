@@ -363,15 +363,17 @@ describe('N043 · apagar uma subcategoria «Não dedutível» não passa as desp
     return t;
   };
 
-  test('o Fundo de reserva, os Eletrodomésticos e a Remodelação ficam «Não dedutível», escrito em cada despesa', () => {
+  /* (a Remodelação, que aqui estava, passou a «a confirmar» como a categoria — N045: o
+     notário e os registos ficam no lugar dela) */
+  test('o Fundo de reserva, os Eletrodomésticos e o Notário ficam «Não dedutível», escrito em cada despesa', () => {
     const dito = janelas(app);
     const f = despesa('Condomínio', 'Fundo de reserva', 400), e = despesa('Manutenção e reparações', 'Eletrodomésticos', 250),
-      r = despesa('Obras e benfeitorias', 'Remodelação', 9000);
+      r = despesa('Serviços profissionais', 'Notário e registos', 900);
     const antes = copia(app.resumoFiscal(2026, 'ana').totais.gastos);
     app.delSub('cats', 'Condomínio', 'Fundo de reserva');
     assert.match(dito.perguntas.pop(), /continua em «Não dedutível» e não passa a «Condomínio»/);
     app.delSub('cats', 'Manutenção e reparações', 'Eletrodomésticos');
-    app.delSub('cats', 'Obras e benfeitorias', 'Remodelação');
+    app.delSub('cats', 'Serviços profissionais', 'Notário e registos');
     for (const t of [f, e, r]) {
       assert.equal(t.sub, '');
       igual(app.irsColunaDe(t), { col: 'nao', origem: 'movimento' });

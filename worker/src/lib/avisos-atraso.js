@@ -43,6 +43,13 @@ import { emailAtrasos } from './correio.js';
 
 // O kind dos planeados, em records e em user_records (web/cloud/nucleo.js:listaDe).
 const KIND_PLANEADO = 'rec';
+// O kind dos contratos e o dos movimentos, em records (web/cloud/nucleo.js:listaDe).
+const KIND_CONTRATO = 'contract';
+const KIND_MOVIMENTO = 'tx';
+// Os encargos do imóvel que um contrato pode pôr a cargo do inquilino (web/app/dados.js:ENCARGOS_DO_INQUILINO).
+const ENCARGOS_DO_INQUILINO = ['condominio', 'imi', 'seguro', 'consumos'];
+// As subcategorias do Condomínio que o mapa de origem não põe na coluna do condomínio (web/app/dados.js:IRS_MAPA0).
+const CONDOMINIO_FORA = ['Fundo de reserva', 'Quota extraordinária'];
 // O nome que se lê para um planeado sem casa.
 export const SEM_IMOVEL = 'Sem imóvel';
 // Quanto tempo vive uma linha de avisos_atraso: depois disto, sai.
@@ -98,7 +105,10 @@ export function horaDosAvisos(agora) {
 /* A regra do atraso da app (web/app/planeados.js:recIsLate, mais o «!muted»
    do recActive): por confirmar, não silenciado, e já passou o último dia da
    janela (o until, ou o next sem janela). Um next que não é uma data não
-   está em atraso — não há dia que o email possa dizer.
+   está em atraso — não há dia que o email possa dizer. O que a app também
+   tira (recPorConfirmar: o planeado de depois da venda da casa e o encargo
+   que o inquilino paga) tira-se em atrasosPorPessoa, que tem a casa e os
+   contratos (depoisDaVenda, suspensoPeloInquilino).
    Recebe: rec — o planeado (o JSON do registo, interpretado); hoje — 'AAAA-MM-DD'.
    Devolve: true quando está em atraso. */
 export function emAtraso(rec, hoje) {
@@ -106,6 +116,106 @@ export function emAtraso(rec, hoje) {
   const next = typeof rec.next === 'string' ? rec.next : '';
   if (!DATA_ISO.test(next)) return false;
   return next <= hoje && String(rec.until || next) < hoje;
+}
+
+/* A ocorrência do planeado é de depois da venda da casa (o p.vendido que o
+   «Marcar como vendido» escreve na casa — web/app/planeados.js:recDepoisDaVenda,
+   D33)? Depois do dia da venda a casa já não é de quem recebe o email: a app
+   não pede nada desse imóvel, e o email também não (N147).
+   Recebe: rec — o planeado; casa — o JSON da casa (interpretado; aguenta null).
+   Devolve: true quando a casa já estava vendida no dia do planeado. */
+export function depoisDaVenda(rec, casa) {
+  const v = casa && typeof casa.vendido === 'string' ? casa.vendido : '';
+  return DATA_ISO.test(v) && DATA_ISO.test(String((rec || {}).next || '')) && String(rec.next) > v;
+}
+
+/* O encargo do imóvel que um planeado paga, como a app o reconhece
+   (web/app/planeados.js:recEncargoDoInquilino): o planeado automático da
+   ficha da casa (tx.propRec, ids fixos), a marca do IRS do movimento (o IMI
+   pelo id, enquanto os nomes forem os da marca), a coluna do Anexo F escrita
+   à mão (irsCol) e, sem nenhum, os nomes de origem das categorias
+   (Impostos › IMI; Condomínio, menos o fundo de reserva e a quota
+   extraordinária, que o mapa de origem não põe na coluna do condomínio —
+   web/app/dados.js:IRS_MAPA0). O mapa mudado à mão nas definições de cada
+   conta não chega aqui: é o caso raro em que o email difere da app.
+   Recebe: rec — o planeado.
+   Devolve: o id do encargo ('condominio', 'imi', 'seguro', 'consumos'), ou ''. */
+export function encargoDoPlaneado(rec) {
+  const t = (rec && typeof rec.tx === 'object' && rec.tx) || {};
+  if (t.kind !== 'expense') return '';
+  if (t.propRec) return ENCARGOS_DO_INQUILINO.includes(t.propRec) ? t.propRec : '';
+  const cat = String(t.category == null ? '' : t.category).trim(), sub = String(t.sub == null ? '' : t.sub).trim();
+  const m = t.catIrs && typeof t.catIrs === 'object' ? t.catIrs : null;
+  if (m && m.cat === cat && m.sub === sub && m.id === 'impostos/imi') return 'imi';
+  if (t.irsCol) return t.irsCol === 'imi' || t.irsCol === 'condominio' ? t.irsCol : '';
+  if (cat === 'Impostos' && sub === 'IMI') return 'imi';
+  if (cat === 'Condomínio' && !CONDOMINIO_FORA.includes(sub)) return 'condominio';
+  return '';
+}
+
+/* O último dia em vigor de um contrato, como a app o lê
+   (web/app/irs.js:irsFimReal): o da cessação (fisco.cessacao.data), se o há;
+   senão, num terminado, o c.end; senão o termo com as renovações registadas
+   (irs.js:irsFimEfetivo).
+   Recebe: c — o contrato (o JSON do registo).
+   Devolve: { fim, termo, cessacao } — 'AAAA-MM-DD' ou '' cada um (termo é o
+   c.end com as renovações). */
+function fimDoContrato(c) {
+  const f = c && typeof c.fisco === 'object' && c.fisco ? c.fisco : {};
+  const cx = f.cessacao && typeof f.cessacao === 'object' ? f.cessacao : {};
+  const cessacao = DATA_ISO.test(String(cx.data || '')) ? String(cx.data) : '';
+  let termo = typeof c.end === 'string' ? c.end : '';
+  (Array.isArray(f.renovacoes) ? f.renovacoes : []).forEach((r) => {
+    if (termo && r && typeof r.fim === 'string' && r.fim > termo) termo = r.fim;
+  });
+  const fim = cessacao || (c.active === false ? (typeof c.end === 'string' ? c.end : '') : termo);
+  return { fim, termo, cessacao };
+}
+
+/* O contrato continua depois do termo (web/app/planeados.js:ctRendaDepoisDoTermo)?
+   Ativo, com o termo já passado, sem cessação, e com uma renda de um mês
+   depois do termo — e então não tem fim (D15).
+   Recebe: c — o contrato; hoje — 'AAAA-MM-DD'; ultimaRenda — o mês
+   'AAAA-MM' da última renda dele ('' sem nenhuma).
+   Devolve: true ou false. */
+function continuaDepoisDoTermo(c, hoje, ultimaRenda) {
+  if (!c || c.active === false) return false;
+  const { termo, cessacao } = fimDoContrato(c);
+  if (!DATA_ISO.test(termo) || termo >= hoje || cessacao) return false;
+  return !!ultimaRenda && ultimaRenda > termo.slice(0, 7);
+}
+
+/* O contrato está em vigor neste mês, para os encargos que põe a cargo do
+   inquilino (web/app/planeados.js:ctEmVigorNoMes): do mês do início ao mês
+   do último dia em vigor; sem fim, enquanto não estiver terminado; o que
+   continua depois do termo, sempre.
+   Recebe: c — o contrato; mes — 'AAAA-MM'; hoje — 'AAAA-MM-DD';
+   ultimaRenda — o mês da última renda dele ('' sem nenhuma).
+   Devolve: true ou false. */
+export function contratoEmVigorNoMes(c, mes, hoje, ultimaRenda) {
+  if (!c || !/^\d{4}-\d{2}$/.test(String(mes || ''))) return false;
+  const ini = String(c.start || '').slice(0, 7);
+  if (ini && mes < ini) return false;
+  const { fim } = fimDoContrato(c);
+  if (!fim) return c.active !== false;
+  if (continuaDepoisDoTermo(c, hoje, ultimaRenda)) return true;
+  return mes <= fim.slice(0, 7);
+}
+
+/* Este planeado é de um encargo que o inquilino paga no mês dele
+   (web/app/planeados.js:recSuspensaPeloInquilino)? Um contrato da mesma
+   casa, em vigor nesse mês, com esse encargo em encargosInquilino. A app não
+   o pede nem o dá em atraso (recPorConfirmar), e o email também não (N147):
+   quem o registasse por causa do email deduzia o que não pagou.
+   Recebe: rec — o planeado; contratos — os contratos da casa (JSON);
+   hoje — 'AAAA-MM-DD'; ultimas — Map id do contrato → mês da última renda.
+   Devolve: true ou false. */
+export function suspensoPeloInquilino(rec, contratos, hoje, ultimas) {
+  const enc = encargoDoPlaneado(rec), next = String((rec || {}).next || '');
+  if (!enc || !DATA_ISO.test(next)) return false;
+  const mes = next.slice(0, 7);
+  return (contratos || []).some((c) => c && Array.isArray(c.encargosInquilino) && c.encargosInquilino.includes(enc) &&
+    contratoEmVigorNoMes(c, mes, hoje, (ultimas && ultimas.get(c.id)) || ''));
 }
 
 /* O que o email diz de um planeado em atraso: a descrição (o rótulo do
@@ -158,6 +268,7 @@ export async function atrasosPorPessoa(env, hoje) {
 
   // 1. os planeados das casas vivas (o next em SQL só poupa o que não pode estar em atraso)
   const casas = new Map();   // houseId → { nome, dono, recs: [], participantes: Set, cargos: Map }
+  const jsonDaCasa = new Map();   // houseId → o JSON da casa, lido uma vez
   for (const row of await linhas(env,
     `SELECT r.house_id, r.id, r.data, h.owner_id, h.data AS casa
        FROM records r JOIN houses h ON h.id = r.house_id AND h.deleted = 0
@@ -165,14 +276,61 @@ export async function atrasosPorPessoa(env, hoje) {
     const rec = lerJson(row.data);
     if (!emAtraso(rec, hoje)) continue;
     rec.id = row.id;   // a chave da base manda: é ela que identifica o planeado
+    if (!jsonDaCasa.has(row.house_id)) jsonDaCasa.set(row.house_id, lerJson(row.casa) || {});
+    const c = jsonDaCasa.get(row.house_id);
+    // depois da venda a casa já não é de ninguém aqui: a app não o pede (recDepoisDaVenda)
+    if (depoisDaVenda(rec, c)) continue;
     if (!casas.has(row.house_id)) {
-      const c = lerJson(row.casa) || {};
       casas.set(row.house_id, {
         nome: String(c.name || '').trim() || 'Imóvel sem nome',
         recs: [], participantes: new Set([row.owner_id]), cargos: new Map(),
       });
     }
     casas.get(row.house_id).recs.push(rec);
+  }
+
+  /* 1b. os encargos que o inquilino paga (recSuspensaPeloInquilino): só quando
+     há planeados de encargos, os contratos dessas casas numa consulta; e só
+     quando algum contrato com encargos tem o termo passado sem cessação, a
+     última renda de cada um numa outra (ctRendaDepoisDoTermo). Duas
+     consultas no máximo, sejam quantas forem as casas. Uma casa que fica sem
+     planeados sai antes das partilhas. */
+  const comEncargos = [...casas].filter(([, casa]) => casa.recs.some((rec) => encargoDoPlaneado(rec))).map(([id]) => id);
+  if (comEncargos.length) {
+    const contratos = new Map();   // houseId → [contrato com encargos]
+    for (const row of await linhas(env,
+      `SELECT house_id, id, data FROM records
+        WHERE kind = ? AND deleted = 0 AND house_id IN (SELECT value FROM json_each(?))`, KIND_CONTRATO, JSON.stringify(comEncargos))) {
+      const c = lerJson(row.data);
+      if (!c || !Array.isArray(c.encargosInquilino) || !c.encargosInquilino.length) continue;
+      c.id = row.id;
+      if (!contratos.has(row.house_id)) contratos.set(row.house_id, []);
+      contratos.get(row.house_id).push(c);
+    }
+    const ultimas = new Map();   // id do contrato → mês da última renda
+    const passados = [...contratos.values()].flat().filter((c) => {
+      const f = fimDoContrato(c);
+      return c.active !== false && !f.cessacao && DATA_ISO.test(f.termo) && f.termo < hoje;
+    });
+    if (passados.length) {
+      for (const row of await linhas(env,
+        `SELECT json_extract(data, '$.contractId') AS cid,
+                MAX(CASE WHEN json_extract(data, '$.periodo') GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
+                         THEN json_extract(data, '$.periodo') ELSE substr(json_extract(data, '$.date'), 1, 7) END) AS mes
+           FROM records
+          WHERE kind = ? AND deleted = 0 AND json_valid(data) AND house_id IN (SELECT value FROM json_each(?))
+            AND json_extract(data, '$.kind') = 'income' AND COALESCE(json_extract(data, '$.parcial'), 0) = 0
+            AND COALESCE(json_extract(data, '$.sub'), '') <> 'Caução'
+            AND json_extract(data, '$.contractId') IN (SELECT value FROM json_each(?))
+          GROUP BY cid`, KIND_MOVIMENTO, JSON.stringify(comEncargos), JSON.stringify(passados.map((c) => c.id)))) {
+        if (row.cid && row.mes) ultimas.set(row.cid, String(row.mes));
+      }
+    }
+    for (const id of comEncargos) {
+      const casa = casas.get(id), cs = contratos.get(id) || [];
+      if (cs.length) casa.recs = casa.recs.filter((rec) => !suspensoPeloInquilino(rec, cs, hoje, ultimas));
+      if (!casa.recs.length) casas.delete(id);
+    }
   }
 
   if (casas.size) {

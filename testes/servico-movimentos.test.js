@@ -389,7 +389,7 @@ describe('o formulário e a ficha do movimento dizem o mesmo que a lista', () =>
     app.CW.selLApagar();
     assert.equal(conf.t, 'Apagar 1 imóvel');
     // o que vai junto à cabeça; a seguir, as rendas de um ano por entregar e o «Marcar como vendido» (D33)
-    assert.match(conf.x, /^Vão junto 1 contrato e 4 movimentos\. As rendas de 2026 deste imóvel \(800,00\s€\) deixam de entrar na Declaração do IRS/);
+    assert.match(conf.x, /^Vão junto 1 contrato e 4 movimentos\. O imóvel desaparece também para <b>Ana<\/b> e <b>Rui<\/b>[^.]*\. As rendas de 2026 deste imóvel \(800,00\s€\) deixam de entrar na Declaração do IRS/);
     assert.match(conf.x, /data-click="closeModal\(\);CW\.selLSair\(\);imvVendidoModal\('P1'\)">Marcar como vendido<\/button>/);
     app.CW.selL = { tipo: null, ids: {} };
     const fonte = readFileSync(new URL('../web/cloud/selecao-listas.js', import.meta.url), 'utf8');
