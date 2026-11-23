@@ -152,13 +152,14 @@ describe('irsReceitaDe · as categorias pelo identificador, e o «Fora dos totai
     igual(papel(receita('Rendas', 'Indemnização', { contractId: 'C1' })), { papel: 'indemnizacao', natureza: '05' });
   });
 
-  test('fora das Rendas o countsInTotals vale: fora dos totais é fora; uma «Caução» noutra categoria é passivo', () => {
+  test('fora das Rendas o countsInTotals vale: fora dos totais é fora; uma «Caução» noutra categoria vai a por classificar', () => {
     excluir('catsIn', 'Outras receitas');
     igual(papel(receita('Outras receitas', '', { contractId: 'C1' })), { papel: 'fora', natureza: null });
     excluir('catsIn', 'Reembolsos', 'Inquilino');
     igual(papel(receita('Reembolsos', 'Inquilino', { contractId: 'C1' })), { papel: 'fora', natureza: null });
     app.db.settings.catsIn['Garagem'] = ['Caução'];
-    igual(papel(receita('Garagem', 'Caução', { contractId: 'C1' })), { papel: 'fora', natureza: null }, 'o isPassivo pelo nome, fora das Rendas');
+    igual(papel(receita('Garagem', 'Caução', { contractId: 'C1' })), { papel: 'porClassificar', natureza: null },
+      'o isPassivo lê a caução pelo id (N074): uma «Caução» da pessoa vai ao aviso, e não sai em silêncio');
   });
 });
 
@@ -195,8 +196,9 @@ describe('irsColunaDe · o AIMI fixo, a omissão a confirmar e as colunas da §1
     app.db.settings.irsMapa['Viagens'] = 'lixo';
     igual(col(despesa('Viagens', '')), { col: 'confirmar', origem: 'omissao' });
     igual(col(despesa('constructor', '')), { col: 'confirmar', origem: 'omissao' }, 'um nome que um objeto herda');
-    // o irsCol de um movimento continua a ser só uma coluna do Anexo F
-    igual(col(despesa('Outros', '', { irsCol: 'confirmar' })), { col: 'confirmar', origem: 'categoria' });
+    // o irsCol 'confirmar' é o que apagar uma subcategoria deixa escrito (N043): manda o movimento
+    igual(col(despesa('Outros', '', { irsCol: 'confirmar' })), { col: 'confirmar', origem: 'movimento' });
+    igual(col(despesa('Limpeza e jardim', '', { irsCol: 'confirmar' })), { col: 'confirmar', origem: 'movimento' });
   });
 
   test('D06, D07, D24–D27, D60 · as colunas da tabela da §1.5, pela subcategoria ou pela categoria', () => {
@@ -252,7 +254,11 @@ describe('irsDevolucaoDeRenda · D53', () => {
     st.catIds.cats['Devoluções ao inquilino / Renda devolvida'] = 'devolucoes/renda';
     delete st.catIds.cats['Devoluções ao inquilino / Devolução de renda'];
     assert.equal(app.irsDevolucaoDeRenda(despesa('Devoluções ao inquilino', 'Renda devolvida')), true);
-    assert.equal(app.irsDevolucaoDeRenda(despesa('Devoluções ao inquilino', 'Devolução de renda')), false);
+    // o nome de origem, que aqui já não existe, lê-se pelo id de origem (N006: o de outra conta da casa)
+    assert.equal(app.irsDevolucaoDeRenda(despesa('Devoluções ao inquilino', 'Devolução de renda')), true);
+    st.cats['Devoluções ao inquilino'].push('Devolução de renda');
+    assert.equal(app.irsDevolucaoDeRenda(despesa('Devoluções ao inquilino', 'Devolução de renda')), false,
+      'com uma subcategoria da pessoa com esse nome, a árvore desta conta manda');
   });
 });
 
@@ -283,7 +289,7 @@ describe('irsSituacao · a situação de cada ano (D30, D71, D91)', () => {
 
   test('sem nada guardado: separada, eu A, sem cônjuge', () => {
     igual(sit(2026, 'ana'), { conjunta: false, conjugeId: '', minhaLetra: 'A', letraConjuge: '', dispensaRecibos: false,
-      aimi: { total: null, valorTributavel: null }, deAno: '' });
+      bensComuns: false, aimi: { total: null, valorTributavel: null }, deAno: '' });
     delete app.db.settings.irs;
     assert.equal(sit(2026, 'ana').conjunta, false, 'um settings sem o bloco irs não rebenta');
   });
@@ -291,7 +297,7 @@ describe('irsSituacao · a situação de cada ano (D30, D71, D91)', () => {
   test('D30 · nos campos antigos, o cônjuge é o único outro marcado B quando eu sou A', () => {
     app.db.settings.irs = { conjunta: true, titulares: { bruno: 'B' }, dispensaRecibos: true };
     igual(sit(2026, 'ana'), { conjunta: true, conjugeId: 'bruno', minhaLetra: 'A', letraConjuge: 'B', dispensaRecibos: true,
-      aimi: { total: null, valorTributavel: null }, deAno: '' });
+      bensComuns: false, aimi: { total: null, valorTributavel: null }, deAno: '' });
   });
 
   test('D30 · quem se marcou B: o cônjuge não se adivinha', () => {

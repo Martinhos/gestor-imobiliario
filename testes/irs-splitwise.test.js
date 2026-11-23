@@ -58,19 +58,22 @@ function base() {
 function csv(linhas, cab = 'Date,Description,Category,Cost,Currency,Ana,Bruno') {
   return [cab, '', ...linhas, '', ' ,Total balance, , ,EUR,0.00,0.00'].join('\n');
 }
-/* Lê o CSV como o swParse (sem abrir a janela) e escolhe o imóvel e o «Só
-   desde» como a janela os deixa.
+/* Lê o CSV como o swParse (sem abrir a janela) e escolhe o imóvel, a resposta
+   à pergunta de quem do grupo não é dono e o «Só desde» como a janela os deixa.
    Recebe: texto; prop (opcional) — o imóvel; desde (opcional) — o «Só desde»
-   (por omissão o da janela, swDesdeOmissao).
+   (por omissão o da janela, swDesdeOmissao); naoDonos (opcional) — a resposta
+   ('0' por omissão: são todos donos, como o grupo da Ana e do Bruno).
    Devolve: nada. */
-function ler(texto, { prop = 'v1', desde } = {}) {
+function ler(texto, { prop = 'v1', desde, naoDonos = '0' } = {}) {
   const t = texto.trim();
   const rows = app.parseCsv(t, app.splitDelim(t.split('\n')[0]));
   app.swHead = rows[0].map((h) => String(h).trim());
   app.swRows = rows.slice(1);
   app.swEuros = {};
+  app.swGrupo = { resp: '', nao: {} };
   app.window._swCols = app.swColunas();
   app.document.getElementById('sw_prop').value = prop;
+  app.document.getElementById('sw_naoDonos').value = naoDonos;
   app.document.getElementById('sw_desde').value = desde === undefined ? app.swDesdeOmissao(prop) : desde;
 }
 /* Importa como o botão «Importar».
@@ -111,10 +114,16 @@ describe('D122 — o custo total, e a quota na Declaração', () => {
     assert.doesNotMatch(dito.janela.corpo, /Escrever as quotas/, 'a casa já tem as quotas');
   });
 
-  test('um dono só na app e um grupo de duas pessoas: escrever as quotas na ficha', () => {
+  test('um dono só na app e um grupo de dois donos: escrever as quotas na ficha', () => {
     semEcra();
+    // antes de dizer quem do grupo é dono, a janela não manda escrever ninguém como dono (D11)
+    app.swGrupo = { resp: '', nao: {} };
+    assert.doesNotMatch(app.swQuotaHtml('v2', 2), /quotas dos outros donos|Escrever as quotas/);
+    app.swGrupo = { resp: '1', nao: { 6: true } };
+    assert.doesNotMatch(app.swQuotaHtml('v2', 2), /quotas dos outros donos|Escrever as quotas/, 'o outro do grupo não é dono');
+    app.swGrupo = { resp: '0', nao: {} };
     const h = app.swQuotaHtml('v2', 2);
-    assert.match(h, /O grupo do Splitwise tem 2 pessoas, e na app este imóvel só tem um dono\. Se a casa é partilhada, escreve na ficha do imóvel as quotas dos outros donos/);
+    assert.match(h, /Disseste que o grupo do Splitwise tem 2 donos, e na app este imóvel só tem um\. Escreve na ficha do imóvel as quotas dos outros donos/);
     assert.match(h, /data-click="swEscreverQuotas\(\)">Escrever as quotas</);
     assert.doesNotMatch(app.swQuotaHtml('v2', 1), /Escrever as quotas/, 'um grupo de uma pessoa');
     app.db.properties[1].comproprietariosFora = [{ id: 'f1', nome: 'Carla', quota: 50 }];
@@ -280,10 +289,13 @@ describe('D127 — a chave de cada linha, as apagadas, o «Só desde» e os anos
     assert.equal(app.db.settings.swIgnoradas.length, 1, 'o Anular de quem apagou devolve a linha');
   });
 
-  test('o «Só desde» por omissão é o da última importação para o imóvel', () => {
+  test('o «Só desde» por omissão só corta com despesas importadas sem a chave, e pela data delas', () => {
     assert.equal(app.swDesdeOmissao('v1'), '');
     importar(csv(grupo), { desde: '' });
-    assert.equal(app.swDesdeOmissao('v1'), '2026-11-17', 'o dia em que se importou');
+    assert.equal(app.swDesdeOmissao('v1'), '', 'com a chave de cada linha, as repetidas já se apanham sem cortar');
+    // importadas antes de a app guardar a chave (cortadas pela quota): só o corte as protege
+    doSplitwise().forEach((t) => { t.swKey = ''; });
+    assert.equal(app.swDesdeOmissao('v1'), '2026-11-17', 'o dia em que se importaram');
     const lote = (d) => doSplitwise().forEach((t) => { t.batch = 'b' + new Date(d + 'T12:00:00').getTime(); });
     lote('2025-08-01');
     assert.equal(app.swDesdeOmissao('v1'), '2025-09-11', 'o dia a seguir à mais recente, quando é mais tarde');

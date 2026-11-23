@@ -400,15 +400,21 @@ describe('as quotas ao escolher a casa a partilhar', () => {
     assert.ok(!corpo.includes('cw_q_H5_'), 'sem campos de quotas antes de marcar');
   });
 
-  test('marcar a casa nova mostra um campo por comproprietário mais o par, em partes iguais, com a frase; desmarcar esconde', () => {
+  test('marcar a casa nova mostra um campo por comproprietário mais o par, na divisão real (sem quotas escritas, partes iguais), com a frase e «já era dono?»; desmarcar esconde', () => {
     const { app } = abrir();
     marcar(app, 'H5', true);
     const b = bloco(app, 'H5');
     // uma linha por pessoa (o canvas M-Quotas): o nome, o campo com nome para o leitor de ecrã, e o %
     assert.match(b, /<label class="pt-quota"><span class="pt-quota-nome">Eu \(tu\)<\/span><input id="cw_q_H5_EU" type="text" inputmode="decimal" value="50" aria-label="Eu \(tu\), quota em %" autocomplete="off"><span class="pt-pct" aria-hidden="true">%<\/span><\/label>/);
     assert.match(b, /<label class="pt-quota"><span class="pt-quota-nome">Rui<\/span><input id="cw_q_H5_RUI" type="text" inputmode="decimal" value="50" aria-label="Rui, quota em %" autocomplete="off">/);
-    assert.match(b, /A divisão só entra em vigor depois de o outro confirmar; até lá fica em partes iguais\./);
-    assert.equal((b.match(/<input /g) || []).length, 2);
+    // a frase diz o que a casa conta até lá — nunca «fica em partes iguais», que só é verdade numa casa sem quotas (N017)
+    assert.match(b, /A divisão só entra em vigor depois de Rui confirmar; até lá, o que já passou conta como antes e, a partir de hoje, em partes iguais\./);
+    assert.doesNotMatch(b, /até lá fica em partes iguais/);
+    // desde quando o Rui é dono (N018): «desde sempre» por omissão, sem campo de data
+    assert.match(b, /Rui já era dono deste imóvel\?/);
+    assert.match(b, /<input type="hidden" id="cw_qd_H5" value="sempre">/);
+    assert.ok(!b.includes('cw_qdia_H5'));
+    assert.equal((b.match(/<input id="cw_q_/g) || []).length, 2);
     marcar(app, 'H5', false);
     assert.equal(bloco(app, 'H5'), '');
   });
@@ -418,7 +424,7 @@ describe('as quotas ao escolher a casa a partilhar', () => {
     marcar(app, 'H5', true);
     const b = bloco(app, 'H5');
     for (const u of ['EU', 'ANA', 'RUI']) assert.match(b, new RegExp('id="cw_q_H5_' + u + '" [^>]*value="33,3"'));
-    assert.equal((b.match(/<input /g) || []).length, 3);
+    assert.equal((b.match(/<input id="cw_q_/g) || []).length, 3);
     assert.match(b, /<span class="pt-quota-nome">Ana<\/span>/);
   });
 
@@ -457,20 +463,20 @@ describe('as quotas ao escolher a casa a partilhar', () => {
     await espera();
     assert.deepEqual(chamadas(esp), ['PUT /api/connections/K1/shares', 'POST /api/houses/H5/proposal']);
     assert.deepEqual(esp.api[0].body, { houseIds: ['H1', 'H5'] });
-    assert.deepEqual(esp.api[1].body, { shares: { EU: 60, RUI: 40 } });
+    assert.deepEqual(esp.api[1].body, { shares: { EU: 60, RUI: 40 }, desde: 'sempre' });
     assert.equal(app.modalStack.length, 0, 'o modal fechou');
     assert.deepEqual(esp.toasts, ['Partilha atualizada. A proposta de divisão seguiu — falta a confirmação do outro comproprietário.']);
   });
 
-  test('guardar em partes iguais partilha sem proposta', async () => {
+  test('guardar em partes iguais também envia a proposta, com «desde sempre»: o servidor fecha o período na entrada, e só ela o tira (N017, N018)', async () => {
     const { app, esp } = abrir();
     marcar(app, 'H5', true);
     escreve(app, 'H5', { EU: '50', RUI: '50' });   // o que o browser lê do value="50" dos campos; o DOM do arnês não o lê
     esp.abertas[0].onSave();
     await espera();
-    assert.deepEqual(chamadas(esp), ['PUT /api/connections/K1/shares']);
+    assert.deepEqual(chamadas(esp), ['PUT /api/connections/K1/shares', 'POST /api/houses/H5/proposal']);
     assert.deepEqual(esp.api[0].body, { houseIds: ['H1', 'H5'] });
-    assert.deepEqual(esp.toasts, ['Partilha atualizada.']);
+    assert.deepEqual(esp.api[1].body, { shares: { EU: 50, RUI: 50 }, desde: 'sempre' });
   });
 
   test('uma casa que já estava partilhada não envia proposta — só a lista muda', async () => {

@@ -9,10 +9,19 @@ function b64(s){
   try{const by=new TextEncoder().encode(s);let bin='';for(const b of by)bin+=String.fromCharCode(b);return btoa(bin)}
   catch(e){try{return btoa(unescape(encodeURIComponent(s)))}catch(e2){return ''}}
 }
-// Cópia de segurança: serializa a base inteira em JSON e entrega ao seletor de ficheiros do Android ou, no browser, descarrega o .json.
+/* O cabeçalho de uma cópia de segurança, que vai no topo do JSON (copia): o
+   instante em que se fez. É a data que a reposição diz, e a fronteira do que
+   é mais recente do que a cópia (planoDaReposicao). Com sessão, a nuvem
+   junta-lhe até onde este aparelho tinha lido o servidor (servidorAte, em
+   cloud/nucleo.js), que é a fronteira medida pelo relógio do servidor.
+   Recebe: nada.
+   Devolve: {feitaEm: o instante em ISO 8601}. */
+function cabecalhoDaCopia(){return {feitaEm:new Date().toISOString()}}
+// Cópia de segurança: serializa a base inteira em JSON, com o cabeçalho (cabecalhoDaCopia) à frente, e entrega ao seletor de ficheiros do Android ou, no browser, descarrega o .json.
 // Devolve: nada — entrega o ficheiro ao Android ou dispara a descarga.
 function driveSave(){
-  const json=JSON.stringify(db,null,2);
+  const base=Object.assign({},db);delete base.copia;
+  const json=JSON.stringify(Object.assign({copia:cabecalhoDaCopia()},base),null,2);
   if(window.Android&&window.Android.saveAs){window.Android.saveAs(bkName(),'application/json',b64(json));return toast('Escolhe onde guardar.')}
   download(bkName(),'application/json',json);
 }
@@ -22,12 +31,12 @@ function driveOpen(){
   if(window.Android&&window.Android.openFile){window.Android.openFile('application/json');return toast('Escolhe a cópia.')}
   bkPasteBox();
 }
-// Chamada pelo lado Android depois de o utilizador escolher um ficheiro: .csv segue para a importação do Splitwise, o resto é tratado como cópia de segurança.
+// Chamada pelo lado Android depois de o utilizador escolher um ficheiro: .csv segue para a importação do Splitwise, o resto é tratado como cópia de segurança (com o nome, que diz o dia de uma cópia sem cabeçalho).
 // Recebe: name — o nome do ficheiro escolhido (string; decide pelo sufixo); text — o conteúdo dele (string).
 // Devolve: nada de útil — só encaminha o texto para a importação certa.
 window.__fileLoaded=function(name,text){
   if(String(name||'').toLowerCase().endsWith('.csv'))return swParse(text);
-  bkLoad(text);
+  bkLoad(text,name);
 };
 // Modal com textarea para colar o conteúdo de uma cópia de segurança à mão.
 // Devolve: nada — abre o modal; o Repor chama bkLoad com o que lá estiver.
@@ -43,24 +52,176 @@ function bkPasteBox(){
    valida, pergunta e só então substitui a base.
    Devolve: nada — o bkLoad trata do resto (e não se devolve o que ele devolve). */
 function bkReporColado(){bkLoad(val('bkText'))}
-/* Repõe uma cópia de segurança: valida o JSON (tem de trazer imóveis e movimentos),
-   pede confirmação com os totais e só então substitui a base inteira — pelo MESMO
-   caminho do arranque (dados.js:normalizarBase): cada coleção normalizada e as
-   migrações de todas as versões, para uma cópia antiga abrir como abriria do disco.
-   Havia aqui uma segunda cópia desse caminho, feita à mão, e já tinha ficado para
-   trás: sem os contratos dos inquilinos com renda, sem o CATMAP das categorias,
-   sem o tenantId → contractId e sem as visitas. No fim grava, refaz a navegação e
+/* O instante de uma cópia: o do cabeçalho (copia.feitaEm, cabecalhoDaCopia,
+   com o servidorAte que a nuvem lá pôs), ou o dia do nome do ficheiro
+   (gestor-imobiliario-AAAA-MM-DD.json, desde a meia-noite: o que mudou nesse
+   dia conta como mais recente do que a cópia), ou nenhum — uma cópia colada
+   de antes do cabeçalho. Um instante no futuro conta como agora.
+   Recebe: d — a cópia lida (o objeto do JSON); nome (opcional) — o nome do ficheiro.
+   Devolve: {ms, dia, servidorAte} — ms, o instante em milissegundos (0 sem
+   data); dia, 'AAAA-MM-DD' ('' sem data); servidorAte, os milissegundos do
+   relógio do servidor até onde o aparelho da cópia tinha lido (0 sem eles). */
+function instanteDaCopia(d,nome){
+  const c=d&&d.copia&&typeof d.copia==='object'?d.copia:{};
+  const dois=x=>String(x).padStart(2,'0');
+  const doDia=t=>{const x=new Date(t);return x.getFullYear()+'-'+dois(x.getMonth()+1)+'-'+dois(x.getDate())};
+  const sa=Number(c.servidorAte),servidorAte=isFinite(sa)&&sa>0?sa:0;
+  const feita=Date.parse(String(c.feitaEm||''));
+  if(isFinite(feita)&&feita>0){const ms=Math.min(feita,Date.now());return {ms,dia:doDia(ms),servidorAte}}
+  const m=/gestor-imobiliario-(\d{4}-\d{2}-\d{2})/i.exec(String(nome||''));
+  const t=m?new Date(m[1]+'T00:00:00').getTime():NaN;
+  if(isFinite(t)&&t>0)return {ms:Math.min(t,Date.now()),dia:m[1],servidorAte};
+  return {ms:0,dia:'',servidorAte};
+}
+/* As listas da base que a reposição junta registo a registo, pela ordem em
+   que se decidem: os imóveis primeiro (um registo só volta para um imóvel
+   que fica). */
+const REPOR_LISTAS=['properties','contracts','transactions','recurring','visits','tenants','templates','groups'];
+/* O imóvel de um registo, para a reposição: o próprio (numa casa), o
+   propertyId (contratos, movimentos, visitas), o do movimento de um
+   planeado, ou o da ficha de um inquilino presa a um imóvel. Os modelos e os
+   grupos são da conta.
+   Recebe: lista — o nome da lista da base ('properties', 'contracts', …); x — o registo.
+   Devolve: o id do imóvel, ou '' quando o registo não é de nenhum. */
+function casaNaReposicao(lista,x){
+  if(!x||lista==='templates'||lista==='groups')return '';
+  if(lista==='properties')return x.id||'';
+  if(lista==='recurring')return (x.tx&&x.tx.propertyId)||'';
+  if(lista==='tenants')return x.houseId||x._houseId||'';
+  return x.propertyId||'';
+}
+/* As regras da reposição com sessão iniciada (planoDaReposicao). Sem nuvem
+   não há: a cópia substitui a base deste aparelho, como sempre. A nuvem troca
+   esta função pela dela (cloud/nucleo.js), que lê a conta primeiro e protege
+   o que outros registaram e o que é mais recente do que a cópia; recebe o
+   instante da cópia (instanteDaCopia).
+   Devolve: null. */
+function regrasDaReposicao(){return null}
+/* O que repor uma cópia faz à base, calculado antes de se perguntar. Sem
+   regras (sem sessão), a cópia substitui tudo. Com as regras da nuvem
+   (regrasDaReposicao), registo a registo: o que está nas duas fica com a
+   versão da cópia, salvo o que as regras mandam manter (o servidor tem-no
+   mais recente do que a cópia); o que só a app tem sai só se as regras
+   deixam (nunca o de uma casa com outras pessoas, nem o que mudou depois da
+   cópia); o que só a cópia tem volta se as regras deixam e o imóvel dele
+   fica. Um imóvel que sairia mas tem registos que ficam, fica. As definições
+   e o meu perfil seguem a regra de manter; os outros proprietários vêm do
+   servidor e ficam. Conta os movimentos que saem (por ano), os contratos que
+   saem, o que volta e o que fica como estava.
+   Recebe: atual — a base de agora; nova — a cópia já pelo normalizarBase (é
+   mexida e devolvida); regras — null, ou {eu, manter(lista, atual, daCopia),
+   sair(lista, atual), voltar(lista, daCopia), manterDefinicoes()}.
+   Devolve: {db, saem: {tx, porAno: {'AAAA': n}, contratos}, voltam: {tx,
+   contratos}, ficam} — ficam, os registos de agora que ficam como estão. */
+function planoDaReposicao(atual,nova,regras){
+  const saem={tx:0,porAno:{},contratos:0},voltam={tx:0,contratos:0};let ficam=0;
+  const conta=(o,lista)=>{if(lista==='transactions')o.tx++;else if(lista==='contracts')o.contratos++};
+  const sai=(lista,x)=>{
+    conta(saem,lista);
+    if(lista==='transactions'){const a=String(x.date||'').slice(0,4),k=/^\d{4}$/.test(a)?a:'';saem.porAno[k]=(saem.porAno[k]||0)+1}
+  };
+  const casas=new Set(),porSair=[];
+  REPOR_LISTAS.forEach(lista=>{
+    const agora=Array.isArray(atual[lista])?atual[lista]:[],daCopia=Array.isArray(nova[lista])?nova[lista]:[];
+    const ids=new Set(agora.map(x=>x.id)),naCopia=new Set(daCopia.map(x=>x.id));
+    if(!regras){
+      agora.forEach(a=>{if(!naCopia.has(a.id))sai(lista,a)});
+      daCopia.forEach(x=>{if(!ids.has(x.id))conta(voltam,lista)});
+      return;
+    }
+    const porId=new Map(agora.map(x=>[x.id,x])),res=[];
+    daCopia.forEach(x=>{
+      const a=porId.get(x.id);
+      if(a){if(regras.manter(lista,a,x)){res.push(a);ficam++}else res.push(x);return}
+      const h=casaNaReposicao(lista,x);
+      if(lista!=='properties'&&h&&!casas.has(h))return;
+      if(regras.voltar(lista,x)){res.push(x);conta(voltam,lista)}
+    });
+    agora.forEach(a=>{
+      if(naCopia.has(a.id))return;
+      if(!regras.sair(lista,a)){res.push(a);ficam++;return}
+      if(lista==='properties')porSair.push(a);else sai(lista,a);
+    });
+    nova[lista]=res;
+    if(lista==='properties')res.forEach(p=>casas.add(p.id));
+  });
+  if(regras){
+    // um imóvel que sairia, mas com registos que ficam, fica com eles
+    const presos=new Set();
+    REPOR_LISTAS.slice(1).forEach(lista=>(nova[lista]||[]).forEach(x=>{const h=casaNaReposicao(lista,x);if(h)presos.add(h)}));
+    porSair.forEach(p=>{if(presos.has(p.id)){nova.properties.push(p);ficam++}});
+    if(regras.manterDefinicoes())nova.settings=atual.settings;
+    const meu=(nova.owners||[]).find(o=>o&&o.id===regras.eu);
+    nova.owners=(atual.owners||[]).map(o=>o&&o.id===regras.eu&&meu&&!regras.manter('owners',o,meu)?meu:o);
+  }
+  return {db:nova,saem,voltam,ficam};
+}
+/* A pergunta da reposição: a data da cópia; com sessão, que muda a conta e
+   os outros aparelhos, o que volta e o que fica como está; sem ela, os
+   totais da cópia; e sempre quantos movimentos (por ano) e contratos saem.
+   Recebe: d — a cópia lida; quando — instanteDaCopia; plano —
+   planoDaReposicao; comSessao — true com sessão iniciada.
+   Devolve: o HTML (texto) da pergunta, uma frase por linha. */
+function perguntaDaReposicao(d,quando,plano,comSessao){
+  const n=(k,um,varios)=>k+' '+(k===1?um:varios);
+  const lista=(o,anos)=>{
+    const ps=[];
+    if(o.tx)ps.push(n(o.tx,'movimento','movimentos')+(anos?` (${anos})`:''));
+    if(o.contratos)ps.push(n(o.contratos,'contrato','contratos'));
+    return ps.join(' e ');
+  };
+  const linhas=[quando.dia?`Cópia de ${esc(dPT(quando.dia))}.`:'Esta cópia não diz quando foi feita.'];
+  if(comSessao)linhas.push('Tens sessão iniciada: repor muda a tua conta e os teus outros aparelhos, não só este.'+(quando.dia||quando.servidorAte?'':' Sem a data, nada do que está na conta sai.'));
+  else linhas.push(`Repor substitui os dados deste aparelho pelos da cópia: ${n(d.properties.length,'imóvel','imóveis')}, ${n(Array.isArray(d.contracts)?d.contracts.length:0,'contrato','contratos')} e ${n(d.transactions.length,'movimento','movimentos')}.`);
+  const s=plano.saem,ns=s.tx+s.contratos;
+  const anos=Object.keys(s.porAno).sort().map(a=>(a||'sem data')+': '+s.porAno[a]).join('; ');
+  linhas.push(ns?`${ns===1?'Sai':'Saem'} ${lista(s,anos)}, que não ${ns===1?'está':'estão'} na cópia.`:'Não sai nenhum movimento nem contrato.');
+  if(comSessao){
+    const v=plano.voltam,nv=v.tx+v.contratos;
+    if(nv)linhas.push(`${nv===1?'Volta':'Voltam'} ${lista(v,'')} da cópia, que já não ${nv===1?'está':'estão'} na conta.`);
+    if(plano.ficam)linhas.push(plano.ficam===1?'Fica como está 1 registo mais recente do que a cópia, ou de uma casa com outras pessoas.'
+      :`Ficam como estão ${plano.ficam} registos mais recentes do que a cópia, ou de casas com outras pessoas.`);
+  }
+  return linhas.join('<br>');
+}
+/* Repõe uma cópia de segurança: valida o JSON (tem de trazer imóveis e
+   movimentos), calcula o que muda (planoDaReposicao) e pergunta-o
+   (perguntaDaReposicao) — a data da cópia, quantos movimentos por ano e
+   contratos saem e, com sessão, que muda a conta e os outros aparelhos — e
+   só com o sim põe a base nova. A cópia passa pelo MESMO caminho do arranque
+   (dados.js:normalizarBase): cada coleção normalizada e as migrações de todas
+   as versões, para uma cópia antiga abrir como abriria do disco. Sem sessão,
+   a cópia substitui a base deste aparelho. Com sessão, substituir tudo
+   apagava no servidor o que outros participantes e outros aparelhos
+   registaram depois da cópia, e punha por cima os valores antigos (a
+   cessação de um contrato voltava a vazia): as regras da nuvem
+   (regrasDaReposicao) leem a conta primeiro e a reposição é registo a
+   registo; com o sim o plano refaz-se, porque a conta pode ter mudado
+   enquanto se lia a pergunta. No fim grava, refaz a navegação e
    re-renderiza tudo.
-   Recebe: text — o conteúdo da cópia (string com o JSON exportado).
-   Devolve: nada — pede confirmação e, com o sim, substitui a base e redesenha tudo. */
-function bkLoad(text){
+   Recebe: text — o conteúdo da cópia (string com o JSON exportado); nome
+   (opcional) — o nome do ficheiro (o dia de uma cópia sem cabeçalho).
+   Devolve: nada sem sessão; com sessão, a promessa da leitura da conta (que
+   acaba com a pergunta aberta). */
+function bkLoad(text,nome){
   let d;try{d=JSON.parse(text)}catch(e){return toast('Isso não é um ficheiro válido.')}
   if(!d||!Array.isArray(d.properties)||!Array.isArray(d.transactions))return toast('Falta a lista de imóveis ou de movimentos.');
-  confirmModal('Repor cópia',`Substituir os dados atuais por ${d.properties.length} imóveis, ${Array.isArray(d.contracts)?d.contracts.length:0} contratos e ${d.transactions.length} movimentos?`,()=>{
-    db=normalizarBase(d);
-    if(servicoLigado('recurring')){syncAllContractRecs();syncAllLoanRecs();syncAllPropRecs()}   // os planeados automáticos são dos Planeados
-    save();migrateInline();closeAllModals();applyTheme();buildNav();render();toast('Cópia reposta.');
-  });
+  const quando=instanteDaCopia(d,nome);delete d.copia;
+  const regras=regrasDaReposicao(quando);
+  const planear=()=>planoDaReposicao(db,normalizarBase(JSON.parse(JSON.stringify(d))),regras);
+  const perguntar=()=>{
+    const falta=regras?regras.antes():'';
+    if(falta)return toast(falta);
+    const plano=planear();
+    confirmModal('Repor cópia',perguntaDaReposicao(d,quando,plano,!!regras),()=>{
+      db=(regras?planear():plano).db;
+      if(regras)regras.depois();
+      if(servicoLigado('recurring')){syncAllContractRecs();syncAllLoanRecs();syncAllPropRecs()}   // os planeados automáticos são dos Planeados
+      save();migrateInline();closeAllModals();applyTheme();buildNav();render();toast('Cópia reposta.');
+    });
+  };
+  if(regras)return regras.ler().then(perguntar);
+  perguntar();
 }
 /* Descarrega "content" como ficheiro no browser (anexos.js:descarregarBlob, que
    revoga o URL da descarga anterior). Um CSV leva à frente a marca de ordem de

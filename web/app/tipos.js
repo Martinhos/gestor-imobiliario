@@ -72,9 +72,13 @@ function toggleExc(tk,cat,sub){
 }
 /* receitas que são passivo, não rendimento: a caução devolve-se e o empréstimo paga-se.
    Nunca entram nos totais, no resultado nem no cashflow — capitalizadas a 5 % inflavam a avaliação.
+   A caução é a das Rendas, pelo id ('rendas/caucao', dados.js:txCatIrsId — N074): com o
+   nome mudado continua a ser caução, e uma «Caução» numa categoria da pessoa não é
+   (a Declaração põe-na nas receitas por classificar, com o aviso). Os empréstimos
+   recebidos não têm id e leem-se pelo nome.
    Recebe: t — o movimento.
    Devolve: true se for uma caução ou um empréstimo recebido. */
-const isPassivo=t=>t.kind==='income'&&(t.category==='Empréstimos recebidos'||t.sub==='Caução');
+const isPassivo=t=>t.kind==='income'&&(t.category==='Empréstimos recebidos'||txCatIrsId(t,true)==='rendas/caucao');
 /* O movimento entra nos totais de receitas e despesas: não é passivo nem de uma
    categoria excluída.
    Recebe: t — o movimento.

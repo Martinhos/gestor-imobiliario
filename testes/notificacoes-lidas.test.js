@@ -64,7 +64,7 @@ describe('tocar num aviso das casas lê esse aviso', () => {
 
   test('tocar um do meio não cala o mais novo', () => {
     monta();
-    app.correrAcao(toqueDaLinha('Bruno deixou de ser comproprietário de T2 Benfica.'), null, null);
+    app.correrAcao(toqueDaLinha('Bruno saiu de T2 Benfica a 01/01/1970: a quota que tinha passou para ti, desse dia em diante.'), null, null);
     assert.deepEqual(ids(), ['e1', 'e3']);
   });
 

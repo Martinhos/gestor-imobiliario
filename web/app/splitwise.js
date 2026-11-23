@@ -7,13 +7,20 @@
    reembolsos (D125), as linhas noutra moeda sem o valor em euros escrito
    (D129), as que já estão na base deste imóvel (pela chave da linha, swKey, e
    por multiplicidade — D126), as apagadas de propósito depois de importadas
-   (settings.swIgnoradas) e as de antes do «Só desde» (D127). O «Anular» anula
+   (settings.swIgnoradas) e as de antes do «Só desde» (D127), listadas as que
+   não estão no imóvel. Num grupo com quem não é dono (o inquilino), a janela
+   pergunta quem e a parte dessas pessoas sai do custo (D11). O «Anular» anula
    só um lote meu, e diz quanto sai de cada ano (D128). */
 let swRows=null,swHead=null;
 /* Os valores em euros escritos na janela para as linhas noutra moeda (D129),
    pelo índice da linha no CSV: ficam quando se muda o imóvel ou o «Só desde»,
    que voltam a desenhar a pré-visualização. */
 let swEuros={};
+/* A resposta à pergunta «o grupo tem alguém que não é dono?» (D11): resp ''
+   (por responder), '0' (são todos donos) ou '1' (há quem não seja); nao, as
+   colunas das pessoas que não são donas ({índice: true}). Volta ao princípio
+   a cada CSV lido (swParse). */
+let swGrupo={resp:'',nao:{}};
 // Recebe o ficheiro escolhido no <input type=file>, lê-o como texto e passa-o ao swParse.
 // Limpa o input para que escolher o mesmo ficheiro volte a disparar o evento.
 // Recebe: input — o próprio elemento <input type=file> (usa input.files[0]).
@@ -60,7 +67,7 @@ function swParse(text){
   if(!text)return toast('Não recebi nenhum texto.');
   const rows=parseCsv(text,splitDelim(text.split('\n')[0]));
   if(rows.length<2)return toast('Não consegui ler linhas neste ficheiro.');
-  swHead=rows[0].map(h=>String(h).trim());swRows=rows.slice(1);swEuros={};closeAllModals();swMapModal();
+  swHead=rows[0].map(h=>String(h).trim());swRows=rows.slice(1);swEuros={};swGrupo={resp:'',nao:{}};closeAllModals();swMapModal();
 }
 /* Um cabeçalho do CSV na forma em que se compara: minúsculas, sem acentos e só
    letras — «Descrição» fica «descricao» (antes o «ã» saía e a coluna não se
@@ -111,17 +118,35 @@ function swEhAcerto(r,c,cat,desc,custo){
    Recebe: m — o texto da moeda.
    Devolve: true ou false. */
 const swEmEuros=m=>{const s=String(m||'').trim().toUpperCase();return !s||s==='EUR'||s==='€'};
-/* O dia por omissão do «Só desde» (D127): a seguir à última importação do
-   Splitwise para este imóvel — a exportação traz o grupo inteiro, desde o
-   primeiro dia, e o que já entrou (e foi arrumado ou apagado depois) não deve
-   voltar. É o mais tardio de dois dias: o dia em que se fez a última
-   importação (o instante do lote, 'b' + ms: o que o grupo tinha até aí já veio
-   nela) e o dia a seguir à despesa mais recente já importada. Sem nenhuma,
+/* O imóvel tem outras contas que podem apagar as despesas importadas (é de
+   outro dono, de colaboração, com comproprietários com conta ou com
+   colaboradores)? As apagadas de propósito ficam na lista de quem as apagou
+   (settings.swIgnoradas, que é da conta), e a reimportação de outra pessoa
+   não a vê: nestas casas o «Só desde» por omissão continua a cortar
+   (swDesdeOmissao). Sem sessão não há outras contas.
+   Recebe: p — o imóvel (aguenta null).
+   Devolve: true ou false. */
+function swCasaComOutros(p){
+  if(!p||!meuId())return false;
+  return ownersOfProp(p).length>1||!!p._sharedFrom||!!p._cargo||(Array.isArray(p._colaboradores)&&p._colaboradores.length>0);
+}
+/* O dia por omissão do «Só desde» (D127). As repetidas já se apanham pela
+   chave da linha (swKey) e as apagadas de propósito pelo swIgnoradas: o corte
+   por data só tirava as despesas lançadas tarde no Splitwise (com a data de
+   antes da última importação), que são gastos que se deduzem. Por isso só
+   corta por omissão quando o imóvel tem despesas do Splitwise importadas sem
+   a chave (de antes de a app a guardar, cortadas pela quota — o casamento
+   por data, descrição e valor não as apanha), e com a data só delas: o mais
+   tardio entre o dia em que se fez a última dessas importações (o instante
+   do lote, 'b' + ms) e o dia a seguir à mais recente delas. Numa casa com
+   outras contas (swCasaComOutros) conta com todas as importadas, como antes:
+   as apagadas por outra pessoa voltavam sem o corte. Sem nada a cortar,
    vazio: o ficheiro todo.
    Recebe: pid — o id do imóvel.
    Devolve: 'AAAA-MM-DD' ou ''. */
 function swDesdeOmissao(pid){
-  const ts=(db.transactions||[]).filter(t=>t&&t.src==='splitwise'&&t.propertyId===pid);
+  const todas=(db.transactions||[]).filter(t=>t&&t.src==='splitwise'&&t.propertyId===pid);
+  const ts=swCasaComOutros(pid?prop(pid):null)?todas:todas.filter(t=>!t.swKey);
   const ds=ts.map(t=>String(t.date||'')).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
   const ms=ts.map(t=>Number(String(t.batch||'').slice(1))).filter(n=>n>0).sort((a,b)=>a-b).pop();
   const dois=x=>String(x).padStart(2,'0'),d=ms?new Date(ms):null;
@@ -142,12 +167,16 @@ function swAnoEntregue(ano){
    Recebe: f — a fração (0–1).
    Devolve: o texto. */
 const swPct=f=>String(Math.round(f*10000)/100).replace('.',',')+' %';
-/* A linha da quota na janela da importação (D122): a app lança o custo total
-   de cada despesa, e a Declaração conta a tua quota do imóvel — sem campo
-   para a escrever aqui (era aplicada duas vezes). Com o grupo do Splitwise de
-   duas ou mais pessoas e o imóvel com um dono só na app (sem comproprietários
-   sem conta escritos), manda escrever as quotas na ficha (decisão do D08), com
-   o botão para a ficha quando o serviço dos imóveis está ligado.
+/* A linha da quota na janela da importação (D122): a app lança o custo de
+   cada despesa — o total, ou a parte dos donos quando o grupo tem quem não é
+   dono (D11, swParteDosDonos) —, e a Declaração conta a tua quota do imóvel,
+   sem campo para a escrever aqui (era aplicada duas vezes). Só quando a
+   pessoa disse quem do grupo é dono (swGrupo) e há dois ou mais donos no
+   grupo com o imóvel de um dono só na app (sem comproprietários sem conta
+   escritos), manda escrever as quotas dos outros donos na ficha (D08), com o
+   botão para a ficha quando o serviço dos imóveis está ligado. Antes, bastava
+   o grupo ter duas pessoas — e quem lá tem o inquilino, e o escrevia como
+   dono, cortava também as suas rendas.
    Recebe: pid — o id do imóvel escolhido; nPessoas — quantas pessoas tem o
    grupo (as colunas delas no CSV).
    Devolve: o HTML (texto), ou '' sem imóvel. */
@@ -157,10 +186,67 @@ function swQuotaHtml(pid,nPessoas){
   const q=eu?Number(quotasFiscais(p,today())[eu]):NaN;
   const conta=isFinite(q)&&q>0?(q>=1-1e-9?' Na tua Declaração conta por inteiro: és o único dono.':` Na tua Declaração conta a tua quota deste imóvel, ${swPct(q)}.`)
     :' A Declaração reparte-o pelas quotas da ficha do imóvel.';
-  const so=donos.length<=1&&!fora.length&&nPessoas>=2;
-  return `<div class="hint">A app lança o custo total de cada despesa, como o Splitwise o exporta.${conta}</div>`+
-    (so?`<p class="small amber">O grupo do Splitwise tem ${nPessoas} pessoas, e na app este imóvel só tem um dono. Se a casa é partilhada, escreve na ficha do imóvel as quotas dos outros donos, também dos que não têm conta: a Declaração conta só a tua parte.</p>`+
+  const nao=swGrupo.resp==='1'?Object.keys(swGrupo.nao).filter(k=>swGrupo.nao[k]).length:0;
+  const donosNoGrupo=swGrupo.resp==='0'?nPessoas:swGrupo.resp==='1'?Math.max(0,nPessoas-nao):0;
+  const so=donos.length<=1&&!fora.length&&donosNoGrupo>=2;
+  const custo=nao?'A app lança a parte dos donos de cada despesa: o custo menos a parte de quem não é dono, pelos saldos do Splitwise.'
+    :'A app lança o custo total de cada despesa, como o Splitwise o exporta.';
+  return `<div class="hint">${custo}${conta}</div>`+
+    (so?`<p class="small amber">Disseste que o grupo do Splitwise tem ${donosNoGrupo} donos, e na app este imóvel só tem um. Escreve na ficha do imóvel as quotas dos outros donos, também dos que não têm conta: a Declaração conta só a tua parte.</p>`+
       (servicoLigado('properties')?`<div class="def-botoes"><button class="btn sm" data-toca="camada" data-click="swEscreverQuotas()">Escrever as quotas</button></div>`:''):'');
+}
+/* As colunas das pessoas do grupo que não são donas do imóvel (D11): as
+   marcadas, quando a resposta é «Sim»; nenhuma, senão.
+   Recebe: c — as colunas (swColunas).
+   Devolve: array de índices de colunas. */
+function swNaoDonos(c){return swGrupo.resp==='1'?((c&&c.pessoas)||[]).filter(i=>swGrupo.nao[i]):[]}
+/* A pergunta da janela da importação (D11): num grupo de duas ou mais
+   pessoas, se tem alguém que não é dono deste imóvel (o inquilino, ou outra
+   pessoa) e, com o sim, quem — a parte dessas pessoas sai do custo de cada
+   despesa (swParteDosDonos). Obrigatória: o custo total só é certo quando o
+   grupo é o dos donos (CIRS art. 41.º: só se deduz o gasto suportado).
+   Recebe: c — as colunas (swColunas).
+   Devolve: o HTML (texto), ou '' num grupo de uma pessoa (ou sem as colunas delas). */
+function swNaoDonosHtml(c){
+  const ps=(c&&c.pessoas)||[];if(ps.length<2)return '';
+  const quem=swGrupo.resp==='1'?`<div class="hint">Quem não é dono? A parte de cada um sai do custo de cada despesa.</div>`+
+    ps.map(i=>`<label class="check"><input type="checkbox" id="sw_nd_${i}" data-change="swRefresh()"${swGrupo.nao[i]?' checked':''}> ${esc(String(swHead[i]||''))}</label>`).join(''):'';
+  return `<label>O grupo do Splitwise tem alguém que não é dono deste imóvel? <span class="req">*</span>${sel('sw_naoDonos',swGrupo.resp,[{v:'',label:'—'},{v:'0',label:'Não, são todos donos'},{v:'1',label:'Sim, o inquilino ou outra pessoa'}],'swRefresh','rascunho')}</label>${quem}`;
+}
+/* Guarda em swGrupo o que está escolhido na janela — a pergunta e a caixa de
+   cada pessoa —, antes de ela se voltar a desenhar.
+   Devolve: nada. */
+function swGuardarGrupo(){
+  const e=document.getElementById('sw_naoDonos');if(e)swGrupo.resp=String(e.value||'');
+  const c=window._swCols||swColunas();
+  ((c&&c.pessoas)||[]).forEach(i=>{const x=document.getElementById('sw_nd_'+i);if(x&&swGrupo.resp==='1')swGrupo.nao[i]=!!x.checked});
+}
+/* O saldo de uma pessoa numa linha do CSV, em cêntimos arredondados: o que
+   pagou menos o que lhe cabe.
+   Recebe: r — a linha; i — a coluna da pessoa.
+   Devolve: o número. */
+const swSaldo=(r,i)=>Math.round(num(r[i])*100)/100;
+/* A parte dos donos no custo de uma linha (D11; CIRS art. 41.º n.º 1: só se
+   deduz o gasto suportado por quem declara): o custo menos o que cabe a quem
+   não é dono. O CSV traz, por linha, o saldo de cada pessoa (o que pagou
+   menos o que lhe cabe). Quando nenhuma das pessoas que não são donas tem
+   saldo positivo, não pagaram nada, e o que lhes cabe é o que devem (o saldo
+   ao contrário). Quando uma delas é a única a pagar (a única com saldo
+   positivo), pagou o custo inteiro, e cabe-lhe o custo menos o saldo dela.
+   Com os saldos todos a zero (uma despesa só de quem a pagou, sem se saber
+   quem) ou com mais de uma pessoa a pagar e uma delas sem ser dona, não se
+   sabe: fica de fora, listada.
+   Recebe: r — a linha (array de células); c — as colunas (swColunas); custo —
+   o custo da linha; nao — as colunas das pessoas que não são donas (swNaoDonos).
+   Devolve: a parte dos donos (número, de 0 ao custo), ou null quando não se sabe. */
+function swParteDosDonos(r,c,custo,nao){
+  if(!nao||!nao.length)return custo;
+  const ps=(c&&c.pessoas)||[],pagaram=ps.filter(i=>swSaldo(r,i)>0.004);
+  if(!pagaram.length)return null;
+  const pagouNaoDono=pagaram.filter(i=>nao.indexOf(i)>-1);
+  if(pagouNaoDono.length&&pagaram.length>1)return null;
+  const deles=nao.reduce((s,i)=>s+((pagouNaoDono[0]===i?custo:0)-swSaldo(r,i)),0);
+  return Math.round(Math.min(custo,Math.max(0,custo-deles))*100)/100;
 }
 /* O botão «Escrever as quotas» da janela da importação: fecha-a e abre a
    ficha do imóvel escolhido, onde se escrevem as quotas (D08, D122).
@@ -171,9 +257,10 @@ function swEscreverQuotas(){
   if(pid&&servicoLigado('properties'))propModal(pid);
 }
 /* Depois de ler o CSV: deteta as colunas (swColunas), guarda-as em
-   window._swCols e abre a janela da importação — o imóvel, a linha da quota
-   (swQuotaHtml), o «Só desde» (por omissão a seguir à última importação
-   para o imóvel, swDesdeOmissao) e a pré-visualização (swPrevHtml).
+   window._swCols e abre a janela da importação — o imóvel, a pergunta de
+   quem do grupo não é dono (swNaoDonosHtml, D11), a linha da quota
+   (swQuotaHtml), o «Só desde» (por omissão só quando há que cortar,
+   swDesdeOmissao) e a pré-visualização (swPrevHtml).
    Devolve: nada — abre o modal de importação. */
 function swMapModal(){
   const c=swColunas(),pid=(db.properties[0]||{}).id||'',desde=swDesdeOmissao(pid),nome=i=>esc(i>-1?swHead[i]:'?');
@@ -182,10 +269,11 @@ function swMapModal(){
     <div class="hint">Encontrei <b>${swRows.length}</b> ${swRows.length===1?'linha':'linhas'}. Colunas: data → <b>${nome(c.data)}</b>, descrição → <b>${nome(c.desc)}</b>, custo → <b>${nome(c.custo)}</b>, categoria → <b>${nome(c.cat)}</b>, moeda → <b>${nome(c.moeda)}</b>.</div>
     ${c.desc<0?'<p class="small amber">Não encontrei a coluna da descrição: as despesas ficam «Despesa Splitwise», e duas com a mesma data, custo e categoria só se distinguem por quantas são.</p>':''}
     <label>Lançar em que imóvel? <span class="req">*</span>${sel('sw_prop',pid,db.properties.map(p=>({v:p.id,label:p.name})),'swPropMudou','rascunho')}</label>
+    <div id="swGrupo">${swNaoDonosHtml(c)}</div>
     <div id="swQuota">${swQuotaHtml(pid,c.pessoas.length)}</div>
     <label>Só desde<input id="sw_desde" type="date" value="${esc(desde)}" data-change="swRefresh()"></label>
-    <div class="hint">Só as despesas deste dia em diante. Por omissão, a seguir à última importação para este imóvel; em branco, o ficheiro todo.</div>
-    <div class="divider"></div><div id="swPrev">${swPrevHtml(swPrepare({pid,desde}))}</div></div>`,
+    <div class="hint">Só as despesas deste dia em diante; em branco, o ficheiro todo — as que já estão no imóvel ficam de fora na mesma.</div>
+    <div class="divider"></div><div id="swPrev">${swPrevHtml(swPrepare({pid,desde,naoDonos:swNaoDonos(c)}))}</div></div>`,
     `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="swDo()">Importar</button>`);
 }
 /* Mudou o imóvel na janela da importação: o «Só desde» passa ao desse imóvel
@@ -205,13 +293,14 @@ function swGuardarEuros(){
     const e=document.getElementById('sw_eur_'+i);if(e)swEuros[i]=String(e.value||'');
   });
 }
-// Refaz a linha da quota e a pré-visualização quando se muda o imóvel, o «Só desde» ou um valor em euros.
+// Refaz a pergunta de quem não é dono, a linha da quota e a pré-visualização quando se muda o imóvel, a resposta, o «Só desde» ou um valor em euros.
 // Devolve: nada — redesenha no DOM.
 function swRefresh(){
-  swGuardarEuros();
+  swGuardarEuros();swGuardarGrupo();
   const c=window._swCols||swColunas(),pid=val('sw_prop');
+  const g=document.getElementById('swGrupo');if(g)g.innerHTML=swNaoDonosHtml(c);
   const q=document.getElementById('swQuota');if(q)q.innerHTML=swQuotaHtml(pid,c.pessoas.length);
-  const e=document.getElementById('swPrev');if(e)e.innerHTML=swPrevHtml(swPrepare({pid,desde:val('sw_desde'),euros:swEuros}));
+  const e=document.getElementById('swPrev');if(e)e.innerHTML=swPrevHtml(swPrepare({pid,desde:val('sw_desde'),euros:swEuros,naoDonos:swNaoDonos(c)}));
 }
 /* A chave de uma linha do Splitwise (t.swKey, D127): a data, a descrição, o
    custo total e a categoria do CSV — não muda quando a pessoa edita o
@@ -231,15 +320,21 @@ const swChave=(iso,desc,custo,cat)=>normSwKey([iso,desc,(Number(custo)||0).toFix
      contada por multiplicidade e só contra a base de antes (D126): duas iguais
      no ficheiro e uma na base, entra uma;
    · 'ignorada' — apagada de propósito depois de importada
-     (settings.swIgnoradas); 'antes' — de antes do «Só desde» (D127).
+     (settings.swIgnoradas); 'antes' — de antes do «Só desde» (D127), com
+     jaNaBase quando, sem o corte, seria repetida ou ignorada;
+   · com pessoas que não são donas (opts.naoDonos, D11): a despesa entra com a
+     parte dos donos (swParteDosDonos; parteFora, o que saiu do custo, na moeda
+     da linha, e foraEur, o mesmo em euros); 'deOutros' — cabe toda a quem não
+     é dono; 'semParte' — os saldos não dizem quem a pagou.
    O «Total balance» do fim e as linhas a zero saltam-se sem contar.
    Recebe: opts (opcional) — {pid: o imóvel; desde: 'AAAA-MM-DD' ou ''; euros:
-   {índice da linha: o valor em euros escrito}}.
+   {índice da linha: o valor em euros escrito}; naoDonos: as colunas das
+   pessoas que não são donas (swNaoDonos)}.
    Devolve: {linhas: [{i, tipo, date, label, custo, moeda, amount, category,
-   sub, col, swKey}], cols: as colunas (swColunas), antigas: quantas despesas
-   do Splitwise sem chave tem o imóvel}. */
+   sub, col, swKey, jaNaBase?, parteFora?, foraEur?}], cols: as colunas (swColunas),
+   antigas: quantas despesas do Splitwise sem chave tem o imóvel}. */
 function swPrepare(opts){
-  const o=opts||{},c=swColunas(),pid=o.pid||'',euros=o.euros||{};
+  const o=opts||{},c=swColunas(),pid=o.pid||'',euros=o.euros||{},nao=Array.isArray(o.naoDonos)?o.naoDonos:[];
   const desde=/^\d{4}-\d{2}-\d{2}$/.test(String(o.desde||''))?String(o.desde):'';
   const ign=new Set(normSwIgnoradas(((db.settings||{}).swIgnoradas)));
   /* o que já está na base deste imóvel, antes desta importação */
@@ -255,7 +350,7 @@ function swPrepare(opts){
     const desc=cel('desc'),data=cel('data'),catCsv=cel('cat'),moeda=cel('moeda').toUpperCase()||'EUR',custoTxt=cel('custo');
     if(!data){if(custoTxt&&num(custoTxt)!==0&&!/total|saldo/i.test(desc))linhas.push({i,tipo:'semData',date:'',label:desc||'Despesa Splitwise',custo:num(custoTxt),moeda});return}
     const custo=Math.round(num(custoTxt)*100)/100;if(!custo)return;
-    const iso=/^\d{4}-\d{2}-\d{2}$/.test(data)?data:isoDate(data);
+    const iso=dataExiste(data)?data:isoDate(data);
     const l={i,tipo:'despesa',date:iso||'',label:desc||'Despesa Splitwise',custo,moeda,amount:custo,category:'',sub:'',col:'',swKey:''};
     if(!iso){l.tipo='semData';linhas.push(l);return}
     if(swEhAcerto(r,c,catCsv,desc,custo)){l.tipo='acerto';linhas.push(l);return}
@@ -268,10 +363,22 @@ function swPrepare(opts){
     /* uma despesa reposta pela Declaração (fisco-avisos.js:fiscoAvChaveSplitwise) tem a chave sem a
        categoria do CSV: conta como a mesma linha */
     const ja=(naBase.get(l.swKey)||0)+(catCsv?(naBase.get(swChave(iso,desc,custo,''))||0):0)+antigas.filter(t=>t.date===iso&&t.label===l.label&&Math.abs((Number(t.amount)||0)-custo)<0.005).length;
-    if(desde&&iso<desde)l.tipo='antes';
+    if(desde&&iso<desde){l.tipo='antes';l.jaNaBase=ign.has(l.swKey)||n<=ja}
     else if(ign.has(l.swKey))l.tipo='ignorada';
     else if(n<=ja)l.tipo='repetida';
     else if(!swEmEuros(moeda)){l.tipo='moeda';const e=Math.round(num(euros[i])*100)/100;l.amount=e>0?e:null}
+    /* a parte de quem não é dono sai do custo (D11) */
+    if(nao.length&&(l.tipo==='despesa'||l.tipo==='moeda')){
+      const parte=swParteDosDonos(r,c,custo,nao);
+      if(parte==null)l.tipo='semParte';
+      else if(parte<0.005)l.tipo='deOutros';
+      else if(parte<custo){
+        l.parteFora=Math.round((custo-parte)*100)/100;
+        const antes=l.amount;
+        if(l.tipo==='despesa')l.amount=parte;else if(l.amount>0)l.amount=Math.round(l.amount*parte/custo*100)/100;
+        l.foraEur=antes>0?Math.round((antes-l.amount)*100)/100:0;
+      }
+    }
     linhas.push(l);
   });
   return {linhas,cols:c,antigas:antigas.length};
@@ -281,15 +388,15 @@ function swPrepare(opts){
    Recebe: l — uma linha do swPrepare.
    Devolve: true ou false. */
 const swImporta=l=>l.tipo==='despesa'||(l.tipo==='moeda'&&l.amount>0);
-// Normaliza "31/12/2024", "2024-12-31" ou "31.12.2024" para AAAA-MM-DD; assume dia primeiro quando o ano vem no fim. Devolve null se não reconhecer.
+// Normaliza "31/12/2024", "2024-12-31" ou "31.12.2024" para AAAA-MM-DD; assume dia primeiro quando o ano vem no fim.
+// Uma data que não existe (o «12/31/2025» de um CSV à americana dava 2025-31-12) não passa (dados.js:dataExiste, N104): a linha fica 'semData'.
 // Recebe: s — a data como texto, num desses formatos.
-// Devolve: a data em "AAAA-MM-DD" (string), ou null se não a reconhecer.
+// Devolve: a data em "AAAA-MM-DD" (string), ou null se não a reconhecer ou se ela não existir.
 function isoDate(s){
   const m=String(s).match(/(\d{1,4})[\/\-.](\d{1,2})[\/\-.](\d{1,4})/);if(!m)return null;
   const a=m[1],b=m[2],c=m[3];
-  if(a.length===4)return `${a}-${b.padStart(2,'0')}-${c.padStart(2,'0')}`;
-  if(c.length===4)return `${c}-${b.padStart(2,'0')}-${a.padStart(2,'0')}`;
-  return null;
+  const iso=a.length===4?`${a}-${b.padStart(2,'0')}-${c.padStart(2,'0')}`:c.length===4?`${c}-${b.padStart(2,'0')}-${a.padStart(2,'0')}`:null;
+  return iso&&dataExiste(iso)?iso:null;
 }
 /* Do texto de uma categoria (ou de uma descrição) do Splitwise, em inglês ou
    em português, ao par [categoria, subcategoria] de origem da app — ou null
@@ -369,11 +476,25 @@ function swPorAnoHtml(ls,verbo){
     return swAnoEntregue(a)?`<p class="small amber">${txt} — o prazo da declaração de ${a} já acabou: se já a entregaste, ${verbo} os gastos dela.</p>`:`<p class="small">${txt}</p>`;
   }).join('');
 }
+/* As linhas do CSV numa tabela pequena (data, descrição, valor no CSV), até
+   dez e o resto contado: as de antes do «Só desde» que não estão no imóvel
+   (D127) e as que os saldos não dizem quem pagou (D11).
+   Recebe: ls — as linhas do swPrepare.
+   Devolve: o HTML (texto) da tabela. */
+function swTabelaLinhas(ls){
+  const valor=l=>swEmEuros(l.moeda)?euro2(l.custo):esc(l.custo.toFixed(2).replace('.',',')+' '+l.moeda);
+  return `<div class="tablewrap"><table class="table"><thead><tr><th>Data</th><th>Descrição</th><th>Valor</th></tr></thead><tbody>
+      ${ls.slice(0,10).map(l=>`<tr><td>${esc(dPT(l.date))}</td><td class="u-ta-left u-ws-normal">${esc(l.label)}</td><td>${valor(l)}</td></tr>`).join('')}
+      ${ls.length>10?`<tr><td colspan="3" class="u-ta-left u-c-v-muted">…e mais ${ls.length-10}</td></tr>`:''}</tbody></table></div>`;
+}
 /* O HTML da pré-visualização: as despesas a importar (quantas e o total, por
-   ano, D127), as que ficam «a confirmar» (D123), a categoria e a coluna do
-   Anexo F de cada grupo de linhas, as primeiras seis linhas, e o que fica de
-   fora — os acertos (D124), os reembolsos (D125), as repetidas (D126), as
-   apagadas de propósito e as de antes do «Só desde» (D127) — e as linhas
+   ano, D127), a parte de quem não é dono que saiu do custo (D11), as que
+   ficam «a confirmar» (D123), a categoria e a coluna do Anexo F de cada
+   grupo de linhas, as primeiras seis linhas, e o que fica de fora — os
+   acertos (D124), os reembolsos (D125), as repetidas (D126), as apagadas de
+   propósito, as de antes do «Só desde» (D127, com a lista das que não estão
+   no imóvel: uma lançada tarde no Splitwise vê-se aqui), as que cabem só a
+   quem não é dono e as que os saldos não dizem quem pagou (D11) — e as linhas
    noutra moeda, cada uma com o campo do valor em euros (D129).
    Recebe: prep — o que o swPrepare devolve.
    Devolve: string de HTML da pré-visualização, pronta a inserir com innerHTML. */
@@ -382,6 +503,8 @@ function swPrevHtml(prep){
   const ps=[];
   if(imp.length){
     ps.push(`<div class="hint u-mb-8px">${swN(imp.length,'despesa a importar','despesas a importar')} · total <b>${euro2(sum(imp.map(r=>r.amount)))}</b></div>`);
+    const tirado=sum(imp.map(l=>l.foraEur||0));
+    if(tirado>0)ps.push(`<p class="small">Já sem a parte de quem não é dono, que sai do custo: ${euro2(tirado)} no total.</p>`);
     ps.push(swPorAnoHtml(imp,'importar muda'));
     const conf=imp.filter(l=>l.col==='confirmar');
     if(conf.length)ps.push(`<p class="small amber">${conf.length===1?'1 fica':conf.length+' ficam'} «a confirmar»: só ${conf.length===1?'conta':'contam'} na Declaração quando escolheres a coluna na ficha da despesa.</p>`);
@@ -404,9 +527,25 @@ function swPrevHtml(prep){
   if(ign.length)fora.push(`${swN(ign.length,'despesa que apagaste','despesas que apagaste')} depois de ${ign.length===1?'a':'as'} importar.`);
   const antes=de('antes');
   if(antes.length)fora.push(`${swN(antes.length,'despesa','despesas')} de antes do «Só desde».`);
+  const deOutros=de('deOutros');
+  if(deOutros.length)fora.push(`${swN(deOutros.length,'despesa que cabe','despesas que cabem')} só a quem não é dono: não ${deOutros.length===1?'é gasto':'são gastos'} dos donos.`);
   const sem=de('semData');
   if(sem.length)fora.push(`${swN(sem.length,'linha sem uma data que se perceba','linhas sem uma data que se perceba')}.`);
   if(fora.length)ps.push(`<p class="small"><b>Ficam de fora:</b></p>`+fora.map(f=>`<p class="small">${f}</p>`).join(''));
+  /* as de antes do «Só desde» que não estão no imóvel: uma despesa lançada
+     tarde no Splitwise (com a data de antes da última importação) é uma
+     destas, e deduz-se */
+  const novasAntes=antes.filter(l=>!l.jaNaBase);
+  if(novasAntes.length){
+    ps.push(`<p class="small amber">${novasAntes.length===1?'Destas, 1 não está':'Destas, '+novasAntes.length+' não estão'} neste imóvel. Se ${novasAntes.length===1?'foi lançada':'alguma foi lançada'} no Splitwise depois da última importação, deixa o «Só desde» em branco para ${novasAntes.length===1?'a':'as'} importar:</p>`);
+    ps.push(swTabelaLinhas(novasAntes));
+  }
+  /* as que os saldos do CSV não dizem quem pagou (D11) */
+  const semParte=de('semParte');
+  if(semParte.length){
+    ps.push(`<p class="small amber">${swN(semParte.length,'despesa fica','despesas ficam')} de fora porque os saldos do Splitwise não dizem quem ${semParte.length===1?'a':'as'} pagou. Se ${semParte.length===1?'é gasto teu':'alguma é gasto teu'}, adiciona-${semParte.length===1?'a':'as'} à mão nos Movimentos, com a parte que pagaste:</p>`);
+    ps.push(swTabelaLinhas(semParte));
+  }
   if(prep&&prep.antigas&&rep.length+imp.length)ps.push(`<p class="small amber">Este imóvel tem ${swN(prep.antigas,'despesa importada','despesas importadas')} do Splitwise antes de a app guardar a linha de cada uma: se ${prep.antigas===1?'estiver':'estiverem'} no ficheiro com outro valor (cortado pela quota), volta${prep.antigas===1?'':'m'} a entrar. Confere o «Só desde».</p>`);
   const moeda=de('moeda');
   if(moeda.length){
@@ -419,24 +558,36 @@ function swPrevHtml(prep){
    deixa entrar (swImporta), com o custo total (ou o valor em euros escrito,
    numa linha noutra moeda, e a moeda de origem nas notas), a categoria, a
    chave da linha (swKey) e o lote (batch, 'b' + o instante) que o undoImport
-   anula. Não guarda nenhuma quota (D122). Um valor em euros escrito que não é
-   um número maior que zero pára a importação, com o erro junto ao campo.
+   anula. Não guarda nenhuma quota (D122). Num grupo de duas ou mais pessoas a
+   pergunta de quem não é dono é obrigatória (D11), e com pessoas que não são
+   donas cada despesa entra com a parte dos donos, com o custo do Splitwise e
+   a parte que saiu nas notas. Um valor em euros escrito que não é um número
+   maior que zero pára a importação, com o erro junto ao campo.
    Recebe: nada (lê a janela e o swRows).
    Devolve: nada — grava, fecha o modal, redesenha a vista e avisa por toast. */
 function swDo(){
   if(!db.properties.length)return toast('Cria primeiro um imóvel.');
   const pid=val('sw_prop');
   if(!pid||!prop(pid))return falhaCampo('sw_prop','Escolhe o imóvel.');
-  swGuardarEuros();
-  const prep=swPrepare({pid,desde:val('sw_desde'),euros:swEuros}),rows=prep.linhas.filter(swImporta);
+  swGuardarEuros();swGuardarGrupo();
+  const c=window._swCols||swColunas();
+  if((c.pessoas||[]).length>=2){
+    if(swGrupo.resp!=='0'&&swGrupo.resp!=='1')return falhaCampo('sw_naoDonos','Diz se o grupo tem alguém que não é dono deste imóvel.');
+    if(swGrupo.resp==='1'&&!swNaoDonos(c).length)return falhaCampo('sw_nd_'+c.pessoas[0],'Marca quem não é dono.');
+  }
+  const prep=swPrepare({pid,desde:val('sw_desde'),euros:swEuros,naoDonos:swNaoDonos(c)}),rows=prep.linhas.filter(swImporta);
   /* só os campos que estão à vista (as linhas noutra moeda que entrariam) */
   const mal=prep.linhas.find(l=>l.tipo==='moeda'&&String(swEuros[l.i]||'').trim()&&!(num(swEuros[l.i])>0));
   if(mal)return falhaCampo('sw_eur_'+mal.i,'Escreve o valor em euros, maior que zero, ou deixa em branco.');
   if(!rows.length)return toast('Nada para importar.');
   const batch='b'+Date.now();
+  const valor=(v,m)=>v.toFixed(2).replace('.',',')+' '+(swEmEuros(m)?'€':m);
   rows.forEach(r=>{
+    const notas=[];
+    if(!swEmEuros(r.moeda)||r.parteFora)notas.push('No Splitwise: '+valor(r.custo,r.moeda)+'.');
+    if(r.parteFora)notas.push('A parte de quem não é dono ('+valor(r.parteFora,r.moeda)+') ficou de fora.');
     db.transactions.push(normTx({kind:'expense',label:r.label,amount:r.amount,date:r.date,propertyId:pid,category:r.category,sub:r.sub,batch,src:'splitwise',swKey:r.swKey,
-      notes:swEmEuros(r.moeda)?'':'No Splitwise: '+r.custo.toFixed(2).replace('.',',')+' '+r.moeda+'.'}));
+      notes:notas.join(' ')}));
   });
   const dup=prep.linhas.filter(l=>l.tipo==='repetida').length;
   save();closeModal();render();

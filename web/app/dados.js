@@ -427,7 +427,7 @@ function normTarefas(t){
    Os campos fiscais (o que o Anexo F e o Modelo 2 pedem por imóvel): distrito, código da
    freguesia (seis caracteres da caderneta ou da nota do IMI, que podem acabar em letras,
    em maiúsculas — D136), tipo de prédio (U/R), tipologia,
-   VPT e data de aquisição. O vpt das versões antigas deixou de ser apagado — é o mesmo valor,
+   VPT e data de aquisição (purchaseDate: uma data que existe, dataExiste — N104). O vpt das versões antigas deixou de ser apagado — é o mesmo valor,
    e o rateio dos gastos num imóvel arrendado por partes faz-se por ele.
    As despesas fixas do imóvel, que criam planeados sozinhas (planeados.js:syncPropRecs):
    imi (€/ano), condominio (€/mês), seguro (€/ano) e seguroMes (1–12; 0 é o mês corrente
@@ -476,7 +476,7 @@ function normProp(p){
   o.tipoPredio=(o.tipoPredio==='U'||o.tipoPredio==='R')?o.tipoPredio:'';
   o.tipologia=/^T\d$/.test(String(o.tipologia||''))?String(o.tipologia):'';
   o.vpt=Math.max(0,Number(o.vpt)||0);
-  o.purchaseDate=/^\d{4}-\d{2}-\d{2}$/.test(String(o.purchaseDate||''))?String(o.purchaseDate):'';
+  o.purchaseDate=dataExiste(o.purchaseDate)?o.purchaseDate:'';
   o.rooms=(o.rooms||[]).map(r=>{const q=typeof r==='string'?{id:uid(),name:r}:Object.assign({id:uid(),name:''},r);q.id=idSeguro(q.id);return q});
   o.photos=(o.photos||[]).map(normFile);
   /* as quotas são por dono: as chaves passam pela mesma troca dos ownerIds */
@@ -547,9 +547,10 @@ function normForaDaApp(v){
   return out.reduce((s,x)=>s+Math.round(x.quota*100),0)<10000?out:null;
 }
 /* O histórico das quotas de uma casa (D29): cada entrada é o que valeu até esse dia,
-   inclusive — {ate, ownerIds, ownerShares, fora}; o estado de hoje é o da própria
+   inclusive — {ate, ownerIds, ownerShares, fora, nomes?}; o estado de hoje é o da própria
    casa. Uma entrada sem data válida cai; as quotas só dos donos dessa entrada, como no
-   normProp; o fora pelo normForaDaApp. Fica por ordem de ate e, com duas no mesmo dia,
+   normProp; o fora pelo normForaDaApp; nomes ({id: 'Nome'}, quem saiu no fim desse
+   período, até 80 caracteres) só quando veio. Fica por ordem de ate e, com duas no mesmo dia,
    fica a primeira (a segunda é um estado que não chegou a valer um dia).
    Recebe: l — a lista tal como veio.
    Devolve: um array novo, ordenado por ate. */
@@ -560,7 +561,12 @@ function normQuotasHist(l){
     dias[x.ate]=1;
     const ids=idsSeguros(x.ownerIds),sh0=chavesSeguras(x.ownerShares),sh={};
     Object.keys(sh0).forEach(k=>{const v=Number(sh0[k]);if(ids.indexOf(k)>-1&&typeof sh0[k]!=='boolean'&&isFinite(v)&&v>=0)sh[k]=v});
-    out.push({ate:x.ate,ownerIds:ids,ownerShares:sh,fora:normForaDaApp(x.fora)});
+    const e={ate:x.ate,ownerIds:ids,ownerShares:sh,fora:normForaDaApp(x.fora)};
+    /* os nomes de quem saiu no fim deste período (o servidor escreve-os ao fechar
+       um período por uma saída ou por uma conta apagada — N021); sem eles, sem campo */
+    const nm=x.nomes&&typeof x.nomes==='object'&&!Array.isArray(x.nomes)?chavesSeguras(x.nomes):null;
+    if(nm){const n={};Object.keys(nm).forEach(k=>{const v=typeof nm[k]==='string'?nm[k].replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,80).trim():'';if(k&&v)n[k]=v});e.nomes=n}
+    out.push(e);
   });
   return out.sort((a,b)=>a.ate<b.ate?-1:a.ate>b.ate?1:0);
 }
@@ -572,36 +578,35 @@ function imovelVendido(p,hoje){
   const v=p&&typeof p.vendido==='string'?p.vendido:'';
   return !!v&&v<=(hoje||today());
 }
-/* normaliza o bloco fiscal de um contrato: o estado perante a AT (FISCO_ESTADOS — o vazio
-   é «por indicar»; «naoDeclarado» é uma escolha do senhorio, não um erro da app), o número
-   que a AT atribui ao contrato na entrega do Modelo 2, a finalidade, a data de celebração,
-   se é renovável, as renovações (cada uma com id, início e fim — o quadro 4.2A do Anexo F
-   pede as datas da última) e o motivo da cessação em texto livre (cessacaoMotivo, o
-   antigo: não se migra, mostra-se como nota).
-   A cessação (D02, D09, D10, D14, D39): cessacao = {data, motivo} — o dia em que o
-   contrato acabou mesmo ('' enquanto não acabou) e o código do motivo no quadro 10
-   ('01'…'12'; a lista vive na versão do ano, irsAno(ano).quadro10.motivos). O c.end é
-   sempre o termo estipulado e nunca leva a data da cessação.
-   E o que mexe na taxa: as comunicações da duração já feitas ({'AAAA': 'AAAA-MM-DD'} —
-   desde a marca comunicacoesV=2 a chave é o ano do INÍCIO do período, o contrato
-   inicial ou uma renovação, e não o ano dos rendimentos: comunica-se uma vez por
-   período, D01; a migração das chaves antigas é do normContract, que sabe as datas),
-   se a renda passa os 150 % do limite do concelho (CIRS art. 72.º n.º 23: true, false
-   ou null — por indicar), a renda do contrato anterior no mesmo imóvel (n.º 24: euros
+/* normaliza o bloco fiscal de um contrato: o estado perante a AT (FISCO_ESTADOS — o vazio é «por
+   indicar»; «naoDeclarado» é uma escolha do senhorio, não um erro da app), o número que a AT
+   atribui ao contrato na entrega do Modelo 2, a finalidade, a data de celebração (uma que existe,
+   dataExiste — N104), se é renovável, as renovações (id, início e fim — o quadro 4.2A pede as
+   datas da última; um início que não existe faz cair a renovação, um fim que não existe volta a
+   vazio) e o motivo da cessação em texto livre (cessacaoMotivo, o antigo: mostra-se como nota).
+   A cessação (D02, D09, D10, D14, D39): cessacao = {data, motivo} — o dia em que o contrato
+   acabou mesmo ('' enquanto não acabou) e o código do motivo no quadro 10 ('01'…'12'; a lista
+   vive na versão do ano, irsAno(ano).quadro10.motivos). O c.end é sempre o termo estipulado.
+   E o que mexe na taxa: as comunicações da duração já feitas ({'AAAA': 'AAAA-MM-DD'} — desde a
+   marca comunicacoesV=2 a chave é o ano do INÍCIO do período, o contrato inicial ou uma
+   renovação, e não o ano dos rendimentos: D01; a migração das chaves antigas é do normContract,
+   que sabe as datas), as que a migração deixou por confirmar (comunicacoesPorConfirmar, a mesma
+   forma, com a data antiga marcada no modelo anual depois do prazo — N003; com o dia escrito em
+   comunicacoes, a chave sai; sem nenhuma, sem campo), se a renda passa os 150 % do limite do concelho (CIRS art. 72.º
+   n.º 23: true, false ou null), a renda do contrato anterior no mesmo imóvel (n.º 24: euros
    ≥ 0, 0 é «não se aplica»), a isenção ('', 'paa', 'rsaa', 'pma', 'pmae', 'prerau' —
    EBF 46.º-A, quadro 6H — ou 'al' — EBF 74.º-A, quadro 6F; os detalhes de cada uma
    vivem na versão do ano, irs-AAAA.js:isencoes) e as condições dela: ihru (o dia em
    que o contrato do RSAA foi ao IHRU, D46), nrau3536 (o contrato anterior ao RAU está
    sujeito aos arts. 35.º/36.º do NRAU) e alRegistado2022 (AL registado até 31/12/2022
    e contrato inscrito até 31/12/2024) — D18.
-   O resto que o IRS pergunta ao contrato: empresaHabitacao (inquilino pessoa coletiva:
-   o contrato identifica quem lá mora e proíbe a sublocação? — D47), consumosIncluidos
-   (a renda inclui água, luz e gás, o campo 30 da Modelo 2 — D26), obrasSemOutroUso
-   (nos 24 meses antes o imóvel esteve só à espera de inquilino? art. 41.º n.º 7 —
-   D28), extrasMensais (móveis, equipamentos e serviços pagos à parte, € por mês, para
-   o limite dos 10 % — D48) e atualizacao2023 ('sim', 'nao' ou '' — a renda de 2023
-   subiu mais de 2 %? — D76). As perguntas de sim/não são true, false ou null (por
-   responder); cada campo com lixo volta à omissão.
+   O resto que o IRS pergunta ao contrato: empresaHabitacao (inquilino pessoa coletiva: o contrato
+   identifica quem lá mora e proíbe a sublocação? — D47), empresaMorador (só a identificação do
+   morador — N034/D16; só quando veio), consumosIncluidos (a renda inclui água, luz e gás, o campo 30 da Modelo 2
+   — D26), obrasSemOutroUso (nos 24 meses antes o imóvel esteve só à espera de inquilino? art.
+   41.º n.º 7 — D28), extrasMensais (móveis, equipamentos e serviços pagos à parte, € por mês, para
+   o limite dos 10 % — D48) e atualizacao2023 ('sim', 'nao' ou '' — a renda de 2023 subiu mais de
+   2 %? — D76). As perguntas de sim/não são true, false ou null; cada campo com lixo volta à omissão.
    Os da ronda 2: a finalidade aceita também o DHD ('dhd', FISCO_FINALIDADES_TODAS —
    quadro 4.3, D120); egf (prédio rústico arrendado a uma entidade de gestão florestal
    reconhecida, EBF art. 59.º-G, quadro 6C — D119) e categoriaB (as rendas tributam-se
@@ -616,19 +621,31 @@ function normFisco(f){
     cessacao:null,comunicacoes:{},comunicacoesV:0,rendaAcimaDoLimite:null,rendaAnterior:0,isencao:'',ihru:'',
     nrau3536:null,alRegistado2022:null,empresaHabitacao:null,consumosIncluidos:false,obrasSemOutroUso:null,
     extrasMensais:0,atualizacao2023:'',egf:false,categoriaB:false,impostoEstrangeiro:{}},f&&typeof f==='object'&&!Array.isArray(f)?f:{});
-  const com={},cIn=o.comunicacoes&&typeof o.comunicacoes==='object'&&!Array.isArray(o.comunicacoes)?o.comunicacoes:{};
-  Object.keys(cIn).forEach(k=>{if(/^\d{4}$/.test(k)&&dataExiste(cIn[k]))com[k]=cIn[k]});
-  o.comunicacoes=com;
+  /* {'AAAA': 'AAAA-MM-DD'}: só chaves de quatro algarismos e datas que existem */
+  const porAno=v=>{const r={},x=v&&typeof v==='object'&&!Array.isArray(v)?v:{};
+    Object.keys(x).forEach(k=>{if(/^\d{4}$/.test(k)&&dataExiste(x[k]))r[k]=x[k]});return r};
+  o.comunicacoes=porAno(o.comunicacoes);
   o.comunicacoesV=o.comunicacoesV===2?2:0;
+  /* a data escrita ganha: com o dia da comunicação, a pergunta já está respondida.
+     Só existe com uma pergunta por responder: os contratos de sempre não mudam de forma */
+  const pc=porAno(o.comunicacoesPorConfirmar);
+  Object.keys(o.comunicacoes).forEach(k=>{delete pc[k]});
+  if(Object.keys(pc).length)o.comunicacoesPorConfirmar=pc;else delete o.comunicacoesPorConfirmar;
   o.rendaAcimaDoLimite=simNaoNulo(o.rendaAcimaDoLimite);
   const ra=Number(o.rendaAnterior);o.rendaAnterior=isFinite(ra)&&ra>0?ra:0;
   if(['','paa','rsaa','pma','pmae','prerau','al'].indexOf(o.isencao)<0)o.isencao='';
   if(FISCO_ESTADOS.indexOf(o.estado)<0)o.estado='';
   if(!FISCO_FINALIDADES_TODAS.some(x=>x[0]===o.finalidade))o.finalidade='';
   o.numero=String(o.numero||'').trim();
-  o.celebracao=/^\d{4}-\d{2}-\d{2}$/.test(String(o.celebracao||''))?String(o.celebracao):'';
+  o.celebracao=dataExiste(o.celebracao)?o.celebracao:'';
   o.renovavel=simNaoNulo(o.renovavel);
-  o.renovacoes=(Array.isArray(o.renovacoes)?o.renovacoes:[]).map(r=>{const q=Object.assign({id:uid(),inicio:'',fim:''},r||{});q.id=idSeguro(q.id);return q});
+  /* uma renovação é o início dela: um que não existe (2026-02-30, «lixo») cai, e
+     um fim que não existe volta a vazio (por indicar). O início vazio fica aqui —
+     é a linha que o formulário acabou de adicionar, antes de se escrever a data —
+     e cai no normContract (um contrato guardado não tem renovações sem início) */
+  o.renovacoes=(Array.isArray(o.renovacoes)?o.renovacoes:[])
+    .filter(r=>r&&typeof r==='object'&&!Array.isArray(r)&&(r.inicio==null||r.inicio===''||dataExiste(r.inicio)))
+    .map(r=>{const q=Object.assign({id:uid(),inicio:'',fim:''},r);q.id=idSeguro(q.id);if(!dataExiste(q.inicio))q.inicio='';if(!dataExiste(q.fim))q.fim='';return q});
   o.cessacaoMotivo=String(o.cessacaoMotivo||'');
   const ces=o.cessacao&&typeof o.cessacao==='object'&&!Array.isArray(o.cessacao)?o.cessacao:{};
   o.cessacao={data:dataExiste(ces.data)?ces.data:'',motivo:/^(0[1-9]|1[0-2])$/.test(String(ces.motivo||''))?String(ces.motivo):''};
@@ -636,6 +653,7 @@ function normFisco(f){
   o.nrau3536=simNaoNulo(o.nrau3536);
   o.alRegistado2022=simNaoNulo(o.alRegistado2022);
   o.empresaHabitacao=simNaoNulo(o.empresaHabitacao);
+  if(o.empresaMorador!==undefined)o.empresaMorador=simNaoNulo(o.empresaMorador);
   o.consumosIncluidos=o.consumosIncluidos===true;
   o.obrasSemOutroUso=simNaoNulo(o.obrasSemOutroUso);
   const ex=typeof o.extrasMensais==='boolean'?NaN:Number(o.extrasMensais);
@@ -659,8 +677,17 @@ function normFisco(f){
    adivinha: fica por migrar até o contrato o ter. Não chama o irs.js (carrega depois
    deste ficheiro). Idempotente e determinística: dois aparelhos migram igual, e uma
    chave já no sentido novo (o ano do início de um período) fica onde está.
+   A marca antiga dizia «comuniquei as rendas de AAAA» e não quando se comunicou a
+   duração do período (N003): só uma data até ao prazo do período (o 15 de fevereiro
+   do ano a seguir ao início, como o irs.js:irsComunicacaoDoAno) passa a ser o dia da
+   comunicação. Uma depois do prazo não prova que se comunicou tarde — a duração pode
+   ter sido comunicada a tempo, antes de a pessoa usar a app —, e fica por confirmar
+   (fisco.comunicacoesPorConfirmar[chave] = a data antiga, a mais antiga): a
+   Declaração pergunta o dia, em vez de responder NÃO no 4.2A. Com uma data a tempo
+   no mesmo período, essa ganha e não há pergunta.
    Recebe: o — o contrato, já com o bloco pelo normFisco.
-   Devolve: nada — muda o.fisco.comunicacoes e o.fisco.comunicacoesV. */
+   Devolve: nada — muda o.fisco.comunicacoes, o.fisco.comunicacoesPorConfirmar e
+   o.fisco.comunicacoesV. */
 function migrarComunicacoes(o){
   const f=o.fisco;
   if(f.comunicacoesV===2)return;
@@ -668,22 +695,44 @@ function migrarComunicacoes(o){
   if(!chaves.length){f.comunicacoesV=2;return}
   if(!dataExiste(o.start))return;
   const inicios=[o.start].concat(f.renovacoes.map(r=>r.inicio).filter(d=>dataExiste(d)&&d>o.start)).sort();
-  const novo={};
+  const novo={},porConfirmar=Object.assign({},f.comunicacoesPorConfirmar);
   chaves.forEach(y=>{
     const ate=y+'-12-31',dentro=inicios.filter(d=>d<=ate);
     if(!dentro.length)return;
-    const k=dentro[dentro.length-1].slice(0,4),d=f.comunicacoes[y];
-    if(!novo[k]||d<novo[k])novo[k]=d;
+    const k=dentro[dentro.length-1].slice(0,4),d=f.comunicacoes[y],prazo=(Number(k)+1)+'-02-15';
+    const alvo=d<=prazo?novo:porConfirmar;
+    if(!alvo[k]||d<alvo[k])alvo[k]=d;
   });
+  Object.keys(novo).forEach(k=>{delete porConfirmar[k]});
   f.comunicacoes=novo;f.comunicacoesV=2;
+  if(Object.keys(porConfirmar).length)f.comunicacoesPorConfirmar=porConfirmar;else delete f.comunicacoesPorConfirmar;
+}
+/* Responde à pergunta de uma comunicação por confirmar (N003), ou grava o dia de
+   uma comunicação: com o dia, fica feita nesse dia; sem ele («não comuniquei» ou
+   «não sei»), a pergunta sai e o período fica por comunicar (no 4.2A, NÃO). Não
+   grava: quem chama faz o save().
+   Recebe: c — o contrato; chave — o ano do início do período ('AAAA', a chave das
+   comunicacoes); dia — 'AAAA-MM-DD', ou '' para tirar só a pergunta.
+   Devolve: true quando mudou o contrato; false com uma chave ou um dia que não
+   servem. */
+function resolverComunicacao(c,chave,dia){
+  const k=String(chave==null?'':chave),d=dia==null?'':String(dia);
+  if(!c||!/^\d{4}$/.test(k)||(d&&!dataExiste(d)))return false;
+  const f=normFisco(c.fisco),com=Object.assign({},f.comunicacoes),pc=Object.assign({},f.comunicacoesPorConfirmar);
+  if(d)com[k]=d;
+  delete pc[k];
+  /* a chave é já a do período (como o contrato.js grava o dia): a marca vai com ela */
+  c.fisco=normFisco(Object.assign({},f,{comunicacoes:com,comunicacoesPorConfirmar:pc,comunicacoesV:2}));
+  return true;
 }
 /* normaliza um contrato: omissões preenchidas; itens do inventário e chaves ganham id próprio;
    as tarefas (tarefas.js) passam pelo normTarefas;
    o bloco fiscal passa por normFisco (um contrato antigo ganha-o vazio: «por indicar»),
    e o que precisa das datas do contrato faz-se aqui: uma renovação escrita no bloco
    com o fim depois do termo leva o termo (c.end) com ela, como o «Renovar…» faz (D42 —
-   só num contrato com termo; um sem termo não ganha um), e as comunicações antigas
-   migram para a chave do período (migrarComunicacoes, D01).
+   só num contrato com termo; um sem termo não ganha um), as renovações sem início que
+   exista caem (N104), e as comunicações antigas migram para a chave do período
+   (migrarComunicacoes, D01 — as de depois do prazo ficam por confirmar, N003).
    encargosInquilino são os encargos do imóvel que o contrato põe a cargo do inquilino
    (o Q13): ids de ENCARGOS_DO_INQUILINO, sem repetidos e pela ordem dela ([] sem nenhum).
    Recebe: c — o contrato em bruto (objeto parcial, ou nada).
@@ -697,6 +746,9 @@ function normContract(c){
   o.tenantIds=idsSeguros(o.tenantIds);o.photoIds=idsSeguros(o.photoIds);
   o.ownerContactId=idSeguro(o.ownerContactId);o.tenantContactId=idSeguro(o.tenantContactId);
   o.fisco=normFisco(o.fisco);
+  /* uma renovação sem início que exista não é renovação (N104): a linha por
+     preencher do formulário não chega a um contrato guardado */
+  o.fisco.renovacoes=o.fisco.renovacoes.filter(r=>dataExiste(r.inicio));
   /* só uma renovação inteira (início e fim que existem, por ordem): uma sem início o
      motor não a conta (irs.js:irsPeriodos), e o termo levado por ela alongava o período
      inicial — outro escalão */
@@ -762,13 +814,18 @@ function normSwIgnoradas(l){
    O que o IRS pede a um movimento: numa renda, retencao (o que o inquilino reteve na fonte —
    o amount é o que entrou, e a renda ilíquida é a soma), periodo (o mês 'AAAA-MM' a que a
    renda respeita) e recibo (o recibo eletrónico já foi emitido); numa despesa, irsCol (a
-   coluna do Anexo F escolhida à mão, um id de IRS_COLUNAS; vazio = pela categoria) e
+   coluna do Anexo F escrita no movimento, um id de IRS_COLUNAS, ou 'confirmar' — a que
+   apagar uma subcategoria deixa escrita quando ela a deixava a confirmar, N043; vazio =
+   pela categoria) e
    notaPropria (só numa despesa: «é a minha nota» do IMI de uma casa com mais de um
    dono — conta inteira para quem pagou, sem quota, D32; false em tudo o resto).
    parcial (só numa renda: a resposta «pagamento parcial» à pergunta da renda abaixo
    da do planeado — o resto fica em dívida, e cala o aviso da renda abaixo, D115) e
    swKey (a chave da linha do Splitwise de onde o movimento veio, normSwKey: escreve-a
-   só a importação, e editar o movimento não a muda — D127; '' nos outros).
+   só a importação, e editar o movimento não a muda — D127; '' nos outros). O periodo
+   só com um mês que existe (01 a 12). catIrs é a marca do IRS (N006, normCatIrs):
+   {id, cat, sub} — o id de CATS_DO_IRS que a categoria tinha quando se gravou, com os
+   nomes de então (carimbarCatIrs); só existe num movimento que a tem.
    Onde o movimento vive: propertyId (um imóvel), ou — só num molde (planeado ou
    modelo) e nos antigos — groupId (um grupo) ou todos (todos os meus imóveis à
    data, só numa receita ou despesa), com o psplit a dizer como se divide; um e
@@ -794,9 +851,12 @@ const normTx=t=>{const novo=!t||t.id==null||t.id==='';
   const criado=typeof o.criado==='number'||typeof o.criado==='string'?Number(o.criado):NaN;
   if(isFinite(criado)&&criado>0)o.criado=criado;else if(novo)o.criado=Date.now();else delete o.criado;
   o.retencao=Math.max(0,Number(o.retencao)||0);
-  o.periodo=/^\d{4}-\d{2}$/.test(String(o.periodo||''))?String(o.periodo):'';
+  o.periodo=/^\d{4}-(0[1-9]|1[0-2])$/.test(String(o.periodo||''))?String(o.periodo):'';
   o.recibo=!!o.recibo;
-  if(!IRS_COLUNAS.some(c=>c[0]===o.irsCol))o.irsCol='';
+  if(o.irsCol!=='confirmar'&&!IRS_COLUNAS.some(c=>c[0]===o.irsCol))o.irsCol='';
+  /* a marca do IRS só existe num movimento que a tem (como o criado): sem ela não
+     ganha campo nenhum, e os registos de antes não mudam nem sobem */
+  if(o.catIrs!==undefined){const ci=normCatIrs(o.catIrs,o.kind);if(ci)o.catIrs=ci;else delete o.catIrs}
   o.notaPropria=o.kind==='expense'&&o.notaPropria===true;
   o.parcial=o.kind==='income'&&o.parcial===true;
   o.swKey=normSwKey(o.swKey);
@@ -953,15 +1013,158 @@ function catIrsId(tk,cat,sub){
     return typeof id==='string'&&CATS_DO_IRS.indexOf(id)>-1&&(id.indexOf('/')>-1)===!!s?id:'';
   }catch(e){return ''}
 }
+/* A árvore de um tipo de movimento, como o catIrsId a aceita: as receitas leem o
+   catsIn, as despesas o cats; os outros tipos não têm categorias do IRS.
+   Recebe: tk — 'catsIn', 'cats', ou o kind de um movimento ('income', 'expense').
+   Devolve: 'catsIn', 'cats' ou ''. */
+const arvoreDoIrs=tk=>tk==='income'||tk==='catsIn'?'catsIn':tk==='expense'||tk==='cats'?'cats':'';
+/* Os nomes que esta conta dá a um id do IRS (o contrário do catIrsId): a
+   categoria, e a subcategoria num id de subcategoria, pelo settings.catIds — só
+   se ainda existem na árvore. É o que se escreve num movimento ou num planeado
+   novo para ele cair na categoria certa, mesmo com o nome mudado (o molde da
+   renda, os planeados da ficha do imóvel).
+   Recebe: tk — 'catsIn', 'cats', ou o kind ('income', 'expense'); id — o id
+   ('rendas', 'rendas/renda-mensal', 'impostos/imi', 'devolucoes/caucao'…).
+   Devolve: {category, sub} (sub '' num id de categoria), ou null quando a conta
+   não o tem. */
+function catDoIdIrs(tk,id){
+  try{
+    const t=arvoreDoIrs(tk),st=db&&db.settings;
+    if(!t||!st||typeof id!=='string'||CATS_DO_IRS.indexOf(id)<0)return null;
+    const ids=st.catIds&&st.catIds[t],chaves=chavesDaArvore(st[t]);
+    if(!ids||typeof ids!=='object')return null;
+    const k=Object.keys(ids).find(x=>ids[x]===id&&chaves.has(x));
+    if(!k)return null;
+    const sitio=chaves.get(k);
+    return catIrsId(t,sitio.cat,sitio.sub)===id?{category:sitio.cat,sub:sitio.sub}:null;
+  }catch(e){return null}
+}
+/* O id do IRS que um nome tem nas árvores de origem (CATS_IRS_ORIGEM): é como
+   qualquer conta lê um nome que não é da árvore dela — as «Rendas» de uma conta
+   são as rendas da outra que lhes mudou o nome. A subcategoria só vale dentro
+   da categoria certa.
+   Recebe: tk — 'catsIn' ou 'cats'; cat — o nome da categoria; sub — o da
+   subcategoria ('' sem ela).
+   Devolve: o id mais preciso (o da subcategoria, senão o da categoria), ou ''. */
+function catIrsIdDeOrigem(tk,cat,sub){
+  const o=CATS_IRS_ORIGEM[tk]||{},tem=k=>Object.prototype.hasOwnProperty.call(o,k)?o[k]:'';
+  const c=tem(cat),s=sub?tem(cat+' / '+sub):'';
+  return s||c;
+}
+/* A marca do IRS de um movimento (t.catIrs, N006): o id que a categoria tinha
+   quando se gravou, com os nomes de então. Só vale enquanto a categoria e a
+   subcategoria do movimento forem esses nomes: mudar a categoria (aqui, noutro
+   aparelho ou numa versão antiga da app) desliga-a sozinha, sem ninguém a ter de
+   apagar.
+   Recebe: t — o movimento.
+   Devolve: a marca {id, cat, sub} quando vale, ou null. */
+function catIrsMarca(t){
+  const m=t&&t.catIrs,tk=t&&arvoreDoIrs(t.kind);
+  if(!tk||!m||typeof m!=='object'||Array.isArray(m))return null;
+  const cat=String(t.category==null?'':t.category).trim(),sub=String(t.sub==null?'':t.sub).trim();
+  return m.cat===cat&&m.sub===sub&&normCatIrs(m,t.kind)?m:null;
+}
+/* A marca do IRS de um movimento, limpa (normTx): {id, cat, sub} com o id de
+   CATS_DO_IRS da árvore do tipo (os das receitas numa receita, os das despesas
+   numa despesa), o nome da categoria (não vazio) e o da subcategoria ('' sem
+   ela; um id de subcategoria pede-a). Não confere os nomes com os do movimento:
+   uma marca desligada fica guardada e não conta (catIrsMarca).
+   Recebe: v — a marca tal como veio; kind — o tipo do movimento.
+   Devolve: um objeto novo, ou null quando não serve. */
+function normCatIrs(v,kind){
+  const tk=arvoreDoIrs(kind);
+  if(!tk||!v||typeof v!=='object'||Array.isArray(v))return null;
+  const id=v.id,cat=typeof v.cat==='string'?v.cat.trim():'',sub=typeof v.sub==='string'?v.sub.trim():'';
+  if(typeof id!=='string'||Object.values(CATS_IRS_ORIGEM[tk]).indexOf(id)<0||!cat||cat.length>200||sub.length>200)return null;
+  if(id.indexOf('/')>-1&&!sub)return null;
+  return {id:id,cat:cat,sub:sub};
+}
+/* O id do IRS de um movimento (N006): a categoria que o IRS lê não pode depender
+   da árvore de quem lê. Numa casa partilhada, os movimentos levam os nomes de
+   quem os gravou; se essa conta mudou o nome às Rendas, a outra não o tem na
+   árvore. Por esta ordem: a marca do movimento (catIrsMarca), a árvore desta
+   conta (catIrsId — uma subcategoria que não está nela lê-se pelo nome de
+   origem dentro da categoria), e o nome de origem (catIrsIdDeOrigem) quando a
+   categoria não é desta árvore. É o que o irsReceitaDe, o irsColunaDe, o
+   isPassivo e o ehRenda leem, e quem lê o id de um movimento usa isto em vez do
+   catIrsId(tk, t.category, t.sub). Pura e nunca lança.
+   Recebe: t — o movimento (ou o tx de um planeado); daSub (opcional) — true para
+   o id da subcategoria.
+   Devolve: o id da categoria ('rendas', 'impostos'…), ou o da subcategoria
+   ('rendas/caucao', 'impostos/imi'…) com daSub; '' quando não tem. */
+function txCatIrsId(t,daSub){
+  try{
+    const tk=t&&arvoreDoIrs(t.kind);
+    if(!tk)return '';
+    const cat=String(t.category==null?'':t.category).trim(),sub=String(t.sub==null?'':t.sub).trim();
+    if(!cat)return '';
+    let id='';
+    const m=catIrsMarca(t);
+    if(m)id=m.id;
+    else{
+      const arv=db&&db.settings&&db.settings[tk];
+      if(arv&&typeof arv==='object'&&Object.prototype.hasOwnProperty.call(arv,cat)){
+        const c=catIrsId(tk,cat);
+        let s='';
+        if(sub&&Array.isArray(arv[cat])&&arv[cat].indexOf(sub)>-1)s=catIrsId(tk,cat,sub);
+        else if(sub&&c){
+          /* a subcategoria de origem dentro da categoria com o id dela, mesmo com o
+             nome da categoria mudado aqui («Caução» de outra conta, quando aqui se
+             chama «Depósito») */
+          const o=CATS_IRS_ORIGEM[tk],k=Object.keys(o).find(x=>o[x]===c);
+          const so=k?catIrsIdDeOrigem(tk,k,sub):'';
+          s=so.indexOf(c+'/')===0?so:'';
+        }
+        id=s||c;
+      }else id=catIrsIdDeOrigem(tk,cat,sub);
+    }
+    if(daSub)return id.indexOf('/')>-1?id:'';
+    return id.split('/')[0];
+  }catch(e){return ''}
+}
+/* Carimba nos movimentos, nos planeados e nos modelos o id do IRS da categoria
+   (t.catIrs, N006) quando o nome não chega para outra conta o ler: o nome é desta
+   árvore, tem id, e não é o de origem (catIrsIdDeOrigem dá outro id). Quem nunca
+   mudou um nome não ganha marca nenhuma — nada muda nem sobe. Tira as marcas que
+   já não valem (a categoria mudou: catIrsMarca) e deixa as que valem: a de outra
+   conta, com um nome que aqui não existe ou que aqui é outra coisa, é a vontade
+   de quem gravou. Corre em cada save(), por isso cobre todos os caminhos de
+   gravar (o formulário, confirmar um planeado, registar as rendas, mudar o
+   nome). Idempotente.
+   Recebe: d — a base (usa d.transactions, d.recurring[].tx e d.templates[].tx; as
+   árvores e o catIds são os da db).
+   Devolve: nada — muda os movimentos no próprio objeto. */
+function carimbarCatIrs(d){
+  try{
+    const st=db&&db.settings;
+    if(!d||!st)return;
+    const um=t=>{
+      const tk=t&&arvoreDoIrs(t.kind);
+      if(!tk)return;
+      if(t.catIrs!==undefined&&!catIrsMarca(t))delete t.catIrs;
+      if(t.catIrs)return;
+      const cat=String(t.category==null?'':t.category).trim(),sub=String(t.sub==null?'':t.sub).trim(),arv=st[tk];
+      if(!cat||!arv||typeof arv!=='object'||!Object.prototype.hasOwnProperty.call(arv,cat))return;
+      if(sub&&!(Array.isArray(arv[cat])&&arv[cat].indexOf(sub)>-1))return;
+      const id=(sub&&catIrsId(tk,cat,sub))||catIrsId(tk,cat);
+      if(!id||catIrsIdDeOrigem(tk,cat,sub)===id)return;
+      t.catIrs={id:id,cat:cat,sub:sub};
+    };
+    (Array.isArray(d.transactions)?d.transactions:[]).forEach(um);
+    (Array.isArray(d.recurring)?d.recurring:[]).forEach(r=>{if(r)um(r.tx)});
+    (Array.isArray(d.templates)?d.templates:[]).forEach(x=>{if(x)um(x.tx)});
+  }catch(e){}
+}
 /* O bloco irs das definições, sempre completo: a tributação conjunta e a
    dispensa dos recibos como verdadeiro/falso, a letra de cada proprietário só
    'A' ou 'B' (a chave pelo idSeguro), e os outros rendimentos só com chave de
    ano de quatro dígitos e valor ≥ 0. O que mais lá vier fica.
    A situação de cada ano dos rendimentos (porAno, D30/D71/D91): {'AAAA': {conjunta,
-   conjugeId, minhaLetra, dispensaRecibos, aimi:{total, valorTributavel}}} — o cônjuge
-   (um id seguro, '' sem cônjuge) separado da minha letra no Rosto ('A' ou 'B'; o
-   resto vale 'A'), e os dois números da demonstração do AIMI (€ ≥ 0, ou null por
-   indicar). Só chaves de ano com quatro dígitos e entradas que são objetos; o que
+   conjugeId, minhaLetra, dispensaRecibos, bensComuns, aimi:{total, valorTributavel}}} —
+   o cônjuge (um id seguro, '' sem cônjuge) separado da minha letra no Rosto ('A' ou
+   'B'; o resto vale 'A'), os bens comuns do casal (bensComuns: na conjunta, as casas
+   são do casal e a linha vai inteira ao titular certo — D5, N020; só true liga, o resto
+   é false) e os dois números da demonstração do AIMI (€ ≥ 0, ou null por indicar). Só chaves de ano com quatro dígitos e entradas que são objetos; o que
    mais vier numa entrada fica. Os campos de topo continuam a valer para os anos sem
    entrada (irs-papeis.js:irsSituacao).
    Recebe: x — o bloco em bruto (objeto parcial, ou nada).
@@ -979,7 +1182,7 @@ function normIrsDefs(x){
     const cj=e.conjugeId,a=obj(e.aimi);
     porAno[k]=Object.assign({},e,{conjunta:e.conjunta===true,
       conjugeId:(typeof cj==='string'||typeof cj==='number')&&cj!==''?String(idSeguro(String(cj))):'',
-      minhaLetra:e.minhaLetra==='B'?'B':'A',dispensaRecibos:e.dispensaRecibos===true,
+      minhaLetra:e.minhaLetra==='B'?'B':'A',dispensaRecibos:e.dispensaRecibos===true,bensComuns:e.bensComuns===true,
       aimi:{total:euros(a.total),valorTributavel:euros(a.valorTributavel)}});
   });
   return Object.assign({},x,{conjunta:x.conjunta===true,titulares:tit,dispensaRecibos:x.dispensaRecibos===true,outrosRendimentos:outros,porAno:porAno});
@@ -992,8 +1195,9 @@ const normSettle=x=>{const o=Object.assign({id:uid(),date:'',propertyId:null,fro
 /* modelo: um movimento guardado para repetir à mão; recorrência: repete-se sozinho e pede confirmação.
    propRec e propRecN são a origem de um planeado automático da ficha do imóvel (o IMI e a sua
    prestação, o condomínio, o seguro — planeados.js:syncPropRecs), como o loanId e o contractId
-   são a das prestações e das rendas. */
-const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','todos','psplit','contractId','loanId','paidBy','toId','creditor','category','sub','tags','notes','split','interest','stamp','principal','fee','payType','retencao','irsCol','notaPropria','propRec','propRecN'];
+   são a das prestações e das rendas. catIrs (a marca do IRS, normTx) vai do molde para o
+   movimento confirmado. */
+const TX_TPL_KEYS=['kind','label','amount','propertyId','groupId','todos','psplit','contractId','loanId','paidBy','toId','creditor','category','sub','tags','notes','split','interest','stamp','principal','fee','payType','retencao','irsCol','notaPropria','propRec','propRecN','catIrs'];
 /* cópia profunda de um movimento só com os campos que fazem sentido repetir (TX_TPL_KEYS):
    é o que os modelos e as recorrências guardam — data e id ficam de fora de propósito
    Recebe: t — o movimento a copiar.
@@ -1098,9 +1302,10 @@ function normalizarBase(d){
   if(typeof acertarCreditos==='function')acertarCreditos(out);
   return out;
 }
-/* grava a base inteira no aparelho e reagenda os lembretes no telemóvel
+/* grava a base inteira no aparelho e reagenda os lembretes no telemóvel; antes
+   carimba o id do IRS nos movimentos que dele precisam (carimbarCatIrs, N006)
    Devolve: nada — grava db no localStorage e chama scheduleReminders. */
-function save(){rawSet(KEY,JSON.stringify(db));scheduleReminders()}
+function save(){carimbarCatIrs(db);rawSet(KEY,JSON.stringify(db));scheduleReminders()}
 /* lembretes no telemovel: quando um recorrente entra para confirmar e quando passa a atraso */
 let _remT=null;
 /* reagenda as notificações locais via ponte Android (fora da app instalada não faz nada): espera

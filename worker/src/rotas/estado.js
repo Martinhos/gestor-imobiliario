@@ -43,6 +43,8 @@ import {
   servicosDesligados, kindsDesligados, userKindsDesligados, casaDesligada, colabDesligado,
 } from '../lib/servicos.js';
 import { recordReport } from '../lib/relatos.js';
+import { json } from '../lib/http.js';
+import { versaoRecusada } from '../lib/escritas.js';
 import { sha256hex } from '../auth.js';
 import {
   listarCargos, listarColaboradores, listarConvites, estadoDaLigacao, pedidosDePartilha,
@@ -60,6 +62,32 @@ const DIAS_DOS_AVISOS = 90;
 function seloIgual(cabecalho, selo) {
   if (!cabecalho) return false;
   return cabecalho.split(',').some((s) => s.trim().replace(/^W\//, '') === selo);
+}
+
+/* A versão mínima também no servidor. A app só se trancava a si própria, ao
+   ler o /versao.json no arranque: uma versão velha aberta sem rede (ou dias
+   em segundo plano) escrevia com o significado antigo dos campos quando a
+   rede voltava — uma marca da comunicação de um ano dos rendimentos num
+   contrato já migrado lia-se depois como a de um período. As rotas com
+   sessão correm por ordem (api.js:COM_SESSAO) e esta vem antes do rotasSync:
+   um POST /api/sync de uma versão abaixo da mínima (X-Versao, lib/escritas.js:
+   versaoRecusada) é recusado aqui com 426, antes do travão das gravações e
+   sem gravar nada, com a mínima no corpo para a app trancar
+   (web/cloud/nucleo.js:trancarPelaVersao). Sem o cabeçalho passa como
+   sempre (as versões de antes dele).
+   Recebe: c — o contexto do pedido (env, request, path, method).
+   Devolve: promessa da Response 426, ou undefined para seguir. */
+async function recusaPelaVersao(c) {
+  if (c.path !== '/api/sync' || c.method !== 'POST') return undefined;
+  const velha = await versaoRecusada(c.env, c.request);
+  if (!velha) return undefined;
+  return json({
+    error: 'Esta versão da app (' + velha.versao + ') já não pode guardar na conta: a mais antiga aceite é a ' + velha.minima +
+      '. Atualiza a app — o que registaste fica neste aparelho e sobe a seguir.',
+    erro: 'versao_minima',
+    versao: velha.versao,
+    minima: velha.minima,
+  }, 426);
 }
 
 /* Rota do GET /api/state: junta numa só resposta tudo o que este utilizador
@@ -84,9 +112,14 @@ function seloIgual(cabecalho, selo) {
    houses, records, userRecords, connections, people, roles, collaborators,
    invites, shareLink, shareRequests, sharedGroups, sharedGroupRequests,
    departures, transfers, servicos) e o ETag, ou o
-   304 sem corpo, no GET /api/state; nada (undefined) noutros caminhos. */
+   304 sem corpo, no GET /api/state; o 426 de uma escrita de uma versão abaixo
+   da mínima no POST /api/sync (recusaPelaVersao); nada (undefined) noutros
+   caminhos — o resto do POST /api/sync segue para o rotasSync. */
 export async function rotasEstado(c) {
   const { env, request, ctx, path, method, me } = c;
+
+  const velha = await recusaPelaVersao(c);
+  if (velha) return velha;
 
   // Estado completo visível por este utilizador: casas próprias + partilhadas
   // comigo, registos dessas casas, dados globais e conexões.

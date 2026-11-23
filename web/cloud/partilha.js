@@ -620,9 +620,10 @@ function quotasDe(p, peer) {
 /* O bloco das quotas em campos, debaixo de uma casa no modal das partilhas,
    com as linhas do canvas (M-Quotas): «Pessoa» e «Quota» por cima, e uma
    linha por comproprietário mais o par — o nome à esquerda, o campo estreito
-   com o % à direita. Serve a casa que se vai partilhar (a começar em partes
-   iguais) e a nova divisão proposta para uma casa já partilhada (a começar
-   na divisão atual), cada uma com a sua frase por baixo.
+   com o % à direita. Serve a casa que se vai partilhar (a começar na divisão
+   real depois da partilha: as percentagens escritas com o par, partes iguais
+   só sem elas — N017) e a nova divisão proposta para uma casa já partilhada
+   (a começar na divisão atual), cada uma com a sua frase por baixo.
    Recebe: hid — o id da casa; peer — o outro utilizador {id, name, email};
    valores (opcional) — {userId: texto} escrito antes, ou a divisão de
    partida; nota (opcional) — a frase por baixo (por omissão, a da casa
@@ -631,15 +632,71 @@ function quotasDe(p, peer) {
 function quotasHtml(hid, peer, valores, nota) {
   var p = (db.properties || []).find(function (x) { return x.id === hid; });
   var quem = quotasDe(p, peer);
-  var igual = dec(Math.round(1000 / quem.length) / 10);
+  // a divisão real depois da partilha (N017): as percentagens escritas, com o
+  // par incluído (sem elas, partes iguais) — nunca partes iguais por omissão
+  var real = quotasEntre(quem.map(function (u) { return u.id; }), (p && p.ownerShares) || {});
   return '<div class="pt-quotas"><div class="pt-quotas-cab small" aria-hidden="true"><span>Pessoa</span><span>Quota</span></div>' + quem.map(function (u) {
-    var v = valores && valores[u.id] != null ? valores[u.id] : igual;
+    var v = valores && valores[u.id] != null ? valores[u.id] : dec(Math.round((real[u.id] || 0) * 1000) / 10);
     return '<label class="pt-quota"><span class="pt-quota-nome">' + esc(u.nome) + '</span>' +
       '<input id="cw_q_' + hid + '_' + u.id + '" type="text" inputmode="decimal" value="' + esc(v) + '" aria-label="' + esc(u.nome) + ', quota em %" autocomplete="off">' +
       '<span class="pt-pct" aria-hidden="true">%</span></label>';
   }).join('') +
-    '<p class="hint">' + (nota || 'A divisão só entra em vigor depois de o outro confirmar; até lá fica em partes iguais.') + '</p></div>';
+    '<p class="hint">' + (nota || 'A divisão só entra em vigor depois de o outro confirmar.') + '</p></div>';
 }
+
+/* As escolhas de «… já era dono deste imóvel?» no modal das partilhas, numa
+   casa que se vai partilhar (N018): já era — as quotas valem também para
+   trás —, ou é dono desde um dia. */
+var PT_JA_ERA = [{ v: 'sempre', label: 'Sim, desde sempre' }, { v: 'dia', label: 'Não, desde um dia' }];
+
+/* Uma casa que se vai partilhar precisa da janela das quotas, e não dos
+   campos do modal: tem percentagens escritas ou donos fora da app, que os
+   campos (entre as contas) não mostram (N017). A janela abre ao guardar,
+   com a divisão real e a pergunta de quem entra (imovel.js:imvPropostaAbrir).
+   Recebe: p — a casa.
+   Devolve: true quando vai pela janela. */
+function partilhaPelaJanela(p) {
+  var fora = p && p.comproprietariosFora;
+  return !!p && (hasShares(p) || (Array.isArray(fora) && fora.length > 0));
+}
+
+/* O bloco de uma casa que se vai partilhar (marcada agora), no modal das
+   partilhas. Com quotas escritas ou donos fora da app, a frase de que a
+   janela das quotas abre ao guardar (partilhaPelaJanela). Sem elas, os
+   campos das quotas a partir da divisão real (quotasHtml), a frase do que a
+   casa conta até o outro confirmar, e «… já era dono deste imóvel?» — desde
+   sempre (por omissão) ou desde um dia, com o dia (N018).
+   Recebe: hid — o id da casa.
+   Devolve: o HTML do bloco (texto). */
+function quotasDaCasaNovaHtml(hid) {
+  var em = CW._partilha;
+  var p = (db.properties || []).find(function (x) { return x.id === hid; });
+  var nome = esc(em.peer.name || em.peer.email || em.peer.id);
+  if (partilhaPelaJanela(p)) {
+    return '<p class="hint">Esta casa já tem quotas escritas' + (Array.isArray(p.comproprietariosFora) && p.comproprietariosFora.length ? ' e donos fora da app' : '') +
+      ': ao guardar, abre-se a janela das quotas com a divisão de agora, para propores a nova e dizeres desde quando ' + nome + ' é dono.</p>';
+  }
+  var quando = em.quando[hid] === 'dia' ? 'dia' : 'sempre', hoje = today();
+  return quotasHtml(hid, em.peer, em.escrito[hid],
+    'A divisão só entra em vigor depois de ' + nome + ' confirmar; até lá, o que já passou conta como antes e, a partir de hoje, em partes iguais.') +
+    '<label>' + nome + ' já era dono deste imóvel?' +
+    sel('cw_qd_' + hid, quando, PT_JA_ERA, function () { CW.shareQuandoMudou(hid); }, 'rascunho') + '</label>' +
+    (quando === 'dia' ? '<label>Desde que dia <span class="req">*</span><input id="cw_qdia_' + hid + '" type="date" value="' + esc(em.dia[hid] || hoje) + '" max="' + hoje + '"></label>' : '') +
+    '<p class="hint">' + (quando === 'dia' ? 'O dia da compra, da doação ou da herança: até à véspera, a casa conta como antes da partilha.'
+      : 'As quotas valem também para trás, como se tivesse entrado na app no dia em que passou a ser dono.') + '</p>';
+}
+
+/* A escolha de «… já era dono deste imóvel?» de uma casa no modal das
+   partilhas mudou: guarda o que está escrito e repinta o bloco (com ou sem o dia).
+   Recebe: hid — o id da casa.
+   Devolve: nada. */
+CW.shareQuandoMudou = function (hid) {
+  var em = CW._partilha;
+  if (!em) return;
+  guardarEscrito(hid);
+  em.quando[hid] = val('cw_qd_' + hid) === 'dia' ? 'dia' : 'sempre';
+  pintarBlocoDaCasa(hid);
+};
 
 /* O que está escrito nos campos das quotas de uma casa no modal das partilhas.
    Recebe: hid — o id da casa; quem — os comproprietários ({id, nome}), como
@@ -665,7 +722,8 @@ function quotasEscritas(hid, quem) {
    cwOwnersBlock). Por baixo, o que se pode fazer: a proposta que é minha (ou
    que já confirmei) diz de quem se espera e cancela-se; a de outro confirma-se
    ou rejeita-se, ali mesmo; sem proposta, «Propor nova divisão» abre os
-   campos (quotasHtml) com a divisão atual, e o Guardar do modal envia-a.
+   campos (quotasHtml) com a divisão atual, e o Guardar do modal envia-a —
+   numa casa com donos fora da app, abre a janela das quotas, que os mostra.
    Recebe: hid — o id da casa.
    Devolve: o HTML (texto), ou '' numa casa que já não está partilhada. */
 function quotasDaCasaHtml(hid) {
@@ -697,6 +755,10 @@ function quotasDaCasaHtml(hid) {
     var falta = parts.filter(function (u) { return (prp.approvals || []).indexOf(u) < 0; }).map(nome);
     pe = '<p class="hint">Nova divisão proposta — à espera de: <b>' + falta.join(', ') + '</b>.</p>' +
       '<div class="pt-botoes"><button type="button" class="btn sm" data-toca="dados" data-click="CW.shareResponder(\'' + j + '\',0)">Cancelar proposta</button></div>';
+  } else if (Array.isArray(p.comproprietariosFora) && p.comproprietariosFora.length) {
+    // com donos fora da app, a divisão faz-se na janela das quotas, que os mostra
+    // (os campos daqui são só entre as contas, N017)
+    pe = '<div class="pt-botoes"><button type="button" class="btn sm" data-toca="camada" data-click="CW.proposeShares(\'' + j + '\')">Propor nova divisão</button></div>';
   } else {
     pe = '<div class="pt-botoes"><button type="button" class="btn sm" data-toca="rascunho" data-click="CW.shareProporAbrir(\'' + j + '\')">Propor nova divisão</button></div>';
   }
@@ -704,8 +766,9 @@ function quotasDaCasaHtml(hid) {
 }
 
 /* Repinta, no modal das partilhas, o bloco debaixo de uma casa: a casa nova
-   marcada leva os campos das quotas (com o que lá estava escrito, se já
-   tinha sido marcada); a já partilhada e marcada, a divisão
+   marcada leva os campos das quotas e a pergunta de desde quando o outro é
+   dono, com o que lá estava escrito, se já tinha sido marcada — ou, com
+   quotas escritas, a frase da janela (quotasDaCasaNovaHtml); a já partilhada e marcada, a divisão
    (quotasDaCasaHtml); a já partilhada e desmarcada, a frase de que o outro
    deixa de a ver; a nova desmarcada, nada. As casas do outro não têm caixa
    e levam sempre a divisão.
@@ -716,7 +779,7 @@ function pintarBlocoDaCasa(hid) {
   if (!em || !bloco) return;
   var caixa = document.getElementById('cw_sh_' + hid);
   var ja = em.antes.indexOf(hid) > -1;
-  if (!caixa || caixa.checked) { bloco.innerHTML = ja || !caixa ? quotasDaCasaHtml(hid) : quotasHtml(hid, em.peer, em.escrito[hid]); return; }
+  if (!caixa || caixa.checked) { bloco.innerHTML = ja || !caixa ? quotasDaCasaHtml(hid) : quotasDaCasaNovaHtml(hid); return; }
   bloco.innerHTML = ja
     ? '<p class="hint pt-sai">Ao guardar, ' + esc(em.peer.name || em.peer.email || em.peer.id) + ' deixa de ver esta casa e de ter quota nela.</p>'
     : '';
@@ -729,7 +792,11 @@ function pintarBlocoDaCasa(hid) {
 function guardarEscrito(hid) {
   var em = CW._partilha;
   var p = (db.properties || []).find(function (x) { return x.id === hid; });
+  // sem campos no ecrã (a casa vai pela janela) não há nada a guardar
+  if (!document.getElementById('cw_q_' + hid + '_' + em.peer.id)) return;
   em.escrito[hid] = quotasEscritas(hid, quotasDe(p, em.peer)).texto;
+  var dia = document.getElementById('cw_qdia_' + hid);
+  if (dia) em.dia[hid] = String(dia.value || '');
 }
 
 /* Ao marcar ou desmarcar uma casa minha no modal das partilhas: a nova
@@ -794,10 +861,12 @@ function divisaoEscrita(p, peer) {
    minhas e as dele) mostra a divisão em vigor, com a proposta por responder
    e o «Propor nova divisão» (quotasDaCasaHtml). Ao guardar valida as quotas
    escritas antes de gravar o que quer que seja, envia a lista à API e segue
-   as propostas (enviarProposta): a das casas novas cuja divisão não seja em
-   partes iguais e a das partilhadas onde se abriu uma nova divisão diferente
-   da atual — sem passar pela fila _shareQueue, que fica para a ficha do
-   imóvel.
+   as propostas (enviarProposta): a de cada casa nova, com a divisão escrita
+   (a partir da real) e desde quando o par é dono (N017, N018 — o servidor
+   fecha o período na entrada, e «desde sempre» tira-o), e a das partilhadas
+   onde se abriu uma nova divisão diferente da atual. As casas novas com
+   quotas escritas ou donos fora da app vão pela janela das quotas, uma de
+   cada vez, depois de guardar (a fila _shareQueue, nextShareProposal).
    Recebe: connId — o id da ligação.
    Devolve: nada — abre o modal; o guardar acontece no onSave. */
 CW.sharesModal = function (connId) {
@@ -808,8 +877,9 @@ CW.sharesModal = function (connId) {
   var myHouses = (db.properties || []).filter(function (p) { return cwMinha(p); });
   var dele = (c.peerShares || []).map(function (id) { return (db.properties || []).find(function (p) { return p.id === id; }); }).filter(Boolean);
   var before = (c.myShares || []).slice();
-  // o que os blocos precisam: o par, as casas que já partilhava, o escrito de cada casa e as divisões abertas
-  CW._partilha = { peer: c.peer, antes: before, escrito: {}, propor: {} };
+  // o que os blocos precisam: o par, as casas que já partilhava, o escrito de
+  // cada casa, as divisões abertas e, nas casas novas, desde quando o par é dono
+  CW._partilha = { peer: c.peer, antes: before, escrito: {}, propor: {}, quando: {}, dia: {} };
   var cartao = function (p, caixa) {
     return '<div class="card u-p-12px-13px">' + (caixa
       ? '<label class="u-d-flex u-g-11px u-ai-center u-cur-pointer">' +
@@ -837,17 +907,31 @@ CW.sharesModal = function (connId) {
     }).map(function (p) { return p.id; });
     var em = CW._partilha;
     // as quotas validam-se todas antes de gravar o que quer que seja
-    var propostas = [];
+    var propostas = [], janelas = [];
     var casas = ids.map(function (id) { return myHouses.find(function (x) { return x.id === id; }); }).concat(dele);
     for (var i = 0; i < casas.length; i++) {
       var p = casas[i], nova = dele.indexOf(p) < 0 && before.indexOf(p.id) < 0;
       if (!nova && !em.propor[p.id]) continue;
+      // a casa nova com quotas escritas ou donos de fora vai pela janela das quotas, depois de guardar (N017)
+      if (nova && partilhaPelaJanela(p)) { janelas.push({ hid: p.id, entrou: [c.peer.id] }); continue; }
       var d = divisaoEscrita(p, c.peer);
       if (d.erro) return toast(d.erro);
+      if (nova) {
+        // a casa nova leva sempre a proposta, com desde quando o par é dono (N018):
+        // «desde sempre» tira o período que o servidor fecha na entrada
+        var desde = 'sempre';
+        if (em.quando[p.id] === 'dia') {
+          var dia = String(val('cw_qdia_' + p.id) || '').slice(0, 10);
+          if (!dataExiste(dia)) return falhaCampo('cw_qdia_' + p.id, 'Escolhe o dia em que ' + (c.peer.name || 'o outro') + ' passou a ser dono.');
+          if (dia > today()) return falhaCampo('cw_qdia_' + p.id, 'O dia não pode ser depois de hoje.');
+          desde = dia;
+        }
+        propostas.push({ hid: p.id, nome: p.name || 'Sem nome', shares: d.q.shares, desde: desde });
+        continue;
+      }
       var cur = sharesOf(p);
-      var partida = function (u) { return nova ? 100 / d.quem.length : (cur[u] || 0) * 100; };
-      // igual ao ponto de partida (partes iguais na nova, a divisão atual na partilhada): não há nada para confirmar
-      var diferente = d.quem.some(function (u) { return Math.abs(d.q.shares[u.id] - partida(u.id)) >= 0.1; });
+      // igual à divisão atual da partilhada: não há nada para confirmar
+      var diferente = d.quem.some(function (u) { return Math.abs(d.q.shares[u.id] - (cur[u.id] || 0) * 100) >= 0.1; });
       if (diferente) propostas.push({ hid: p.id, nome: p.name || 'Sem nome', shares: d.q.shares });
     }
     var mudou = ids.length !== before.length || ids.some(function (id) { return before.indexOf(id) < 0; });
@@ -858,7 +942,8 @@ CW.sharesModal = function (connId) {
         // as propostas seguem uma a uma, já com a partilha no servidor; uma que falhe não trava as outras
         return propostas.reduce(function (seq, pr) {
           return seq.then(function () {
-            return enviarProposta(pr.hid, pr.shares).catch(function (e) { falhas.push(pr.nome + ': ' + String(e.message || 'não seguiu').replace(/\.$/, '')); });
+            return enviarProposta(pr.hid, pr.shares, pr.desde ? { desde: pr.desde } : undefined)
+              .catch(function (e) { falhas.push(pr.nome + ': ' + String(e.message || 'não seguiu').replace(/\.$/, '')); });
           });
         }, Promise.resolve());
       })
@@ -873,17 +958,24 @@ CW.sharesModal = function (connId) {
           toast((mudou ? 'Partilha atualizada. ' : '') + (n === 1 ? 'A proposta de divisão seguiu — falta a confirmação do outro comproprietário.'
             : n + ' propostas de divisão seguiram — falta a confirmação dos outros comproprietários.'), { ms: 5000 });
         } else toast('Partilha atualizada.');
+        // as casas com quotas escritas abrem a janela das quotas, uma de cada vez (N017)
+        if (janelas.length) { CW._shareQueue = (CW._shareQueue || []).concat(janelas); nextShareProposal(); }
       })
       .catch(function (e) { toast(e.message); });
   };
 };
 
-// Passa à casa seguinte na fila de propostas de quotas que a ficha do imóvel
-// (CW.proposeShares) deixou; o sharesModal já não a usa.
-// Devolve: nada — abre a proposta seguinte, se a houver.
+// Passa à casa seguinte na fila das janelas das quotas que o modal das
+// partilhas deixou (as casas partilhadas com quotas escritas ou donos fora da
+// app, N017): cada uma abre a janela «Divisão de quotas» com quem entrou
+// (imovel.js:imvPropostaAbrir), e o Guardar ou o fim dela chama esta outra vez.
+// Uma entrada da fila é {hid, entrou: [ids]} (ou só o id, de antes).
+// Devolve: nada — abre a janela seguinte, se a houver.
 function nextShareProposal() {
   var nxt = (CW._shareQueue || []).shift();
-  if (nxt) CW.proposeShares(nxt, true);
+  if (!nxt) return;
+  if (typeof nxt === 'object') CW.proposeShares(nxt.hid, { entrou: (nxt.entrou || []).slice() });
+  else CW.proposeShares(nxt, true);
 }
 
 /* Modal de mudança de palavra-passe, com os requisitos a acenderem-se à
@@ -965,15 +1057,45 @@ CW.revokeSessions = function () {
     });
 };
 
-// Modal de confirmação para apagar a conta: diz quantos imóveis se perdem e
-// exige escrever APAGAR e a palavra-passe (vazia para quem entra com Google).
+/* O que apagar a conta faz aos outros donos, dito antes (N021, N067): os
+   meus imóveis que têm outros donos na app desaparecem também para eles (e
+   o caminho para os deixar: transferir o controlo); nos imóveis dos outros
+   de que sou dono, a minha quota passa aos que ficam a partir de hoje, e são
+   avisados (worker/src/lib/acesso.js:purgeAccount).
+   Devolve: o HTML das frases (nomes escapados), ou '' sem casas partilhadas. */
+function fraseApagarContaAosOutros() {
+  var eu = CW.user ? CW.user.id : '';
+  var casas = db.properties || [];
+  var outrosDe = function (p) { return (p.ownerIds || []).filter(function (u) { return u && u !== eu; }); };
+  var minhas = casas.filter(function (p) { return cwMinha(p) && outrosDe(p).length; });
+  var delas = casas.filter(function (p) { return !cwMinha(p) && (p.ownerIds || []).indexOf(eu) > -1; });
+  var out = '';
+  if (minhas.length) {
+    var gente = [];
+    minhas.forEach(function (p) { outrosDe(p).forEach(function (u) { if (gente.indexOf(u) < 0) gente.push(u); }); });
+    var nomes = listaE(gente.map(function (u) { return '<b>' + esc(nomeUtilizador(u)) + '</b>'; }));
+    out += '<div class="hint">' + (minhas.length === 1 ? 'Um dos teus imóveis, <b>' + esc(minhas[0].name || 'Sem nome') + '</b>, tem'
+      : minhas.length + ' dos teus imóveis têm') + ' outros donos na app (' + nomes + '): ' + (minhas.length === 1 ? 'desaparece' : 'desaparecem') +
+      ' também para ' + (gente.length === 1 ? 'essa pessoa' : 'essas pessoas') + ', da lista e da Declaração do IRS. Para ' + (minhas.length === 1 ? 'o deixares' : 'os deixares') +
+      ' a quem fica, transfere primeiro o controlo, na ficha ' + (minhas.length === 1 ? 'desse imóvel' : 'de cada imóvel') + '.</div>';
+  }
+  if (delas.length) {
+    out += '<div class="hint">Nos imóveis de outras pessoas de que és dono (' + listaE(delas.map(function (p) { return '<b>' + esc(p.name || 'Sem nome') + '</b>'; })) +
+      '), a tua quota passa para os outros donos a partir de hoje, e cada um recebe um aviso.</div>';
+  }
+  return out;
+}
+
+// Modal de confirmação para apagar a conta: diz quantos imóveis se perdem, o
+// que isso faz aos outros donos (fraseApagarContaAosOutros) e exige escrever
+// APAGAR e a palavra-passe (vazia para quem entra com Google).
 // Devolve: nada — abre o modal de confirmação.
 CW.deleteAccount = function () {
   var mine = (db.properties || []).filter(function (p) { return cwMinha(p); }).length;
   var body = '<div class="form">' +
     '<div class="hint u-c-v-danger"><b>Isto não se pode desfazer.</b> Vais apagar ' + mine +
     ' imóvel' + (mine === 1 ? '' : 'is') + ', com os contratos, movimentos e pessoas que lhes pertencem, ' +
-    'e todas as tuas ligações a outros utilizadores.</div>' +
+    'e todas as tuas ligações a outros utilizadores.</div>' + fraseApagarContaAosOutros() +
     '<div class="hint">Nas casas de outras pessoas onde tenhas ficado registado (num movimento pago por ti, por exemplo), o teu nome ' +
     'passa a aparecer como <b>[deleted]</b>. As casas que os outros partilharam contigo deixam de estar ligadas a ti — os dados deles não são apagados.</div>' +
     '<div class="hint">Se quiseres guardar os teus registos, cancela e faz primeiro uma cópia de segurança ' +

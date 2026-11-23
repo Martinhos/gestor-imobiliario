@@ -11,10 +11,13 @@
 
    As categorias que o IRS lê reconhecem-se pelo identificador fixo
    (dados.js:catIrsId, CATS_DO_IRS — rev. 5 §5.1, D19): o nome pode mudar à
-   vontade. Os Empréstimos recebidos, as Outras receitas e os Subsídios e
-   apoios não têm id e leem-se pelo nome; o ehRenda e o isPassivo, que servem
-   tudo o que não é a Declaração (o cursor da renda planeada, o ano automático,
-   os totais), continuam pelo nome. */
+   vontade. O id de um movimento lê-se pelo dados.js:txCatIrsId (a marca que o
+   movimento leva, a árvore desta conta, o nome de origem — N006): numa casa
+   partilhada, o nome que outra conta deu às Rendas não as tira da Declaração.
+   O ehRenda e o isPassivo (tipos.js), que servem tudo o que não é a Declaração
+   (o cursor da renda planeada, o ano automático, os totais), leem também pelo
+   id (N005, N074). Os Empréstimos recebidos, as Outras receitas e os Subsídios
+   e apoios não têm id e leem-se pelo nome. */
 
 /* o mapa categoria → coluna do Anexo F em vigor: o das definições, ou o de origem
    Devolve: o mapa (objeto {'Categoria' ou 'Categoria / Sub': id de IRS_MAPA_VALORES}). */
@@ -35,23 +38,47 @@ const IRS_DESPESAS_SEMPRE=['impostos/imi','impostos/imposto-do-selo'];
    Devoluções ao inquilino (IRS_DESPESAS_SEMPRE). Depois manda o que foi escolhido no
    próprio movimento, depois a subcategoria, depois a categoria (o mapa, que pode dizer
    'confirmar'); o que não tem regra fica a confirmar, e a origem di-lo — na dúvida a
-   app não deduz, e o resumo lista a despesa para a pessoa escolher (D61).
+   app não deduz, e o resumo lista a despesa para a pessoa escolher (D61). As
+   categorias do IRS leem-se pelo id do movimento (dados.js:txCatIrsId, N006): uma
+   despesa com os nomes de outra conta procura no mapa os nomes que esta conta dá a
+   esse id (irsChavesDoMapa) — o IMI que a outra dona gravou em «Impostos e taxas ›
+   IMI» cai na coluna do IMI.
    Recebe: t — o movimento.
    Devolve: {col, origem} — col é um id de IRS_COLUNAS ou 'confirmar'; origem é 'tipo',
    'lei', 'excluido', 'movimento', 'sub', 'categoria' ou 'omissao'. */
 function irsColunaDe(t){
   if(!t||t.kind!=='expense')return {col:'nao',origem:'tipo'};
-  const cat=String(t.category||'').trim(),sub=String(t.sub||'').trim();
-  const sid=sub?catIrsId('cats',cat,sub):'',cid=catIrsId('cats',cat);
+  const sid=txCatIrsId(t,true),cid=txCatIrsId(t);
   if(sid==='impostos/aimi')return {col:'nao',origem:'lei'};
   if(!countsInTotals(t)&&cid!=='devolucoes'&&IRS_DESPESAS_SEMPRE.indexOf(sid)<0)return {col:'nao',origem:'excluido'};
-  if(t.irsCol&&IRS_COLUNAS.some(c=>c[0]===t.irsCol))return {col:t.irsCol,origem:'movimento'};
+  /* a coluna escrita no movimento: escolhida à mão, ou a que ficou ao apagar a
+     subcategoria (também 'confirmar' — N043) */
+  if(t.irsCol&&(t.irsCol==='confirmar'||IRS_COLUNAS.some(c=>c[0]===t.irsCol)))return {col:t.irsCol,origem:'movimento'};
   /* só valores que o mapa aceita: um mapa por normalizar (ou um nome como
      'constructor', que um objeto herda) não decide nada */
   const m=irsMapa(),ok=k=>Object.prototype.hasOwnProperty.call(m,k)&&IRS_MAPA_VALORES.some(c=>c[0]===m[k]);
+  const ch=irsChavesDoMapa(t,cid,sid),cat=ch.cat,sub=ch.sub;
   if(cat&&sub&&ok(cat+' / '+sub))return {col:m[cat+' / '+sub],origem:'sub'};
   if(cat&&ok(cat))return {col:m[cat],origem:'categoria'};
   return {col:'confirmar',origem:'omissao'};
+}
+/* Os nomes por que o mapa das colunas se lê numa despesa: os dela, quando são os
+   desta conta para o mesmo id (o caso de sempre, e também as categorias sem id);
+   senão os que esta conta dá ao id do movimento (dados.js:catDoIdIrs) — a
+   subcategoria da despesa só fica se também existir aqui nessa categoria.
+   Recebe: t — a despesa; cid, sid — os ids dela (txCatIrsId, da categoria e da
+   subcategoria; '' sem eles).
+   Devolve: {cat, sub} — os nomes ('' quando não há). */
+function irsChavesDoMapa(t,cid,sid){
+  const cat=String(t.category||'').trim(),sub=String(t.sub||'').trim(),id=sid||cid;
+  const arv=(db.settings&&db.settings.cats)||{},daqui=Object.prototype.hasOwnProperty.call(arv,cat);
+  const idAqui=daqui?((sub&&Array.isArray(arv[cat])&&arv[cat].indexOf(sub)>-1&&catIrsId('cats',cat,sub))||catIrsId('cats',cat)):'';
+  if(!id||(daqui&&idAqui===id))return {cat:cat,sub:sub};
+  const ns=sid?catDoIdIrs('cats',sid):null;
+  if(ns)return {cat:ns.category,sub:ns.sub};
+  const nc=cid?catDoIdIrs('cats',cid):null;
+  if(!nc)return {cat:cat,sub:sub};
+  return {cat:nc.category,sub:sub&&Array.isArray(arv[nc.category])&&arv[nc.category].indexOf(sub)>-1?sub:''};
 }
 /* o rótulo de uma coluna do Anexo F, e o da coluna 'confirmar' (a despesa não conta
    até a pessoa escolher a coluna) — é o que o formulário do movimento diz em «Pela
@@ -66,7 +93,9 @@ const irsColunaNome=col=>{if(col==='confirmar')return 'A confirmar';const c=IRS_
      receitas prediais 'outra' (natureza 02, D51); a Renda mensal, a Renda em atraso,
      sem subcategoria ou uma subcategoria da pessoa, 'renda'.
    · Fora das Rendas o «Fora dos totais» vale (o countsInTotals, com o isPassivo dos
-     Empréstimos recebidos): uma receita fora dos totais é 'fora'.
+     Empréstimos recebidos): uma receita fora dos totais é 'fora'. Uma subcategoria
+     «Caução» numa categoria da pessoa já não é passivo (o isPassivo lê a caução pelo
+     id, N074): vai a 'porClassificar', com o aviso, como o resto dessa categoria.
    · Reembolsos (pelo id) — do inquilino, e do condomínio com contrato ligado: 'renda'
      (art. 8.º n.º 2 a), com recibo); do condomínio sem contrato e do seguro:
      'reembolsoGasto' (abate ao gasto reembolsado; sem aviso a pedir o contrato, Q7);
@@ -84,8 +113,9 @@ const irsColunaNome=col=>{if(col==='confirmar')return 'A confirmar';const c=IRS_
    natureza um código ('07', '05'…) ou null. */
 function irsReceitaDe(t){
   if(!t||t.kind!=='income')return {papel:'',natureza:null};
-  const cat=String(t.category||'').trim(),sub=String(t.sub||'').trim();
-  const sid=sub?catIrsId('catsIn',cat,sub):'',cid=catIrsId('catsIn',cat),temCt=!!t.contractId;
+  const cat=String(t.category||'').trim();
+  /* pelo id do movimento (a marca, a árvore, o nome de origem — N006) */
+  const sid=txCatIrsId(t,true),cid=txCatIrsId(t),temCt=!!t.contractId;
   const ano=anoIrs(String(t.date||'').slice(0,4));
   const papel=(p,n)=>({papel:p,natureza:n===undefined?null:n});
   /* a natureza da linha do contrato a que a receita está ligada */
@@ -113,16 +143,19 @@ function irsReceitaDe(t){
    Recebe: t — o movimento.
    Devolve: true ou false. */
 function irsDevolucaoDeRenda(t){
-  return !!t&&t.kind==='expense'&&!!String(t.sub||'').trim()&&catIrsId('cats',t.category,t.sub)==='devolucoes/renda';
+  return !!t&&t.kind==='expense'&&txCatIrsId(t,true)==='devolucoes/renda';
 }
 /* É uma renda para tudo o que não é a Declaração (o cursor dos planeados, o ano
-   automático, os totais)? Uma receita que conta nos totais, da categoria «Rendas» — ou
+   automático, as rendas por entregar de um imóvel)? Uma receita da categoria das
+   Rendas pelo id (dados.js:txCatIrsId — com o nome mudado continua a ser, N005), ou
    sem categoria mas presa a um contrato. A caução e os empréstimos ficam de fora
-   (isPassivo), e um reembolso ou um subsídio não são rendas. Lê pelo nome, de propósito
-   (plano §1.5): a Declaração lê pelo papel (irsReceitaDe).
+   (isPassivo, a caução pelo id — N074), e um reembolso ou um subsídio não são
+   rendas. O «Fora dos totais» das Rendas não lhes tira o ser renda: é uma escolha
+   dos gráficos, e a Declaração conta-as na mesma (D19) — sem isto o planeado
+   voltava a pedir os meses já pagos.
    Recebe: t — o movimento.
    Devolve: true se é renda. */
-const ehRenda=t=>!!t&&t.kind==='income'&&countsInTotals(t)&&(t.category==='Rendas'||(!t.category&&!!t.contractId));
+const ehRenda=t=>!!t&&t.kind==='income'&&!isPassivo(t)&&(txCatIrsId(t)==='rendas'||(!t.category&&!!t.contractId));
 /* a renda ilíquida de um movimento: o que entrou mais o que o inquilino reteve na fonte
    Recebe: t — o movimento.
    Devolve: o valor bruto em euros (número). */
@@ -179,21 +212,24 @@ function nifParticular(nif){
    me marquei B, ou há mais do que um marcado B, fica '' — não se adivinha. Os números
    da demonstração do AIMI (aimi) são do próprio ano e nunca se herdam: a liquidação
    de um ano não é a do seguinte. A conjunta liga-se e desliga-se aqui; quem a lê
-   decide se o cônjuge entra (só com conjunta).
+   decide se o cônjuge entra (só com conjunta). Os bens comuns do casal (bensComuns,
+   D5 — N020) herdam-se como a conjunta e vêm crus: só contam com ela, e é quem os lê
+   que as junta.
    Recebe: ano — o ano dos rendimentos; eu (opcional) — o id de quem declara (só
    serve aos campos antigos: sem ele não há cônjuge).
    Devolve: {conjunta, conjugeId, minhaLetra, letraConjuge, dispensaRecibos,
-   aimi:{total, valorTributavel}, deAno} — conjugeId '' sem cônjuge; minhaLetra 'A'
-   ou 'B'; letraConjuge '' sem cônjuge; deAno o ano de onde a situação veio ('' dos
-   campos antigos). Objeto novo. */
+   bensComuns, aimi:{total, valorTributavel}, deAno} — conjugeId '' sem cônjuge;
+   minhaLetra 'A' ou 'B'; letraConjuge '' sem cônjuge; bensComuns true ou false (false
+   nos campos antigos); deAno o ano de onde a situação veio ('' dos campos antigos).
+   Objeto novo. */
 function irsSituacao(ano,eu){
   const d=normIrsDefs(db&&db.settings&&db.settings.irs),A=String(anoIrs(ano)),pa=d.porAno;
   const k=Object.keys(pa).filter(y=>y<=A).sort().pop()||'';
   const me=String(eu||'');
-  let conjunta,conjugeId,minhaLetra,dispensaRecibos,aimi={total:null,valorTributavel:null};
+  let conjunta,conjugeId,minhaLetra,dispensaRecibos,bensComuns=false,aimi={total:null,valorTributavel:null};
   if(k){
     const e=pa[k];
-    conjunta=e.conjunta;minhaLetra=e.minhaLetra;dispensaRecibos=e.dispensaRecibos;
+    conjunta=e.conjunta;minhaLetra=e.minhaLetra;dispensaRecibos=e.dispensaRecibos;bensComuns=e.bensComuns===true;
     conjugeId=e.conjugeId&&e.conjugeId!==me?e.conjugeId:'';
     if(k===A)aimi={total:e.aimi.total,valorTributavel:e.aimi.valorTributavel};
   }else{
@@ -203,5 +239,5 @@ function irsSituacao(ano,eu){
     conjugeId=bs.length===1?bs[0].id:'';
   }
   return {conjunta:conjunta,conjugeId:conjugeId,minhaLetra:minhaLetra,
-    letraConjuge:conjugeId?(minhaLetra==='B'?'A':'B'):'',dispensaRecibos:dispensaRecibos,aimi:aimi,deAno:k};
+    letraConjuge:conjugeId?(minhaLetra==='B'?'A':'B'):'',dispensaRecibos:dispensaRecibos,bensComuns:bensComuns,aimi:aimi,deAno:k};
 }

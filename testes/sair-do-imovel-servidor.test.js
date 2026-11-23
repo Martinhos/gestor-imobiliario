@@ -425,9 +425,21 @@ describe('apagar a casa e a conta limpam as saídas e os avisos', () => {
     assert.deepEqual((await linhas(env, 'SELECT house_id, user_id FROM house_exits ORDER BY house_id')).map((x) => x.house_id), ['H2', 'HC']);
     await purgeAccount(env, B.id);
     assert.deepEqual((await linhas(env, 'SELECT house_id, user_id FROM house_exits')), [{ house_id: 'HC', user_id: A.id }]);
-    assert.deepEqual((await linhas(env, 'SELECT actor_id FROM house_events')).map((e) => e.actor_id), [A.id], 'os avisos da saída do Bruno foram com ele');
+    // o aviso que o Bruno recebeu foi com ele; os que deu (as saídas dele de
+    // H1 e H2) ficam com quem os recebeu, sem o nome dele (D6), e quem fica em
+    // HC recebe o aviso da conta apagada (N021)
+    const linha = (r) => [r.user_id, r.kind, r.house_id, r.actor_id, r.actor_name];
+    const avisos = async () => (await linhas(env, 'SELECT user_id, kind, house_id, actor_id, actor_name FROM house_events ORDER BY user_id, kind, house_id')).map(linha);
+    const porQuem = (l) => l.slice().sort((x, y) => (x.join('|') < y.join('|') ? -1 : 1));
+    assert.deepEqual(porQuem(await avisos()), porQuem([
+      [A.id, 'casa.sair', 'H1', B.id, ''], [A.id, 'casa.sair', 'H2', B.id, ''],
+      [C.id, 'casa.apagada', 'H1', A.id, 'Alice'], [C.id, 'casa.sair', 'H1', B.id, ''], [C.id, 'casa.sair', 'H2', B.id, ''],
+      [C.id, 'casa.sair', 'HC', A.id, 'Alice'], [C.id, 'casa.sair_conta', 'HC', B.id, ''],
+    ]));
     await purgeAccount(env, C.id);
     assert.deepEqual(await linhas(env, 'SELECT * FROM house_exits'), [], 'as da casa da Carla foram com ela');
-    assert.deepEqual(await linhas(env, 'SELECT * FROM house_events'), [], 'e o aviso que a Carla recebeu');
+    assert.deepEqual(porQuem(await avisos()), porQuem([
+      [A.id, 'casa.sair', 'H1', B.id, ''], [A.id, 'casa.sair', 'H2', B.id, ''], [A.id, 'casa.sair_conta', 'H2', C.id, ''],
+    ]), 'os que a Carla recebeu foram com ela; a Alice fica com os seus e com o de que a Carla saiu de H2 com a conta');
   });
 });

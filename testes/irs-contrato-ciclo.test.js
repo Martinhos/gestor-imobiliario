@@ -100,10 +100,15 @@ describe('terminar: a data em que acabou e o motivo, e o termo fica (D02, D39, D
     assert.deepEqual(codigos, motivosDa(2026, 'reducao'), 'os motivos vêm da versão (quadro10.motivos), não do código');
     for (const m of app.irsAno(2026).quadro10.motivos.filter((x) => x.para === 'reducao')) assert.ok(f.b.includes(m.curto), m.curto);
     assert.equal(app.contract('C1').active, true, 'abrir a folha não grava nada');
-    // com o termo passado, o dia proposto é o termo e o motivo o do fim do prazo
+    // com o termo passado o contrato renovou-se: hoje por omissão, sem motivo escolhido, e a pergunta da renovação
     monta({ start: '2021-07-01', end: '2026-06-30' });
     app.endContract('C1');
-    assert.match(ultima(o).b, /id="c_cesData" type="date" value="2026-06-30" min="2021-07-01" max="2026-06-30"/);
+    assert.match(ultima(o).b, /id="c_cesData" type="date" value="2026-11-17" min="2021-07-01" max="2026-11-17"/);
+    assert.match(ultima(o).b, /<input type="hidden" id="c_cesMot" value="">/);
+    assert.match(ultima(o).b, /Continuou depois de 30\/06\/2026\?/);
+    // no próprio dia do termo, o motivo do fim do prazo vem escolhido
+    monta({ start: '2021-11-18', end: '2026-11-17' });
+    app.endContract('C1');
     assert.match(ultima(o).b, /<input type="hidden" id="c_cesMot" value="03">/);
   });
 
@@ -478,7 +483,7 @@ describe('os prazos da AT na ficha e na lista (com a vaga 2 dos prazos)', () => 
   });
 });
 
-describe('o inquilino empresa num contrato de habitação (D47)', () => {
+describe('o inquilino empresa num contrato de habitação (D47, D16)', () => {
   /* o contrato C1 com a inquilina com o NIF dado (o 5… é de pessoa coletiva) */
   const comNif = (nif, fisco) => {
     const c = monta({ fisco: Object.assign({ finalidade: 'hp' }, fisco || {}) });
@@ -493,12 +498,12 @@ describe('o inquilino empresa num contrato de habitação (D47)', () => {
     app.cForm = app.normContract(copia(app.contract('C1')));
     let f = app.fiscoSect();
     assert.equal(caixa(f), '<div id="c_fempBox">', 'à vista');
-    assert.match(f, /<label>O contrato identifica quem lá mora e proíbe a sublocação\?<div class="sel" id="sel_c_femp">/);
+    assert.match(f, /<label>O contrato identifica pelo nome quem lá mora\?<div class="sel" id="sel_c_femp">/);
     assert.match(f, /<input type="hidden" id="c_femp" value="">/, 'por responder: «Não sei»');
     assert.deepEqual(opcoes('c_femp'), ['1', '0']);
-    assert.match(f, /a AT só trata a renda como de habitação se o contrato identifica quem lá mora/);
+    assert.match(f, /a AT só trata a renda como de habitação se o contrato identifica pelo nome a pessoa que lá mora/);
     // um particular, ou um contrato não habitacional: escondida, com o valor guardado lá dentro
-    comNif('123456789', { empresaHabitacao: true });
+    comNif('123456789', { empresaMorador: true });
     app.cForm = app.normContract(copia(app.contract('C1')));
     f = app.fiscoSect();
     assert.equal(caixa(f), '<div id="c_fempBox" hidden>');
@@ -511,18 +516,18 @@ describe('o inquilino empresa num contrato de habitação (D47)', () => {
     assert.equal(caixa(app.fiscoSect()), '<div id="c_fempBox">', 'também na habitação não permanente');
   });
 
-  test('o collectCt grava a resposta em fisco.empresaHabitacao (Sim, Não, Não sei)', () => {
+  test('o collectCt grava a resposta em fisco.empresaMorador (Sim, Não, Não sei)', () => {
     comNif('503504564');
     app.cForm = app.normContract(copia(app.contract('C1')));
     for (const [v, esperado] of [['1', true], ['0', false], ['', null]]) {
       domCom({ c_rent: '1000', c_femp: v });
       app.collectCt();
-      assert.equal(app.cForm.fisco.empresaHabitacao, esperado, v);
+      assert.equal(app.cForm.fisco.empresaMorador, esperado, v);
     }
     domCom({ c_rent: '1000' });
-    app.cForm.fisco.empresaHabitacao = true;
+    app.cForm.fisco.empresaMorador = true;
     app.collectCt();
-    assert.equal(app.cForm.fisco.empresaHabitacao, true, 'sem o campo no ecrã, não se toca');
+    assert.equal(app.cForm.fisco.empresaMorador, true, 'sem o campo no ecrã, não se toca');
   });
 
   test('o liveNet mostra ou esconde a pergunta quando a finalidade muda', () => {
@@ -544,17 +549,17 @@ describe('o inquilino empresa num contrato de habitação (D47)', () => {
     app.db.tenants[0].name = 'Imobiliária Lda';
     let h = app.ctFicha('C1');
     assert.match(h, /<span>Inquilino empresa<\/span><b><span class="badge amber">Por confirmar<\/span><\/b>/);
-    assert.match(h, /Arrendamento de habitação a Imobiliária Lda, com NIF de empresa ou de outra entidade\. Confirma se o contrato identifica quem lá mora e proíbe a sublocação/);
+    assert.match(h, /Arrendamento de habitação a Imobiliária Lda, com NIF de empresa ou de outra entidade\. Confirma se o contrato identifica pelo nome quem lá mora: sem isso/);
     assert.match(h, /data-click="ctResponderEmpresa\('C1'\)">Responder<\/button>/);
     app.ctResponderEmpresa('C1');
     assert.equal(ultima(o).t, 'Editar contrato');
     assert.equal(app.cForm.id, 'C1');
-    app.db.contracts[0].fisco.empresaHabitacao = true;
+    app.db.contracts[0].fisco.empresaMorador = true;
     h = app.ctFicha('C1');
-    assert.match(h, /<span>Inquilino empresa<\/span><b>identifica quem lá mora e proíbe a sublocação<\/b>/);
+    assert.match(h, /<span>Inquilino empresa<\/span><b>identifica quem lá mora<\/b>/);
     assert.doesNotMatch(h, /ctResponderEmpresa/);
-    app.db.contracts[0].fisco.empresaHabitacao = false;
-    assert.match(app.ctFicha('C1'), /<b>não identifica quem lá mora, ou não proíbe a sublocação: para a AT é não habitacional<\/b>/);
+    app.db.contracts[0].fisco.empresaMorador = false;
+    assert.match(app.ctFicha('C1'), /<b>não identifica quem lá mora: para a AT é não habitacional<\/b>/);
     app.db.tenants[0].nif = '123456789';
     assert.doesNotMatch(app.ctFicha('C1'), /Inquilino empresa/, 'um particular: nada');
   });

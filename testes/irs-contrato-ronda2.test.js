@@ -311,7 +311,7 @@ describe('os encargos a cargo do inquilino (Q13)', () => {
     for (const e of app.ENCARGOS_DO_INQUILINO) {
       assert.match(h, new RegExp('<b>' + e.nome + '</b></span><input type="checkbox" role="switch" class="ct-sw" id="c_enc_' + e.id + '"' + (e.id === 'imi' ? ' checked' : '') + '>'), e.id);
     }
-    assert.match(h, /Enquanto o contrato estiver em vigor, o planeado desse encargo neste imóvel fica suspenso: não se pede nem se confirma\./);
+    assert.match(h, /Enquanto o contrato estiver em vigor, os planeados do IMI e do condomínio deste imóvel, e o do seguro da ficha do imóvel, ficam suspensos: não se pedem nem se confirmam\./);
   });
 
   test('o collectCt grava os marcados pela ordem da constante, e a ficha mostra-os', () => {

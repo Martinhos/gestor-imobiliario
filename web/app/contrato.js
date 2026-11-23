@@ -291,7 +291,12 @@ function ctAtDaFicha(c){
   const ces=irsCessacao(c),cessacao=ces.data?ctCessacaoTexto(c):'';
   const notaAntiga=String(fisc.cessacaoMotivo||'').trim();
   const regulariza=ces.data&&fisc.estado==='declarado'&&!semEst?ctCessacaoAviso(c,ces.data,ces.motivo):'';
-  /* o inquilino empresa num contrato de habitação (D47): a resposta numa
+  /* a cessação de antes do ano anterior já não acende nos prazos
+     (prazos.js:pzCessacaoRecente): a ficha diz, sem alarme, que se comunica */
+  const diaCes=fisc.estado==='declarado'&&!fora?pzDiaDaCessacao(c,today()):'';
+  const cesAntiga=diaCes&&!pzCessacaoRecente(diaCes,today())
+    ?'O contrato acabou a '+dPT(diaCes)+': a cessação comunica-se à AT até ao fim do mês seguinte (o Modelo 2 também serve). Se nunca a comunicaste, ainda o deves fazer.':'';
+  /* o inquilino empresa num contrato de habitação (D16): a resposta numa
      linha, e por responder a frase do aviso da Declaração com «Responder» */
   const empresa=fisc.estado==='declarado'&&!fora?ctEmpresaDaFicha(c):null;
   const selo=fisc.estado==='declarado'?'<span class="badge in">Declarado</span>':fisc.estado==='naoDeclarado'?'<span class="badge grey">Não declarado</span>':'<span class="badge">Por indicar</span>';
@@ -360,6 +365,7 @@ function ctAtDaFicha(c){
     comunicacao,
     empresa?empresa.nota:'',
     regulariza?esc(regulariza):'',
+    cesAntiga?esc(cesAntiga):'',
     !semEst&&!taxaReduzida&&c.rent>0&&!escrita&&irsDoAno.motivo==='moderada'?'Com a renda até '+euro(irsAno(YEAR).taxas.rendaModerada.limiteMensal)+' por mês, as rendas de '+YEAR+' pagam a taxa de '+dec(irsDoAno.taxa)+' % das rendas moderadas (EBF art. 45.º-C), em vez de '+dec(irsAno(YEAR).taxas.habitacional)+' %.':''
   ].filter(Boolean).map(t=>`<div class="ct-nota">${t}</div>`).join('');
   return ctSecao('Perante a AT',corpo+notas,selo,'ct-sec-at');
@@ -414,7 +420,10 @@ function ctInquilinosDaFicha(c,verPessoas){
 }
 /* O cartão do que ficou combinado à parte da renda: a caução, as rendas
    antecipadas, o IBAN e os contactos escritos no contrato (o do inquilino só
-   a quem pode ver inquilinos — ver ctFicha).
+   a quem pode ver inquilinos — ver ctFicha). Num contrato terminado com a
+   caução por devolver nos movimentos (ctDevolucaoPossivel, D15), e que
+   acabou no ano de hoje ou no anterior (prazos.js:pzCessacaoRecente), a
+   pergunta «Devolveste a caução?» com «Registar a devolução» (ctDevolucaoCaucao).
    Recebe: c — o contrato; verPessoas — se o cargo deixa ver os inquilinos.
    Devolve: o HTML do cartão, ou '' sem nada para mostrar. */
 function ctCaucaoDaFicha(c,verPessoas){
@@ -424,7 +433,12 @@ function ctCaucaoDaFicha(c,verPessoas){
     c.iban?ctKv('IBAN',`<span class="ct-iban">${esc(fmtIBAN(c.iban))}</span>`):'',
     (c.ownerPhone||c.ownerEmail)?ctKv('Contacto do senhorio',esc(contacto(c.ownerPhone,c.ownerEmail))):'',
     verPessoas&&(c.tenantPhone||c.tenantEmail)?ctKv('Contacto do inquilino',esc(contacto(c.tenantPhone,c.tenantEmail))):''].join('');
-  return corpo?`<div class="card ct-sec ct-sec-kv">${corpo}</div>`:'';
+  /* só de um contrato que acabou no ano de hoje ou no anterior: a devolução
+     de um que acabou há anos foi num ano já entregue */
+  const terminado=(c.active===false||!!irsCessacao(c).data)&&pzCessacaoRecente(irsFimReal(c),today());
+  const devolver=terminado&&ctDevolucaoPossivel(c)
+    ?`<div class="ct-nota">Devolveste a caução? A devolução é um gasto do ano em que a devolves: regista-a, com o dia e o valor (só o que devolveste).<div class="toolbar u-m-9px-0-0"><button type="button" class="btn sm" data-toca="camada" data-click="ctDevolucaoCaucao('${jsq(c.id)}')">Registar a devolução</button></div></div>`:'';
+  return corpo?`<div class="card ct-sec ct-sec-kv">${corpo}${devolver}</div>`:'';
 }
 /* Os mosaicos do que vai junto ao contrato (a prancheta): o inventário, as
    chaves entregues, o registo fotográfico e os anexos, cada um com quantos
@@ -837,16 +851,13 @@ function ctAntecipadasPorRegistar(c){
     itens.push({tipo:'caucao',periodo:'',valor:Number(c.deposit),rotulo:'Caução'});
   return itens.length?{data:data,itens:itens}:null;
 }
-/* A categoria e a subcategoria de receita que a conta dá a um id do IRS
-   (settings.catIds.catsIn — o nome pode ter mudado; o id não).
-   Recebe: id — o id ('rendas', 'rendas/renda-mensal', 'rendas/caucao'…).
+/* A categoria e a subcategoria que a conta dá a um id do IRS (o nome pode ter
+   mudado; o id não), só se ainda existem na árvore: dados.js:catDoIdIrs, nas
+   receitas por omissão.
+   Recebe: id — o id ('rendas', 'rendas/renda-mensal', 'rendas/caucao',
+   'devolucoes/caucao'…); arvore (opcional) — 'catsIn' (omissão) ou 'cats'.
    Devolve: {category, sub}, ou null quando a conta não tem esse id. */
-function ctCatDoId(id){
-  const ids=(db.settings&&db.settings.catIds&&db.settings.catIds.catsIn)||{};
-  const k=Object.keys(ids).find(x=>ids[x]===id);if(!k)return null;
-  const i=k.indexOf(' / ');
-  return i<0?{category:k,sub:''}:{category:k.slice(0,i),sub:k.slice(i+3)};
-}
+function ctCatDoId(id,arvore){return catDoIdIrs(arvore==='cats'?'cats':'catsIn',id)}
 /* Propõe, por cima da lista, o registo do que se pagou na assinatura
    (ctAntecipadasPorRegistar): cada renda antecipada e a caução num
    interruptor (todos ligados; a linha inteira toca-se, com 44 px), e o dia
@@ -1484,8 +1495,15 @@ function collectCt(){
   if(document.getElementById('c_fcel'))f.celebracao=val('c_fcel');
   if(document.getElementById('c_fren')){const r=val('c_fren');f.renovavel=r==='1'?true:r==='0'?false:null}
   /* a pergunta do inquilino empresa vive sempre no ecrã do declarado (escondida
-     quando não se aplica), com o valor gravado: lê-la não o apaga */
-  if(document.getElementById('c_femp')){const r=val('c_femp');f.empresaHabitacao=r==='1'?true:r==='0'?false:null}
+     quando não se aplica), com o valor gravado: lê-la não o apaga. A resposta
+     vai a fisco.empresaMorador (D16); a pergunta antiga, junta com a
+     sublocação (empresaHabitacao), fica coerente para os clientes antigos:
+     «Não» é também «Não» lá, e «Não sei» apaga um «Sim» antigo */
+  if(document.getElementById('c_femp')){
+    const r=val('c_femp'),v=r==='1'?true:r==='0'?false:null;
+    f.empresaMorador=v;
+    if(v===false)f.empresaHabitacao=false;else if(v===null&&f.empresaHabitacao===true)f.empresaHabitacao=null;
+  }
   (f.renovacoes||[]).forEach(r=>{
     const a=document.getElementById('c_rini_'+r.id);if(a)r.inicio=a.value;
     const b=document.getElementById('c_rfim_'+r.id);if(b)r.fim=b.value;
@@ -1599,8 +1617,8 @@ function fiscoSect(){
     <label>Finalidade${sel('c_ffin',f.finalidade,[{v:'',label:'—'}].concat(FISCO_FINALIDADES_TODAS.map(x=>({v:x[0],label:x[1]}))),'liveNet','rascunho')}</label>
     <div class="hint ct-colado" id="c_ffinHint"${ctFinalidadeDica(c)?'':' hidden'}>${esc(ctFinalidadeDica(c))}</div>
     <div id="c_fempBox"${ctEmpresaVisivel(c)?'':' hidden'}><div class="form">
-      <label>O contrato identifica quem lá mora e proíbe a sublocação?${sel('c_femp',f.empresaHabitacao===true?'1':f.empresaHabitacao===false?'0':'',[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'','rascunho')}</label>
-      <div class="hint ct-colado">Um inquilino com NIF de empresa ou de outra entidade: a AT só trata a renda como de habitação se o contrato identifica quem lá mora, e a taxa reduzida pede ainda que proíba a sublocação (CIRS art. 72.º). Sem isso, o arrendamento é não habitacional.</div>
+      <label>O contrato identifica pelo nome quem lá mora?${sel('c_femp',ctEmpresaMoradorValor(c),[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'','rascunho')}</label>
+      <div class="hint ct-colado">${esc(ctEmpresaDica())}</div>
     </div></div>
     ${ctInterruptor('c_fcatb',f.categoriaB===true,'Rendas tributadas na categoria B',ctCategoriaBDica(),'liveNet()')}
     ${ctEgfVisivel(c)?`${ctInterruptor('c_fegf',f.egf===true,'Arrendado a entidade de gestão florestal reconhecida (EGF/UGF)','','liveNet()')}
@@ -1990,43 +2008,69 @@ function ctEncargosNomes(c){
 }
 /* O bloco «Encargos a cargo do inquilino» do formulário (o Q13): um
    interruptor por encargo de dados.js:ENCARGOS_DO_INQUILINO, e a dica do que
-   muda — enquanto o contrato estiver em vigor, o planeado desse encargo do
-   imóvel fica suspenso (planeados.js), para não se pagar nem confirmar duas
-   vezes.
+   muda de verdade (planeados.js:recEncargoDoInquilino) — enquanto o contrato
+   estiver em vigor, os planeados do IMI e do condomínio deste imóvel e o do
+   seguro da ficha dele ficam suspensos, para não se pagarem nem confirmarem
+   duas vezes; a água, a luz e o gás e um seguro adicionado à mão não se
+   reconhecem, e a dica não os promete.
    Recebe: c — o contrato do formulário.
    Devolve: o HTML. */
 function ctEncargosCampos(c){
   const ids=Array.isArray(c&&c.encargosInquilino)?c.encargosInquilino:[];
   return `<div class="ct-campo" role="group" aria-labelledby="c_encRot"><div class="flabel" id="c_encRot">Encargos a cargo do inquilino</div>
     ${ENCARGOS_DO_INQUILINO.map(e=>ctInterruptor('c_enc_'+e.id,ids.indexOf(e.id)>-1,e.nome,'')).join('')}
-    <div class="hint ct-colado">Os que o contrato põe a pagar ao inquilino. Enquanto o contrato estiver em vigor, o planeado desse encargo neste imóvel fica suspenso: não se pede nem se confirma.</div></div>`;
+    <div class="hint ct-colado">Os que o contrato põe a pagar ao inquilino. Enquanto o contrato estiver em vigor, os planeados do IMI e do condomínio deste imóvel, e o do seguro da ficha do imóvel, ficam suspensos: não se pedem nem se confirmam. Os da água, da luz e do gás, e um seguro adicionado à mão, continuam a pedir-se: não os confirmes nos meses em que o inquilino os paga.</div></div>`;
 }
-/* A pergunta do inquilino empresa (D47) faz-se quando conta: um contrato de
+/* A pergunta do inquilino empresa (D16) faz-se quando conta: um contrato de
    habitação (permanente ou não) com algum inquilino de NIF de pessoa
-   coletiva (irs-papeis.js:nifColetivo — só o sinal que a acende). A AT só
-   trata a renda como de habitação se o contrato identifica quem lá mora, e
-   a taxa reduzida pede ainda a proibição de sublocar.
+   coletiva (irs-papeis.js:nifColetivo — só o sinal que a acende). Para a AT
+   a renda é de habitação quando o contrato identifica pelo nome quem lá
+   mora (PIV 28246, 26024, 30248); a proibição de sublocar não é condição
+   (PIV 30723).
    Recebe: c — o contrato (o do formulário, o que ctEmEdicao devolve, ou o da base).
    Devolve: true se a pergunta se mostra. */
 function ctEmpresaVisivel(c){
   if(!c||['hp','hnp'].indexOf(fiscoDe(c).finalidade)<0)return false;
   return ctTenants(c).some(t=>nifColetivo(t.nif));
 }
+/* A resposta à pergunta do inquilino empresa para o sel() do formulário,
+   pelo leitor do motor (irs.js:irsEmpresaMorador — fisco.empresaMorador, ou
+   um empresaHabitacao antigo «Sim»).
+   Recebe: c — o contrato.
+   Devolve: '1' (identifica), '0' (não identifica) ou '' (por responder). */
+function ctEmpresaMoradorValor(c){
+  const r=irsEmpresaMorador(c);
+  return r===true?'1':r===false?'0':'';
+}
+/* A dica da pergunta do inquilino empresa: só a identificação de quem lá
+   mora decide (D16), e o que a AT faz sem ela — a natureza e a taxa do não
+   habitacional, lidas da versão do ano.
+   Devolve: o texto (sem HTML). */
+function ctEmpresaDica(){
+  const v=irsAno(YEAR);
+  return 'Um inquilino com NIF de empresa ou de outra entidade: a AT só trata a renda como de habitação se o contrato identifica pelo nome a pessoa que lá mora. Sem isso, o arrendamento é não habitacional (natureza '
+    +v.naturezas.naoHabitacional+', '+dec(v.taxas.naoHabitacional)+' %, sem a redução pela duração), e a Declaração conta-o assim.';
+}
 /* O inquilino empresa na ficha (o cartão «Perante a AT»), quando a pergunta
-   se aplica (ctEmpresaVisivel): a resposta numa linha; por responder, a
+   se aplica (ctEmpresaVisivel): a resposta numa linha (com «Não», a
+   Declaração conta o contrato como não habitacional); por responder, a
    linha diz-o a âmbar e a nota diz o que confirmar, com «Responder» para
    quem pode alterar o contrato (ctResponderEmpresa).
    Recebe: c — o contrato.
    Devolve: null quando não se aplica; senão {kv, nota} — o HTML do valor da
-   linha e o da nota ('' com a resposta dada). */
+   linha e o da nota. */
 function ctEmpresaDaFicha(c){
   if(!ctEmpresaVisivel(c))return null;
-  const r=fiscoDe(c).empresaHabitacao,emp=ctTenants(c).find(t=>nifColetivo(t.nif));
-  if(r===true)return {kv:'identifica quem lá mora e proíbe a sublocação',nota:''};
-  if(r===false)return {kv:'não identifica quem lá mora, ou não proíbe a sublocação: para a AT é não habitacional',nota:''};
+  const r=irsEmpresaMorador(c),emp=ctTenants(c).find(t=>nifColetivo(t.nif));
+  if(r===true)return {kv:'identifica quem lá mora',nota:''};
+  if(r===false){
+    const v=irsAno(YEAR);
+    return {kv:'não identifica quem lá mora: para a AT é não habitacional',
+      nota:esc('A Declaração conta este contrato como não habitacional: natureza '+v.naturezas.naoHabitacional+', '+dec(v.taxas.naoHabitacional)+' %, sem a redução pela duração.')};
+  }
   const pode=podeEditar(c.propertyId,'contract.add',c);
   return {kv:'<span class="badge amber">Por confirmar</span>',
-    nota:esc('Arrendamento de habitação a '+(emp&&emp.name||'uma empresa')+', com NIF de empresa ou de outra entidade. Confirma se o contrato identifica quem lá mora e proíbe a sublocação: sem isso, a AT trata o arrendamento como não habitacional.')
+    nota:esc('Arrendamento de habitação a '+(emp&&emp.name||'uma empresa')+', com NIF de empresa ou de outra entidade. Confirma se o contrato identifica pelo nome quem lá mora: sem isso, a AT trata o arrendamento como não habitacional.')
       +(pode?`<div class="toolbar u-m-9px-0-0"><button type="button" class="btn sm" data-toca="camada" data-click="ctResponderEmpresa('${jsq(c.id)}')">Responder</button></div>`:'')};
 }
 /* O «Responder» da pergunta do inquilino empresa (a ficha, e o aviso da
@@ -2123,18 +2167,30 @@ function ctFimEfetivo(c){
 /* As linhas da ficha sobre a comunicação da duração, uma por período
    (ctComunicacoesDaFicha): feita (e quando — depois do prazo, o 4.2A é NÃO)
    ou por fazer (e até quando), com o botão de a marcar ou desmarcar para
-   quem pode alterar o contrato.
+   quem pode alterar o contrato. Um período com a data antiga da app de
+   antes por confirmar (N003: fisco.comunicacoesPorConfirmar, que a
+   migração deixou por cair depois do prazo) pergunta se se comunicou até ao
+   prazo, com o dia antigo como sugestão: «Comuniquei a dd/mm/aaaa» e «Não
+   comuniquei» (ctResolverComunicacao), ou «Noutro dia» (a janela de sempre,
+   ctComunicadaPergunta).
    Recebe: c — o contrato.
    Devolve: o HTML (texto escapado e os botões), ou '' sem nada a comunicar. */
 function ctComunicacaoNota(c){
   const h=today(),pode=podeEditar(c.propertyId,'contract.add',c);
   return ctComunicacoesDaFicha(c,h).map(x=>{
     const renov=x.periodoInicio!==c.start,quem=renov?'A renovação de '+dPT(x.periodoInicio):'A duração do contrato';
+    const id=jsq(c.id),k=Number(x.chave);
+    if(!x.data&&x.porConfirmar===true&&dataExiste(x.dataAntiga)){
+      const oque=renov?'a renovação de '+dPT(x.periodoInicio):'a duração do contrato';
+      const per='Comunicaste '+oque+' no Portal das Finanças até '+dPT(x.prazo)+'? A app antiga marcou-a a '+dPT(x.dataAntiga)
+        +', mas essa marca não diz quando a comunicaste. O quadro 4.2A do Anexo F pergunta se foi a tempo: se não foi, a resposta é NÃO.';
+      const bts=pode?`<div class="toolbar u-m-9px-0-0"><button type="button" class="btn sm" data-toca="dados" data-click="ctResolverComunicacao('${id}',${k},1)">Comuniquei a ${dPT(x.dataAntiga)}</button><button type="button" class="btn sm" data-toca="camada" data-click="ctComunicadaPergunta('${id}',${k})">Noutro dia</button><button type="button" class="btn sm" data-toca="dados" data-click="ctResolverComunicacao('${id}',${k},0)">Não comuniquei</button></div>`:'';
+      return `<div>${esc(per)}${bts}</div>`;
+    }
     const txt=x.data?quem+' foi comunicada no Portal das Finanças a '+dPT(x.data)
         +(x.foraDePrazo?', depois do prazo ('+dPT(x.prazo)+'): no quadro 4.2A do Anexo F a resposta é NÃO.':'.')
       :quem+' está por comunicar no Portal das Finanças: '+(h>x.prazo?'o prazo era ':'até ')+dPT(x.prazo)+'.'
         +(h>x.prazo?'':' Comunica-se uma vez, e vale para todos os anos '+(renov?'da renovação.':'do contrato.'));
-    const id=jsq(c.id),k=Number(x.chave);
     const btn=pode?`<div class="toolbar u-m-9px-0-0"><button type="button" class="btn sm" data-toca="${x.data?'dados':'camada'}" data-click="${x.data?`ctMarcarComunicada('${id}',${k},0)`:`ctComunicadaPergunta('${id}',${k})`}">${x.data?'Desmarcar':'Marcar como comunicada'}</button></div>`:'';
     return `<div>${esc(txt)}${btn}</div>`;
   }).join('');
@@ -2190,6 +2246,27 @@ function ctMarcarComunicada(id,chave,on){
   c.fisco=normFisco(Object.assign({},f,{comunicacoes:com,comunicacoesV:2}));
   save();render();
   toast(!Number(on)?'Comunicação desmarcada.':fora?'Comunicação marcada, depois do prazo: no quadro 4.2A a resposta é NÃO.':'Comunicação marcada como feita.');
+}
+/* A resposta da ficha à pergunta de uma comunicação por confirmar (N003):
+   «Comuniquei a …» grava o dia antigo (fisco.comunicacoesPorConfirmar[chave],
+   lido do contrato e não da ação) como o dia da comunicação — depois do
+   prazo, no 4.2A a resposta é NÃO —; «Não comuniquei» tira só a pergunta, e
+   o período fica por comunicar (dados.js:resolverComunicacao). Grava e
+   repinta pelo caminho de sempre.
+   Recebe: id — o id do contrato; chave — o ano do início do período;
+   comuniquei — 1 no dia antigo, 0 não comuniquei.
+   Devolve: nada. */
+function ctResolverComunicacao(id,chave,comuniquei){
+  const c=contract(id);if(!c)return;
+  const recusa=motivoRecusa(c.propertyId,'contract.add',c);if(recusa)return toast(recusa);
+  const k=String(chave),antiga=String((fiscoDe(c).comunicacoesPorConfirmar||{})[k]||'');
+  if(!/^\d{4}$/.test(k)||!dataExiste(antiga))return;
+  const sim=Number(comuniquei)===1;
+  if(!resolverComunicacao(c,k,sim?antiga:''))return;
+  save();render();
+  const x=irsPrazosDeComunicacao(c).find(p=>p.chave===k),fora=!!(x&&x.prazo&&antiga>x.prazo);
+  toast(!sim?'Fica por comunicar: no quadro 4.2A a resposta é NÃO. Se a comunicares, marca o dia na ficha.'
+    :fora?'Comunicação marcada a '+dPT(antiga)+', depois do prazo: no quadro 4.2A a resposta é NÃO.':'Comunicação marcada a '+dPT(antiga)+'.');
 }
 /* Soma meses a uma data, em hora local; um dia que não existe no mês de
    chegada (31 de abril) cai no último dia desse mês.
@@ -2578,8 +2655,45 @@ function ctCessacaoErro(c,data,motivo,exigeMotivo){
   if(termo&&d>termo)return {id:'c_cesData',msg:'O prazo do contrato acabava a '+dPT(termo)+': se continuou depois, regista primeiro a renovação («Renovar…»).'};
   const ms=ctMotivosCessacao(c,Number(d.slice(0,4)));
   if(m&&!ms.some(x=>x.v===m))return {id:'c_cesMot',msg:'Escolhe um dos motivos da lista.'};
-  if(!m&&exigeMotivo&&ms.length)return {id:'c_cesMot',msg:'Escolhe o motivo: o '+ctQuadroDaCessacao(c)+' do Anexo F pede-o.'};
+  if(!m&&exigeMotivo&&ms.length){
+    const q=ctMotivoVaiAoAnexo(c,d);
+    return {id:'c_cesMot',msg:q?'Escolhe o motivo: o '+q+' do Anexo F pede-o.':'Escolhe o motivo por que o contrato acabou.'};
+  }
   return null;
+}
+/* O quadro do Anexo F que leva o motivo da cessação de um contrato nesse
+   ano: o 4.3 num direito real de habitação duradoura; o quadro 10 num
+   contrato declarado que lá vai (irs.js:irsRegimeQuadro10 — redução pela
+   duração ou isenção de um programa, no período em que acabou). Fora de
+   Portugal (Anexo J), na categoria B, ou sem redução nem isenção, nenhum: o
+   motivo fica só registado no contrato (D14).
+   Recebe: c — o contrato (com as renovações que a folha regista); data — o
+   dia em que acabou ('AAAA-MM-DD').
+   Devolve: 'quadro 4.3', 'quadro 10', ou ''. */
+function ctMotivoVaiAoAnexo(c,data){
+  const f=fiscoDe(c);
+  if(f.finalidade==='dhd')return ctQuadroDaCessacao(c);
+  if(f.estado!=='declarado'||ctSemEstimativa(c)||!dataExiste(data))return '';
+  const cessado=Object.assign({},c,{active:false,fisco:Object.assign({},f,{cessacao:{data:data,motivo:''}})});
+  return irsRegimeQuadro10(cessado,Number(data.slice(0,4)))?'quadro 10':'';
+}
+/* A frase por baixo do motivo, na folha do «Terminar» (D14, N100): o motivo
+   é obrigatório em todos os contratos declarados, mas só se diz que o
+   Anexo F o pede quando pede (ctMotivoVaiAoAnexo) — com a redução pela
+   duração, também a comunicação da cessação no Portal (Portaria 110/2019,
+   art. 2.º c)); num declarado que não vai ao quadro 10 nesse ano, que fica
+   só registado. Num contrato por declarar, quando é que o pedem.
+   Recebe: c — o contrato (com as renovações da folha); data — o dia em que acabou.
+   Devolve: o texto (por escapar). */
+function ctMotivoDica(c,data){
+  const f=fiscoDe(c),d=dataExiste(data)?data:today(),q=ctMotivoVaiAoAnexo(c,d);
+  if(f.estado!=='declarado')return 'Num contrato declarado às Finanças, o '+(f.finalidade==='dhd'?ctQuadroDaCessacao(c):'quadro 10')+' do Anexo F pede-o'+(f.finalidade==='dhd'?'.':' quando o contrato tem redução da taxa pela duração ou isenção.');
+  if(q==='quadro 10'&&irsIsencao(Object.assign({},c,{active:false,fisco:Object.assign({},f,{cessacao:{data:d,motivo:''}})}),Number(d.slice(0,4))))return 'O quadro 10 do Anexo F pede-o.';
+  if(q)return 'O '+q+' do Anexo F e a comunicação da cessação à AT pedem-no.';
+  const sem=ctSemEstimativa(c);
+  if(sem==='fora')return 'Fica registado no contrato: as rendas deste imóvel declaram-se no Anexo J, que não o pede.';
+  if(sem==='catB')return 'Fica registado no contrato: as rendas dele declaram-se no Anexo B ou C, que não o pedem.';
+  return 'Fica registado no contrato. Só vai ao quadro 10 do Anexo F quando o contrato tem redução da taxa pela duração ou isenção, e este não tem nenhuma das duas em '+d.slice(0,4)+'.';
 }
 /* O quadro do Anexo F que pede a data e o motivo da cessação: o 4.3 num
    direito real de habitação duradoura (o da versão, quadros.dhd), senão o
@@ -2595,78 +2709,295 @@ function ctQuadroDaCessacao(c){
    Devolve: true ou false. */
 const ctMotivoExigido=c=>fiscoDe(c).estado==='declarado';
 /* A folha do «Terminar contrato» (D02, D09, D39): o dia em que acabou — hoje
-   por omissão, nunca antes do início nem depois do termo e de hoje (com o
-   termo passado, o termo, e o motivo do fim do prazo) — e o motivo, com os
-   da versão do ano (ctMotivosCessacao); por baixo, o que isso leva ao IRS
-   (ctCessacaoAviso, refeito a cada mudança). O termo (c.end) não se toca: é
-   ele que decide a taxa. Do formulário (desligar «Contrato em vigor», ou o
-   fim que recua e acabou antes do prazo), a folha trabalha no cForm e
-   grava-o a seguir.
+   por omissão, nunca antes do início nem depois de hoje — e o motivo, com os
+   da versão do ano (ctMotivosCessacao) e a frase de quando o Anexo F o pede
+   (ctMotivoDica); por baixo, o que isso leva ao IRS (ctCessacaoAviso, refeito
+   a cada mudança). O termo (c.end) não se toca: é ele que decide a taxa.
+   Com o termo já passado, o contrato que se termina agora continuou depois
+   dele e renovou-se (CC art. 1096.º): a folha não propõe o termo antigo nem
+   o motivo do fim do prazo; pergunta se continuou (ctRenovacaoNaFolha) e,
+   com «Sim», até quando ia a renovação — e regista as renovações até ao dia
+   em que acabou no mesmo gesto (ctRenovacoesAte); com «Não», o dia fica até
+   ao termo. Com a caução escrita no contrato e sem devolução registada, a
+   devolução regista-se ali também (ctDevolucaoCampos, D15). Do formulário
+   (desligar «Contrato em vigor», ou o fim que recua e acabou antes do
+   prazo), a folha trabalha no cForm e grava-o a seguir.
    Recebe: c — o contrato (o da base, ou o cForm); doForm — true vindo do
-   formulário; dia (opcional) — o dia proposto ('AAAA-MM-DD').
+   formulário; dia (opcional) — o dia em que acabou, já dito ('AAAA-MM-DD':
+   sem a pergunta da renovação).
    Devolve: nada — abre a folha. */
 function ctTerminarFolha(c,doForm,dia){
-  const h=today(),termo=irsFimEfetivo(c),max=termo&&termo<h?termo:h;
-  const d=dataExiste(dia)?dia:max;
+  const h=today(),termo=irsFimEfetivo(c),dado=dataExiste(dia);
+  const passou=!dado&&!!termo&&termo<h,max=!passou&&termo&&termo<h?termo:h;
+  const d=dado?dia:h;
   _ctCessar={id:doForm?'':c.id};
   const ms=ctMotivosCessacao(c,Number(d.slice(0,4))),exige=ctMotivoExigido(c)&&ms.length>0;
-  const fimDoPrazo=d===termo?(ms.find(x=>x.quem==='fim')||{}).v||'':'';
-  const nota=ctCessacaoAviso(c,d,fimDoPrazo);
+  const fimDoPrazo=!passou&&d===termo?(ms.find(x=>x.quem==='fim')||{}).v||'':'';
+  const nota=passou?'':ctCessacaoAviso(c,d,fimDoPrazo);
   const req=exige?' <span class="req">*</span>':'';
   openModal('Terminar contrato',`<div class="form">
-    <div class="hint">O contrato de ${esc(ctNames(c))} deixa de contar para as rendas e as projeções.${termo?' O fim do contrato ('+dPT(termo)+') fica como está: é o prazo dele que decide a taxa do IRS.':''}</div>
+    <div class="hint">O contrato de ${esc(ctNames(c))} deixa de contar para as rendas e as projeções.${termo&&!passou?' O fim do contrato ('+dPT(termo)+') fica como está: é o prazo dele que decide a taxa do IRS.':''}</div>
+    ${passou?ctRenovacaoNaFolha(c,termo):''}
     <label>Acabou a <span class="req">*</span><input id="c_cesData" type="date" value="${esc(d)}"${c.start?` min="${esc(c.start)}"`:''} max="${esc(max)}" data-change="ctCessacaoNota()"></label>
     ${ms.length?`<label>Motivo${req}${sel('c_cesMot',fimDoPrazo,[{v:'',label:'—'}].concat(ms.map(x=>({v:x.v,label:x.label}))),'ctCessacaoNota','rascunho')}</label>
-    <div class="hint ct-colado">${exige?'O '+ctQuadroDaCessacao(c)+' do Anexo F e a comunicação da cessação à AT pedem-no.':'Num contrato declarado às Finanças, o '+ctQuadroDaCessacao(c)+' do Anexo F pede-o.'}</div>`:''}
-    <div class="hint" id="c_cesNota"${nota?'':' hidden'}>${esc(nota)}</div></div>`,
+    <div class="hint ct-colado" id="c_cesMotDica">${esc(ctMotivoDica(c,d))}</div>`:''}
+    <div class="hint" id="c_cesNota"${nota?'':' hidden'}>${esc(nota)}</div>
+    ${ctDevolucaoCampos(c,true)}</div>`,
     `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn danger" data-toca="dados" data-click="ctTerminarOk('${doForm?'':jsq(c.id)}')">Terminar</button>`);
 }
-/* O dia ou o motivo da folha do «Terminar» mudaram: refaz a frase do que isso
-   leva ao IRS (ctCessacaoAviso) e esconde-a quando não há nada a dizer.
-   Devolve: nada — mexe no #c_cesNota. */
+/* A pergunta da renovação na folha do «Terminar», com o termo já passado: o
+   contrato continuou depois dele? Nada vem escolhido. Com «Sim», até quando
+   ia a renovação — num contrato que teve redução pela duração, em branco
+   (é a duração que decide a taxa, e o CC art. 1096.º deixa as partes
+   combinarem outra: não se supõe); nos outros, a proposta repete o período
+   que acabou (ctRenovacaoSugerida). As seguintes, da mesma duração,
+   registam-se até ao dia em que acabou (ctRenovacoesAte). Num imóvel fora
+   de Portugal a frase não cita o Código Civil (a lei é a do país).
+   Recebe: c — o contrato; termo — o termo passado ('AAAA-MM-DD').
+   Devolve: o HTML. */
+function ctRenovacaoNaFolha(c,termo){
+  const red=ctTeveReducao(c),ini=pzAddDias(termo,1),proposta=red?'':ctRenovacaoSugerida(c);
+  const lei=pzForaDePortugal(c.propertyId)?'':' (Código Civil, art. 1096.º)';
+  return `<div class="hint">O prazo do contrato acabou a ${dPT(termo)}. Se continuou depois disso, renovou-se${lei}: a renovação regista-se no contrato, e ele acaba no dia em que acabou mesmo.</div>
+    <label>Continuou depois de ${dPT(termo)}? <span class="req">*</span>${sel('c_cesRenov','',[{v:'',label:'—'},{v:'1',label:'Sim, renovou-se'},{v:'0',label:'Não, acabou nesse dia ou antes'}],'ctCessacaoRenovMudou','rascunho')}</label>
+    <div id="c_cesRenBox" hidden><div class="form">
+      <label>A renovação ia até <span class="req">*</span><input id="c_cesRenFim" type="date" value="${esc(proposta)}" min="${esc(ini)}" data-change="ctCessacaoNota()"></label>
+      <div class="hint ct-colado">${red?'Vê no contrato quanto dura cada renovação: é a duração que decide a taxa do IRS.':'A data proposta repete a duração do período que acabou: confirma-a no contrato.'} Se acabou depois desse dia, as renovações seguintes, com a mesma duração, registam-se também.</div>
+    </div></div>`;
+}
+/* A resposta à pergunta da renovação mudou: com «Sim» aparece até quando ia
+   a renovação; com «Não», o dia em que acabou não passa do termo (vem para
+   ele, se estava depois). Refaz as frases da folha (ctCessacaoNota).
+   Devolve: nada — mexe nos campos da folha. */
+function ctCessacaoRenovMudou(){
+  const r=val('c_cesRenov'),box=document.getElementById('c_cesRenBox'),e=document.getElementById('c_cesData');
+  if(box)box.hidden=r!=='1';
+  const c=_ctCessar?(_ctCessar.id?contract(_ctCessar.id):cForm):null,termo=c?irsFimEfetivo(c):'';
+  if(e&&termo){
+    if(typeof e.setAttribute==='function')e.setAttribute('max',r==='0'?termo:today());
+    if(r==='0'&&String(e.value||'')>termo)e.value=termo;
+  }
+  ctCessacaoNota();
+}
+/* As renovações de um contrato com o termo passado até ao dia em que acabou:
+   a primeira do dia a seguir ao termo até ao fim escrito, e as seguintes com
+   a mesma duração (CC art. 1096.º: períodos sucessivos de igual duração) até
+   à que tem esse dia — em meses inteiros quando a primeira os tem, senão em
+   dias. No máximo cem, que nenhum contrato tem.
+   Recebe: c — o contrato; fim1 — o fim da primeira renovação; dia — o dia em
+   que acabou ('AAAA-MM-DD').
+   Devolve: [{inicio, fim}] pela ordem; [] sem termo, sem fim, ou com o fim antes do início. */
+function ctRenovacoesAte(c,fim1,dia){
+  const termo=irsFimEfetivo(c);if(!termo||!dataExiste(fim1))return [];
+  const ini=pzAddDias(termo,1);if(fim1<ini)return [];
+  const m=irsMeses(ini,fim1),meses=m>0&&pzAddDias(ctSomaMeses(ini,m),-1)===fim1?m:0,dias=pzDias(fim1,ini)+1;
+  const out=[{inicio:ini,fim:fim1}];
+  while(out.length<100&&dataExiste(dia)&&out[out.length-1].fim<dia){
+    const i=pzAddDias(out[out.length-1].fim,1);
+    out.push({inicio:i,fim:meses?pzAddDias(ctSomaMeses(i,meses),-1):pzAddDias(i,dias-1)});
+  }
+  return out;
+}
+/* Junta ao contrato as renovações dadas (uma com o mesmo início de outra que
+   já lá está não se repete: ctJuntaRenovacao) e leva o termo (c.end) ao fim
+   da última, como o «Renovar…».
+   Recebe: c — o contrato (muda-o); rs — [{inicio, fim}] pela ordem.
+   Devolve: o mesmo contrato. */
+function ctJuntaRenovacoes(c,rs){
+  const xs=Array.isArray(rs)?rs:[];
+  xs.forEach(r=>ctJuntaRenovacao(c,r.inicio,r.fim));
+  const ult=xs[xs.length-1];if(ult&&(!c.end||ult.fim>c.end))c.end=ult.fim;
+  return c;
+}
+/* O contrato da folha do «Terminar» como fica com a resposta à pergunta da
+   renovação: com «Sim» e o fim dela escrito, uma cópia com as renovações até
+   ao dia em que acabou (ctRenovacoesAte, ctJuntaRenovacoes); sem a pergunta,
+   ou com outra resposta, o próprio contrato.
+   Recebe: c — o contrato da folha; dia — o dia em que acabou ('AAAA-MM-DD').
+   Devolve: {c, renovacoes:[{inicio, fim}], resposta} — resposta '1', '0', ''
+   (por responder), ou null sem a pergunta na folha. */
+function ctCessarComRenovacoes(c,dia){
+  if(!document.getElementById('c_cesRenov'))return {c:c,renovacoes:[],resposta:null};
+  const r=String(val('c_cesRenov')||'');
+  const rs=r==='1'&&dataExiste(dia)?ctRenovacoesAte(c,val('c_cesRenFim'),dia):[];
+  return {c:rs.length?ctJuntaRenovacoes(Object.assign({},c),rs):c,renovacoes:rs,resposta:r};
+}
+/* O dia, o motivo ou a renovação da folha do «Terminar» mudaram: refaz a
+   frase do que isso leva ao IRS (ctCessacaoAviso, com as renovações que se
+   vão registar) e esconde-a quando não há nada a dizer — também enquanto a
+   pergunta da renovação está por responder —, e a frase do motivo
+   (ctMotivoDica).
+   Devolve: nada — mexe no #c_cesNota e no #c_cesMotDica. */
 function ctCessacaoNota(){
   const n=document.getElementById('c_cesNota');if(!n||!_ctCessar)return;
-  const c=_ctCessar.id?contract(_ctCessar.id):cForm;if(!c)return;
-  const t=ctCessacaoAviso(c,val('c_cesData'),val('c_cesMot'));
+  const c0=_ctCessar.id?contract(_ctCessar.id):cForm;if(!c0)return;
+  const dia=val('c_cesData'),r=ctCessarComRenovacoes(c0,dia);
+  const espera=r.resposta===''||(r.resposta==='1'&&!r.renovacoes.length);
+  const t=espera?'':ctCessacaoAviso(r.c,dia,val('c_cesMot'));
   n.textContent=t;n.hidden=!t;
+  const m=document.getElementById('c_cesMotDica');if(m)m.textContent=ctMotivoDica(r.c,dia);
 }
-/* O «Terminar» da folha: lê o dia e o motivo, diz o erro junto do campo, e
-   termina — o contrato da base (ctTerminar) ou o do formulário, que se
-   grava logo (ctGravar).
+/* O «Terminar» da folha: lê a resposta da renovação (se a houver), o dia, o
+   motivo e a devolução da caução, diz o erro junto do campo pela ordem da
+   folha, e termina — o contrato da base (ctTerminar, com as renovações e a
+   devolução) ou o do formulário, que se grava logo (ctGravar).
    Recebe: id — o id do contrato; '' para o do formulário.
    Devolve: nada. */
 function ctTerminarOk(id){
   const doForm=!id,c=doForm?cForm:contract(id);if(!c)return;
-  const data=val('c_cesData'),motivo=val('c_cesMot');
-  const e=ctCessacaoErro(c,data,motivo,ctMotivoExigido(c));if(e)return falhaCampo(e.id,e.msg);
+  const data=val('c_cesData'),motivo=val('c_cesMot'),termo=irsFimEfetivo(c);
+  const r=ctCessarComRenovacoes(c,data);
+  if(r.resposta==='')return falhaCampo('c_cesRenov','Diz se o contrato continuou depois de '+dPT(termo)+'.');
+  if(r.resposta==='1'){
+    const fim1=val('c_cesRenFim'),ini=pzAddDias(termo,1);
+    if(!dataExiste(fim1))return falhaCampo('c_cesRenFim','Indica até quando ia a renovação.');
+    if(fim1<ini)return falhaCampo('c_cesRenFim','A renovação começou a '+dPT(ini)+': o fim é depois desse dia.');
+    if(dataExiste(data)&&data<=termo)return falhaCampo('c_cesData','Se continuou depois de '+dPT(termo)+', acabou depois desse dia.');
+  }
+  if(r.resposta==='0'&&dataExiste(data)&&data>termo)return falhaCampo('c_cesData','Acabou até '+dPT(termo)+': se continuou depois, responde «Sim, renovou-se».');
+  const e=ctCessacaoErro(r.c,data,motivo,ctMotivoExigido(r.c));if(e)return falhaCampo(e.id,e.msg);
+  const dev=ctDevolucaoDaFolha(c);if(dev&&dev.erro)return falhaCampo(dev.erro.id,dev.erro.msg);
   closeModal();_ctCessar=null;
-  if(!doForm)return ctTerminar(id,data,motivo);
+  const extra={renovacoes:r.renovacoes,devolucao:dev};
+  if(!doForm)return ctTerminar(id,data,motivo,extra);
+  ctJuntaRenovacoes(cForm,r.renovacoes);
   cForm.fisco=normFisco(Object.assign({},fiscoDe(cForm),{cessacao:{data:data,motivo:motivo}}));
   cForm.active=false;
+  const tx=dev?ctTxDevolucao(cForm,dev.dia,dev.valor):null;if(tx)db.transactions.push(tx);
   ctGravar();
 }
-/* Termina um contrato da base: guarda o dia em que acabou e o motivo em
-   fisco.cessacao, desliga-o (active false) e acerta a renda planeada; o termo
-   (c.end) nunca muda — a «alternativa» c.end=min(c.end,data) está proibida
-   (é o termo que decide o escalão da redução, também nos anos já
-   entregues). O aviso tem «Anular».
-   Recebe: id — o id do contrato; data — 'AAAA-MM-DD'; motivo — o código do quadro 10 ('' sem ele).
+/* Termina um contrato da base: regista as renovações que a folha deu (o
+   termo vai para o fim da última, como no «Renovar…»), guarda o dia em que
+   acabou e o motivo em fisco.cessacao, desliga-o (active false), regista a
+   devolução da caução se veio, e acerta a renda planeada. Fora disso o
+   termo (c.end) nunca muda — a «alternativa» c.end=min(c.end,data) está
+   proibida (é o termo que decide o escalão da redução, também nos anos já
+   entregues). O aviso tem «Anular», que desfaz tudo.
+   Recebe: id — o id do contrato; data — 'AAAA-MM-DD'; motivo — o código do
+   quadro 10 ('' sem ele); extra (opcional) — {renovacoes:[{inicio, fim}],
+   devolucao:{dia, valor}|null}.
    Devolve: '' quando terminou, ou a frase do erro (nada se grava). */
-function ctTerminar(id,data,motivo){
+function ctTerminar(id,data,motivo,extra){
   const c=contract(id);if(!c)return 'O contrato já não existe.';
   const recusa=motivoRecusa(c.propertyId,'contract.add',c);if(recusa){toast(recusa);return recusa}
-  const e=ctCessacaoErro(c,data,motivo,ctMotivoExigido(c));if(e)return e.msg;
-  const antes={active:c.active,cessacao:irsCessacao(c)};
+  const x=extra||{},rs=Array.isArray(x.renovacoes)?x.renovacoes:[];
+  const alvo=rs.length?ctJuntaRenovacoes(Object.assign({},c),rs):c;
+  const e=ctCessacaoErro(alvo,data,motivo,ctMotivoExigido(alvo));if(e)return e.msg;
+  const dv=x.devolucao&&!ctDevolucaoErro(c,x.devolucao.dia,x.devolucao.valor)?ctTxDevolucao(c,x.devolucao.dia,x.devolucao.valor):null;
+  const antes={active:c.active,end:c.end,cessacao:irsCessacao(c),renovacoes:JSON.parse(JSON.stringify(fiscoDe(c).renovacoes||[]))};
+  if(rs.length){c.fisco=alvo.fisco;c.end=alvo.end}
   c.fisco=normFisco(Object.assign({},fiscoDe(c),{cessacao:{data:String(data),motivo:String(motivo||'')}}));
   c.active=false;
+  if(dv)db.transactions.push(dv);
   if(servicoLigado('recurring'))syncContractRec(c);
   save();closeAllModals();buildNav();render();
-  comDesfazer('Contrato terminado.',()=>{
-    const x=contract(id);if(!x)return;
-    x.active=antes.active;x.fisco=normFisco(Object.assign({},fiscoDe(x),{cessacao:antes.cessacao}));
-    if(servicoLigado('recurring'))syncContractRec(x);
+  const msg=(rs.length?'Contrato terminado, com '+(rs.length===1?'a renovação registada':rs.length+' renovações registadas'):'Contrato terminado')
+    +(dv?', e a devolução da caução registada.':'.');
+  comDesfazer(msg,()=>{
+    const y=contract(id);if(!y)return;
+    y.active=antes.active;y.end=antes.end;
+    y.fisco=normFisco(Object.assign({},fiscoDe(y),{cessacao:antes.cessacao,renovacoes:antes.renovacoes}));
+    if(dv)db.transactions=db.transactions.filter(t=>t.id!==dv.id);
+    if(servicoLigado('recurring'))syncContractRec(y);
   });
   return '';
+}
+/* A devolução da caução pode registar-se neste contrato (D15, ficha
+   doutrinária 26360: é gasto de quem é senhorio no dia em que a devolve,
+   mesmo que a caução não tenha sido registada como renda)? Com a caução
+   escrita no contrato, a categoria Devoluções ao inquilino › Devolução da
+   caução na conta (pelo id, ctCatDoId), os Movimentos ligados, quem pode
+   adicionar movimentos no imóvel, e nenhuma devolução da caução ligada ao
+   contrato ainda.
+   Recebe: c — o contrato.
+   Devolve: true ou false. */
+function ctDevolucaoPossivel(c){
+  if(!c||!(Number(c.deposit)>0)||!servicoLigado('transactions')||!pode(c.propertyId,'tx.add'))return false;
+  if(!ctCatDoId('devolucoes/caucao','cats'))return false;
+  return !(db.transactions||[]).some(t=>t&&t.kind==='expense'&&t.contractId===c.id&&txCatIrsId(t,true)==='devolucoes/caucao');
+}
+/* Os campos da devolução da caução: o dia (hoje por omissão) e o valor (a
+   caução inteira por omissão; uma parte, se ficou alguma coisa para danos ou
+   rendas em falta). Na folha do «Terminar», atrás do interruptor «Já devolvi
+   a caução» (ctCessacaoDevMudou); na janela da ficha, à vista.
+   Recebe: c — o contrato; naFolha — true na folha do «Terminar».
+   Devolve: o HTML, ou '' quando não há devolução a registar (ctDevolucaoPossivel). */
+function ctDevolucaoCampos(c,naFolha){
+  if(!ctDevolucaoPossivel(c))return '';
+  const h=today(),dep=Number(c.deposit);
+  const campos=`<div class="ct-par">
+      <label>Devolvida a <span class="req">*</span><input id="c_devDia" type="date" value="${esc(h)}"${c.start?` min="${esc(c.start)}"`:''} max="${esc(h)}"></label>
+      <label>Valor devolvido (€) <span class="req">*</span><input id="c_devValor" type="text" inputmode="decimal" class="num" value="${esc(String(dep))}" autocomplete="off"></label></div>
+    <div class="hint ct-colado">Se ficaste com uma parte (danos, rendas em falta), escreve só o que devolveste. Fica uma despesa em Devoluções ao inquilino, ligada ao contrato.</div>`;
+  if(!naFolha)return campos;
+  return `${ctInterruptor('c_cesDev',false,'Já devolvi a caução','Caução de '+euro2(dep)+': a devolução é um gasto do ano em que a devolves.','ctCessacaoDevMudou()')}
+    <div id="c_devBox" hidden><div class="form">${campos}</div></div>`;
+}
+/* O interruptor «Já devolvi a caução» da folha do «Terminar» mudou: mostra
+   ou esconde o dia e o valor.
+   Devolve: nada — mexe no #c_devBox. */
+function ctCessacaoDevMudou(){
+  const b=document.getElementById('c_devBox');if(b)b.hidden=!chk('c_cesDev');
+}
+/* O que está mal no dia e no valor de uma devolução da caução: o dia existe,
+   não é antes do início do contrato nem depois de hoje; o valor é mais de
+   zero e não passa da caução.
+   Recebe: c — o contrato; dia — 'AAAA-MM-DD'; valor — euros (número).
+   Devolve: null, ou {id, msg} — o campo (c_devDia, c_devValor) e a frase do erro. */
+function ctDevolucaoErro(c,dia,valor){
+  const d=String(dia||''),v=Number(valor),dep=Number(c&&c.deposit)||0;
+  if(!dataExiste(d))return {id:'c_devDia',msg:'Indica o dia em que devolveste a caução.'};
+  if(c&&c.start&&d<c.start)return {id:'c_devDia',msg:'O contrato começou a '+dPT(c.start)+': a devolução não pode ser antes.'};
+  if(d>today())return {id:'c_devDia',msg:'O dia da devolução não pode ser depois de hoje.'};
+  if(!(v>0))return {id:'c_devValor',msg:'Indica quanto devolveste.'};
+  if(dep>0&&v>dep+0.004)return {id:'c_devValor',msg:'A caução do contrato é de '+euro2(dep)+': a devolução não passa disso.'};
+  return null;
+}
+/* A devolução da caução escrita na folha do «Terminar», com o interruptor
+   ligado: o dia e o valor, ou o erro.
+   Recebe: c — o contrato da folha.
+   Devolve: null (sem o interruptor, ou desligado), {dia, valor}, ou {erro:{id, msg}}. */
+function ctDevolucaoDaFolha(c){
+  if(!document.getElementById('c_cesDev')||!chk('c_cesDev'))return null;
+  const dia=val('c_devDia'),valor=num(val('c_devValor')),e=ctDevolucaoErro(c,dia,valor);
+  return e?{erro:e}:{dia:dia,valor:Math.round(valor*100)/100};
+}
+/* O movimento da devolução da caução: uma despesa do imóvel, ligada ao
+   contrato, na categoria Devoluções ao inquilino › Devolução da caução da
+   conta (pelo id, ctCatDoId — o nome pode ter mudado), paga pelo dono quando
+   o imóvel tem um só (como o formulário do movimento).
+   Recebe: c — o contrato; dia — 'AAAA-MM-DD'; valor — euros.
+   Devolve: o movimento (normTx), ou null sem a categoria na conta. */
+function ctTxDevolucao(c,dia,valor){
+  const cat=ctCatDoId('devolucoes/caucao','cats');if(!c||!cat)return null;
+  const os=ownersOfProp(prop(c.propertyId)||{});
+  return normTx({kind:'expense',label:'Devolução da caução '+ctName(c),amount:Math.round(Number(valor)*100)/100,date:String(dia),
+    propertyId:c.propertyId,contractId:c.id,category:cat.category,sub:cat.sub,paidBy:os.length===1?os[0]:null,split:null});
+}
+/* «Registar a devolução» da ficha de um contrato terminado com caução e sem
+   devolução registada (ctCaucaoDaFicha): a janela com o dia e o valor
+   (ctDevolucaoCampos).
+   Recebe: id — o id do contrato.
+   Devolve: nada — abre a janela (ou nada, sem devolução a registar). */
+function ctDevolucaoCaucao(id){
+  const c=contract(id);if(!c||!ctDevolucaoPossivel(c))return;
+  openModal('Devolução da caução',`<div class="form">
+    <div class="hint">A caução deste contrato é de ${euro2(c.deposit)}. Devolvê-la é um gasto do ano em que a devolves, na Declaração do IRS: regista o dia e o que devolveste.</div>
+    ${ctDevolucaoCampos(c,false)}</div>`,
+    `<button class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button class="btn primary" data-toca="dados" data-click="ctDevolucaoCaucaoOk('${jsq(id)}')">Registar</button>`);
+}
+/* Grava a devolução da janela da ficha: valida (ctDevolucaoErro, junto do
+   campo), cria a despesa (ctTxDevolucao), com «Anular».
+   Recebe: id — o id do contrato.
+   Devolve: nada. */
+function ctDevolucaoCaucaoOk(id){
+  const c=contract(id);if(!c||!ctDevolucaoPossivel(c))return closeModal();
+  const dia=val('c_devDia'),valor=num(val('c_devValor')),e=ctDevolucaoErro(c,dia,valor);
+  if(e)return falhaCampo(e.id,e.msg);
+  const tx=ctTxDevolucao(c,dia,valor);if(!tx)return closeModal();
+  db.transactions.push(tx);
+  closeModal();save();buildNav();render();
+  comDesfazer('Devolução da caução registada.',()=>{db.transactions=db.transactions.filter(t=>t.id!==tx.id)});
 }
 /* O que uma cessação leva ao IRS, numa frase para a folha e para a ficha:
    com um motivo que a versão marca para regularizar (o 01, por motivo do
@@ -2715,16 +3046,18 @@ function ctCessacaoTexto(c){
 }
 /* O dia em que acabou e o motivo no formulário de um contrato terminado, a
    seguir ao «Contrato em vigor»: corrigem-se aqui (o collectCt lê-os, o
-   ctSaver valida-os pelas regras da folha). O texto livre antigo do motivo,
-   que já não se escreve, fica dito por baixo.
+   ctSaver valida-os pelas regras da folha). A frase só diz que o Anexo F os
+   pede quando pede (ctMotivoVaiAoAnexo, D14). O texto livre antigo do
+   motivo, que já não se escreve, fica dito por baixo.
    Recebe: c — o contrato do formulário.
    Devolve: o HTML dos campos. */
 function ctCessacaoCampos(c){
   const x=irsCessacao(c),h=today(),termo=irsFimEfetivo(c),max=termo&&termo<h?termo:h;
   const ms=ctMotivosCessacao(c,x.data?Number(x.data.slice(0,4)):YEAR),antiga=String(fiscoDe(c).cessacaoMotivo||'').trim();
+  const q=ctMotivoVaiAoAnexo(c,x.data||h);
   return `<label>Acabou a<input id="c_cesData" type="date" value="${esc(x.data)}"${c.start?` min="${esc(c.start)}"`:''} max="${esc(max)}"></label>
     ${ms.length?`<label>Motivo${sel('c_cesMot',x.motivo,[{v:'',label:'—'}].concat(ms.map(y=>({v:y.v,label:y.label}))),'','rascunho')}</label>`:''}
-    <div class="hint ct-colado">O dia em que o contrato acabou e porquê: o ${esc(ctQuadroDaCessacao(c))} do Anexo F e a comunicação da cessação pedem-nos. O fim do contrato fica o do prazo.${antiga?' Escrito antes: «'+esc(antiga)+'».':''}</div>`;
+    <div class="hint ct-colado">O dia em que o contrato acabou e porquê${q?': o '+esc(q)+' do Anexo F pede-os':''}. O fim do contrato fica o do prazo.${antiga?' Escrito antes: «'+esc(antiga)+'».':''}</div>`;
 }
 /* O «Reativar contrato»: volta a contar para as rendas e as projeções e perde
    a cessação, e o termo (c.end) nunca se apaga (D14 — sem ele o contrato
@@ -2743,16 +3076,80 @@ function reactivateContract(id){
     if(servicoLigado('recurring'))syncContractRec(c);save();closeAllModals();buildNav();render();toast('Contrato reativado.');
   });
 }
+/* As rendas de um contrato nos anos cuja Declaração ainda está por entregar
+   (imovel.js:imvAnosPorEntregar): as receitas ligadas a ele que vão à linha
+   dele (irs-papeis.js:irsReceitaDe — a renda e a caução), pela renda bruta
+   (com o que o inquilino reteve), como a Declaração as soma.
+   Recebe: c — o contrato; hoje (opcional) — 'AAAA-MM-DD'.
+   Devolve: [{ano, total}] só dos anos com rendas, do mais antigo para o mais recente. */
+function ctRendasPorEntregar(c,hoje){
+  if(!c)return [];
+  const ts=(db.transactions||[]).filter(t=>t&&t.contractId===c.id&&t.kind==='income'&&['renda','caucao'].indexOf(irsReceitaDe(t).papel)>-1);
+  return imvAnosPorEntregar(hoje).map(ano=>({ano,total:Math.round(sum(ts.filter(t=>String(t.date||'').startsWith(String(ano))).map(rendaBruta))*100)/100}))
+    .filter(x=>x.total>0);
+}
+/* O valor das rendas por entregar de um contrato, para o meio de uma frase:
+   «(7 200,00 €)», ou com os anos quando são dois; '' a quem não vê os
+   movimentos do imóvel.
+   Recebe: c — o contrato; rs — o que o ctRendasPorEntregar devolveu.
+   Devolve: o texto (com o espaço à frente), ou ''. */
+function ctValorPorEntregar(c,rs){
+  if(!servicoLigado('transactions')||!pode(c.propertyId,'tx.view')||!rs.length)return '';
+  return ' ('+(rs.length===1?euro2(rs[0].total):rs.map(r=>r.ano+': '+euro2(r.total)).join('; '))+')';
+}
+/* O que a confirmação de apagar um contrato acrescenta quando ele tem rendas
+   de um ano por entregar (ctRendasPorEntregar), como a do imóvel
+   (imovel.js:imvAvisoDeApagar): quanto fica sem contrato, que a Declaração
+   desse ano perde a linha dele — a taxa, as datas e, num terminado, a
+   cessação — e, num contrato em vigor, o «Terminar contrato» no lugar de
+   apagar. Um contrato «não declarado» já está fora da Declaração: nada.
+   Recebe: c — o contrato.
+   Devolve: o HTML (frase e botão), ou ''. */
+function ctAvisoDeApagar(c){
+  if(!c||ctNaoDeclarado(c))return '';
+  const rs=ctRendasPorEntregar(c);if(!rs.length)return '';
+  const um=rs.length===1,term=c.active===false||!!irsCessacao(c).data;
+  const frase='As rendas de '+listaE(rs.map(r=>String(r.ano)))+' deste contrato'+ctValorPorEntregar(c,rs)+' ficam sem contrato, e a Declaração do IRS '
+    +(um?'desse ano, ainda por entregar, perde':'desses anos, ainda por entregar, perde')+' a linha dele: '+(term?'a taxa, as datas e a cessação.':'a taxa e as datas.');
+  if(term)return esc(frase)+' Já está terminado: assim, fica na Declaração com o dia em que acabou.';
+  if(!podeEditar(c.propertyId,'contract.add',c)||(c.start&&c.start>today()))return esc(frase);
+  return esc(frase)+' Se o contrato acabou, termina-o em vez de o apagar: fica na Declaração com o dia em que acabou.'
+    +`<div class="toolbar u-mt-12px"><button type="button" class="btn" data-toca="camada" data-click="closeModal();endContract('${jsq(c.id)}')">Terminar contrato</button></div>`;
+}
+/* O que a confirmação de apagar um inquilino acrescenta quando um contrato
+   dele (não «não declarado») tem rendas de um ano por entregar: a linha
+   desse contrato na Declaração fica sem ele — e o Anexo F pede o NIF do
+   inquilino —, quanto vale (a quem vê os movimentos) e, nos contratos em
+   vigor que a pessoa pode alterar, o «Terminar contrato» no lugar de apagar
+   (o inquilino fica nos anos em que lá morou). Só com os Contratos ligados
+   (quem chama, pessoas.js:delPerson, guarda-o).
+   Recebe: tid — o id do inquilino.
+   Devolve: o HTML (frase e botões), ou ''. */
+function ctAvisoDeApagarInquilino(tid){
+  const cs=contractsOfTenant(tid).filter(c=>!ctNaoDeclarado(c)).map(c=>({c,rs:ctRendasPorEntregar(c)})).filter(x=>x.rs.length);
+  if(!cs.length)return '';
+  const anos=[...new Set(cs.flatMap(x=>x.rs.map(r=>r.ano)))].sort(),um=cs.length===1,umAno=anos.length===1;
+  const cada=cs.map(x=>'«'+ctName(x.c)+'»'+ctValorPorEntregar(x.c,x.rs));
+  const frase='A Declaração do IRS de '+listaE(anos.map(String))+', ainda por entregar, tem rendas '+(um?'do contrato ':'dos contratos ')+listaE(cada)
+    +': sem esta ficha, a linha '+(um?'dele':'de cada um')+' fica sem este inquilino, e o Anexo F pede o NIF dele. Guarda-a até entregares '+(umAno?'essa declaração.':'essas declarações.');
+  const vivos=cs.filter(x=>x.c.active!==false&&!irsCessacao(x.c).data&&!(x.c.start&&x.c.start>today())&&podeEditar(x.c.propertyId,'contract.add',x.c));
+  if(!vivos.length)return esc(frase);
+  return esc(frase)+' Se o inquilino saiu, termina o contrato: fica na Declaração com ele, nos anos em que lá morou.'
+    +`<div class="toolbar u-mt-12px">${vivos.map(x=>`<button type="button" class="btn" data-toca="camada" data-click="closeModal();endContract('${jsq(x.c.id)}')">${vivos.length>1?'Terminar «'+esc(ctName(x.c))+'»':'Terminar contrato'}</button>`).join('')}</div>`;
+}
 /* Apaga o contrato, com confirmação: sai da lista, o recorrente automático
    da renda vai com ele e os movimentos ligados ficam órfãos (mantêm-se, mas
-   sem contractId). O toast dá para desfazer tudo; os anexos só se apagam do
-   IndexedDB quando o desfazer expira sem ser usado.
+   sem contractId). Com rendas de um ano por entregar, a confirmação diz o
+   que a Declaração perde e propõe terminá-lo (ctAvisoDeApagar). O toast dá
+   para desfazer tudo; os anexos só se apagam do IndexedDB quando o desfazer
+   expira sem ser usado.
    Recebe: id — id do contrato a apagar.
    Devolve: nada — pede confirmação e, se aceite, grava e redesenha a vista. */
 function delContract(id){
   const c=contract(id);if(!c)return;
   const recusa=motivoRecusa(c.propertyId,'contract.add',c,true);if(recusa)return toast(recusa);
-  confirmModal('Apagar contrato',`Apagar o contrato de ${esc(ctNames(c))}? Os movimentos ficam, mas deixam de estar ligados a ele.`,()=>{
+  const aviso=ctAvisoDeApagar(c);
+  confirmModal('Apagar contrato',`Apagar o contrato de ${esc(ctNames(c))}? Os movimentos ficam, mas deixam de estar ligados a ele.${aviso?' '+aviso:''}`,()=>{
     const copia=JSON.parse(JSON.stringify(c));
     const recs=JSON.parse(JSON.stringify((db.recurring||[]).filter(r=>r.auto&&r.tx&&r.tx.contractId===id)));
     const ligados=db.transactions.filter(t=>t.contractId===id).map(t=>t.id);

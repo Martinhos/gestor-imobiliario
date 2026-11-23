@@ -124,15 +124,16 @@ function ctRendaDepoisDoTermo(c){
   const mes=fim.slice(0,7);
   return (db.transactions||[]).some(t=>t.contractId===c.id&&ehRenda(t)&&mesDaRenda(t)>mes);
 }
-/* O molde do movimento da renda de um contrato: receita, na categoria Rendas
-   (e Renda mensal) quando existem, com o imóvel e o contrato. É o tx do
-   planeado da renda (syncContractRec) e o do plano de um contrato terminado
+/* O molde do movimento da renda de um contrato: receita, na categoria das
+   Rendas (e na Renda mensal) quando existem — pelo id, com o nome que tiverem
+   nesta conta (dados.js:catDoIdIrs, N005) —, com o imóvel e o contrato. É o tx
+   do planeado da renda (syncContractRec) e o do plano de um contrato terminado
    (ctPlanoTerminado).
    Recebe: c — o contrato.
    Devolve: o molde (objeto). */
 function ctMoldeDaRenda(c){
-  const inc=catsIn(),cat='Rendas' in inc?'Rendas':'',sub=cat&&(inc[cat]||[]).indexOf('Renda mensal')>-1?'Renda mensal':'';
-  return {kind:'income',label:'Renda '+ctName(c),amount:c.rent,propertyId:c.propertyId,contractId:c.id,category:cat,sub,split:null};
+  const n=catDoIdIrs('catsIn','rendas/renda-mensal')||catDoIdIrs('catsIn','rendas')||{category:'',sub:''};
+  return {kind:'income',label:'Renda '+ctName(c),amount:c.rent,propertyId:c.propertyId,contractId:c.id,category:n.category,sub:n.sub,split:null};
 }
 /* Um contrato que já terminou não tem planeado de renda (syncContractRec só
    os quer vivos), e por isso a janela do preenchimento não tinha por onde lhe
@@ -376,8 +377,11 @@ function proximoFimDoMes(mes){
    existem sem mexer no next que a pessoa acertou (aplicaPlanoNaRec), e apaga
    os que ficaram sem valor na ficha. Quando o número de prestações do IMI
    muda, refaz as prestações do zero; quando o mês do seguro muda, o planeado
-   vai para o fim desse mês. A categoria é a da árvore (Impostos / IMI,
-   Condomínio / Quota mensal, Seguros / Multirriscos) enquanto ela lá estiver,
+   vai para o fim desse mês. A categoria é a da árvore: o IMI pelo id do IRS
+   ('impostos/imi', com o nome que tiver nesta conta — dados.js:catDoIdIrs,
+   N005); o condomínio e o seguro, que não têm id, por Condomínio / Quota mensal
+   e Seguros / Multirriscos ou, com a categoria noutro nome, pela categoria
+   (sem id do IRS) que tem essa subcategoria — enquanto ela lá estiver,
    como a renda faz com as Rendas. Só nos imóveis de que sou dono: quem
    colabora recebe os planeados do dono com os registos da casa, e não os
    cria por ele. No fim passa à frente as ocorrências vencidas dos encargos
@@ -387,9 +391,16 @@ function proximoFimDoMes(mes){
    Devolve: nada — mexe em db.recurring; quem chama grava. */
 function syncPropRecs(p){
   if(!p||!cargoDe(p.id).dono)return;
-  const arv=cats(),catDe=(c,s)=>({category:c in arv?c:'',sub:c in arv&&(arv[c]||[]).indexOf(s)>-1?s:''});
+  const arv=cats(),catDe=(c,s)=>{
+    if(c in arv)return {category:c,sub:(arv[c]||[]).indexOf(s)>-1?s:''};
+    const k=Object.keys(arv).find(x=>Array.isArray(arv[x])&&arv[x].indexOf(s)>-1&&!catIrsId('cats',x));
+    return k?{category:k,sub:s}:{category:'',sub:''};
+  };
+  /* o IMI pelo id (N005): com os Impostos noutro nome, o planeado nasce na
+     categoria certa, e o IMI vai ao campo dele */
+  const imiCat=catDoIdIrs('cats','impostos/imi')||catDoIdIrs('cats','impostos')||catDe('Impostos','IMI');
   const imi=imiPrestacoes(p.imi),quer=imi.map(x=>({propRec:'imi',propRecN:x.n,amount:x.amount,every:'year',next:proximoFimDoMes(x.mes),
-    name:'IMI · '+p.name+(imi.length>1?' ('+x.n+'.ª de '+imi.length+')':''),cat:catDe('Impostos','IMI')}));
+    name:'IMI · '+p.name+(imi.length>1?' ('+x.n+'.ª de '+imi.length+')':''),cat:{category:imiCat.category,sub:imiCat.sub}}));
   /* o mês de hoje em 1–12 é, em base 0, o mês seguinte: o dia 1 que vem */
   if(p.condominio>0){let y=Number(today().slice(0,4)),m=Number(today().slice(5,7));if(m>11){m=0;y++}
     quer.push({propRec:'condominio',propRecN:0,amount:r2(p.condominio),every:'month',next:dayInMonth(y,m,1),name:'Condomínio · '+p.name,cat:catDe('Condomínio','Quota mensal')})}
@@ -427,7 +438,7 @@ function syncAllPropRecs(){
 /* O encargo do imóvel que um planeado paga: pelo planeado automático da ficha
    do imóvel (tx.propRec: 'imi', 'condominio', 'seguro', ids fixos) e, num
    planeado feito à mão, pela categoria que o IRS lê — o id do IMI
-   (dados.js:catIrsId, 'impostos/imi') ou a coluna do Anexo F
+   (dados.js:txCatIrsId, 'impostos/imi') ou a coluna do Anexo F
    (irs-papeis.js:irsColunaDe: 'imi' ou 'condominio'). Nunca pelo nome: a
    categoria pode ter outro nesta conta. O seguro e a água, luz e gás não têm
    id nem coluna própria: feitos à mão não se reconhecem.
@@ -438,7 +449,7 @@ function recEncargoDoInquilino(r){
   if(t.kind!=='expense'||!t.propertyId)return '';
   const ids=ENCARGOS_DO_INQUILINO.map(e=>e.id);
   if(t.propRec)return ids.indexOf(t.propRec)>-1?t.propRec:'';
-  if(t.sub&&catIrsId('expense',t.category,t.sub)==='impostos/imi')return 'imi';
+  if(txCatIrsId(t,true)==='impostos/imi')return 'imi';
   const col=irsColunaDe(t).col;
   return (col==='imi'||col==='condominio')&&ids.indexOf(col)>-1?col:'';
 }

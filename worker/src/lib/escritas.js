@@ -254,7 +254,10 @@ function escreverCasa(e, o, linha) {
     };
   }
   if (linha && linha.owner_id !== me.id) return { res: { ok: false, status: 403 } };
-  const dados = preserveOwnership('', data);
+  // a casa que nasce: os de fora e o histórico das quotas que o cliente manda
+  // entram validados, com quem cria como a única conta de cada período
+  // (acesso.js:preserveOwnership, com o id dele)
+  const dados = preserveOwnership('', data, me.id);
   // ressuscitar é o «Anular» de apagar: os comproprietários sem conta e o
   // histórico das quotas (D08, D29) voltam do que a casa tinha — são factos
   // da casa, e o cliente não os pode escrever. Os donos e as percentagens
@@ -715,4 +718,50 @@ export async function aplicarOp(e, op) {
   const [r] = await aplicarOps(e, [op]);
   if (r && r._erro) throw r._erro;
   return r;
+}
+
+/* A versão mínima lida de cada binding dos assets: {v, ate}. Só muda com um
+   deploy, que traz isolados novos; o prazo é a rede para o resto. */
+const MINIMAS = new WeakMap();
+
+/* A versão mais antiga da app que ainda escreve: a «minima» do /versao.json
+   do deploy — o mesmo ficheiro que a app lê no arranque
+   (web/cloud/novidades.js:verificarVersao) —, pelo binding dos assets.
+   Guarda-se 5 minutos (1 minuto quando a leitura falha).
+   Recebe: env — o ambiente do worker (lê env.ASSETS); url — o URL do pedido
+   (a origem de onde se pede o ficheiro).
+   Devolve: promessa do número, ou 0 quando não se sabe (sem assets, ou a
+   leitura falhou). */
+async function versaoMinima(env, url) {
+  const assets = env && env.ASSETS;
+  if (!assets || typeof assets.fetch !== 'function') return 0;
+  const guardada = MINIMAS.get(assets);
+  if (guardada && guardada.ate > Date.now()) return guardada.v;
+  let v = 0;
+  try {
+    const r = await assets.fetch(new Request(new URL('/versao.json', url).toString()));
+    if (r && r.ok) {
+      const d = await r.json();
+      const m = Number(d && d.minima);
+      if (isFinite(m) && m > 0) v = m;
+    }
+  } catch (e) { v = 0; }
+  MINIMAS.set(assets, { v, ate: Date.now() + (v ? 300000 : 60000) });
+  return v;
+}
+
+/* Uma escrita de uma versão da app abaixo da mínima? A app diz a versão no
+   cabeçalho X-Versao (web/cloud/nucleo.js:api); abaixo da «minima» do
+   /versao.json, a escrita recusa-se (rotas/estado.js responde 426 antes do
+   POST /api/sync). Sem o cabeçalho (as versões de antes dele), com um valor
+   que não é número, ou sem se saber a mínima, passa como sempre: recusar
+   quem não o manda obrigava toda a gente a atualizar de uma vez.
+   Recebe: env — o ambiente do worker; request — o pedido.
+   Devolve: promessa de {versao, minima} quando se recusa, ou null. */
+export async function versaoRecusada(env, request) {
+  const h = request && request.headers ? request.headers.get('X-Versao') : null;
+  const versao = Number(String(h == null ? '' : h).trim());
+  if (!h || !isFinite(versao) || versao <= 0) return null;
+  const minima = await versaoMinima(env, request.url);
+  return minima && versao < minima ? { versao, minima } : null;
 }

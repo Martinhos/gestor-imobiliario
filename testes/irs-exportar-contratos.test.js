@@ -199,7 +199,9 @@ describe('o 4.2A: a comunicação por período (D01, D35)', () => {
   });
 
   test('D35: comunicada depois do prazo do período é Não no 4.2A, no texto, no CSV e no PDF', async () => {
-    longo({}, { comunicacoes: { 2024: '2025-03-20' } });
+    // o dia escrito na janela de agora (comunicacoesV 2): uma marca do modelo
+    // antigo com esta data ficava por confirmar
+    longo({}, { comunicacoes: { 2024: '2025-03-20' }, comunicacoesV: 2 });
     rendas('L1', 900);
     assert.match(app.fiscoTexto(), /4\.2A[^\n]*: comunicada fora do prazo \(a 20\/03\/2025; o prazo era 15\/02\/2025\) — no 4\.2A é NÃO · início/);
     const c = csv().quadros[0];
@@ -448,11 +450,15 @@ describe('o modelo provisório (D49), os anos sem regras (D50) e o 4.2C (D78)', 
 
 describe('o quadro 10 (D09) e a regularização (D10)', () => {
   /* o resumo com um contrato terminado por motivo do senhorio (regime 02, n.º
-     3 do art. 72.º), com a regularização, e outro sem o motivo */
+     3 do art. 72.º), com a regularização, e outro sem o motivo (um contrato
+     que já não está na base: a matriz, o titular e o inquilino vêm na
+     entrada, como o resumo os dá) */
   const comCessados = () => ajustar((r) => {
     r.cessados = [
       { contratoId: 'L1', nome: 'Benfica longo', imovel: 'T2 Bragança', regime: '02', numero: '333', anoInicioBeneficio: 2024, data: '2025-08-15', motivo: '01' },
-      { contratoId: 'X9', nome: 'Antigo', imovel: 'T2 Bragança', regime: '03', numero: '', anoInicioBeneficio: 2020, data: '2025-03-31', motivo: '' }];
+      { contratoId: 'X9', nome: 'Antigo', imovel: 'T2 Bragança', regime: '03', numero: '', anoInicioBeneficio: 2020, data: '2025-03-31', motivo: '',
+        propertyId: 'v1', titularId: 'ana', titular: 'A', freguesiaCodigo: '040810', tipoPredio: 'U', artigo: '3850', fracao: '',
+        anoInicioConfirmar: false, inquilinos: [{ nome: 'Tiago', nif: '123456789', pais: '' }] }];
     r.regularizacoes = [{ contratoId: 'L1', nome: 'Benfica longo', anos: [{ ano: 2025, diferenca: 450 }], total: 450 }];
     r.totais.regularizacao = 450;
   });
@@ -463,7 +469,7 @@ describe('o quadro 10 (D09) e a regularização (D10)', () => {
     comCessados();
     const t = app.fiscoTexto();
     assert.match(t, /\nQUADRO 10 · CONTRATOS QUE ACABARAM[^\n]*\n {2}Benfica longo — T2 Bragança: regime 02 \(Artigo 72\.º, n\.º 3, do Código do IRS\) · n\.º 333 · benefício desde 2024 · cessação 15\/08\/2025 · motivo 01 \(Acabou antes do prazo, por motivo do senhorio\)/);
-    assert.match(t, /Antigo — T2 Bragança: [^\n]*motivo por indicar\n {4}Falta: n\.º do contrato na AT, motivo da cessação\./);
+    assert.match(t, /Antigo — T2 Bragança: [^\n]*motivo por indicar\n {4}Freguesia 040810 · U · artigo 3850 · titular A · inquilinos: Tiago \(NIF 123456789\)\n {4}Falta: n\.º do contrato na AT, motivo da cessação\./);
     const c = csv(), q10 = c.rows.filter((x) => x.declarado === 'quadro 10');
     assert.equal(q10.length, 2);
     assert.deepEqual([q10[0].contrato, q10[0].n_at, q10[0].cessacao_regime, q10[0].cessacao_ano_beneficio, q10[0].cessacao_data, q10[0].cessacao_motivo],

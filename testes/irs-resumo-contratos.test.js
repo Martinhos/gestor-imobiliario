@@ -267,8 +267,11 @@ describe('D09 — os contratos com benefício que acabaram no ano (quadro 10)', 
       fisco: { estado: 'declarado', numero: '114', finalidade: 'hp', celebracao: '2023-12-15', cessacao: { data: '2025-08-31', motivo: '02' } } });
     rendas(app, 'C1', 2024, 1000); rendas(app, 'C1', 2025, 1000, [1, 2, 3, 4, 5, 6, 7, 8]);
     const r = app.resumoFiscal(2025, 'ana');
-    assert.deepEqual(json(r.cessados), [{ contratoId: 'C1', nome: 'C1', imovel: 'T2 Arroios', regime: app.irsRegimeQuadro10(app.contract('C1'), 2025),
-      numero: '114', anoInicioBeneficio: 2024, data: '2025-08-31', motivo: '02' }]);
+    // N008/N009: cada entrada leva também a matriz, o titular, os inquilinos e se o ano de início é certo
+    assert.deepEqual(json(r.cessados), [{ contratoId: 'C1', nome: 'C1', imovel: 'T2 Arroios', propertyId: 'v1', regime: app.irsRegimeQuadro10(app.contract('C1'), 2025),
+      numero: '114', anoInicioBeneficio: 2024, anoInicioConfirmar: false, anoInicioPorque: '', data: '2025-08-31', motivo: '02',
+      titularId: 'ana', titular: 'A', quota: 1, freguesiaCodigo: '110623', tipoPredio: 'U', artigo: '4651', fracao: 'A',
+      freguesiaUniao: null, matrizConfirmada: '', inquilinos: [{ id: 't1', nome: 'Tiago', nif: '123456789', pais: '' }] }]);
     assert.equal(r.cessados[0].regime, '02', 'o n.º 3 do art. 72.º (5 a 10 anos) é o código 02');
     assert.deepEqual(json(app.resumoFiscal(2024, 'ana').cessados), [], 'no ano antes não');
   });
@@ -300,7 +303,9 @@ describe('D10 — a regularização do n.º 20: a taxa da duração decorrida, s
     const dec = app.irsTaxaDecorrida(app.contract('C1'));
     assert.equal(dec.taxa, 25, '30 meses não chegam a escalão nenhum: a taxa base');
     const r = app.resumoFiscal(2026, 'ana');
-    assert.deepEqual(json(r.regularizacoes), [{ contratoId: 'C1', nome: 'C1', anos: [{ ano: 2024, diferenca: 4500 }, { ano: 2025, diferenca: 4500 }], total: 9000 }]);
+    // N031: com o início do período, os anos que a app não tem (nenhum) e os somados com as regras de outro ano (2024)
+    assert.deepEqual(json(r.regularizacoes), [{ contratoId: 'C1', nome: 'C1', desde: '2024-01-01', anos: [{ ano: 2024, diferenca: 4500 }, { ano: 2025, diferenca: 4500 }], total: 9000,
+      anosEmFalta: [], anosSemRegras: [2024] }]);
     perto(r.totais.regularizacao, 9000, 1e-9);
     const l = linha(r, 'C1');
     assert.equal(l.quadro, '4.2', 'a linha fica no 4.2: o 4.2A e o quadro 10 dizem-no à AT');

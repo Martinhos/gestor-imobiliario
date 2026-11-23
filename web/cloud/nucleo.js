@@ -302,7 +302,12 @@ function contratoAbaixo(cru, migrado) {
    forma migrada, e por isso nada sobe enquanto o contrato não mudar — cada
    aparelho migra igual ao ler —, mas o primeiro envio dele (uma alteração
    qualquer, de quem tem permissão) vê o bloco fiscal mudado (baseParcial) e
-   leva a migração com a marca, uma vez. Os outros campos ficam como estão.
+   leva a migração com a marca, uma vez. As marcas das comunicações por
+   confirmar (fisco.comunicacoesPorConfirmar, que a migração escreve junto
+   com a marca) vão também como o servidor as tem: sem isso a base era igual
+   ao que o aparelho tem nesse campo, a fusão ficava com o do servidor (nada)
+   e a marca perdia-se no primeiro envio — e a comunicacoesV já não deixava
+   migrar outra vez. Os outros campos ficam como estão.
    Recebe: forma — o contrato na forma local (migrado, sem as chaves de
    trabalho); cru — o mesmo contrato como o servidor o tem.
    Devolve: a própria forma quando o servidor já tem a migração; senão, uma
@@ -311,9 +316,12 @@ function comunicacoesPorMigrar(forma, cru) {
   if (!fusaoObjeto(forma) || !fusaoObjeto(forma.fisco) || !contratoAbaixo(cru, forma)) return forma;
   var out = JSON.parse(JSON.stringify(forma));
   var fc = fusaoObjeto(cru) && fusaoObjeto(cru.fisco) ? cru.fisco : {};
-  out.fisco.comunicacoes = normFisco(fc).comunicacoes;
+  var nf = normFisco(fc);
+  out.fisco.comunicacoes = nf.comunicacoes;
   if (fc.comunicacoesV === undefined) delete out.fisco.comunicacoesV;
   else out.fisco.comunicacoesV = JSON.parse(JSON.stringify(fc.comunicacoesV));
+  if (fc.comunicacoesPorConfirmar === undefined || (nf || {}).comunicacoesPorConfirmar === undefined) delete out.fisco.comunicacoesPorConfirmar;
+  else out.fisco.comunicacoesPorConfirmar = JSON.parse(JSON.stringify(nf.comunicacoesPorConfirmar));
   return out;
 }
 
@@ -433,13 +441,63 @@ var TEMPO_API = { estado: 45000, sync: 45000, outros: 20000 };
    escrevem dados. */
 var LIVRES_DA_TRANCA = { '/api/reports': 1, '/api/auth/logout': 1 };
 
+/* A versão desta app (o VERSAO do avisos.js), para o X-Versao de cada
+   pedido. O avisos.js pode não ter carregado (index.html): aí é 0, e o
+   pedido segue sem o cabeçalho, como o de uma versão de antes dele.
+   Recebe: nada.
+   Devolve: o número da versão, ou 0. */
+function versaoDestaApp() {
+  try { var v = Number(VERSAO); return isFinite(v) && v > 0 ? v : 0; } catch (e) { return 0; }
+}
+
+/* Tranca a app porque esta versão está abaixo da mínima: o servidor recusou
+   uma escrita com 426 (worker/src/rotas/estado.js), ou o /versao.json lido ao
+   voltar a rede o diz (versaoMinimaAoVoltar). É a mesma tranca do arranque
+   (novidades.js:gateAtualizar): nada que escreva sai, o envio agendado
+   desarma-se, e o ecrã de atualizar tapa a app. O que ficou por enviar fica
+   no aparelho e sobe depois de atualizar.
+   Recebe: minima — a versão mais antiga aceite (0 quando não se sabe).
+   Devolve: nada. */
+function trancarPelaVersao(minima) {
+  CW.trancado = true;
+  try { clearTimeout(pushTimer); pushTimer = null; } catch (e) {}
+  try { if (typeof gateAtualizar === 'function') gateAtualizar(minima > 0 ? minima : versaoDestaApp() + 1); } catch (e) {}
+}
+
+/* Quando se perguntou pela última vez a versão mínima (versaoMinimaAoVoltar), em ms. */
+var versaoVistaEm = 0;
+/* Ao voltar a rede (e ao voltar à frente, no máximo de 10 em 10 minutos):
+   lê o /versao.json e, abaixo da mínima, tranca (trancarPelaVersao). O
+   CW.verificarVersao (novidades.js) só corria no arranque, e uma app aberta
+   sem rede, ou dias em segundo plano, escrevia com o código velho quando a
+   rede voltava. Só a mínima: a versão nova, que o arranque descarrega e
+   recarrega sozinho, não se instala aqui — recarregar a meio de um
+   formulário perdia o que estava escrito. Sem rede não faz nada.
+   Recebe: espacar (opcional) — true para não perguntar outra vez antes de 10 minutos.
+   Devolve: Promise que resolve quando acabar (nunca rejeita). */
+function versaoMinimaAoVoltar(espacar) {
+  if (CW.trancado || !versaoDestaApp()) return Promise.resolve();
+  if (espacar && Date.now() - versaoVistaEm < 600000) return Promise.resolve();
+  versaoVistaEm = Date.now();
+  return Promise.resolve().then(function () { return fetch('/versao.json', { cache: 'no-store' }); })
+    .then(function (r) { return r && r.ok ? r.json() : null; })
+    .then(function (d) {
+      var m = Number(d && d.minima);
+      if (isFinite(m) && m > versaoDestaApp()) trancarPelaVersao(m);
+    })
+    .catch(function () { /* sem rede: fica como está */ });
+}
+
 /* Chamada à API. A sessão vai no cookie HttpOnly que o servidor põe ao entrar
    (credentials: 'same-origin'), e o token não se guarda no aparelho: um script
    na página não o lê. O Bearer só segue quando há um token cá — os fluxos de
    teste (?entrar=, o seletor de contas de teste) e as sessões guardadas antes
    de o token sair das respostas (largarTokenAntigo) — e com ele o
    X-Rendorium-Token: 1, para o servidor de teste devolver o token novo quando
-   roda a sessão (sessaoRodada). Serializa 'data' em JSON, tem tempo-limite
+   roda a sessão (sessaoRodada). Cada pedido diz a versão da app no X-Versao
+   (versaoDestaApp): o servidor recusa com 426 a escrita de uma versão abaixo
+   da mínima (worker/src/rotas/estado.js), e a app tranca como no arranque
+   (trancarPelaVersao). Serializa 'data' em JSON, tem tempo-limite
    (TEMPO_API), e com a app trancada recusa o que escreve. Um 401 de sessão
    encerra a sessão local (sessaoCaiu). Resposta não-ok rejeita com um Error
    cuja mensagem vem do servidor e com .status preenchido.
@@ -459,6 +517,7 @@ function api(method, path, data, opcoes) {
     return Promise.reject(tr);
   }
   var opts = { method: method, headers: {}, credentials: 'same-origin' };
+  if (versaoDestaApp()) opts.headers['X-Versao'] = String(versaoDestaApp());
   if (CW.user && CW.user.token) {
     opts.headers['Authorization'] = 'Bearer ' + CW.user.token;
     opts.headers['X-Rendorium-Token'] = '1';
@@ -483,6 +542,8 @@ function api(method, path, data, opcoes) {
       if (!r.ok) {
         var e = new Error(j.error || ('Erro ' + r.status)); e.status = r.status;
         if (j.erro) e.erro = j.erro;
+        // uma versão abaixo da mínima: o servidor não grava, e a app tranca já
+        if (r.status === 426) trancarPelaVersao(Number(j.minima) || 0);
         /* passaram os 7 dias sem confirmar o email: o servidor só deixa o
            essencial (worker/src/api.js:portaoDoEmail), e a app abre o ecrã
            que o diz (cloud/entrada.js:emailPorConfirmar) */
@@ -1120,6 +1181,8 @@ function pushNow() {
        escolheu entretanto. Esperam pela leitura seguinte (syncCycle lê
        já), que refaz a base — e a base fica no aparelho, para a fusão
        dessa leitura (reporPendentes) */
+    // uma casa que o servidor ainda não tem (quotasQueNaoVieram)
+    if (op.scope === 'house' && !(k in snap)) op._nova = true;
     var porMigrar = b && (k === 'u:settings:main' ? definicoesAbaixo(b, op.data).length > 0
       : op.kind === 'contract' && contratoAbaixo(b, op.data));
     if (porMigrar && !(migracoesLidasEm && Date.now() - migracoesLidasEm <= MIGRACOES_FRESCAS_MS)) {
@@ -1157,6 +1220,7 @@ function pushNow() {
      logo na primeira contagem) para o push partir. Os «put» seguem: o que
      desapareceu espera pelo applyState, que refaz o retrato por inteiro
      (sabeOServidor, lá em cima). */
+  var protecao = reposicaoEmCurso();
   Object.keys(snap).forEach(function (k) {
     if (k in map) return;
     if (!sabeOServidor) return;
@@ -1170,9 +1234,16 @@ function pushNow() {
     // casas dos outros — só remoções pontuais (a casa continua presente)
     var houseGone = pk.houseId && !('h:' + pk.houseId in map);
     if (sharedHouses[pk.houseId] && houseGone) { delete snap[k]; return; }
+    // e depois de repor uma cópia com sessão: o que a reposição tirou e é de
+    // uma casa com outras pessoas, de outra conta ou mais recente do que a
+    // cópia não sai do servidor — o estado seguinte devolve-o ao aparelho
+    if (protecao && protecao.chaves[k] && protegidoNaReposicao(protecao, pk)) { delete snap[k]; return; }
     ops.push(Object.assign({ _key: k, op: 'del' }, pk));
   });
-  if (!ops.length) { pushing = false; return Promise.resolve(); }
+  if (!ops.length) {
+    if (protecao && reposicaoArmada === protecao) reposicaoArmada = null;   // a reposição não tinha nada a enviar
+    pushing = false; return Promise.resolve();
+  }
   // enviar muda o servidor (ou tenta): o selo do último estado deixa de valer
   seloAplicado = ''; resumoAplicado = '';
 
@@ -1199,6 +1270,7 @@ function pushNow() {
               // o que subiu passa a ser o que este aparelho sabe que o servidor tem
               bases[chaveDaBase(o._key)] = o.data;
               delete basesPorEnviar[o._key];
+              if (o._nova) lembrarQuotasDaCasaNova(o.houseId, o.data);
             }
             // um serviço desligado nesta conta: diz-se a razão certa, e não se insiste
             else if (sid) recusaPorServico(o, sid);
@@ -1221,6 +1293,8 @@ function pushNow() {
     .then(function () {
       saveSnap(); saveBases();
       ligou();
+      // o envio da reposição chegou ao servidor: a proteção dela acaba aqui
+      if (protecao && reposicaoArmada === protecao) reposicaoArmada = null;
       /* um 200 com operações recusadas lá dentro ficava 'ok' para sempre,
          com o selo verde e os dados sem subir — e «Sem ligação» também não
          é: o servidor respondeu. Ficam por enviar, e o ciclo volta a tentar */
@@ -1274,8 +1348,9 @@ function pushNow() {
         ligou();
         setSyncBadge('pend', porEnviar(ops));
         /* o email por confirmar diz-se no ecrã dele (cloud/entrada.js); em
-           aviso aparecia por cima da janela do «Pedir ajuda» */
-        if (e.erro !== 'email_por_confirmar') avisoDoServidor(e.message);
+           aviso aparecia por cima da janela do «Pedir ajuda». A versão abaixo
+           da mínima (426) também: o ecrã de atualizar já está por cima */
+        if (e.erro !== 'email_por_confirmar' && e.status !== 426) avisoDoServidor(e.message);
       } else {
         caiuALigacao();   // sem rede, ou sem resposta a tempo
       }
@@ -1968,7 +2043,8 @@ function reporPendentes(d, pend) {
    cliente não sabe ler — um kind de uma versão mais nova, um registo que não
    normaliza — nunca: fica congelado, para a versão que o sabe ler. Nem o que
    não sobe por falta de permissão num imóvel de colaboração: isso é do dono.
-   Grava tudo no aparelho e redesenha.
+   Uma casa nova que subiu com quotas escritas e voltou sem elas diz-se
+   (quotasQueNaoVieram). Grava tudo no aparelho e redesenha.
    Recebe: st — o estado vindo de GET /api/state (o mesmo que rebuildDb
    recebe); selo, resumoSt (opcionais) — o ETag e o resumo da resposta, que a
    leitura seguinte usa para saber se mudou alguma coisa.
@@ -2000,6 +2076,8 @@ function applyState(st, selo, resumoSt) {
   if (!Array.isArray(st.sharedGroupRequests.incoming)) st.sharedGroupRequests.incoming = [];
   if (!Array.isArray(st.sharedGroupRequests.outgoing)) st.sharedGroupRequests.outgoing = [];
   CW.state = st;
+  // as casas novas que subiram com quotas escritas e voltaram sem elas (dito no fim)
+  var quotasPerdidas = quotasQueNaoVieram(st);
   /* os serviços desligados nesta conta vêm no estado (servicos.desligados);
      sem o campo, está tudo ligado — e o separador onde estávamos, se ficou
      desligado, dá lugar ao primeiro que abre */
@@ -2085,6 +2163,7 @@ function applyState(st, selo, resumoSt) {
   try { scheduleReminders(); } catch (e) {}
   applyLocalTheme(); buildNav(); render();
   setSyncBadge('ok');
+  avisarQuotasQueNaoVieram(quotasPerdidas);
   schedulePush(); // envia o que ainda faltar no servidor
 }
 
@@ -2201,8 +2280,9 @@ function syncCycle() {
    aparelho tem (applyState: o que ficou por enviar da sessão anterior fica
    por cima do servidor e sobe a seguir; a migração de quem usava a app sem
    conta, com o servidor vazio, sobe o que tinha). Liga, uma vez por página,
-   o ciclo de 30s, as sincronizações ao voltar online ou à frente, e o envio
-   imediato do que estava agendado quando a app vai para segundo plano.
+   o ciclo de 30s, as sincronizações ao voltar online ou à frente (com a
+   versão mínima, versaoMinimaAoVoltar), e o envio imediato do que estava
+   agendado quando a app vai para segundo plano.
 
    O `pedido` é a leitura já em curso, quando quem chama a mandou adiantar (o
    entrada.js dispara-a ao mesmo tempo que o /api/me, em vez de esperar por
@@ -2227,10 +2307,11 @@ function startSync(pedido) {
   if (startSync._armado) return;   // entrar de novo na mesma página não arma um segundo ciclo
   startSync._armado = 1;
   setInterval(syncCycle, 30000);
-  window.addEventListener('online', syncCycle);
+  // ao voltar a rede e à frente, a versão mínima também (versaoMinimaAoVoltar)
+  window.addEventListener('online', function () { versaoMinimaAoVoltar(); syncCycle(); });
   window.addEventListener('pagehide', despacharJa);
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) despacharJa(); else { marcarAtividade(); syncCycle(); }
+    if (document.hidden) despacharJa(); else { marcarAtividade(); versaoMinimaAoVoltar(true); syncCycle(); }
   });
   ['pointerdown', 'keydown', 'scroll'].forEach(function (ev) {
     document.addEventListener(ev, marcarAtividade, { capture: true, passive: true });
@@ -2281,6 +2362,248 @@ function dropUnsafe(d) {
   return d;
 }
 dropUnsafe(db);
+
+/* ---------------- repor uma cópia com sessão ----------------
+   Repor uma cópia antiga com sessão iniciada substituía a base inteira, e o
+   envio seguinte apagava no servidor tudo o que a cópia não trazia — as
+   rendas que o comproprietário registou depois dela, as dos outros
+   aparelhos — e, na fusão a três, os valores antigos da cópia ganhavam (a
+   cessação de um contrato voltava a vazia, e a Declaração do outro dono
+   perdia as rendas). A reposição é registo a registo
+   (copias.js:planoDaReposicao), com as regras daqui (regrasDaReposicao): lê
+   a conta primeiro; o que o servidor tem mais recente do que a cópia fica
+   como está; o que é de uma casa com outras pessoas (de outro dono, de
+   colaboração, com comproprietários ou colaboradores) ou que outra conta
+   criou ou escreveu nunca sai; o que a cópia tem e a conta já não tem volta,
+   salvo o que outra conta criou numa casa com outras pessoas. E o envio que
+   se segue não manda o «del» dessas chaves, mesmo que a conta tenha mudado
+   entretanto (reposicaoArmada). */
+
+/* O instante do servidor até onde este aparelho leu: a escrita mais recente
+   do último estado (casas, registos, dados da conta). Vai no cabeçalho de
+   cada cópia (cabecalhoDaCopia): o que o servidor escreveu depois é mais
+   recente do que a cópia, medido pelo relógio do servidor (o do aparelho
+   pode estar adiantado ou atrasado).
+   Recebe: st (opcional) — o estado (CW.state por omissão).
+   Devolve: os milissegundos, ou 0 sem nada lido. */
+function servidorLidoAte(st) {
+  st = st || CW.state || {};
+  var m = 0;
+  [st.houses, st.records, st.userRecords].forEach(function (l) {
+    (l || []).forEach(function (x) { var t = Number(x && x.updatedAt) || 0; if (t > m) m = t; });
+  });
+  return m;
+}
+
+var _cabecalhoDaCopia = cabecalhoDaCopia;
+/* O cabeçalho da cópia de segurança com sessão: o da base (copias.js) e,
+   com um estado lido, o servidorAte (servidorLidoAte), que a reposição usa
+   como fronteira do que é mais recente do que a cópia.
+   Recebe: nada.
+   Devolve: {feitaEm, servidorAte?}. */
+cabecalhoDaCopia = function () {
+  var c = _cabecalhoDaCopia();
+  if (CW.user && CW._pulled) { var t = servidorLidoAte(); if (t) c.servidorAte = t; }
+  return c;
+};
+
+/* O kind de cada lista da base (o inverso de listaDe), para a chave de
+   entidade de um registo (entidadeNaReposicao). */
+var KINDS_DAS_LISTAS = { contracts: 'contract', transactions: 'tx', recurring: 'rec', visits: 'visit', tenants: 'tenant', templates: 'tpl', groups: 'group' };
+
+/* A chave de entidade de um registo da base, como a do entidadeDe: o mesmo
+   registo em r: e em u: é a mesma entidade.
+   Recebe: lista — a lista da base ('properties', 'contracts', …, ou
+   'owners' para o meu perfil e 'settings' para as definições); x — o registo.
+   Devolve: 'h:<id>', '<kind>:<id>', 'profile:main' ou 'settings:main'. */
+function entidadeNaReposicao(lista, x) {
+  if (lista === 'properties') return 'h:' + (x && x.id);
+  if (lista === 'owners') return 'profile:main';
+  if (lista === 'settings') return 'settings:main';
+  return KINDS_DAS_LISTAS[lista] + ':' + (x && x.id);
+}
+
+/* O que o servidor sabe de cada entidade, para a reposição: quando a
+   escreveu (pela chave de entidade; a ficha que vem em duas chaves fica com
+   a escrita mais recente), que casas têm outras pessoas (de outro dono, de
+   colaboração, com comproprietários ou com colaboradores), as de
+   colaboração, e que registos outra conta criou ou escreveu.
+   Recebe: st — o estado.
+   Devolve: {em: {chave: ms}, comOutros: {casa: true}, colab: {casa: true},
+   deOutros: {chave: true}}. */
+function indiceDaReposicao(st) {
+  var eu = CW.user ? CW.user.id : '';
+  var em = {}, comOutros = {}, colab = {}, deOutros = {};
+  var poe = function (k, t) { t = Number(t) || 0; if (!(k in em) || t > em[k]) em[k] = t; };
+  (st.houses || []).forEach(function (h) {
+    poe('h:' + h.id, h.updatedAt);
+    if (h.collab) colab[h.id] = true;
+    if (!h.mine || h.collab || (h.participants || []).length > 1 || (h.collaborators || []).length) comOutros[h.id] = true;
+  });
+  (st.records || []).forEach(function (r) {
+    var k = r.kind + ':' + r.id;
+    poe(k, r.updatedAt);
+    if ((r.createdBy && r.createdBy !== eu) || (r.author && r.author !== eu)) deOutros[k] = true;
+  });
+  (st.userRecords || []).forEach(function (r) { poe(r.kind + ':' + r.id, r.updatedAt); });
+  return { em: em, comOutros: comOutros, colab: colab, deOutros: deOutros };
+}
+
+var _regrasDaReposicao = regrasDaReposicao;
+/* As regras da reposição com sessão iniciada (copias.js:planoDaReposicao;
+   o porquê no cabeçalho desta secção). Sem sessão, as da base: nenhumas.
+   Recebe: quando — o instante da cópia (copias.js:instanteDaCopia: ms, do
+   relógio do aparelho; servidorAte, do relógio do servidor).
+   Devolve: null sem sessão; senão {eu, ler(), antes(), manter(lista, atual,
+   daCopia), sair(lista, atual), voltar(lista, daCopia), manterDefinicoes(),
+   depois()}. */
+regrasDaReposicao = function (quando) {
+  if (!CW.user) return _regrasDaReposicao(quando);
+  var q = quando || {};
+  /* a fronteira: até onde o aparelho da cópia tinha lido o servidor (o
+     relógio do servidor) ou, numa cópia sem isso, quando se fez (o relógio
+     do aparelho; desde a meia-noite, numa cópia só com o dia no nome) */
+  var lim = Number(q.servidorAte) || Number(q.ms) || 0;
+  var ix = null;
+  var indice = function () { return ix || (ix = indiceDaReposicao(CW.state || {})); };
+  /* O servidor tem a entidade mais recente do que a cópia: escrita depois da
+     versão que a cópia tem (o _atServidor dela, pelo mesmo relógio), ou
+     depois da fronteira; sem nada com que medir, conta como mais recente. O
+     que o servidor não tem (por enviar daqui) também: não é a cópia que o
+     desfaz. */
+  var maisRecente = function (k, daCopia) {
+    var at = indice().em[k];
+    if (!at) return true;
+    var dela = daCopia ? Number(daCopia._atServidor) || 0 : 0;
+    if (dela) return at > dela;
+    return !lim || at > lim;
+  };
+  return {
+    eu: CW.user.id,
+    // lê a conta primeiro: as regras medem pelo que o servidor tem agora
+    ler: function () { return pullNow(true); },
+    // o que impede repor agora (o texto do aviso), ou '' para seguir
+    antes: function () {
+      ix = null;
+      if (CW.trancado) return 'Esta versão da app tem de ser atualizada antes de repor uma cópia.';
+      if (!CW._pulled || semLigacao) return 'Para repor uma cópia com sessão iniciada, a app tem de ler a tua conta primeiro. Liga-te à internet e tenta outra vez.';
+      return '';
+    },
+    // nas duas: fica a de agora numa casa de colaboração ou quando o servidor a tem mais recente
+    manter: function (lista, atual, daCopia) {
+      var h = casaNaReposicao(lista, atual);
+      if (h && indice().colab[h]) return true;
+      return maisRecente(entidadeNaReposicao(lista, atual), daCopia);
+    },
+    // só agora: sai o que é só meu, e que o servidor já tinha antes da cópia
+    sair: function (lista, atual) {
+      var h = casaNaReposicao(lista, atual), k = entidadeNaReposicao(lista, atual), i = indice();
+      if ((h && i.comOutros[h]) || i.deOutros[k]) return false;
+      return !maisRecente(k, null);
+    },
+    // só na cópia: volta, salvo uma casa que não era minha ou o que outra conta criou numa casa com outras pessoas
+    voltar: function (lista, daCopia) {
+      if (lista === 'properties') return !daCopia._sharedFrom && !daCopia._cargo && !daCopia._ownerUserId;
+      var h = casaNaReposicao(lista, daCopia);
+      return !(h && indice().comOutros[h] && daCopia._createdBy && daCopia._createdBy !== CW.user.id);
+    },
+    manterDefinicoes: function () { return maisRecente('settings:main', null); },
+    depois: function () { armarReposicao(lim); },
+  };
+};
+
+/* O envio que se segue a uma reposição com sessão (copias.js:bkLoad): as
+   chaves que ela tirou (no retrato e fora da exportação), a fronteira da
+   cópia e até quando vale. Só essas se vigiam, e só até um envio chegar ao
+   servidor (pushNow) — ou dez minutos, sem rede: o que a pessoa apagar
+   depois sai como sempre. null sem reposição por enviar. */
+var reposicaoArmada = null;
+
+/* Arma a vigia do envio da reposição (reposicaoArmada), com a base nova já
+   posta e antes de gravar.
+   Recebe: lim — a fronteira da cópia (ms; 0 sem ela).
+   Devolve: nada. */
+function armarReposicao(lim) {
+  var map = exportEntities(), chaves = {};
+  Object.keys(snap).forEach(function (k) { if (!(k in map)) chaves[k] = 1; });
+  reposicaoArmada = { lim: lim || 0, chaves: chaves, ate: Date.now() + 600000 };
+}
+
+/* A vigia do envio da reposição, se ainda vale, com o índice do servidor de
+   agora (indiceDaReposicao) — para o pushNow.
+   Recebe: nada.
+   Devolve: {lim, chaves, ate, ix}, ou null. */
+function reposicaoEmCurso() {
+  var a = reposicaoArmada;
+  if (!a) return null;
+  if (Date.now() > a.ate) { reposicaoArmada = null; return null; }
+  a.ix = indiceDaReposicao(CW.state || {});
+  return a;
+}
+
+/* Uma remoção que o envio da reposição não manda: de uma casa com outras
+   pessoas, de um registo que outra conta criou ou escreveu, ou de uma
+   entidade mais recente no servidor do que a cópia (sem fronteira, todas).
+   Recebe: a — o que reposicaoEmCurso devolve; pk — a chave decomposta (parseKey).
+   Devolve: true quando não sai. */
+function protegidoNaReposicao(a, pk) {
+  var i = a.ix, k = entidadeDe(pk);
+  if ((pk.houseId && i.comOutros[pk.houseId]) || i.deOutros[k]) return true;
+  return !a.lim || (i.em[k] || 0) > a.lim;
+}
+
+/* ---------------- as quotas de uma casa nova ----------------
+   Uma casa que sobe pela primeira vez (a migração dos dados de quem usava a
+   app sem conta, ou uma casa que volta ao repor uma cópia) leva os
+   comproprietários sem conta e o histórico das quotas que o aparelho tinha;
+   o servidor aceita-os validados (worker/src/lib/acesso.js:preserveOwnership)
+   e deixa cair o que não passa. Se a casa voltar sem eles, diz-se: calado, a
+   Declaração passava a contar a casa por inteiro, ou com as quotas de agora
+   nos anos de antes. */
+
+/* As casas novas enviadas com quotas escritas, à espera do estado seguinte:
+   id -> {nome, fora, hist}. */
+var casasNovasComQuotas = {};
+
+/* Lembra uma casa nova que subiu com os de fora (uma lista, mesmo vazia) ou
+   com períodos no histórico das quotas (pushNow).
+   Recebe: id — o id da casa; d — a ficha que subiu.
+   Devolve: nada. */
+function lembrarQuotasDaCasaNova(id, d) {
+  d = d || {};
+  var fora = Array.isArray(d.comproprietariosFora), hist = Array.isArray(d.quotasHist) && d.quotasHist.length > 0;
+  if (id && (fora || hist)) casasNovasComQuotas[id] = { nome: String(d.name || ''), fora: fora, hist: hist };
+}
+
+/* As casas novas cujas quotas não voltaram no estado (applyState): os de
+   fora vêm nulos, ou o histórico vem sem períodos, quando o aparelho os
+   tinha. Cada casa lembrada sai da lista quando chega no estado.
+   Recebe: st — o estado lido.
+   Devolve: os nomes dessas casas (array). */
+function quotasQueNaoVieram(st) {
+  var nomes = [];
+  (st.houses || []).forEach(function (h) {
+    var e = casasNovasComQuotas[h.id];
+    if (!e) return;
+    delete casasNovasComQuotas[h.id];
+    var d = fusaoObjeto(h.data) ? h.data : {};
+    var semFora = e.fora && !Array.isArray(d.comproprietariosFora);
+    var semHist = e.hist && !(Array.isArray(d.quotasHist) && d.quotasHist.length);
+    if (semFora || semHist) nomes.push(e.nome || String(d.name || '') || 'uma casa');
+  });
+  return nomes;
+}
+
+/* O aviso das quotas que não voltaram (quotasQueNaoVieram), uma vez.
+   Recebe: nomes — os nomes das casas.
+   Devolve: nada. */
+function avisarQuotasQueNaoVieram(nomes) {
+  if (!nomes || !nomes.length) return;
+  var onde = nomes.length === 1 ? nomes[0] : nomes.length === 2 ? nomes[0] + ' e em ' + nomes[1] : nomes[0] + ' e em mais ' + (nomes.length - 1) + ' casas';
+  try {
+    toast('As quotas que tinhas escritas em ' + onde + ' não vieram: confirma-as na ' + (nomes.length === 1 ? 'ficha do imóvel.' : 'ficha de cada imóvel.'), { ms: 8000 });
+  } catch (e) {}
+}
 
 /* ---------------- embrulhos da base ----------------
    A base não sabe da nuvem: a nuvem embrulha-a por reatribuição (guarda a

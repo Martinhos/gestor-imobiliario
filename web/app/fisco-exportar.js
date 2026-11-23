@@ -135,13 +135,19 @@ function fiscoExpSemRegras(r){
    4.2A pergunta se foi feita até lá. Feita depois é NÃO (D35); por fazer com
    o prazo passado também. O período vem do resumo (l.comunicacao,
    irs.js:irsComunicacaoDoAno); sem ele, do contrato; sem o contrato, do
-   l.comunicado de antes.
+   l.comunicado de antes. Sem o dia do período e com a marca do modelo antigo
+   por confirmar (a app pedia a comunicação todos os anos e guardava-a pelo ano
+   dos rendimentos: a data dessa marca, depois do prazo do período para onde
+   a migração a levou, não diz quando a duração foi comunicada —
+   fiscoExpComPorConfirmar), a resposta fica «a confirmar», e nunca NÃO.
    Recebe: r — o resumo; l — a linha (do quadro 4.2).
    Devolve: null quando não há nada a comunicar; senão {resposta ('sim',
-   'nao', ou '' por fazer com o prazo à frente), data, prazo, periodoInicio
-   ('AAAA-MM-DD' ou ''), foraDePrazo, texto} — texto a forma curta, ex.:
+   'nao', 'a confirmar', ou '' por fazer com o prazo à frente), data, prazo,
+   periodoInicio ('AAAA-MM-DD' ou ''), foraDePrazo, porConfirmar, dataAntiga
+   ('AAAA-MM-DD' da marca antiga, ou ''), texto} — texto a forma curta, ex.:
    «comunicada a 10/02/2025», «comunicada fora do prazo (a 20/03/2026; o
-   prazo era 15/02/2026) — no 4.2A é NÃO», «por comunicar · até 15/02/2027». */
+   prazo era 15/02/2026) — no 4.2A é NÃO», «por comunicar · até 15/02/2027»,
+   «a confirmar — a marca de 10/02/2026 vem da app antiga, …». */
 function fiscoExpComunicacao(r,l){
   if(!l)return null;
   let x=l.comunicacao;
@@ -153,12 +159,34 @@ function fiscoExpComunicacao(r,l){
   if(!x||typeof x!=='object')return null;
   const Q=(((r||{}).versao||{}).quadros||{}).datas||'4.2A';
   const data=String(x.data||''),prazo=String(x.prazo||''),fora=!!data&&(x.foraDePrazo===true||(!!prazo&&data>prazo));
-  const passou=!data&&!!prazo&&prazo<today();
-  return {resposta:data&&!fora?'sim':fora||passou?'nao':'',data:data,prazo:prazo,periodoInicio:String(x.periodoInicio||''),foraDePrazo:fora,
-    texto:data&&!fora?'comunicada a '+dPT(data)
+  const pc=data?null:fiscoExpComPorConfirmar(l,x);
+  const passou=!data&&!pc&&!!prazo&&prazo<today();
+  return {resposta:pc?'a confirmar':data&&!fora?'sim':fora||passou?'nao':'',data:data,prazo:prazo,periodoInicio:String(x.periodoInicio||''),foraDePrazo:fora,
+    porConfirmar:!!pc,dataAntiga:pc?pc.data:'',
+    texto:pc?'a confirmar — '+(pc.data?'a marca de '+dPT(pc.data)+' vem':'a marca vem')+' da app antiga, que pedia a comunicação todos os anos; se comunicaste a duração deste período até '
+        +(prazo?dPT(prazo):'15 de fevereiro do ano seguinte ao início dele')+', no '+Q+' é SIM, senão é NÃO'
+      :data&&!fora?'comunicada a '+dPT(data)
       :fora?'comunicada fora do prazo (a '+dPT(data)+(prazo?'; o prazo era '+dPT(prazo):'')+') — no '+Q+' é NÃO'
       :passou?'por comunicar (o prazo acabou a '+dPT(prazo)+') — no '+Q+' é NÃO'
       :'por comunicar'+(prazo?' · até '+dPT(prazo):'')};
+}
+/* A marca do modelo antigo por confirmar na comunicação de um período (a
+   migração das comunicações, dados.js): a do resumo (x.porConfirmar, com a
+   x.dataAntiga) ou, sem ela, a do contrato — fisco.comunicacoesPorConfirmar
+   pela chave do período (o ano do início dele), com a data da marca antiga.
+   Lida com cuidado: um contrato sem ela não está por confirmar.
+   Recebe: l — a linha (com contratoId); x — a comunicação do período
+   (l.comunicacao, irs.js:irsComunicacaoDoAno).
+   Devolve: null sem marca; senão {data} — a data da marca antiga
+   ('AAAA-MM-DD', ou '' quando a marca não a tem). */
+function fiscoExpComPorConfirmar(l,x){
+  const dia=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||''))?String(v):'';
+  if(x&&x.porConfirmar===true)return {data:dia(x.dataAntiga)};
+  const k=String((x&&x.chave)||String((x&&x.periodoInicio)||'').slice(0,4));
+  if(!/^\d{4}$/.test(k)||!l||l.contratoId==null)return null;
+  const c=contract(l.contratoId),m=c&&c.fisco&&c.fisco.comunicacoesPorConfirmar;
+  if(!m||typeof m!=='object'||Array.isArray(m)||!m[k])return null;
+  return {data:dia(m[k])};
 }
 /* Se a linha do 4.2 leva o 4.2B: o contrato novo com a renda pelo menos 5 %
    abaixo da do anterior (o n.º 24 do art. 72.º), mesmo quando a estimativa
@@ -238,29 +266,120 @@ function fiscoExpLimites23(r){
 /* Os contratos do quadro 10 (os que acabaram no ano e tiveram redução ou
    isenção, D09), com os textos das tabelas da versão (quadro10.regimes e
    .motivos) e, no motivo que regulariza (o 01, art. 72.º n.º 20), a
-   diferença estimada (D10, r.regularizacoes do resumo).
+   diferença estimada (D10, r.regularizacoes do resumo). Cada entrada leva
+   também o que o impresso pede depois da cessação, «conforme as instruções
+   do quadro 4.1»: a identificação matricial, o titular e o NIF do inquilino
+   ou o país (fiscoExpIdent10) — uma por titular em conjunta, como as linhas
+   do 4.x. O ano de início do benefício que a app não sabe ao certo (o
+   contrato começou antes das rendas que tem dele: c.anoInicioConfirmar e o
+   c.anoInicioPorque do resumo) vai «a confirmar», e é uma falta.
    Recebe: r — o resumo (resumoFiscal).
    Devolve: [{contratoId, nome, imovel, numero, regime, regimeTexto,
-   anoInicioBeneficio, data, motivo, motivoCurto, regulariza, faltas,
-   regularizacao}] — regularizacao null ou {anos:[{ano, diferenca}], total};
-   faltas o que o quadro pede e não há. */
+   anoInicioBeneficio, anoInicioConfirmar, anoInicioPorque, data, motivo,
+   motivoCurto, regulariza, regularizacaoAcima, faltas, regularizacao} + a
+   identificação de fiscoExpIdent10] — regularizacao null ou {anos:[{ano,
+   diferenca}], total}, a do contrato, só na primeira entrada dele
+   (regularizacaoAcima nas outras, em conjunta); faltas o que o quadro pede
+   e não há, ou está a confirmar. */
 function fiscoExpQuadro10(r){
   const q=(((r||{}).versao||{}).quadro10)||{},rs=Array.isArray(q.regimes)?q.regimes:[],ms=Array.isArray(q.motivos)?q.motivos:[];
-  const regs={};(Array.isArray(r.regularizacoes)?r.regularizacoes:[]).forEach(x=>{if(x&&x.contratoId!=null)regs[x.contratoId]=x});
+  const regs={};(Array.isArray(r.regularizacoes)?r.regularizacoes:[]).forEach(x=>{if(x&&x.contratoId!=null&&!x.dhd)regs[x.contratoId]=x});
+  /* a regularização é do contrato (os dois titulares juntos): vai só na
+     primeira entrada dele, para não se somar duas vezes em conjunta */
+  const ja={};
   return (Array.isArray(r.cessados)?r.cessados:[]).filter(Boolean).map(c=>{
     const regime=String(c.regime||''),motivo=String(c.motivo||''),rg=rs.find(x=>x&&String(x.codigo)===regime),m=ms.find(x=>x&&String(x.codigo)===motivo);
-    const g=regs[c.contratoId],anos=g&&Array.isArray(g.anos)?g.anos.filter(a=>a&&Number(a.diferenca)):[];
+    const acima=!!ja[c.contratoId],g=acima?null:regs[c.contratoId],anos=g&&Array.isArray(g.anos)?g.anos.filter(a=>a&&Number(a.diferenca)):[];ja[c.contratoId]=1;
     const total=g?r2(Number(g.total)||sum(anos.map(a=>Number(a.diferenca)||0))):0;
+    const id=fiscoExpIdent10(r,c),ano=c.anoInicioBeneficio?String(c.anoInicioBeneficio):'',conf=fiscoExpAnoInicioConfirmar(c),porque=conf?conf.porque:'';
     const faltas=[];
     if(!c.numero)faltas.push('n.º do contrato na AT');
     if(!regime)faltas.push('regime fiscal');
-    if(!c.anoInicioBeneficio)faltas.push('ano de início do benefício');
+    if(!ano)faltas.push('ano de início do benefício');
+    else if(conf)faltas.push('ano de início do benefício a confirmar'+(porque?' ('+porque+')':': o da primeira declaração em que as rendas deste contrato tiveram o benefício'));
     if(!motivo)faltas.push('motivo da cessação');
-    return {contratoId:c.contratoId,nome:c.nome||'',imovel:c.imovel||'',numero:c.numero||'',regime:regime,regimeTexto:rg?String(rg.texto||''):'',
-      anoInicioBeneficio:c.anoInicioBeneficio?String(c.anoInicioBeneficio):'',data:c.data||'',motivo:motivo,motivoCurto:m?String(m.curto||m.texto||''):'',
-      regulariza:!!(m&&m.regulariza),faltas:faltas,
-      regularizacao:g&&total>0?{anos:anos.map(a=>({ano:a.ano,diferenca:r2(Number(a.diferenca))})),total:total}:null};
+    return Object.assign({contratoId:c.contratoId,nome:c.nome||'',imovel:c.imovel||'',numero:c.numero||'',regime:regime,regimeTexto:rg?String(rg.texto||''):'',
+      anoInicioBeneficio:ano,anoInicioConfirmar:!!conf,anoInicioPorque:porque,data:c.data||'',motivo:motivo,motivoCurto:m?String(m.curto||m.texto||''):'',
+      regulariza:!!(m&&m.regulariza),regularizacaoAcima:acima&&!!regs[c.contratoId],
+      regularizacao:g&&total>0?{anos:anos.map(a=>({ano:a.ano,diferenca:r2(Number(a.diferenca))})),total:total}:null},id,{faltas:faltas.concat(id.faltas)});
   });
+}
+/* Se o ano de início do benefício de uma entrada do quadro 10 está por
+   confirmar, e porquê: a marca do resumo (x.anoInicioConfirmar, com o
+   x.anoInicioPorque — a frase sem ponto final); um resumo que ainda não a
+   tenha está por confirmar quando o contrato começou antes desse ano (as
+   rendas que a app tem dele podem não chegar ao ano da primeira
+   declaração com o benefício), como o cartão da página.
+   Recebe: x — a entrada de r.cessados.
+   Devolve: null quando o ano é certo (ou não há ano); senão {porque} — a
+   frase, sem ponto final ('' quando o resumo não a diz). */
+function fiscoExpAnoInicioConfirmar(x){
+  const ano=Number((x&&x.anoInicioBeneficio)||0);if(!ano)return null;
+  const marca=typeof x.anoInicioConfirmar==='boolean'?x.anoInicioConfirmar:typeof x.anoInicioPorConfirmar==='boolean'?x.anoInicioPorConfirmar:null;
+  const porque=String(x.anoInicioPorque||x.anoInicioNota||'').trim().replace(/\.$/,'');
+  if(marca!=null)return marca?{porque:porque}:null;
+  const c=x.contratoId!=null?contract(x.contratoId):null,ini=Number(String((c&&c.start)||'').slice(0,4));
+  return ini&&ini<ano?{porque:porque||'o contrato começou em '+ini+', antes do primeiro ano com rendas dele na app'}:null;
+}
+/* O que uma linha do quadro 10 pede depois da cessação, pela ordem do
+   impresso: a identificação matricial (o código da freguesia, o tipo, o
+   artigo, a fração), o titular e o arrendatário (o NIF português ou o país,
+   fiscoIdInquilino), «conforme as instruções do quadro 4.1». Lê os campos
+   que o resumo põe em cada entrada de r.cessados, com os nomes das linhas do
+   4.x (uma entrada por titular em conjunta); um resumo que ainda não os
+   tenha cai na ficha do imóvel e nos inquilinos do contrato. As faltas são
+   as das linhas (fisco-resumo.js:fiscoLinhaNova, fiscoFaltaDoInquilino) e a
+   da freguesia de uma união extinta por confirmar (fiscoExpFreguesia).
+   Recebe: r — o resumo; x — a entrada de r.cessados.
+   Devolve: {propertyId, titularId, titular ('A', 'B', 'A/B', ou '' sem se
+   saber em conjunta), freguesiaCodigo, tipoPredio, artigo, fracao,
+   freguesiaUniao, matrizConfirmada, inquilinos:[{nome, nif, pais}], ids
+   (fiscoIdInquilino de cada inquilino), faltas}. */
+function fiscoExpIdent10(r,x){
+  x=x||{};
+  const c=x.contratoId!=null?contract(x.contratoId):null,pid=x.propertyId!=null?x.propertyId:c?c.propertyId:null,p=pid!=null?prop(pid):null;
+  const tem=k=>x[k]!=null,s=v=>String(v==null?'':v);
+  const ts=Array.isArray(x.inquilinos)?x.inquilinos.filter(Boolean).map(t=>({nome:s(t.nome),nif:s(t.nif),pais:s(t.pais),paisCodigo:s(t.paisCodigo)}))
+    :c?ctTenants(c).map(t=>({nome:s(t.name),nif:s(t.nif),pais:s(t.pais),paisCodigo:''})):[];
+  const out={propertyId:pid,titularId:s(x.titularId),titular:s(x.titular)||(r&&r.variosTitulares?'':'A'),
+    freguesiaCodigo:s(tem('freguesiaCodigo')?x.freguesiaCodigo:p&&p.freguesiaCodigo),tipoPredio:s(tem('tipoPredio')?x.tipoPredio:p&&p.tipoPredio),
+    artigo:s(tem('artigo')?x.artigo:p&&p.matrix),fracao:s(tem('fracao')?x.fracao:p&&p.fraction),
+    freguesiaUniao:tem('freguesiaUniao')?x.freguesiaUniao:p?fiscoFreguesiaUniao(p,Number(r&&r.ano)):null,
+    matrizConfirmada:s(tem('matrizConfirmada')?x.matrizConfirmada:p&&p.matrizConfirmada),inquilinos:ts,ids:ts.map(fiscoIdInquilino),faltas:[]};
+  const f=out.faltas,fx=fiscoExpFreguesia(out);
+  if(!out.freguesiaCodigo)f.push('código da freguesia');
+  if(!out.tipoPredio)f.push('tipo de prédio');
+  if(!out.artigo)f.push('artigo matricial');
+  if(fx&&fx.falta)f.push(fx.falta);
+  if(!out.titular)f.push('titular (A ou B)');
+  if(!ts.length)f.push('inquilino do contrato');
+  ts.forEach(t=>{const m=fiscoFaltaDoInquilino(t.nome,t.nif,t.pais);if(m)f.push(m)});
+  return out;
+}
+/* Se o ano tem uma regularização do art. 72.º n.º 20 a somar ao imposto (a
+   do quadro 10 ou a de um DHD cessado por acordo, r.regularizacoes; sem
+   elas, o totais.regularizacao do resumo).
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: true ou false. */
+function fiscoExpComRegularizacao(r){
+  const gs=Array.isArray(r&&r.regularizacoes)?r.regularizacoes:[];
+  return gs.some(g=>g&&Number(g.total)>0)||Number(((r&&r.totais)||{}).regularizacao)>0;
+}
+/* O que o texto e o PDF dizem de um ano sem rendas nos quadros das linhas
+   que leva o quadro 10 (um contrato que acabou antes de qualquer renda do
+   ano) ou a regularização do n.º 20: o Anexo F desse ano entrega-se na
+   mesma, com eles — o quadro 10 não depende de haver rendas no ano, e a
+   regularização é imposto dessa declaração.
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: a frase, ou '' quando o ano tem linhas, ou não tem nem quadro 10
+   nem regularização. */
+function fiscoExpSemRendasTexto(r){
+  if((r.linhas||[]).length)return '';
+  const q10=fiscoExpQuadro10(r),reg=fiscoExpComRegularizacao(r),Q=(((r||{}).versao||{}).quadros)||{};
+  if(!q10.length&&!reg)return '';
+  return 'Sem rendas em '+r.ano+' nos quadros '+listaE(fiscoExpQuadrosDasLinhas(r))+': o Anexo F deste ano leva na mesma '
+    +(q10.length?'o quadro '+(Q.cessados||'10')+', com '+(fiscoNContratos(q10)===1?'o contrato que acabou':'os contratos que acabaram')+' no ano (o quadro não depende de haver rendas nele)'+(reg?', e ':''):'')
+    +(reg?'a regularização do n.º 20 do art. 72.º, que acresce ao imposto de '+r.ano:'')+'.';
 }
 /* A frase da regularização de um contrato do quadro 10 com o motivo 01
    (art. 72.º n.º 20): a diferença estimada, ano a ano, sem juros; num DHD
@@ -813,8 +932,9 @@ function fiscoExpForaDoAnexoFTexto(r){
    identificação (o NIF português ou o país de cada inquilino), os valores, o
    4.2A e o 4.2B no 4.2 com o campo a que se ligam, e as faltas; e depois o
    que ficou fora, as rendas sem contrato com o valor, o quadro 8 com o prazo
-   das substituições, o quadro 10 (os contratos que acabaram, com a
-   regularização do motivo 01), o que há a tratar e, no fim, o IRS_AVISO. Os
+   das substituições, o quadro 10 (fiscoExpQuadro10: por contrato e titular,
+   pela ordem do impresso, com a regularização do motivo 01; num ano sem
+   linhas, fiscoExpSemRendasTexto), o que há a tratar e o IRS_AVISO. Os
    mesmos números da página, de quem declara (fiscoQuemDeclara). Nos totais, o
    imposto estimado e, quando os há, o abate dos prejuízos de anos anteriores
    com o imposto depois dele (fiscoExpReporteTexto) e o imposto depois do
@@ -867,7 +987,14 @@ function fiscoTexto(r){
     +obP.map(x=>`  ${x.nome}${x.imovel?' — '+x.imovel:''}: ${euro2(x.valor)}${x.inicioGastos?' (desde '+fiscoExpMesAno(x.inicioGastos)+')':''} — ${x.texto}`).join('\n')+'\n':'';
   const letras=fiscoExpLetrasTexto(r);
   const q8=r.linhas.some(l=>l.anosAnteriores.length)?'\nQUADRO '+(Q.anosAnteriores||'8')+' · RENDAS DE ANOS ANTERIORES\n  '+fiscoQuadro8Texto(r)+'\n':'';
-  const q10t=q10.length?'\nQUADRO '+(Q.cessados||'10')+' · CONTRATOS QUE ACABARAM (com redução pela duração ou isenção)\n'+q10.map(x=>`  ${x.nome}${x.imovel?' — '+x.imovel:''}: regime ${x.regime?x.regime+(x.regimeTexto?' ('+x.regimeTexto+')':''):'—'} · ${x.numero?'n.º '+x.numero:'sem n.º na AT'} · benefício desde ${x.anoInicioBeneficio||'—'} · cessação ${dPT(x.data)||'—'} · motivo ${x.motivo?x.motivo+(x.motivoCurto?' ('+x.motivoCurto+')':''):'por indicar'}${x.regularizacao&&!sem?'\n    Regularização: '+fiscoExpRegularizacaoTexto(r,x.regularizacao)+'.':''}${x.faltas.length?'\n    Falta: '+x.faltas.join(', ')+'.':''}`).join('\n')+'\n':'';
+  /* o código da freguesia, e o de uma união extinta em 2025 a confirmar (D135) */
+  const fregTxt=l=>{const fx=fiscoExpFreguesia(l);return (l.freguesiaCodigo||'—')+(!fx?'':fx.confirmada?' (confirmada na caderneta a '+dPT(fx.confirmada)+')':' (a confirmar)')};
+  /* o quadro 10 pela ordem do impresso: o regime, o n.º, o ano de início do
+     benefício (a confirmar quando a app não o sabe), a cessação e, na linha
+     de baixo, a identificação matricial, o titular e os inquilinos — uma
+     entrada por titular em conjunta */
+  const q10t=q10.length?'\nQUADRO '+(Q.cessados||'10')+' · CONTRATOS QUE ACABARAM (com redução pela duração ou isenção)\n'+q10.map(x=>`  ${x.nome}${x.imovel?' — '+x.imovel:''}${r.variosTitulares&&x.titular?' · titular '+x.titular:''}: regime ${x.regime?x.regime+(x.regimeTexto?' ('+x.regimeTexto+')':''):'—'} · ${x.numero?'n.º '+x.numero:'sem n.º na AT'} · benefício desde ${x.anoInicioBeneficio||'—'}${x.anoInicioConfirmar?' (a confirmar)':''} · cessação ${dPT(x.data)||'—'} · motivo ${x.motivo?x.motivo+(x.motivoCurto?' ('+x.motivoCurto+')':''):'por indicar'}
+    Freguesia ${fregTxt(x)} · ${x.tipoPredio||'—'} · artigo ${x.artigo||'—'}${x.fracao?' · fração '+x.fracao:''} · titular ${x.titular||'—'} · inquilinos: ${x.inquilinos.length?x.inquilinos.map((t,i)=>t.nome+' ('+x.ids[i].texto+')').join(', '):'—'}${x.regularizacao&&!sem?'\n    Regularização: '+fiscoExpRegularizacaoTexto(r,x.regularizacao)+'.':''}${x.faltas.length?'\n    Falta: '+x.faltas.join(', ')+'.':''}`).join('\n')+'\n':'';
   /* a taxa, a natureza e o que vem com elas, numa linha do contrato */
   const taxaDe=l=>{
     if(l.isencao)return ' · isento (quadro '+l.isencao.quadro+(l.isencao.codigo?', código '+l.isencao.codigo:'')+')';
@@ -894,7 +1021,6 @@ function fiscoTexto(r){
     +(dx.regularizacao&&!sem?'\n    Regularização (art. 72.º n.º 20): '+fiscoExpRegularizacaoTexto(r,dx.regularizacao)+'.':'');
   const benTxt=l=>fiscoExpBeneficios(r,l).map(b=>'\n    Quadro '+b.quadro+(b.campo?' (campo '+b.campo+' do 4.1)':'')+': '+b.curto+(b.efeito?' · '+b.efeito:'')
     +(b.muda&&b.muda!=='taxa'&&fiscoExpLiquidoImposto(l)!==r2(Number(l.liquido)||0)?' · líquido para o imposto '+euro2(fiscoExpLiquidoImposto(l)):'')+(b.aviso?' — '+b.aviso:'')).join('');
-  const fregTxt=l=>{const fx=fiscoExpFreguesia(l);return (l.freguesiaCodigo||'—')+(!fx?'':fx.confirmada?' (confirmada na caderneta a '+dPT(fx.confirmada)+')':' (a confirmar)')};
   const linhaTxt=l=>{
     const nt=fiscoExpNaturezaTexto(r,l),qx=fiscoExpQuota(r,l),rec=fiscoExpReceitas(l),at=fiscoExpAtualizacao(r,l),dx=fiscoExpDhd(r,l),fs=fiscoExpFaltas(l);
     const outra=!!(l.papel&&l.papel!=='renda');
@@ -909,7 +1035,7 @@ function fiscoTexto(r){
     +x.linhas.map(({linha:l,beneficio:b})=>`  Campo ${l.campo||'—'} — ${l.nome}${l.imovel?' — '+l.imovel:''}${r.variosTitulares?' · titular '+(l.titular||'A'):''}${b.efeito?': '+b.efeito:''}`).join('\n')+'\n').join('');
   const lt=sem?null:fiscoExpLiquidoTributavel(r);
   /* o Anexo J (D133, Q12) e a categoria B (D134): fora do Anexo F */
-  const J=fiscoExpAnexoJ(r),B=fiscoExpCategoriaB(r),foraF=fiscoExpForaDoAnexoFTexto(r);
+  const J=fiscoExpAnexoJ(r),B=fiscoExpCategoriaB(r),foraF=fiscoExpForaDoAnexoFTexto(r),semR=fiscoExpSemRendasTexto(r);
   const jTxt=J?'\nANEXO J · QUADRO '+J.quadro+' (imóveis fora de Portugal: não vão ao Anexo F; a app não estima o imposto)\n'+J.entradas.map(e=>`  ${e.nome}${e.imovel?' — '+e.imovel:''}${e.quota<1?' · quota-parte '+fiscoExpQuota(r,e).quota:''} · titular ${e.titular||'A'}: código ${e.codigo||'—'} · país ${e.pais||'—'}${e.paisCodigo?' (código '+e.paisCodigo+')':''} · rendas ${euro2(e.rendas)} · gastos ${euro2(e.gastos)} · líquido ${euro2(e.liquido)} · imposto pago no estrangeiro ${euro2(e.impostoEstrangeiro)}${Number(e.retencoes)>0?' · retenções em Portugal '+euro2(e.retencoes):''}${e.faltas.length?'\n    Falta: '+e.faltas.join(', ')+'.':''}`).join('\n')
     +'\n  '+fiscoExpAnexoJNota(r)+'\n':'';
   const bTxt=B?'\nFORA DO ANEXO F · CATEGORIA B (declaram-se no Anexo B ou C, com a tua atividade)\n'+B.entradas.map(e=>`  ${e.nome}${e.imovel?' — '+e.imovel:''}: ${euro2(e.rendas)} (${fiscoN(e.n,'renda','rendas')})${e.retencoes?' · retenções '+euro2(e.retencoes):''}`).join('\n')+'\n  '+FISCO_EXP_CATEGORIA_B_NOTA+'\n':'';
@@ -919,7 +1045,7 @@ ${fiscoRegrasTexto(r)}${letras?'\n'+letras:''}
 
 Rendas ilíquidas ${euro2(r.totais.rendas)}${recT.texto?' ('+recT.texto+')':''} · retenções ${euro2(r.totais.retencoes)}${q5T.retencoes?' (com '+euro2(q5T.retencoes)+' do quadro '+(Q.sublocacao||'5')+')':''}
 ${gastos(r.totais.gastos)}${r.totais.obras24?'\n'+G.obras+' (24 meses antes do contrato): '+G.valor+' '+euro2(r.totais.obras24):''}
-Rendimento líquido ${euro2(r.totais.liquido)}${q5.length?' (quadros '+listaE(QL)+')':''} · ${impTxt}${lt?'\nLíquido para o imposto estimado '+euro2(lt.valor)+' (o quadro leva os valores por inteiro: '+lt.porque+')':''}${q5.length?'\nSublocação (quadro '+(Q.sublocacao||'5')+'): renda recebida '+euro2(q5T.rendaRecebida)+' · renda paga ao senhorio '+euro2(q5T.rendaPaga)+' · diferença '+euro2(q5T.liquido)+(sem?'':' · imposto estimado '+euro2(q5T.imposto)+' (já no imposto estimado)'):''}${pre?'\n'+pre:''}${rep&&!sem?'\n'+rep:''}${isTxt}${aimi}${!sem&&(imp.regularizacao||Number(r.totais.retencoes)||imp.reporte||imp.abate)?'\nImposto: '+fiscoExpImpostoTexto(r):''}${foraF?'\n'+foraF:''}
+Rendimento líquido ${euro2(r.totais.liquido)}${q5.length?' (quadros '+listaE(QL)+')':''} · ${impTxt}${lt?'\nLíquido para o imposto estimado '+euro2(lt.valor)+' (o quadro leva os valores por inteiro: '+lt.porque+')':''}${q5.length?'\nSublocação (quadro '+(Q.sublocacao||'5')+'): renda recebida '+euro2(q5T.rendaRecebida)+' · renda paga ao senhorio '+euro2(q5T.rendaPaga)+' · diferença '+euro2(q5T.liquido)+(sem?'':' · imposto estimado '+euro2(q5T.imposto)+' (já no imposto estimado)'):''}${pre?'\n'+pre:''}${rep&&!sem?'\n'+rep:''}${isTxt}${aimi}${!sem&&(imp.regularizacao||Number(r.totais.retencoes)||imp.reporte||imp.abate)?'\nImposto: '+fiscoExpImpostoTexto(r):''}${foraF?'\n'+foraF:''}${semR?'\n'+semR:''}
 ${r.linhas.length?'\nPOR CONTRATO (preenche por esta ordem: cada entrada é uma linha do quadro, com o seu campo)\n'+r.linhas.map(linhaTxt).join('\n')+'\n':''}${q6Txt}${q5Txt}${obPTxt}${jTxt}${bTxt}${r.fora.length?'\nFORA DA DECLARAÇÃO\n'+r.fora.map(f=>`  ${f.nome}${f.imovel?' — '+f.imovel:''}: ${euro2(f.rendas)}`).join('\n')+'\n':''}${r.semContrato.length?'\nRENDAS SEM CONTRATO (não estão em nenhuma linha do quadro: liga-as ao contrato — declaram-se na mesma)\n'+r.semContrato.map(s=>`  ${s.imovel}: ${euro2(s.rendas)} (${fiscoN(s.n,'movimento','movimentos')})`).join('\n')+'\n':''}${q8}${q10t}${r.avisos.length?'\nA TRATAR\n'+r.avisos.map(a=>'  · '+a.texto).join('\n')+'\n':''}
 Resumo feito pela app com o que tem registado. As rendas ilíquidas são ${FISCO_EXP_RENDA_DO_RECIBO}. Os gastos de um imóvel com mais do que um contrato repartem-se pelas rendas; o rateio por VPT ou área fica para quem preenche.
 ${IRS_AVISO}
@@ -931,7 +1057,9 @@ ${IRS_AVISO}
    com rendas sem contrato («sem contrato», D34); uma por contrato de
    sublocação («quadro 5», D52), por contrato com obras dos 24 meses por
    confirmar («obras por confirmar», D28), do AIMI («quadro 9») e por prédio
-   dele («quadro 9 · prédio», D71), por contrato do quadro 10 («quadro 10»),
+   dele («quadro 9 · prédio», D71), por contrato e titular do quadro 10
+   («quadro 10», com a matriz, o titular e o NIF ou o país nas colunas de
+   sempre, e o ano de início do benefício a confirmar nas faltas),
    por contrato e titular de um imóvel fora de Portugal («anexo J», D133, sem
    imposto estimado) e por contrato da categoria B («categoria B», D134); e
    as de rodapé, com o texto na coluna contrato: cada ponto de «A tratar»
@@ -954,7 +1082,9 @@ ${IRS_AVISO}
    país, o imposto pago lá e os gastos num número (D133); e as freguesias
    repostas de uma união extinta e o dia confirmado na caderneta, com a falta
    nas faltas (D135). O nif_ou_pais é o NIF português ou, sem ele, o país
-   (D59); o 4.2B preenche-se sempre que o contrato o tem (D36); sem regras do
+   (D59); o comunicacao_4_2a_resposta é 'sim', 'nao', 'a confirmar' (a marca
+   do modelo antigo por confirmar, sem data na coluna comunicacao_4_2a) ou ''
+   por fazer com o prazo à frente; o 4.2B preenche-se sempre que o contrato o tem (D36); sem regras do
    ano, a taxa e o imposto vão vazios (D50). Em conjunta, um contrato dos dois
    cônjuges dá uma linha por titular.
    Recebe: r — o resumo (resumoFiscal).
@@ -1059,9 +1189,15 @@ function fiscoCsvTexto(r){
   /* os prédios do quadro 9 (D71), cada um com o quadro e o campo onde ficou e o VPT */
   if(q9)fiscoExpQuadro9Predios(r).forEach(p=>out.push(linha({ano:T(ano),declarado:T('quadro '+(Q.aimi||'9')+' · prédio'),quadro:C(Q.aimi||'9'),imovel:T(p.imovel),
     campo:T(p.campos),vpt:p.vpt!=null?N(p.vpt):'""'})));
-  fiscoExpQuadro10(r).forEach(x=>out.push(linha({ano:T(ano),declarado:T('quadro '+(Q.cessados||'10')),contrato:T(x.nome),n_at:C(x.numero),imovel:T(x.imovel),
+  /* o quadro 10: uma linha por contrato e titular, com a matriz, o titular e
+     o NIF do inquilino (ou o país) nas colunas de sempre; o ano de início do
+     benefício a confirmar fica na coluna dele e diz-se nas faltas */
+  fiscoExpQuadro10(r).forEach(x=>{const fx=fiscoExpFreguesia(x);out.push(linha({ano:T(ano),declarado:T('quadro '+(Q.cessados||'10')),contrato:T(x.nome),n_at:C(x.numero),imovel:T(x.imovel),
+    freguesia:C(x.freguesiaCodigo),tipo_predio:T(x.tipoPredio),artigo:T(x.artigo),fracao:T(x.fracao),titular:T(x.titular),
+    inquilinos:T(x.inquilinos.map(t=>t.nome).join(' / ')),nif_ou_pais:T(x.ids.map(t=>t.nif||t.pais||'').join(' / ')),nif:codigos(x.ids.map(t=>t.nif)),pais:T(x.ids.map(t=>t.pais).filter(Boolean).join(' / ')),
+    freguesia_repostas:T(fx?fx.repostasLista.join(' / '):''),matriz_confirmada:T(x.matrizConfirmada||''),
     quadro:C(Q.cessados||'10'),faltas:T(x.faltas.join('; ')),cessacao_regime:C(x.regime),cessacao_ano_beneficio:T(x.anoInicioBeneficio),cessacao_data:T(x.data),
-    cessacao_motivo:C(x.motivo),regularizacao_estimada:x.regularizacao&&!sem?N(x.regularizacao.total):'""'})));
+    cessacao_motivo:C(x.motivo),regularizacao_estimada:x.regularizacao&&!sem?N(x.regularizacao.total):'""'}))});
   (r.avisos||[]).forEach(a=>out.push(linha({ano:T(ano),declarado:T('a tratar ('+fiscoNivelNome(a)+')'),contrato:T(a.texto)})));
   const rep=sem?null:fiscoExpReporte(r);
   if(rep)out.push(linha({ano:T(ano),declarado:T('reporte'),contrato:T(fiscoExpReporteTexto(r)),reporte_abatido:N(rep.usado),imposto_depois_reporte:N(rep.depois)}));

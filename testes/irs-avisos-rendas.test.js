@@ -372,7 +372,8 @@ describe('as despesas a confirmar (D06, D07, D24–D27, D60, D61)', () => {
 
 describe('os toques com os serviços desligados', () => {
   test('o aviso fica, sem o toque', () => {
-    const c = ct({ start: '2021-01-01', end: '2025-12-31', tenantIds: ['emp'] });
+    // de habitação permanente: num não habitacional não há redução, e as rendas depois do termo não dão aviso (N032)
+    const c = ct({ start: '2021-01-01', end: '2025-12-31', tenantIds: ['emp'], fisco: { estado: 'declarado', numero: '123', finalidade: 'hp' } });
     renda('r1', 'C1', '2026-02-08', 1000);
     app.definirServicosDesligados(['contracts', 'transactions', 'tenants', 'properties']);
     const r = resumo([linha(c, { fracao: 'A, B', faltas: ['fração: mais do que uma'] })], {

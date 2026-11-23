@@ -119,11 +119,15 @@ describe('D08 — os comproprietários fora da app, sem nuvem', () => {
   });
 
   test('a ficha do dono tem o cartão das quotas: os de fora, ou que estão por confirmar, e o caminho para os mudar', () => {
-    local();
+    const { abertas } = local();
     let f = app.propFicha('v1');
     assert.match(f, /<h3>Quotas<\/h3>/);
     assert.match(f, /por confirmar/);
-    assert.match(f, /data-click="propModal\('v1'\)"/);
+    // o caminho é o imvAbrirQuotas (o mesmo dos avisos da Declaração): sem nuvem, o formulário com a pergunta
+    assert.match(f, /data-click="imvAbrirQuotas\('v1'\)"/);
+    app.imvAbrirQuotas('v1');
+    assert.equal(abertas.at(-1).t, 'Editar imóvel');
+    assert.match(abertas.at(-1).b, /id="p_foraEstado"/);
     app.prop('v1').comproprietariosFora = [{ id: 'f1', nome: 'Irmão', quota: 50 }];
     f = app.propFicha('v1').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
     assert.match(f, /Ana 50%/);
@@ -153,7 +157,7 @@ describe('D93 e D29 — as quotas sem nuvem: somam 100 com os de fora, e mudam c
   });
 
   test('com os de fora, quem fica em branco leva a sua parte do que sobra (e não a parte das contas)', () => {
-    local({ bruno: true });
+    const { abertas } = local({ bruno: true });
     abrirForm('v1');
     escreve('p_foraEstado', 'sim');
     app.imvForaMudouNoForm();
@@ -161,8 +165,8 @@ describe('D93 e D29 — as quotas sem nuvem: somam 100 com os de fora, e mudam c
     escreve('p_fn_0', 'Carla');
     escreve('p_fq_0', '50');
     app.onSave();
-    escreve('imv_desde', '2026-11-17');
-    app.onSave();
+    // a primeira resposta com donos de fora já disse desde quando no formulário («desde sempre»): não pergunta outra vez (N019)
+    assert.ok(!abertas.some((j) => j.t === 'Desde quando?'));
     const q = app.quotasFiscais(app.prop('v1'), '');
     assert.ok(Math.abs(q.ana - 0.2) < 1e-9 && Math.abs(q.bruno - 0.3) < 1e-9, JSON.stringify(q));
   });
@@ -246,24 +250,51 @@ function nuvem() {
 }
 
 describe('D08, D29 e D93 com nuvem — a proposta leva os de fora, a data e as percentagens acertadas', () => {
-  test('num imóvel só meu, as quotas abrem-se na mesma: o irmão a 50 % vai na proposta, sem data (confirmar vale para trás)', async () => {
+  test('num imóvel só meu, a pergunta dos de fora responde-se no formulário: o irmão a 50 % vai numa proposta de um dono só, «desde sempre»', async () => {
     const { abertas, esp } = nuvem();
     app.pForm = app.normProp(JSON.parse(JSON.stringify(app.prop('H1'))));
+    app.imvForaIniciar('p', null, 'H1');
     const bloco = app.cwOwnersBlock();
     assert.match(bloco, /Este imóvel é só teu na app\./);
-    assert.match(bloco, /Há outros donos fora da app\?/);
-    assert.match(bloco, /data-click="CW\.proposeShares\('H1'\)"/);
-    app.CW.proposeShares('H1');
-    assert.equal(abertas.length, 1, 'com um dono só, a janela abre');
-    assert.match(abertas[0].b, /Há outros donos fora da app\?/);
-    escreve('cwq_foraEstado', 'sim');
-    app.imvForaMudouNaProposta();
-    escreve('cwq_fn_0', 'Irmão');
-    escreve('cwq_fq_0', '50');
+    assert.match(bloco, /id="p_foraEstado"/, 'a própria pergunta, e não um botão para outra janela (N059)');
+    assert.doesNotMatch(bloco, /CW\.proposeShares/);
+    abrirForm('H1');
+    assert.equal(abertas.length, 1);
+    escreve('p_foraEstado', 'sim');
+    app.imvForaMudouNoForm();
+    assert.match(app.modalBodyEl().innerHTML, /Desde quando é assim\?/, 'a primeira resposta pergunta desde quando (N019)');
+    assert.doesNotMatch(app.modalBodyEl().innerHTML, /id="p_foraDia"/, '«desde sempre» por omissão: sem campo de data');
+    escreve('p_fn_0', 'Irmão');
+    escreve('p_fq_0', '50');
     app.onSave();
     await espera();
-    igual(esp.api, [{ m: 'POST', p: '/api/houses/H1/proposal', b: { shares: { EU: 100 }, fora: [{ nome: 'Irmão', quota: 50 }] } }]);
-    assert.equal(esp.toasts.at(-1), 'Quotas guardadas.');
+    igual(esp.api.map((x) => [x.m, x.p, x.b.shares, x.b.fora.map((f) => [f.nome, f.quota]), x.b.desde]),
+      [['POST', '/api/houses/H1/proposal', { EU: 100 }, [['Irmão', 50]], 'sempre']]);
+    assert.equal(esp.toasts[0], 'Imóvel atualizado.');
+  });
+
+  test('num imóvel novo só meu, a resposta dos de fora fica no imóvel (sobe com ele) e o botão morto já não existe (N059)', () => {
+    const { abertas } = nuvem();
+    app.propModal();
+    const b = abertas[0].b;
+    assert.match(b, /id="p_foraEstado"/);
+    assert.doesNotMatch(b, /Indicar as quotas/);
+    escreve('p_name', 'T1 Novo');
+    escreve('p_foraEstado', 'sim');
+    app.imvForaMudouNoForm();
+    escreve('p_foraQuando', 'dia');
+    app.imvForaQuandoNoForm();
+    assert.match(app.modalBodyEl().innerHTML, /<input id="p_foraDia" type="date" value="2026-11-17" max="2026-11-17">/);
+    escreve('p_fn_0', 'Rui');
+    escreve('p_fq_0', '50');
+    escreve('p_foraDia', '2026-07-01');
+    app.onSave();
+    const p = app.db.properties.find((x) => x.name === 'T1 Novo');
+    igual(p.comproprietariosFora.map((f) => [f.nome, f.quota]), [['Rui', 50]]);
+    igual(p.quotasHist, [{ ate: '2026-06-30', ownerIds: ['EU'], ownerShares: {}, fora: null }], 'até à véspera, só a minha conta');
+    assert.equal(app.quotasFiscais(p, '2026-03-01').EU, 1);
+    p.ownerIds = ['EU'];   // como volta do servidor (os donos são os participantes)
+    assert.equal(app.quotasFiscais(p, '2026-09-01').EU, 0.5);
   });
 
   test('«Não, mais ninguém» envia [] (o «Só eu»), sem data', async () => {
@@ -327,8 +358,9 @@ describe('D08, D29 e D93 com nuvem — a proposta leva os de fora, a data e as p
     escreve('cwq_desde', '2026-01-01');
     app.onSave();
     await espera();
-    // entre as contas fica 50/50, como estava: só se confirma quem mais é dono, e isso vale para trás (sem dia)
-    igual(esp.api.map((x) => x.b), [{ shares: { EU: 50, RUI: 50 }, fora: [{ nome: 'Carla', quota: 50 }] }]);
+    // entre as contas fica 50/50, como estava: só se confirma quem mais é dono, e isso vale para trás
+    // («Desde sempre», a escolha por omissão da primeira resposta, N019)
+    igual(esp.api.map((x) => x.b), [{ shares: { EU: 50, RUI: 50 }, fora: [{ nome: 'Carla', quota: 50 }], desde: 'sempre' }]);
     // a Carla já confirmada, e as contas a mudar: aí vai o dia
     app.prop('H2').comproprietariosFora = [{ id: 'c1', nome: 'Carla', quota: 50 }];
     app.CW.proposeShares('H2');

@@ -388,7 +388,9 @@ export async function convitesSemCasa(env, houseId, ownerId, t) {
 // saiu por um grupo (house_exits) desaparecem, uma transferência pendente
 // fica cancelada, e os convites
 // por usar deixam de a incluir (um convite que ficasse sem casas fica
-// revogado). Os anexos ficam presos à
+// revogado). Cada comproprietário que a perde fica com um aviso
+// 'casa.apagada' (N067): a casa e as rendas dela saem também da Declaração
+// dele, e sem o aviso nada lho dizia. Os anexos ficam presos à
 // casa por agora: a app deixa desfazer o apagar, e o desfazer volta a gravar
 // a casa e os registos com os mesmos anexos; a varredura do cron diário
 // leva-os da D1 e do R2 passado o prazo (files.js:varrerAnexos).
@@ -397,7 +399,13 @@ export async function convitesSemCasa(env, houseId, ownerId, t) {
 // Devolve: promessa de nada — o efeito é o lote de escritas na base.
 export async function apagarCasa(env, houseId, ownerId) {
   const t = now();
-  const casa = await env.DB.prepare('SELECT rev FROM houses WHERE id = ?').bind(houseId).first();
+  const casa = await env.DB.prepare('SELECT rev, data FROM houses WHERE id = ?').bind(houseId).first();
+  // os outros donos perdem a casa com ela: cada um fica com um aviso
+  // 'casa.apagada' (N067), lidos antes de as partilhas saírem
+  const outros = ((await participantsOf(env, houseId)) || []).filter((u) => u !== ownerId);
+  const avisos = outros.length
+    ? await avisosAosOutros(env, outros, 'casa.apagada', houseId, nomeDaCasaGuardada(casa && casa.data), ownerId, t)
+    : [];
   const stmts = [
     gravarCasa(env, houseId, casa ? casa.rev : '', { deleted: 1 }, t),
     env.DB.prepare('UPDATE records SET deleted = 1, updated_at = ? WHERE house_id = ?').bind(t, houseId),
@@ -413,8 +421,40 @@ export async function apagarCasa(env, houseId, ownerId) {
     env.DB.prepare("UPDATE house_transfers SET status = 'cancelled', decided_at = ? WHERE house_id = ? AND status = 'pending'")
       .bind(t, houseId),
   ];
-  stmts.push(...(await convitesSemCasa(env, houseId, ownerId, t)));
+  stmts.push(...(await convitesSemCasa(env, houseId, ownerId, t)), ...avisos);
   await env.DB.batch(stmts);
+}
+
+/* O nome de uma casa a partir do JSON guardado (estragado ou vazio dá '').
+   Recebe: texto — o houses.data.
+   Devolve: o nome (texto). */
+function nomeDaCasaGuardada(texto) {
+  try { const d = JSON.parse(texto); return d && typeof d === 'object' ? String(d.name || '') : ''; } catch (e) { return ''; }
+}
+
+/* Os nomes de algumas contas, numa consulta só, como estão agora (antes de
+   uma purga os mudar para a lápide).
+   Recebe: env — o ambiente do worker (a base D1); ids — os ids das contas.
+   Devolve: promessa de {id: nome} — uma conta que não existe não vem. */
+export async function nomesDeContas(env, ids) {
+  const out = {};
+  const lista = [...new Set((ids || []).filter((x) => typeof x === 'string' && x))];
+  if (!lista.length) return out;
+  (await env.DB.prepare('SELECT id, name FROM users WHERE id IN (SELECT value FROM json_each(?1))')
+    .bind(JSON.stringify(lista)).all()).results.forEach((u) => { out[u.id] = String(u.name || ''); });
+  return out;
+}
+
+/* Os avisos de uma casa aos outros donos (house_events, o departures do
+   /api/state), com o nome de quem age lido agora.
+   Recebe: env — o ambiente do worker; para — os ids dos destinatários; kind
+   — o tipo do aviso (avisoDeSaida); houseId, houseName — a casa; quemId — o
+   id de quem saiu ou apagou; t — o instante.
+   Devolve: promessa da lista de instruções preparadas, para o lote de quem chama. */
+async function avisosAosOutros(env, para, kind, houseId, houseName, quemId, t) {
+  const nomes = await nomesDeContas(env, [quemId]);
+  const quem = { id: quemId, name: nomes[quemId] || '' };
+  return [...new Set(para)].map((u) => avisoDeSaida(env, u, kind, houseId, houseName, quem, t));
 }
 
 // Os campos da casa que só o servidor escreve: os donos e as quotas entre as
@@ -426,16 +466,23 @@ export const CAMPOS_DAS_QUOTAS = ['ownerShares', 'ownerIds', 'comproprietariosFo
 
 // As quotas (ownerIds/ownerShares, comproprietariosFora e quotasHist) são
 // geridas pelo servidor através das propostas de divisão: um cliente a gravar
-// a casa nunca as pode alterar.
+// uma casa que já existe nunca as pode alterar. Numa casa sem linha anterior
+// (criação, ou ressurreição de uma apagada — existingDataStr '') não há outro
+// dono a proteger, e os comproprietários sem conta e o histórico das quotas
+// que o cliente traz são factos da casa (N139: o que se escreveu sem conta,
+// ou numa cópia reposta): entram, validados (quotasDaCriacao). Os donos e as
+// percentagens entre as contas nunca entram.
 // Recebe: existingDataStr — o JSON da casa como está na base, em texto (pode
-// nem ser JSON válido); incoming — o objeto da casa que o cliente mandou,
-// alterado no próprio sítio.
+// nem ser JSON válido; '' numa casa nova); incoming — o objeto da casa que o
+// cliente mandou, alterado no próprio sítio; donoId (opcional) — quem cria a
+// casa: sem ele, o quotasHist de uma casa nova não entra (os períodos
+// precisam de um dono com conta).
 // Devolve: o mesmo incoming, com os CAMPOS_DAS_QUOTAS repostos do que havia
-// (ou sem eles, quando não havia).
-export function preserveOwnership(existingDataStr, incoming) {
-  // sem casa anterior (criação, ou ressurreição de uma apagada) as quotas
-  // partem do zero: só o caminho das propostas as pode escrever
+// (ou, numa casa nova, só com os de fora e o histórico validados).
+export function preserveOwnership(existingDataStr, incoming, donoId) {
+  const novos = existingDataStr === '' ? quotasDaCriacao(incoming, donoId) : {};
   CAMPOS_DAS_QUOTAS.forEach((k) => { delete incoming[k]; });
+  Object.keys(novos).forEach((k) => { incoming[k] = novos[k]; });
   try {
     const ex = JSON.parse(existingDataStr);
     if (ex && typeof ex === 'object') {
@@ -445,13 +492,54 @@ export function preserveOwnership(existingDataStr, incoming) {
   return incoming;
 }
 
+// Quantos períodos do histórico das quotas uma casa nova pode trazer.
+const MAX_PERIODOS_NA_CRIACAO = 200;
+
+/* Os comproprietários sem conta e o histórico das quotas que uma casa nova
+   traz do cliente, validados (N139): os de fora pelo validarFora (os ids que
+   não servem nascem aqui; uma lista que não passa cai, e a casa fica «por
+   confirmar»); cada período do histórico com uma data real até hoje (em
+   Lisboa), os de fora dele validados da mesma maneira (um que não passa fica
+   por confirmar), um só por dia e por ordem, até 200 — e, numa casa acabada
+   de criar, com uma conta só: a de quem a cria, sem percentagens (os donos
+   fichas de um aparelho sem conta não são contas).
+   Recebe: incoming — a casa que o cliente mandou (não muda); donoId
+   (opcional) — quem a cria; sem ele, o histórico não entra.
+   Devolve: { comproprietariosFora?, quotasHist? } — só o que entra. */
+export function quotasDaCriacao(incoming, donoId) {
+  const out = {};
+  const c = incoming && typeof incoming === 'object' ? incoming : {};
+  const idNovo = () => crypto.randomUUID();
+  if (c.comproprietariosFora !== undefined) {
+    const f = validarFora(c.comproprietariosFora, idNovo);
+    if (!f.erro) out.comproprietariosFora = f.fora;
+  }
+  if (typeof donoId === 'string' && donoId && Array.isArray(c.quotasHist)) {
+    const hoje = diaEmLisboa(), dias = new Set(), hist = [];
+    for (const e of c.quotasHist.slice(0, MAX_PERIODOS_NA_CRIACAO)) {
+      const ate = e && typeof e === 'object' ? diaValido(e.ate) : '';
+      if (!ate || ate >= hoje || dias.has(ate)) continue;
+      dias.add(ate);
+      const f = e.fora === undefined ? { fora: null } : validarFora(e.fora, idNovo);
+      hist.push({ ate, ownerIds: [donoId], ownerShares: {}, fora: f.erro ? null : f.fora });
+    }
+    hist.sort((x, y) => (x.ate < y.ate ? -1 : x.ate > y.ate ? 1 : 0));
+    if (hist.length) out.quotasHist = hist;
+  }
+  return out;
+}
+
 /* ===================== As quotas com data (D08, D29, D93) =====================
    A quota de cada um muda com uma data: a proposta aceite diz desde quando
    (share_proposals.desde, migração 0030), e sair de uma casa ou apagar uma
    conta mudam-na a partir de hoje (em Lisboa, o «hoje» da app). O estado que
    acaba vai para o quotasHist da casa com ate = a véspera desse dia:
    [{ate, ownerIds, ownerShares, fora}], por ordem de ate — o que valia até
-   esse dia, inclusive. O de hoje é o ownerShares/ownerIds/comproprietariosFora
+   esse dia, inclusive —, com duas marcas opcionais: nomes ({id: nome} de quem
+   saiu no fim do período, fecharQuotasHoje) e entrada ([ids] de quem entrou
+   no dia seguinte, fecharQuotasNaEntrada, N018). Entrar também fecha o
+   período: quem entra não era dono nos dias de antes até uma proposta dizer
+   desde quando (com «desde sempre», DESDE_SEMPRE, o período sai). O de hoje é o ownerShares/ownerIds/comproprietariosFora
    da própria casa. A Declaração de cada ano usa o estado de cada data
    (web/app/saldos.js:quotasFiscais, o espelho no cliente).
    O ownerShares continua relativo entre as contas (soma 100, como nos
@@ -582,10 +670,7 @@ export function quotasIguais(a, b) {
    'AAAA-MM-DD', o primeiro dia do novo.
    Devolve: a lista nova, por ordem de ate. */
 export function quotasComHistorico(hist, antes, novo, desde) {
-  const lista = (Array.isArray(hist) ? hist : [])
-    .filter((e) => e && typeof e === 'object' && diaValido(e.ate))
-    .map((e) => ({ ...e }))
-    .sort((x, y) => (x.ate < y.ate ? -1 : x.ate > y.ate ? 1 : 0));
+  const lista = periodosGuardados(hist);
   const ate = vesperaDe(desde);
   if (!ate) return lista;
   const i = lista.findIndex((e) => e.ate >= ate);
@@ -595,10 +680,40 @@ export function quotasComHistorico(hist, antes, novo, desde) {
     out = lista.concat([{ ate, ownerIds: antes.ownerIds, ownerShares: antes.ownerShares, fora: antes.fora }]);
   } else {
     out = lista.slice(0, i + 1);
+    // encurtado, o período já não acaba no dia em que alguém entrou: a data
+    // é a da mudança, e um «desde sempre» já não o tira (aplicarQuotas)
+    if (out[i].ate !== ate) delete out[i].entrada;
     out[i].ate = ate;
   }
-  // dois seguidos iguais: o primeiro sai (o segundo cobre os dois períodos)
-  const juntos = out.filter((e, k) => k === out.length - 1 || !quotasIguais(e, out[k + 1]));
+  return juntarPeriodos(out, novo);
+}
+
+/* Os períodos guardados de um quotasHist, válidos e por ordem de ate, em
+   cópias rasas (as marcas entrada e nomes vão com eles).
+   Recebe: hist — o quotasHist guardado (lixo conta como []).
+   Devolve: a lista nova. */
+function periodosGuardados(hist) {
+  return (Array.isArray(hist) ? hist : [])
+    .filter((e) => e && typeof e === 'object' && diaValido(e.ate))
+    .map((e) => ({ ...e }))
+    .sort((x, y) => (x.ate < y.ate ? -1 : x.ate > y.ate ? 1 : 0));
+}
+
+/* O fim comum de quem mexe no histórico: dois períodos seguidos iguais
+   juntam-se (o primeiro sai, o segundo cobre os dois — os nomes de quem saiu
+   no fim do primeiro passam para ele), e um último igual ao estado novo sai
+   (o novo já vale nesses dias).
+   Recebe: out — a lista por ordem de ate (pode mudar); novo — o estado que fica.
+   Devolve: a lista junta. */
+function juntarPeriodos(out, novo) {
+  const juntos = [];
+  out.forEach((e, k) => {
+    if (k < out.length - 1 && quotasIguais(e, out[k + 1])) {
+      if (e.nomes && typeof e.nomes === 'object') out[k + 1].nomes = { ...e.nomes, ...(out[k + 1].nomes || {}) };
+      return;
+    }
+    juntos.push(e);
+  });
   if (juntos.length && quotasIguais(juntos[juntos.length - 1], novo)) juntos.pop();
   return juntos;
 }
@@ -661,6 +776,12 @@ export function validarFora(v, idNovo) {
   return { fora };
 }
 
+/* O «desde» de uma proposta cujas quotas valem também para trás: a pessoa
+   respondeu «Desde sempre (já era assim)» — na primeira confirmação dos de
+   fora, ou quando o dono que acabou de entrar na app já era dono (N018,
+   N019). Vai no corpo da proposta e fica em share_proposals.desde. */
+export const DESDE_SEMPRE = 'sempre';
+
 /* Aplica um estado novo das quotas a uma casa, com o período que acaba a ir
    para o quotasHist: as percentagens entre as contas, os donos e — quando
    vem — os de fora. É o que a proposta aceite (e a de um dono só) faz.
@@ -670,12 +791,31 @@ export function validarFora(v, idNovo) {
    dono não é uma mudança, é dizer o que já era (o irmão que herdou a meias
    em 2020 não entrou na casa no dia em que a Ana o escreveu). Com data,
    vale a data: o que estava por confirmar até à véspera fica assim.
+   Com desde 'sempre' (DESDE_SEMPRE — «já era assim», a escolha da primeira
+   resposta e de quem acabou de entrar, N018/N019) as quotas novas valem
+   também para trás: o estado de hoje não fica guardado (era um engano, ou
+   uma divisão que não se sabia); os períodos fechados só porque alguém que
+   agora é dono entrou na app (a marca entrada, fecharQuotasNaEntrada) saem —
+   quem entrou já era dono —; e os de fora por confirmar passam a ser os
+   confirmados, como sem data. As mudanças guardadas antes disso (uma saída,
+   uma proposta com data) ficam.
    Recebe: data — o JSON da casa (objeto, alterado no sítio); parts — os
    participantes de agora; quotas — o ownerShares novo; fora — a lista nova,
    null, ou undefined para ficar como está; desde — 'AAAA-MM-DD', o primeiro
-   dia das quotas novas, ou null (sem data: hoje, em Lisboa).
+   dia das quotas novas, 'sempre', ou null (sem data: hoje, em Lisboa).
    Devolve: o mesmo data. */
 export function aplicarQuotas(data, parts, quotas, fora, desde) {
+  if (desde === DESDE_SEMPRE) {
+    const lista = periodosGuardados(data.quotasHist)
+      .filter((e) => !(Array.isArray(e.entrada) && e.entrada.some((u) => parts.includes(u))))
+      .map((e) => (Array.isArray(fora) && foraGuardados(e.fora) === null ? { ...e, fora } : e));
+    data.ownerShares = quotas;
+    data.ownerIds = parts;
+    if (fora !== undefined) data.comproprietariosFora = fora;
+    data.quotasHist = juntarPeriodos(lista, estadoDasQuotas(data, parts));
+    if (!data.quotasHist.length) delete data.quotasHist;
+    return data;
+  }
   const antes = estadoDasQuotas(data, parts);
   if (!desde && Array.isArray(fora)) {
     if (antes.fora === null) antes.fora = fora;
@@ -766,14 +906,60 @@ export function redistribuirQuotas(shares, saiId, ficam) {
 /* Quem sai de uma casa (ou apaga a conta) muda as quotas a partir de hoje:
    o estado de antes vai para o quotasHist com ate = ontem (em Lisboa). O
    data já tem as quotas novas; antes é o que tinha antes de mudar.
+   O período que acaba ontem leva os nomes de quem saiu (nomes: {id: nome},
+   lidos antes da saída): depois de sair, e sobretudo de apagar a conta, a
+   pessoa já não está nas fichas de ninguém, e o aviso da Declaração de quem
+   fica diz quem foi (N021).
    Recebe: data — o JSON da casa (objeto, alterado no sítio), já com as
    quotas de quem fica; antes — estadoDasQuotas de antes da mudança; ficam —
-   os participantes que continuam; agora (opcional) — ms de época.
+   os participantes que continuam; agora (opcional) — ms de época; nomes
+   (opcional) — {id: nome} de quem sai.
    Devolve: o mesmo data. */
-export function fecharQuotasHoje(data, antes, ficam, agora) {
-  data.quotasHist = quotasComHistorico(data.quotasHist, antes, estadoDasQuotas(data, ficam), diaEmLisboa(agora));
+export function fecharQuotasHoje(data, antes, ficam, agora, nomes) {
+  const hoje = diaEmLisboa(agora);
+  data.quotasHist = quotasComHistorico(data.quotasHist, antes, estadoDasQuotas(data, ficam), hoje);
+  const saiu = Object.keys(nomes || {}).filter((u) => !ficam.includes(u) && (antes.ownerIds || []).includes(u));
+  const fim = data.quotasHist.find((e) => e.ate === vesperaDe(hoje));
+  if (fim && saiu.length) {
+    const n = { ...(fim.nomes && typeof fim.nomes === 'object' ? fim.nomes : {}) };
+    saiu.forEach((u) => { n[u] = String(nomes[u] || '').slice(0, 80); });
+    fim.nomes = n;
+  }
   if (!data.quotasHist.length) delete data.quotasHist;
   return data;
+}
+
+/* Quem entra numa casa (uma partilha numa ligação, e as outras portas que
+   chamem isto) fecha o período das quotas na véspera, como as saídas (N018):
+   o estado de antes fica com os donos de então e as quotas de então, e quem
+   entrou fica fora dele — com 0 % nesses dias — até uma proposta dizer desde
+   quando é dono («desde sempre» tira o período: aplicarQuotas). O período
+   leva a marca entrada: [ids] com quem entrou no dia seguinte. Uma entrada
+   que não muda a Declaração de ninguém (quem entra fica com 0 %, as quotas
+   já escritas) não abre período; se o período de ontem já estava fechado
+   hoje por outra entrada, quem entra agora junta-se à marca dele (fechado
+   por uma saída ou uma proposta, fica como está).
+   Recebe: data — o JSON da casa (objeto, alterado no sítio); eram — os
+   participantes antes; depois — os de agora; agora (opcional) — ms de época.
+   Devolve: true quando o histórico mudou. */
+export function fecharQuotasNaEntrada(data, eram, depois, agora) {
+  const novos = [...new Set((depois || []).filter((u) => typeof u === 'string' && u && !(eram || []).includes(u)))];
+  if (!novos.length || !(eram || []).length) return false;
+  const ontem = vesperaDe(diaEmLisboa(agora));
+  const lista = periodosGuardados(data.quotasHist);
+  const ultimo = lista[lista.length - 1];
+  if (ultimo && ultimo.ate >= ontem) {
+    if (!Array.isArray(ultimo.entrada)) return false;
+    const junta = novos.filter((u) => !ultimo.entrada.includes(u) && !(ultimo.ownerIds || []).includes(u));
+    if (!junta.length) return false;
+    ultimo.entrada = ultimo.entrada.concat(junta);
+    data.quotasHist = lista;
+    return true;
+  }
+  const antes = estadoDasQuotas(data, eram);
+  if (quotasIguais(antes, estadoDasQuotas(data, depois))) return false;
+  data.quotasHist = lista.concat([{ ate: ontem, ownerIds: antes.ownerIds, ownerShares: antes.ownerShares, fora: antes.fora, entrada: novos }]);
+  return true;
 }
 
 // O aviso de que alguém saiu de uma casa, para um destinatário: uma linha de
@@ -782,7 +968,11 @@ export function fecharQuotasHoje(data, antes, ficam, agora) {
 // As transferências (rotas/casas.js) escrevem por aqui os avisos delas.
 // Recebe: env — o ambiente do worker (a base D1); para — o id do
 // destinatário; kind — 'colab.sair' (vai ao dono), 'casa.sair' (vai a cada
-// participante que fica) ou um dos da passagem do controlo ('transf.pedido',
+// participante que fica: saiu, ou a ligação, a partilha ou o grupo deixaram
+// de lha dar), 'casa.sair_conta' (um comproprietário apagou a conta; vai a
+// cada um que fica), 'casa.apagada' e 'casa.apagada_conta' (o criador apagou
+// a casa, ou a conta com ela; vão a cada comproprietário), ou um dos da
+// passagem do controlo ('transf.pedido',
 // 'transf.aceite', 'transf.recusada', 'transf.cancelada', 'casa.novo_dono',
 // 'colab.novo_dono'); houseId, houseName — a casa, com o
 // nome lido ANTES de qualquer escrita; quem — quem age ({ id, name }); t — o instante.
@@ -845,7 +1035,14 @@ export async function purgeAccount(env, uid) {
 
 // Uma passagem da purga de uma conta (purgeAccount, que a repete quando uma
 // casa dos outros mudou entretanto). Correr duas vezes é seguro: o R2 sai
-// antes e o lote é tudo ou nada.
+// antes e o lote é tudo ou nada. Nas casas dos outros de que era dona, a
+// quota dela passa aos que ficam como numa saída (redistribuirQuotas, com o
+// período fechado ontem) e cada um que fica recebe um aviso
+// 'casa.sair_conta'; nas casas dela, que saem com a conta, cada
+// comproprietário recebe um 'casa.apagada_conta' (D6, N021, N067, N136). Os
+// avisos levam o id e não o nome dela, e o nome que as saídas de antes
+// deixaram nos períodos das quotas (nomes) sai também: a identidade vai com
+// a conta, e as referências ficam legíveis pela lápide.
 // Recebe: env — o ambiente do worker (a base D1 e o R2); uid — o id da conta a apagar.
 // Devolve: nada — o efeito é o lote de escritas na base, lápide incluída.
 async function purgarConta(env, uid) {
@@ -868,6 +1065,15 @@ async function purgarConta(env, uid) {
     ).results;
 
     const stmts = [];
+    // os avisos a quem fica, que entram no fim do lote: a limpeza dos
+    // house_events desta conta corre antes e não os leva. Sem o nome dela —
+    // a identidade sai com a conta, como nas outras referências (a lápide)
+    const avisos = [];
+    const t = now();
+    const quemSai = { id: uid, name: '' };
+    // as casas dos outros a regravar, uma escrita por casa (duas no mesmo
+    // lote chocavam na revisão): id → { data, rev }
+    const escrever = new Map();
     // os donos de cada uma antes de a conta sair (numa consulta só): o
     // período das quotas que acaba hoje leva-os a todos (D29)
     const donosDe = await participantesDeCasas(env, foreign.map((r) => r.house_id));
@@ -878,22 +1084,61 @@ async function purgarConta(env, uid) {
       try { data = JSON.parse(h.data); } catch (e) { continue; }
       if (!data || typeof data !== 'object' || Array.isArray(data)) continue;
       const donos = donosDe.get(row.house_id) || [];
+      if (!donos.includes(uid)) {
+        // já não era dono desta (uma partilha numa ligação por aceitar): só
+        // os restos dela saem, sem período nem aviso (não contavam)
+        let mexeu = false;
+        if (data.ownerShares && data.ownerShares[uid] !== undefined) { delete data.ownerShares[uid]; mexeu = true; }
+        if (Array.isArray(data.ownerIds) && data.ownerIds.includes(uid)) { data.ownerIds = data.ownerIds.filter((x) => x !== uid); mexeu = true; }
+        if (mexeu) escrever.set(row.house_id, { data, rev: h.rev });
+        continue;
+      }
+      const ficam = donos.filter((x) => x !== uid);
       const antes = estadoDasQuotas(data, donos);
-      let touched = false;
-      if (data.ownerShares && data.ownerShares[uid] !== undefined) { delete data.ownerShares[uid]; touched = true; }
-      if (Array.isArray(data.ownerIds) && data.ownerIds.includes(uid)) {
-        data.ownerIds = data.ownerIds.filter((x) => x !== uid);
-        touched = true;
-      }
-      // a quota de quem sai passa aos que ficam a partir de hoje: até ontem,
-      // a Declaração de cada um continua com as quotas de antes
-      const histAntes = JSON.stringify(data.quotasHist);
-      fecharQuotasHoje(data, antes, donos.filter((x) => x !== uid));
-      if (JSON.stringify(data.quotasHist) !== histAntes) touched = true;
-      if (touched) {
-        stmts.push(gravarCasa(env, row.house_id, h.rev, { data: JSON.stringify(data) }, now()));
-      }
+      // a quota de quem apaga a conta passa aos que ficam, na proporção das
+      // deles, como numa saída (redistribuirQuotas, N136): só apagá-la deixava
+      // as dos outros a somar menos de 100
+      const quotas = redistribuirQuotas(data.ownerShares, uid, ficam);
+      if (quotas) data.ownerShares = quotas; else delete data.ownerShares;
+      data.ownerIds = ficam;
+      // a partir de hoje: até ontem, a Declaração de cada um continua com as quotas de antes
+      fecharQuotasHoje(data, antes, ficam);
+      escrever.set(row.house_id, { data, rev: h.rev });
+      // e cada um que fica é avisado (N021, D6): sem isto, nada lhe dizia que a quota mudou
+      ficam.forEach((u) => avisos.push(avisoDeSaida(env, u, 'casa.sair_conta', row.house_id, String(data.name || ''), quemSai, t)));
     }
+    // o nome dela nos períodos das quotas das casas dos outros (as saídas de
+    // antes, fecharQuotasHoje) também sai: fica o id, como nas outras referências
+    const comNome = (await env.DB.prepare(
+      `SELECT id, data, rev FROM houses WHERE deleted = 0 AND owner_id <> ?1 AND instr(data, '"nomes"') > 0 AND instr(data, ?2) > 0`
+    ).bind(uid, JSON.stringify(uid)).all()).results;
+    for (const h of comNome) {
+      let v = escrever.get(h.id);
+      if (!v) {
+        let data = null;
+        try { data = JSON.parse(h.data); } catch (e) {}
+        if (!data || typeof data !== 'object' || Array.isArray(data)) continue;
+        v = { data, rev: h.rev, soNomes: true };
+      }
+      let tirou = false;
+      (Array.isArray(v.data.quotasHist) ? v.data.quotasHist : []).forEach((e) => {
+        if (e && e.nomes && typeof e.nomes === 'object' && Object.prototype.hasOwnProperty.call(e.nomes, uid)) {
+          delete e.nomes[uid];
+          if (!Object.keys(e.nomes).length) delete e.nomes;
+          tirou = true;
+        }
+      });
+      if (tirou || !v.soNomes) escrever.set(h.id, v);
+    }
+    escrever.forEach((v, hid) => stmts.push(gravarCasa(env, hid, v.rev, { data: JSON.stringify(v.data) }, t)));
+    // as casas desta conta saem com ela: cada comproprietário fica com o
+    // aviso 'casa.apagada_conta' (N067), lido antes de as partilhas saírem
+    const minhas = (await env.DB.prepare('SELECT id, data FROM houses WHERE owner_id = ? AND deleted = 0').bind(uid).all()).results;
+    const donosDasMinhas = await participantesDeCasas(env, minhas.map((h) => h.id));
+    minhas.forEach((h) => {
+      (donosDasMinhas.get(h.id) || []).filter((u) => u !== uid)
+        .forEach((u) => avisos.push(avisoDeSaida(env, u, 'casa.apagada_conta', h.id, nomeDaCasaGuardada(h.data), quemSai, t)));
+    });
 
     // os anexos: primeiro os que ficam (passam para o dono da casa onde
     // estão), depois os que saem — antes das casas, de que a condição depende
@@ -920,9 +1165,12 @@ async function purgarConta(env, uid) {
       env.DB.prepare('DELETE FROM shared_group_requests WHERE user_id = ?').bind(uid),
       env.DB.prepare('DELETE FROM shared_group_houses WHERE added_by = ?1 OR house_id IN (SELECT id FROM houses WHERE owner_id = ?1)').bind(uid),
       // as saídas: as dela e as das casas dela (antes das casas, de que a
-      // condição depende); os avisos que recebeu e os que deu a outros
+      // condição depende); os avisos que recebeu saem, e os que deu a outros
+      // ficam com eles sem o nome dela (D6: quem fica não perde o aviso de
+      // que ela saiu ou apagou uma casa; a identidade sai, como na lápide)
       env.DB.prepare('DELETE FROM house_exits WHERE user_id = ?1 OR house_id IN (SELECT id FROM houses WHERE owner_id = ?1)').bind(uid),
-      env.DB.prepare('DELETE FROM house_events WHERE user_id = ?1 OR actor_id = ?1').bind(uid),
+      env.DB.prepare('DELETE FROM house_events WHERE user_id = ?1').bind(uid),
+      env.DB.prepare("UPDATE house_events SET actor_name = '' WHERE actor_id = ?1").bind(uid),
       // as transferências que pediu e as que lhe pediram, decididas ou não
       env.DB.prepare('DELETE FROM house_transfers WHERE from_user = ?1 OR to_user = ?1').bind(uid),
       // dados próprios
@@ -958,7 +1206,10 @@ async function purgarConta(env, uid) {
            pass_hash = '', pass_salt = '', google_sub = NULL, apple_sub = NULL,
            rasto_escolha = NULL, rasto_escolha_at = NULL, deleted_at = ?
          WHERE id = ?`
-      ).bind(now(), uid)
+      ).bind(now(), uid),
+      // os avisos a quem fica (e a quem perde as casas dela), depois da
+      // limpeza dos house_events desta conta, que os levaria
+      ...avisos
     );
     // e as miniaturas deles (a chave de worker/src/files.js:chavesNoR2, escrita
     // aqui para não criar o ciclo de importações que o apagarDoR2 evita)

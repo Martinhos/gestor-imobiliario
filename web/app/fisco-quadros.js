@@ -78,6 +78,23 @@ function fiscoTermoSemRenovacao(l){
   const s=l.segmentos.find(x=>tem(x)&&x.semRenovacao);
   return s&&s.de?irsVespera(s.de):'';
 }
+/* A redução pela duração de uma linha caiu toda pelo n.º 20 do art. 72.º? O
+   contrato acabou no ano antes do prazo por motivo do senhorio sem chegar a
+   nenhum escalão de duração: a redução cai desde o início do período e as
+   rendas do ano pagam a taxa base, mas a linha fica no 4.2 (D14: a app não
+   muda o quadro sem a AT confirmar se estas rendas vão ao 4.1). O resumo
+   marca-a (l.reducaoCaida); um resumo sem a marca diz-o pelos troços: algum
+   regularizado, nenhum com rendas ainda com a redução, e a taxa da linha a
+   base.
+   Recebe: r — o resumo (resumoFiscal); l — a linha do resumo.
+   Devolve: true quando a redução caiu toda. */
+function fiscoReducaoCaida(r,l){
+  if(!l||l.isencao)return false;
+  if(typeof l.reducaoCaida==='boolean')return l.reducaoCaida;
+  const Q=r&&r.versao&&r.versao.quadros;if(!Q||l.quadro!==Q.comReducao||l.motivoTaxa!=='base')return false;
+  const ss=(Array.isArray(l.segmentos)?l.segmentos:[]).filter(s=>s&&(s.rendas==null||Number(s.rendas)>0));
+  return ss.some(s=>s.regulariza)&&ss.every(s=>!s.reducao||s.regulariza);
+}
 /* A taxa de uma linha como se diz no resumo do quadro e no cartão do
    contrato: «isento · 6D código 01»; sem regras do ano, «sem regras de AAAA»
    (D50); com mais do que um período, a taxa de cada um (fiscoTaxaPorPeriodos);
@@ -101,13 +118,17 @@ function fiscoTaxaTexto(r,l,cartao){
    período — o contrato e cada renovação —, até 15 de fevereiro do ano
    seguinte ao início dele, e o 4.2A pergunta se foi feita a tempo (D01, D35).
    Lê l.comunicacao ({periodoInicio, chave, prazo, data, foraDePrazo}, do
-   resumo); um resumo sem ela dá só a data em l.comunicado.
+   resumo); um resumo sem ela dá só a data em l.comunicado. Sem data, um
+   período com a marca da app antiga por confirmar (a migração das
+   comunicações, N003) lê-se como no PDF e no CSV
+   (fisco-exportar.js:fiscoExpComPorConfirmar), e nunca é NÃO.
    Recebe: l — a linha do resumo.
-   Devolve: {estado ('feita'|'fora'|'porFazer'), valor, sub, aviso} — valor
-   «comunicada a dd/mm/aaaa»; «comunicada fora do prazo (a dd/mm/aaaa) — no
-   4.2A é NÃO»; «por comunicar · até dd/mm/aaaa», ou com o prazo passado «por
-   comunicar · o prazo acabou a dd/mm/aaaa — no 4.2A é NÃO»; sub o período a
-   que respeita; aviso true quando não é SIM. */
+   Devolve: {estado ('feita'|'fora'|'confirmar'|'porFazer'), valor, sub,
+   aviso} — valor «comunicada a dd/mm/aaaa»; «comunicada fora do prazo (a
+   dd/mm/aaaa) — no 4.2A é NÃO»; «a confirmar na ficha do contrato — a marca
+   de dd/mm/aaaa vem da app antiga»; «por comunicar · até dd/mm/aaaa», ou com
+   o prazo passado «por comunicar · o prazo acabou a dd/mm/aaaa — no 4.2A é
+   NÃO»; sub o período a que respeita; aviso true quando não é SIM. */
 function fiscoComunicacaoDe(l){
   const x=l&&l.comunicacao&&typeof l.comunicacao==='object'?l.comunicacao:null;
   const data=String((x?x.data:l&&l.comunicado)||''),prazo=String(x&&x.prazo||'');
@@ -115,6 +136,8 @@ function fiscoComunicacaoDe(l){
   const fora=!!data&&!!x&&(x.foraDePrazo===true||(!!prazo&&data>prazo));
   if(data&&!fora)return {estado:'feita',valor:'comunicada a '+dPT(data),sub:sub,aviso:false};
   if(data)return {estado:'fora',valor:'comunicada fora do prazo (a '+dPT(data)+') — no 4.2A é NÃO',sub:sub,aviso:true};
+  const pc=x?fiscoExpComPorConfirmar(l,x):null;
+  if(pc)return {estado:'confirmar',valor:'a confirmar na ficha do contrato'+(pc.data?' — a marca de '+dPT(pc.data)+' vem da app antiga':''),sub:sub,aviso:true};
   const passou=!!prazo&&prazo<today();
   return {estado:'porFazer',valor:'por comunicar'+(!prazo?'':passou?' · o prazo acabou a '+dPT(prazo)+' — no 4.2A é NÃO':' · até '+dPT(prazo)),sub:sub,aviso:true};
 }
@@ -352,7 +375,13 @@ function fiscoDiaDasQuotas(ano){
 }
 /* As notas das quotas de uma linha, para o cartão do contrato: os
    comproprietários sem conta na app, com a quota de cada um, que a quota-parte
-   já desconta (D08, saldos.js:quotasForaNaData); as quotas escritas na ficha
+   já desconta (D08, saldos.js:quotasForaNaData), e que contam só os que têm
+   direito às rendas — havendo usufruto, os usufrutuários (informação
+   vinculativa 25058); com os bens comuns do casal (D5, r.bensComuns e
+   r.conjugeFora), que a parte do cônjuge vai na linha do titular dele, ou
+   que não entra quando há mais do que um dono de fora e não se sabe qual é
+   ele — e, na linha do cônjuge sem conta (l.conjugeFora), de quem é a parte
+   que lá vai; as quotas escritas na ficha
    que não somam 100 % e que a app reparte na proporção (D93: a Declaração usa a
    repartida, e di-lo); e as quotas que mudaram no ano, cada uma com a data
    (D29: l.quotas, do resumo — cada renda e cada gasto contam pela do seu dia).
@@ -362,14 +391,31 @@ function fiscoDiaDasQuotas(ano){
 function fiscoQuotaNotas(r,l){
   if(!r||r.porInteiro||!l)return [];
   const out=[],p=l.propertyId?prop(l.propertyId):null,dia=fiscoDiaDasQuotas(r.ano);
-  if(p){
+  /* os bens comuns do casal com o cônjuge sem conta (D5, r.bensComuns): a
+     linha dele, o imóvel onde ele é o dono de fora, ou onde não se sabe qual é */
+  const bc=r.bensComuns&&typeof r.bensComuns==='object'?r.bensComuns:null;
+  const deste=k=>bc&&Array.isArray(bc[k])?bc[k].find(x=>x&&x.propertyId===l.propertyId)||null:null;
+  const cf=r.conjugeFora||{},ehCf=y=>!!y&&(!!y.conjugeFora||fiscoEhConjugeFora(y.titularId)),doCf=ehCf(l);
+  /* o imóvel com a linha do cônjuge: o do r.bensComuns, ou um com uma linha dele */
+  const linhaCf=(r.linhas||[]).find(y=>y&&y.propertyId===l.propertyId&&ehCf(y))||null;
+  const bcIm=deste('imoveis')||(linhaCf?{propertyId:l.propertyId}:null),bcPd=deste('porDecidir');
+  const letraCf=cf.letra||(linhaCf&&linhaCf.titular)||'B';
+  if(doCf){
+    const fora1=p?quotasForaNaData(p,dia).filter(f=>f&&Number(f.quota)>0):[];
+    const nome=String((bcIm&&bcIm.nome)||cf.nome||(fora1.length===1?fora1[0].nome:'')||'').trim();
+    out.push('Linha do teu cônjuge (titular '+(l.titular||letraCf)+'), que não tem conta na app: os bens são comuns do casal, e a parte '+(nome?'de '+nome+', o dono fora da app deste imóvel':'do dono fora da app deste imóvel')+' ('+fiscoPctQuota(l.quota)+') vai aqui, com as rendas, as retenções e os gastos pela quota dele.');
+  }
+  if(p&&!doCf){
     const fora=quotasForaNaData(p,dia).filter(f=>f&&Number(f.quota)>0);
-    if(fora.length)out.push('Fora da app: '+listaE(fora.map(f=>f.nome+' ('+fiscoPctQuota(Number(f.quota)/100)+')'))+'. A tua quota-parte ('+fiscoPctQuota(l.quota)+') já os desconta.');
+    if(fora.length)out.push('Fora da app: '+listaE(fora.map(f=>f.nome+' ('+fiscoPctQuota(Number(f.quota)/100)+')'))+'. A tua quota-parte ('+fiscoPctQuota(l.quota)+') já os desconta'
+      +(bcIm?', e a parte do teu cônjuge vai numa linha do titular '+letraCf+' (os bens são comuns do casal).'
+        :bcPd?'. Os bens são comuns do casal, mas com mais do que um dono fora da app a app não sabe qual é o teu cônjuge: a parte dele não entra — junta-a no Portal das Finanças, numa linha do titular '+letraCf+' pela quota dele.':'.')
+      +' Contam só os que têm direito às rendas: havendo usufruto, os usufrutuários, e não quem tem só a nua-propriedade.');
     const e=quotasEstadoNaData(p,dia),ids=e.atual?ownersOfProp(p):(e.ownerIds||[]).filter(x=>typeof x==='string'&&x);
     const sh=e.ownerShares||{},tem=o=>sh[o]!==undefined&&sh[o]!==null&&sh[o]!==''&&isFinite(Number(sh[o]))&&Number(sh[o])>=0;
     if(ids.length>1&&ids.every(tem)){
       const soma=Math.round(sum(ids.map(o=>Number(sh[o])))*100)/100;
-      if(Math.abs(soma-100)>0.005)out.push('As quotas escritas na ficha do imóvel somam '+String(soma).replace('.',',')+' %: a app reparte-as na proporção, e a tua quota-parte fica '+fiscoPctQuota(l.quota)+'. Se a escritura diz outra coisa, corrige-as na ficha'+(soma<100?'; se o resto é de quem não está na app, junta-o lá, nos comproprietários sem conta.':'.'));
+      if(Math.abs(soma-100)>0.005)out.push('As quotas escritas na ficha do imóvel somam '+String(soma).replace('.',',')+' %: a app reparte-as na proporção, e a tua quota-parte fica '+fiscoPctQuota(l.quota)+'. Se a parte das rendas que cabe a cada um é outra, corrige-as na ficha'+(soma<100?'; se o resto é de quem não está na app, junta-o lá, nos comproprietários sem conta.':'.'));
     }
   }
   const qs=Array.isArray(l.quotas)?l.quotas.filter(x=>x&&x.desde):[];
@@ -455,7 +501,9 @@ function fiscoReducoesHtml(r,ls){
    ficha do contrato (a Declaração requer os Contratos).
    Ronda 2: cada linha diz os quadros do 6 que apontam para ela (D117, D119,
    D121), o total diz o líquido que o imposto conta quando é outro (o 6B, o
-   6C), e no 4.3 (D120) a linha é por contrato e por natureza.
+   6C), e no 4.3 (D120) a linha é por contrato e por natureza. A linha com a
+   redução caída pelo n.º 20 diz «a redução caiu (n.º 20): confirma o
+   quadro» (fiscoReducaoCaida).
    Recebe: r — o resumo (resumoFiscal); ls — as linhas do quadro; q — o
    quadro ('4.1', '4.2', '4.3'); red — true no quadro com redução pela duração.
    Devolve: o HTML (string). */
@@ -470,7 +518,8 @@ function fiscoQuadroResumoHtml(r,ls,q,red){
     /* os quadros do 6 que apontam para esta linha (D117, D119, D121) */
     const seis=bs.length?'com o '+listaE([...new Set(bs.map(b=>b.quadro))]):'';
     const sub=[l.campo?'campo '+l.campo:'',fiscoPapelTexto(l),l.imovel,l.artigo?'art. '+l.artigo:'',l.fracao?'fr. '+l.fracao:'',l.atNumero?'n.º '+l.atNumero:'',taxa,seis,
-      escrita!=null?'escreveste '+dec(escrita)+' % no contrato':'',r.variosTitulares?'titular '+l.titular:''].filter(Boolean).map(esc).join(' · ');
+      escrita!=null?'escreveste '+dec(escrita)+' % no contrato':'',r.variosTitulares?'titular '+l.titular:'',
+      fiscoReducaoCaida(r,l)?'a redução caiu (n.º 20): confirma o quadro':''].filter(Boolean).map(esc).join(' · ');
     const fs=fiscoFaltasDaLinha(l);
     const falta=fs.length?`<span class="fis-qr-falta"><span class="badge red">${esc(cap(fs[0]))}</span>${fs.length>1?` <span class="small">+${fs.length-1}</span>`:''}</span>`:'';
     const num=l.isencao?'isento':pj>0?'prejuízo '+euro2(pj):semRegras?'sem regras de '+r.ano:'imposto estimado '+euro2(Math.max(0,Number(l.imposto)||0));
@@ -552,9 +601,9 @@ function fiscoQuadroCard(r,q){
   const A2=esc(r.versao.quadros.datas),dia=irsDiaMes(r.versao.prazos&&r.versao.prazos.comunicacaoDuracao)||'15 de fevereiro';
   /* contados por contrato: em conjunta, um contrato dos dois tem duas linhas */
   const estados={};ls.forEach(l=>{estados[l.contratoId]=fiscoComunicacaoDe(l).estado});
-  const nEst=e=>Object.keys(estados).filter(k=>estados[k]===e).length,porComunicar=nEst('porFazer'),fora=nEst('fora');
+  const nEst=e=>Object.keys(estados).filter(k=>estados[k]===e).length,porComunicar=nEst('porFazer'),fora=nEst('fora'),aConfirmar=nEst('confirmar');
   const datas=red?`<div class="flabel u-mt-12px">Quadro ${A2} · datas de cada contrato</div>
-    <div class="hint">O campo «Comunicação» do ${A2} pergunta se a duração do contrato e de cada renovação foi comunicada no Portal até ${esc(dia)} do ano seguinte ao início do contrato ou de cada renovação (Portaria 110/2019). Comunica-se uma vez por período, e não todos os anos: «comunicada a …» é SIM; «por comunicar» e «comunicada fora do prazo» são NÃO — e sem ela arriscas a redução.${porComunicar?' '+fiscoN(porComunicar,'contrato ainda por comunicar','contratos ainda por comunicar')+': marca a data na ficha do contrato quando o fizeres.':''}${fora?' '+fiscoN(fora,'contrato comunicado fora do prazo','contratos comunicados fora do prazo')+': no '+A2+' a resposta é NÃO.':''}</div>`
+    <div class="hint">O campo «Comunicação» do ${A2} pergunta se a duração do contrato e de cada renovação foi comunicada no Portal até ${esc(dia)} do ano seguinte ao início do contrato ou de cada renovação (Portaria 110/2019). Comunica-se uma vez por período, e não todos os anos: «comunicada a …» é SIM; «por comunicar» e «comunicada fora do prazo» são NÃO — e sem ela arriscas a redução.${porComunicar?' '+fiscoN(porComunicar,'contrato ainda por comunicar','contratos ainda por comunicar')+': marca a data na ficha do contrato quando o fizeres.':''}${fora?' '+fiscoN(fora,'contrato comunicado fora do prazo','contratos comunicados fora do prazo')+': no '+A2+' a resposta é NÃO.':''}${aConfirmar?' '+fiscoN(aConfirmar,'contrato com a comunicação a confirmar','contratos com a comunicação a confirmar')+': a marca vem da app antiga, que não diz quando comunicaste; responde na ficha do contrato.':''}</div>`
     +fiscoReducoesHtml(r,ls):'';
   /* as despesas a confirmar não contam em coluna nenhuma (o resumo não as
      soma); um resumo antigo, sem r.aConfirmar, somava as sem regra em Outros */
@@ -822,7 +871,10 @@ function fiscoBeneficiosNotas(r,l){
    baixo os campos do fiscoCamposDe, campo à esquerda e valor à direita, em
    grupos (a linha do quadro, os gastos, as obras, o 4.2A, o 4.2B). O que
    falta leva o selo vermelho com a falta, o que convém tratar o âmbar, o que
-   não se aplica um «—». O NIF não parte entre linhas (lê-se e copia-se para o
+   não se aplica um «—». Com a redução pela duração caída toda pelo n.º 20
+   (fiscoReducaoCaida), uma nota diz «a redução caiu (n.º 20): confirma o
+   quadro» e porquê — a linha fica no 4.2 até a AT dizer outra coisa (D14).
+   O NIF não parte entre linhas (lê-se e copia-se para o
    Portal de uma vez). Tocar abre a ficha do contrato (a Declaração requer os
    Contratos: sem eles não há página). Ronda 2: as notas do 4.3 (a caução
    recebida, a cessação por acordo — fiscoDhdNotas, D120), dos benefícios do
@@ -861,6 +913,7 @@ function fiscoContratoHtml(r,l){
   const nota=(papel?`<p class="fis-ctc-nota">${papel}</p>`:'')
     +(escrita==null?'':`<p class="fis-ctc-nota">Escreveste ${esc(dec(escrita))} % no contrato; a lei de ${esc(String(r.ano))} dá ${esc(dec(l.taxa))} %, e é essa que conta aqui.</p>`)
     +(termo?`<p class="fis-ctc-nota">Rendas depois do termo (${dPT(termo)}) sem renovação registada: contam sem a redução pela duração. Se o contrato se renovou, regista a renovação na ficha.</p>`:'')
+    +(fiscoReducaoCaida(r,l)?`<p class="fis-ctc-nota">A redução caiu (n.º 20): confirma o quadro. O contrato acabou antes do prazo por motivo do senhorio sem chegar a nenhum escalão de duração, e a redução cai desde o início do período (CIRS art. 72.º n.º 20): as rendas de ${esc(String(r.ano))} pagam a taxa base, e o quadro 10 diz a cessação. As instruções reservam o quadro ${esc(r.versao.quadros.comReducao)} às rendas que podem ter a redução: a app deixa a linha aqui até a AT dizer se vai ao ${esc(r.versao.quadros.semReducao)} — pergunta-lhe pelo e-balcão antes de entregar.</p>`:'')
     +fiscoQuotaNotas(r,l).concat(fiscoDhdNotas(r,l),fiscoBeneficiosNotas(r,l),[fiscoFreguesiaUniaoTexto(l)]).filter(Boolean).map(t=>`<p class="fis-ctc-nota">${esc(t)}</p>`).join('');
   const faltas=fiscoFaltasDaLinha(l);
   return `<div class="fis-ctc tap" data-toca="camada" data-click="ctView('${jsq(l.contratoId)}')">
@@ -1177,57 +1230,150 @@ function fiscoAnosAnterioresCard(r){
     '<div>'+ls.map(l=>l.anosAnteriores.map(a=>`<div class="stat"><span>${esc(l.nome)}<div class="small">quadro ${esc(l.quadro)}${l.campo?' · campo '+esc(l.campo):''}${r.variosTitulares?' · titular '+esc(l.titular):''} · respeitam a ${esc(String(a.ano))}${extra(a)}</div></span><b>${euro2(a.valor)}</b></div>`).join('')).join('')+'</div>'
     +`<div class="hint">Já estão nas rendas da linha, porque contam no ano em que se recebem. No quadro ${esc(Q8)} dizes de que ano é cada parte: no 8A se optares pelo englobamento (o valor reparte-se pelos anos a que respeita), ou no 8B se entregares as declarações de substituição desses anos (até cinco anos para trás)${prazo}. No 8B, cada ano leva o valor, as retenções na fonte e os gastos desse ano que não entraram na declaração dele${comGastos?'':' — esses gastos soma-os tu, a app não os separa'}. A app conta cada renda no mês a que respeita: um pagamento de vários anos regista-se num movimento por ano.</div>`);
 }
+/* O «ano de início do benefício» de uma entrada do quadro 10 é certo? É o
+   ano da primeira declaração em que as rendas do contrato tiveram a redução
+   ou a isenção (as instruções do Anexo F), e a app só o sabe pelo que tem
+   registado. O resumo marca-o (x.anoInicioConfirmar) e diz porquê
+   (x.anoInicioPorque, uma frase sem ponto final), e a nota é essa frase com
+   a maiúscula e o ponto; um resumo que não traz a marca — o de antes da
+   correção, que dava o primeiro ano com rendas na app — fica por confirmar
+   quando o contrato começou antes desse ano.
+   Recebe: r — o resumo (resumoFiscal); x — a entrada de r.cessados.
+   Devolve: {sim, nota} — sim true quando o ano é por confirmar; nota o
+   porquê (texto simples; '' quando é certo). */
+function fiscoAnoInicioPorConfirmar(r,x){
+  x=x||{};
+  const ano=Number(x.anoInicioBeneficio)||0;
+  const geral='O ano de início do benefício é o da primeira declaração em que as rendas deste contrato tiveram a redução ou a isenção, e a app só o sabe pelo que tens registado: confirma-o nas tuas declarações anteriores, no Portal das Finanças.';
+  const marca=x.anoInicioConfirmar!==undefined?x.anoInicioConfirmar:x.anoInicioPorConfirmar;
+  if(marca!==undefined&&marca!==null){
+    const p=String(x.anoInicioPorque||x.anoInicioNota||'').trim();
+    const nota=p?p.charAt(0).toUpperCase()+p.slice(1)+(/[.!?]$/.test(p)?'':'.'):'';
+    return marca?{sim:true,nota:nota||geral}:{sim:false,nota:''};
+  }
+  const c=x.contratoId?contract(x.contratoId):null,ini=Number(String((c&&c.start)||'').slice(0,4))||0;
+  if(!ano||!ini||ini>=ano)return {sim:false,nota:''};
+  return {sim:true,nota:'O contrato começou em '+ini+' e a app só tem rendas dele desde '+ano+'. '+geral};
+}
+/* A linha do 4.x do mesmo contrato e titular que uma entrada do quadro 10,
+   no mesmo ano: de onde vêm a identificação matricial, o titular e o
+   inquilino quando o resumo não os pôs na entrada (um resumo antigo).
+   Recebe: r — o resumo (resumoFiscal); x — a entrada de r.cessados.
+   Devolve: a linha, ou null sem nenhuma. */
+function fiscoLinhaDoCessado(r,x){
+  const ls=Array.isArray(r&&r.linhas)?r.linhas:[];
+  return ls.find(l=>l&&x&&l.contratoId===x.contratoId&&(!x.titularId||l.titularId===x.titularId)&&l.papel!=='indemnizacao'&&l.papel!=='outra')
+    ||ls.find(l=>l&&x&&l.contratoId===x.contratoId&&(!x.titularId||l.titularId===x.titularId))||null;
+}
+/* Os campos de uma entrada do quadro 10, pela ordem das colunas do impresso:
+   o regime fiscal, o n.º do contrato, o ano de início do benefício (a âmbar,
+   «a confirmar», quando a app não o sabe — fiscoAnoInicioPorConfirmar), a
+   data e o motivo da cessação — os códigos com o texto da versão do ano
+   (quadro10.regimes e quadro10.motivos), nunca daqui —, a identificação
+   matricial (fiscoCamposMatriz: o código da freguesia, o tipo, o artigo) e a
+   fração, o titular (em conjunta, um contrato dos dois tem uma entrada por
+   titular) e o NIF do inquilino, ou o país (fiscoCamposInquilinos) — «as
+   restantes colunas … conforme as instruções do quadro 4.1». A matriz, o
+   titular e os inquilinos vêm da entrada (o resumo põe-nos lá, com os nomes
+   das linhas: freguesiaCodigo, tipoPredio, artigo, fracao, titular,
+   inquilinos); uma entrada sem eles (um resumo antigo) lê-os da linha do 4.x
+   do mesmo contrato (fiscoLinhaDoCessado) e, sem linha no ano, da ficha do
+   imóvel e do contrato; o que nenhuma tem fica em falta. A mesma forma do
+   fiscoCamposDe, texto simples, para o HTML e para um PDF.
+   Recebe: r — o resumo (resumoFiscal); x — a entrada de r.cessados.
+   Devolve: [{grupo, campo, sub, valor, falta, aviso, nota, nif}]. */
+function fiscoCamposQuadro10(r,x){
+  const out=[],add=(grupo,campo,valor,o)=>{o=o||{};out.push({grupo:grupo,campo:campo,sub:o.sub||'',valor:valor==null?'':String(valor),
+    falta:!!o.falta,aviso:!!o.aviso,nota:o.nota||'',nif:!!o.nif})};
+  x=x||{};
+  const v=(r&&r.versao)||irsAno(r.ano),q10=v.quadro10||{};
+  const regimes=Array.isArray(q10.regimes)?q10.regimes:[],motivos=Array.isArray(q10.motivos)?q10.motivos:[];
+  const reg=regimes.find(g=>g&&String(g.codigo)===String(x.regime)),mot=motivos.find(m=>m&&String(m.codigo)===String(x.motivo));
+  const conf=fiscoAnoInicioPorConfirmar(r,x),ano=x.anoInicioBeneficio?String(x.anoInicioBeneficio):'';
+  add('','Regime fiscal',x.regime?x.regime+(reg&&reg.texto?' · '+reg.texto:''):'',{falta:!x.regime,nota:'por conhecer'});
+  add('','N.º do contrato',x.numero?String(x.numero):'',{falta:!x.numero});
+  add('','Ano de início do benefício',ano,{falta:!ano,aviso:!!ano&&conf.sim,nota:ano?'a confirmar':'falta',
+    sub:ano&&conf.sim?'a primeira declaração com o benefício':''});
+  add('','Data da cessação',dPT(x.data),{falta:!x.data});
+  add('','Motivo',x.motivo?x.motivo+(mot?' · '+(mot.curto||mot.texto||''):''):'',{falta:!x.motivo});
+  /* a matriz e os inquilinos da entrada; num resumo antigo, os da linha do
+     mesmo contrato, e sem ela os da ficha do imóvel e do contrato (a mesma
+     fonte da linha) */
+  const temMatriz=['freguesiaCodigo','tipoPredio','artigo','fracao'].some(k=>x[k]!==undefined);
+  const l=fiscoLinhaDoCessado(r,x),c=!temMatriz&&!l&&x.contratoId?contract(x.contratoId):null;
+  const p=c||x.propertyId?prop(x.propertyId||(c&&c.propertyId)):null;
+  const m=temMatriz?x:l?l:p?{freguesiaCodigo:p.freguesiaCodigo||'',tipoPredio:p.tipoPredio||'',artigo:p.matrix||'',fracao:p.fraction||''}:x;
+  fiscoCamposMatriz(add,m);
+  add('','Fração ou secção',m.fracao);
+  add('','Titular',x.titular||(l&&l.titular)||'A');
+  const ts=Array.isArray(x.inquilinos)?x.inquilinos:l&&Array.isArray(l.inquilinos)?l.inquilinos
+    :c?ctTenants(c).map(t=>({id:t.id,nome:t.name,nif:t.nif||'',pais:t.pais||''})):[];
+  fiscoCamposInquilinos(add,'',ts);
+  return out;
+}
 /* O cartão do quadro 10, «contratos que acabaram» (D09): os contratos de
    habitação permanente com a taxa reduzida pela duração, ou com uma isenção
    dos programas, que acabaram no ano, seja qual for o motivo (r.cessados, do
-   resumo). Cada um num cartão como os dos quadros, campo → valor pela ordem
-   do impresso: o regime fiscal, o n.º do contrato, o ano em que o benefício
-   começou, a data da cessação e o motivo — os códigos com o texto da versão
-   do ano (quadro10.regimes e quadro10.motivos), nunca daqui. O que falta leva
-   o selo vermelho. Com um motivo que regulariza (o 01 da versão, a cessação
+   resumo; em conjunta, um contrato dos dois tem uma entrada por titular).
+   Cada um num cartão como os dos quadros, com os campos do fiscoCamposQuadro10
+   pela ordem do impresso — o regime, o n.º, o ano de início do benefício, a
+   data e o motivo da cessação, a identificação matricial, o titular e o NIF
+   do inquilino ou o país. O que falta leva o selo vermelho; o ano de início
+   do benefício que a app não sabe ao certo, o âmbar, com a nota a dizer
+   porquê. Com um motivo que regulariza (o 01 da versão, a cessação
    imputável ao senhorio, CIRS art. 72.º n.º 20 — D10), a nota diz que a
    redução do período em que acabou se perde: a taxa passa à da duração que
    o contrato durou mesmo (irs.js:irsTaxaDecorrida), e a diferença
    regulariza-se nesta declaração com juros compensatórios — a estimativa
    sem juros, ano a ano (r.regularizacoes). Sem as regras do ano não se
-   estima (D50). Tocar abre a ficha do contrato. Sem cessados, não se escreve.
+   estima (D50). Num ano sem rendas nos quadros 4 (o contrato acabou antes
+   da primeira renda do ano), diz que o quadro 10 vai na declaração desse ano
+   na mesma. Tocar abre a ficha do contrato. Sem cessados, não se escreve.
    Recebe: r — o resumo (resumoFiscal).
    Devolve: o HTML do cartão (string), ou '' sem contratos que acabaram. */
 function fiscoQuadro10Card(r){
   const cs=r&&Array.isArray(r.cessados)?r.cessados.filter(Boolean):[];if(!cs.length)return '';
   const v=r.versao||irsAno(r.ano),q10=v.quadro10||{},Q=(v.quadros&&v.quadros.cessados)||'10';
-  const regimes=Array.isArray(q10.regimes)?q10.regimes:[],motivos=Array.isArray(q10.motivos)?q10.motivos:[];
+  const motivos=Array.isArray(q10.motivos)?q10.motivos:[];
   const regs=Array.isArray(r.regularizacoes)?r.regularizacoes:[],semRegras=fiscoSemRegras(r);
   const dia=irsDiaMes(v.prazos&&v.prazos.comunicacaoDuracao)||'15 de fevereiro';
-  const valor=(txt,nota)=>txt?esc(txt):`<span class="badge red">${esc(nota)}</span>`;
+  const letras={};cs.forEach(x=>{if(x.titular)letras[x.titular]=1});
+  const varios=!!r.variosTitulares||Object.keys(letras).length>1;
   const cartao=x=>{
-    const reg=regimes.find(g=>g&&String(g.codigo)===String(x.regime)),mot=motivos.find(m=>m&&String(m.codigo)===String(x.motivo));
-    const campos=[
-      ['Regime fiscal',x.regime?x.regime+(reg&&reg.texto?' · '+reg.texto:''):'','por conhecer'],
-      ['N.º do contrato',x.numero?String(x.numero):'','falta'],
-      ['Ano de início do benefício',x.anoInicioBeneficio?String(x.anoInicioBeneficio):'','falta'],
-      ['Data da cessação',dPT(x.data),'falta'],
-      ['Motivo',x.motivo?x.motivo+(mot?' · '+(mot.curto||mot.texto||''):''):'','falta']];
-    const dl=campos.map(c=>`<div class="fis-campo"><dt>${esc(c[0])}</dt><dd>${valor(c[1],c[2])}</dd></div>`).join('');
+    const mot=motivos.find(m=>m&&String(m.codigo)===String(x.motivo));
+    const campos=fiscoCamposQuadro10(r,x),titular=(campos.find(c=>c.campo==='Titular')||{}).valor||'';
+    const dl=campos.map(fiscoCampoHtml).join('');
     const faltas=[!x.motivo?'o motivo da cessação':'',!x.numero?'o n.º do contrato na AT':''].filter(Boolean);
+    const conf=fiscoAnoInicioPorConfirmar(r,x),notaAno=x.anoInicioBeneficio&&conf.sim?`<p class="fis-ctc-nota">${esc(conf.nota)}</p>`:'';
     let nota='';
     if(mot&&mot.regulariza){
-      const c=typeof contract==='function'?contract(x.contratoId):null;
-      let td=null;if(c&&typeof irsTaxaDecorrida==='function'){try{td=irsTaxaDecorrida(c)}catch(e){td=null}}
-      const g=regs.find(y=>y&&y.contratoId===x.contratoId),anos=g&&Array.isArray(g.anos)?g.anos.filter(y=>y&&Number(y.diferenca)>0):[];
+      const c=x.contratoId?contract(x.contratoId):null;
+      let td=null;if(c){try{td=irsTaxaDecorrida(c)}catch(e){td=null}}
+      const g=regs.find(y=>y&&y.contratoId===x.contratoId&&(!y.titularId||!x.titularId||y.titularId===x.titularId)),anos=g&&Array.isArray(g.anos)?g.anos.filter(y=>y&&Number(y.diferenca)>0):[];
+      /* em conjunta, a regularização de um contrato dos dois é uma só: a
+         estimativa vai no cartão da primeira entrada dele, como no PDF */
+      const doContrato=cs.filter(y=>y.contratoId===x.contratoId),dosDois=!!g&&!g.titularId&&doContrato.length>1;
+      const primeiro=doContrato[0]===x,letra1=esc(String(doContrato[0]&&doContrato[0].titular||'A'));
       const est=semRegras?` Sem as regras de ${esc(String(r.ano))} a app não estima a diferença.`
-        :g&&Number(g.total)>0?` A diferença regulariza-se nesta declaração, com juros compensatórios — estimativa sem juros: ${euro2(g.total)}${anos.length?' ('+anos.map(y=>esc(String(y.ano))+': '+euro2(y.diferenca)).join(', ')+')':''}.`
+        :g&&Number(g.total)>0&&dosDois&&!primeiro?` A diferença regulariza-se nesta declaração, com juros compensatórios — a estimativa, dos dois titulares, está no cartão do titular ${letra1}.`
+        :g&&Number(g.total)>0?` A diferença regulariza-se nesta declaração, com juros compensatórios — estimativa sem juros${dosDois?', dos dois titulares':''}: ${euro2(g.total)}${anos.length?' ('+anos.map(y=>esc(String(y.ano))+': '+euro2(y.diferenca)).join(', ')+')':''}.`
         :' A diferença regulariza-se nesta declaração, com juros compensatórios.';
-      nota=`<p class="fis-ctc-nota">Acabou antes do prazo por motivo do senhorio: a redução do período em que acabou perde-se (CIRS art. 72.º n.º 20) — a taxa passa a ser a da duração que o contrato durou mesmo${td&&!semRegras?' ('+esc(dec(td.taxa))+' %)':''}.${est}</p>`;
+      /* sem escalão nenhum na duração decorrida, a taxa é a base, e não «uma da duração» (N101) */
+      const taxaDec=td&&!td.reducao?` — a taxa passa a ser a base${!semRegras?' ('+esc(dec(td.taxa))+' %)':''}: a duração que o contrato durou não chega a nenhum escalão`
+        :` — a taxa passa a ser a da duração que o contrato durou mesmo${td&&!semRegras?' ('+esc(dec(td.taxa))+' %)':''}`;
+      nota=`<p class="fis-ctc-nota">Acabou antes do prazo por motivo do senhorio: a redução do período em que acabou perde-se (CIRS art. 72.º n.º 20)${taxaDec}.${est}</p>`;
     }
     return `<div class="fis-ctc tap" data-toca="camada" data-click="ctView('${jsq(x.contratoId)}')">
-    <div class="fis-ctc-cab"><div class="fis-ctc-nome"><b>${esc(x.nome||'')}</b><span class="small">${esc(x.imovel||'')}</span></div>${ic('chevR',18)}</div>
-    ${nota}${faltas.length?`<p class="fis-ctc-falta">Falta: ${esc(listaE(faltas))} — ${faltas.length>1?'indica-os':'indica-o'} na ficha do contrato.</p>`:''}
+    <div class="fis-ctc-cab"><div class="fis-ctc-nome"><b>${esc(x.nome||'')}</b><span class="small">${esc([x.imovel||'',varios&&titular?'titular '+titular:''].filter(Boolean).join(' · '))}</span></div>${ic('chevR',18)}</div>
+    ${nota}${notaAno}${faltas.length?`<p class="fis-ctc-falta">Falta: ${esc(listaE(faltas))} — ${faltas.length>1?'indica-os':'indica-o'} na ficha do contrato.</p>`:''}
     <dl class="fis-campos">${dl}</dl></div>`;
   };
-  return fisCartao('Quadro '+esc(Q)+' · contratos que acabaram',fiscoN(cs.length,'contrato','contratos')+' em '+r.ano,
+  /* num ano sem rendas nos quadros 4, o quadro 10 vai na declaração na mesma */
+  const semRendas=!(Array.isArray(r.linhas)&&r.linhas.length)?` Em ${esc(String(r.ano))} não tens rendas nos quadros 4, mas o quadro ${esc(Q)} é do ano em que o contrato acabou: vai na declaração de ${esc(String(r.ano))} na mesma.`:'';
+  const nCt=fiscoNContratos(cs);
+  return fisCartao('Quadro '+esc(Q)+' · contratos que acabaram',fiscoN(nCt,'contrato','contratos')+' em '+r.ano,
     `<div class="fis-cts">${cs.map(cartao).join('')}</div>
-    <div class="hint">No quadro ${esc(Q)} vão os contratos de habitação permanente que tiveram a taxa reduzida pela duração, ou a isenção de um programa de arrendamento, e acabaram em ${esc(String(r.ano))}, seja qual for o motivo: um por linha, com o regime, o n.º do contrato, o ano em que o benefício começou, a data e o motivo. A cessação também se comunica no Portal das Finanças, até ${esc(dia)} do ano seguinte (Portaria 110/2019).</div>`,'fis-quadro');
+    <div class="hint">No quadro ${esc(Q)} vão os contratos de habitação permanente que tiveram a taxa reduzida pela duração, ou a isenção de um programa de arrendamento, e acabaram em ${esc(String(r.ano))}, seja qual for o motivo: um por linha, com o regime, o n.º do contrato, o ano em que o benefício começou, a data e o motivo da cessação e, como no quadro 4.1, a identificação matricial do prédio, o titular e o NIF do inquilino (ou o país)${cs.length>nCt?' — um contrato dos dois vai numa linha por titular':''}. O ano de início do benefício é o da primeira declaração em que as rendas do contrato tiveram a redução ou a isenção.${semRendas} A cessação também se comunica no Portal das Finanças, até ${esc(dia)} do ano seguinte (Portaria 110/2019).</div>`,'fis-quadro');
 }
 /* O cartão «Fora da declaração»: os contratos marcados como não declarados com
    rendas no ano, com o valor, sem juízo. Tocar abre o contrato (a Declaração

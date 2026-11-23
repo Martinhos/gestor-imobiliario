@@ -554,18 +554,29 @@ function notifSaidas(desde){
    recebam ou não), «Rui passou a gerir … na app.» (aos outros
    comproprietários) e «Rui passou a gerir …: continuas com o mesmo cargo.»
    ('colab.novo_dono', aos colaboradores de quem o geria). Nos dois últimos
-   o ator é quem recebeu o controlo. Um kind que a app não conhece — e o
-   'transf.pedido', que é um pedido por responder (notifPedidos) — não tem
-   frase.
-   Recebe: d — o aviso ({kind, houseId, houseName, actorId, actorName}).
+   o ator é quem recebeu o controlo. Quando um dono sai (D6, N021) — saiu do
+   imóvel, a ligação ou a partilha deixou de lho dar ('casa.sair'), ou apagou
+   a conta ('casa.sair_conta') —, a frase diz o dia e que a quota que tinha
+   passou para quem fica desse dia em diante (notifQuotaPassou). Quando o
+   criador apaga o imóvel ('casa.apagada') ou a conta com ele
+   ('casa.apagada_conta', N067), diz que o imóvel saiu da lista e da
+   Declaração. Um kind que a app não conhece — e o 'transf.pedido', que é um
+   pedido por responder (notifPedidos) — não tem frase.
+   Recebe: d — o aviso ({kind, houseId, houseName, actorId, actorName, at}).
    Devolve: {titulo, quem} (texto, por escapar; quem dá as iniciais do
    avatar), ou null. */
 function notifFraseDoAviso(d){
-  const quem=String((d&&d.actorName)||'').trim()||'Alguém';
+  const nome=String((d&&d.actorName)||'').trim(),quem=nome||'Alguém';
   const casa=String((d&&d.houseName)||'').trim()||propName(d&&d.houseId)||'um imóvel';
+  /* quem apagou a conta já não tem nome (o servidor tira-o com ela): diz-se o papel */
+  const dono=nome||'Um comproprietário',criador=nome||'Quem criou '+casa;
+  const saiu='saiu da tua lista e da tua Declaração do IRS, também nos meses em que foste dono.';
   switch(d&&d.kind){
     case 'colab.sair':return {titulo:quem+' deixou de colaborar em '+casa+'.',quem};
-    case 'casa.sair':return {titulo:quem+' deixou de ser comproprietário de '+casa+'.',quem};
+    case 'casa.sair':return {titulo:dono+' saiu de '+casa+notifNoDia(d)+': '+notifQuotaPassou(d),quem};
+    case 'casa.sair_conta':return {titulo:dono+' apagou a conta e deixou de ser dono de '+casa+notifNoDia(d)+': '+notifQuotaPassou(d),quem};
+    case 'casa.apagada':return {titulo:nome?nome+' apagou '+casa+': o imóvel '+saiu:criador+' apagou o imóvel: '+saiu,quem};
+    case 'casa.apagada_conta':return {titulo:nome?nome+' apagou a conta, e '+casa+' foi com ela: o imóvel '+saiu:'Quem criou '+casa+' apagou a conta, e o imóvel foi com ela: '+saiu,quem};
     case 'transf.aceite':return {titulo:'Todos aceitaram: '+quem+' passou a gerir '+casa+'.',quem};
     case 'transf.recusada':return {titulo:quem+' recusou o pedido para transferir o controlo de '+casa+'.',quem};
     case 'transf.cancelada':return {titulo:quem+' cancelou o pedido para transferir o controlo de '+casa+'.',quem};
@@ -575,6 +586,26 @@ function notifFraseDoAviso(d){
   return null;
 }
 
+/* « a 10/07/2026», o dia de um aviso das casas no relógio deste aparelho (o
+   dia de Lisboa em que o servidor fechou o período das quotas).
+   Recebe: d — o aviso ({at}: ms de época).
+   Devolve: o texto, com o espaço à frente; '' sem hora. */
+function notifNoDia(d){
+  const at=Number(d&&d.at);if(!(at>0))return '';
+  const t=new Date(at),dd=n=>String(n).padStart(2,'0');
+  return ' a '+dd(t.getDate())+'/'+dd(t.getMonth()+1)+'/'+t.getFullYear();
+}
+/* Para quem passou a quota de quem saiu (D6, N021): para mim, e para os
+   outros donos se o imóvel ainda os tem — desse dia em diante, nunca para
+   trás. Sem o imóvel na base, para os donos que ficaram.
+   Recebe: d — o aviso ({houseId}).
+   Devolve: a frase (texto, com o ponto final). */
+function notifQuotaPassou(d){
+  const p=d&&d.houseId?prop(d.houseId):null,eu=meuId();
+  if(!p)return 'a quota que tinha passou para os donos que ficaram, desse dia em diante.';
+  const outros=(p.ownerIds||[]).filter(u=>u&&u!==eu&&u!==(d&&d.actorId));
+  return 'a quota que tinha passou para ti'+(outros.length?' e para os outros donos':'')+', desse dia em diante.';
+}
 /* A atividade do sino: a dos outros nas casas partilhadas (notifPartilha) e
    quem saiu delas (notifSaidas), juntas e pela hora — é uma secção só no
    «Pede atenção» e um cartão só no painel geral, com a mesma marca de leitura.

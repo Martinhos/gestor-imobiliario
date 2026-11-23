@@ -19,12 +19,17 @@ const copia = (o) => JSON.parse(JSON.stringify(o));
 
 describe('D01 · as comunicações da duração passam a ser por período (comunicacoesV=2)', () => {
   test('uma chave antiga (ano dos rendimentos) passa ao ano do início do período, e uma segunda passagem não muda nada', () => {
-    const c = app.normContract({ id: 'C', start: '2024-03-01', end: '2034-02-28', fisco: { comunicacoes: { 2025: '2026-02-10' } } });
-    igual(c.fisco.comunicacoes, { 2024: '2026-02-10' });
+    const c = app.normContract({ id: 'C', start: '2024-03-01', end: '2034-02-28', fisco: { comunicacoes: { 2024: '2025-02-10' } } });
+    igual(c.fisco.comunicacoes, { 2024: '2025-02-10' });
     assert.equal(c.fisco.comunicacoesV, 2);
     const outra = app.normContract(copia(c));
-    igual(outra.fisco.comunicacoes, { 2024: '2026-02-10' }, 'idempotente');
+    igual(outra.fisco.comunicacoes, { 2024: '2025-02-10' }, 'idempotente');
     assert.equal(outra.fisco.comunicacoesV, 2);
+    // depois do prazo do período (15/02/2025), a marca antiga não diz quando se comunicou: fica por confirmar (N003)
+    const tarde = app.normContract({ id: 'C', start: '2024-03-01', end: '2034-02-28', fisco: { comunicacoes: { 2025: '2026-02-10' } } });
+    igual(tarde.fisco.comunicacoes, {});
+    igual(tarde.fisco.comunicacoesPorConfirmar, { 2024: '2026-02-10' });
+    igual(app.normContract(copia(tarde)).fisco.comunicacoesPorConfirmar, { 2024: '2026-02-10' }, 'idempotente');
   });
 
   test('duas do mesmo período ficam com a data mais antiga; uma renovação é outro período; uma de antes do início cai', () => {
@@ -190,7 +195,7 @@ describe('D30, D71, D91 · a situação fiscal de cada ano', () => {
       2025: { conjunta: true, conjugeId: 'ana', minhaLetra: 'B', dispensaRecibos: true, aimi: { total: '312.456', valorTributavel: 650000 }, outro: 1 },
       2026: { conjunta: 'sim', conjugeId: "x'); alert(1", minhaLetra: 'C', aimi: { total: -1, valorTributavel: true } },
       ano: { conjunta: true }, 2024: 'lixo' } });
-    igual(irs.porAno[2025], { conjunta: true, conjugeId: 'ana', minhaLetra: 'B', dispensaRecibos: true, aimi: { total: 312.46, valorTributavel: 650000 }, outro: 1 });
+    igual(irs.porAno[2025], { conjunta: true, conjugeId: 'ana', minhaLetra: 'B', dispensaRecibos: true, bensComuns: false, aimi: { total: 312.46, valorTributavel: 650000 }, outro: 1 });
     assert.equal(irs.porAno[2026].conjunta, false);
     assert.match(irs.porAno[2026].conjugeId, /^id_[0-9a-f]{16}$/, 'um id seguro');
     assert.equal(irs.porAno[2026].minhaLetra, 'A');
@@ -217,7 +222,8 @@ describe('D06, D07, D24–D27, D53, D60, D61 · o mapa das colunas (irsMapaV=2)'
     for (const k of Object.keys(esperado)) assert.equal(m[k], esperado[k], k);
     assert.ok(app.IRS_MAPA_VALORES.some((c) => c[0] === 'confirmar'));
     assert.ok(!app.IRS_COLUNAS.some((c) => c[0] === 'confirmar'), 'o confirmar é só do mapa');
-    assert.equal(app.normTx({ kind: 'expense', irsCol: 'confirmar' }).irsCol, '', 'o irsCol de um movimento não o aceita');
+    assert.equal(app.normTx({ kind: 'expense', irsCol: 'confirmar' }).irsCol, 'confirmar', 'o irsCol aceita-o: é o que apagar uma subcategoria deixa escrito (N043)');
+    assert.equal(app.normTx({ kind: 'expense', irsCol: 'lixo' }).irsCol, '');
   });
 
   test('a migração: só as chaves com o valor antigo de origem, uma vez, e nunca contra uma escolha feita depois', () => {
@@ -383,7 +389,9 @@ describe('as migrações por onde passam: o load() e a leitura da nuvem', () => 
   test('o load() de uma base antiga migra tudo de uma vez', () => {
     const outra = carregarApp({ hoje: '2026-11-17', antes: (j) => j.localStorage.setItem('gi_v13', JSON.stringify(BASE_ANTIGA())) });
     const db = outra.db;
-    igual(db.contracts[0].fisco.comunicacoes, { 2024: '2026-02-10' });
+    // a marca de 2025 cai depois do prazo do período de 2024 (15/02/2025): por confirmar (N003)
+    igual(db.contracts[0].fisco.comunicacoes, {});
+    igual(db.contracts[0].fisco.comunicacoesPorConfirmar, { 2024: '2026-02-10' });
     assert.equal(db.contracts[0].fisco.comunicacoesV, 2);
     assert.equal(db.settings.irsMapa['Seguros'], 'confirmar');
     assert.equal(db.settings.irsMapa['Outros'], 'confirmar');

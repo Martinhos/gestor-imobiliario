@@ -398,7 +398,7 @@ describe('quem saiu, no sino e no painel', () => {
   test('as duas frases, com quem, a casa, a hora como as outras e as mais recentes primeiro', () => {
     comSaidas([saida('e1', 'colab.sair', 5000), saida('e2', 'casa.sair', 6000, { actorId: 'ZE', actorName: 'Zé Lopes' })]);
     const l = cru(app.notifSaidas());
-    assert.deepEqual(l.map((n) => n.titulo), ['Zé Lopes deixou de ser comproprietário de T2 Benfica.', 'Rui deixou de colaborar em T2 Benfica.']);
+    assert.deepEqual(l.map((n) => n.titulo), ['Zé Lopes saiu de T2 Benfica a 01/01/1970: a quota que tinha passou para ti, desse dia em diante.', 'Rui deixou de colaborar em T2 Benfica.']);
     assert.equal(l[1].sub, app.notifQuando(5000), 'o sub é a data e a hora, como na atividade');
     assert.equal(l[0].quem, 'Zé Lopes');
     assert.equal(app.notifQuem(l[0]), 'Zé Lopes', 'as iniciais do avatar são de quem saiu');
@@ -459,7 +459,7 @@ describe('quem saiu, no sino e no painel', () => {
     const { corpo, pe } = corpoDoSino();
     assert.match(corpo, /<h3>Atividade nas casas partilhadas<\/h3>/);
     assert.match(corpo, /Rui deixou de colaborar em T2 Benfica\./);
-    assert.match(corpo, /Rui Costa deixou de ser comproprietário de T2 Benfica\./);
+    assert.match(corpo, /Rui Costa saiu de T2 Benfica a 01\/01\/1970: a quota que tinha passou para ti, desse dia em diante\./);
     assert.match(corpo, /<button type="button" class="atencao-linha tap" data-toca="camada" data-click="closeModal\(\);notifLerAviso\('e2'\);propView\('P1'\)"><span class="avatar" aria-hidden="true">RC<\/span>/);
     assert.ok(!/\son[a-z]+=|style=/.test(corpo), 'sem style= nem on…=');
     assert.match(pe, /Marcar tudo como lido/, 'há o que marcar como lido');

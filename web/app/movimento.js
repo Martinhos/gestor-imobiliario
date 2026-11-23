@@ -1068,14 +1068,17 @@ function txReciboLinha(on){
    repintar). O que a categoria deixa a confirmar di-lo — «a confirmar —
    escolhe a coluna» —, porque não conta até a pessoa escolher (D61, D07). O
    AIMI não tem seletor: a lei tira-o dos gastos e ele vai ao quadro do AIMI
-   (irs-papeis.js:irsColunaDe, origem 'lei'; D66).
+   (irs-papeis.js:irsColunaDe, origem 'lei'; D66). Uma despesa com a coluna
+   escrita «a confirmar» (a subcategoria que a dava foi apagada, N043) tem
+   essa opção no seletor: sem ela, abrir e gravar o formulário apagava-a.
    Recebe: t — o movimento do formulário (tForm), uma despesa.
    Devolve: o HTML (texto). */
 function txColunaHtml(t){
   const pela=irsColunaDe(Object.assign({},t,{irsCol:''}));
   if(pela.origem==='lei')return `<div class="mov-campo"><span class="flabel">Anexo F</span><div class="hint">${esc(txFraseDoAimi(t))}</div></div>`;
   const primeira=pela.col==='confirmar'?'Pela categoria: a confirmar — escolhe a coluna':'Pela categoria: '+irsColunaNome(pela.col);
-  return `<label>Coluna no Anexo F${sel('t_irscol',t.irsCol||'',[{v:'',label:primeira}].concat(IRS_COLUNAS.map(x=>({v:x[0],label:x[1]}))),'onIrsCol','rascunho')}</label>
+  const escrita=t.irsCol==='confirmar'?[{v:'confirmar',label:'A confirmar — escolhe a coluna'}]:[];
+  return `<label>Coluna no Anexo F${sel('t_irscol',t.irsCol||'',[{v:'',label:primeira}].concat(escrita,IRS_COLUNAS.map(x=>({v:x[0],label:x[1]}))),'onIrsCol','rascunho')}</label>
       <div class="hint u-mt-n6px" id="t_irsDica">${txDicaDaColunaHtml(t)}</div>`;
 }
 /* A frase do AIMI no formulário e na ficha: não é um gasto do Anexo F e vai

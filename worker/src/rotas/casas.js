@@ -7,6 +7,7 @@ import {
   gravarCasa, comCasaFresca, casaMudou, FRASE_CASA_MUDOU,
   convitesSemCasa, SAIU_DA_CASA,
   aplicarQuotas, acertarQuotas, validarFora, diaValido, diaEmLisboa, estadoDasQuotas, fecharQuotasHoje,
+  DESDE_SEMPRE,
 } from '../lib/acesso.js';
 import { normalizarPerms } from '../lib/permissoes.js';
 import { servicosDesligados, casaDesligada, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
@@ -124,7 +125,9 @@ async function sairDaCasaUmaVez(env, me, houseId, ownerId) {
     const antes = estadoDasQuotas(data, parts);
     if (quotas) data.ownerShares = quotas; else delete data.ownerShares;
     data.ownerIds = ficam;
-    fecharQuotasHoje(data, antes, ficam);
+    // o período que acaba ontem leva o meu nome: o aviso da Declaração de
+    // quem fica diz quem saiu, mesmo quando já não estou nas fichas dele (N021)
+    fecharQuotasHoje(data, antes, ficam, undefined, { [me.id]: me.name || '' });
   }
   const t = now();
   const stmts = [
@@ -164,9 +167,10 @@ async function sairDaCasaUmaVez(env, me, houseId, ownerId) {
      em % da casa inteira, [] para «não há outros», null para «por
      confirmar»; sem ele, ficam os que a casa tem (acesso.js:validarFora).
    - desde (opcional, D29): 'AAAA-MM-DD', o primeiro dia das quotas novas,
-     hoje ou antes (em Lisboa); sem ele, o dia em que a proposta se aplica
-     (e os de fora por confirmar passam a confirmados também para trás:
-     acesso.js:aplicarQuotas).
+     hoje ou antes (em Lisboa); 'sempre' (acesso.js:DESDE_SEMPRE — «já era
+     assim»: valem também para trás, e quem entrou na app já era dono,
+     N018/N019); sem ele, o dia em que a proposta se aplica (e os de fora por
+     confirmar passam a confirmados também para trás: acesso.js:aplicarQuotas).
    Recebe: b — o corpo lido; parts — os participantes; eu — quem propõe.
    Devolve: { quotas, fora, desde } (fora undefined sem mudança, desde null
    sem data) ou { erro } com a frase do 400. */
@@ -188,7 +192,8 @@ function propostaDoCorpo(b, parts, eu) {
     fora = f.fora;
   }
   let desde = null;
-  if (b.desde !== undefined && b.desde !== null && b.desde !== '') {
+  if (b.desde === DESDE_SEMPRE) desde = DESDE_SEMPRE;
+  else if (b.desde !== undefined && b.desde !== null && b.desde !== '') {
     desde = diaValido(b.desde);
     if (!desde) return { erro: 'A data em que as quotas mudam não é válida.' };
     if (desde > diaEmLisboa()) return { erro: 'A data em que as quotas mudam não pode ser depois de hoje.' };
@@ -222,7 +227,8 @@ async function quotasDeUmDonoUmaVez(env, houseId, parts, p) {
    proposta ainda estiver como se leu, e a casa por cima da revisão lida
    (acesso.js:gravarCasa) — senão, a recusa 'casa-mudou' faz repetir.
    Ao aplicar, as quotas novas valem a partir do desde da proposta (o dia em
-   que se aplicam, se não o tiver), os de fora mudam se a proposta os trouxer,
+   que se aplicam, se não o tiver; também para trás, com 'sempre'), os de
+   fora mudam se a proposta os trouxer,
    e o estado de antes vai para o quotasHist até à véspera
    (acesso.js:aplicarQuotas).
    Recebe: env — o ambiente do worker; me — quem aprova (da sessão);
@@ -249,7 +255,7 @@ async function aceitarPropostaUmaVez(env, me, houseId) {
   if (parts.every((u) => approvals.has(u))) {
     const casa = await lerCasa(env, houseId);
     const data = casa.data || {};
-    aplicarQuotas(data, parts, quotas, fora, diaValido(row.desde) || null);
+    aplicarQuotas(data, parts, quotas, fora, row.desde === DESDE_SEMPRE ? DESDE_SEMPRE : diaValido(row.desde) || null);
     await env.DB.batch([
       gravarCasa(env, houseId, casa.rev, { data: JSON.stringify(data) }, now()),
       env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ? AND created_at = ?').bind(houseId, row.created_at),

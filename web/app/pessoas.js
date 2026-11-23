@@ -589,8 +589,12 @@ function repaintPerson(){const b=modalBodyEl();if(!b)return;b.innerHTML=personBo
 // Devolve: nada — repinta o formulário.
 function delPersonFile(fid){collectPerson();perForm.files=(perForm.files||[]).filter(f=>f.id!==fid);idbDel(fid).catch(()=>{});repaintPerson()}
 /* Apaga a ficha, com confirmação: a pessoa sai da lista e o seu id é tirado
-   dos imóveis (proprietário) ou contratos (inquilino), que se mantêm. Os
-   documentos saem já do IndexedDB — aqui não há desfazer.
+   dos imóveis (proprietário) ou contratos (inquilino), que se mantêm. Um
+   inquilino de um contrato com rendas de um ano por entregar: a confirmação
+   diz que a linha desse contrato na Declaração fica sem ele, e propõe
+   terminar o contrato (contrato.js:ctAvisoDeApagarInquilino, só com os
+   Contratos ligados). Os documentos saem já do IndexedDB — aqui não há
+   desfazer.
    Recebe: kind — 'owner' ou 'tenant', diz em que lista procurar; id — id da
    ficha a apagar.
    Devolve: nada — pede confirmação e, se aceite, grava e redesenha a vista. */
@@ -602,7 +606,9 @@ function delPerson(kind,id){
   /* a contagem só fala do que a conta vê: com os Imóveis ou os Contratos
      desligados, o id sai deles na mesma, mas a pergunta não os nomeia */
   const used=kind==='owner'?(servicoLigado('properties')?propsOf(id).length:0):(servicoLigado('contracts')?contractsOfTenant(id).length:0);
-  confirmModal('Apagar '+word,`Apagar “${esc(p.name)}”?${used?` Sai de ${used} ${kind==='owner'?'imóvel(is)':'contrato(s)'}, que se mantêm.`:''}`,()=>{
+  const sai=!used?'':' Sai de '+used+' '+(kind==='owner'?(used===1?'imóvel, que se mantém.':'imóveis, que se mantêm.'):(used===1?'contrato, que se mantém.':'contratos, que se mantêm.'));
+  const aviso=kind==='tenant'&&used?ctAvisoDeApagarInquilino(id):'';
+  confirmModal('Apagar '+word,`Apagar “${esc(p.name)}”?${sai}${aviso?' '+aviso:''}`,()=>{
     (p.files||[]).forEach(f=>idbDel(f.id).catch(()=>{}));
     if(kind==='owner'){db.owners=db.owners.filter(x=>x.id!==id);db.properties.forEach(x=>{x.ownerIds=(x.ownerIds||[]).filter(o=>o!==id)});if(ownerFilter===id)ownerFilter=''}
     else{db.tenants=db.tenants.filter(x=>x.id!==id);db.contracts.forEach(c=>{c.tenantIds=(c.tenantIds||[]).filter(t=>t!==id)})}

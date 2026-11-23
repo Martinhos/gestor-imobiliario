@@ -30,10 +30,15 @@
    não carregou: a Declaração requer os Contratos, por isso não é o serviço
    desligado) não descarrega e pede que se recarregue; sem nada a declarar no
    ano (nem linhas nos quadros, nem sublocação no quadro 5, nem rendas sem
-   contrato, nem contratos fora, nem Anexo J, nem categoria B) diz que não há
-   PDF; um ano só com o quadro 5 dá o PDF com ele (D52), e um só com o Anexo J
-   ou a categoria B também (D133, D134). Rendas sem contrato sozinhas dão o PDF com elas (D34):
-   são rendimento, e recusá-lo escondia-as. Espera pelas letras da app
+   contrato, nem contratos fora, nem Anexo J, nem categoria B, nem contratos
+   que acabaram no quadro 10, nem regularização) diz que não há PDF; um ano
+   só com o quadro 5 dá o PDF com ele (D52), e um só com o Anexo J ou a
+   categoria B também (D133, D134). Rendas sem contrato sozinhas dão o PDF com elas (D34):
+   são rendimento, e recusá-lo escondia-as. Um ano só com o quadro 10 (um
+   contrato que acabou antes de qualquer renda do ano) ou só com a
+   regularização do n.º 20 dá o PDF com eles: as instruções do quadro 10
+   pedem os contratos que acabaram no ano, haja ou não rendas nele, e a
+   regularização é imposto dessa declaração. Espera pelas letras da app
    (pdfLetras), que sem rede deixam o PDF na Helvetica.
    Devolve: Promise de nada — descarrega o PDF, ou avisa porque não o fez. */
 async function fiscoPdf(){
@@ -42,7 +47,8 @@ async function fiscoPdf(){
     return;
   }
   const ano=fiscoAnoAtual(),r=resumoFiscal(ano);
-  if(!r.linhas.length&&!(r.semContrato||[]).length&&!(r.fora||[]).length&&!fiscoExpQuadro5(r).length&&!fiscoExpAnexoJ(r)&&!fiscoExpCategoriaB(r)){
+  if(!r.linhas.length&&!(r.semContrato||[]).length&&!(r.fora||[]).length&&!fiscoExpQuadro5(r).length&&!fiscoExpAnexoJ(r)&&!fiscoExpCategoriaB(r)
+    &&!fiscoExpQuadro10(r).length&&!fiscoExpComRegularizacao(r)){
     toast('Sem rendas a declarar em '+ano+' (nos quadros 4.1, 4.2, 4.3 e 5 do Anexo F, nem no Anexo J): não há PDF para exportar.');return}
   const nomeTit=r.porInteiro?'':((owner(r.titularId)||{}).name||''),hoje=today();
   if(typeof pdfLetras==='function')await pdfLetras();
@@ -132,7 +138,8 @@ function fiscoPdfNota(pdf,s){pdf.text(fiscoPdfTxt(s),{size:8.5,cor:PDF_COR.secun
    finalidade, D16), as rendas ilíquidas, as
    retenções e cada coluna de gastos; as três colunas das obras dos 24 meses
    quando as há; no 4.2 o 4.2A (a comunicação pelo período, Sim só até ao
-   prazo dele: fiscoExpComunicacao, D01, D35) e o 4.2B sempre que o contrato
+   prazo dele: fiscoExpComunicacao, D01, D35; «A confirmar» com a marca do
+   modelo antigo por confirmar) e o 4.2B sempre que o contrato
    o tem (fiscoExpElegivel24, D36), cada um com
    o campo do 4.2 a que se liga; e por fim a quota-parte, a estimativa da app
    (que não vai ao quadro: o imposto nunca negativo, e o resultado negativo,
@@ -199,8 +206,12 @@ function fiscoPdfLinha(pdf,r,l,red,medir){
     const D=v.quadros.datas,com=fiscoExpComunicacao(r,l);
     if(l.campo)F(D+' · campo do quadro 4.2',l.campo);
     /* a resposta pelo período em que as rendas assentam (D01): comunicada até
-       ao prazo dele é Sim; depois, ou por fazer com o prazo passado, Não (D35) */
-    F(D+' · comunicação',!com?'—':com.resposta==='sim'?'Sim (comunicada a '+dPT(com.data)+')'
+       ao prazo dele é Sim; depois, ou por fazer com o prazo passado, Não (D35);
+       com a marca do modelo antigo por confirmar, nem Sim nem Não */
+    F(D+' · comunicação',!com?'—'
+      :com.porConfirmar?'A confirmar ('+(com.dataAntiga?'a marca de '+dPT(com.dataAntiga)+' vem':'a marca vem')+' da app antiga, que a pedia todos os anos: se comunicaste a duração deste período até '
+        +(com.prazo?dPT(com.prazo):'15 de fevereiro do ano seguinte ao início dele')+', é Sim, senão é Não; confirma o dia na Declaração)'
+      :com.resposta==='sim'?'Sim (comunicada a '+dPT(com.data)+')'
       :com.foraDePrazo?'Não (comunicada fora do prazo, a '+dPT(com.data)+(com.prazo?'; o prazo era '+dPT(com.prazo):'')+')'
       :com.resposta==='nao'?'Não (por comunicar; o prazo acabou a '+dPT(com.prazo)+')'
       :'Por comunicar'+(com.prazo?' (até '+dPT(com.prazo)+'; sem ela, é Não)':''),com&&com.resposta!=='sim'?AVISO:undefined);
@@ -410,30 +421,42 @@ function fiscoPdfIsentos(pdf,r,q,ls,varios){
     :'No '+q+' indicas só o campo do 4.1 onde ficaram (este quadro não tem código). Não pagam imposto e ficam fora do imposto estimado.');
 }
 /* O quadro 10 (D09): os contratos de habitação permanente com redução pela
-   duração, ou isentos dos programas, que acabaram no ano, um cartão cada,
-   com o regime fiscal, o n.º do contrato, o ano de início do benefício, a
-   data e o motivo da cessação (os textos das tabelas da versão,
-   fiscoExpQuadro10); com o motivo 01, a regularização do n.º 20 do art.
+   duração, ou isentos dos programas, que acabaram no ano, um cartão cada (um
+   por titular em conjunta), pela ordem do impresso: o regime fiscal, o n.º
+   do contrato, o ano de início do benefício («a confirmar», com o porquê,
+   quando a app não o sabe ao certo), a data e o motivo da cessação (os
+   textos das tabelas da versão, fiscoExpQuadro10), a identificação matricial
+   (fiscoPdfMatriz), o titular e o inquilino com o NIF português ou o país
+   (fiscoPdfInquilinos); com o motivo 01, a regularização do n.º 20 do art.
    72.º, com a diferença estimada sem juros (D10); e a nota do que o quadro
-   pede. Sem contratos que acabaram, não escreve.
+   pede. Num ano sem linhas nos quadros 4.1 a 4.3, também a nota da
+   caderneta atual (FISCO_EXP_CADERNETA_NOTA), que nenhum outro quadro
+   escreveu. Sem contratos que acabaram, não escreve.
    Recebe: pdf — o escritor; r — o resumo (resumoFiscal).
    Devolve: nada — escreve o quadro e desce. */
 function fiscoPdfQuadro10(pdf,r){
   const xs=fiscoExpQuadro10(r);if(!xs.length)return;
   const Q=r.versao.quadros||{},q=Q.cessados||'10',sem=fiscoExpSemRegras(r),FALTA={bold:true,cor:PDF_COR.cobaltoTexto};
-  fiscoPdfTitulo(pdf,'Quadro '+q+' · contratos que acabaram',fiscoN(xs.length,'contrato','contratos')+' com redução pela duração ou isenção que acabaram em '+r.ano,q);
+  const n=fiscoNContratos(xs);
+  fiscoPdfTitulo(pdf,'Quadro '+q+' · contratos que acabaram',fiscoN(n,'contrato','contratos')+' com redução pela duração ou isenção que '+(n===1?'acabou':'acabaram')+' em '+r.ano,q);
   xs.forEach(x=>{
-    const cs=[];
-    cs.push(['Regime fiscal',x.regime?x.regime+(x.regimeTexto?' · '+x.regimeTexto:''):'falta',x.regime?undefined:FALTA]);
-    cs.push(['N.º do contrato na AT',x.numero||'falta',x.numero?undefined:FALTA]);
-    cs.push(['Ano de início do benefício',x.anoInicioBeneficio||'falta',x.anoInicioBeneficio?undefined:FALTA]);
-    cs.push(['Data da cessação',dPT(x.data)||'—']);
-    cs.push(['Motivo da cessação',x.motivo?x.motivo+(x.motivoCurto?' · '+x.motivoCurto:''):'falta: escolhe-o na ficha do contrato',x.motivo?undefined:FALTA]);
-    if(x.regularizacao&&!sem)cs.push(['Regularização (art. 72.º n.º 20)',fiscoExpRegularizacaoTexto(r,x.regularizacao),FALTA]);
-    else if(x.regulariza)cs.push(['Regularização (art. 72.º n.º 20)','o período em que o contrato acabou passa à taxa da duração efetivamente decorrida, e a diferença acresce ao imposto de '+r.ano+', com juros compensatórios',FALTA]);
-    fiscoPdfCartao(pdf,x.nome+(x.imovel?' · '+x.imovel:''),cs);
+    const cs=[],F=(c,v,o)=>cs.push([c,v,o]);
+    F('Regime fiscal',x.regime?x.regime+(x.regimeTexto?' · '+x.regimeTexto:''):'falta',x.regime?undefined:FALTA);
+    F('N.º do contrato na AT',x.numero||'falta',x.numero?undefined:FALTA);
+    F('Ano de início do benefício',!x.anoInicioBeneficio?'falta':x.anoInicioConfirmar?x.anoInicioBeneficio+' · a confirmar ('+(x.anoInicioPorque||'confirma o ano da primeira declaração em que as rendas deste contrato tiveram o benefício')+')'
+      :x.anoInicioBeneficio,x.anoInicioBeneficio&&!x.anoInicioConfirmar?undefined:FALTA);
+    F('Data da cessação',dPT(x.data)||'—');
+    F('Motivo da cessação',x.motivo?x.motivo+(x.motivoCurto?' · '+x.motivoCurto:''):'falta: escolhe-o na ficha do contrato',x.motivo?undefined:FALTA);
+    /* as colunas que o impresso pede depois da cessação, como no 4.1 */
+    fiscoPdfMatriz(F,x);
+    F('Titular',x.titular==='A/B'?'A/B (o imóvel é dos dois: uma linha por titular)':x.titular||'falta',x.titular?undefined:FALTA);
+    fiscoPdfInquilinos(F,x.inquilinos,'Inquilino');
+    if(x.regularizacao&&!sem)F('Regularização (art. 72.º n.º 20)',fiscoExpRegularizacaoTexto(r,x.regularizacao),FALTA);
+    else if(x.regulariza&&!x.regularizacaoAcima)F('Regularização (art. 72.º n.º 20)','o período em que o contrato acabou passa à taxa da duração efetivamente decorrida, e a diferença acresce ao imposto de '+r.ano+', com juros compensatórios',FALTA);
+    fiscoPdfCartao(pdf,x.nome+(x.imovel?' · '+x.imovel:'')+(r.variosTitulares&&x.titular?' · titular '+x.titular:''),cs);
   });
-  fiscoPdfNota(pdf,'O quadro '+q+' pede todos os contratos de habitação permanente com redução da taxa pela duração, ou isentos de um programa de arrendamento acessível, que acabaram em '+r.ano+', seja qual for o motivo. A app não calcula os juros compensatórios.');
+  fiscoPdfNota(pdf,'O quadro '+q+' pede todos os contratos de habitação permanente com redução da taxa pela duração, ou isentos de um programa de arrendamento acessível, que acabaram em '+r.ano+', seja qual for o motivo, com a identificação matricial, o titular e o NIF do inquilino (ou o país), como no 4.1. O ano de início do benefício é o da primeira declaração em que as rendas do contrato tiveram a redução ou a isenção: quando a app não tem as rendas desse ano, diz «a confirmar». A app não calcula os juros compensatórios.');
+  if(!r.linhas.length)fiscoPdfNota(pdf,FISCO_EXP_CADERNETA_NOTA);
 }
 /* O quadro 5 — a sublocação (D52): um cartão por contrato de sublocação e
    titular, com o que o impresso pede (o n.º e o início do contrato, os
@@ -575,7 +598,9 @@ function fiscoPdfCategoriaB(pdf,r){
    D134) e a regularização do quadro certo (o 10, o 4.3 de um DHD); a nota
    das rendas ilíquidas diz que são a renda do recibo (D112); o quadro 4.3
    depois do 4.2 (D120); os quadros 6A, 6B e 6C depois dos isentos; e o Anexo
-   J e a categoria B depois do quadro 10.
+   J e a categoria B depois do quadro 10. Num ano sem rendas nos quadros das
+   linhas, mas com o quadro 10 ou a regularização do n.º 20, os totais dizem
+   «sem rendas» e uma nota diz que o Anexo F desse ano os leva na mesma.
    Recebe: r — o resumo (resumoFiscal); nomeTit — o nome de quem declara (''
    por inteiro); hoje — a data 'AAAA-MM-DD'.
    Devolve: os bytes do PDF (string latin-1, um carácter por byte). */
@@ -607,7 +632,7 @@ function fiscoPdfDocumento(r,nomeTit,hoje){
   const q5=fiscoExpQuadro5(r),q5T=fiscoExpTotaisQuadro5(r),q5n=Q.sublocacao||'5';
   const recT=fiscoExpReceitas({caucao:sum(r.linhas.map(l=>Number(l.caucao)||0)),reembolsos:sum(r.linhas.map(l=>Number(l.reembolsos)||0)),devolucoes:sum(r.linhas.map(l=>Number(l.devolucoes)||0))});
   const QL=listaE(fiscoExpQuadrosDasLinhas(r)),lt=sem?null:fiscoExpLiquidoTributavel(r),J=fiscoExpAnexoJ(r),B=fiscoExpCategoriaB(r);
-  fiscoPdfTitulo(pdf,'Totais de '+r.ano,fiscoN(fiscoNContratos(r.linhas),'contrato','contratos')+' nos quadros '+QL+(q5.length?' · '+fiscoN(fiscoNContratos(q5),'contrato','contratos')+' no quadro '+q5n:''));
+  fiscoPdfTitulo(pdf,'Totais de '+r.ano,(r.linhas.length?fiscoN(fiscoNContratos(r.linhas),'contrato','contratos'):'sem rendas')+' nos quadros '+QL+(q5.length?' · '+fiscoN(fiscoNContratos(q5),'contrato','contratos')+' no quadro '+q5n:''));
   F('Rendas ilíquidas',E(T.rendas)+(recT.texto?' · '+recT.texto:''),{bold:true});
   F('Retenções na fonte',E(T.retencoes)+(q5T.retencoes?' · com '+E(q5T.retencoes)+' do quadro '+q5n:''),{bold:true});
   F('Gastos dedutíveis',E(g)+(T.obras24?' (com '+E(T.obras24)+' de obras dos 24 meses)':''),{bold:true});
@@ -637,6 +662,10 @@ function fiscoPdfDocumento(r,nomeTit,hoje){
   if(J)F('Fora do Anexo F · Anexo J (quadro '+J.quadro+')','rendas '+E(J.totais.rendas)+' · líquido '+E(J.totais.liquido)+' · imposto pago lá '+E(J.totais.impostoEstrangeiro)+' · sem estimativa',{cor:C.secundario});
   if(B)F('Fora do Anexo F · categoria B','rendas '+E(B.totais.rendas)+' · Anexo B ou C',{cor:C.secundario});
   cartao('',{fundo:C.cobaltoSuave});
+  /* um ano sem rendas nos quadros das linhas que leva o quadro 10 ou a
+     regularização: o Anexo F entrega-se na mesma, com eles */
+  const semRendas=fiscoExpSemRendasTexto(r);
+  if(semRendas)fiscoPdfNota(pdf,semRendas);
   if(rep&&!sem)fiscoPdfNota(pdf,fiscoExpReporteTexto(r));
   if(fiscoPrejuizos(r).length)fiscoPdfNota(pdf,'As rendas não chegaram para os gastos. '+FISCO_PREJUIZO_NOTA);
   /* a renda ilíquida é a do recibo (D112): a comissão da gestora não a baixa, vai aos gastos */

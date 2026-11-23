@@ -3,7 +3,8 @@ import { json, err, body, now, idsDeCasas } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
 import {
   connectionForUser, limparSaida, participantsOf, participantesDeCasas, estadoDasQuotas, redistribuirQuotas,
-  fecharQuotasHoje, gravarCasa, comCasaFresca, casaMudou,
+  fecharQuotasHoje, fecharQuotasNaEntrada, gravarCasa, comCasaFresca, casaMudou, avisoDeSaida, nomesDeContas,
+  SAIU_DA_CASA,
 } from '../lib/acesso.js';
 import { servicosDesligados, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
 import { passarSeTodosAceitaram } from './casas.js';
@@ -34,11 +35,15 @@ export function donosAntes(env, casas) {
    estava — as partilhas já mudaram, e as quotas acertam-se numa proposta.
    Os participantes e as casas leem-se de uma vez para todas (uma ligação
    pode levar muitas casas): uma consulta por casa só para gravar, e para
-   reler numa repetição.
+   reler numa repetição. No mesmo lote, o período que acaba leva os nomes
+   de quem saiu e, dito quem fez a mudança, cada um que fica (menos ele)
+   recebe um aviso 'casa.sair' por quem saiu (D6, N021). Sem quem, não há
+   avisos: um grupo apagado avisava quem o apagou de cada membro em cada casa.
    Recebe: env — o ambiente do worker; antes — o Map de donosAntes; agora
-   (opcional) — ms de época (o «hoje» de Lisboa sai dele).
+   (opcional) — ms de época (o «hoje» de Lisboa sai dele); quem (opcional) —
+   quem fez a mudança ({id}): com ele, os avisos a quem fica.
    Devolve: promessa dos ids das casas em que o período fechou. */
-export async function fecharQuotasDeQuemSaiu(env, antes, agora) {
+export async function fecharQuotasDeQuemSaiu(env, antes, agora, quem) {
   const ids = [...antes.keys()];
   if (!ids.length) return [];
   const depois = await participantesDeCasas(env, ids);
@@ -59,7 +64,7 @@ export async function fecharQuotasDeQuemSaiu(env, antes, agora) {
           ficam: await participantsOf(env, hid),
         };
         lida = null;
-        return fecharQuotasDeUmaCasa(env, hid, antes.get(hid) || [], l.row, l.ficam, agora);
+        return fecharQuotasDeUmaCasa(env, hid, antes.get(hid) || [], l.row, l.ficam, agora, quem);
       });
       if (fechou) fechadas.push(hid);
     } catch (e) { if (!casaMudou(e)) throw e; }
@@ -69,26 +74,111 @@ export async function fecharQuotasDeQuemSaiu(env, antes, agora) {
 
 /* Uma passagem do fecho das quotas de uma casa (fecharQuotasDeQuemSaiu, que
    a repete quando outra escrita mudou a casa): com a casa e os participantes
-   de agora, grava num lote a casa e o fim da proposta.
+   de agora, grava num lote a casa, o fim da proposta e os avisos a quem fica.
    Recebe: env; hid — a casa; eram — os participantes de antes; row — a
    linha da casa ({data, rev}, ou null se já não existe); ficam — os
-   participantes de agora (ou null); agora (opcional) — ms de época.
+   participantes de agora (ou null); agora (opcional) — ms de época; quem
+   (opcional) — quem fez a mudança ({id}): sem ele, nenhum aviso; com ele,
+   todos os que ficam menos ele.
    Devolve: promessa de true quando gravou, false quando não havia nada a fazer. */
-async function fecharQuotasDeUmaCasa(env, hid, eram, row, ficam, agora) {
+async function fecharQuotasDeUmaCasa(env, hid, eram, row, ficam, agora, quem) {
   if (!row || !ficam || !eram.some((u) => !ficam.includes(u))) return false;
   let data = null;
   try { data = JSON.parse(row.data); } catch (e) {}
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  const saem = eram.filter((u) => !ficam.includes(u));
+  const nomes = await nomesDeContas(env, saem);
   const antes = estadoDasQuotas(data, eram);
   const quotas = redistribuirQuotas(data.ownerShares, '', ficam);
   if (quotas) data.ownerShares = quotas; else delete data.ownerShares;
   data.ownerIds = ficam;
-  fecharQuotasHoje(data, antes, ficam, agora);
+  fecharQuotasHoje(data, antes, ficam, agora, nomes);
+  const t = now();
+  const avisar = quem ? ficam.filter((u) => u !== quem.id) : [];
   await env.DB.batch([
-    gravarCasa(env, hid, row.rev, { data: JSON.stringify(data) }, now()),
+    gravarCasa(env, hid, row.rev, { data: JSON.stringify(data) }, t),
     env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(hid),
+    ...saem.flatMap((s) => avisar.map((u) => avisoDeSaida(env, u, 'casa.sair', hid, String(data.name || ''), { id: s, name: nomes[s] || '' }, t))),
   ]);
   return true;
+}
+
+/* Depois de uma mudança que pode dar uma casa a mais alguém (partilhá-la
+   numa ligação; as outras portas — um grupo, um pedido de partilha aceite —
+   podem chamá-la da mesma maneira), fecha o período das quotas de cada casa
+   que ganhou donos, na véspera (acesso.js:fecharQuotasNaEntrada, N018): o
+   «antes» fica com os donos de então, e quem entrou não era dono nesses dias
+   até a proposta seguinte dizer desde quando («desde sempre» tira o
+   período). A proposta pendente cai: não tem quem entrou. Uma casa ilegível
+   não se reescreve; à terceira recusa seguida fica como estava. Os
+   participantes de depois e as casas leem-se de uma vez para todas (ou vêm
+   já lidos de quem chama); uma repetição relê só a casa que mudou.
+   Recebe: env — o ambiente do worker; antes — o Map de donosAntes, lido
+   antes da mudança; agora (opcional) — ms de época; lido (opcional) —
+   { depois, linhas }: o Map dos participantes de agora e o das linhas das
+   casas (id → {data, rev}), quando quem chama já os tem.
+   Devolve: promessa dos ids das casas em que o período fechou. */
+export async function fecharQuotasDeQuemEntrou(env, antes, agora, lido) {
+  const ids = [...antes.keys()];
+  if (!ids.length) return [];
+  const depois = (lido && lido.depois) || await participantesDeCasas(env, ids);
+  const ganhou = ids.filter((hid) => (depois.get(hid) || []).some((u) => !(antes.get(hid) || []).includes(u)));
+  if (!ganhou.length) return [];
+  const linhas = (lido && lido.linhas) || new Map((await env.DB.prepare(
+    'SELECT id, data, rev FROM houses WHERE deleted = 0 AND id IN (SELECT value FROM json_each(?1))'
+  ).bind(JSON.stringify(ganhou)).all()).results.map((r) => [r.id, r]));
+  const fechadas = [];
+  for (const hid of ganhou) {
+    // a primeira passagem usa o que já se leu; uma repetição relê a casa e os participantes
+    let l = { row: linhas.get(hid), agoraSao: depois.get(hid) };
+    try {
+      const fechou = await comCasaFresca(async () => {
+        const v = l || {
+          row: await env.DB.prepare('SELECT data, rev FROM houses WHERE id = ? AND deleted = 0').bind(hid).first(),
+          agoraSao: await participantsOf(env, hid),
+        };
+        l = null;
+        if (!v.row || !v.agoraSao) return false;
+        let data = null;
+        try { data = JSON.parse(v.row.data); } catch (e) {}
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+        const mudou = fecharQuotasNaEntrada(data, antes.get(hid) || [], v.agoraSao, agora);
+        await env.DB.batch([
+          ...(mudou ? [gravarCasa(env, hid, v.row.rev, { data: JSON.stringify(data) }, now())] : []),
+          env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(hid),
+        ]);
+        return mudou;
+      });
+      if (fechou) fechadas.push(hid);
+    } catch (e) { if (!casaMudou(e)) throw e; }
+  }
+  return fechadas;
+}
+
+/* Os participantes de casas minhas, sem voltar a ler as casas (quem chama
+   já as leu e viu que são minhas e vivas): eu, as pontas das partilhas em
+   ligações aceites e os membros dos grupos vivos que não saíram delas — as
+   portas de acesso.js:participantesDeCasas, sem a linha da casa.
+   Recebe: env — o ambiente do worker; eu — o meu id; ids — as casas.
+   Devolve: promessa do Map casa → [ids dos participantes] (eu primeiro). */
+async function participantesDasMinhas(env, eu, ids) {
+  const out = new Map();
+  if (!ids.length) return out;
+  ids.forEach((h) => out.set(h, [eu]));
+  (await env.DB.prepare(
+    `SELECT s.house_id, CASE WHEN c.requester_id = s.owner_id THEN c.target_id ELSE c.requester_id END AS user_id
+       FROM shares s JOIN connections c ON c.id = s.connection_id
+      WHERE c.status = 'accepted' AND s.house_id IN (SELECT value FROM json_each(?1))
+     UNION
+     SELECT gh.house_id, m.user_id FROM shared_group_houses gh
+       JOIN shared_groups g ON g.id = gh.group_id AND g.deleted = 0
+       JOIN shared_group_members m ON m.group_id = gh.group_id
+      WHERE gh.house_id IN (SELECT value FROM json_each(?1)) AND ${SAIU_DA_CASA}`
+  ).bind(JSON.stringify([...new Set(ids)])).all()).results.forEach((r) => {
+    const l = out.get(r.house_id);
+    if (l && !l.includes(r.user_id)) l.push(r.user_id);
+  });
+  return out;
 }
 
 /* Os pedidos pendentes para transferir o controlo de uma destas casas depois de
@@ -111,7 +201,9 @@ async function pedidosSemComproprietario(env, casas) {
    pedidosSemComproprietario) e escolher que casas minhas ficam
    partilhadas nessa conexão (as que deixam de estar acertam-se da mesma
    maneira). Nos dois casos, as casas que alguém perde fecham o período das
-   quotas como sair delas (fecharQuotasDeQuemSaiu). Todas escrevem: com os
+   quotas como sair delas, com um aviso a quem fica (fecharQuotasDeQuemSaiu);
+   e as que alguém ganha fecham-no na véspera da entrada
+   (fecharQuotasDeQuemEntrou, N018). Todas escrevem: com os
    Colaboradores desligados nesta conta (lib/servicos.js — o que inclui os
    Imóveis desligados, por fecho) levam 403 com a frase do serviço, à
    entrada. Devolve a Response da rota que casar com o pedido, ou nada.
@@ -181,7 +273,7 @@ export async function rotasConexoes(c) {
       env.DB.prepare('DELETE FROM shares WHERE connection_id = ?').bind(conn.id),
       env.DB.prepare('DELETE FROM connections WHERE id = ?').bind(conn.id),
     ]);
-    await fecharQuotasDeQuemSaiu(env, donos);
+    await fecharQuotasDeQuemSaiu(env, donos, undefined, me);
     await pedidosSemComproprietario(env, casas);
     return json({ ok: true });
   }
@@ -200,17 +292,18 @@ export async function rotasConexoes(c) {
     // ligação que já são de outra pessoa (herdadas de quando as controlava,
     // antes de transferir o controlo — casas.js:aceitarCasaUmaVez): essas ficam,
     // continuam a dar a casa ao outro, e eu não as vejo na lista, que é só
-    // das minhas casas
-    const minhas = new Set(), herdadas = new Set();
+    // das minhas casas. Os dados e a revisão vêm na mesma leitura: são o que
+    // o fecho das quotas de quem entra grava (fecharQuotasDeQuemEntrou)
+    const minhas = new Set(), herdadas = new Set(), linhas = new Map();
     for (let i = 0; i < Math.max(houseIds.length, 1); i += 50) {
       const parte = houseIds.slice(i, i + 50);
       const pedidas = parte.length ? `id IN (${parte.map(() => '?').join(',')})` : '0';
       const minhasPartilhas = i === 0 ? ' OR id IN (SELECT house_id FROM shares WHERE connection_id = ? AND owner_id = ?)' : '';
       const rows = (await env.DB.prepare(
-        `SELECT id, owner_id FROM houses WHERE deleted = 0 AND (${pedidas}${minhasPartilhas})`
+        `SELECT id, owner_id, data, rev FROM houses WHERE deleted = 0 AND (${pedidas}${minhasPartilhas})`
       ).bind(...parte, ...(i === 0 ? [conn.id, me.id] : [])).all()).results;
       rows.forEach((r) => {
-        if (r.owner_id === me.id) { if (parte.includes(r.id)) minhas.add(r.id); }
+        if (r.owner_id === me.id) { if (parte.includes(r.id)) { minhas.add(r.id); linhas.set(r.id, r); } }
         else herdadas.add(r.id);
       });
     }
@@ -219,9 +312,12 @@ export async function rotasConexoes(c) {
     // as minhas casas partilhadas aqui antes: as que saírem acertam os pedidos de as passar
     const antes = (await env.DB.prepare('SELECT house_id FROM shares WHERE connection_id = ? AND owner_id = ?')
       .bind(conn.id, me.id).all()).results.map((r) => r.house_id).filter((h) => !herdadas.has(h));
-    // e os donos das que saem, para o período das quotas fechar onde alguém as perde
+    // e os donos das que saem, para o período das quotas fechar onde alguém as
+    // perde; e os das que entram, para fechar onde alguém as ganha (N018)
     const saem = antes.filter((h) => !houseIds.includes(h));
     const donos = await donosAntes(env, saem);
+    const novas = houseIds.filter((h) => !antes.includes(h));
+    const donosDasNovas = await participantesDasMinhas(env, me.id, novas);
     // as minhas partilhas nesta ligação regravam-se, e as herdadas voltam
     // tal e qual no mesmo lote
     const stmts = [
@@ -245,7 +341,9 @@ export async function rotasConexoes(c) {
       );
     }
     await env.DB.batch(stmts);
-    await fecharQuotasDeQuemSaiu(env, donos);
+    await fecharQuotasDeQuemSaiu(env, donos, undefined, me);
+    await fecharQuotasDeQuemEntrou(env, donosDasNovas, undefined,
+      { depois: await participantesDasMinhas(env, me.id, novas), linhas });
     await pedidosSemComproprietario(env, saem);
     return json({ ok: true });
   }

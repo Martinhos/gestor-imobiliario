@@ -71,7 +71,13 @@ function fiscoAvRetencaoCerta(c,t,ano){
    janeiro, ou uma atualização a meio do ano, não são um erro):
    - depoisDoTermo: as rendas do ano que caem depois do termo sem renovação
      registada, num contrato que continua (o troço `semRenovacao` do
-     irs.js:irsTaxaDaRenda), e o termo;
+     irs.js:irsTaxaDaRenda); o termo é o fim do período que acabou
+     (irs.js:irsPeriodos), e não a véspera do troço do ano; reducao diz se
+     esse período estava num escalão da duração (irs.js:irsCadeia, num
+     contrato de habitação permanente ou por indicar) — só então a renovação
+     muda a taxa (a falta); perdeu diz se o período tinha mesmo a redução no
+     ano (irs.js:irsReducaoDoPeriodo); hp diz se o contrato é de habitação
+     permanente (ou por indicar) — nos outros não há redução pela duração;
    - dobradas: os meses do ano com rendas que somam vez e meia a renda do
      contrato ou mais — duas rendas no mesmo mês, ou uma só com o mês de antes
      (dentro do contrato) sem nenhuma. Pagamentos parciais que somam a renda
@@ -85,7 +91,7 @@ function fiscoAvRetencaoCerta(c,t,ano){
    - semRetencao: há rendas no ano e nenhuma tem retenção; dispensada: todas
      ficam abaixo do mínimo da retenção (o inquilino não retém).
    Recebe: c — o contrato; ano — o ano dos rendimentos.
-   Devolve: {rendas, depoisDoTermo:{n, termo, ids}|null, dobradas:[{mes, n,
+   Devolve: {rendas, depoisDoTermo:{n, termo, ids, hp, reducao, perdeu}|null, dobradas:[{mes, n,
    valor, falta}], acima:[{id, mes, montante, retencao}], retMaior:[…],
    taxa:[{id, mes, pct, certas:[%]}], semRetencao, dispensada} — rendas as
    do ano; falta o mês sem renda antes de um dobrado ('' quando o mês tem
@@ -102,7 +108,14 @@ function fiscoAvAnaliseDasRendas(c,ano){
   const p0=irsPeriodos(c)[0],fim0=p0&&/^\d{4}-\d{2}/.test(String(p0.fim||''))?p0.fim.slice(0,7):'';
   const vive=c.active!==false&&!irsCessacao(c).data&&!!fim0;
   const tarde=(vive?doAno.filter(t=>irsMesDaRenda(t)>=fim0):[]).map(t=>({t:t,s:irsTaxaDaRenda(c,t)})).filter(x=>x.s&&x.s.semRenovacao);
-  if(tarde.length)out.depoisDoTermo={n:tarde.length,termo:irsVespera(tarde[0].s.de),ids:tarde.map(x=>x.t.id)};
+  if(tarde.length){
+    /* o período que acabou: o último com fim antes do troço sem renovação */
+    const ps=irsPeriodos(c),de=String(tarde[0].s.de||'');let k=-1;
+    ps.forEach((p,i)=>{if(p.fim&&/^\d{4}-\d{2}-\d{2}$/.test(p.fim)&&p.fim<de)k=i});
+    const fin=fiscoDe(c).finalidade,cad=k>-1?irsCadeia(c,ano)[k]:null;
+    out.depoisDoTermo={n:tarde.length,termo:k>-1?ps[k].fim:irsVespera(de),ids:tarde.map(x=>x.t.id),hp:!fin||fin==='hp',
+      reducao:(!fin||fin==='hp')&&!!(cad&&cad.taxa!=null),perdeu:k>-1&&!!irsReducaoDoPeriodo(c,ano,k)};
+  }
   /* os meses: todas as rendas do contrato, de todos os anos, para saber se o
      mês de antes tem a sua; só se apontam os meses com rendas pagas no ano */
   const porMes={};
@@ -646,6 +659,465 @@ function fiscoAvForaDoAnexoF(r){
   return out;
 }
 
+/* ---- Os avisos das correções da auditoria ao IRS de raiz (ronda 1,
+   KAN-147 a KAN-149): o fim dos contratos, as comunicações por confirmar, as
+   despesas que deixaram de contar, a conjunta com o cônjuge sem conta e as
+   quotas dos comproprietários. Leem o resumo pela forma combinada com o
+   fisco-resumo.js com cuidado (um campo que falte é vazio, ou conta-se da
+   base quando a conta é simples). ---- */
+
+/* Os anos de uma lista numa frase: «2021», «2020 e 2021», «de 2016 a 2021»
+   (três ou mais seguidos) ou «2016, 2018 e 2019».
+   Recebe: ys — [AAAA] (números ou texto).
+   Devolve: o texto ('' sem anos). */
+function fiscoAvAnos(ys){
+  const xs=[...new Set((ys||[]).map(Number).filter(y=>y>0))].sort((a,b)=>a-b);
+  if(!xs.length)return '';
+  if(xs.length>2&&xs[xs.length-1]-xs[0]===xs.length-1)return 'de '+xs[0]+' a '+xs[xs.length-1];
+  return listaE(xs.map(String));
+}
+/* Uma quota (fração) em percentagem, com duas casas no máximo: «50 %»,
+   «66,67 %».
+   Recebe: q — a fração (0 a 1).
+   Devolve: o texto. */
+function fiscoAvPct(q){return dec(Math.round((Number(q)||0)*10000)/100)+' %'}
+/* O dia das quotas «de agora» de um ano, para dizer a quota que a Declaração
+   conta: hoje, dentro do ano; o último dia, num ano que já passou; o
+   primeiro, num que ainda não começou.
+   Recebe: ano — o ano dos rendimentos.
+   Devolve: 'AAAA-MM-DD'. */
+function fiscoAvDiaDoAno(ano){
+  const A=String(ano),h=today();
+  return h<A+'-01-01'?A+'-01-01':h>A+'-12-31'?A+'-12-31':h;
+}
+/* O toque que abre as quotas de um imóvel (imovel.js:imvAbrirQuotas — a
+   janela das quotas com mais do que uma conta, ou o formulário com «Há outros
+   donos fora da app?»), com os Imóveis ligados.
+   Recebe: pid — o id do imóvel.
+   Devolve: {abrir, toca} (fiscoAvToque). */
+function fiscoAvToqueQuotas(pid){return fiscoAvToque('properties',`imvAbrirQuotas('${jsq(pid)}')`,'camada')}
+/* Os anos do período em que um contrato acabou que a regularização do art.
+   72.º n.º 20 não soma por a app não ter rendas deles (N031): os anteriores
+   ao primeiro ano com rendas do contrato na app
+   (fisco-resumo.js:fiscoAnosComRendaDe), desde o ano em que o período começou
+   (irs.js:irsTaxaDecorrida; num DHD, o do início do contrato) até ao ano antes
+   da cessação. O resumo dá-os em anosEmFalta; sem o campo, contam-se da base
+   (fora os anos que a entrada já soma, x.anos).
+   Recebe: x — a entrada de r.regularizacoes; ano — o ano da cessação.
+   Devolve: [AAAA] (números), por ordem. */
+function fiscoAvAnosEmFalta(x,ano){
+  if(Array.isArray(x&&x.anosEmFalta))return x.anosEmFalta.map(Number).filter(y=>y>0).sort((a,b)=>a-b);
+  const c=x&&x.contratoId?contract(x.contratoId):null;if(!c)return [];
+  const dec0=x.dhd===true?null:irsTaxaDecorrida(c);
+  const ini=Number(String((x.dhd===true?c.start:dec0&&dec0.desde)||'').slice(0,4));if(!ini)return [];
+  const ys=fiscoAnosComRendaDe(c),ate=Math.min(ys.length?ys[0]:Number(ano),Number(ano)),out=[];
+  const somados=(Array.isArray(x.anos)?x.anos:[]).map(y=>Number(y&&y.ano));
+  for(let y=ini;y<ate;y++)if(somados.indexOf(y)<0)out.push(y);
+  return out;
+}
+/* O que se junta ao aviso da regularização do n.º 20 (N031): os anos do
+   período de que a app não tem rendas, que também se regularizam, e os anos
+   somados com as regras de outro ano (anosSemRegras do resumo — a app não
+   tem as versões desses anos).
+   Recebe: x — a entrada de r.regularizacoes; ano — o ano da cessação.
+   Devolve: o texto, a começar por «. » ('' sem nada a juntar). */
+function fiscoAvRegularizacaoFalta(x,ano){
+  const em=fiscoAvAnosEmFalta(x,ano),sr=(Array.isArray(x&&x.anosSemRegras)?x.anosSemRegras:[]).map(Number).filter(y=>y>0);
+  let t='';
+  if(em.length)t+='. '+(em.length===1?'Falta o ano de '+em[0]+', de que':'Faltam os anos '+fiscoAvAnos(em)+', de que')+' a app não tem rendas: a diferença '
+    +(em.length===1?'dele':'deles')+(Number(x&&x.total)>0?' também se regulariza':' regulariza-se na mesma')+'. Regista no contrato as rendas em falta para a app a estimar';
+  if(sr.length){const v=irsAno(sr[0]).ano,ys=fiscoAvAnos(sr);t+='. A estimativa '+(ys.indexOf('de ')===0?'':'de ')+ys+' usa as regras de '+v+': a app não tem as desses anos'}
+  return t;
+}
+/* As rendas do ano que respeitam a meses depois do dia em que o contrato
+   acabou (N033; r.rendasDepoisDoFim, uma por renda): a do próprio mês do fim
+   e as que trazem o mês certo não entram. Sem o campo no resumo, contam-se da
+   base: as rendas do ano das linhas (fiscoAvRendasDe) cujo mês
+   (irs.js:irsMesDaRenda) vem depois do mês do último dia em vigor
+   (fisco-resumo.js:fiscoFimDaVida — a cessação, ou o fim de um terminado
+   antigo).
+   Recebe: r — o resumo; L — as linhas das rendas, uma por contrato.
+   Devolve: [{txId, contratoId, nome, fim, mes, data, valor}]. */
+function fiscoAvRendasDepoisDoFim(r,L){
+  if(Array.isArray(r.rendasDepoisDoFim))return r.rendasDepoisDoFim.filter(x=>x&&x.contratoId&&Number(x.valor)>0);
+  const A=String(r.ano),out=[];
+  (L||[]).forEach(l=>{
+    const c=contract(l.contratoId),fim=c?String(fiscoFimDaVida(c)||''):'';
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(fim))return;
+    fiscoAvRendasDe(c).forEach(t=>{
+      const m=irsMesDaRenda(t);
+      if(String(t.date||'').startsWith(A)&&m>fim.slice(0,7))
+        out.push({txId:t.id,contratoId:c.id,nome:l.nome||ctName(c),fim:fim,mes:m,data:String(t.date||''),valor:r2(rendaBruta(t))});
+    });
+  });
+  return out;
+}
+/* O aviso das rendas de meses depois do dia em que o contrato acabou (N033),
+   um por contrato: ou o dia da cessação está errado (é ele que vai ao quadro
+   10, à comunicação da cessação e ao prazo do Modelo 2, e que corta os
+   gastos), ou o mês da renda, ou são de outro contrato, ou de uma ocupação sem
+   contrato (uma indemnização, natureza 05). Continuam a contar nas rendas
+   deste.
+   Recebe: r — o resumo; L — as linhas das rendas, uma por contrato.
+   Devolve: [{texto, abrir, toca, nivel}]. */
+function fiscoAvDepoisDoFim(r,L){
+  const nat=(irsAno(r.ano).naturezas||{}).indemnizacao;
+  return fiscoAvPorContrato(fiscoAvRendasDepoisDoFim(r,L)).map(ds=>{
+    const um=ds.length===1,c=contract(ds[0].contratoId),nome=String(ds[0].nome||(c?ctName(c):'')),fim=String(ds[0].fim||'');
+    const ms=[];ds.forEach(d=>{const m=String(d.mes||'');if(/^\d{4}-\d{2}$/.test(m)&&ms.indexOf(m)<0)ms.push(m)});
+    ms.sort();
+    const quando=ms.length>4?'de '+pzMes(ms[0])+' a '+pzMes(ms[ms.length-1]):'de '+fiscoAvMeses(ms),val=euroS(sum(ds.map(d=>Number(d.valor)||0)));
+    return fiscoAvNovo('Contrato '+nome+': '+(um?'a renda '+(ms.length?quando+' ':'')+'('+val+') respeita a um mês':fiscoN(ds.length,'renda','rendas')+' ('+val+')'+(ms.length?', '+quando+',':'')+' respeitam a meses')
+      +' depois do dia em que o contrato acabou'+(/^\d{4}-\d{2}-\d{2}$/.test(fim)?' ('+dPT(fim)+')':'')+'. Confirma o dia da cessação, ou o mês a que '+(um?'a renda respeita':'cada renda respeita')
+      +'; se '+(um?'é':'são')+' de um contrato novo, liga-'+(um?'a':'as')+' a ele, e se o inquilino ficou sem contrato, '+(um?'é':'são')+' uma indemnização (Rendas › Indemnização'+(nat?', natureza '+nat:'')+'). Até lá, '
+      +(um?'conta':'contam')+' nas rendas deste',fiscoAvToque('contracts',`ctView('${jsq(ds[0].contratoId)}')`,'camada'),'aviso');
+  });
+}
+/* Os contratos de habitação permanente (ou de finalidade por indicar) que
+   acabaram no ano «antes do prazo» — um motivo do quadro 10 da redução que
+   não é o do fim do prazo (a versão diz-o: para 'reducao', quem não 'fim') —
+   com o termo escrito (irs.js:irsFimEfetivo) no próprio dia em que acabaram
+   (N098): o «Terminar» antigo escrevia lá o dia da saída, e um termo encurtado
+   tira a taxa reduzida e o quadro 10 (CIRS art. 72.º n.os 3 a 5: conta a
+   duração estipulada). Ou o termo, ou o motivo, está errado: falta.
+   Recebe: r — o resumo.
+   Devolve: [{texto, abrir, toca, nivel}]. */
+function fiscoAvTermoNoFim(r){
+  const A=String(r.ano),daDecl=fiscoAvDaDeclaracao(r),Q=irsAno(r.ano).quadros||{},ms=((irsAno(r.ano).quadro10||{}).motivos||[]).filter(m=>m&&m.para==='reducao');
+  const antes=ms.filter(m=>m.quem&&m.quem!=='fim').map(m=>String(m.codigo)),noFim=ms.find(m=>m.quem==='fim');
+  const q10=Q.cessados?'o quadro '+Q.cessados:'o quadro dos contratos que acabaram';
+  return (db.contracts||[]).filter(c=>{
+    if(!c||ctNaoDeclarado(c))return false;
+    const fin=fiscoDe(c).finalidade,x=irsCessacao(c);
+    if(fin&&fin!=='hp')return false;
+    return !!x.data&&x.data.slice(0,4)===A&&antes.indexOf(x.motivo)>-1&&irsFimEfetivo(c)===x.data&&daDecl(c);
+  }).map(c=>{
+    const x=irsCessacao(c);
+    return fiscoAvNovo('Contrato '+ctName(c)+': acabou a '+dPT(x.data)+' antes do prazo (o motivo '+x.motivo+' d'+q10+'), mas o fim escrito no contrato é esse mesmo dia. '
+      +(noFim&&noFim.codigo?'Se acabou no fim do prazo, o motivo é o '+noFim.codigo+'; se acabou antes':'Se acabou antes do prazo')
+      +', o fim do contrato é o prazo combinado, e não o dia em que acabou: corrige-o — é ele que decide a taxa reduzida e '+q10,
+      fiscoAvToque('contracts',`ctView('${jsq(c.id)}')`,'camada'),'falta');
+  });
+}
+/* A redução pela duração caiu toda no ano (art. 72.º n.º 20, N101): a linha
+   traz l.reducaoCaida; sem o campo, um contrato cessado no ano com o motivo
+   que regulariza (fisco-resumo.js:fiscoCessacaoRegulariza) cuja duração
+   decorrida não chega a escalão nenhum (irs.js:irsTaxaDecorrida, reducao
+   false: a taxa é a base).
+   Recebe: l — a linha; c — o contrato; ano — o ano dos rendimentos.
+   Devolve: true ou false. */
+function fiscoAvReducaoCaida(l,c,ano){
+  if(l&&Object.prototype.hasOwnProperty.call(l,'reducaoCaida'))return l.reducaoCaida===true;
+  if(!c||irsCessacao(c).data.slice(0,4)!==String(ano)||!fiscoCessacaoRegulariza(c))return false;
+  const d=irsTaxaDecorrida(c);
+  return !!d&&d.reducao===false;
+}
+/* As subcategorias que deixaram de contar nos gastos com a migração do mapa
+   (irsMapaV=2, D10, N117), porque a AT não as aceita: o seguro multirriscos,
+   facultativo (PIV 11676), o fundo de reserva do condomínio fora do ano da
+   obra (PIV 27168), a reparação de eletrodomésticos (PIV 11676), o notário e
+   os registos e a avaliação (não são gastos de obter as rendas, CIRS art.
+   41.º). Cada uma pela chave de origem do mapa (dados.js:IRS_MAPA0) e, quando
+   a árvore lhe der um id do IRS (dados.js:CATS_DO_IRS), também por ele
+   (dados.js:txCatIrsId — o nome pode mudar); com o porquê. */
+const FISCO_AV_SEM_DEDUCAO={
+  'Seguros / Multirriscos':{id:'seguros/multirriscos',porque:'o seguro multirriscos é facultativo (conta só a parte do seguro de incêndio obrigatório, se a apólice a separar)'},
+  'Condomínio / Fundo de reserva':{id:'condominio/fundo-de-reserva',porque:'o fundo de reserva do condomínio só conta no ano em que paga uma obra'},
+  'Manutenção e reparações / Eletrodomésticos':{id:'manutencao/eletrodomesticos',porque:'a reparação de eletrodomésticos não é um gasto do imóvel'},
+  'Serviços profissionais / Notário e registos':{id:'servicos/notario-e-registos',porque:'o notário e os registos são da compra ou da venda do imóvel, e não das rendas'},
+  'Serviços profissionais / Avaliação':{id:'servicos/avaliacao',porque:'a avaliação do imóvel não é um gasto de obter as rendas'}};
+/* A chave de FISCO_AV_SEM_DEDUCAO de uma despesa: pelo id do IRS da
+   subcategoria (txCatIrsId, quando o tem), ou pelo nome de origem.
+   Recebe: t — a despesa.
+   Devolve: a chave ('Categoria / Sub'), ou '' quando não é nenhuma delas. */
+function fiscoAvChaveSemDeducao(t){
+  const sid=txCatIrsId(t,true),ks=Object.keys(FISCO_AV_SEM_DEDUCAO);
+  const porId=sid?ks.find(k=>FISCO_AV_SEM_DEDUCAO[k].id===sid):'';if(porId)return porId;
+  const k=String((t&&t.category)||'').trim()+' / '+String((t&&t.sub)||'').trim();
+  return ks.indexOf(k)>-1?k:'';
+}
+/* As despesas do ano nos imóveis desta declaração que ficam fora dos gastos
+   por serem de uma das subcategorias de FISCO_AV_SEM_DEDUCAO
+   (fiscoAvChaveSemDeducao), pela regra do
+   mapa (irs-papeis.js:irsColunaDe — origem 'sub', coluna 'nao'): uma coluna
+   escolhida na própria despesa manda, e essa não entra. Os imóveis são os da
+   declaração: a quota de algum titular no ano (ou todos, por inteiro) e a
+   permissão de ver.
+   Recebe: r — o resumo.
+   Devolve: [{txId, nome, valor, chave}], pela data. */
+function fiscoAvSemDeducao(r){
+  const A=String(r.ano),tits=Array.isArray(r.titulares)?r.titulares:[],out=[];
+  const conta=p=>!!p&&pode(p.id,'report.view')&&(!tits.length||tits.some(o=>fiscoQuotaNoAno(p,o,r.ano)>0));
+  (db.transactions||[]).filter(t=>t&&t.kind==='expense'&&String(t.date||'').startsWith(A))
+    .sort((a,b)=>String(a.date)<String(b.date)?-1:String(a.date)>String(b.date)?1:0)
+    .forEach(t=>{
+      const k=fiscoAvChaveSemDeducao(t);if(!k)return;
+      const col=irsColunaDe(t);if(!col||col.col!=='nao'||col.origem!=='sub'||!txProps(t).some(conta))return;
+      out.push({txId:t.id,nome:String(t.label||'').trim()||String(t.category||'').trim()+' › '+String(t.sub||'').trim(),valor:r2(Number(t.amount)||0),chave:k});
+    });
+  return out;
+}
+/* O aviso das despesas que deixaram de contar nos gastos (N117): cinzento,
+   com o total, a lista e o porquê de cada subcategoria — quem copiou gastos
+   da app antes da versão que as tirou confere-os.
+   Recebe: r — o resumo.
+   Devolve: [{texto, abrir, toca, nivel}]. */
+function fiscoAvNaoAceites(r){
+  const ds=fiscoAvSemDeducao(r);if(!ds.length)return [];
+  const um=ds.length===1,ano=r.ano,ks=[];ds.forEach(d=>{if(ks.indexOf(d.chave)<0)ks.push(d.chave)});
+  const item=d=>d.nome+', '+euroS(Number(d.valor)||0),resto=ds.slice(5);
+  const lista=ds.slice(0,5).map(item).join('; ')+(resto.length?'; e mais '+resto.length+', '+euroS(sum(resto.map(d=>Number(d.valor)||0))):'');
+  const pq=ks.map(k=>FISCO_AV_SEM_DEDUCAO[k].porque);
+  return [fiscoAvNovo((um?'Despesa de '+ano+' que não conta nos gastos: ':fiscoN(ds.length,'despesa','despesas')+' de '+ano+' ('+euroS(sum(ds.map(d=>Number(d.valor)||0)))+') não contam nos gastos: ')+lista
+    +'. A AT não '+(um?'a':'as')+' aceita: '+pq.join('; ')+'. Se copiaste daqui gastos de '+ano+' antes desta versão, confere-os — até aí a app contava-'+(um?'a':'as'),
+    um?fiscoAvToque('transactions',`txView('${jsq(ds[0].txId)}')`,'camada'):fiscoAvToque('transactions',"go('transactions')",'ecra'),'info')];
+}
+/* A tributação conjunta sem o cônjuge escolhido (D30; D5, N020): só entram as
+   rendas de quem declara. O que fazer depende de haver quem escolher
+   (fisco.js:fiscoCandidatosConjuge — os outros proprietários com conta) e da
+   escolha «Os bens são comuns do casal» do ano (r.bensComuns do resumo, ou
+   fisco-titulares.js:fiscoBensComuns):
+   - com ela, só se diz (cinzento) que a parte do cônjuge sem conta vai às
+     linhas do outro titular e que os imóveis só dele se inserem à mão no
+     Portal (decisão do Martinho de 2026-11-18); e, por imóvel, os que a app
+     não sabe partir (r.bensComuns.porDecidir — mais do que um dono fora da
+     app: âmbar) e os que ficam inteiros em quem declara (soMeus — sem dono
+     fora da app: cinzento);
+   - sem ela é falta: com candidatos, escolhe-se o cônjuge na situação, ou
+     segue-se o caminho de quem não tem conta; sem eles, os imóveis do cônjuge
+     fora da app inserem-se à mão no Portal, e a casa que é um bem comum do
+     casal conta-se com o cônjuge escrito como dono fora da app e a escolha
+     ligada.
+   Recebe: r — o resumo; eu — quem declara ('' por inteiro).
+   Devolve: [{texto, abrir, toca, nivel}]. */
+function fiscoAvConjuntaSemConjuge(r,eu){
+  const ano=r.ano,out=[],sit='«A tua situação em '+ano+'»',bensTx='«Os bens são comuns do casal»';
+  const temBc=Object.prototype.hasOwnProperty.call(r,'bensComuns'),bc=r.bensComuns&&typeof r.bensComuns==='object'?r.bensComuns:null;
+  const bens=temBc?!!bc:fiscoBensComuns(fiscoSituacaoDoAno(ano,eu||''));
+  if(bens){
+    const cj=r.conjugeFora&&typeof r.conjugeFora==='object'?r.conjugeFora:null,nome=String((cj&&cj.nome)||'').trim();
+    const quem=nome?'de '+nome:'do teu cônjuge',letra=String((cj&&cj.letra)||'').trim(),tit=letra?'do titular '+letra:'do outro titular';
+    /* quem conta como o cônjuge em cada imóvel (r.bensComuns.imoveis: o dono
+       fora da app, quando é um só): a escolha é do ano, e numa casa com um
+       dono de fora que não é o cônjuge (um irmão) ele contava como tal. Com
+       nomes diferentes (o r.conjugeFora.nome vem vazio) é âmbar */
+    const im=(bc&&Array.isArray(bc.imoveis)?bc.imoveis:[]).filter(x=>x&&x.propertyId),porNome={},nomes=[];
+    im.forEach(x=>{const n=String(x.nome||'').trim()||'o dono fora da app';if(!porNome[n]){porNome[n]=[];nomes.push(n)}porNome[n].push(String(x.imovel||''))});
+    const lista=nomes.map(n=>n+' ('+listaE(porNome[n].filter(Boolean))+')');
+    const varios=nomes.length>1||(!!im.length&&!nome);
+    out.push(fiscoAvNovo('Tributação conjunta com os bens comuns do casal: '+(lista.length?'conta como o teu cônjuge, nas linhas '+tit+', '+listaE(lista)
+      +'. Se algum não é o teu cônjuge (uma casa herdada com um irmão), desliga «Os bens são comuns do casal» em '+sit+' e junta à mão no Portal a parte do teu cônjuge. '
+      :'a parte '+quem+' nos imóveis em comum vai às linhas '+tit+'. ')
+      +'Os imóveis só '+quem+', que não estão na app, inserem-se à mão no Portal das Finanças',null,varios?'aviso':'info'));
+    const pd=(bc&&Array.isArray(bc.porDecidir)?bc.porDecidir:[]).filter(x=>x&&x.propertyId);
+    pd.forEach(x=>{
+      const ns=(Array.isArray(x.nomes)?x.nomes:[]).map(n=>String(n||'').trim()).filter(Boolean);
+      out.push(fiscoAvNovo('Imóvel '+String(x.imovel||'')+': tem mais do que um dono fora da app'+(ns.length?' ('+listaE(ns)+')':'')+', e a app não sabe qual é o teu cônjuge — a parte do teu cônjuge não entra. '
+        +'Junta-a à mão no Portal, numa linha '+tit+', pela quota do teu cônjuge',
+        fiscoAvToqueQuotas(x.propertyId),'aviso'));
+    });
+    const sm=(bc&&Array.isArray(bc.soMeus)?bc.soMeus:[]).filter(x=>x&&x.propertyId);
+    if(sm.length)out.push(fiscoAvNovo((sm.length===1?'Imóvel '+String(sm[0].imovel||'')+': sem donos fora da app, a linha fica inteira em ti'
+      :fiscoN(sm.length,'imóvel','imóveis')+' sem donos fora da app ficam inteiros em ti: '+listaE(sm.map(x=>String(x.imovel||''))))
+      +'. Se '+(sm.length===1?'a casa é':'algum é')+' um bem comum do casal, escreve na ficha o teu cônjuge como dono fora da app, com a quota, e essa parte passa ao outro titular',
+      sm.length===1?fiscoAvToqueQuotas(sm[0].propertyId):fiscoAvToque('properties',"go('properties')",'ecra'),'info'));
+    return out;
+  }
+  const cands=eu?fiscoCandidatosConjuge(ano,eu):[];
+  const semConta='os imóveis do teu cônjuge que não estão na app inserem-se à mão no Portal das Finanças, e uma casa que é um bem comum do casal conta-se com o cônjuge escrito na ficha como dono fora da app e '+bensTx+' ligado em '+sit;
+  out.push(fiscoAvNovo(cands.length
+    ?'Tributação conjunta sem o cônjuge escolhido: só entram as tuas rendas. Se o teu cônjuge tem conta na app, escolhe-o em '+sit+'; se não tem, '+semConta+'.'
+    :'Tributação conjunta sem o cônjuge na app: só entram as tuas rendas. '+semConta.charAt(0).toUpperCase()+semConta.slice(1)+'.',null,'falta'));
+  return out;
+}
+/* Um imóvel com mais do que uma conta com quota em algum dia do ano em que os
+   comproprietários sem conta estão por confirmar (o comproprietariosFora null
+   — N135): a casa conta só para os donos da app, e a pergunta dos de fora
+   está por responder. O de um dono só é o fiscoAvSoDeUmDono.
+   Recebe: p — o imóvel (aguenta null); ano — o ano dos rendimentos.
+   Devolve: true ou false. */
+function fiscoAvPartilhadoPorConfirmar(p,ano){
+  if(!p)return false;
+  return fiscoDiasDasQuotas(p,ano).some(d=>{
+    if(quotasForaConfirmados(p,d))return false;
+    const q=quotasFiscais(p,d);
+    return Object.keys(q).filter(o=>q[o]>0).length>1;
+  });
+}
+/* As quotas escritas entre as contas de um imóvel que não somam 100 % (dados
+   de antes de o formulário e o servidor o recusarem — D93, N136): a app
+   reparte-as na proporção (saldos.js:quotasEntre). Em cada dia do ano em que
+   as quotas podem mudar (fisco-titulares.js:fiscoDiasDasQuotas), com mais do
+   que uma conta: todas escritas e a soma longe de 100, ou umas por escrever e
+   as escritas acima de 100 (as por escrever ficam sem nada).
+   Recebe: p — o imóvel (aguenta null); ano — o ano dos rendimentos.
+   Devolve: {dia, soma} do primeiro dia assim, ou null. */
+function fiscoAvQuotasForaDe100(p,ano){
+  if(!p)return null;
+  for(const d of fiscoDiasDasQuotas(p,ano)){
+    const e=quotasEstadoNaData(p,d),ids=[...new Set((e.atual?ownersOfProp(p):(e.ownerIds||[])).filter(x=>typeof x==='string'&&x))];
+    if(ids.length<2)continue;
+    const sh=e.ownerShares||{},tem=o=>sh[o]!==undefined&&sh[o]!==null&&sh[o]!==''&&isFinite(Number(sh[o]))&&Number(sh[o])>=0;
+    const dadas=ids.filter(tem);if(!dadas.length)continue;
+    const soma=Math.round(sum(dadas.map(o=>Number(sh[o])))*100)/100;
+    if(dadas.length===ids.length?Math.abs(soma-100)>0.005:soma>100.005)return {dia:d,soma:soma};
+  }
+  return null;
+}
+/* As propostas de quotas à espera de confirmação (CW.state.proposals, só com
+   a nuvem — a forma do worker/src/rotas/estado.js), uma por imóvel.
+   Devolve: {houseId: proposta}. */
+function fiscoAvPropostas(){
+  const st=window.CW&&window.CW.state,ps=st&&Array.isArray(st.proposals)?st.proposals:[],out={};
+  ps.forEach(x=>{if(x&&x.houseId&&!out[x.houseId])out[x.houseId]=x});
+  return out;
+}
+/* O nome de uma conta: a ficha do proprietário ou a pessoa da nuvem
+   (CW.pessoas).
+   Recebe: id — o id da conta.
+   Devolve: o nome, ou '' quando não se sabe. */
+function fiscoAvNomeDe(id){
+  const o=(db.owners||[]).find(x=>x&&(x.id===id||x._userId===id));if(o&&String(o.name||'').trim())return String(o.name).trim();
+  const pe=window.CW&&window.CW.pessoas&&window.CW.pessoas[id];
+  return pe&&String(pe.name||'').trim()?String(pe.name).trim():'';
+}
+/* O nome de quem saiu de um imóvel: o que o período das quotas guardou
+   (e.nomes, que o servidor escreve ao fechar o período de uma saída ou de uma
+   conta apagada), a ficha ou a pessoa da nuvem (fiscoAvNomeDe), ou o aviso da
+   saída (CW.state.departures, 'casa.sair' ou 'casa.sair_conta').
+   Recebe: id — o id de quem saiu; e — o período das quotas; pid — o id do imóvel.
+   Devolve: o nome, ou ''. */
+function fiscoAvNomeDeQuemSaiu(id,e,pid){
+  const g=e&&e.nomes&&typeof e.nomes==='object'?String(e.nomes[id]||'').trim():'';if(g)return g;
+  const n=fiscoAvNomeDe(id);if(n)return n;
+  const st=window.CW&&window.CW.state,ds=st&&Array.isArray(st.departures)?st.departures:[];
+  const d=ds.find(x=>x&&(x.kind==='casa.sair'||x.kind==='casa.sair_conta')&&x.actorId===id&&(!x.houseId||x.houseId===pid));
+  return d?String(d.actorName||'').trim():'';
+}
+/* Os donos com conta que saíram de um imóvel durante o ano (D6, N021: quem
+   sai da app sai da casa, e a quota que tinha passa aos que ficam a partir
+   desse dia, nunca para trás): pelos períodos guardados das quotas
+   (saldos.js:quotasPeriodos), um dono com quota no último dia de um período
+   que já não está entre os donos do seguinte (ou os de hoje). Serve à saída,
+   a deixar de partilhar e à conta apagada, que fecham todas o período
+   (worker/src/lib/acesso.js:fecharQuotasHoje); uma entrada (o recém-chegado
+   só no período seguinte) não conta.
+   Recebe: p — o imóvel (aguenta null); ano — o ano dos rendimentos.
+   Devolve: [{id, dia, ate, nome}] — dia o primeiro sem ele, ate o último com
+   ele; nome o que se sabe ('' sem nada). */
+function fiscoAvSaidasDoAno(p,ano){
+  const A=String(ano),ps=quotasPeriodos(p),out=[];
+  ps.forEach((e,k)=>{
+    const dia=addDays(e.ate,1);if(dia.slice(0,4)!==A)return;
+    const seg=ps[k+1]||{ownerIds:(p&&p.ownerIds)||[]},ficam=Array.isArray(seg.ownerIds)?seg.ownerIds:[],q=quotasFiscais(p,e.ate);
+    (Array.isArray(e.ownerIds)?e.ownerIds:[]).forEach(id=>{
+      if(typeof id!=='string'||!id||ficam.indexOf(id)>-1||!(q[id]>0)||out.some(x=>x.id===id&&x.dia===dia))return;
+      out.push({id:id,dia:dia,ate:e.ate,nome:fiscoAvNomeDeQuemSaiu(id,e,p.id)});
+    });
+  });
+  return out;
+}
+/* Os avisos das quotas de cada imóvel com linha nesta declaração (N021, N138,
+   N136, N035, N135), um imóvel de cada vez, pela ordem das linhas:
+   - um dono que saiu no ano (fiscoAvSaidasDoAno): âmbar, com o dia e a
+     quota que passou a contar para quem declara — quem sai da app sai da
+     casa (D6), e o aviso só o diz, com o toque na ficha;
+   - uma proposta de quotas à espera de confirmação (fiscoAvPropostas): âmbar
+     — até todos confirmarem, a Declaração conta a divisão em vigor;
+   - as quotas escritas que não somam 100 % (fiscoAvQuotasForaDe100): âmbar,
+     com a quota-parte que a proporção dá;
+   - uma casa sem histórico das quotas com movimentos do ano de quem já não é
+     dono (r.quotasSemHistorico do resumo): âmbar, pergunta se as quotas foram
+     as mesmas o ano todo;
+   - uma casa com mais do que uma conta e os donos fora da app por confirmar
+     (fiscoAvPartilhadoPorConfirmar), quando não é já das por inteiro
+     (aCem): âmbar, conta só para os donos da app.
+   O toque abre as quotas (fiscoAvToqueQuotas); o da saída e o da proposta, a ficha.
+   Recebe: r — o resumo; pids — os ids dos imóveis com linha; aCem — os
+   imóveis do aviso dos donos por confirmar de um dono só.
+   Devolve: [{texto, abrir, toca, nivel}]. */
+function fiscoAvQuotasDasCasas(r,pids,aCem){
+  const ano=r.ano,eu=r.titularId||'',dia=fiscoAvDiaDoAno(ano),out=[],props=(pids||[]).map(id=>prop(id)).filter(Boolean);
+  const nome=p=>String(p.name||'');
+  props.forEach(p=>{
+    const grupos={},ordem=[];
+    fiscoAvSaidasDoAno(p,ano).filter(x=>x.id!==eu).forEach(x=>{if(!grupos[x.dia]){grupos[x.dia]=[];ordem.push(x.dia)}grupos[x.dia].push(x)});
+    ordem.forEach(d=>{
+      const xs=grupos[d],um=xs.length===1,ns=xs.map(x=>x.nome).filter(Boolean),antes=eu?fiscoQuota(p,eu,xs[0].ate):0,depois=eu?fiscoQuota(p,eu,d):0;
+      const quem=ns.length===xs.length?listaE(ns):um?'Um comproprietário':fiscoN(xs.length,'comproprietário','comproprietários');
+      out.push(fiscoAvNovo('Imóvel '+nome(p)+': '+quem+(um?' saiu':' saíram')+' do imóvel a '+dPT(d)+', e '+(um?'a quota que tinha passou':'as quotas que tinham passaram')+' para os donos que ficaram a partir desse dia'
+        +(eu&&Math.abs(depois-antes)>1e-9?' — a tua passou de '+fiscoAvPct(antes)+' a '+fiscoAvPct(depois):''),
+        fiscoAvToque('properties',`propView('${jsq(p.id)}')`,'camada'),'aviso'));
+    });
+  });
+  const prps=fiscoAvPropostas();
+  props.forEach(p=>{
+    const x=prps[p.id];if(!x)return;
+    const ap=Array.isArray(x.approvals)?x.approvals:[],faltam=(p.ownerIds||[]).filter(o=>typeof o==='string'&&o&&ap.indexOf(o)<0);
+    const euFalta=!!eu&&faltam.indexOf(eu)>-1,outros=faltam.filter(o=>o!==eu).map(o=>fiscoAvNomeDe(o)).filter(Boolean);
+    const por=x.proposedBy&&x.proposedBy===eu?'proposta por ti':String(x.proposedByName||'').trim()?'proposta por '+String(x.proposedByName).trim():'';
+    const desde=/^\d{4}-\d{2}-\d{2}$/.test(String(x.desde||''))?'desde '+dPT(x.desde):x.desde==='sempre'?'desde sempre':'';
+    const falta=euFalta&&outros.length?'falta a tua confirmação e a de '+listaE(outros):euFalta?'falta a tua confirmação':outros.length?'falta a confirmação de '+listaE(outros):'';
+    const det=[[por,desde].filter(Boolean).join(', '),falta].filter(Boolean).join('; ');
+    out.push(fiscoAvNovo('Imóvel '+nome(p)+': há uma nova divisão de quotas à espera de confirmação'+(det?' ('+det+')':'')+'. Até todos confirmarem, a Declaração conta a divisão em vigor'
+      +(eu?' — a tua quota: '+fiscoAvPct(fiscoQuota(p,eu,dia)):''),fiscoAvToque('properties',`propView('${jsq(p.id)}')`,'camada'),'aviso'));
+  });
+  props.forEach(p=>{
+    const x=fiscoAvQuotasForaDe100(p,ano);if(!x)return;
+    out.push(fiscoAvNovo('Imóvel '+nome(p)+': as quotas escritas na ficha somam '+dec(x.soma)+' %, e não 100 %: a app reparte-as na proporção'+(eu?', e a tua quota-parte fica '+fiscoAvPct(fiscoQuota(p,eu,x.dia)):'')
+      +'. Se a parte das rendas que cabe a cada um é outra, corrige-as na ficha'+(x.soma<100?'; se o resto é de quem não está na app, junta-o em «Há outros donos fora da app?»':''),fiscoAvToqueQuotas(p.id),'aviso'));
+  });
+  const SH=(Array.isArray(r.quotasSemHistorico)?r.quotasSemHistorico:[]).filter(x=>x&&x.propertyId),vistoSH={};
+  SH.forEach(x=>{
+    if(vistoSH[x.propertyId])return;vistoSH[x.propertyId]=1;
+    const p=prop(x.propertyId),ns=(Array.isArray(x.autores)?x.autores:[]).map(a=>String((a&&a.nome)||'').trim()).filter(Boolean);
+    out.push(fiscoAvNovo('Imóvel '+String(x.imovel||(p?p.name:''))+': as quotas deste imóvel foram estas o ano todo? Há movimentos de '+ano+' registados por '+(ns.length?listaE(ns)+', que já não '+(ns.length===1?'é dono':'são donos'):'quem já não é dono')
+      +', e a app não sabe quando as quotas mudaram: conta as de hoje'+(eu&&p?' (a tua: '+fiscoAvPct(fiscoQuota(p,eu,dia))+')':'')+' o ano inteiro. Se mudaram a meio do ano, regista a mudança com o dia em que começou — cada renda e cada gasto contam pela quota do seu dia (CIRS art. 19.º)',
+      fiscoAvToqueQuotas(x.propertyId),'aviso'));
+  });
+  const parts=props.filter(p=>(aCem||[]).indexOf(p)<0&&fiscoAvPartilhadoPorConfirmar(p,ano));
+  if(parts.length){
+    const um=parts.length===1;
+    out.push(fiscoAvNovo((um?'Imóvel '+nome(parts[0])+': conta só para os donos da app'+(eu?' (a tua quota: '+fiscoAvPct(fiscoQuota(parts[0],eu,dia))+')':'')+', e não está confirmado que não há outros donos'
+      :fiscoN(parts.length,'imóvel conta','imóveis contam')+' só para os donos da app sem estar confirmado que não há outros donos: '+listaE(parts.map(nome)))
+      +'. Se '+(um?'a casa tem':'algum tem')+' donos fora da app (um irmão, um herdeiro), escreve-os com a quota de cada um na ficha '+(um?'do imóvel':'dele')
+      +', em «Há outros donos fora da app?» — cada um declara só a sua parte (CIRS art. 19.º); se '+(um?'a casa é só vossa':'são só vossos')+', escolhe «Não, mais ninguém»',
+      um?fiscoAvToqueQuotas(parts[0].id):fiscoAvToque('properties',"go('properties')",'ecra'),'aviso'));
+  }
+  return out;
+}
+/* As rendas e o IMI que contam por uma quota diferente da do dia do
+   pagamento (N069; CC art. 213.º n.º 2 — a renda é de quem era dono no mês a
+   que respeita; CIMI art. 8.º n.º 1 — o IMI é de quem era dono a 31 de
+   dezembro do ano a que respeita): o resumo marca-os (r.rendasDeOutraQuota,
+   r.imiDeOutraQuota) e decide; aqui nomeiam-se, para quem declara confirmar
+   de quem são. Uma por contrato (as rendas) e uma por despesa (o IMI).
+   Recebe: r — o resumo.
+   Devolve: [{texto, abrir, toca, nivel}]. */
+function fiscoAvOutraQuota(r){
+  const out=[],eu=r.titularId||'';
+  const RQ=(Array.isArray(r.rendasDeOutraQuota)?r.rendasDeOutraQuota:[]).filter(x=>x&&x.contratoId&&Number(x.valor)>0);
+  fiscoAvPorContrato(RQ).forEach(ds=>{
+    const um=ds.length===1,x=ds[0],c=contract(x.contratoId),nome=String(x.nome||(c?ctName(c):'')),dias=[];
+    ds.forEach(d=>{if(/^\d{4}-\d{2}-\d{2}$/.test(String(d.desde||''))&&dias.indexOf(d.desde)<0)dias.push(d.desde)});
+    const ms=[];ds.forEach(d=>{if(/^\d{4}-\d{2}$/.test(String(d.mes||''))&&ms.indexOf(d.mes)<0)ms.push(d.mes)});
+    const mudou=dias.length?' (a '+listaE(dias.sort().map(dPT))+')':'';
+    const quota=eu&&um&&typeof x.quotaMes==='number'&&typeof x.quotaDia==='number'?' (a tua: '+fiscoAvPct(x.quotaMes)+', e não '+fiscoAvPct(x.quotaDia)+')':'';
+    out.push(fiscoAvNovo('Contrato '+nome+': '+(um?'a renda de '+fiscoAvMeses(ms)+' ('+euroS(Number(x.valor))+'), paga a '+dPT(x.data)+', respeita a um mês antes de as quotas mudarem'+mudou+': a Declaração conta-a pela quota desse mês'+quota
+      :fiscoN(ds.length,'renda','rendas')+' ('+euroS(sum(ds.map(d=>Number(d.valor)||0)))+'), de '+fiscoAvMeses(ms)+', pagas depois de as quotas mudarem'+mudou+', contam pela quota do mês a que respeitam')
+      +' — a de quem era dono quando se venceu'+(um?'':'m')+' (Código Civil, art. 213.º n.º 2). Confirma de quem '+(um?'é':'são'),
+      um&&x.txId?fiscoAvToque('transactions',`txView('${jsq(x.txId)}')`,'camada'):fiscoAvToque('contracts',`ctView('${jsq(x.contratoId)}')`,'camada'),'aviso'));
+  });
+  (Array.isArray(r.imiDeOutraQuota)?r.imiDeOutraQuota:[]).filter(x=>x&&x.txId&&Number(x.valor)>0).forEach(x=>{
+    const ant=Number(String(x.data||'').slice(0,4))-1;
+    const quota=eu&&typeof x.quotaAno==='number'&&typeof x.quotaDia==='number'?' (a tua: '+fiscoAvPct(x.quotaAno)+', e não '+fiscoAvPct(x.quotaDia)+')':'';
+    out.push(fiscoAvNovo('IMI de '+euroS(Number(x.valor))+(x.imovel?' ('+String(x.imovel)+')':'')+' pago a '+dPT(x.data)+': conta pela quota a 31/12/'+ant+quota
+      +' — o IMI é de quem era dono a 31 de dezembro do ano a que respeita (CIMI art. 8.º). Se a nota que pagaste é só tua, liga no movimento «É a minha nota de IMI»',
+      fiscoAvToque('transactions',`txView('${jsq(x.txId)}')`,'camada'),'aviso'));
+  });
+  return out;
+}
+
 /* O que há a tratar antes de preencher o quadro, cada ponto com o nível e o
    toque que abre a ficha onde se trata (com o serviço desligado, sem toque).
    Um contrato conta uma vez, mesmo com uma linha por titular ou por natureza
@@ -711,7 +1183,9 @@ function fiscoAvisos(r){
      (fisco-titulares.js:fiscoTitulares). Escolhe-se no cartão da situação */
   const semConjuge=typeof r.semConjuge==='boolean'?r.semConjuge
     :!!(r.titularId&&typeof fiscoTitulares==='function'&&(fiscoTitulares(r.titularId,ano)||{}).semConjuge===true);
-  if(semConjuge)add('Tributação conjunta sem o cônjuge escolhido: só entram as tuas rendas. Escolhe-o em «A tua situação em '+ano+'».','','','falta');
+  /* sem ninguém para escolher, ou com o cônjuge sem conta dos bens comuns do
+     casal, o aviso diz o que fazer (D5, fiscoAvConjuntaSemConjuge) */
+  if(semConjuge)fiscoAvConjuntaSemConjuge(r,r.titularId||fiscoEu()).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
   /* a conjunta com o cônjuge escolhido (D31): a app só vê os imóveis dele
      partilhados com esta conta; os que estão só na conta dele faltam, e
      juntam-se à mão. Só se diz (cinzento: não há nada a corrigir na app —
@@ -754,14 +1228,16 @@ function fiscoAvisos(r){
       :semFin.length+' contratos sem finalidade: a app assume habitação'+hab+'. Diz em cada um se é habitação permanente, não permanente ou não habitacional')
       +' — a natureza, a taxa e a redução pela duração dependem dela',...umCt(semFin),'falta');
   }
-  /* o inquilino pessoa coletiva num contrato de habitação (D47): a AT só o
-     trata como habitacional se o contrato identifica quem lá mora (PIV
-     25679), e os 10 % pedem ainda a proibição de sublocar (PIV 30751) — a
-     pergunta é fisco.empresaHabitacao. O NIF é só o sinal que a acende; a
-     app não muda a natureza nem a taxa por ele: diz o que falta */
+  /* o inquilino pessoa coletiva num contrato de habitação (D16, que muda a
+     D47): a AT só o trata como habitacional se o contrato identifica pelo
+     nome quem lá mora (PIV 28246, 26024, 30248; a proibição de sublocar não
+     é condição, PIV 30723) — a pergunta lê-se pelo irs.js:irsEmpresaMorador.
+     O NIF é só o sinal que a acende. Por responder, a app mantém a finalidade
+     e é falta; com «Não», a linha já vai como não habitacional
+     (l.empresaNaoHabitacional, irs.js:irsEmpresaNaoHabitacional) e só se diz */
   L.forEach(l=>{
     const c=contract(l.contratoId);if(!c)return;
-    const f=fiscoDe(c);if(['hp','hnp'].indexOf(f.finalidade)<0||f.empresaHabitacao===true)return;
+    const f=fiscoDe(c),mora=irsEmpresaMorador(c);if(['hp','hnp'].indexOf(f.finalidade)<0||mora===true)return;
     let emp=null;
     (l.inquilinos||[]).forEach(x=>{
       if(emp)return;
@@ -770,11 +1246,15 @@ function fiscoAvisos(r){
     });
     if(!emp)return;
     const T=v.taxas||{},nat=(v.naturezas||{}).naoHabitacional,nh='não habitacional'+(nat||T.naoHabitacional?' ('+[nat?'natureza '+nat:'',T.naoHabitacional?dec(T.naoHabitacional)+' %':''].filter(Boolean).join(', ')+', sem a redução pela duração)':'');
-    add('Contrato '+l.nome+': '+(f.empresaHabitacao===false
-      ?'o contrato com '+emp.nome+' não identifica quem lá mora, ou não proíbe a sublocação — para a AT o arrendamento é '+nh+'. Muda a finalidade do contrato para não habitacional'
-      :'arrendamento de habitação a '+emp.nome+', com NIF de empresa ou de outra entidade. Confirma se o contrato identifica quem lá mora e proíbe a sublocação: sem isso, a AT trata o arrendamento como '+nh+'. A app mantém a finalidade escolhida até o confirmares'),
+    if(mora===false){
+      const ja=l.empresaNaoHabitacional===true;
+      add('Contrato '+l.nome+': o contrato com '+emp.nome+' não identifica quem lá mora — para a AT o arrendamento é '+nh
+        +(ja?', e a Declaração já o conta assim':'. Muda a finalidade do contrato para não habitacional'),...verCt(l.contratoId),ja?'info':'falta');
+      return;
+    }
+    add('Contrato '+l.nome+': arrendamento de habitação a '+emp.nome+', com NIF de empresa ou de outra entidade. Confirma se o contrato identifica pelo nome quem lá mora: sem isso, a AT trata o arrendamento como '+nh+'. A app mantém a finalidade escolhida até responderes',
       // o toque abre a pergunta no formulário do contrato (contrato.js:ctResponderEmpresa)
-      ...(f.empresaHabitacao===false?verCt(l.contratoId):se('contracts',`ctResponderEmpresa('${jsq(l.contratoId)}')`,'camada')),'falta');
+      ...se('contracts',`ctResponderEmpresa('${jsq(l.contratoId)}')`,'camada'),'falta');
   });
   /* o fim de cada contrato (D02, D09, D10): os terminados à moda antiga sem o
      dia em que acabaram, os que vão ao quadro 10 sem o motivo, e a
@@ -789,10 +1269,20 @@ function fiscoAvisos(r){
     const motivo=vaiAoQ10?' e o motivo, que '+q10+' pede':' e o motivo';
     if(!x.fim)add('Contrato '+ctName(c)+': terminado sem o dia em que acabou, e sem termo — a app não sabe até quando esteve em vigor. Escreve no contrato o dia em que acabou'+motivo,...verCt(c.id),'falta');
     else if(x.futuro)add('Contrato '+ctName(c)+': terminado sem o dia em que acabou, e o termo ('+dPT(x.fim)+') ainda não chegou — a app conta-o em vigor até lá, com os gastos da casa vazia, e o prazo da cessação não aparece. Escreve no contrato o dia em que acabou'+motivo,...verCt(c.id),'falta');
-    else add('Contrato '+ctName(c)+': terminado sem o dia em que acabou — a app usa o fim escrito, '+dPT(x.fim)+'. Confirma no contrato o dia em que acabou'+motivo+': o dia decide os gastos que contam e o prazo da cessação',...verCt(c.id),vaiAoQ10?'falta':'aviso');
+    /* o «Terminar» antigo escrevia o dia da saída no fim do contrato, e o fim
+       é também o prazo que decide o escalão (N098): num de habitação
+       permanente (ou por indicar), o aviso pede para o confirmar */
+    else{
+      const fin=fiscoDe(c).finalidade,prazo=!fin||fin==='hp'?'. O fim escrito conta como o prazo do contrato: se o prazo combinado era outro, corrige-o — é ele que decide a taxa reduzida':'';
+      add('Contrato '+ctName(c)+': terminado sem o dia em que acabou — a app usa o fim escrito, '+dPT(x.fim)+'. Confirma no contrato o dia em que acabou'+motivo+': o dia decide os gastos que contam e o prazo da cessação'+prazo,...verCt(c.id),vaiAoQ10?'falta':'aviso');
+    }
   });
+  /* r.cessados tem uma entrada por contrato e titular (em conjunta, A e B):
+     o motivo em falta diz-se uma vez por contrato */
+  const motivoVisto={};
   cessados.forEach(x=>{
-    if(x.motivo||semDia[x.contratoId])return;
+    if(x.motivo||semDia[x.contratoId]||motivoVisto[x.contratoId])return;
+    motivoVisto[x.contratoId]=1;
     const c=contract(x.contratoId),nome=x.nome||(c?ctName(c):'');
     add('Contrato '+nome+': acabou'+(x.data?' a '+dPT(x.data):'')+' sem o motivo da cessação, que '+q10+' pede com o regime, o n.º, o ano de início do benefício e a data. Escolhe-o no contrato',...verCt(x.contratoId),'falta');
   });
@@ -802,29 +1292,49 @@ function fiscoAvisos(r){
      do contrato (CIRS art. 72.º n.º 20) */
   const Q43=v.quadro43||{},m43=(Q43.motivos||[]).find(x=>x&&x.regulariza);
   (Array.isArray(r.regularizacoes)?r.regularizacoes:[]).forEach(x=>{
-    if(!x||!x.contratoId||!(Number(x.total)>0))return;
+    /* sem diferença estimada, o aviso só nasce quando faltam anos na app
+       (N031): a regularização deles é devida na mesma */
+    if(!x||!x.contratoId||(!(Number(x.total)>0)&&!fiscoAvAnosEmFalta(x,ano).length))return;
     const c=contract(x.contratoId),nome=x.nome||(c?ctName(c):'');
     const anos=(x.anos||[]).filter(y=>y&&Number(y.diferenca)>0).map(y=>y.ano+': '+euroS(Number(y.diferenca)));
+    const estima=Number(x.total)>0?' — a app estima '+euroS(Number(x.total))+' sem os juros'+(anos.length?' ('+anos.join('; ')+')':''):'';
     if(x.dhd===true){
       add('Contrato '+nome+': o direito real de habitação duradoura acabou por acordo das partes'+(m43&&m43.codigo&&Q.dhd?' (o motivo '+m43.codigo+' do quadro '+Q.dhd+')':'')
-        +'. '+(v.taxas&&Number(v.taxas.dhd)>0?'Os '+dec(v.taxas.dhd)+' % caem':'A taxa reduzida cai')+' desde o início do contrato (CIRS art. 72.º n.º 20), e a diferença de imposto dos anos anteriores paga-se com esta declaração, com juros compensatórios — a app estima '
-        +euroS(Number(x.total))+' sem os juros'+(anos.length?' ('+anos.join('; ')+')':''),...verCt(x.contratoId),'falta');
+        +'. '+(v.taxas&&Number(v.taxas.dhd)>0?'Os '+dec(v.taxas.dhd)+' % caem':'A taxa reduzida cai')+' desde o início do contrato (CIRS art. 72.º n.º 20), e a diferença de imposto dos anos anteriores paga-se com esta declaração, com juros compensatórios'
+        +estima+fiscoAvRegularizacaoFalta(x,ano),...verCt(x.contratoId),'falta');
       return;
     }
-    add('Contrato '+nome+': acabou antes do prazo por motivo do senhorio'+(m01&&m01.codigo&&Q.cessados?' (o motivo '+m01.codigo+' do quadro '+Q.cessados+')':'')+'. A redução pela duração do período em que acabou cai (CIRS art. 72.º n.º 20), e a diferença de imposto dos anos dele já declarados paga-se com esta declaração, com juros compensatórios — a app estima '
-      +euroS(Number(x.total))+' sem os juros'+(anos.length?' ('+anos.join('; ')+')':''),...verCt(x.contratoId),'falta');
+    add('Contrato '+nome+': acabou antes do prazo por motivo do senhorio'+(m01&&m01.codigo&&Q.cessados?' (o motivo '+m01.codigo+' do quadro '+Q.cessados+')':'')+'. A redução pela duração do período em que acabou cai (CIRS art. 72.º n.º 20), e a diferença de imposto dos anos dele já declarados paga-se com esta declaração, com juros compensatórios'
+      +estima+fiscoAvRegularizacaoFalta(x,ano),...verCt(x.contratoId),'falta');
   });
+  /* o termo escrito no dia em que acabou «antes do prazo» (N098) */
+  fiscoAvTermoNoFim(r).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
   fiscoAvDhd(r,L).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
   /* as rendas depois do termo, sem renovação registada: o contrato renovou-se
-     sozinho (Código Civil art. 1096.º) ou as datas estão erradas; até lá
-     essas rendas vão sem a redução do período que acabou (D15) */
+     sozinho (Código Civil art. 1096.º) ou as datas estão erradas (D15). O
+     termo dito é o do período que acabou (N032). Só é falta quando esse
+     período estava num escalão da duração: até se registar a renovação, as
+     rendas vão sem a redução. Num contrato sem redução (o caso de quase todos
+     os que se renovam sozinhos) a taxa não muda — só uma renovação de 5 anos
+     ou mais a pode ter —, e diz-se a cinzento; num que não é de habitação
+     permanente não há redução nenhuma, e não se diz nada. O lembrete do fim
+     do prazo está nos prazos */
   const analise={};
   L.forEach(l=>{const c=contract(l.contratoId);analise[l.contratoId]=c?fiscoAvAnaliseDasRendas(c,ano):null});
   L.forEach(l=>{
     const x=analise[l.contratoId],d=x&&x.depoisDoTermo;if(!d)return;
-    add('Contrato '+l.nome+': '+fiscoN(d.n,'renda','rendas')+' de '+ano+' depois do termo ('+dPT(d.termo)+') — renovou-se? Usa o «Renovar…» do contrato, ou corrige as datas. Até lá, '
-      +(d.n===1?'essa renda vai':'essas rendas vão')+' sem a redução do período que acabou',...verCt(l.contratoId),'falta');
+    const rs=fiscoN(d.n,'renda','rendas')+' de '+ano+' depois do termo ('+dPT(d.termo)+')';
+    if(d.reducao===false){
+      if(d.hp===false)return;
+      add('Contrato '+l.nome+': '+rs+', sem renovação registada. Num contrato que se renova sozinho isto é normal, e a taxa não muda: o período que acabou não tinha a redução pela duração. '
+        +'Só uma renovação de 5 anos ou mais a pode ter — se foi o caso, regista-a com o «Renovar…» do contrato; se o termo está errado, corrige-o',...verCt(l.contratoId),'info');
+      return;
+    }
+    add('Contrato '+l.nome+': '+rs+' — renovou-se? Usa o «Renovar…» do contrato, ou corrige as datas. Até lá, '
+      +(d.n===1?'essa renda vai':'essas rendas vão')+(d.perdeu===false?' sem a redução pela duração, que a renovação pode ter':' sem a redução do período que acabou'),...verCt(l.contratoId),'falta');
   });
+  /* as rendas de meses depois do dia em que o contrato acabou (N033) */
+  fiscoAvDepoisDoFim(r,L).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
   /* a comunicação da duração (D12), uma por período com redução — o
      contrato e cada renovação —, até 15 de fevereiro do ano seguinte ao
      início dele; feita, vale em todos os anos do período
@@ -838,11 +1348,26 @@ function fiscoAvisos(r){
     if(!x||typeof x!=='object'||!/^\d{4}-\d{2}-\d{2}$/.test(String(x.prazo||'')))return;
     const ren=!!x.periodoInicio&&x.periodoInicio!==c.start;
     const oque=ren?'a renovação de '+dPT(x.periodoInicio):'a duração do contrato',Oque=ren?'A renovação':'A duração';
+    /* com a redução já caída pelo n.º 20 (N101) o 4.2A continua a perguntar,
+       mas não há redução a perder: sem a frase da AT, e âmbar */
+    const caiu=fiscoAvReducaoCaida(l,c,ano),aAT=caiu?'. A redução pela duração já caiu (CIRS art. 72.º n.º 20): não há redução a perder':', e a AT pode não aplicar a redução pela duração';
     if(x.data){
-      if(x.foraDePrazo||String(x.data)>x.prazo)add('Contrato '+l.nome+': '+oque+' foi comunicada a '+dPT(x.data)+', depois do prazo ('+dPT(x.prazo)+'). Se a comunicaste antes, corrige o dia no contrato; se não, no '+q4a+' a resposta é NÃO, e a AT pode não aplicar a redução pela duração',...verCt(c.id),'aviso');
+      if(x.foraDePrazo||String(x.data)>x.prazo)add('Contrato '+l.nome+': '+oque+' foi comunicada a '+dPT(x.data)+', depois do prazo ('+dPT(x.prazo)+'). Se a comunicaste antes, corrige o dia no contrato; se não, no '+q4a+' a resposta é NÃO'+aAT,...verCt(c.id),'aviso');
       return;
     }
-    if(hoje>x.prazo)add('Contrato '+l.nome+': '+oque+' não está marcada como comunicada, e o prazo era '+dPT(x.prazo)+'. Se a comunicaste, marca no contrato o dia em que o fizeste; se não, no '+q4a+' a resposta é NÃO, e a AT pode não aplicar a redução pela duração',...verCt(c.id),'falta');
+    /* a data da app antiga (a comunicação pedida todos os anos), que a
+       migração deixou por confirmar por cair depois do prazo do período
+       (N003; fisco.comunicacoesPorConfirmar, ou o porConfirmar/dataAntiga do
+       irs.js:irsComunicacaoDoAno): não prova quando se comunicou, e
+       pergunta-se o dia — nunca se afirma o NÃO */
+    const pc=(fiscoDe(c).comunicacoesPorConfirmar||{})[x.chave],antiga=String((x.porConfirmar===true&&x.dataAntiga)||pc||'');
+    if(x.porConfirmar===true||/^\d{4}-\d{2}-\d{2}$/.test(antiga)){
+      add('Contrato '+l.nome+': comunicaste '+oque+' no Portal das Finanças até '+dPT(x.prazo)+'? Em que dia? A app antiga pedia esta comunicação todos os anos'
+        +(/^\d{4}-\d{2}-\d{2}$/.test(antiga)?' e marcaste-a a '+dPT(antiga):'')+', mas essa marca não diz quando comunicaste '+oque+'. Marca no contrato o dia em que o fizeste: o '+q4a+' pergunta se foi até '+dPT(x.prazo)
+        +'; se não a comunicaste a tempo, a resposta é NÃO'+(caiu?aAT:''),...verCt(c.id),caiu?'aviso':'falta');
+      return;
+    }
+    if(hoje>x.prazo)add('Contrato '+l.nome+': '+oque+' não está marcada como comunicada, e o prazo era '+dPT(x.prazo)+'. Se a comunicaste, marca no contrato o dia em que o fizeste; se não, no '+q4a+' a resposta é NÃO'+aAT,...verCt(c.id),caiu?'aviso':'falta');
     else add('Contrato '+l.nome+': '+oque+' está por comunicar no Portal das Finanças. '+Oque+' comunica-se uma vez, até '+dPT(x.prazo)+', e o '+q4a+' pergunta se foi a tempo; quando o fizeres, marca-o no contrato',...verCt(c.id),'aviso');
   });
   /* o 4.2C (art. 72.º n.º 23) nos do 4.2 celebrados desde a data da versão
@@ -852,9 +1377,11 @@ function fiscoAvisos(r){
   if(L23&&L23.desde&&q42){
     const n23=L.filter(l=>l.quadro===q42&&l.acimaDoLimite===null&&String(l.celebracao||l.inicio||'')>=L23.desde);
     const pct=dec(L23.percentagem)+' %',per='«Renda acima de '+pct+' do limite do concelho?»';
+    /* com a redução já caída pelo n.º 20 em todos (N101), a app já não a conta */
+    const contaRed=n23.some(l=>!fiscoAvReducaoCaida(l,contract(l.contratoId),ano));
     if(n23.length)add((n23.length===1?'Contrato '+n23[0].nome+': celebrado a '+dPT(String(n23[0].celebracao||n23[0].inicio))+', com «Não sei» em '+per+'. Confirma-o no contrato'
       :n23.length+' contratos do quadro '+q42+' celebrados desde '+dPT(L23.desde)+' com «Não sei» em '+per+'. Confirma-o em cada um')
-      +': o quadro '+q42+'C pergunta-o, e uma renda acima do limite não tem a redução pela duração. Até lá, a app conta a redução',...umCt(n23),'aviso');
+      +': o quadro '+q42+'C pergunta-o, e uma renda acima do limite não tem a redução pela duração'+(contaRed?'. Até lá, a app conta a redução':''),...umCt(n23),'aviso');
   }
   /* a isenção escolhida no contrato que não conta no ano (D46): a primeira
      condição da versão que falha (irs.js:irsIsencaoMotivo). Sem o envio ao
@@ -918,14 +1445,21 @@ function fiscoAvisos(r){
     :fiscoN(aCem.length,'imóvel conta','imóveis contam')+' por inteiro nesta declaração sem estar confirmado que não há outros donos: '+listaE(aCem.map(p=>String(p.name||''))))
     +'. Se '+(aCem.length===1?'a casa tem':'algum tem')+' donos fora da app (um irmão, um herdeiro), escreve-os com a quota de cada um na ficha '+(aCem.length===1?'do imóvel':'dele')
     +', em «Há outros donos fora da app?» — cada um declara só a sua parte (CIRS art. 19.º); se '+(aCem.length===1?'é só tua':'são só teus')+', escolhe «Não, mais ninguém»',
-    ...(aCem.length===1?se('properties',`propView('${jsq(aCem[0].id)}')`,'camada'):se('properties',"go('properties')",'ecra')),'aviso');
+    ...(aCem.length===1?se('properties',`imvAbrirQuotas('${jsq(aCem[0].id)}')`,'camada'):se('properties',"go('properties')",'ecra')),'aviso');
+  /* as quotas de cada imóvel: quem saiu, a proposta pendente, as que não
+     somam 100 %, as sem data, os donos de fora por confirmar com mais do que
+     uma conta (fiscoAvQuotasDasCasas); e as rendas e o IMI que contam por
+     outra quota que a do dia (fiscoAvOutraQuota) */
+  fiscoAvQuotasDasCasas(r,pids,aCem).concat(fiscoAvOutraQuota(r)).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
   const vistoQ={};
   (r.linhas||[]).filter(l=>l&&l.propertyId&&Array.isArray(l.quotas)&&l.quotas.length>1)
     .sort((a,b)=>(a.titularId===r.titularId?0:1)-(b.titularId===r.titularId?0:1))
     .forEach(l=>{
       if(vistoQ[l.propertyId])return;vistoQ[l.propertyId]=1;
+      /* o cônjuge sem conta dos bens comuns (D5) não está em db.owners: o nome vem do resumo */
       const dono=l.titularId?(db.owners||[]).find(o=>o&&o.id===l.titularId):null;
-      const quem=!l.titularId?'a parte da casa nesta declaração':l.titularId===r.titularId?'a tua quota':'a quota de '+String((dono&&dono.name)||'quem declara contigo');
+      const cjf=fiscoEhConjugeFora(l.titularId)&&r.conjugeFora&&typeof r.conjugeFora==='object'?String(r.conjugeFora.nome||'').trim():'';
+      const quem=!l.titularId?'a parte da casa nesta declaração':l.titularId===r.titularId?'a tua quota':'a quota de '+String(cjf||(dono&&dono.name)||'quem declara contigo');
       const qs=l.quotas.filter(x=>x&&/^\d{4}-\d{2}-\d{2}$/.test(String(x.desde||''))).map(x=>dec(Math.round((Number(x.quota)||0)*10000)/100)+' % desde '+dPT(x.desde));
       add('Imóvel '+l.imovel+': '+quem+' mudou em '+ano+' ('+listaE(qs)+'). A Declaração conta cada renda e cada gasto pela quota do dia em que entrou ou foi pago (CIRS art. 19.º)',
         ...se('properties',`propView('${jsq(l.propertyId)}')`,'camada'),'info');
@@ -944,7 +1478,7 @@ function fiscoAvisos(r){
     (db.transactions||[]).forEach(t=>{
       if(!t||!ids[t.contractId]||t.recibo||!String(t.date||'').startsWith(A)||t.kind!=='income')return;
       if(fiscoPapelDe(t)==='caucao')outros.caucao=1;
-      else if(fiscoNaLinhaDoContrato(t)&&catIrsId('catsIn',t.category)==='reembolsos')outros.reembolso=1;
+      else if(fiscoNaLinhaDoContrato(t)&&txCatIrsId(t)==='reembolsos')outros.reembolso=1;
     });
     const ks=(outros.caucao?['a caução']:[]).concat(outros.reembolso?['o reembolso do inquilino']:[]);
     add(ks.length?fiscoN(nRec,'recebimento','recebimentos')+' de '+ano+' sem recibo eletrónico emitido: '+listaE(ks)+' também '+(ks.length===1?'pede':'pedem')+' recibo, como a renda'
@@ -1129,6 +1663,9 @@ function fiscoAvisos(r){
   }
   else if(r.semRegra)add(fiscoN(r.semRegra,'despesa sem regra de dedução','despesas sem regra de dedução')+' de '+ano+': escolhe a coluna do Anexo F nas Definições → Categorias, etiquetas e IRS',
     "go('settings');goSet('irs')",'ecra');
+  /* as despesas das subcategorias que a AT não aceita, que deixaram de contar
+     (N117, fiscoAvNaoAceites): só se diz, com o total */
+  fiscoAvNaoAceites(r).forEach(a=>add(a.texto,a.abrir,a.toca,a.nivel));
   if(foraDoPeriodo)add(fiscoN(foraDoPeriodo,'despesa paga','despesas pagas')+' em '+ano+' com o imóvel sem contrato em vigor '+(foraDoPeriodo===1?'fica':'ficam')+' fora: só conta o período arrendado. Se é deste período, corrige as datas do contrato ou escolhe a coluna na ficha da despesa',
     ...se('transactions',"go('transactions')",'ecra'));
   if(obrasSoltas)add(fiscoN(obrasSoltas,'despesa marcada como obras dos 24 meses','despesas marcadas como obras dos 24 meses')+' de '+ano+' sem contrato a começar depois: '+(obrasSoltas===1?'fica':'ficam')+' fora até o haver',

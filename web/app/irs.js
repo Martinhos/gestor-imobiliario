@@ -159,6 +159,40 @@ function irsFimReal(c){
   const d=irsCessacao(c).data;if(d)return d;
   return c.active===false?(c.end||''):irsFimEfetivo(c);
 }
+/* O contrato identifica pelo nome quem lá mora? A pergunta do inquilino
+   empresa (D16, que muda a D47: para a AT basta a identificação da pessoa
+   singular que lá mora — PIV 28246, 26024, 30248; a proibição de sublocar
+   não é condição, PIV 30723), em fisco.empresaMorador. A pergunta antiga
+   (fisco.empresaHabitacao, que juntava a identificação e a sublocação) lê-se
+   só de recurso: um «Sim» antigo identifica; um «Não» antigo não diz qual das
+   duas faltava, e conta como por responder.
+   Recebe: c — o contrato (aguenta null).
+   Devolve: true (identifica), false (não identifica) ou null (por responder). */
+function irsEmpresaMorador(c){
+  const f=fiscoDe(c);
+  if(f.empresaMorador===true||f.empresaMorador===false)return f.empresaMorador;
+  return f.empresaHabitacao===true?true:null;
+}
+/* O arrendamento de habitação a uma pessoa coletiva é, para a AT, não
+   habitacional? Quando a finalidade escrita é habitação (permanente ou não),
+   algum inquilino tem NIF de pessoa coletiva (irs-papeis.js:nifColetivo — a
+   condição em que o formulário faz a pergunta, contrato.js:ctEmpresaVisivel)
+   e a resposta é que o contrato não identifica quem lá mora
+   (irsEmpresaMorador === false). Por responder, fica a finalidade escrita e a
+   Declaração aponta o que falta.
+   Recebe: c — o contrato (aguenta null).
+   Devolve: true ou false. */
+function irsEmpresaNaoHabitacional(c){
+  if(!c||['hp','hnp'].indexOf(fiscoDe(c).finalidade)<0||irsEmpresaMorador(c)!==false)return false;
+  return ctTenants(c).some(t=>nifColetivo(t&&t.nif));
+}
+/* A finalidade de um contrato para o IRS: a escrita, ou 'nh' quando o
+   inquilino empresa faz dele não habitacional (irsEmpresaNaoHabitacional) —
+   a natureza do não habitacional, a taxa dele, sem a redução pela duração,
+   sem as rendas moderadas e sem as isenções e os benefícios da habitação.
+   Recebe: c — o contrato (aguenta null).
+   Devolve: '', 'hp', 'hnp', 'nh' ou 'dhd'. */
+function irsFinalidade(c){return irsEmpresaNaoHabitacional(c)?'nh':fiscoDe(c).finalidade}
 /* O número do artigo 72.º de um escalão da duração (o quadro 10 pede o regime
    por ele): o que a versão escreve no escalão (`n`), ou o lugar dele no
    regime — o mais longo é o n.º 5, o seguinte o n.º 4, e assim para baixo
@@ -249,7 +283,7 @@ function irsPeriodoDoAno(c,ano){
    dele e n o número do art. 72.º do escalão — ou null sem redução. */
 function irsReducaoDoPeriodo(c,ano,i){
   if(!c||i==null||i<0)return null;
-  const F=fiscoDe(c),fin=F.finalidade;if(fin&&fin!=='hp')return null;
+  const F=fiscoDe(c),fin=irsFinalidade(c);if(fin&&fin!=='hp')return null;
   const a=anoIrs(ano),T=irsAno(a).taxas,cad=irsCadeia(c,a),p=cad[i];
   if(!p||p.taxa==null)return null;
   const cel=F.celebracao||cad[0].inicio,L=T.limiteRendaAlta;
@@ -318,7 +352,7 @@ function irsIsencaoAvaliada(c,ano){
   if(is.celebradoAte&&cel&&cel>is.celebradoAte)return falha('a isenção só vale para contratos celebrados até '+dia(is.celebradoAte));
   if(is.ateAno&&a>Number(is.ateAno))return falha('a isenção só vale para as rendas até '+is.ateAno);
   if(is.finalidade){
-    const fs=[].concat(is.finalidade),fin=f.finalidade||'hp';
+    const fs=[].concat(is.finalidade),fin=irsFinalidade(c)||'hp';
     if(fs.indexOf(fin)<0)return falha('a isenção só vale para contratos de '+fs.map(x=>{const n=FISCO_FINALIDADES.find(y=>y[0]===x);return n?n[1].toLowerCase():x}).join(' ou '));
   }
   for(const campo of [].concat(is.pede||[])){
@@ -387,7 +421,7 @@ function irsBeneficiosAvaliados(c,ano){
     const m=String(b.marca||''),k=m.slice(m.indexOf('.')+1);
     const v=m.indexOf('imovel.')===0?(p?p[k]:undefined):m.indexOf('contrato.')===0?F[k]:undefined;
     if(!(v===true||(v&&typeof v==='object'&&!Array.isArray(v)&&String(v.tipo||'').trim())))return;
-    const Q='o quadro '+b.quadro+' não conta',fin=F.finalidade||'',cel=data(F.celebracao)||data(c.start);
+    const Q='o quadro '+b.quadro+' não conta',fin=irsFinalidade(c)||'',cel=data(F.celebracao)||data(c.start);
     const falha=()=>{
       if(fin==='dhd')return 'num direito real de habitação duradoura a linha vai ao quadro '+(irsAno(a).quadros.dhd||'4.3')+', e o quadro '+b.quadro+' só identifica linhas do '+irsAno(a).quadros.semReducao;
       if(p&&String(p.pais||'').trim())return 'o imóvel fica fora de Portugal: '+Q;
@@ -476,7 +510,9 @@ function irsRendaMensalDoTeste(c,ano){
 }
 /* A taxa de um contrato num ano com um período dado em vigor — o miolo de
    irsTaxa e de cada troço de irsSegmentosDoAno. A isenção vem antes de tudo
-   (0 %); o não habitacional paga a taxa da versão; a habitação fica com a
+   (0 %); o não habitacional paga a taxa da versão — a finalidade é a do IRS
+   (irsFinalidade: também o inquilino empresa que o contrato não diz quem lá
+   mora, D16); a habitação fica com a
    mais baixa entre a base, a redução do período (irsReducaoDoPeriodo) e a
    das rendas moderadas, quando a versão a tem, o ano está dentro dela e a
    renda do ano (irsRendaMensalDoTeste) não passa o limite.
@@ -490,7 +526,7 @@ function irsRendaMensalDoTeste(c,ano){
    o índice do período (-1: nenhum, depois do termo sem renovação).
    Devolve: {taxa, motivo, reducao[, isencao][, beneficio]} como irsTaxa. */
 function irsTaxaDoPeriodo(c,ano,i){
-  const a=anoIrs(ano),T=irsAno(a).taxas,is=c?irsIsencao(c,a):null,fin=c?fiscoDe(c).finalidade:'';
+  const a=anoIrs(ano),T=irsAno(a).taxas,is=c?irsIsencao(c,a):null,fin=c?irsFinalidade(c):'';
   if(is)return {taxa:0,motivo:'isento',reducao:null,isencao:is};
   if(fin==='dhd')return {taxa:T.dhd!=null?T.dhd:T.habitacional,motivo:'dhd',reducao:null};
   let out;
@@ -637,20 +673,28 @@ function irsTaxaDecorrida(c){
    ano seguinte ao início dele, e não todos os anos. O período é o último
    com redução vivo no ano (com uma renovação sem redução a meio do ano, o
    de antes, que é o que o 4.2A pergunta). A marca guarda-se pela chave do
-   ano do início do período (fisco.comunicacoes).
+   ano do início do período (fisco.comunicacoes). Uma data antiga que a
+   migração das comunicações não pôde dar como feita (caía depois do prazo do
+   período: dados.js, fisco.comunicacoesPorConfirmar[chave]) não é a data:
+   diz-se à parte, por confirmar (N003).
    Recebe: c — o contrato (aguenta null); ano (opcional) — o ano dos rendimentos.
    Devolve: null sem redução nesse ano (ou isento); senão {periodoInicio,
-   chave, prazo, data, foraDePrazo} — chave o ano do início ('AAAA'), prazo
-   o 15 de fevereiro seguinte (irsAno(chave).prazos.comunicacaoDuracao), data
-   o dia em que se comunicou ('' por fazer), foraDePrazo se foi depois. */
+   chave, prazo, data, foraDePrazo[, porConfirmar, dataAntiga]} — chave o ano
+   do início ('AAAA'), prazo o 15 de fevereiro seguinte
+   (irsAno(chave).prazos.comunicacaoDuracao), data o dia em que se comunicou
+   ('' por fazer), foraDePrazo se foi depois; sem data e com a marca da
+   migração, porConfirmar true e dataAntiga 'AAAA-MM-DD' (só então existem). */
 function irsComunicacaoDoAno(c,ano){
   if(!c)return null;
   const segs=irsSegmentosDoAno(c,ano).filter(s=>s.periodo!=null&&s.reducao),s=segs[segs.length-1];
   if(!s)return null;
   const p=irsPeriodos(c)[s.periodo];if(!p||!/^\d{4}-/.test(p.inicio))return null;
-  const chave=p.inicio.slice(0,4),prazo=irsAno(Number(chave)).prazos.comunicacaoDuracao;
-  const data=(fiscoDe(c).comunicacoes||{})[chave]||'';
-  return {periodoInicio:p.inicio,chave:chave,prazo:prazo,data:data,foraDePrazo:!!data&&!!prazo&&data>prazo};
+  const chave=p.inicio.slice(0,4),prazo=irsAno(Number(chave)).prazos.comunicacaoDuracao,f=fiscoDe(c);
+  const data=(f.comunicacoes||{})[chave]||'';
+  const out={periodoInicio:p.inicio,chave:chave,prazo:prazo,data:data,foraDePrazo:!!data&&!!prazo&&data>prazo};
+  const pcs=f.comunicacoesPorConfirmar,pc=!data&&pcs&&typeof pcs==='object'&&!Array.isArray(pcs)?String(pcs[chave]||''):'';
+  if(/^\d{4}-\d{2}-\d{2}$/.test(pc)){out.porConfirmar=true;out.dataAntiga=pc}
+  return out;
 }
 /* A comunicação da duração de que dependem as rendas de um ano já feita: o
    dia em que o senhorio comunicou no Portal o período em vigor
@@ -782,10 +826,12 @@ function irsDiaMes(iso){
    finalidade assume-se habitação, como na taxa. Um direito real de habitação duradoura
    dá o da prestação mensal no quadro 4.3 (naturezas.dhd, 01); a caução dele (02, 03) é
    do resumo, que sabe que receita é. Os códigos leem-se de irsNaturezasDoAno (guardados
-   por ano: o resumo pede-os a cada movimento).
+   por ano: o resumo pede-os a cada movimento). A finalidade é a do IRS (irsFinalidade):
+   o inquilino empresa num contrato que não identifica quem lá mora dá a do não
+   habitacional (D16).
    Recebe: c — o contrato; ano (opcional) — o ano dos rendimentos.
    Devolve: o código (string). */
-const naturezaIrs=(c,ano)=>{const n=irsNaturezasDoAno(ano),f=fiscoDe(c).finalidade;return f==='nh'?n.naoHabitacional:f==='dhd'?(n.dhd||n.habitacional):n.habitacional};
+const naturezaIrs=(c,ano)=>{const n=irsNaturezasDoAno(ano),f=irsFinalidade(c);return f==='nh'?n.naoHabitacional:f==='dhd'?(n.dhd||n.habitacional):n.habitacional};
 /* O aviso de responsabilidade da Declaração, o texto aprovado: o que a app faz e
    o que não faz. O PDF escreve-o hoje; as outras saídas (a página, o texto, o
    CSV e o guia) hão de escrevê-lo à letra, a partir daqui. */

@@ -289,7 +289,7 @@ describe('os ids que entram de fora', () => {
     assert.match(g.groupId, FORMA_ID);
     assert.deepEqual(Object.keys(g.psplit.parts), [p.id]);
     const c = app.normContract({ id: MAU, propertyId: MAU, roomId: MAU, tenantIds: [MAU2], photoIds: [MAU], ownerContactId: MAU2,
-      tenantContactId: MAU2, files: [{ id: MAU }], inventory: [{ id: MAU }], keys: [{ id: MAU }], fisco: { renovacoes: [{ id: MAU }] } });
+      tenantContactId: MAU2, files: [{ id: MAU }], inventory: [{ id: MAU }], keys: [{ id: MAU }], fisco: { renovacoes: [{ id: MAU, inicio: '2025-01-01' }] } });
     for (const v of [c.id, c.propertyId, c.roomId, c.tenantIds[0], c.photoIds[0], c.ownerContactId, c.tenantContactId, c.files[0].id,
       c.inventory[0].id, c.keys[0].id, c.fisco.renovacoes[0].id]) assert.match(v, FORMA_ID);
     assert.equal(c.roomId, p.rooms[0].id);

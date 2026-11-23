@@ -60,17 +60,22 @@
    seus contratos e os campos de cada contrato (com o 4.2A, o 4.2B e o 4.2C
    no do 4.2); o quadro 5 da sublocação (D52); os isentos do 6D, os
    benefícios do 6A, do 6B e do 6C (D117, D121, D119), as obras dos 24 meses
-   (e as por confirmar), as rendas de anos anteriores, o AIMI do quadro 9, o
+   (e as por confirmar), as rendas de anos anteriores, o AIMI do quadro 9, os
+   contratos que acabaram no quadro 10 (pela ordem do impresso: 8, 9, 10), o
    Anexo J dos imóveis fora de Portugal (D133), as rendas da categoria B fora
    do Anexo F (D134), o que ficou fora por escolha e as rendas sem contrato;
    e, no fim, o aviso de responsabilidade (fiscoAvisoCard). Sem imóveis
    diz-o e aponta a saída; sem rendas no ano (nem nos quadros 4, nem no
-   quadro 5, nem fora do Anexo F), diz-o e nomeia os contratos que
+   quadro 5, nem fora do Anexo F) e sem nada no quadro 10 (os contratos que
+   acabaram no ano, r.cessados, e a regularização do n.º 20,
+   r.regularizacoes, que vão na declaração desse ano mesmo sem rendas nele),
+   diz-o e nomeia os contratos que
    estiveram em vigor nele sem nenhuma renda registada
    (fiscoContratosSemRendas) — um contrato sem rendas não tem linha, e a
    página não pode ficar só com «Sem rendas»; com imóveis à vista mas nenhum
-   teu (só colaboras), diz que o Anexo F é de quem é dono, e não de quem
-   recebe as rendas por conta dele (CIRS art. 19.º).
+   teu (só colaboras), diz que o Anexo F é de quem tem direito às rendas — o
+   dono ou, havendo usufruto, o usufrutuário (informação vinculativa 25058) —,
+   e não de quem recebe as rendas por conta dele (CIRS art. 19.º).
    A Declaração requer os Contratos (servicos.js, D57), e eles os Imóveis: a
    página nunca se pinta com um dos dois desligado, e nada aqui o pergunta.
    Devolve: o HTML da vista (string). */
@@ -79,18 +84,24 @@ function vFisco(){
   const anos=yearsWithData(null);if(anos.indexOf(ano)<0)anos.push(ano);anos.sort((a,b)=>a-b);
   const r=resumoFiscal(ano);
   /* em conjunta, a letra do cônjuge é a das linhas dele (a do Rosto, D30);
+     o cônjuge sem conta entra pelos bens comuns do casal (D5, r.conjugeFora);
      ligada sem cônjuge escolhido, diz-se que entram só as minhas rendas */
   const sit=r.porInteiro?null:irsSituacao(ano,r.titularId);
   const outro=(r.linhas||[]).find(l=>l&&l.titularId&&l.titularId!==r.titularId);
-  const conj=r.titulares.length>1?' Em tributação conjunta entra também a do titular '+esc((outro&&outro.titular)||(sit&&sit.letraConjuge)||'B')+', cada linha com a sua letra.'
-    :sit&&sit.conjunta&&!(db.owners||[]).some(o=>o&&o.id&&o.id===sit.conjugeId)?' A tributação conjunta de '+ano+' está ligada sem cônjuge escolhido: entram só as tuas rendas.':'';
+  const letraOutro=esc((outro&&outro.titular)||(r.conjugeFora&&r.conjugeFora.letra)||(sit&&sit.letraConjuge)||'B');
+  const conj=r.titulares.length>1?(outro&&fiscoEhConjugeFora(outro.titularId)
+      ?' Em tributação conjunta entra também a parte do teu cônjuge nos bens comuns do casal, nas linhas do titular '+letraOutro+'.'
+      :' Em tributação conjunta entra também a do titular '+letraOutro+', cada linha com a sua letra.')
+    :sit&&sit.conjunta&&!(db.owners||[]).some(o=>o&&o.id&&o.id===sit.conjugeId)?(fiscoBensComuns(sit)
+      ?' A tributação conjunta de '+ano+' está ligada sem cônjuge com conta, com os bens comuns do casal: nenhum imóvel teu tem um só dono fora da app, e as linhas ficam todas em teu nome.'
+      :' A tributação conjunta de '+ano+' está ligada sem cônjuge escolhido: entram só as tuas rendas.'):'';
   const quem=r.porInteiro?(r.semSessao?'Sem sessão não se sabe qual dos proprietários és: os valores vão por inteiro.':'Sem proprietários na ficha, os valores vão por inteiro.')
     :'A declaração é a tua: rendas, retenções e gastos entram pela tua quota-parte de cada imóvel.'+conj;
   const panel=anaPanel(`<div class="u-w-100pc">${sel('fiscoSel',String(ano),anos.map(y=>({v:String(y),label:String(y)})),'onFiscoAno','vista')}</div>
     <div class="hint u-mt-9px">${quem}${auto&&ano===YEAR-1?' Até junho mostra-se o ano anterior, que é o que se está a declarar.':''}</div>`);
   if(!r.imoveis){
     const deOutros=!r.porInteiro&&pidProps(null).some(p=>pode(p.id,'report.view'));
-    return panel+(esperaDoServidor()||(deOutros?`<div class="empty"><b>Nenhum imóvel teu</b>O Anexo F é de quem é dono, pela sua quota-parte (CIRS art. 19.º): aqui entram só os imóveis de que és proprietário. Quem só recebe as rendas por conta do dono não as declara.</div>`
+    return panel+(esperaDoServidor()||(deOutros?`<div class="empty"><b>Nenhum imóvel teu</b>O Anexo F é de quem tem direito às rendas, pela sua quota-parte (CIRS art. 19.º): o dono ou, havendo usufruto, o usufrutuário — e não quem tem só a nua-propriedade. Aqui entram só os imóveis de que és proprietário. Quem só recebe as rendas por conta do dono não as declara.</div>`
       :`<div class="empty"><b>Sem imóveis</b>O Anexo F parte das rendas de cada imóvel.
     ${saida('Adicionar imóvel',"go('properties')",'ecra')}</div>`));
   }
@@ -100,7 +111,11 @@ function vFisco(){
   /* nem um ano só com rendas fora do Anexo F — o Anexo J de um imóvel lá
      fora (D133) ou a categoria B (D134) —, que têm cartão próprio */
   const foraDoF=(Array.isArray(r.anexoJ)?r.anexoJ.length:0)+(Array.isArray(r.categoriaB)?r.categoriaB.length:0);
-  if(!r.linhas.length&&!q5&&!foraDoF&&!r.fora.length&&!r.semContrato.length){
+  /* nem um ano só com o quadro 10 — o contrato com redução que acabou antes
+     da primeira renda do ano — ou só com a regularização do n.º 20: vão na
+     declaração do ano em que o contrato acabou (CIRS art. 72.º n.º 20) */
+  const q10=(Array.isArray(r.cessados)?r.cessados.filter(Boolean).length:0)+(Array.isArray(r.regularizacoes)?r.regularizacoes.filter(Boolean).length:0);
+  if(!r.linhas.length&&!q5&&!foraDoF&&!q10&&!r.fora.length&&!r.semContrato.length){
     const outros=anos.filter(y=>y!==ano&&(db.transactions||[]).some(t=>ehRenda(t)&&String(t.date||'').startsWith(String(y))));
     return panel+`<div class="ana fis"><div class="empty"><b>Sem rendas em ${ano}</b>${fiscoFraseSemRendas(fiscoContratosSemRendas(r),ano)}${outros.length?'Há rendas em '+esc(outros.join(', '))+'. ':''}Uma renda entra aqui quando o movimento é da categoria Rendas e está ligado ao contrato.
       ${saida('Escolher outro ano','hdrFiltToggle()','vista')}</div></div>`;
@@ -115,7 +130,7 @@ function vFisco(){
     +`<div class="fis-grelha">`+fiscoObrigacoesCard(r)+fiscoSituacaoCard(r)+fisPrazosCard()+`</div>`
     +`<div class="fiscoPilha u-d-grid u-gtc-minmax-0-1fr u-g-14px">`
     +fiscoQuadroCard(r,Q.semReducao)+fiscoQuadroCard(r,Q.comReducao)+(q43?fiscoQuadroCard(r,q43):'')+fiscoQuadro5Card(r)+fiscoIsentosCard(r)+fiscoBeneficiosCard(r)+fiscoObrasCard(r)
-    +fiscoAnosAnterioresCard(r)+fiscoAimiCard(r)+fiscoAnexoJCard(r)+fiscoCategoriaBCard(r)+fiscoForaCard(r)+fiscoSemContratoCard(r)+fisNadaForaCard(r)+`</div>`
+    +fiscoAnosAnterioresCard(r)+fiscoAimiCard(r)+fiscoQuadro10Card(r)+fiscoAnexoJCard(r)+fiscoCategoriaBCard(r)+fiscoForaCard(r)+fiscoSemContratoCard(r)+fisNadaForaCard(r)+`</div>`
     +fiscoAvisoCard()+`</div>`;
 }
 /* Os contratos que estiveram em vigor no ano sem nenhuma renda registada
@@ -367,15 +382,18 @@ function fiscoRegularizacao(r){
 }
 /* O rótulo do botão de um aviso, pelo sítio que ele abre: a ficha de um
    contrato, de um inquilino, de um imóvel ou de um movimento, uma pergunta
-   do contrato (o «Responder» de contrato.js:ctIrParaPergunta), a lista dos
-   contratos, dos imóveis ou dos movimentos, as definições do IRS, ou o
-   «Marcar como enviado» do envio ao IHRU (prazos.js:pzIhruPergunta).
+   do contrato (o «Responder» de contrato.js:ctIrParaPergunta), as quotas de
+   um imóvel (imovel.js:imvAbrirQuotas, a janela das quotas ou a pergunta dos
+   donos fora da app), a lista dos contratos, dos imóveis ou dos movimentos,
+   as definições do IRS, ou o «Marcar como enviado» do envio ao IHRU
+   (prazos.js:pzIhruPergunta).
    Recebe: abrir — o código da ação do aviso.
    Devolve: o rótulo (texto). */
 function fiscoRotuloDoAviso(abrir){
   const a=String(abrir||'');
   if(/^pzIhruPergunta\(/.test(a))return 'Marcar como enviado';
   if(/^fiscoAvReporSplitwise\(/.test(a))return 'Repor o total';
+  if(/^imvAbrirQuotas\(/.test(a))return 'Indicar as quotas';
   if(/^ctResponderEmpresa\(/.test(a)||/^ctIrParaPergunta\(/.test(a))return 'Responder';
   if(/^ctView\(/.test(a))return 'Abrir contrato';
   if(/^personView\(/.test(a))return 'Abrir inquilino';
@@ -495,7 +513,10 @@ function fiscoLimiteDispensa(ano){
    num segmentado A/B, ficando o cônjuge com a outra (D30: as letras são só a
    posição no Rosto e não decidem que rendas entram); a nota de que só entram
    os imóveis do cônjuge que estão nesta app (D31), ou de que sem cônjuge
-   escolhido entram só as minhas rendas. A dispensa dos recibos eletrónicos
+   escolhido entram só as minhas rendas. Sem cônjuge com conta escolhido (o
+   casal em que só um usa a app, D5), a escolha «Os bens são comuns do
+   casal» (fiscoBensComunsHtml), e a nota de que os imóveis só do cônjuge
+   se inserem à mão no Portal das Finanças. A dispensa dos recibos eletrónicos
    noutro interruptor, com quem está dispensado nesse ano — o limite com o IAS
    do ano anterior (fiscoLimiteDispensa, D111) — e o Modelo 44 que isso obriga
    a entregar. Uma nota fixa diz as letras que a app não escreve (F no ano do
@@ -518,13 +539,17 @@ function fiscoSituacaoCard(r){
     const escolhido=s.conjugeId&&cands.indexOf(s.conjugeId)>-1?s.conjugeId:'';
     const campo=cands.length
       ?`<label class="fis-sit-nota fis-sit-campo">O teu cônjuge${sel('fiscoConjuge',escolhido,[{v:'',label:'Ninguém escolhido'}].concat(cands.map(o=>({v:o,label:nomeDe(o)}))),'fiscoSetConjuge','dados')}</label>`
-      :`<p class="hint fis-sit-nota">Não há outro proprietário nesta app para escolher como cônjuge: a parte do cônjuge só entra quando ele for proprietário de um imóvel que vês aqui.</p>`;
+      :`<p class="hint fis-sit-nota">Não há outro proprietário nesta app para escolher como cônjuge: o teu cônjuge não tem conta, ou não é proprietário de nenhum imóvel que vês aqui. Os imóveis só dele inserem-se à mão no Portal das Finanças, com a letra dele.</p>`;
+    /* o cônjuge sem conta (D5): os bens comuns do casal, em vez de metade */
+    const comuns=escolhido?'':fiscoBensComunsHtml(r,ano,fiscoBensComuns(s));
     const outra=s.minhaLetra==='B'?'A':'B';
     const letra=`<div class="fis-linha"><span class="fis-linha-txt"><b>A tua letra no Rosto</b><span class="small">${escolhido?esc(nomeDe(escolhido))+' fica com a '+outra:'O cônjuge fica com a outra'}</span></span><div class="segm fis-ab" role="group" id="fiscoMinhaLetra" aria-label="A tua letra no Rosto">${['A','B'].map(x=>
       `<button type="button" class="${s.minhaLetra===x?'on':''}" aria-pressed="${s.minhaLetra===x}" data-toca="dados" data-click="fiscoSetSituacao(${ano},'minhaLetra','${x}')">${x}</button>`).join('')}</div></div>`;
-    conj=`<p class="lbl fis-sit-lbl">Na declaração conjunta</p><input type="hidden" id="fiscoSitAno" value="${ano}">${campo}${letra}
+    conj=`<p class="lbl fis-sit-lbl">Na declaração conjunta</p><input type="hidden" id="fiscoSitAno" value="${ano}">${campo}${comuns}${letra}
     <p class="hint fis-sit-nota">A e B são a posição de cada um no Rosto da declaração: sujeito passivo A e sujeito passivo B. A letra não muda as rendas que entram: a conjunta junta as tuas e as do cônjuge, e cada linha do Anexo F leva a letra de quem é a renda. Um imóvel dos dois vai em duas linhas, uma por titular, cada uma com a sua quota-parte.</p>
-    <p class="hint fis-sit-nota">${escolhido?'Entram só os imóveis do cônjuge que vês nesta app, os partilhados contigo. Os que estão só na conta do cônjuge não chegam aqui: junta-os no Portal das Finanças, a partir do PDF ou do CSV da Declaração dessa conta.':'Sem cônjuge escolhido, a Declaração tem só as tuas rendas.'}</p>`;
+    <p class="hint fis-sit-nota">${escolhido?'Entram só os imóveis do cônjuge que vês nesta app, os partilhados contigo. Os que estão só na conta do cônjuge não chegam aqui: junta-os no Portal das Finanças, a partir do PDF ou do CSV da Declaração dessa conta.'
+      :fiscoBensComuns(s)?'Os imóveis só do cônjuge, que não estão nesta app, inserem-se à mão no Portal das Finanças, com a letra dele.'
+      :'Sem cônjuge escolhido, a Declaração tem só as tuas rendas. Os imóveis só do cônjuge, que não estão nesta app, inserem-se à mão no Portal das Finanças, com a letra dele.'}</p>`;
   }
   const herdada=s.deAno&&s.deAno!==String(ano)?' A de '+ano+' vem de '+esc(s.deAno)+'.':'';
   /* as linhas dos interruptores são <label>: tocar no texto (a linha inteira,
@@ -538,6 +563,33 @@ function fiscoSituacaoCard(r){
     <p class="hint fis-sit-nota">Em ${ano} tem dispensa quem a 31 de dezembro de ${ano-1} tinha 65 anos ou mais, ou quem não tem nem é obrigado a ter caixa postal eletrónica e recebeu rendas de ${ano-1} até ${fiscoLimiteDispensa(ano)} — e o arrendamento rural (Portaria 98-A/2015, art. 5.º). Quem se dispensa entrega o Modelo 44, a declaração anual das rendas de ${ano}, até ao fim de fevereiro de ${ano+1}. Quem passa recibos eletrónicos na mesma fica na regra geral: deixa isto desligado.</p>
     <p class="hint fis-sit-nota">As rendas na categoria B — porque optaste por ela (CIRS art. 4.º n.º 1 n)) ou porque o imóvel está afeto à tua atividade empresarial ou profissional (art. 3.º n.º 2 a)) — não vão ao Anexo F: marca-as em cada contrato, em «Rendas tributadas na categoria B», e a Declaração mostra-as à parte, para o Anexo B ou C.</p>
     <p class="hint fis-sit-nota">Cada ano tem a sua situação, a do último dia do ano (CIRS art. 13.º): o que mudas aqui vale para ${ano} e para os anos seguintes que não tenham a sua, e nunca muda os anteriores.${herdada}</p>`,'fis-sit');
+}
+/* A escolha «Os bens são comuns do casal» no cartão da situação (D5), em
+   conjunta sem cônjuge com conta escolhido — o caso de um casal em que só um
+   usa a app. Ligada, o resumo põe a parte do cônjuge numa linha do titular
+   dele, em cada imóvel com um só dono fora da app (esse dono é o cônjuge):
+   as rendas, as retenções e os gastos pela quota dele, em vez de ficarem de
+   fora. Diz o que fez, pelo r.bensComuns do resumo: os imóveis com a linha
+   do cônjuge (imoveis), os que têm mais do que um dono fora da app, onde não
+   se sabe qual é o cônjuge (porDecidir), e os que estão todos em meu nome,
+   cuja linha fica inteira na minha letra (soMeus). Grava ao mexer
+   (fiscoSetSituacao, campo bensComuns).
+   Recebe: r — o resumo (resumoFiscal); ano — o ano; on — a escolha de agora.
+   Devolve: o HTML da linha do interruptor e das notas (string). */
+function fiscoBensComunsHtml(r,ano,on){
+  const s=irsSituacao(ano,r.titularId||''),cf=r.conjugeFora||null;
+  const minha=s.minhaLetra==='B'?'B':'A',dele=(cf&&cf.letra)||(minha==='B'?'A':'B');
+  const nomes=xs=>esc(listaE((xs||[]).map(x=>String((x&&(x.imovel||x.nome))||'')).filter(Boolean)));
+  const bc=r.bensComuns&&typeof r.bensComuns==='object'?r.bensComuns:null;
+  const im=bc&&Array.isArray(bc.imoveis)?bc.imoveis.filter(Boolean):[],pd=bc&&Array.isArray(bc.porDecidir)?bc.porDecidir.filter(Boolean):[],sm=bc&&Array.isArray(bc.soMeus)?bc.soMeus.filter(Boolean):[];
+  /* a quota do cônjuge em fração (0 a 1); uma em % (até 100) também se lê */
+  const pct=q=>{const n=Number(q);return n>0?' '+fiscoPctQuota(n>1?n/100:n):''};
+  const estado=!on||!bc?'':[
+    im.length?`A parte do teu cônjuge vai numa linha do titular ${dele}: ${esc(listaE(im.map(x=>String(x.imovel||'')+(x.nome||Number(x.quota)>0?' ('+[x.nome||'',pct(x.quota).trim()].filter(Boolean).join(', ')+')':'')).filter(Boolean)))}.`:'',
+    pd.length?`Em ${nomes(pd)} há mais do que um dono fora da app, e a app não sabe qual é o teu cônjuge: a parte dele não entra — junta-a no Portal das Finanças, numa linha do titular ${dele} pela quota dele.`:'',
+    sm.length?`${nomes(sm)} ${sm.length>1?'estão todos':'está todo'} em teu nome na app: a linha fica inteira no titular ${minha}. Se uma parte é do teu cônjuge, escreve-o na ficha do imóvel em «Há outros donos fora da app?», com a quota dele.`:''].filter(Boolean).map(t=>`<p class="hint fis-sit-nota">${t}</p>`).join('');
+  return `<label class="fis-linha fis-linha-toque"><span class="fis-linha-txt"><b>Os bens são comuns do casal</b><span class="small">O teu cônjuge não tem conta nesta app</span></span><button type="button" class="interruptor" role="switch" id="fiscoBensComuns" aria-checked="${on?'true':'false'}" aria-label="Os bens são comuns do casal" data-toca="dados" data-click="fiscoSetSituacao(${ano},'bensComuns',${on?'false':'true'})"></button></label>
+    <p class="hint fis-sit-nota">Liga se os imóveis que tens aqui são do casal e o teu cônjuge não usa a app. Num imóvel com um só dono fora da app, esse dono é o teu cônjuge: a parte dele vai numa linha do titular ${dele}, com as rendas, as retenções e os gastos pela quota dele, em vez de ficar de fora da declaração.</p>${estado}`;
 }
 /* Grava uma mudança no bloco irs das definições e redesenha: lê-o completo
    (normIrsDefs), deixa fn mudá-lo, e guarda-o normalizado outra vez. A
@@ -581,8 +633,9 @@ function fisRepintar(adiar){
    mais perto, ou a dos campos de topo antigos, com o cônjuge que eles davam),
    sem os números do AIMI, que são de cada ano. Os campos de topo não se tocam:
    valem para os anos sem entrada, e mudá-los refazia os anos anteriores (a
-   Declaração de um ano já entregue mudava). Os campos: conjunta e
-   dispensaRecibos (true liga, o resto desliga); conjugeId (um proprietário
+   Declaração de um ano já entregue mudava). Os campos: conjunta,
+   dispensaRecibos e bensComuns (os bens são comuns do casal, D5; true liga,
+   o resto desliga); conjugeId (um proprietário
    que não sou eu, ou '' para nenhum); minhaLetra ('A' ou 'B'); aimi
    ({total, valorTributavel} da demonstração de liquidação — só mudam as
    chaves que vêm; € ≥ 0, ou null ou '' por indicar —, que o cartão do AIMI,
@@ -598,7 +651,7 @@ function fiscoSetSituacao(ano,campo,valor){
   if(!/^\d{4}$/.test(A))return false;
   const eu=fiscoEu();
   let novo;
-  if(campo==='conjunta'||campo==='dispensaRecibos')novo=valor===true;
+  if(campo==='conjunta'||campo==='dispensaRecibos'||campo==='bensComuns')novo=valor===true;
   else if(campo==='minhaLetra'){if(valor!=='A'&&valor!=='B')return false;novo=valor}
   else if(campo==='conjugeId'){
     novo=valor==null?'':String(valor);
@@ -609,7 +662,7 @@ function fiscoSetSituacao(ano,campo,valor){
   fiscoGravarIrs(d=>{
     if(!Object.prototype.hasOwnProperty.call(d.porAno,A)){
       const h=irsSituacao(A,eu);
-      d.porAno[A]={conjunta:h.conjunta,conjugeId:h.conjugeId,minhaLetra:h.minhaLetra,dispensaRecibos:h.dispensaRecibos,aimi:{total:null,valorTributavel:null}};
+      d.porAno[A]={conjunta:h.conjunta,conjugeId:h.conjugeId,minhaLetra:h.minhaLetra,dispensaRecibos:h.dispensaRecibos,bensComuns:h.bensComuns===true,aimi:{total:null,valorTributavel:null}};
     }
     const e=d.porAno[A];
     if(campo==='aimi'){
@@ -630,15 +683,18 @@ function fiscoSetConjuge(){
 /* Quem declara, por extenso, para o cabeçalho do texto e do PDF: o nome de
    quem tem a sessão e, em conjunta com o cônjuge, os dois, cada um com a
    sua letra — a das linhas do resumo (a do Rosto, D30); um titular sem linhas
-   leva a do fiscoLetra.
+   leva a do fiscoLetra. O cônjuge sem conta dos bens comuns do casal (D5,
+   r.conjugeFora: um titular que não é proprietário na app) leva o nome do
+   dono de fora que é ele, ou «o cônjuge», e a letra do resumo.
    Recebe: r — o resumo (resumoFiscal).
    Devolve: o texto ('' por inteiro). */
 function fiscoQuemDeclara(r){
   if(r.porInteiro)return '';
-  const nome=o=>(owner(o)||{}).name||'—';
+  const cf=r.conjugeFora&&r.conjugeFora.id?r.conjugeFora:null;
+  const nome=o=>fiscoEhConjugeFora(o)?(String((cf&&o===cf.id&&cf.nome)||'').trim()||'o cônjuge'):(owner(o)||{}).name||'—';
   if(r.titulares.length<2)return nome(r.titularId);
   const letra={};(r.linhas||[]).forEach(l=>{if(l&&l.titularId&&l.titular&&!(l.titularId in letra))letra[l.titularId]=l.titular});
-  return listaE(r.titulares.map(o=>nome(o)+' ('+(letra[o]||fiscoLetra(o,r.ano))+')'));
+  return listaE(r.titulares.map(o=>nome(o)+' ('+(letra[o]||(cf&&o===cf.id&&cf.letra)||fiscoLetra(o,r.ano))+')'));
 }
 /* aplica o ano escolhido no seletor e volta a desenhar
    Devolve: nada — guarda o ano e redesenha a vista. */

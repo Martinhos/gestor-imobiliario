@@ -169,6 +169,18 @@ function pzDiaDaCessacao(c,h){
   const d=irsCessacao(c).data;if(d)return d;
   return c&&c.active===false&&c.end&&c.end<=h?c.end:'';
 }
+/* Uma cessação ainda acende o «Comunicar a cessação à AT» nos prazos? Só a
+   do ano de hoje ou a do anterior — o limite da comunicação de fevereiro —,
+   venha o dia do «Terminar» (fisco.cessacao) ou do fim de um contrato
+   terminado de antes dele: a de antes já não pesa em nenhuma declaração por
+   entregar, e quem regista contratos antigos já a comunicou há anos. A
+   ficha do contrato continua a dizer, sem alarme, que se comunica
+   (contrato.js:ctAtDaFicha).
+   Recebe: dia — o dia em que acabou ('AAAA-MM-DD'); h — o hoje dos prazos.
+   Devolve: true ou false. */
+function pzCessacaoRecente(dia,h){
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(dia||''))&&String(dia)>=(Number(String(h||pzHoje()).slice(0,4))-1)+'-01-01';
+}
 
 /* O prazo do envio ao IHRU de um contrato do RSAA (DL 97/2026, anexo III,
    art. 6.º n.º 3): o 15 de janeiro do ano seguinte ao da celebração (o
@@ -237,8 +249,9 @@ function pzPodeMarcar(c){return !!c&&!!podeEditar(c.propertyId,'contract.add',c)
    energéticos, o fim da fase fixa das mistas e o de uma redução de spread.
    E a AT: o Modelo 2 dos por indicar começados desde 1 de abril de 2015 (os
    de antes, um aviso sem data: os elementos mínimos e o n.º); a cessação de
-   quem acabou mesmo, pelo dia em que acabou (pzDiaDaCessacao), nunca a de um
-   ativo com o termo passado, que se renovou; os recibos das receitas que os
+   quem acabou mesmo, pelo dia em que acabou (pzDiaDaCessacao), só do ano de
+   hoje ou do anterior (pzCessacaoRecente), nunca a de um ativo com o termo
+   passado, que se renovou; os recibos das receitas que os
    pedem (PZ_PAPEIS_RECIBO) dos últimos três meses, desde o dia em que se
    receberam, salvo com a dispensa nesse ano; o Anexo F do ano anterior; o 15
    de fevereiro dos declarados com redução pela duração, um por período por
@@ -351,7 +364,7 @@ function prazosDe(hoje){
        havia era o do Modelo 2). Uma receita com data à frente ainda não se
        recebeu */
     if(c&&ctDeclarado(c)&&pede&&!t.recibo&&t.date>=desde&&t.date<=h&&!dispensaEm(Number(t.date.slice(0,4)))){
-      const reembolso=catIrsId('catsIn',t.category)==='reembolsos';
+      const reembolso=txCatIrsId(t)==='reembolsos';
       const o=papel==='caucao'
         ?'Caução recebida a '+dPT(t.date)+': a AT trata-a como renda do ano em que a recebes, com recibo eletrónico. Emite-o no Portal das Finanças e marca-o no movimento.'
         :reembolso
@@ -411,7 +424,8 @@ function prazosDe(hoje){
        duração a comunicar em fevereiro (D134) */
     const fimR=pzDiaDaCessacao(c,h),segR=fimR&&!catB?irsTaxaNaData(c,fimR):null,comRed=!!(segR&&segR.reducao);
     const fev15Ces=comRed?irsAno(Number(fimR.slice(0,4))).prazos.comunicacaoDuracao:'';
-    if(fimR){
+    /* a de antes do ano anterior fica calada (pzCessacaoRecente) */
+    if(fimR&&pzCessacaoRecente(fimR,h)){
       const alvo=fimDoMesSeguinte(fimR);
       poe('cessacao',c.id+':'+alvo,alvo,'Comunicar a cessação à AT — '+nome,
         'Até '+dPT(alvo)+', o fim do mês seguinte ao da cessação: o contrato acabou a '+dPT(fimR)+'. O Modelo 2 também serve para a cessação.'

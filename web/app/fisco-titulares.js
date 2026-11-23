@@ -36,6 +36,8 @@ function fiscoSituacaoDoAno(ano,eu){
 function fiscoLetra(oid,ano,defs){
   const s=fiscoSituacaoDoAno(ano,'');
   if(!s.conjunta)return 'A';
+  /* o cônjuge sem conta dos bens comuns do casal leva a outra letra (D5) */
+  if(fiscoEhConjugeFora(oid))return s.minhaLetra==='B'?'A':'B';
   if(s.deAno)return s.conjugeId&&oid===s.conjugeId?(s.minhaLetra==='B'?'A':'B'):s.minhaLetra;
   const d=defs||fiscoIrsDefs();
   return d.titulares[oid]==='B'?'B':'A';
@@ -50,28 +52,74 @@ function fiscoEu(){
   const os=db.owners||[];
   return os.length===1?os[0].id:'';
 }
+/* O cônjuge sem conta nos bens comuns do casal (D5): um titular da Declaração
+   que não é proprietário na app. O id dele é este prefixo e o id de quem
+   declara (fiscoConjugeForaId), para a quota dele se ler da casa de quem
+   declara (fiscoQuotaDoConjugeFora) sem mais nada à volta. */
+const FISCO_CONJUGE_FORA='conjuge~';
+/* O id do cônjuge sem conta de quem declara (FISCO_CONJUGE_FORA).
+   Recebe: eu — o id de quem declara.
+   Devolve: o id (texto). */
+function fiscoConjugeForaId(eu){return FISCO_CONJUGE_FORA+String(eu||'')}
+/* O id é o do cônjuge sem conta dos bens comuns (fiscoConjugeForaId)? Quem
+   mostra um titular pelo nome usa-o: este não está em db.owners, e o nome
+   vem do resumo (r.conjugeFora.nome).
+   Recebe: o — o id de um titular (aguenta tudo).
+   Devolve: true ou false. */
+function fiscoEhConjugeFora(o){return typeof o==='string'&&o.indexOf(FISCO_CONJUGE_FORA)===0&&o.length>FISCO_CONJUGE_FORA.length}
+/* Os bens são comuns do casal neste ano (D5)? A escolha da situação do ano
+   (irs-papeis.js:irsSituacao, porAno[AAAA].bensComuns — herdada como a
+   conjunta; enquanto a situação não a trouxer, lida da entrada do ano dela em
+   settings.irs.porAno), e só com a tributação conjunta.
+   Recebe: s — a situação do ano (fiscoSituacaoDoAno).
+   Devolve: true ou false. */
+function fiscoBensComuns(s){
+  if(!s||!s.conjunta)return false;
+  if(typeof s.bensComuns==='boolean')return s.bensComuns;
+  const pa=((db.settings&&db.settings.irs)||{}).porAno,e=pa&&s.deAno&&pa[s.deAno];
+  return !!(e&&e.bensComuns===true);
+}
+/* A quota do cônjuge sem conta num imóvel numa data, nos bens comuns do casal
+   (D5): a do dono fora da app desse dia, quando quem declara tem quota nesse
+   dia e há UM só dono de fora — é ele o cônjuge. Com dois ou mais não se
+   adivinha qual é (0, e o resumo di-lo em bensComuns.porDecidir); sem nenhum,
+   a casa é só de quem declara na app (0: a linha fica inteira no titular dele).
+   Recebe: p — o imóvel; eu — o id de quem declara; data — 'AAAA-MM-DD' (vazia: hoje).
+   Devolve: a quota (0 a 1). */
+function fiscoQuotaDoConjugeFora(p,eu,data){
+  if(!p||!eu||!(fiscoQuota(p,eu,data)>0))return 0;
+  const fs=quotasForaNaData(p,data);
+  return fs.length===1?Math.max(0,Math.min(100,Number(fs[0].quota)||0))/100:0;
+}
 /* Os titulares da Declaração de um ano (D30, D91): eu e, em tributação
    conjunta nesse ano, o cônjuge escolhido (o conjugeId da situação do ano,
    irs-papeis.js:irsSituacao), seja qual for a letra de cada um — nunca «todos
    os de letra diferente da minha», que punha na conjunta os irmãos e os
    sócios com quem tenho casas. Cada um entra pela sua quota-parte, com a sua
    letra (fiscoLetra). Conjunta sem cônjuge escolhido (ou com um que já não é
-   proprietário na app): só eu, e semConjuge di-lo. Sem saber quem és
-   (fiscoEu vazio, ou '' pedido de propósito), ninguém: os valores vão por
-   inteiro, de todos os proprietários, e com vários sem sessão diz-se.
+   proprietário na app): só eu, e semConjuge di-lo; com os bens comuns do
+   casal (fiscoBensComuns, D5), entra o cônjuge sem conta
+   (fiscoConjugeForaId), pela quota do dono de fora de cada casa minha
+   (fiscoQuotaDoConjugeFora). Sem saber quem és (fiscoEu vazio, ou '' pedido
+   de propósito), ninguém: os valores vão por inteiro, de todos os
+   proprietários, e com vários sem sessão diz-se.
    Recebe: eu (opcional) — o id de quem declara; omitido, o fiscoEu; '' para
    por inteiro; ano (opcional) — o ano dos rendimentos (por omissão, o corrente).
-   Devolve: {eu, ids, porInteiro, semSessao, conjunta, semConjuge} — ids os
-   titulares, eu à cabeça ([] por inteiro); semSessao true quando é por
-   inteiro por não haver sessão e haver mais do que um proprietário;
-   conjunta a do ano; semConjuge true em conjunta sem o cônjuge na lista. */
+   Devolve: {eu, ids, porInteiro, semSessao, conjunta, semConjuge,
+   conjugeFora} — ids os titulares, eu à cabeça ([] por inteiro); semSessao
+   true quando é por inteiro por não haver sessão e haver mais do que um
+   proprietário; conjunta a do ano; semConjuge true em conjunta sem um
+   cônjuge com conta na lista (também com o cônjuge sem conta dos bens
+   comuns); conjugeFora true quando esse entra. */
 function fiscoTitulares(eu,ano){
   const auto=eu===undefined||eu===null;
   if(auto)eu=fiscoEu();
-  if(!eu)return {eu:'',ids:[],porInteiro:true,semSessao:auto&&(db.owners||[]).length>1,conjunta:false,semConjuge:false};
+  if(!eu)return {eu:'',ids:[],porInteiro:true,semSessao:auto&&(db.owners||[]).length>1,conjunta:false,semConjuge:false,conjugeFora:false};
   const s=fiscoSituacaoDoAno(ano,eu),ids=[eu],cj=s.conjunta?s.conjugeId:'';
   if(cj&&cj!==eu&&(db.owners||[]).some(o=>o&&o.id===cj))ids.push(cj);
-  return {eu:eu,ids:ids,porInteiro:false,semSessao:false,conjunta:!!s.conjunta,semConjuge:!!s.conjunta&&ids.length<2};
+  const semConjuge=!!s.conjunta&&ids.length<2,fora=semConjuge&&fiscoBensComuns(s);
+  if(fora)ids.push(fiscoConjugeForaId(eu));
+  return {eu:eu,ids:ids,porInteiro:false,semSessao:false,conjunta:!!s.conjunta,semConjuge:semConjuge,conjugeFora:fora};
 }
 /* O titular de uma linha: a letra do titular dela; por inteiro (sem saber
    quem és), as letras dos donos do imóvel com quota — «A/B» num imóvel dos
@@ -113,12 +161,15 @@ function fiscoDiasDasQuotas(p,ano){
    em que era dono. Sem titular (a declaração por inteiro, sem saber quem
    és), a parte dos donos da app: a casa inteira menos a dos de fora nesse
    dia — o que é de quem não está na app não é de declaração nenhuma daqui.
+   O cônjuge sem conta dos bens comuns (fiscoEhConjugeFora) tem a quota do
+   dono de fora (fiscoQuotaDoConjugeFora, D5).
    Recebe: p — o imóvel; o — o id do titular ('' por inteiro); data — a data
    'AAAA-MM-DD' do movimento (vazia: hoje).
    Devolve: a quota (0 a 1). */
 function fiscoQuota(p,o,data){
   if(!p)return o?0:1;
   if(!o)return Math.max(0,100-Math.min(100,sum(quotasForaNaData(p,data).map(f=>Number(f.quota)||0))))/100;
+  if(fiscoEhConjugeFora(o))return fiscoQuotaDoConjugeFora(p,o.slice(FISCO_CONJUGE_FORA.length),data);
   const q=Number(quotasFiscais(p,data)[o]);
   return q>0?q:0;
 }
@@ -142,14 +193,14 @@ function fiscoQuotaNoAno(p,o,ano){
    habitação e os terrenos para construção ficam sujeitos. */
 const FISCO_AIMI_AFETACOES_FORA={comercio:'afetação de comércio',servicos:'afetação de serviços',industria:'afetação de indústria',outros:'afetação de outros fins'};
 /* Uma despesa é o AIMI: Impostos › AIMI pelo id da categoria (o nome pode
-   mudar — dados.js:catIrsId), ou pelos nomes de origem quando a árvore não o
-   tem.
+   mudar — dados.js:txCatIrsId: a marca do movimento, a árvore desta conta, o
+   nome de origem), ou pelos nomes de origem quando nada o tem.
    Recebe: t — o movimento.
    Devolve: true/false. */
 function fiscoEhAimi(t){
   if(!t||t.kind!=='expense')return false;
   const cat=String(t.category||'').trim(),sub=String(t.sub||'').trim();
-  const id=sub&&typeof catIrsId==='function'?catIrsId('cats',cat,sub):'';
+  const id=sub?txCatIrsId(t,true):'';
   return id==='impostos/aimi'||(!id&&cat==='Impostos'&&sub==='AIMI');
 }
 /* Porque é que um prédio fica fora do quadro 9 (D71): o AIMI só incide nos
@@ -158,11 +209,18 @@ function fiscoEhAimi(t){
    pela finalidade do contrato, que é o uso que o inquilino lhe dá — nem nos
    habitacionais arrendados no Programa de Apoio ao Arrendamento (n.º 2;
    desde 1/9/2026 lê-se RSAA, DL 97/2026 art. 14.º a)): um prédio cujas
-   linhas do ano são todas isentas por um desses programas.
-   Recebe: p — o imóvel; ls — as linhas do ano desse imóvel (array).
-   Devolve: {motivo:'rustico'|'afetacao'|'paa', porque} ou null quando o AIMI
-   incide. */
-function fiscoAimiExclusao(p,ls){
+   linhas do ano são todas isentas por um desses programas. Nem num prédio
+   comprado depois de 1 de janeiro do ano (p.purchaseDate): a titularidade do
+   AIMI afere-se nesse dia (CIMI art. 135.º-A n.º 3), e o AIMI pago no ano —
+   o desse mesmo ano, art. 135.º-H — não incidiu sobre ele (N070). Sem a data
+   de compra a app não sabe, e o prédio fica.
+   Recebe: p — o imóvel; ls — as linhas do ano desse imóvel (array); ano
+   (opcional) — o ano dos rendimentos (sem ele, a compra não se olha).
+   Devolve: {motivo:'compra'|'rustico'|'afetacao'|'paa', porque} ou null
+   quando o AIMI incide. */
+function fiscoAimiExclusao(p,ls,ano){
+  const A=String(ano||''),pd=String(p.purchaseDate||'');
+  if(/^\d{4}$/.test(A)&&/^\d{4}-\d{2}-\d{2}$/.test(pd)&&pd>A+'-01-01')return {motivo:'compra',porque:'comprado depois de 1 de janeiro: o AIMI deste ano não incidiu sobre ele'};
   if(p.tipoPredio==='R')return {motivo:'rustico',porque:'prédio rústico'};
   const af=FISCO_AIMI_AFETACOES_FORA[p.afetacao];
   if(af)return {motivo:'afetacao',porque:af};
@@ -178,7 +236,9 @@ function fiscoAimiExclusao(p,ls){
    declaração; de outro, não conta. O «Fora dos totais» não a tira. Sem «pago
    por» num imóvel com mais do que um dono na app vai também a semPagador.
    Os prédios do quadro 9 são os que deram rendas e sobre os quais o AIMI
-   incide (fiscoAimiExclusao); os de fora vão a excluidos, com o porquê. O VPT
+   incide (fiscoAimiExclusao, com o comprado depois de 1 de janeiro); os de
+   fora vão a excluidos, com o porquê, e não pesam no VPT de nenhum dos lados
+   da conta (nem com os números da demonstração). O VPT
    de cada um é o da quota dos titulares (quotaDe: a matriz diz a parte de
    cada comproprietário). Com os números da demonstração de liquidação do ano
    (irsSituacao(ano).aimi, em demonstracao), a parte que abate à coleta (CIMI
@@ -216,7 +276,7 @@ function fiscoAimi(ano,semImovel,props,quotaDe,L,imposto){
   if(!n&&!(demonstracao&&demonstracao.total>0))return null;
   const linhasDe={};L.forEach(l=>{if(props[l.propertyId])(linhasDe[l.propertyId]||(linhasDe[l.propertyId]=[])).push(l)});
   const vptDe=p=>(Number(p.vpt)||0)*quotaDe(p),fora={},excluidos=[];
-  Object.keys(props).forEach(k=>{const p=props[k],ls=linhasDe[k]||[],x=fiscoAimiExclusao(p,ls);
+  Object.keys(props).forEach(k=>{const p=props[k],ls=linhasDe[k]||[],x=fiscoAimiExclusao(p,ls,A);
     if(x){fora[k]=1;excluidos.push({propertyId:p.id,imovel:p.name,motivo:x.motivo,porque:x.porque,arrendado:ls.length>0})}});
   const vistos={},predios=[],arr=[];
   L.forEach(l=>{const p=props[l.propertyId];if(!p||vistos[p.id]||fora[p.id])return;vistos[p.id]=1;arr.push(p);

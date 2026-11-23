@@ -205,7 +205,7 @@ describe('o inquilino pessoa coletiva num contrato de habitação (D47)', () => 
   test('sem a confirmação é uma falta, e a app não muda a natureza nem a taxa', () => {
     const c = ct({ tenantIds: ['emp'], start: '2025-01-01', end: '2034-12-31', fisco: { finalidade: 'hp' } });
     const a = avisos(resumo([linha(c, { natureza: '07', quadro: '4.2', taxa: 10 })]), /pessoa|empresa|quem lá mora/);
-    assert.deepEqual(a, [{ texto: 'Contrato Loja: arrendamento de habitação a Empresa, Lda., com NIF de empresa ou de outra entidade. Confirma se o contrato identifica quem lá mora e proíbe a sublocação: sem isso, a AT trata o arrendamento como não habitacional (natureza 06, 28 %, sem a redução pela duração). A app mantém a finalidade escolhida até o confirmares',
+    assert.deepEqual(a, [{ texto: 'Contrato Loja: arrendamento de habitação a Empresa, Lda., com NIF de empresa ou de outra entidade. Confirma se o contrato identifica pelo nome quem lá mora: sem isso, a AT trata o arrendamento como não habitacional (natureza 06, 28 %, sem a redução pela duração). A app mantém a finalidade escolhida até responderes',
       abrir: "ctResponderEmpresa('C1')", toca: 'camada', nivel: 'falta' }]);
     rendas('C1', 2026, [1, 2, 3]);
     const r = app.resumoFiscal(2026, 'o1');
@@ -214,16 +214,29 @@ describe('o inquilino pessoa coletiva num contrato de habitação (D47)', () => 
     assert.ok(r.avisos.some((x) => /^Contrato Loja: arrendamento de habitação a Empresa, Lda\., com NIF de empresa/.test(x.texto) && x.nivel === 'falta'));
   });
 
-  test('com «não» é uma falta que manda mudar a finalidade; com «sim», num não habitacional ou com um particular, nada', () => {
-    const c = ct({ tenantIds: ['emp'], fisco: { finalidade: 'hnp', empresaHabitacao: false } });
-    const a = avisos(resumo([linha(c)]), /quem lá mora/);
+  test('com «não» a linha já vai como não habitacional e só se diz; o «não» antigo fica por responder; com «sim», num não habitacional ou com um particular, nada', () => {
+    // D16: só conta a identificação de quem lá mora (fisco.empresaMorador, lido por irsEmpresaMorador)
+    const c = ct({ tenantIds: ['emp'], fisco: { finalidade: 'hnp', empresaMorador: false } });
+    const a = avisos(resumo([linha(c, { empresaNaoHabitacional: true })]), /quem lá mora/);
     assert.equal(a.length, 1);
-    assert.equal(a[0].nivel, 'falta');
-    assert.match(a[0].texto, /^Contrato Loja: o contrato com Empresa, Lda\. não identifica quem lá mora, ou não proíbe a sublocação — para a AT o arrendamento é não habitacional \(natureza 06, 28 %, sem a redução pela duração\)\. Muda a finalidade do contrato para não habitacional$/);
-    assert.equal(a[0].abrir, "ctView('C1')", 'respondido «não»: abre a ficha, onde se muda a finalidade');
+    assert.equal(a[0].nivel, 'info');
+    assert.equal(a[0].texto, 'Contrato Loja: o contrato com Empresa, Lda. não identifica quem lá mora — para a AT o arrendamento é não habitacional (natureza 06, 28 %, sem a redução pela duração), e a Declaração já o conta assim');
+    assert.equal(a[0].abrir, "ctView('C1')");
+    // um resumo sem a marca da linha: a falta manda mudar a finalidade, sem falar da sublocação
+    const b = avisos(resumo([linha(c)]), /quem lá mora/);
+    assert.equal(b[0].nivel, 'falta');
+    assert.match(b[0].texto, /^Contrato Loja: o contrato com Empresa, Lda\. não identifica quem lá mora — para a AT o arrendamento é não habitacional \(natureza 06, 28 %, sem a redução pela duração\)\. Muda a finalidade do contrato para não habitacional$/);
+    assert.doesNotMatch(b[0].texto, /subloca/);
+    // o «não» antigo (empresaHabitacao) não diz qual das duas faltava: fica por responder
+    delete c.fisco.empresaMorador; c.fisco.empresaHabitacao = false;
+    const d = avisos(resumo([linha(c)]), /quem lá mora/);
+    assert.equal(d[0].abrir, "ctResponderEmpresa('C1')");
+    assert.match(d[0].texto, /Confirma se o contrato identifica pelo nome quem lá mora/);
     c.fisco.empresaHabitacao = true;
+    assert.equal(avisos(resumo([linha(c)]), /quem lá mora/).length, 0, 'confirmado (o «sim» antigo)');
+    c.fisco.empresaHabitacao = null; c.fisco.empresaMorador = true;
     assert.equal(avisos(resumo([linha(c)]), /quem lá mora/).length, 0, 'confirmado');
-    c.fisco.empresaHabitacao = null; c.fisco.finalidade = 'nh';
+    c.fisco.empresaMorador = null; c.fisco.finalidade = 'nh';
     assert.equal(avisos(resumo([linha(c)]), /quem lá mora/).length, 0, 'não habitacional');
     c.fisco.finalidade = 'hp'; c.tenantIds = ['t1'];
     assert.equal(avisos(resumo([linha(c)]), /quem lá mora/).length, 0, 'particular');
@@ -312,7 +325,11 @@ describe('o fim do contrato: o dia, o motivo e a regularização (D02, D09, D10)
     assert.deepEqual(a, [{ texto: 'Contrato Loja: acabou antes do prazo por motivo do senhorio (o motivo 01 do quadro 10). A redução pela duração do período em que acabou cai (CIRS art. 72.º n.º 20), e a diferença de imposto dos anos dele já declarados paga-se com esta declaração, com juros compensatórios — a app estima '
       + app.euroS(9000) + ' sem os juros (2024: ' + app.euroS(4500) + '; 2025: ' + app.euroS(4500) + ')',
       abrir: "ctView('C1')", toca: 'camada', nivel: 'falta' }]);
-    assert.equal(avisos(resumo([], { regularizacoes: [Object.assign({}, reg, { anos: [], total: 0 })] }), /senhorio/).length, 0);
+    // sem diferença e sem anos em falta, nada; com os anos do período sem rendas na app, a regularização é devida na mesma (N031)
+    assert.equal(avisos(resumo([], { regularizacoes: [Object.assign({}, reg, { anos: [], total: 0, anosEmFalta: [] })] }), /senhorio/).length, 0);
+    const f = avisos(resumo([], { regularizacoes: [Object.assign({}, reg, { anos: [], total: 0, anosEmFalta: [2024, 2025] })] }), /senhorio/);
+    assert.equal(f.length, 1);
+    assert.match(f[0].texto, /com juros compensatórios\. Faltam os anos 2024 e 2025, de que a app não tem rendas: a diferença deles regulariza-se na mesma\./);
   });
 });
 
@@ -356,14 +373,18 @@ describe('o prejuízo de anos anteriores (Q10)', () => {
 
 describe('a conjunta sem o cônjuge e o AIMI do quadro 9 (D30, D32, D71)', () => {
   test('a conjunta ligada sem o cônjuge escolhido é uma falta: só entram as tuas rendas', () => {
-    const texto = 'Tributação conjunta sem o cônjuge escolhido: só entram as tuas rendas. Escolhe-o em «A tua situação em 2026».';
+    // sem ninguém para escolher (D5, N020): diz o que fazer, em vez de mandar escolher
+    const texto = 'Tributação conjunta sem o cônjuge na app: só entram as tuas rendas. Os imóveis do teu cônjuge que não estão na app inserem-se à mão no Portal das Finanças, '
+      + 'e uma casa que é um bem comum do casal conta-se com o cônjuge escrito na ficha como dono fora da app e «Os bens são comuns do casal» ligado em «A tua situação em 2026».';
     assert.deepEqual(avisos(resumo([], { semConjuge: true }), /conjunta/), [{ texto, abrir: '', toca: '', nivel: 'falta' }]);
     assert.equal(avisos(resumo([], { semConjuge: false }), /conjunta/).length, 0);
     // sem o campo no resumo, pergunta-se aos titulares de quem declara
     app.db.owners.push(app.normPerson({ id: 'o2', name: 'Rui' }));
     app.db.settings.irs.porAno = { 2026: { conjunta: true, conjugeId: '', minhaLetra: 'A' } };
     assert.equal(app.fiscoTitulares('o1', 2026).semConjuge, true, 'a forma dos titulares');
-    assert.equal(avisos(resumo([], { titularId: 'o1' }), /conjunta/).length, 1);
+    const comQuem = avisos(resumo([], { titularId: 'o1' }), /conjunta/);
+    assert.equal(comQuem.length, 1);
+    assert.match(comQuem[0].texto, /^Tributação conjunta sem o cônjuge escolhido: só entram as tuas rendas\. Se o teu cônjuge tem conta na app, escolhe-o em «A tua situação em 2026»; se não tem, /);
     app.db.settings.irs.porAno = { 2026: { conjunta: true, conjugeId: 'o2', minhaLetra: 'A' } };
     app.db.properties[0].ownerIds = ['o1', 'o2'];
     assert.equal(avisos(resumo([], { titularId: 'o1' }), /conjunta/).length, 0, 'com o cônjuge escolhido');

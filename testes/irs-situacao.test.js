@@ -92,7 +92,7 @@ describe('D91: a situação é de cada ano', () => {
     app.db.settings.irs = app.normIrsDefs({ conjunta: false, dispensaRecibos: true });
     assert.equal(app.fiscoSetSituacao(2026, 'conjunta', true), true);
     const irs = app.db.settings.irs;
-    assert.deepEqual(copia(irs.porAno), { 2026: { conjunta: true, conjugeId: '', minhaLetra: 'A', dispensaRecibos: true, aimi: { total: null, valorTributavel: null } } });
+    assert.deepEqual(copia(irs.porAno), { 2026: { conjunta: true, conjugeId: '', minhaLetra: 'A', dispensaRecibos: true, bensComuns: false, aimi: { total: null, valorTributavel: null } } });
     assert.equal(irs.conjunta, false, 'o topo não se toca');
     assert.equal(irs.dispensaRecibos, true);
     assert.equal(app.irsSituacao(2025, 'ana').conjunta, false, '2025 fica separada');
@@ -126,7 +126,7 @@ describe('D91: a situação é de cada ano', () => {
     app.db.settings.irs = app.normIrsDefs({ porAno: { 2024: { conjunta: true, conjugeId: 'rui', minhaLetra: 'B', dispensaRecibos: true, aimi: { total: 100, valorTributavel: 200 } } } });
     assert.match(textoDe(cartao(2026)), /A de 2026 vem de 2024\./);
     app.fiscoSetSituacao(2026, 'dispensaRecibos', false);
-    assert.deepEqual(copia(app.db.settings.irs.porAno[2026]), { conjunta: true, conjugeId: 'rui', minhaLetra: 'B', dispensaRecibos: false, aimi: { total: null, valorTributavel: null } });
+    assert.deepEqual(copia(app.db.settings.irs.porAno[2026]), { conjunta: true, conjugeId: 'rui', minhaLetra: 'B', dispensaRecibos: false, bensComuns: false, aimi: { total: null, valorTributavel: null } });
     app.db.settings.irs.porAno[2024].conjunta = false;
     app.fiscoSetSituacao(2026, 'minhaLetra', 'A');
     assert.equal(app.db.settings.irs.porAno[2026].conjunta, true, 'já tem a sua: não se copia outra vez');

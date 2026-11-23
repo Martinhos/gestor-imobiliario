@@ -221,13 +221,14 @@ describe('D68 — as despesas sem imóvel', () => {
 });
 
 describe('D08 — o imóvel por inteiro sem os donos fora da app confirmados', () => {
-  test('por confirmar: âmbar, com o toque na ficha do imóvel', () => {
+  test('por confirmar: âmbar, com o toque nas quotas do imóvel', () => {
     imovel({ comproprietariosFora: null }); contrato();
     rendas(800);
     const a = avisos(/por inteiro nesta declaração/);
+    // o toque abre a pergunta das quotas (imovel.js:imvAbrirQuotas — N135)
     assert.deepEqual(a, [{ texto: 'Imóvel T2 Arroios: conta por inteiro nesta declaração, e não está confirmado que não há outros donos. Se a casa tem donos fora da app (um irmão, um herdeiro), '
       + 'escreve-os com a quota de cada um na ficha do imóvel, em «Há outros donos fora da app?» — cada um declara só a sua parte (CIRS art. 19.º); se é só tua, escolhe «Não, mais ninguém»',
-      abrir: "propView('v1')", toca: 'camada', nivel: 'aviso' }]);
+      abrir: "imvAbrirQuotas('v1')", toca: 'camada', nivel: 'aviso' }]);
   });
 
   test('com «Não, mais ninguém», com os de fora escritos ou com dois donos na app, não', () => {

@@ -119,10 +119,10 @@ donosDoFormulario = function () { return CW.user ? cwOwnersBlock() : ''; };
    e, se houver proposta pendente, as novas — com os de fora e o dia em que
    começam, se ela os traz (imovel.js:imvQuotasDaProposta) — e os botões de
    confirmar/rejeitar (ou cancelar, para quem já confirmou); sem proposta, o
-   botão de propor. Com um só dono, diz o que se sabe dos donos fora da app
-   (por confirmar, «não há outros», ou quem e com que quota) e abre a mesma
-   janela para os indicar (imovel.js:imvQuotasSoTeu, D08), e explica como
-   partilhar.
+   botão de propor. Com um só dono (um imóvel novo incluído), a própria
+   pergunta «Há outros donos fora da app?», que se responde e grava com o
+   imóvel (imovel.js:imvQuotasSoTeu, D08, N059 — a janela das quotas fica
+   para mais de uma conta), e explica como partilhar.
    Lê o imóvel "vivo" da base, não o rascunho do formulário. É um grupo do
    formulário (.sect, como os outros), com o título no cabeçalho.
    Devolve: o HTML (texto) da secção, pronto a entrar no corpo do formulário. */
@@ -150,7 +150,7 @@ function cwOwnersBlock() {
       '. <a href="#" class="u-c-v-accent" data-toca="ecra" data-click="event.preventDefault();cwGerirColaboradores()">Gerir</a></div>'
     : '';
   if (parts.length < 2) {
-    // os donos fora da app e a janela das quotas são dos Imóveis (imovel.js:imvQuotasSoTeu)
+    // a pergunta dos donos fora da app é dos Imóveis (imovel.js:imvQuotasSoTeu)
     return grupo('Proprietários', '<div class="hint">Este imóvel é só teu na app.</div>' +
       (servicoLigado('properties') ? imvQuotasSoTeu(live, myId) : '') +
       '<div class="hint">Para o teres em compropriedade com outra conta, partilha-o com outro utilizador em <b>Pessoas → Proprietários</b>.</div>' + colabHtml);
@@ -223,7 +223,9 @@ function refreshPropModal(hid) {
    Recebe: hid — o id da casa; shares — {userId: percentagem}, a somar 100;
    extra (opcional) — {fora, desde}: os comproprietários fora da app (null,
    [] ou [{id?, nome, quota}], só quando mudam) e o primeiro dia das quotas
-   novas ('AAAA-MM-DD', só quando a mudança tem data) — worker/src/rotas/casas.js:propostaDoCorpo.
+   novas ('AAAA-MM-DD', só quando a mudança tem data; 'sempre' quando valem
+   também para trás — a primeira resposta e quem acabou de entrar, N018/N019)
+   — worker/src/rotas/casas.js:propostaDoCorpo.
    Devolve: a promessa da API (POST /api/houses/:hid/proposal). */
 function enviarProposta(hid, shares, extra) {
   var corpo = { shares: shares };
@@ -236,8 +238,9 @@ function enviarProposta(hid, shares, extra) {
    (imovel.js:imvPropostaAbrir — as percentagens da casa toda, os donos fora
    da app e desde quando valem); daqui só sai pela rota (enviarProposta).
    Sem os Imóveis nesta conta, segue para a próxima proposta em fila.
-   Recebe: hid — o id da casa; fromShare (opcional) — verdadeiro quando a casa
-   acabou de ser partilhada (muda o texto do modal).
+   Recebe: hid — o id da casa; fromShare (opcional) — depois de uma partilha
+   ({entrou: [ids]} com quem entrou, ou verdadeiro): a janela pergunta desde
+   quando quem entrou é dono (imovel.js:imvPropostaAbrir).
    Devolve: nada — abre o modal; o envio à API acontece no Guardar. */
 CW.proposeShares = function (hid, fromShare) {
   return servicoLigado('properties') ? imvPropostaAbrir(hid, fromShare) : nextShareProposal();

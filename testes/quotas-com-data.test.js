@@ -199,8 +199,8 @@ describe('sair e apagar a conta fecham o período (D29)', () => {
     const d = await dadosDa(env, 'H1');
     assert.deepEqual(d.ownerShares, { [A.id]: 100 });
     assert.deepEqual(d.quotasHist, [
-      { ate: '2026-05-09', ownerIds: [A.id, B.id], ownerShares: { [A.id]: 50, [B.id]: 50 }, fora: null },
-    ]);
+      { ate: '2026-05-09', ownerIds: [A.id, B.id], ownerShares: { [A.id]: 50, [B.id]: 50 }, fora: null, nomes: { [B.id]: 'Bruno' } },
+    ], 'o período leva o nome de quem saiu (N021)');
     limpar(app);
     const p = imovelDoCliente(app, d, [A.id]);
     assert.equal(app.quotasFiscais(p, '2026-05-09')[A.id], 0.5, 'até à véspera, metade');
@@ -221,7 +221,7 @@ describe('sair e apagar a conta fecham o período (D29)', () => {
     const { env, A, B } = await doisDonos();
     assert.equal((await resp(pedir(env, B, '/api/houses/H1/participacao', 'DELETE'))).status, 200);
     const d = await dadosDa(env, 'H1');
-    assert.deepEqual(d.quotasHist, [{ ate: '2026-05-09', ownerIds: [A.id, B.id], ownerShares: {}, fora: null }]);
+    assert.deepEqual(d.quotasHist, [{ ate: '2026-05-09', ownerIds: [A.id, B.id], ownerShares: {}, fora: null, nomes: { [B.id]: 'Bruno' } }]);
     limpar(app);
     const p = imovelDoCliente(app, d, [A.id]);
     assert.equal(app.quotasFiscais(p, '2026-05-01')[A.id], 0.5, 'partes iguais até à véspera');
@@ -232,10 +232,11 @@ describe('sair e apagar a conta fecham o período (D29)', () => {
     const { env, A, B } = await doisDonos((a, b) => ({ [a.id]: 50, [b.id]: 50 }));
     await purgeAccount(env, B.id);
     const d = await dadosDa(env, 'H1');
-    assert.deepEqual(d.ownerShares, { [A.id]: 50 }, 'a quota dele sai, como sempre');
+    assert.deepEqual(d.ownerShares, { [A.id]: 100 }, 'a quota dele passa a quem fica, como numa saída (N136)');
+    assert.deepEqual(d.ownerIds, [A.id]);
     assert.deepEqual(d.quotasHist, [
       { ate: '2026-05-09', ownerIds: [A.id, B.id], ownerShares: { [A.id]: 50, [B.id]: 50 }, fora: null },
-    ]);
+    ], 'com o id dele e sem o nome: a identidade sai com a conta');
     limpar(app);
     const p = imovelDoCliente(app, d, [A.id]);
     assert.equal(app.quotasFiscais(p, '2026-03-01')[A.id], 0.5);
@@ -369,9 +370,12 @@ describe('os comproprietários sem conta (D08)', () => {
     const d = await dadosDa(env, 'H1');
     assert.deepEqual(d.comproprietariosFora, antes.comproprietariosFora, 'sem isto, o Anular punha a casa a 100 % da Ana');
     assert.deepEqual(d.quotasHist, antes.quotasHist);
-    // uma casa nova com um id novo não herda nada de ninguém
+    // uma casa nova com um id novo não herda nada de ninguém; os de fora que
+    // traz, escritos por quem a cria, entram validados (N139)
     assert.equal((await resp(pedir(env, A, '/api/houses/H2', 'PUT', { data: { id: 'H2', name: 'T3', comproprietariosFora: [{ nome: 'X', quota: 10 }] } }))).status, 200);
-    assert.equal((await dadosDa(env, 'H2')).comproprietariosFora, undefined);
+    const h2 = (await dadosDa(env, 'H2')).comproprietariosFora;
+    assert.deepEqual(h2.map((f) => [f.nome, f.quota]), [['X', 10]]);
+    assert.equal((await dadosDa(env, 'H2')).ownerShares, undefined, 'as percentagens entre as contas nunca vêm do cliente');
   });
 
   test('passar o controlo do imóvel não mexe nas quotas nem fecha período', async () => {

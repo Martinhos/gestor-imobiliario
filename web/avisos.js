@@ -27,6 +27,59 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 81,
+    data: '2026-11-23',
+    titulo: 'A Declaração: o resumo de 2025, o quadro 10 e os imóveis partilhados',
+    seccoes: [
+      {
+        titulo: 'O resumo de 2025 mudou',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'O resumo de 2025 muda com esta versão: a caução passa a contar como renda do ano em que a recebes, e o seguro multirriscos, o fundo de reserva, a reparação de eletrodomésticos, o notário e a avaliação deixaram de se deduzir, porque a AT não os aceita. «A tratar» mostra essas despesas e porque não contam.',
+          'Se já entregaste a declaração de 2025 com números da app, confere-a com o resumo de agora e vê se precisas de entregar uma declaração de substituição.',
+        ],
+      },
+      {
+        titulo: 'Os contratos',
+        afeta: ['contratos'],
+        itens: [
+          'Terminar um contrato cujo prazo já tinha acabado pergunta se ele continuou: com «Sim», a app regista as renovações e guarda o dia em que acabou mesmo.',
+          'Ao terminar, podes registar logo a devolução da caução, que é um gasto do ano em que a devolves. Num contrato já terminado, a ficha pergunta se a devolveste.',
+          'Com um inquilino empresa, o contrato pergunta só se identifica pelo nome quem lá mora. Se não identifica, a Declaração conta-o como não habitacional, e a ficha diz porquê.',
+          'Se marcaste na app antiga a comunicação das rendas de um ano, a ficha do contrato pergunta agora o dia em que comunicaste a duração do contrato, em vez de dizer que foi fora do prazo.',
+          'Apagar um contrato ou um inquilino com rendas de um ano ainda por declarar diz o que a Declaração perde e propõe terminar o contrato.',
+        ],
+      },
+      {
+        titulo: 'A Declaração',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'A Declaração mostra o quadro 10 dos contratos que acabaram, com a identificação do prédio, o titular e o inquilino, mesmo num ano sem rendas, e pede-te para confirmar o ano de início do benefício quando a app não o sabe. O PDF, o CSV e o texto dizem o mesmo.',
+          'Na tributação conjunta com o cônjuge sem conta na app, podes dizer que os bens são comuns do casal: a parte dele entra numa linha própria.',
+          '«A tratar» avisa quando um comproprietário saiu do imóvel, quando há uma divisão de quotas à espera de confirmação ou quotas que não somam 100 %, e quando há rendas de meses depois do fim de um contrato. As rendas depois do prazo num contrato sem redução deixam de ser uma falta.',
+        ],
+      },
+      {
+        titulo: 'Os imóveis partilhados',
+        afeta: ['imoveis', 'partilha'],
+        itens: [
+          'Ao partilhar um imóvel, a app parte das quotas que já escreveste e pergunta desde quando a outra pessoa é dona: desde sempre ou desde um dia. A Declaração conta cada ano com quem era dono nesse ano.',
+          'Num imóvel só teu, a pergunta dos outros donos fora da app está no próprio formulário. Contam os donos ou, havendo usufruto, os usufrutuários.',
+          'Quando um comproprietário sai, apaga a conta ou apaga um imóvel que partilhavas, recebes um aviso com o dia e com quem ficou com a quota dele.',
+        ],
+      },
+      {
+        titulo: 'As categorias, as cópias e o Splitwise',
+        afeta: ['movimentos', 'app'],
+        itens: [
+          'Mudar o nome a uma categoria que o IRS lê já não deixa de fora da Declaração as rendas e o IMI dos planeados, nem o que outra conta da mesma casa regista, e «Repor as de origem» devolve-lhes o nome de origem.',
+          'Repor uma cópia de segurança com sessão iniciada já não apaga o que os comproprietários e os teus outros aparelhos registaram depois dela, e a pergunta diz a data da cópia e o que sai.',
+          'Na importação do Splitwise, se o grupo tem o inquilino ou outra pessoa que não é dona, a app pergunta quem e lança só a parte dos donos. Uma despesa lançada tarde no Splitwise já não fica de fora.',
+        ],
+      },
+    ],
+  },
+  {
     v: 80,
     data: '2026-11-18',
     titulo: 'A Declaração: os quadros raros, o Anexo J e a renda abaixo do recibo',
@@ -1961,7 +2014,7 @@ var VERSAO = AVISOS[0].v;
 /* Versão mínima aceite. Subir isto obriga toda a gente a atualizar antes de
    continuar a usar a app — é para quando uma versão antiga passa a estar
    errada, não para empurrar novidades. */
-var VERSAO_MINIMA = 79;
+var VERSAO_MINIMA = 81;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { AVISOS: AVISOS, VERSAO: VERSAO, VERSAO_MINIMA: VERSAO_MINIMA, FUNCIONALIDADES: FUNCIONALIDADES };

@@ -172,8 +172,9 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
   });
 
   test('collectCt lê os campos do declarado e grava no formato do normFisco', () => {
-    app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800,
-      fisco: { estado: 'declarado', renovacoes: [{ id: 'R1' }] } });
+    app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800, fisco: { estado: 'declarado' } });
+    // a linha por preencher entra como a do addRenov: um contrato guardado não tem renovações sem início
+    app.cForm.fisco.renovacoes.push({ id: 'R1', inicio: '', fim: '' });
     desfazerDom = domCom({ c_fnum: ' 1234567 ', c_ffin: 'hp', c_fcel: '2024-03-01', c_fren: '1',
       c_rini_R1: '2025-03-01', c_rfim_R1: '2026-02-28', c_fces: 'fim do prazo', c_cesData: '2026-01-31', c_cesMot: '02', c_rent: '800', c_active: true });
     app.collectCt();

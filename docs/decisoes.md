@@ -127,6 +127,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-17 · A vaga 2 da auditoria ao IRS: o fim dos contratos, os prazos da AT, a situação de cada ano e o reporte (KAN-127)
 - 2026-11-18 · A vaga 3 da auditoria ao IRS: o bloco fiscal do contrato, as receitas da Declaração, os quadros raros e o guia (KAN-128)
 - 2026-11-18 · A vaga 4 da auditoria ao IRS: os quadros raros nos formulários e na Declaração, a renda abaixo e os encargos do inquilino (KAN-129)
+- 2026-11-23 · A ronda 1 das correções da auditoria ao IRS de raiz: o quadro 10, as categorias pelo id, as cópias e as quotas (KAN-147, KAN-148, KAN-149)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4173,6 +4174,9 @@ dos formulários novos (esses são das vagas 2 a 4). As decisões que ficam:
   a leitura «renovações de igual duração» de 2026-10-08. Uma renovação que vem de um período sem redução (2019 a 23 %
   renovado por 5 anos; 3 anos a 25 % renovado por 5) fica com a taxa do escalão da renovação, 15 % (o Martinho, a
   2026-11-17: «15 %, o do escalão»). O bónus do n.º 24 não entra na cadeia.
+  *Nota de 2026-11-23:* na renovação que atravessa a mudança de regime (um contrato do regime de 2019 renovado
+  depois de 7/10/2023), o «15 %, o do escalão» fica substituído pelos 13 % do OC 20268/2024, ponto 8 (D1, N028):
+  ver a entrada de 2026-11-23.
 - **O n.º 24 do art. 72.º vale desde 7/10/2023** (Lei 56/2023), e não desde 1/1/2024 — corrige a de 2026-10-12.
 - **A dispensa dos recibos usa o IAS do ano das rendas** (o folheto do Modelo 44 e a FAQ 5929; a FAQ 5937 diz o do ano
   da dispensa — fica INCERTO, com o limite mais baixo).
@@ -4492,3 +4496,147 @@ O porquê do lote B (os avisos, os cartões e a exportação):
 - **O Anexo J sem estimativa** (Q12): o cartão, o texto, o CSV e o PDF dizem as rendas, os gastos, o líquido e o
   imposto pago lá, e nenhum soma ao imposto da página. As colunas do quadro 7A seguem o achado (INCERTO: não se abriu
   o impresso).
+
+## 2026-11-23 · A ronda 1 das correções da auditoria ao IRS de raiz: o quadro 10, as categorias pelo id, as cópias e as quotas (KAN-147, KAN-148, KAN-149)
+A segunda auditoria ao IRS (KAN-143), feita de raiz sobre o código de 2026-11-18 e a lei, deixou os achados N001 a
+N156 e dezassete perguntas (D1 a D17). O Martinho leu o relatório a 2026-11-23 e respondeu: D1, 13 %, como a AT; D6,
+quem sai da app também sai da casa; D8, as maquetes da linearidade antes; as outras, as recomendações do relatório. A
+ronda 1 corrige as vagas V1 (o fim dos contratos e o quadro 10), V2 (as categorias com id, as cópias, a
+sincronização e o Splitwise) e V3 (as quotas dos comproprietários). As decisões:
+
+- **D1 · A renovação que atravessa a mudança de regime paga 13 %** (N028; OC 20268/2024, ponto 8, que trata este caso
+  exato e vincula a AT). Substitui, só para este caso, o «15 %, o do escalão» da entrada de 2026-11-17, que fica como
+  estava, com uma nota. O que se copia para o Anexo F é o mesmo nos dois casos; muda a taxa mostrada e o imposto
+  estimado. O motor muda com a vaga V5 (KAN-151), na ronda 2: até lá, a app continua a dar 15 % neste caso.
+- **D6 · Quem sai da app também sai da casa** (N021, N067, N068): a regra de 2026-10-22 fica — deixa de ser dono no
+  dia em que sai, e a quota passa aos que ficam desse dia em diante, nunca para trás. O relatório recomendava manter
+  a quota de quem sai até alguém registar a mudança (CIRS art. 19.º: conta quem é dono, não quem está na app); o
+  Martinho preferiu a regra simples, e a app passa a avisar: o sino de quem fica diz o dia e para quem passou a quota
+  (worker/src/lib/acesso.js:avisoDeSaida, notificacoes.js:notifFraseDoAviso), também quando a ligação ou a partilha
+  deixa de dar a casa, quando o outro apaga a conta (`casa.sair_conta`) e quando o criador apaga o imóvel ou a conta
+  com ele (`casa.apagada`, `casa.apagada_conta`); «A tratar» diz a saída do ano a quem fica
+  (fisco-avisos.js:fiscoAvQuotasDasCasas). Quem sai leva o PDF dos meses em que foi dono, como já levava (N068 fica).
+  A quota de uma conta apagada passa pelos que ficam, como uma saída (N136; antes as quotas ficavam a somar 70 %).
+  Uma conta apagada não deixa nome nos avisos nem nos períodos das quotas: diz-se «Um comproprietário».
+- **D5 · A conjunta com o cônjuge sem conta** (N020): o «Escolhe-o» mandava escolher quem não existe. A falta diz o
+  caminho (os imóveis do cônjuge fora da app inserem-se à mão no Portal) e a situação do ano tem «Os bens são comuns
+  do casal» (fisco.js:fiscoBensComunsHtml): num imóvel com um só dono fora da app, esse dono é o cônjuge, e a quota
+  dele vai a uma linha da letra dele, como com o cônjuge com conta (2026-11-12). Com dois ou mais donos de fora não se
+  adivinha; sem nenhum, a linha fica inteira em quem declara. Como a AT quer um bem comum do casal em conjunta fica
+  INCERTO (o verificador da lei não encontrou FAQ). A escolha é do ano e não do imóvel: numa casa com um só dono de
+  fora que não é o cônjuge, ele conta como cônjuge, e o aviso mostra quem conta como tal em cada imóvel.
+- **D10 · O resumo de 2025 mudou, e as Novidades dizem-no** (N007, N117): quem tem contas de antes vê o resumo de
+  2025 mudar — a caução passou a renda do ano em que se recebe (OC 20256), e o seguro multirriscos, o fundo de
+  reserva, a reparação de eletrodomésticos, o notário e a avaliação deixaram de se deduzir. Ninguém entregou 2025 no
+  prazo com números da app, mas pode haver declarações de substituição: a entrada da v81 manda conferir. «A tratar»
+  lista essas despesas a cinzento, com o porquê (fisco-avisos.js:fiscoAvNaoAceites). Sem recalcular o resumo antigo.
+- **D11 · O Splitwise lança o custo dos donos** (N038): o custo total só é o gasto suportado quando o grupo é o dos
+  donos (CIRS art. 41.º n.º 1). Num grupo de duas ou mais pessoas a janela pergunta, obrigatória, se alguém não é dono,
+  e a parte dessas pessoas sai do custo pelos saldos do CSV (splitwise.js:swParteDosDonos); a linha cujos saldos não
+  dizem quem pagou fica de fora, listada, em vez de se adivinhar. Atualiza a de 2026-11-18 («lança o custo total»,
+  D122): num grupo só de donos continua a lançar o total, e a quota-parte continua a ser da Declaração.
+- **D14 · O ano da cessação** (N100, N101): o motivo continua obrigatório em todos os contratos declarados, com a
+  frase certa — só diz que o quadro 10 o pede quando o contrato lá vai nesse ano (contrato.js:ctMotivoDica). A linha
+  com a redução caída toda pelo n.º 20 fica no 4.2, com a marca e o porquê (fisco-quadros.js:fiscoReducaoCaida), até a
+  AT responder pelo e-balcão se vai ao 4.1: as instruções dizem-no pela letra, mas não se muda o quadro sem a
+  confirmar. Só os textos mudam, e os avisos da comunicação deixam de falar de uma redução que já caiu.
+- **D15 · A devolução da caução** (N084): é gasto de quem é senhorio no dia em que a devolve, mesmo sem a ter recebido
+  (ficha 26360). O «Terminar» pergunta «Já devolvi a caução», com o dia e o valor, e a ficha de um contrato terminado
+  pergunta «Devolveste a caução?» (contrato.js:ctDevolucaoCampos, contrato.js:ctDevolucaoCaucao); a despesa nasce pelo
+  id, também com a categoria renomeada. O aviso de um ano sem rendas desse imóvel (as instruções mandam não referir
+  prédios sem rendimento, N024) fica para a vaga V4.
+- **D16 · O inquilino empresa** (N034): para a AT basta o contrato identificar quem lá mora (PIV 28246, 26024, 30248);
+  a proibição de sublocar não é condição (PIV 30723). Substitui a pergunta junta da vaga 2 (D47,
+  fisco.empresaHabitacao): a nova (fisco.empresaMorador, irs.js:irsEmpresaMorador) pergunta só a identificação, e com
+  «Não» a Declaração aplica a natureza do não habitacional (06, 28 %, no 4.1, sem a redução), em vez de só pedir que
+  se mude a finalidade — corrige o «nem muda a natureza de um inquilino empresa» de 2026-11-17. Um «Não» antigo, da
+  pergunta junta, é ambíguo: volta a por responder, e não passa sozinho a 06.
+- **D17 · Os anos depois da última versão** (N122): a decisão «um ano sem versão mostra um aviso vermelho, sem taxa
+  nem imposto» falava de 2023 e de 2024, antes da primeira versão. Um ano depois da última usa a versão mais recente,
+  com as datas passadas e o aviso (irs.js:irsAno, o `exato`), como o design.md já dizia; a frase das decisões de
+  produto foi acertada, e o código não muda.
+
+O porquê do resto, por vaga:
+
+- **O quadro 10 aparece, e diz tudo o que o impresso pede** (N001, N008, N040): o cartão existia e não se desenhava
+  (fisco.js:vFisco). As instruções mandam preencher a matriz, o titular e o NIF ou o país «conforme as instruções do
+  quadro 4.1», e um contrato que acaba sem rendas no ano não tem linha do 4.x de onde os copiar: o resumo junta-os a
+  cada entrada, uma por titular (fisco-resumo.js:fiscoCessadosDoAno). O art. 72.º n.º 20 manda declarar a cessação no
+  ano em que acontece, com ou sem rendas, e a regularização é imposto dessa declaração: um ano só com o quadro 10 tem
+  página e PDF. Se o Anexo F é obrigatório só pelo quadro 10, sem outro rendimento predial, fica INCERTO; as saídas
+  dizem só que o quadro não depende de haver rendas.
+- **O ano de início do benefício vai «a confirmar»** (N009): as instruções pedem o ano da primeira declaração com o
+  benefício, que a app não conhece; sabe o início do período com o regime e as rendas que tem. Por isso estima a
+  partir do período (fisco-resumo.js:fiscoAnoInicioBeneficio) e diz «a confirmar» quando não tem as rendas desse ano
+  nem a comunicação do período no prazo, em vez de dar como certo o primeiro ano com rendas na app.
+- **Terminar com o termo passado pergunta se o contrato continuou** (N002): o CC art. 1096.º renova o contrato de
+  prazo certo no termo, salvo estipulação, e a folha propunha o termo antigo com o motivo do fim do prazo (03), que
+  apagava as renovações e o condomínio de três anos. A duração da renovação não é pacífica (há acórdãos que leem os 3
+  anos como imperativos e outros como supletivos) e decide a taxa no 4.2 (OC 20217/2020): num contrato com redução, a
+  folha deixa-a em branco. A oposição à renovação é o caso em que o termo antigo está certo: por isso pergunta, e não
+  escolhe o 03. O «Renovar…» da ficha continua a propor a duração, também num contrato com redução.
+- **O prazo da cessação só para as do ano de hoje e do anterior** (N097): o mesmo limite para o dia do «Terminar» e
+  para o fim de um terminado de antes (o verificador do código corrigiu o auditor: o limite só no c.end deixava
+  passar uma cessação de 2022 com dia). A obrigação não caduca, por isso a ficha continua a dizê-la, sem alarme.
+- **Apagar um contrato ou um inquilino diz o que a Declaração perde** (N036): uma linha por entregar perdia a taxa, as
+  datas e o NIF sem ninguém o saber; terminar é quase sempre o que se queria.
+- **A comunicação marcada na app antiga fica por confirmar** (N003): a marca anual dizia «comuniquei as rendas de
+  AAAA», e não quando se comunicou a duração do período; a migração da vaga 2 passava-a a dia da comunicação, e uma
+  data depois do prazo dava NÃO no 4.2A (Portaria 110/2019, art. 2.º b)), o que pode custar a redução. Só uma data
+  até ao prazo passa (dados.js:migrarComunicacoes); as outras ficam por confirmar e a ficha, os avisos e as saídas
+  perguntam o dia, sem afirmar o NÃO. Os contratos já migrados no dev pela v77 a v80 não se distinguem de uma data
+  tardia escrita à mão e ficam como estão (a produção, na v68, ainda não migrou nenhum).
+- **O papel fiscal viaja com o movimento** (N005, N006, N073, N074, N043): as categorias e as árvores vivem em cada
+  conta, e os movimentos de uma casa partilhada levam os nomes de quem os gravou; ler pela árvore de quem lê tirava as
+  rendas e o IMI da Declaração da outra conta, e mudar o nome às Rendas tirava as dos planeados (D19). A marca t.catIrs
+  leva os nomes de então para não ficar velha quando a categoria muda num cliente que não a conhece
+  (dados.js:txCatIrsId). Os planeados que já ficaram com o nome antigo não se reescrevem — duas contas com árvores
+  diferentes reescreviam-nos uma à outra a cada gravação —: leem-se pelo nome de origem. O renameCat continua a mudar
+  o nome também aos movimentos que a outra conta registou (INCERTO de produto: ela passa a ver os nomes de quem
+  renomeou). Apagar uma subcategoria «Não dedutível» fixa a coluna em cada despesa, também a «a confirmar» (o
+  verificador da lei: «seja ela qual for»), para os gastos não mudarem sem ninguém o decidir.
+- **As datas que não existem não se guardam** (N104): um 30 de fevereiro ou um mês 13 passavam na base e no CSV do
+  Splitwise.
+- **Os avisos do resumo** (N031, N032, N033, N035, N069, N070, N098, N135, N136, N138): a regularização diz os anos do
+  período que faltam na app, porque também se regularizam; as rendas depois do termo num contrato curto sem redução
+  repetiam uma falta todos os anos com uma redução que nunca houve, e o 4.1 não pede o termo — ficam uma nota, e só a
+  renovação de 5 anos ou mais a pode ter (num contrato de habitação permanente); as rendas depois do dia da cessação e
+  as casas sem histórico das quotas com movimentos de quem já saiu perguntam, porque a app não sabe o que está certo; o
+  «Terminar» até à v77 escrevia o dia da saída no termo, e seguir o aviso não repunha o prazo
+  (fisco-avisos.js:fiscoAvTermoNoFim). A renda de um mês conta pela quota de quem era dono nesse mês (CC art. 213.º n.º 2) e o IMI pela
+  de 31 de dezembro do ano anterior (CIMI art. 8.º n.º 1), salvo a nota própria («suportado e pago»); a renda
+  antecipada conta pelo dia (CIRS art. 8.º). O AIMI de um prédio comprado depois de 1 de janeiro não incidiu sobre ele
+  (CIMI art. 135.º-A n.º 3). O âmbar de quem está sozinho sem os de fora confirmados alarga-se às casas de várias
+  contas (a herança a três com dois na app), e as quotas que não somam 100 % e a proposta à espera dizem-se.
+- **O usufruto** (N137): o Anexo F é de quem tem direito às rendas, pela sua quota-parte — havendo usufruto, o
+  usufrutuário, e não quem tem só a nua-propriedade (PIV 25058, 2025-11-13).
+- **Repor uma cópia com sessão é registo a registo** (N004): repor uma cópia antiga com sessão apagava no servidor as
+  rendas que o comproprietário e os outros aparelhos registaram depois dela, e punha por cima a cessação vazia; recusar
+  com sessão deixava sem saída quem quer mesmo repor. A reposição com sessão nunca tira o que é dos outros nem o que é
+  mais recente do que a cópia (copias.js:planoDaReposicao). Fica INCERTO o relógio de uma cópia sem sessão, que compara
+  o relógio do aparelho com o do servidor: um telemóvel muito adiantado faria contar como antigas escritas recentes,
+  que então podiam sair, só nas casas só minhas.
+- **A versão mínima também no servidor** (N103): a mínima só no cliente deixava escrever uma versão velha aberta sem
+  rede. O servidor recusa só quem diz a versão (worker/src/rotas/estado.js:recusaPelaVersao): os clientes de antes do
+  cabeçalho continuam a escrever, para não obrigar todos a atualizar de uma vez. Ao voltar a rede a app lê só a
+  mínima, e não instala a versão nova, que recarregava a meio de um formulário.
+- **O «Só desde» por omissão do Splitwise** (N037): o corte pelo dia da última importação (D127, 2026-11-18) tirava as
+  despesas lançadas tarde, que são gastos dedutíveis. Fica onde protege: as importações sem chave e, até a marca das
+  apagadas viver no imóvel (N102, ronda 2), as casas com outras contas.
+- **A entrada também fecha o período das quotas** (N017, N018, N019, N059, N139): «partes iguais para trás» dava a
+  casa a quem comprou a meio, e as quotas escritas antes de partilhar perdiam-se no modal. A partilha parte da divisão
+  real e pergunta «… já era dono deste imóvel?»; o «desde sempre» por omissão mantém o caso comum (o casal dono desde
+  sempre) num toque (worker/src/lib/acesso.js:DESDE_SEMPRE). Num imóvel só meu com conta, a pergunta dos donos de fora
+  está no formulário, e uma casa nova guarda no servidor os de fora e o histórico
+  (worker/src/lib/acesso.js:quotasDaCriacao). A primeira resposta «Desde um dia» deixa o período anterior por
+  confirmar, que conta a casa toda para os donos da app — certo para quem passou a ter um dono de fora nesse dia; um
+  «e antes?» para quem tinha outro dono de fora antes fica por fazer (INCERTO). As outras portas de entrada (os grupos
+  e os pedidos de partilha aceites) ainda não fecham o período.
+- **A versão mínima sobe para 81** (avisos.js:VERSAO_MINIMA): um cliente 79 ou 80 que lesse um contrato por migrar
+  migrava-o à maneira antiga — gravava a data tardia como dia da comunicação e subia a marca, sem volta —, lia pelo
+  nome os movimentos da casa partilhada, e partilhava casas sem a proposta, deixando o recém-chegado a 0 % para trás
+  sem ninguém o dizer. Os clientes 79 e 80 também repunham uma cópia à maneira antiga, que apaga.
+
+Ficam para o Martinho: o «e antes?» da primeira resposta «Desde um dia»; se o «Renovar…» da ficha também deve deixar
+a duração em branco num contrato com redução; e se renomear uma categoria deve mudar o nome aos registos de uma casa
+com outros participantes.

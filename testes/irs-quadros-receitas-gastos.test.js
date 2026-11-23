@@ -254,7 +254,7 @@ describe('D08, D29, D93 — as quotas no cartão do contrato', () => {
     assert.equal(l.quota, 0.5, 'controlo: a quota já desconta o João');
     const h = app.fiscoContratoHtml(r, l);
     assert.match(h, /quota-parte 50 %/);
-    assert.match(h, /<p class="fis-ctc-nota">Fora da app: João \(50 %\)\. A tua quota-parte \(50 %\) já os desconta\.<\/p>/);
+    assert.match(h, /<p class="fis-ctc-nota">Fora da app: João \(50 %\)\. A tua quota-parte \(50 %\) já os desconta\. Contam só os que têm direito às rendas: havendo usufruto, os usufrutuários, e não quem tem só a nua-propriedade\.<\/p>/);
     // por inteiro (sem saber quem és) não há quota a dizer
     assert.deepEqual(JSON.parse(JSON.stringify(app.fiscoQuotaNotas(resumo(''), linhaDe(resumo(''))))), []);
   });

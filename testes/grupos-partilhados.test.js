@@ -1083,8 +1083,8 @@ describe('escrever, sair, ser removido, apagar', () => {
     assert.equal(await conta1(env, "SELECT COUNT(*) AS n FROM shared_groups WHERE id = 'GM'"), 0, 'o grupo de que M era dono foi inteiro');
     assert.deepEqual(await linhasDoGrupo(env, 'GM'), { membros: [], casas: [], ligacoes: [], pedidos: [] });
     const h1 = JSON.parse((await env.DB.prepare("SELECT data FROM houses WHERE id = 'H1'").first()).data);
-    assert.deepEqual(h1.ownerIds, [D.id], 'a quota de M saiu de H1');
-    assert.deepEqual(h1.ownerShares, { [D.id]: 50 });
+    assert.deepEqual([...h1.ownerIds].sort(), [D.id, a.P.id, T.id].sort(), 'M saiu de H1; ownerIds fica com os que ficam, como nas saídas');
+    assert.deepEqual(h1.ownerShares, { [D.id]: 100 }, 'a quota de M passa para quem fica (redistribuirQuotas, como nas saídas)');
     assert.equal((await prever(env, token)).members, 2);
     assert.equal((await canAccessHouse(env, T.id, 'H1')).ok, true, 'o terceiro continua no grupo');
 

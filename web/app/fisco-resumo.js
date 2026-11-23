@@ -322,12 +322,28 @@ const FISCO_PAPEIS_DECLARAM={renda:'renda',caucao:'renda',indemnizacao:'indemniz
    Devolve: true ou false. */
 function fiscoNaLinhaDoContrato(t){return FISCO_PAPEIS_DECLARAM[fiscoPapelDe(t)]==='renda'}
 /* É a renda de um mês (o que conta para a cobertura dos meses, D04)? O papel
-   'renda' fora dos Reembolsos: nem a caução, nem as indemnizações, nem um
-   reembolso do inquilino enchem um mês.
+   'renda' fora dos Reembolsos (pelo id do movimento, dados.js:txCatIrsId —
+   N006): nem a caução, nem as indemnizações, nem um reembolso do inquilino
+   enchem um mês.
    Recebe: t — o movimento.
    Devolve: true ou false. */
 function fiscoRendaDoMes(t){
-  return fiscoPapelDe(t)==='renda'&&catIrsId('catsIn',t.category)!=='reembolsos';
+  return fiscoPapelDe(t)==='renda'&&txCatIrsId(t)!=='reembolsos';
+}
+/* A data cuja quota reparte uma receita (N069): a renda de um mês anterior ao
+   mês em que entrou (t.periodo — a renda em atraso) é de quem era dono nesse
+   mês (CC art. 213.º n.º 2: os frutos civis partilham-se pela duração do
+   direito) e conta pela quota do primeiro dia dele; as outras, pela do dia em
+   que entraram (CIRS art. 8.º: tributam-se quando se recebem), a antecipada
+   incluída. Só as rendas de um mês (fiscoRendaDoMes): a caução, as
+   indemnizações e os reembolsos contam pelo dia.
+   Recebe: t — a receita.
+   Devolve: 'AAAA-MM-DD' (a data do movimento quando não é uma renda em atraso). */
+function fiscoDataDaQuota(t){
+  const d=String((t&&t.date)||'');
+  if(!fiscoRendaDoMes(t))return d;
+  const m=irsMesDaRenda(t);
+  return /^\d{4}-\d{2}$/.test(m)&&m<d.slice(0,7)?m+'-01':d;
 }
 /* A categoria dos consumos (a água, a luz, o gás e a internet que o senhorio
    paga), pelo nome da regra do mapa: a AT só os aceita quando o contrato diz
@@ -369,7 +385,7 @@ function fiscoParteDaNota(t,o,eu){
    titularId — o titular da linha; papel — 'indemnizacao' ou 'outra'.
    Devolve: a linha (fiscoLinhaNova), com o papel, a natureza e a taxa dela. */
 function fiscoLinhaDaReceita(c,p,q,ano,titularId,papel){
-  const l=fiscoLinhaNova(c,p,q,ano,titularId),v=irsAno(ano),T=v.taxas||{},n=v.naturezas||{},nh=fiscoDe(c).finalidade==='nh';
+  const l=fiscoLinhaNova(c,p,q,ano,titularId),v=irsAno(ano),T=v.taxas||{},n=v.naturezas||{},nh=irsFinalidade(c)==='nh';
   return Object.assign(l,{papel:papel,natureza:(papel==='indemnizacao'?n.indemnizacao:n.outras)||'',naturezaAssumida:false,
     quadro:v.quadros.semReducao,taxaReduzida:false,taxa:nh?T.naoHabitacional:T.habitacional,taxaEscrita:null,motivoTaxa:nh?'nh':'base',
     isencao:null,comunicado:'',comunicacao:null,bonus:false,elegivel24:false,atualizacao2023:null,
@@ -445,7 +461,7 @@ function fiscoQuadro5(E,ano,props){
     });
   });
   return es.map(e=>{
-    const c=contract(e.contratoId),nh=c&&fiscoDe(c).finalidade==='nh',p=props[e.propertyId],sub=(p&&p.subarrendamento)||{},faltas=[];
+    const c=contract(e.contratoId),nh=c&&irsFinalidade(c)==='nh',p=props[e.propertyId],sub=(p&&p.subarrendamento)||{},faltas=[];
     const nif=nifValido(sub.nifSenhorio);
     if(nif===null)faltas.push('NIF do senhorio');else if(nif===false)faltas.push('NIF do senhorio não bate certo');
     if(!(Number(sub.rendaMensal)>0))faltas.push('renda paga ao senhorio');
@@ -697,6 +713,13 @@ function fiscoAnexoJ(LJ,ano,cols){
     return e;
   }).sort((a,b)=>String(a.imovel).localeCompare(String(b.imovel),'pt')||String(a.nome).localeCompare(String(b.nome),'pt')||String(a.titular).localeCompare(String(b.titular),'pt'));
 }
+/* Os campos de cada linha da ronda 1 das correções do IRS (fiscoLinhaNova, a
+   seguir): reducaoCaida — o resumo escreve-a: a redução caiu toda pelo n.º 20
+   e a linha fica no 4.2 (N101, D14); empresaNaoHabitacional — o inquilino
+   empresa que o contrato não diz quem lá mora: a natureza, a taxa e o quadro
+   já são os do não habitacional (irs.js:irsEmpresaNaoHabitacional, N034,
+   D16); conjugeFora — a linha é do cônjuge sem conta dos bens comuns do casal
+   (fisco-titulares.js:fiscoEhConjugeFora, N020, D5). */
 /* Uma linha do Anexo F ainda sem valores: a identificação do contrato, do
    imóvel e dos inquilinos, o quadro onde vai (o 4.2 quando há redução pela
    duração, o 4.1 nos outros), a taxa e a natureza do ano, as datas do 4.2A e
@@ -784,7 +807,8 @@ function fiscoLinhaNova(c,p,q,ano,titularId){
     faltas:faltas,recibosPorEmitir:0,
     freguesiaUniao:fiscoFreguesiaUniao(p,ano),matrizConfirmada:p?(p.matrizConfirmada||''):'',
     beneficios:[],liquidoTributavel:0,
-    dhd:dhd?{escritura:c.start||'',caucao:r2(Number(c.deposit)||0),caucaoRecebida:0,cessacao:null,gastos:null}:null};
+    dhd:dhd?{escritura:c.start||'',caucao:r2(Number(c.deposit)||0),caucaoRecebida:0,cessacao:null,gastos:null}:null,
+    reducaoCaida:false,empresaNaoHabitacional:irsEmpresaNaoHabitacional(c),conjugeFora:fiscoEhConjugeFora(titularId)};
 }
 /* As quotas de um titular num imóvel ao longo de um ano, quando mudaram a
    meio dele (saldos.js:quotasMudaramNoAno): cada renda e cada gasto já
@@ -818,39 +842,94 @@ function fiscoAnosComRendaDe(c){
   return Object.keys(ys).map(Number).sort((a,b)=>a-b);
 }
 /* O «ano de início do benefício» do quadro 10: o ano da primeira declaração
-   em que as rendas do contrato tiveram o benefício (as instruções do Anexo
-   F) — o primeiro ano com rendas e o mesmo regime (irsRegimeQuadro10);
-   senão o primeiro com rendas e algum benefício; sem rendas nenhumas, o ano
-   do início do contrato.
-   Recebe: c — o contrato; regime — o código do regime ('01'…); ano — o ano da cessação.
-   Devolve: o ano (número). */
-function fiscoAnoInicioBeneficio(c,regime,ano){
-  const ys=fiscoAnosComRendaDe(c).filter(y=>y<=ano);
-  const igual=ys.find(y=>irsRegimeQuadro10(c,y)===regime);if(igual)return igual;
-  const algum=ys.find(y=>irsRegimeQuadro10(c,y)!=='');if(algum)return algum;
-  return Number(String(c.start||'').slice(0,4))||Number(ano);
+   em que as rendas do contrato tiveram o benefício da coluna do regime (as
+   instruções do Anexo F) — e não o primeiro ano com rendas na app, que num
+   contrato que já corria quando a pessoa chegou à app é sempre mais tarde
+   (N009). Parte do início do período com o regime do quadro 10: numa
+   isenção, o do contrato; na redução pela duração, o do período em que o
+   contrato acabou (o do último troço com redução do ano, como o
+   irs.js:irsRegimeQuadro10), recuando pelas renovações seguidas com o mesmo
+   número do art. 72.º (o mesmo código do regime) — a cadeia lê os regimes da
+   versão do ano da cessação, nunca a de um ano sem versão. É certo quando a
+   app tem rendas do contrato nesse ano, ou a comunicação da duração desse
+   período feita no prazo (fisco.comunicacoes, pela chave do ano do início);
+   senão vai «a confirmar», com o porquê: o ano é a estimativa, e só a
+   declaração desse ano o diz (uma comunicação fora do prazo pode ter atrasado
+   a redução, e um contrato que começou em dezembro pode só ter dado rendas no
+   ano a seguir).
+   Recebe: c — o contrato; ano — o ano da cessação (número).
+   Devolve: {ano, confirmar, porque} — ano o número; confirmar true quando a
+   app não tem a certeza; porque a frase (sem ponto final; '' quando é certo). */
+function fiscoAnoInicioBeneficio(c,ano){
+  const A=Number(ano),ys=fiscoAnosComRendaDe(c).filter(y=>y<=A),ps=irsPeriodos(c);
+  let i=0,ben='a isenção';
+  if(!irsIsencao(c,A)){
+    ben='a redução';
+    const segs=irsSegmentosDoAno(c,A).filter(s=>s.reducao&&s.periodo!=null),s=segs[segs.length-1];
+    if(s){
+      i=s.periodo;
+      while(i>0){const r=irsReducaoDoPeriodo(c,A,i-1);if(!r||r.n!==s.reducao.n)break;i--}
+    }
+  }
+  const ini=String((ps[i]&&ps[i].inicio)||c.start||''),Y=Number(ini.slice(0,4))||A,o={ano:Y,confirmar:false,porque:''};
+  if(ys.indexOf(Y)>-1)return o;
+  const quem=i>0?'a renovação começou em '+Y:'o contrato começou em '+Y;
+  if(ben==='a redução'){
+    const com=String((fiscoDe(c).comunicacoes||{})[String(Y)]||''),prazo=irsAno(Y).prazos.comunicacaoDuracao||'';
+    if(com&&(!prazo||com<=prazo))return o;
+    if(com)return Object.assign(o,{confirmar:true,porque:quem+' e a duração foi comunicada a '+dPT(com)+', depois do prazo ('+dPT(prazo)+'): confirma o ano da primeira declaração em que a AT aplicou a redução'});
+  }
+  const desde=ys.filter(y=>y>Y);
+  return Object.assign(o,{confirmar:true,porque:quem+(desde.length?' e a app só tem rendas dele desde '+desde[0]:' e a app não tem rendas dele desse ano')
+    +': confirma o ano da primeira declaração com '+ben});
 }
 /* Os contratos que acabaram no ano e tiveram redução de taxa ou isenção — o
    quadro 10 do Anexo F (D09): os do âmbito da declaração e não marcados como
    não declarados nem fora do Anexo F (fiscoForaDoAnexoF), com a cessação
    (irs.js:irsCessacao) nesse ano; sem ela, um
    terminado com o c.end no ano, e o motivo por dizer. O regime vem da versão
-   (irs.js:irsRegimeQuadro10); sem benefício no ano, não vai ao quadro 10.
-   Recebe: ano — o ano (número); props — {id: imóvel} da declaração.
-   Devolve: [{contratoId, nome, imovel, regime, numero, anoInicioBeneficio,
-   data, motivo}] — motivo o código ('' por dizer), pela data. */
-function fiscoCessadosDoAno(ano,props){
-  const A=String(ano),out=[];
+   (irs.js:irsRegimeQuadro10); sem benefício no ano, não vai ao quadro 10. O
+   ano de início do benefício é o do início do período com o regime, «a
+   confirmar» quando a app não o sabe (fiscoAnoInicioBeneficio — N009).
+   Cada entrada leva o que o impresso pede nas outras colunas, «conforme as
+   instruções do quadro 4.1» (N008): a matriz do imóvel, o titular e os
+   inquilinos (NIF ou país) — uma entrada por titular, como as linhas do 4.x:
+   em conjunta, um imóvel dos dois dá duas, cada uma com a sua letra. Um
+   titular entra quando teve quota no imóvel algum dia do ano até ao da
+   cessação (fiscoQuota pelos dias em que as quotas mudam); por inteiro, uma
+   só, com as letras dos donos (fiscoTitularDe).
+   Recebe: ano — o ano (número); props — {id: imóvel} da declaração; tits
+   (opcional) — os titulares (fiscoTitulares().ids; [] ou nada: por inteiro).
+   Devolve: [{contratoId, nome, imovel, propertyId, regime, numero,
+   anoInicioBeneficio, anoInicioConfirmar, anoInicioPorque, data, motivo,
+   titularId, titular, quota, freguesiaCodigo, tipoPredio, artigo, fracao,
+   freguesiaUniao, matrizConfirmada, inquilinos:[{id, nome, nif, pais}]}] —
+   motivo o código ('' por dizer); quota a maior do titular no ano até à
+   cessação (0 a 1); pela data, pelo nome e pelo titular. */
+function fiscoCessadosDoAno(ano,props,tits){
+  const A=String(ano),out=[],quem=tits&&tits.length?tits:[''];
   (db.contracts||[]).forEach(c=>{
-    if(!c||!props[c.propertyId]||ctNaoDeclarado(c)||fiscoForaDoAnexoF(c,props[c.propertyId]))return;
+    const p=c&&props[c.propertyId];
+    if(!p||ctNaoDeclarado(c)||fiscoForaDoAnexoF(c,p))return;
     const x=irsCessacao(c);let data=x.data,motivo=x.motivo;
     if(!data){if(c.active!==false||!c.end)return;data=c.end;motivo=''}
     if(data.slice(0,4)!==A)return;
     const regime=irsRegimeQuadro10(c,ano);if(!regime)return;
-    out.push({contratoId:c.id,nome:ctName(c),imovel:props[c.propertyId].name||'',regime:regime,numero:fiscoDe(c).numero||'',
-      anoInicioBeneficio:fiscoAnoInicioBeneficio(c,regime,ano),data:data,motivo:motivo});
+    const ai=fiscoAnoInicioBeneficio(c,ano),dias=fiscoDiasDasQuotas(p,A).filter(d=>d<=data);
+    const base={contratoId:c.id,nome:ctName(c),imovel:p.name||'',propertyId:p.id,regime:regime,numero:fiscoDe(c).numero||'',
+      anoInicioBeneficio:ai.ano,anoInicioConfirmar:ai.confirmar,anoInicioPorque:ai.porque,data:data,motivo:motivo};
+    const ident={freguesiaCodigo:p.freguesiaCodigo||'',tipoPredio:p.tipoPredio||'',artigo:p.matrix||'',fracao:p.fraction||'',
+      freguesiaUniao:fiscoFreguesiaUniao(p,ano),matrizConfirmada:p.matrizConfirmada||'',
+      inquilinos:ctTenants(c).map(t=>({id:t.id,nome:t.name,nif:t.nif||'',pais:t.pais||''}))};
+    quem.forEach(o=>{
+      const q=Math.max.apply(null,dias.map(d=>fiscoQuota(p,o,d)));
+      if(!(q>0))return;
+      out.push(Object.assign({},base,{titularId:o,titular:fiscoTitularDe(p,o,ano),quota:q},ident,
+        {inquilinos:ident.inquilinos.map(t=>Object.assign({},t))}));
+    });
   });
-  return out.sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:String(a.nome).localeCompare(String(b.nome),'pt'));
+  const pt=(a,b)=>String(a).localeCompare(String(b),'pt');
+  return out.sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:pt(a.nome,b.nome)||pt(a.titular,b.titular));
 }
 /* A regularização do art. 72.º n.º 20 (D10): um contrato que acabou no ano
    antes do prazo por motivo do senhorio (fiscoCessacaoRegulariza) perde a
@@ -865,15 +944,25 @@ function fiscoCessadosDoAno(ano,props){
    cessado por acordo das partes (o motivo 01 do quadro 4.3, n.º 20) perde
    os 5 % desde o início do contrato: em cada ano anterior, (taxa base da
    habitação − a do DHD) sobre o imposto da prestação mensal. Os contratos
-   fora do Anexo F (fiscoForaDoAnexoF) não entram.
+   fora do Anexo F (fiscoForaDoAnexoF) não entram. A estimativa só soma os
+   anos com rendas na app: os anos do período antes do primeiro com rendas
+   (quem chegou à app com o contrato a correr) vão em anosEmFalta, e os
+   somados com as regras de outro ano (irsAno(Y).exato false — a app só tem
+   versões de alguns anos) em anosSemRegras, para o aviso e o cartão o dizerem
+   (N031).
    Recebe: ano — o ano da cessação (número); props — {id: imóvel} da
    declaração; anterior — (Y) → resumoFiscal(Y, eu, {semExtras:true}), em cache.
-   Devolve: [{contratoId, nome, anos:[{ano, diferenca}], total[, dhd:true]}]
-   — um por contrato com o motivo do n.º 20 e redução no período em que
-   acabou (ou DHD cessado por acordo, com dhd:true); anos só os com
-   diferença. */
+   Devolve: [{contratoId, nome, desde, anos:[{ano, diferenca}], total,
+   anosEmFalta:[AAAA], anosSemRegras:[AAAA][, dhd:true]}] — um por contrato
+   com o motivo do n.º 20 e redução no período em que acabou (ou DHD cessado
+   por acordo, com dhd:true); desde o início do período ('AAAA-MM-DD'; num
+   DHD, o do contrato); anos só os com diferença. */
 function fiscoRegularizacoes(ano,props,anterior){
   const A=String(ano),out=[];
+  /* os anos do período, do primeiro (y0) ao anterior ao da cessação, antes do
+     primeiro com rendas na app nesse intervalo; e os somados sem versão própria */
+  const emFalta=(ys,y0)=>{const com=ys.filter(y=>y>=y0&&y<ano),f=[];for(let y=y0;y<ano&&(!com.length||y<com[0]);y++)f.push(y);return f};
+  const semRegras=anos=>anos.map(a=>a.ano).filter(y=>!irsAno(y).exato);
   (db.contracts||[]).forEach(c=>{
     if(!c||!props[c.propertyId]||ctNaoDeclarado(c)||fiscoForaDoAnexoF(c,props[c.propertyId]))return;
     if(irsCessacao(c).data.slice(0,4)!==A||!fiscoCessacaoRegulariza(c))return;
@@ -881,8 +970,8 @@ function fiscoRegularizacoes(ano,props,anterior){
        contrato: a prestação mensal de cada ano anterior paga a taxa base da
        habitação desse ano (não há escalões de duração no DHD) */
     if(fiscoEhDhd(c)){
-      const ini=Number(String(c.start||'').slice(0,4))||ano,anos=[];
-      fiscoAnosComRendaDe(c).filter(y=>y>=ini&&y<ano).forEach(Y=>{
+      const ini=Number(String(c.start||'').slice(0,4))||ano,anos=[],todos=fiscoAnosComRendaDe(c);
+      todos.filter(y=>y>=ini&&y<ano).forEach(Y=>{
         const nova=Number((irsAno(Y).taxas||{}).habitacional)||0;let d=0;
         (anterior(Y).linhas||[]).forEach(l=>{
           if(l.contratoId!==c.id||l.papel!=='renda'||l.motivoTaxa!=='dhd'||!(l.taxa>0)||!(l.imposto>0)||!(nova>l.taxa))return;
@@ -890,11 +979,13 @@ function fiscoRegularizacoes(ano,props,anterior){
         });
         if(r2(d)>0)anos.push({ano:Y,diferenca:r2(d)});
       });
-      out.push({contratoId:c.id,nome:ctName(c),anos:anos,total:r2(sum(anos.map(a=>a.diferenca))),dhd:true});
+      out.push({contratoId:c.id,nome:ctName(c),desde:c.start||'',anos:anos,total:r2(sum(anos.map(a=>a.diferenca))),
+        anosEmFalta:emFalta(todos,ini),anosSemRegras:semRegras(anos),dhd:true});
       return;
     }
     const dec=irsTaxaDecorrida(c);if(!dec||!irsReducaoDoPeriodo(c,ano,dec.periodo))return;
-    const ys=fiscoAnosComRendaDe(c).filter(y=>y>=Number(String(dec.desde).slice(0,4))&&y<ano),anos=[];
+    const y0=Number(String(dec.desde).slice(0,4)),todos=fiscoAnosComRendaDe(c);
+    const ys=todos.filter(y=>y>=y0&&y<ano),anos=[];
     ys.forEach(Y=>{
       let d=0;
       (anterior(Y).linhas||[]).forEach(l=>{
@@ -907,7 +998,8 @@ function fiscoRegularizacoes(ano,props,anterior){
       });
       if(r2(d)>0)anos.push({ano:Y,diferenca:r2(d)});
     });
-    out.push({contratoId:c.id,nome:ctName(c),anos:anos,total:r2(sum(anos.map(a=>a.diferenca)))});
+    out.push({contratoId:c.id,nome:ctName(c),desde:String(dec.desde||''),anos:anos,total:r2(sum(anos.map(a=>a.diferenca))),
+      anosEmFalta:y0?emFalta(todos,y0):[],anosSemRegras:semRegras(anos)});
   });
   return out;
 }
@@ -989,6 +1081,87 @@ function fiscoSemRendasDoAno(ano,props,L,mesesDe){
     return {contratoId:c.id,nome:ctName(c),imovel:p.name||'',propertyId:c.propertyId,mesesEmVigor:cob.mesesEmVigor,mesesComRenda:cob.mesesComRenda};
   }).filter(x=>x.mesesEmVigor>0).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt'));
 }
+/* As rendas do ano de meses depois do dia em que o contrato acabou (N033): o
+   mês a que respeitam (irs.js:irsMesDaRenda) passa o mês do último dia em
+   vigor (fiscoFimDaVida: a cessação, ou o c.end de um terminado antigo). São o
+   sinal de que esse dia está errado — é o que vai ao quadro 10, à comunicação
+   da cessação e ao Modelo 2, e o que corta os gastos — ou de que o inquilino
+   ficou sem contrato (indemnização) ou com outro. Não contam a do próprio mês
+   do fim nem as rendas em atraso com o mês certo (t.periodo até esse mês): é
+   o mês, e não a data, que se compara. Só as rendas de um mês
+   (fiscoRendaDoMes) de contratos do Anexo F: nem os não declarados, nem os da
+   categoria B, nem os do Anexo J. Continuam na linha: só se apontam.
+   Recebe: ano — o ano (número); props — {id: imóvel} da declaração.
+   Devolve: [{txId, contratoId, nome, fim, mes, data, valor, propertyId,
+   imovel}] — valor a renda bruta inteira (sem quota), pela data e pelo nome. */
+function fiscoRendasDepoisDoFim(ano,props){
+  const A=String(ano),out=[];
+  (db.transactions||[]).forEach(t=>{
+    if(!t||t.kind!=='income'||!t.contractId||!String(t.date||'').startsWith(A)||!fiscoRendaDoMes(t))return;
+    const c=contract(t.contractId),p=c&&props[c.propertyId];
+    if(!p||ctNaoDeclarado(c)||fiscoForaDoAnexoF(c,p))return;
+    const fim=fiscoFimDaVida(c),m=irsMesDaRenda(t);
+    if(!fim||!/^\d{4}-\d{2}$/.test(m)||m<=fim.slice(0,7))return;
+    out.push({txId:t.id,contratoId:c.id,nome:ctName(c),fim:fim,mes:m,data:String(t.date||''),valor:r2(rendaBruta(t)),
+      propertyId:p.id,imovel:p.name||''});
+  });
+  return out.sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:String(a.nome).localeCompare(String(b.nome),'pt'));
+}
+/* As casas da declaração sem quotas com data (p.quotasHist vazio — as de
+   antes da v78, cujas saídas e mudanças não deixaram histórico) com
+   movimentos do ano gravados por quem já não é participante (N035): o autor
+   (o _createdBy, ou o _author, que o servidor marca) não está nos donos de
+   hoje (p.ownerIds) nem nos colaboradores conhecidos (p._colaboradores). As
+   quotas de hoje valem então para o ano inteiro, e a Declaração pergunta se
+   foram essas o ano todo. Sem nuvem não há autores, e nada se aponta.
+   INCERTO: um colaborador que já saiu também deixa de estar na lista.
+   Recebe: ano — o ano (número); props — {id: imóvel} da declaração.
+   Devolve: [{propertyId, imovel, autores:[{id, nome}]}] — pelo nome do imóvel. */
+function fiscoQuotasSemHistorico(ano,props){
+  const A=String(ano),por={};
+  (db.transactions||[]).forEach(t=>{
+    if(!t||!String(t.date||'').startsWith(A))return;
+    const ids=[t._createdBy,t._author].filter(x=>typeof x==='string'&&x);if(!ids.length)return;
+    const c=t.contractId?contract(t.contractId):null;
+    const ps=c&&props[c.propertyId]?[props[c.propertyId]]:txProps(t).filter(p=>props[p.id]);
+    ps.forEach(p=>{
+      if(quotasPeriodos(p).length)return;
+      const donos=(p.ownerIds||[]).concat(meuId()||[]),colab=(Array.isArray(p._colaboradores)?p._colaboradores:[]).map(x=>x&&x.userId);
+      ids.forEach(u=>{
+        if(donos.indexOf(u)>-1||colab.indexOf(u)>-1)return;
+        const e=por[p.id]||(por[p.id]={propertyId:p.id,imovel:p.name||'',autores:[]});
+        /* o nome, quando se sabe (o nomeUtilizador devolve o id encurtado quando não) */
+        const nm=String(nomeUtilizador(u)||'');
+        if(!e.autores.some(x=>x.id===u))e.autores.push({id:u,nome:nm===String(u).slice(0,8)?'':nm});
+      });
+    });
+  });
+  return Object.keys(por).map(k=>por[k]).sort((a,b)=>String(a.imovel).localeCompare(String(b.imovel),'pt'));
+}
+/* Os bens comuns do casal no ano (D5), para o cartão da situação e os avisos:
+   com o cônjuge sem conta na declaração (fisco-titulares.js:fiscoTitulares,
+   conjugeFora), cada imóvel com linha diz o que lhe aconteceu — imoveis, onde
+   um só dono fora da app é o cônjuge e a quota dele foi à linha do titular
+   dele; porDecidir, onde há dois ou mais donos de fora e não se adivinha qual
+   é (sem linha do cônjuge); soMeus, onde não há dono de fora (a linha fica
+   inteira no titular de quem declara: o imposto é o mesmo, e a AT não diz como
+   quer os bens comuns). Pelos dias do ano em que quem declara tem quota.
+   Recebe: ano — o ano (número); eu — o id de quem declara; ps — os imóveis com linha.
+   Devolve: {imoveis:[{propertyId, imovel, nome, quota}], porDecidir:
+   [{propertyId, imovel, nomes:[…]}], soMeus:[{propertyId, imovel}]} — quota
+   a maior do cônjuge no ano (0 a 1). */
+function fiscoBensComunsDoAno(ano,eu,ps){
+  const out={imoveis:[],porDecidir:[],soMeus:[]},cj=fiscoConjugeForaId(eu);
+  ps.forEach(p=>{
+    const dias=fiscoDiasDasQuotas(p,ano).filter(d=>fiscoQuota(p,eu,d)>0);
+    const q=Math.max.apply(null,[0].concat(dias.map(d=>fiscoQuota(p,cj,d))));
+    if(q>0){const d=dias.find(x=>fiscoQuota(p,cj,x)>0);out.imoveis.push({propertyId:p.id,imovel:p.name||'',nome:String((quotasForaNaData(p,d)[0]||{}).nome||'').trim(),quota:q});return}
+    const nomes=[];dias.forEach(d=>{const fs=quotasForaNaData(p,d);if(fs.length>1)fs.forEach(f=>{if(nomes.indexOf(f.nome)<0)nomes.push(f.nome)})});
+    if(nomes.length)out.porDecidir.push({propertyId:p.id,imovel:p.name||'',nomes:nomes});
+    else out.soMeus.push({propertyId:p.id,imovel:p.name||''});
+  });
+  return out;
+}
 /* O resumo do Anexo F de um ano — a função pura por trás da página, do texto e
    do CSV. Uma linha por contrato não marcado como não declarado com rendas no
    ano e por titular com quota no imóvel (fiscoTitulares: eu e, em conjunta, o
@@ -1021,11 +1194,26 @@ function fiscoSemRendasDoAno(ano,props,L,mesesDe){
    obrasPorConfirmar, foraPorEscolha, semImovel, porClassificar,
    reembolsosGasto, seguroDeRenda, rendasForaDosTotais, anexoJ, categoriaB,
    rendasAntesDoInicio, rendasAbaixo, retencoesParticulares,
-   splitwiseCortadas}. */
+   splitwiseCortadas, semConjuge, conjugeFora, bensComuns, rendasDepoisDoFim,
+   rendasDeOutraQuota, imiDeOutraQuota, quotasSemHistorico}. */
 function resumoFiscal(ano,eu,opcoes){
   const dono=!fiscoPapeis;if(dono)fiscoPapeis=new Map();
   try{return fiscoResumoDoAno(ano,eu,opcoes)}finally{if(dono)fiscoPapeis=null}
 }
+/* O que o resumo traz da ronda 1 das correções da auditoria (fiscoResumoDoAno,
+   a seguir): cessados por titular, com a matriz, os inquilinos e o ano de
+   início do benefício «a confirmar» (N008, N009); regularizacoes com desde,
+   anosEmFalta e anosSemRegras (N031); nas linhas, reducaoCaida (N101),
+   empresaNaoHabitacional (N034) e conjugeFora (N020); semConjuge (true em
+   conjunta sem cônjuge com conta), conjugeFora ({id, nome, letra} do cônjuge
+   sem conta dos bens comuns, ou null) e bensComuns (fiscoBensComunsDoAno, ou
+   null — D5); rendasDepoisDoFim (fiscoRendasDepoisDoFim — N033);
+   rendasDeOutraQuota [{txId, contratoId, nome, propertyId, imovel, mes, data,
+   valor, desde, quotaMes, quotaDia}] — as rendas em atraso que contaram pela
+   quota do mês a que respeitam (fiscoDataDaQuota), com as quotas de quem
+   declara; imiDeOutraQuota [{txId, nome, propertyId, imovel, data, valor,
+   quotaAno, quotaDia}] — o IMI que contou pela quota de 31 de dezembro do ano
+   anterior (N069); e quotasSemHistorico (fiscoQuotasSemHistorico — N035). */
 /* O miolo do resumoFiscal, com a cache dos papéis das receitas já aberta.
    Recebe: ano, eu, opcoes — os do resumoFiscal.
    Devolve: o resumo — linhas as de fiscoLinhaNova (papel 'renda') e
@@ -1060,7 +1248,8 @@ function resumoFiscal(ano,eu,opcoes){
    inicio, propertyId, imovel, mes}] (D130); rendasAbaixo
    (fiscoRendasAbaixo — D115; [] sem extras); retencoesParticulares
    (fiscoRetencoesParticulares — D116); splitwiseCortadas
-   (fiscoSplitwiseCortadas — D122; [] sem extras). */
+   (fiscoSplitwiseCortadas — D122; [] sem extras). E os da ronda 1 das
+   correções, no bloco de cima. */
 function fiscoResumoDoAno(ano,eu,opcoes){
   ano=Number(ano)||YEAR;
   const quem=fiscoTitulares(eu,ano),tits=quem.ids;
@@ -1101,6 +1290,9 @@ function fiscoResumoDoAno(ano,eu,opcoes){
   /* a categoria B (D134), as cauções iniciais dos DHD por linha (D120) e as
      rendas recebidas antes do início do contrato (D130) */
   const catB={},dhdCaucao={},antesDoInicio=[];
+  /* as rendas em atraso repartidas pela quota do mês a que respeitam, e não
+     pela do dia em que entraram (N069) */
+  const rendasDeOutraQuota=[];
   /* as receitas do ano pelo papel de cada uma (irs-papeis.js:irsReceitaDe —
      pelo id das categorias, nunca pelo nome; o «Fora dos totais» nas Rendas
      não as tira, D19): a renda, a caução (D03) e o reembolso do inquilino
@@ -1119,7 +1311,7 @@ function fiscoResumoDoAno(ano,eu,opcoes){
       const nome=t.label||[t.category,t.sub].filter(Boolean).join(' › ')||'Receita',valor=r2(rendaBruta(t));
       const e={txId:t.id,nome:nome,valor:valor,propertyId:ps.length===1?ps[0].id:(t.propertyId||null),data:String(t.date||'')};
       if(papel==='porClassificar'){porClassificar.push(Object.assign(e,{contratoId:c?c.id:null,categoria:t.category||'',sub:t.sub||''}));return}
-      const tipo=catIrsId('catsIn',t.category,t.sub)==='reembolsos/condominio'?'condominio':'seguro';
+      const tipo=txCatIrsId(t,true)==='reembolsos/condominio'?'condominio':'seguro';
       if(tipo==='seguro'&&ps.some(p=>comSeguroDeRenda[p.id])){seguroDeRenda.push(e);return}
       const x=Object.assign(e,{tipo:tipo,sub:t.sub||'',abatido:0});reembolsosGasto.push(x);
       if(tipo==='condominio')reembCondominio.push({t:t,e:x});
@@ -1129,7 +1321,16 @@ function fiscoResumoDoAno(ano,eu,opcoes){
     const pid=(c&&c.propertyId)||t.propertyId||'';
     const p=props[pid];
     if(pid&&!p)return;                 // fora do âmbito: de outro dono, ou sem permissão
-    const ps=p?partes(p,t.date):partesSem(t);
+    /* a renda em atraso de um mês anterior reparte-se pela quota desse mês
+       (fiscoDataDaQuota — N069); quando não é a do dia em que entrou, diz-se */
+    const dq=p?fiscoDataDaQuota(t):String(t.date||'');
+    const ps=p?partes(p,dq):partesSem(t);
+    if(p&&c&&dq!==t.date&&!ctNaoDeclarado(c)&&fiscoForaDoAnexoF(c,p)!=='categoriaB'){
+      const eu=quem.eu||'',qm=quotaDe(p,eu,dq),qd=quotaDe(p,eu,t.date);
+      if(Math.abs(qm-qd)>1e-9)rendasDeOutraQuota.push({txId:t.id,contratoId:c.id,nome:ctName(c),propertyId:p.id,imovel:p.name||'',
+        mes:irsMesDaRenda(t),data:String(t.date||''),valor:r2(rendaBruta(t)),
+        desde:quotasPeriodos(p).map(e=>addDays(e.ate,1)).filter(x=>x>dq&&x<=t.date).sort()[0]||'',quotaMes:qm,quotaDia:qd});
+    }
     if(!ps.length)return;              // sem imóvel e de outro: não é desta declaração
     const bruto=rendaBruta(t),q=sum(ps.map(x=>x[1])),bruta=bruto*q;
     /* uma renda numa categoria «Fora dos totais» continua a declarar-se (D19) */
@@ -1169,7 +1370,7 @@ function fiscoResumoDoAno(ano,eu,opcoes){
     }
     /* o troço da taxa do mês a que a renda respeita (D41, D15) */
     const segs=segsDe[c.id]||(segsDe[c.id]=irsSegmentosDoAno(c,ano)),s=fiscoTrocoDaRenda(c,t,segs,ano),sk=s.de+'|'+s.ate;
-    const reemb=catIrsId('catsIn',t.category)==='reembolsos';
+    const reemb=txCatIrsId(t)==='reembolsos';
     /* uma renda recebida antes do início do contrato e que não respeita a um
        mês dele (não é uma renda antecipada nem a caução): é deste contrato?
        Continua a contar; diz-se (D130) */
@@ -1303,12 +1504,12 @@ function fiscoResumoDoAno(ano,eu,opcoes){
      imóvel nenhum, de quem declara, com coluna dedutível ou a confirmar, em
      semImovel (D68) */
   let obrasSoltas=0,foraDoPeriodo=0;
-  const aConfirmar=[],foraPorEscolha=[],semImovel=[];
+  const aConfirmar=[],foraPorEscolha=[],semImovel=[],imiDeOutraQuota=[],dImi=(ano-1)+'-12-31';
   const pidsComLinha={};Object.keys(porImovel).forEach(k=>{pidsComLinha[porImovel[k][0].propertyId]=1});
   (db.transactions||[]).forEach(t=>{
     if(t.kind!=='expense'||!noAno(t)||irsDevolucaoDeRenda(t))return;
     /* a caução de um DHD não foi rendimento: devolvê-la não é gasto (D120) */
-    if(t.contractId&&catIrsId('cats',t.category,t.sub)==='devolucoes/caucao'&&fiscoEhDhd(contract(t.contractId)))return;
+    if(t.contractId&&txCatIrsId(t,true)==='devolucoes/caucao'&&fiscoEhDhd(contract(t.contractId)))return;
     let r=irsColunaDe(t)||{};if(r.col==='nao')return;
     const nome=t.label||[t.category,t.sub].filter(Boolean).join(' › ')||'Despesa',d=String(t.date||'');
     if(!txProps(t).length){
@@ -1331,8 +1532,12 @@ function fiscoResumoDoAno(ano,eu,opcoes){
       return;
     }
     const jaFoi=consumidos[t.id]||{};
-    const semPeriodo=r.col==='obras24'||!!FISCO_SEM_PERIODO[r.col]||catIrsId('cats',t.category,t.sub)==='devolucoes/caucao';
+    const semPeriodo=r.col==='obras24'||!!FISCO_SEM_PERIODO[r.col]||txCatIrsId(t,true)==='devolucoes/caucao';
     const nota=r.col==='imi'&&t.notaPropria===true;
+    /* o IMI pago no ano é o do ano anterior, devido por quem era dono a 31 de
+       dezembro dele (CIMI art. 8.º n.º 1): reparte-se pela quota desse dia, e
+       não pela do pagamento (N069). A nota própria fica como é (D32) */
+    const dq=r.col==='imi'&&!nota?dImi:t.date,tocou=[];
     let entrou=false,vazio=false,porEscolha=false;
     Object.keys(porImovel).forEach(k=>{
       const ls=porImovel[k],pid=ls[0].propertyId,o=ls[0].titularId;
@@ -1342,11 +1547,18 @@ function fiscoResumoDoAno(ano,eu,opcoes){
         if(r.origem!=='movimento'){vazio=true;return}
         porEscolha=true;
       }
-      entrou=true;
-      const q=nota?fiscoParteDaNota(t,o,quem.eu):quotaDe(props[pid],o,t.date);
+      entrou=true;if(tocou.indexOf(pid)<0)tocou.push(pid);
+      const q=nota?fiscoParteDaNota(t,o,quem.eu):quotaDe(props[pid],o,dq);
       if(r.col!=='obras24')fiscoReparte(ls,(Number(t.amount)||0)*w*q,(l,parte)=>{l.gastos[r.col]+=parte},resto[k]);
     });
     if(vazio)foraDoPeriodo++;
+    /* um IMI repartido pela quota de 31 de dezembro que não é a do dia em que
+       se pagou: diz-se (o aviso pergunta se a nota é a de quem era dono) */
+    if(dq!==t.date){
+      const eu=quem.eu||'',p=tocou.map(id=>props[id]).find(x=>Math.abs(quotaDe(x,eu,dq)-quotaDe(x,eu,t.date))>1e-9);
+      if(p)imiDeOutraQuota.push({txId:t.id,nome:nome,propertyId:p.id,imovel:p.name||'',data:d,valor:r2(Number(t.amount)||0),
+        quotaAno:quotaDe(p,eu,dq),quotaDia:quotaDe(p,eu,t.date)});
+    }
     if(!entrou)return;
     if(porEscolha)foraPorEscolha.push({txId:t.id,nome:nome,data:d,valor:r2(Number(t.amount)||0),propertyId:t.propertyId||null,col:r.col});
     if(r.col==='obras24')obrasSoltas++;
@@ -1423,6 +1635,11 @@ function fiscoResumoDoAno(ano,eu,opcoes){
     Object.defineProperty(l,'_trocos',{value:ts,enumerable:false,writable:true,configurable:true});
     const com=ts.some(s=>s.rendas>0)?ts.filter(s=>s.rendas>0):ts,ult=com[com.length-1];
     const red=com.some(s=>s.reducao);
+    /* a redução caiu toda (N101): a duração decorrida não chega a escalão
+       nenhum e todos os troços com redução são do período que acabou — a
+       linha fica no 4.2 (D14: confirmar com a AT antes de mudar), e o cartão
+       e os avisos dizem que já não há redução nenhuma */
+    l.reducaoCaida=!!(dec&&!dec.reducao&&red&&com.filter(s=>s.reducao).every(s=>s.periodo===dec.periodo));
     l.taxa=ult.taxa;
     l.motivoTaxa=ult.regulariza?(dec&&dec.reducao?'duracao':'base'):ult.motivo==='semRenovacao'?'base':ult.motivo;
     l.quadro=ehDhd?(v.quadros.dhd||v.quadros.semReducao):red?v.quadros.comReducao:v.quadros.semReducao;l.taxaReduzida=red;
@@ -1544,14 +1761,31 @@ function fiscoResumoDoAno(ano,eu,opcoes){
   /* o AIMI é dos prédios em Portugal: um imóvel lá fora não entra no quadro 9 */
   const propsPT={};Object.keys(props).forEach(k=>{if(!paisDoImovel(props[k].pais))propsPT[k]=props[k]});
   const idsF={};L.forEach(l=>{if(l.papel==='renda')idsF[l.contratoId]=1});
+  /* os bens comuns do casal (D5): o que aconteceu a cada imóvel com linha, e
+     o cônjuge sem conta com o nome do dono de fora que ele é */
+  let bensComuns=null,conjugeFora=null;
+  if(quem.conjugeFora){
+    const comLinha={};L.concat(Q5).forEach(l=>{if(l.propertyId&&props[l.propertyId])comLinha[l.propertyId]=props[l.propertyId]});
+    bensComuns=fiscoBensComunsDoAno(ano,quem.eu,Object.keys(comLinha).map(k=>comLinha[k]).sort((a,b)=>pt(a.name,b.name)));
+    /* o nome só quando é o mesmo em todos os imóveis: nomes diferentes são
+       pessoas diferentes, e o aviso lista-os para a pessoa confirmar */
+    const nms=bensComuns.imoveis.map(x=>x.nome).filter((x,i,a)=>x&&a.indexOf(x)===i);
+    const cj=fiscoConjugeForaId(quem.eu),nm=nms.length===1?nms[0]:'';
+    conjugeFora={id:cj,nome:nm,letra:fiscoLetra(cj,ano)};
+  }
   const r={ano:ano,versao:v,colunas:cols,titularId:quem.eu,titulares:tits.slice(),porInteiro:quem.porInteiro,semSessao:quem.semSessao,
+    semConjuge:!!quem.semConjuge,conjugeFora:conjugeFora,bensComuns:bensComuns,
     variosTitulares:Object.keys(donos).length>1,imoveis:base.length,linhas:L,fora:F,semContrato:S,totais:totais,
     avisos:[],aConfirmar:aConfirmar,semRegra:semRegra,obrasSoltas:obrasSoltas,foraDoPeriodo:foraDoPeriodo,
     /* o VPT do quadro 9 pela quota a 1 de janeiro: a titularidade do AIMI
        apura-se nesse dia (CIMI art. 135.º-A n.º 3) */
     aimi:fiscoAimi(ano,t=>sum(partesSem(t).map(x=>x[1])),propsPT,p=>quotaCasa(p,A+'-01-01'),L,totais.imposto),
     semRegrasDoAno:ano<(irsAnosConhecidos()[0]||ano),
-    cessados:fiscoCessadosDoAno(ano,props),regularizacoes:regs,reporte:reporte,
+    cessados:fiscoCessadosDoAno(ano,props,tits),regularizacoes:regs,reporte:reporte,
+    rendasDepoisDoFim:fiscoRendasDepoisDoFim(ano,props),
+    rendasDeOutraQuota:rendasDeOutraQuota.sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:pt(a.nome,b.nome)),
+    imiDeOutraQuota:imiDeOutraQuota.sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:pt(a.nome,b.nome)),
+    quotasSemHistorico:fiscoQuotasSemHistorico(ano,props),
     contratosSemRendas:fiscoSemRendasDoAno(ano,props,L.concat(Q5),mesesDe),
     quadro5:Q5,obrasPorConfirmar:obrasPorConfirmar,foraPorEscolha:foraPorEscolha,semImovel:semImovel,
     porClassificar:porClassificar,reembolsosGasto:reembolsosGasto,seguroDeRenda:seguroDeRenda,

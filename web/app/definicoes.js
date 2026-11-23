@@ -473,6 +473,13 @@ function vSettings(){
    Recebe: tk — a árvore ('cats' ou 'catsIn').
    Devolve: os movimentos cujo tipo usa essa árvore (array). */
 const treeTx=tk=>db.transactions.filter(t=>treeKey(t.kind)===tk);
+/* O que leva o nome de uma categoria desta árvore e muda com ele: os movimentos
+   (treeTx) e o tx de cada planeado e de cada modelo — um planeado com o nome antigo
+   fazia nascer as rendas confirmadas numa categoria que a árvore já não tem (N005).
+   Recebe: tk — a árvore ('cats' ou 'catsIn').
+   Devolve: array de movimentos e de tx de moldes (os próprios objetos, para mudar). */
+const txEMoldesDaArvore=tk=>treeTx(tk).concat((db.recurring||[]).concat(db.templates||[])
+  .map(x=>x&&x.tx).filter(x=>x&&typeof x==='object'&&treeKey(x.kind)===tk));
 /* A árvore de categorias à vista na página das categorias: os pagamentos
    ('cats', a que vai ao Anexo F, e a primeira — o canvas) ou as receitas
    ('catsIn'). Vive enquanto a app está aberta. */
@@ -1167,9 +1174,12 @@ function moverEscolhas(tk,pares){
 const paresDaCategoria=(tk,cat,nova)=>[[[cat],nova==null?null:[nova]]]
   .concat(((db.settings[tk]||{})[cat]||[]).map(sb=>[[cat,sb],nova==null?null:[nova,sb]]));
 /* Renomeia uma categoria mantendo a ordem (reconstrói o objeto) e atualiza os
-   movimentos dessa árvore que a usavam e as escolhas guardadas por nome (fora dos
-   totais, coluna do Anexo F, e o id das categorias que o IRS lê, que segue o nome
-   novo — D19). Nome vazio ou igual só repinta; o nome de
+   movimentos, os planeados e os modelos dessa árvore que a usavam
+   (txEMoldesDaArvore, N005) e as escolhas guardadas por nome (fora dos totais,
+   coluna do Anexo F, e o id das categorias que o IRS lê, que segue o nome novo —
+   D19). Ao gravar, os movimentos com o nome novo de uma categoria do IRS levam o id
+   (dados.js:carimbarCatIrs, N006): outra conta da mesma casa continua a lê-los.
+   Nome vazio ou igual só repinta; o nome de
    outra categoria que já existe não se aceita — fundia as duas e perdia as subcategorias.
    Recebe: tk — a árvore: 'cats' ou 'catsIn'; oldName — o nome atual;
    newName — o nome novo, tal como vem do campo (é-lhe feito trim).
@@ -1182,14 +1192,16 @@ function renameCat(tk,oldName,newName){
   moverEscolhas(tk,paresDaCategoria(tk,oldName,newName));
   Object.keys(cs).forEach(k=>{out[k===oldName?newName:k]=cs[k]});
   db.settings[tk]=out;
-  treeTx(tk).forEach(t=>{if(t.category===oldName)t.category=newName});
+  txEMoldesDaArvore(tk).forEach(t=>{if(t.category===oldName)t.category=newName});
   save();render();toast('Categoria renomeada.');
 }
 // Apaga a categoria depois de confirmar com o impacto: os movimentos que a
 // usavam ficam sem categoria nem subcategoria (não se apagam), e as escolhas
-// dela (fora dos totais, coluna do Anexo F) saem com ela. A frase diz quantos,
-// no singular ou no plural. Uma categoria que o IRS lê (com id, catDoIrs) não
-// se remove: diz porquê e não faz nada (o ⋯ dela já não tem o «Apagar»).
+// dela (fora dos totais, coluna do Anexo F) saem com ela. Os planeados e os
+// modelos dela também ficam sem categoria (txEMoldesDaArvore): os movimentos que
+// nascerem deles não levam um nome que a árvore já não tem. A frase diz quantos
+// movimentos, no singular ou no plural. Uma categoria que o IRS lê (com id,
+// catDoIrs) não se remove: diz porquê e não faz nada (o ⋯ dela já não tem o «Apagar»).
 // Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria.
 // Devolve: nada — abre a confirmação; só ao confirmar apaga e grava.
 function delCat(tk,k){
@@ -1198,7 +1210,7 @@ function delCat(tk,k){
   confirmModal('Apagar categoria',`Apagar “${esc(k)}”?${used?` ${used===1?'1 movimento fica':used+' movimentos ficam'} sem categoria.`:''}`,()=>{
     moverEscolhas(tk,paresDaCategoria(tk,k,null));
     delete db.settings[tk][k];
-    treeTx(tk).forEach(t=>{if(t.category===k){t.category='';t.sub=''}});
+    txEMoldesDaArvore(tk).forEach(t=>{if(t.category===k){t.category='';t.sub=''}});
     save();render();toast('Categoria apagada.');
   });
 }
@@ -1208,9 +1220,10 @@ function delCat(tk,k){
 function addSub(tk,k){promptModal('Nova subcategoria','Nome da subcategoria',null,v=>{
   const cs=db.settings[tk]||(db.settings[tk]={}),l=cs[k]||(cs[k]=[]);
   if(l.indexOf(v)<0)l.push(v);save();render();toast('Subcategoria criada.')},'Canalização')}
-/* Muda o nome de uma subcategoria via prompt: atualiza a lista, os movimentos
-   que a usavam e leva as escolhas dela (fora dos totais, coluna do Anexo F, o
-   id do IRS — D19) para o nome novo. O nome de outra subcategoria da mesma categoria
+/* Muda o nome de uma subcategoria via prompt: atualiza a lista, os movimentos,
+   os planeados e os modelos que a usavam (txEMoldesDaArvore, N005) e leva as
+   escolhas dela (fora dos totais, coluna do Anexo F, o id do IRS — D19) para o
+   nome novo. O nome de outra subcategoria da mesma categoria
    não se aceita: ficavam duas iguais.
    Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria;
    old — o nome atual da subcategoria.
@@ -1221,13 +1234,50 @@ function renameSub(tk,k,old){
     const cs2=db.settings[tk]||{},l=cs2[k]||[];
     if(l.indexOf(nn)>-1)return toast('Já há uma subcategoria com esse nome.');
     const i=l.indexOf(old);if(i>-1)l[i]=nn;
-    treeTx(tk).forEach(t=>{if(t.category===k&&t.sub===old)t.sub=nn});
+    txEMoldesDaArvore(tk).forEach(t=>{if(t.category===k&&t.sub===old)t.sub=nn});
     moverEscolhas(tk,[[[k,old],[k,nn]]]);
     save();render();toast('Subcategoria renomeada.');
   },'Canalização');
 }
+/* As despesas (e os moldes dos planeados e dos modelos) de uma subcategoria cuja
+   coluna do Anexo F muda quando ela sai: a coluna que tinham pela subcategoria (ou
+   por estar fora dos totais) e a que passariam a ter pela categoria (N043). As
+   subcategorias de origem que dizem «isto não se deduz» dentro de uma categoria que
+   deduz (Condomínio › Fundo de reserva, Manutenção e reparações › Eletrodomésticos,
+   Obras e benfeitorias › Remodelação) e as que deixam a confirmar são as que contam.
+   Uma despesa com a coluna escolhida à mão não muda.
+   Recebe: tk — a árvore ('cats'; nas receitas não há colunas); k — a categoria;
+   sb — a subcategoria.
+   Devolve: array de {t, col, depois, molde} — o objeto (movimento, ou tx de um
+   molde), a coluna de agora, a da categoria, e se é de um molde. */
+function subColunasQueMudam(tk,k,sb){
+  if(tk!=='cats')return [];
+  const moldes=new Set((db.recurring||[]).concat(db.templates||[]).map(x=>x&&x.tx).filter(Boolean));
+  const out=[];
+  txEMoldesDaArvore(tk).forEach(t=>{
+    if(t.kind!=='expense'||t.category!==k||t.sub!==sb)return;
+    const antes=irsColunaDe(t).col,depois=irsColunaDe(Object.assign({},t,{sub:''})).col;
+    if(antes!==depois)out.push({t:t,col:antes,depois:depois,molde:moldes.has(t)});
+  });
+  return out;
+}
+/* A frase da confirmação de apagar uma subcategoria sobre o Anexo F (N043): as
+   despesas que mudariam de coluna ficam com a que tinham, escrita em cada uma.
+   Recebe: muda — o que o subColunasQueMudam devolve.
+   Devolve: o texto (já escapado, com o espaço à frente), ou '' sem despesas. */
+function fraseColunasQueFicam(muda){
+  const mv=muda.filter(x=>!x.molde),n=mv.length;
+  if(!n)return '';
+  const cols=[...new Set(mv.map(x=>x.col))],depois=[...new Set(mv.map(x=>x.depois))];
+  const para=depois.length===1?` e não ${n===1?'passa':'passam'} a «${esc(irsColunaNome(depois[0]))}»`:'';
+  if(cols.length===1)return ` No Anexo F, ${n===1?'a despesa continua':'as '+n+' despesas continuam'} em «${esc(irsColunaNome(cols[0]))}»${para}: a coluna fica escrita ${n===1?'nela':'em cada uma'}.`;
+  return ` No Anexo F, as ${n} despesas ficam com a coluna que tinham${para}: a coluna fica escrita em cada uma.`;
+}
 // Apaga a subcategoria depois de confirmar com o impacto: sai da lista, dos
-// movimentos que a usavam (ficam só sem subcategoria) e das escolhas guardadas.
+// movimentos, dos planeados e dos modelos que a usavam (ficam só sem
+// subcategoria) e das escolhas guardadas. Uma despesa cuja coluna do Anexo F
+// mudava sem a subcategoria fica com a que tinha, escrita no próprio movimento
+// (t.irsCol, 'nao' e 'confirmar' incluídos — N043), e a confirmação di-lo.
 // A frase diz quantos, no singular ou no plural. Uma subcategoria que o IRS lê
 // (com id, catDoIrs) não se remove: diz porquê e não faz nada.
 // Recebe: tk — a árvore: 'cats' ou 'catsIn'; k — o nome da categoria;
@@ -1238,20 +1288,67 @@ function delSub(tk,k,sb){
   /* apagar categoria e etiqueta confirmam com o impacto; a subcategoria
      executava logo — a mesma ação, na mesma página, ora protegia ora não */
   const usados=treeTx(tk).filter(t=>t.category===k&&t.sub===sb).length;
-  confirmModal('Apagar subcategoria',`“${esc(sb)}” sai de ${esc(k)}${usados?` e de ${usados===1?'1 movimento que a usa':usados+' movimentos que a usam'}`:''}.`,()=>{
+  const frase=fraseColunasQueFicam(subColunasQueMudam(tk,k,sb));
+  confirmModal('Apagar subcategoria',`“${esc(sb)}” sai de ${esc(k)}${usados?` e de ${usados===1?'1 movimento que a usa':usados+' movimentos que a usam'}`:''}.${frase}`,()=>{
+    /* a coluna fica escrita antes de a subcategoria sair (a regra dela vai-se com ela) */
+    subColunasQueMudam(tk,k,sb).forEach(x=>{x.t.irsCol=x.col});
     moverEscolhas(tk,[[[k,sb],null]]);
     const cs=db.settings[tk]||{};cs[k]=(cs[k]||[]).filter(x=>x!==sb);
-    treeTx(tk).forEach(t=>{if(t.category===k&&t.sub===sb)t.sub=''});
+    txEMoldesDaArvore(tk).forEach(t=>{if(t.category===k&&t.sub===sb)t.sub=''});
     save();render();toast('Subcategoria apagada.');
   });
 }
-// Repõe as duas árvores nas listas de origem, após confirmação; os movimentos
-// mantêm o texto de categoria que já tinham. As categorias que o IRS lê voltam
-// com o identificador de origem (dados.js:catIdsDeOrigem): sem ele, as Rendas
-// repostas ficavam sem id, e a Declaração deixava de as reconhecer (D19).
+/* As categorias e subcategorias que o IRS lê e que têm hoje um nome que não é o de
+   origem, por árvore: as subcategorias (o nome de agora e o de origem, dentro do
+   nome de agora da categoria) e as categorias (o nome de agora, o de origem e as
+   subcategorias delas já com o nome de origem). É o que o «Repor categorias» leva
+   de volta ao nome de origem (N073).
+   Devolve: array de {tk, cat, sub, para, subs} — numa subcategoria, cat e sub são
+   os nomes de agora e para o de origem da sub; numa categoria, sub é '', para o
+   nome de origem e subs as subcategorias (com os nomes que ficam). As subcategorias
+   vêm primeiro. */
+function catsDoIrsRenomeadas(){
+  const subs=[],cats=[];
+  ['cats','catsIn'].forEach(tk=>{
+    const ids=(db.settings.catIds&&db.settings.catIds[tk])||{},ori=CATS_IRS_ORIGEM[tk];
+    const aqui=chavesDaArvore(db.settings[tk]),origem=chavesDaArvore(tk==='catsIn'?CATS_IN0:CATS0);
+    const novoSub={};
+    Object.keys(ids).forEach(k=>{
+      const id=ids[k],o=Object.keys(ori).find(x=>ori[x]===id),s=aqui.get(k),so=o?origem.get(o):null;
+      if(!s||!so)return;
+      if(s.sub){if(s.sub!==so.sub){subs.push({tk:tk,cat:s.cat,sub:s.sub,para:so.sub});novoSub[k]=so.sub}}
+      else if(s.cat!==so.cat)cats.push({tk:tk,cat:s.cat,sub:'',para:so.cat});
+    });
+    cats.filter(x=>x.tk===tk).forEach(x=>{
+      x.subs=((db.settings[tk]||{})[x.cat]||[]).map(sb=>novoSub[x.cat+' / '+sb]||sb);
+    });
+  });
+  return subs.concat(cats);
+}
+// Repõe as duas árvores nas listas de origem, após confirmação. As categorias
+// que o IRS lê voltam com o identificador de origem (dados.js:catIdsDeOrigem):
+// sem ele, as Rendas repostas ficavam sem id, e a Declaração deixava de as
+// reconhecer (D19). As que tinham outro nome voltam ao de origem com os
+// movimentos, os planeados e os modelos delas e com as escolhas (fora dos
+// totais, coluna do Anexo F) — senão os movimentos ficavam com um nome que a
+// árvore reposta não tem, e as rendas saíam todas da Declaração (N073); a
+// confirmação diz quais. Os movimentos das categorias que a pessoa criou mantêm
+// o texto.
 // Devolve: nada — abre a confirmação; só ao confirmar repõe e grava.
 function resetCats(){
-  confirmModal('Repor categorias','Volta às listas de origem (receitas e pagamentos). As categorias que criaste desaparecem; os movimentos mantêm o texto.',()=>{
+  const ren=catsDoIrsRenomeadas();
+  const lista=ren.map(x=>x.sub?`“${esc(x.cat+' › '+x.sub)}” volta a “${esc(x.para)}”`:`“${esc(x.cat)}” volta a “${esc(x.para)}”`);
+  const frase=ren.length?` ${lista.length===1?'O nome que mudaste numa categoria que o IRS lê volta ao de origem':'Os nomes que mudaste nas categorias que o IRS lê voltam aos de origem'}, com os movimentos, os planeados e os modelos (${lista.join('; ')}): a Declaração continua a contá-los.`:'';
+  confirmModal('Repor categorias','Volta às listas de origem (receitas e pagamentos). As categorias que criaste desaparecem, e os movimentos delas mantêm o texto.'+frase,()=>{
+    catsDoIrsRenomeadas().forEach(x=>{
+      if(x.sub){
+        moverEscolhas(x.tk,[[[x.cat,x.sub],[x.cat,x.para]]]);
+        txEMoldesDaArvore(x.tk).forEach(t=>{if(t.category===x.cat&&t.sub===x.sub)t.sub=x.para});
+      }else{
+        moverEscolhas(x.tk,[[[x.cat],[x.para]]].concat(x.subs.map(sb=>[[x.cat,sb],[x.para,sb]])));
+        txEMoldesDaArvore(x.tk).forEach(t=>{if(t.category===x.cat)t.category=x.para});
+      }
+    });
     db.settings.cats=JSON.parse(JSON.stringify(CATS0));db.settings.catsIn=JSON.parse(JSON.stringify(CATS_IN0));
     db.settings.catIds=catIdsDeOrigem(db.settings.cats,db.settings.catsIn);
     save();render();toast('Categorias repostas.');

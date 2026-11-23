@@ -272,7 +272,7 @@ describe('D96: o Anexo F é de quem é dono', () => {
     assert.equal(app.resumoFiscal(ANO).imoveis, 0, 'controlo: nenhum imóvel com quota da Carla');
     const t = textoDe(app.vFisco());
     assert.match(t, /Nenhum imóvel teu/);
-    assert.match(t, /O Anexo F é de quem é dono, pela sua quota-parte \(CIRS art\. 19\.º\)/);
+    assert.match(t, /O Anexo F é de quem tem direito às rendas, pela sua quota-parte \(CIRS art\. 19\.º\): o dono ou, havendo usufruto, o usufrutuário/);
     assert.match(t, /Quem só recebe as rendas por conta do dono não as declara\./);
     assert.doesNotMatch(t, /de quem recebe as rendas/);
   });

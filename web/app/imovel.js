@@ -43,9 +43,15 @@ function propModal(id){
       const f=errSub.campo==='p_purchaseDate'?null:document.getElementById('fold_reg');if(f&&f.classList&&!f.classList.contains('open'))toggleFold('reg');
       return falhaCampo(errSub.campo,errSub.msg);
     }
-    /* as quotas à mão só existem sem nuvem (com ela são da proposta, cloud/utilizadores.js) */
-    const locais=imvDonosLocais();
+    /* as quotas à mão só existem sem nuvem (com ela são da proposta, cloud/utilizadores.js);
+       com nuvem, num imóvel só da minha conta, a pergunta dos donos de fora responde-se
+       aqui (N059) e segue com o imóvel (novo) ou numa proposta de um dono só (guardado) */
+    const locais=imvDonosLocais(),soMinha=!locais&&imvSoMinhaNaNuvem(pForm);
     if(locais){const q=imvQuotasDoFormulario();if(q.erro)return falhaCampo(q.erro.campo,q.erro.msg)}
+    else if(soMinha){const v=imvForaValidar('p');if(v.erro)return falhaCampo(v.erro.campo,v.erro.msg);pForm.comproprietariosFora=v.fora===null?null:normForaDaApp(v.fora)}
+    /* o dia da primeira resposta com donos de fora, quando não é «desde sempre» (N019) */
+    const q1=locais||soMinha?imvForaQuando('p'):{desde:''};
+    if(q1.erro)return falhaCampo(q1.erro.campo,q1.erro.msg);
     /* o capital de cada hipoteca é obrigatório (o asterisco de loanSect); o
        grupo das hipotecas está sempre aberto, e o falhaCampo chega ao campo */
     const semCapital=servicoLigado('credits')?(pForm.loans||[]).find(l=>!(capitalDoInicio(l,db.transactions)>0)):null;
@@ -57,10 +63,17 @@ function propModal(id){
     const semMeses=servicoLigado('credits')?loanProdSemMeses(pForm.loans):'';
     if(semMeses)return falhaCampo(semMeses,LOAN_PROD_FRASES.semMeses);
     const seguir=()=>{
-      /* as quotas de um imóvel que já existe mudaram: desde quando valem as novas? (D29) */
-      const guardado=locais?prop(pForm.id):null,muda=guardado?imvComoMudamAsQuotas(guardado,pForm):'';
-      if(muda==='paraTras')imvFecharQuotas(pForm,guardado,'');
-      if(muda==='comData')return imvPerguntarDesde(desde=>{imvFecharQuotas(pForm,guardado,desde);imvGravarFormulario(id)});
+      const guardado=locais||soMinha?prop(pForm.id):null;
+      if(soMinha)return imvGravarComForaNaNuvem(id,guardado,q1.desde);
+      /* as quotas de um imóvel que já existe mudaram: desde quando valem as novas? (D29);
+         a primeira resposta com donos de fora já disse desde quando no formulário (N019) */
+      const muda=guardado?imvComoMudamAsQuotas(guardado,pForm):'';
+      const primeira=!!guardado&&!Array.isArray(guardado.comproprietariosFora)&&Array.isArray(pForm.comproprietariosFora)&&pForm.comproprietariosFora.length>0;
+      if(muda&&primeira)imvFecharQuotas(pForm,guardado,q1.desde);
+      else if(muda==='paraTras')imvFecharQuotas(pForm,guardado,'');
+      else if(muda==='comData')return imvPerguntarDesde(desde=>{imvFecharQuotas(pForm,guardado,desde);imvGravarFormulario(id)});
+      /* um imóvel novo cujos donos de fora começaram num dia: até à véspera, só os da app */
+      if(!guardado&&q1.desde)imvFecharQuotas(pForm,{ownerIds:pForm.ownerIds||[],ownerShares:pForm.ownerShares||{},comproprietariosFora:null},q1.desde);
       imvGravarFormulario(id);
     };
     /* o código de uma união de freguesias desagregada em 2025, por confirmar na
@@ -864,11 +877,23 @@ const IMV_FORA_ESTADOS=[{v:'',label:'Por confirmar'},{v:'nao',label:'Não, mais 
    Devolve: nada. */
 function imvForaIniciar(pref,fora,pid){
   _imvFora[pref]={pid:pid!=null?pid:(pForm&&pForm.id)||'',estado:Array.isArray(fora)?(fora.length?'sim':'nao'):'',
-    linhas:(Array.isArray(fora)?fora:[]).map(f=>({id:f&&f.id?String(f.id):'',nome:String((f&&f.nome)||''),quota:f&&f.quota!=null?dec(f.quota):''}))};
+    linhas:(Array.isArray(fora)?fora:[]).map(f=>({id:f&&f.id?String(f.id):'',nome:String((f&&f.nome)||''),quota:f&&f.quota!=null?dec(f.quota):''})),
+    /* a primeira resposta (os de fora ainda por confirmar) pergunta desde quando é assim (N019) */
+    primeira:!Array.isArray(fora),quando:'sempre',dia:'',semQuando:false};
 }
+/* As escolhas de «Desde quando é assim?», a pergunta da primeira resposta
+   com donos fora da app (N019): «Desde sempre» vale também para trás (quem
+   herdou ou comprou a casa com eles); «Desde um dia» pede o dia, e até à
+   véspera a casa conta só para os donos da app. */
+const IMV_FORA_QUANDO=[{v:'sempre',label:'Desde sempre (já era assim)'},{v:'dia',label:'Desde um dia'}];
 /* O bloco «Há outros donos fora da app?»: o seletor e, com «Sim», uma linha
    por dono (o nome, a quota em % da casa toda e o remover) e o «Adicionar».
-   Os campos de cada linha têm o índice no id (pref_fn_0, pref_fq_0).
+   Os campos de cada linha têm o índice no id (pref_fn_0, pref_fq_0). Na
+   primeira resposta com «Sim» (os de fora estavam por confirmar), «Desde
+   quando é assim?» (imvForaQuandoHtml, N019) — nunca um campo de data que não
+   se usa. A dica diz quem conta: quem tem direito às rendas — havendo
+   usufruto, os usufrutuários (PIV 25058, N137) — e que se regista a casa
+   toda (a Declaração conta a cada um a sua parte).
    Recebe: pref — a janela ('p' ou 'cwq').
    Devolve: o HTML do bloco. */
 function imvForaHtml(pref){
@@ -879,8 +904,52 @@ function imvForaHtml(pref){
       <span class="imv-dono-nome"><input id="${pref}_fn_${i}" value="${esc(f.nome)}" placeholder="Ex: Rui Costa" aria-label="Nome de quem é dono fora da app" autocomplete="off"></span>
       <span class="imv-pct"><input id="${pref}_fq_${i}" type="text" inputmode="decimal" value="${esc(f.quota)}" placeholder="Ex: 50" aria-label="Quota de ${esc(f.nome||'quem é dono fora da app')} (% da casa toda)" data-input="${pref==='p'?'liveShares()':'imvPropostaAoVivo()'}" autocomplete="off"><span aria-hidden="true">%</span></span>
       <button type="button" class="btn ghost so-icone" aria-label="Remover ${esc(f.nome||'esta linha')}" data-toca="rascunho" data-click="imvForaRemover('${pref}',${i})">${ic('x',18)}</button></div>`).join('')}</div>
-    <div class="imv-botoes"><button type="button" class="btn" data-toca="rascunho" data-click="imvForaAdicionar('${pref}')">${ic('plus',16)} Adicionar dono fora da app</button></div>`:''}
-    <div class="hint">${sim?'A quota de cada um em % da casa toda, como na escritura ou na caderneta. ':''}Cada dono declara só a sua parte das rendas e dos gastos (CIRS art. 19.º). ${ed.estado?'':'Até responderes, a Declaração conta a casa como só dos donos da app.'}</div></div>`;
+    <div class="imv-botoes"><button type="button" class="btn" data-toca="rascunho" data-click="imvForaAdicionar('${pref}')">${ic('plus',16)} Adicionar dono fora da app</button></div>${imvForaQuandoHtml(pref)}`:''}
+    <div class="hint">Conta quem tem direito às rendas: os donos ou, havendo usufruto, os usufrutuários (quem tem só a nua-propriedade não conta). ${sim?'A quota de cada um é a parte das rendas que lhe cabe, em % do total. ':''}Regista as rendas e os gastos da casa toda: a Declaração conta a cada um só a sua parte (CIRS art. 19.º). ${ed.estado?'':'Até responderes, a Declaração conta a casa como só dos donos da app.'}</div></div>`;
+}
+/* «Desde quando é assim?» na primeira resposta com donos fora da app (N019):
+   o seletor e, com «Desde um dia», o dia (hoje ou antes). Não aparece quando
+   os de fora já estavam confirmados (a mudança pede o dia à parte), nem na
+   janela das quotas aberta depois de uma partilha, que faz a pergunta dela
+   (ed.semQuando).
+   Recebe: pref — a janela ('p' ou 'cwq').
+   Devolve: o HTML ('' quando não se pergunta). */
+function imvForaQuandoHtml(pref){
+  const ed=imvForaEd(pref);
+  if(!ed.primeira||ed.semQuando||ed.estado!=='sim')return '';
+  const hoje=today(),dia=ed.quando==='dia';
+  const muda=pref==='p'?'imvForaQuandoNoForm':'imvForaQuandoNaProposta';
+  return `<label>Desde quando é assim?${sel(pref+'_foraQuando',ed.quando,IMV_FORA_QUANDO,muda,'rascunho')}</label>
+    ${dia?`<label>Desde que dia <span class="req">*</span><input id="${pref}_foraDia" type="date" value="${esc(ed.dia||hoje)}" max="${hoje}"></label>`:''}
+    <div class="hint">${dia?'O primeiro dia com estes donos (a compra ou a venda de uma parte, a herança, as partilhas). Até à véspera, a casa conta só para os donos da app.':'Vale também para trás: estes donos já o eram quando a casa passou a ser tua.'}</div>`;
+}
+/* A escolha de «Desde quando é assim?» do formulário mudou: mostra (ou
+   esconde) o dia.
+   Devolve: nada — repinta o formulário. */
+function imvForaQuandoNoForm(){imvForaQuandoEscolha('p',val('p_foraQuando'))}
+/* A escolha de «Desde quando é assim?» da janela das quotas mudou.
+   Devolve: nada — repinta a janela. */
+function imvForaQuandoNaProposta(){imvForaQuandoEscolha('cwq',val('cwq_foraQuando'))}
+/* Aplica a escolha de «Desde quando é assim?» numa janela.
+   Recebe: pref — a janela; v — 'sempre' ou 'dia'.
+   Devolve: nada — repinta a janela. */
+function imvForaQuandoEscolha(pref,v){
+  const ed=imvForaEd(pref);
+  imvForaColher(pref);
+  ed.quando=v==='dia'?'dia':'sempre';
+  if(ed.quando==='dia'&&!ed.dia)ed.dia=today();
+  imvForaRepintar(pref);
+}
+/* Desde quando valem os de fora da primeira resposta, validado (N019).
+   Recebe: pref — a janela.
+   Devolve: {desde:''} para «desde sempre» (ou quando não se pergunta),
+   {desde:'AAAA-MM-DD'} com o dia, ou {erro:{campo, msg}}. */
+function imvForaQuando(pref){
+  imvForaColher(pref);
+  const ed=imvForaEd(pref);
+  if(!ed.primeira||ed.semQuando||ed.estado!=='sim'||ed.quando!=='dia')return {desde:''};
+  const e=imvDesdeErro(ed.dia);
+  return e?{erro:{campo:pref+'_foraDia',msg:e}}:{desde:String(ed.dia).slice(0,10)};
 }
 /* A edição dos de fora de uma janela: a do formulário recomeça do que o
    pForm tem quando é de outro imóvel (o formulário pintado sem passar pelo
@@ -892,12 +961,13 @@ function imvForaEd(pref){
   if(pref==='p'&&(!ed||ed.pid!==((pForm&&pForm.id)||'')))imvForaIniciar('p',pForm?pForm.comproprietariosFora:null);
   return _imvFora[pref]||(_imvFora[pref]={pid:'',estado:'',linhas:[]});
 }
-/* Lê do ecrã o nome e a quota de cada linha dos de fora (o que não está no
-   ecrã fica como estava).
+/* Lê do ecrã o nome e a quota de cada linha dos de fora, e o dia de «Desde
+   quando é assim?» (o que não está no ecrã fica como estava).
    Recebe: pref — a janela.
    Devolve: nada — atualiza _imvFora[pref].linhas. */
 function imvForaColher(pref){
   const ed=imvForaEd(pref);if(ed.estado!=='sim')return;
+  const d=document.getElementById(pref+'_foraDia');if(d)ed.dia=String(d.value==null?'':d.value);
   ed.linhas.forEach((f,i)=>{
     const n=document.getElementById(pref+'_fn_'+i),q=document.getElementById(pref+'_fq_'+i);
     if(n)f.nome=String(n.value==null?'':n.value);
@@ -1324,6 +1394,9 @@ function liveShares(){
   const owners=(pForm.ownerIds||[]).map(owner).filter(Boolean);
   const e=document.getElementById('shareHint');
   if(e)e.innerHTML=shareHint(owners,hasShares(pForm),sum(owners.map(o=>Number((pForm.ownerShares||{})[o.id])||0)));
+  /* com nuvem, num imóvel só meu, a minha quota ao lado dos de fora (imvQuotasSoTeu) */
+  const m=document.getElementById('p_minhaQuota');
+  if(m){imvForaColher('p');m.textContent=imvPropostaMinha('p')}
 }
 let _propPaint=null;
 // Repinta o corpo do modal a partir de pForm (ou do pintor alternativo em
@@ -1955,7 +2028,8 @@ function acertarLotesSemImovel(id,txs){
    movimentos acerta-se (acertarLotesSemImovel). Só quem o criou o apaga: num
    imóvel que não criei, «Apagar» é sair dele (imvSair). Com rendas de um ano
    por entregar, a confirmação diz quanto sai da Declaração e propõe marcá-lo
-   vendido (imvAvisoDeApagar, D33).
+   vendido (imvAvisoDeApagar, D33); com outros donos na app, diz quem mais o
+   perde e propõe transferir o controlo (imvAvisoDeApagarPartilhado, N067).
    Recebe: id — o id do imóvel a apagar.
    Devolve: nada — abre a confirmação; só se apaga depois do sim. */
 function delProp(id){
@@ -1963,8 +2037,8 @@ function delProp(id){
   if(!p)return;
   /* um comproprietário ou um colaborador não apaga o imóvel de outro: sai dele */
   if(!souCriador(id))return imvSair(id);
-  const aviso=imvAvisoDeApagar(p);
-  confirmModal('Apagar imóvel',`Apagar “${esc(p.name)}”${n===1?', o seu contrato':n?`, os seus ${n} contratos`:''} e todos os movimentos associados?${aviso?' '+aviso:''}`,()=>{
+  const aviso=imvAvisoDeApagar(p),outros=imvAvisoDeApagarPartilhado(p);
+  confirmModal('Apagar imóvel',`Apagar “${esc(p.name)}”${n===1?', o seu contrato':n?`, os seus ${n} contratos`:''} e todos os movimentos associados?${outros?' '+outros:''}${aviso?' '+aviso:''}`,()=>{
     /* a cópia primeiro, os blobs só quando o Anular expirar: uma cascata
        destas confirmada por hábito era irrecuperável */
     const copia={p:JSON.parse(JSON.stringify(p)),
@@ -2026,6 +2100,23 @@ function imvAvisoDeApagar(p,antes){
   if(p.vendido)return frase+' Já está marcado como vendido: não precisas de o apagar para o tirar das listas.';
   return frase+` Se o vendeste, marca-o como vendido: sai das listas do dia a dia, e as rendas e os gastos ficam na Declaração dos anos em que foi teu.`
     +`<div class="imv-botoes u-mt-12px"><button type="button" class="btn" data-toca="camada" data-click="closeModal();${antes||''}imvVendidoModal('${jsq(p.id)}')">Marcar como vendido</button></div>`;
+}
+/* O que a confirmação de apagar acrescenta num imóvel com outros donos na
+   app (N067): quem mais o perde — sai da lista e da Declaração do IRS de cada
+   um, também nos meses em que foi dono, e recebe um aviso (o servidor deixa-o:
+   worker/src/lib/acesso.js:apagarCasa) — e, a quem o pode fazer, «Transferir
+   o controlo» em vez de apagar (imvTransferir), que deixa o imóvel aos outros.
+   Recebe: p — o imóvel.
+   Devolve: o HTML (frase e botão; nomes escapados), ou '' sem outros donos. */
+function imvAvisoDeApagarPartilhado(p){
+  const eu=meuId(),outros=((p&&p.ownerIds)||[]).filter(u=>u&&u!==eu);
+  if(!outros.length)return '';
+  const nomes=listaE(outros.map(u=>'<b>'+esc(nomeUtilizador(u))+'</b>')),um=outros.length===1;
+  const frase=um?`O imóvel desaparece também para ${nomes}, que deixa de o ter na lista e na Declaração do IRS, também nos meses em que foi dono, e recebe um aviso.`
+    :`O imóvel desaparece também para ${nomes}, que deixam de o ter na lista e na Declaração do IRS, também nos meses em que foram donos, e recebem um aviso.`;
+  if(!imvPossoTransferir(p.id))return frase;
+  return frase+` Se só queres deixar de o gerir, transfere o controlo: o imóvel continua para ${um?'quem fica':'os outros'}.`
+    +`<div class="imv-botoes u-mt-12px"><button type="button" class="btn" data-toca="camada" data-click="closeModal();imvTransferir('${jsq(p.id)}')">Transferir o controlo</button></div>`;
 }
 /* O mesmo aviso para vários imóveis apagados de uma vez (a seleção das Casas,
    cloud/selecao-listas.js:selLApagarImoveis): com um só, o de um
@@ -2103,6 +2194,63 @@ function imvExportarAno(tipo,ano){
 function imvDonosLocais(){
   if(!donosDoFormulario)return true;
   try{return !donosDoFormulario()}catch(e){return true}
+}
+/* Com sessão, um imóvel só da minha conta — novo, ou guardado com a minha
+   conta como única dona: a pergunta dos donos de fora responde-se no próprio
+   formulário (N059), como sem nuvem; a janela das quotas fica para os
+   imóveis com mais de uma conta. Um em que só colaboro não é.
+   Recebe: p — o imóvel (o do formulário, ou o da base).
+   Devolve: true quando é só meu na nuvem. */
+function imvSoMinhaNaNuvem(p){
+  const eu=meuId();if(!eu||!(window.CW&&CW.user))return false;
+  const live=(p&&p.id&&prop(p.id))||p||{},parts=(live.ownerIds||[]).filter(Boolean);
+  return parts.length===0||(parts.length===1&&parts[0]===eu);
+}
+/* O Guardar do formulário de um imóvel só meu, com sessão (N059): grava o
+   imóvel como sempre (imvGravarFormulario) e leva a resposta dos donos de
+   fora ao servidor. Num imóvel novo vai com ele (o servidor aceita-a ao
+   criar a casa, worker/src/lib/acesso.js:preserveOwnership, N139), com o
+   período até à véspera quando começou num dia; num guardado, numa proposta
+   de um dono só, que se aplica logo (cloud/utilizadores.js:enviarProposta):
+   a primeira resposta com o dia escolhido no formulário, ou «desde sempre»;
+   uma mudança de quem já estava confirmado, com o dia de «Desde quando?»
+   (imvPerguntarDesde). Sem mudança, só grava.
+   Recebe: id — o id com que o formulário abriu; guardado — o imóvel da base
+   (null num novo); desde — o dia da primeira resposta ('' para «desde sempre»).
+   Devolve: nada. */
+function imvGravarComForaNaNuvem(id,guardado,desde){
+  const fora=pForm.comproprietariosFora,eu=meuId();
+  if(!guardado){
+    if(desde)imvFecharQuotas(pForm,{ownerIds:[eu],ownerShares:{},comproprietariosFora:null},desde);
+    return imvGravarFormulario(id);
+  }
+  const antes=quotasForaLimpos(guardado.comproprietariosFora);
+  if(imvForaChave(antes)===imvForaChave(fora))return imvGravarFormulario(id);
+  const hid=pForm.id;
+  const enviar=d=>{
+    imvGravarFormulario(id);
+    if(typeof enviarProposta!=='function')return toast('As quotas precisam do servidor. Tenta outra vez daqui a pouco.');
+    Promise.resolve(enviarProposta(hid,{[eu]:100},{fora,desde:d}))
+      .then(()=>typeof pullNow==='function'?pullNow(true):null)
+      .then(()=>render(),e=>toast('As quotas não seguiram: '+String((e&&e.message)||'tenta outra vez').replace(/\.$/,'')+'.'));
+  };
+  if(antes===null)return enviar(desde||'sempre');
+  imvPerguntarDesde(enviar);
+}
+/* Abre a resposta às quotas de um imóvel, o toque dos avisos da Declaração
+   (fisco-avisos.js) e do cartão das quotas: com mais de uma conta na casa, a
+   janela das quotas (CW.proposeShares); só minha (com ou sem nuvem), o
+   formulário do imóvel com a pergunta «Há outros donos fora da app?» à vista
+   (N059, N135).
+   Recebe: hid — o id do imóvel.
+   Devolve: nada. */
+function imvAbrirQuotas(hid){
+  const p=prop(hid);if(!p)return;
+  const nuvem=!!(window.CW&&CW.user&&typeof CW.proposeShares==='function');
+  if(nuvem&&!imvSoMinhaNaNuvem(p))return CW.proposeShares(hid);
+  propModal(hid);
+  const e=document.getElementById('p_fora');
+  if(e&&typeof e.scrollIntoView==='function')try{e.scrollIntoView({block:'center'})}catch(x){}
 }
 /* Um estado das quotas reduzido ao que conta para o imposto: a fração da
    casa toda de cada conta (quotasEntre, com os de fora a abater) e os de
@@ -2191,8 +2339,8 @@ function imvPerguntarDesde(seguir){
 /* O cartão das quotas na ficha do dono (D08, D29): cada conta e cada dono
    fora da app com a sua quota da casa toda (saldos.js:quotasFiscais), desde
    quando valem, se os de fora estão por confirmar, a proposta pendente, e o
-   caminho para as mudar — a proposta com nuvem (CW.proposeShares), o
-   formulário sem ela.
+   caminho para as mudar (imvAbrirQuotas) — a janela das quotas com mais de
+   uma conta, o formulário num imóvel só meu, com ou sem nuvem.
    Recebe: p — o imóvel; c — o cargo (acessos.js:cargoDe).
    Devolve: o HTML do cartão; '' a quem colabora. */
 function imvQuotasCartao(p,c){
@@ -2208,7 +2356,8 @@ function imvQuotasCartao(p,c){
   const prp=nuvem&&window.CW.state?(CW.state.proposals||[]).find(x=>x.houseId===p.id):null;
   const notas=[fora===null?`Há outros donos fora da app? Está por confirmar: até responderes, a Declaração conta a casa como só ${donos.length>1?'dos donos da app':'tua'}.`:'',
     prp?'Há uma nova divisão proposta, à espera de confirmação.':''].filter(Boolean);
-  const act=prp?`propModal('${q}')`:nuvem?`CW.proposeShares('${q}')`:`propModal('${q}')`;
+  /* a resposta: a janela das quotas com mais de uma conta, o formulário num só meu (imvAbrirQuotas, N059) */
+  const act=prp?`propModal('${q}')`:`imvAbrirQuotas('${q}')`;
   const rot=prp?'Ver a proposta':fora===null?'Responder':'Mudar as quotas';
   return `<div class="card imv-sec">${imvCab('Quotas',desde?`<span class="small num">desde ${dPT(desde)}</span>`:'')}${linhas}
     ${notas.map(t=>`<p class="small imv-texto">${esc(t)}</p>`).join('')}
@@ -2228,24 +2377,23 @@ function imvForaLinhasNuvem(lista,seta){
   return (lista||[]).map(f=>{const v=imvQuotaTexto(f.quota/100);
     return `<div class="stat"><span>${esc(f.nome)} <span class="small">fora da app</span></span><b class="num">${seta?`<span class="u-c-v-warn">→ ${v}</span>`:v}</b></div>`}).join('');
 }
-/* O que a secção da nuvem diz de um imóvel que só tem a minha conta (D08): se
-   há donos fora da app (por confirmar, «não há outros», ou quem e com que
-   quota, com a minha) e o botão da janela das quotas.
-   Recebe: live — o imóvel da base; myId — o meu id.
+/* O que a secção da nuvem diz de um imóvel que só tem a minha conta (D08,
+   N059): a própria pergunta «Há outros donos fora da app?» (imvForaHtml, com
+   «Desde quando é assim?» na primeira resposta) e, com «Sim», a minha quota,
+   que acompanha o que se escreve. Responde-se no formulário, novo ou
+   guardado — o Guardar leva a resposta (imvGravarComForaNaNuvem); a janela
+   das quotas fica para os imóveis com mais de uma conta.
+   Recebe: live — o imóvel da base (ou o do formulário, num novo); myId — o meu id.
    Devolve: o HTML. */
 function imvQuotasSoTeu(live,myId){
-  const fora=quotasForaLimpos(live.comproprietariosFora),q=imvQuotasDaCasa(live);
-  const estado=fora===null?'Há outros donos fora da app? Até responderes, a Declaração conta-o todo como teu.'
-    :fora.length?'':'Não há outros donos: é todo teu (100%).';
-  const minha=fora&&fora.length?`<div class="cw-donos-quotas"><div class="stat"><span>${esc((owner(myId)||{name:'Tu'}).name)} (tu)</span><b class="num">${imvQuotaTexto(q[myId]||0)}</b></div>${imvForaLinhasNuvem(fora)}</div>`:'';
-  return `${estado?`<div class="hint">${estado}</div>`:''}${minha}
-    <div class="imv-botoes"><button type="button" class="btn" data-toca="camada" data-click="CW.proposeShares('${jsq(live.id)}')">${fora===null?'Indicar as quotas':'Mudar as quotas'}</button></div>`;
+  const sim=imvForaEd('p').estado==='sim';
+  return imvForaHtml('p')+(sim?`<div class="hint" id="p_minhaQuota">${esc(imvPropostaMinha('p'))}</div>`:'');
 }
 /* As linhas das quotas na secção da nuvem com várias contas: a de cada uma,
    da casa toda, e — com proposta pendente — a nova (as percentagens dela
    entre as contas, vezes o que os de fora deixam: os dela, ou os de agora se
    não os traz), os de fora de agora e os da proposta, e o dia em que ela
-   começa.
+   começa (ou que vale também para trás, com o desde 'sempre').
    Recebe: live — o imóvel da base; parts — os participantes; prp — a
    proposta pendente (ou nada); myId — o meu id.
    Devolve: o HTML das linhas. */
@@ -2257,7 +2405,7 @@ function imvQuotasDaProposta(live,parts,prp,myId){
   return parts.map(u=>{const o=owner(u)||{name:u};
     return `<div class="stat"><span>${esc(o.name)}${u===myId?' (tu)':''}</span><b class="num">${pct(q[u]||0,0)}${prp?` <span class="u-c-v-warn">→ ${imvQuotaTexto((prpRel[u]||0)*fator)}</span>`:''}</b></div>`}).join('')
     +imvForaLinhasNuvem(fora)+(traz?imvForaLinhasNuvem(prpFora,true):'')
-    +(prp&&prp.desde?`<div class="hint">Valem desde ${dPT(prp.desde)}.</div>`:'');
+    +(prp&&prp.desde?`<div class="hint">${prp.desde==='sempre'?'Valem também para trás: já era assim.':'Valem desde '+dPT(prp.desde)+'.'}</div>`:'');
 }
 /* A janela das quotas aberta (imvPropostaAbrir): a casa, os participantes,
    se veio de uma partilha, as percentagens escritas e o dia escrito — para a
@@ -2269,25 +2417,101 @@ let _imvProposta=null;
    Devolve: o texto (por escapar). */
 function imvPropostaNome(u){return (owner(u)||{name:u}).name+(u===meuId()?' (tu)':'')}
 /* A frase da minha quota com um dono só: o que os de fora deixam.
+   Recebe: pref (opcional) — a janela ('cwq', a das quotas, por omissão; 'p', o formulário).
    Devolve: o texto. */
-function imvPropostaMinha(){
-  const fora=imvForaRascunho('cwq')||[];
+function imvPropostaMinha(pref){
+  const fora=imvForaRascunho(pref||'cwq')||[];
   return 'A tua quota: '+dec(Math.round(Math.max(0,100-sum(fora.map(f=>f.quota)))*100)/100)+' %.';
 }
-/* O corpo da janela das quotas: as percentagens das contas (da casa toda;
-   com um dono só, a frase da minha quota), a pergunta dos donos fora da app
-   (imvForaHtml) e desde quando valem (em branco, hoje).
+/* As escolhas da pergunta de quem acabou de entrar na casa (N018): já era
+   dono antes de entrar na app — as quotas valem também para trás —, ou é
+   dono desde um dia. */
+const IMV_ENTROU_QUANDO=[{v:'sempre',label:'Sim, desde sempre'},{v:'dia',label:'Não, desde um dia'}];
+/* O corpo da janela das quotas: as percentagens das contas (da casa toda,
+   a começar na divisão de agora; com um dono só, a frase da minha quota), a
+   pergunta dos donos fora da app (imvForaHtml, com «Desde quando é assim?»
+   na primeira resposta) e desde quando valem. Depois de uma partilha
+   (N017, N018): o que a casa conta até lá dito como é, a pergunta «… já era
+   dono antes de entrar na app?» (desde sempre, por omissão, ou desde um dia)
+   e, havendo donos fora da app, se algum deles é quem entrou
+   (imvPropostaForaConta). Fora disso, o «Desde quando valem?» só aparece
+   quando a divisão muda (imvPropostaMuda, N059).
    Devolve: o HTML do corpo. */
 function imvPropostaCorpo(){
-  const s=_imvProposta,um=s.parts.length<2,hoje=today();
-  const intro=s.fromShare?`Acabaste de partilhar <b>${esc(s.nome||'esta casa')}</b> — indica a divisão de quotas entre os comproprietários. Fica em partes iguais enquanto os outros não confirmarem a tua proposta.`
+  const s=_imvProposta,um=s.parts.length<2,hoje=today(),entrada=s.entrou.length>0;
+  const quem=listaE(s.entrou.map(u=>'<b>'+esc(imvPropostaNome(u))+'</b>'));
+  const intro=entrada?`Acabaste de partilhar <b>${esc(s.nome||'esta casa')}</b> com ${quem}. Indica a quota de cada um, da casa toda, e desde quando ${s.entrou.length>1?'são donos':'é dono'}. Só entra em vigor quando os outros comproprietários confirmarem; até lá, a casa conta como está na ficha.`
     :um?'Diz se o imóvel tem outros donos fora da app, e a quota de cada um. Com uma conta só, as quotas valem logo.'
     :'Define a percentagem de cada comproprietário, da casa toda. A nova divisão só entra em vigor depois de todos confirmarem.';
   const contas=um?`<div class="hint" id="cwq_minha">${esc(imvPropostaMinha())}</div>`
-    :s.parts.map(u=>`<label>${esc(imvPropostaNome(u))} (%)<input id="cw_pp_${u}" type="text" inputmode="decimal" value="${esc(s.vals[u])}" autocomplete="off"></label>`).join('');
-  return `<div class="form"><div class="hint">${intro}</div>${contas}${imvForaHtml('cwq')}
-    <label>Desde quando valem?<input id="cwq_desde" type="date" value="${esc(s.desde||hoje)}" max="${hoje}"></label>
-    <div class="hint">O primeiro dia das quotas novas, hoje ou antes (em branco, hoje): a Declaração de cada ano conta com as quotas desse ano. Confirmar pela primeira vez quem mais é dono vale também para trás.</div></div>`;
+    :s.parts.map(u=>`<label>${esc(imvPropostaNome(u))} (%)<input id="cw_pp_${u}" type="text" inputmode="decimal" value="${esc(s.vals[u])}" data-input="imvPropostaAoVivo()" autocomplete="off"></label>`).join('');
+  let quando;
+  if(entrada){
+    const dia=s.quando==='dia';
+    quando=`<label>${quem} já ${s.entrou.length>1?'eram donos':'era dono'} antes de entrar na app?${sel('cwq_quando',s.quando,IMV_ENTROU_QUANDO,'imvPropostaQuandoMudou','rascunho')}</label>
+    ${dia?`<label>Desde que dia <span class="req">*</span><input id="cwq_desde" type="date" value="${esc(s.desde||hoje)}" max="${hoje}"></label>`:''}
+    <div class="hint">${dia?'O dia da compra, da doação ou da herança. Até à véspera, a casa conta como antes da partilha.':'As quotas valem também para trás, como se tivesse entrado na app no dia em que passou a ser dono.'}</div>`;
+  }else if(um&&!Array.isArray((prop(s.hid)||{}).comproprietariosFora)){
+    /* uma conta só, com os de fora por confirmar: a única mudança é a primeira
+       resposta, que pergunta desde quando no bloco dos de fora (N019) */
+    quando='';
+  }else{
+    quando=`<div id="cwq_quando" class="${imvPropostaMuda()?'':'u-d-none'}"><label>Desde quando valem?<input id="cwq_desde" type="date" value="${esc(s.desde||hoje)}" max="${hoje}"></label>
+    <div class="hint">O primeiro dia das quotas novas, hoje ou antes: a Declaração de cada ano conta com as quotas desse ano. Se só corriges um engano, escolhe o dia em que as de antes começaram.</div></div>`;
+  }
+  return `<div class="form"><div class="hint">${intro}</div>${contas}${imvForaHtml('cwq')}${imvPropostaForaConta()}${quando}</div>`;
+}
+/* Depois de uma partilha com uma pessoa só, havendo donos fora da app: «Rui
+   era um dos donos fora da app?», com um botão por cada um — o «É este»
+   tira-o dos de fora e dá a quota dele à conta que entrou (o irmão que
+   criou conta passa a ser ele, N017).
+   Devolve: o HTML ('' sem nada a perguntar). */
+function imvPropostaForaConta(){
+  const s=_imvProposta;if(!s||s.entrou.length!==1)return '';
+  const ed=imvForaEd('cwq');if(ed.estado!=='sim')return '';
+  const nomes=ed.linhas.map((f,i)=>({i,nome:String(f.nome||'').trim()})).filter(x=>x.nome);
+  if(!nomes.length)return '';
+  const quem=esc(imvPropostaNome(s.entrou[0]));
+  return `<div class="hint">${quem} era um dos donos fora da app? Assim, a quota passa para a conta e sai dos de fora.</div>
+    <div class="imv-botoes">${nomes.map(x=>`<button type="button" class="btn sm" data-toca="rascunho" data-click="imvPropostaForaEConta(${x.i})">Sim, era ${esc(x.nome)}</button>`).join('')}</div>`;
+}
+/* «Sim, era …»: o dono fora da app da linha i é a conta que entrou — sai dos
+   de fora, e a quota dele junta-se à dela (sem o «Sim» da pergunta dos de
+   fora, sem linhas, fica «Não, mais ninguém»).
+   Recebe: i — o índice da linha dos de fora.
+   Devolve: nada — repinta a janela. */
+function imvPropostaForaEConta(i){
+  const s=_imvProposta;if(!s||s.entrou.length!==1)return;
+  imvPropostaColher();
+  const ed=imvForaEd('cwq'),f=ed.linhas[Number(i)];if(!f)return;
+  const u=s.entrou[0],q=imvLerQuota(f.quota),antes=imvLerQuota(s.vals[u]);
+  s.vals[u]=dec(Math.round(((antes>=0?antes:0)+(q>0?q:0))*100)/100);
+  ed.linhas.splice(Number(i),1);
+  if(!ed.linhas.length)ed.estado='nao';
+  const b=modalBodyEl();if(b)b.innerHTML=imvPropostaCorpo();
+}
+/* A escolha de «… já era dono antes de entrar na app?» mudou: mostra (ou
+   esconde) o dia.
+   Devolve: nada — repinta a janela. */
+function imvPropostaQuandoMudou(){
+  const s=_imvProposta;if(!s)return;
+  imvPropostaColher();
+  s.quando=val('cwq_quando')==='dia'?'dia':'sempre';
+  const b=modalBodyEl();if(b)b.innerHTML=imvPropostaCorpo();
+}
+/* A divisão escrita na janela das quotas é diferente da de agora: alguma
+   percentagem da casa toda (a mais de 0,05 pontos, o arredondamento) ou os
+   de fora, quando já estavam confirmados. Na primeira resposta com donos de
+   fora, não: ela pergunta à parte (imvForaQuandoHtml), e um segundo dia
+   ficava à vista sem se usar. É o que mostra o «Desde quando valem?».
+   Devolve: true quando muda. */
+function imvPropostaMuda(){
+  const s=_imvProposta,live=s?prop(s.hid):null;if(!live)return false;
+  const cur=imvQuotasDaCasa(live),antesFora=quotasForaLimpos(live.comproprietariosFora);
+  /* a primeira resposta com donos de fora já pergunta desde quando, no bloco deles */
+  if(antesFora===null&&imvForaEd('cwq').estado==='sim')return false;
+  const contas=s.parts.length>1&&s.parts.some(u=>{const x=imvLerQuota(s.vals[u]);return Math.abs((x>=0?x:0)-Math.round((cur[u]||0)*10000)/100)>0.05});
+  return contas||(antesFora!==null&&imvForaChave(antesFora)!==imvForaChave(imvForaRascunho('cwq')));
 }
 /* Lê da janela das quotas as percentagens e o dia escritos (e as linhas dos
    de fora, imvForaColher).
@@ -2305,12 +2529,15 @@ function imvPropostaRepintar(){
   imvPropostaColher();
   const b=modalBodyEl();if(b)b.innerHTML=imvPropostaCorpo();
 }
-/* Escreve-se uma quota dos de fora na janela das quotas: com um dono só, a
-   frase da minha quota acompanha.
+/* Escreve-se uma percentagem ou uma quota dos de fora na janela das quotas:
+   com um dono só, a frase da minha quota acompanha; e o «Desde quando
+   valem?» aparece quando a divisão escrita deixa de ser a de agora
+   (imvPropostaMuda), e desaparece quando volta a ser.
    Devolve: nada. */
 function imvPropostaAoVivo(){
-  imvForaColher('cwq');
+  imvPropostaColher();
   const e=document.getElementById('cwq_minha');if(e)e.textContent=imvPropostaMinha();
+  const w=document.getElementById('cwq_quando');if(w&&w.classList)w.classList.toggle('u-d-none',!imvPropostaMuda());
 }
 /* O seletor «Há outros donos fora da app?» da janela das quotas mudou.
    Devolve: nada — repinta a janela. */
@@ -2333,13 +2560,18 @@ function imvProximaProposta(){if(typeof nextShareProposal==='function')nextShare
    minha quota, que valem logo. As percentagens das contas passam a quotas
    entre elas e acertam-se a somar 100 antes de ir (imvQuotasEntreContas,
    D93): 50/49,6 não vai, e diz quanto somam. O dia (D29) só vai quando as
-   quotas mudam; confirmar os de fora que estavam por confirmar vale para
-   trás, sem dia (o servidor: worker/src/lib/acesso.js:aplicarQuotas). Uma
-   divisão igual à atual não gera proposta. fromShare ajusta o texto para o
-   caso de a casa ter acabado de ser partilhada; no fim segue para a próxima
-   proposta em fila.
-   Recebe: hid — o id da casa; fromShare (opcional) — verdadeiro quando a casa
-   acabou de ser partilhada.
+   quotas mudam (o campo só aparece aí, N059); a primeira resposta com donos
+   de fora diz desde quando é assim — «desde sempre» vai como 'sempre'
+   (worker/src/lib/acesso.js:DESDE_SEMPRE) ou o dia (N019). Uma divisão igual
+   à atual não gera proposta — menos depois de uma partilha (N017, N018): a
+   divisão parte da de agora, com quem entrou (a real, não partes iguais), e
+   segue sempre, com a resposta a «… já era dono antes de entrar na app?»
+   («desde sempre», por omissão, tira o período que o servidor fechou na
+   entrada; «desde um dia», o dia). No fim segue para a próxima proposta em
+   fila (cloud/partilha.js:nextShareProposal).
+   Recebe: hid — o id da casa; fromShare (opcional) — depois de uma partilha:
+   {entrou: [ids]} com quem entrou (true, sem quem, é quem não estava no
+   último período guardado).
    Devolve: nada — abre o modal; o envio à API (cloud/utilizadores.js:enviarProposta) acontece no Guardar. */
 function imvPropostaAbrir(hid,fromShare){
   const live=prop(hid);if(!live)return imvProximaProposta();
@@ -2348,8 +2580,13 @@ function imvPropostaAbrir(hid,fromShare){
   /* a quota da casa toda de cada conta, ao centésimo (como o servidor as guarda: 33,33 e não 33,3) */
   const cur=imvQuotasDaCasa(live),rel=quotasEntre(parts,live.ownerShares||{}),vals={};
   parts.forEach(u=>{vals[u]=dec(Math.round((cur[u]||0)*10000)/100)});
-  _imvProposta={hid,parts,fromShare:!!fromShare,nome:live.name||'',vals,desde:''};
+  const ult=quotasPeriodos(live).slice(-1)[0];
+  const entrou=!fromShare?[]:Array.isArray(fromShare.entrou)?fromShare.entrou.filter(u=>parts.indexOf(u)>-1&&u!==meuId())
+    :ult?parts.filter(u=>(ult.ownerIds||[]).indexOf(u)<0):[];
+  _imvProposta={hid,parts,fromShare:!!fromShare,entrou,nome:live.name||'',vals,desde:'',quando:'sempre'};
   imvForaIniciar('cwq',live.comproprietariosFora,hid);
+  /* depois de uma partilha, a pergunta de quem entrou responde também pelos de fora */
+  if(entrou.length)imvForaEd('cwq').semQuando=true;
   openModal(parts.length<2?'Quotas · '+(live.name||''):fromShare?'Divisão de quotas · '+(live.name||''):'Propor nova divisão',imvPropostaCorpo());
   onSave=()=>{
     imvPropostaColher();
@@ -2377,12 +2614,26 @@ function imvPropostaAbrir(hid,fromShare){
       const agora={};parts.forEach(u=>{agora[u]=(rel[u]||0)*100});
       shares=imvAcertarQuotas(agora).quotas||shares;
     }
-    /* igual à divisão atual: não há nada para os outros confirmarem */
-    if(!foraMudou&&!sharesMudaram){closeModal();toast('A divisão fica como está.');return imvProximaProposta()}
-    /* confirmar os de fora que estavam por confirmar vale para trás; o resto muda num dia */
+    const s=_imvProposta,entrada=s.entrou.length>0;
+    /* igual à divisão atual: não há nada para os outros confirmarem — menos
+       depois de uma partilha, em que segue sempre com desde quando é dono */
+    if(!entrada&&!foraMudou&&!sharesMudaram){closeModal();toast('A divisão fica como está.');return imvProximaProposta()}
     const extra={};
     if(foraMudou)extra.fora=fora;
-    if(sharesMudaram||(foraMudou&&antesFora!==null)){
+    const primeira=antesFora===null&&Array.isArray(fora)&&fora.length>0;
+    if(entrada){
+      /* quem entrou já era dono: vale também para trás; ou é dono desde um dia */
+      if(s.quando==='dia'){
+        const d=String(val('cwq_desde')||'').slice(0,10),e=imvDesdeErro(d);
+        if(e)return falhaCampo('cwq_desde',e);
+        extra.desde=d;
+      }else extra.desde='sempre';
+    }else if(primeira){
+      /* a primeira resposta com donos de fora: desde sempre, ou desde o dia escolhido (N019) */
+      const q=imvForaQuando('cwq');
+      if(q.erro)return falhaCampo(q.erro.campo,q.erro.msg);
+      extra.desde=q.desde||'sempre';
+    }else if(sharesMudaram||(foraMudou&&antesFora!==null)){
       const d=String(val('cwq_desde')||'').slice(0,10)||today(),e=imvDesdeErro(d);
       if(e)return falhaCampo('cwq_desde',e);
       extra.desde=d;
