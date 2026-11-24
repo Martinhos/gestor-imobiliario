@@ -130,6 +130,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-23 · A ronda 1 das correções da auditoria ao IRS de raiz: o quadro 10, as categorias pelo id, as cópias e as quotas (KAN-147, KAN-148, KAN-149)
 - 2026-11-23 · A ronda 2 das correções da auditoria ao IRS de raiz: rendas, taxas, gastos, textos e o caminho linear (KAN-150 a KAN-154)
 - 2026-11-24 · O consumo à cabeça da Operação, com o gráfico de cada valor (KAN-144)
+- 2026-11-24 · Staging, Adiado e Produção; a pílula «Tickets»; o promove só do que está em Staging (KAN-155 a KAN-158)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4843,3 +4844,53 @@ O horizonte é de cada gráfico e lembra-se por medida na sessão do browser, co
 gráfico»), e abre no 7d. O gráfico é escrito no guião (o back office não tem o graficos.js da app) mas lê-se
 como os da app, com a leitura no canto e o gesto horizontal. O «Casas · registos» do resumo partiu-se em dois
 quadrados para cada número ter o seu gráfico; o resumo diário e o /uso do Discord ficam iguais.
+
+## 2026-11-24 · Staging, Adiado e Produção; a pílula «Tickets»; o promove só do que está em Staging (KAN-155 a KAN-158)
+O Martinho, em quatro tickets de QA no Samsung: «Quando disser promove, só promoves o que estiver na coluna para
+produção», «Deve haver a opção para enviar para produção (staging) ou adiar a produção», «O pill de qa deve mudar
+de nome. Não é só para QA, é para todos os tickets» e «A skill qa deve desaparecer. Já não faz sentido. Fica tudo
+como kanban». Até aqui o Aceitar de Human Tests levava o cartão a Concluído, e o promove levava o dev inteiro ao
+main num PR com merge commit: tudo o que estava no dev ia junto, testado ou não, e um cartão aceite não dizia se ia
+ou ficava.
+
+**As colunas.** O Aceitar passa a ter duas saídas, com os nomes que ele escolheu: «Enviar para produção» leva o
+cartão a **Staging** (vai no próximo promove) e «Adiar a produção» a **Adiado** (resolvido e testado, mas fica no
+dev; vai a Staging quando ele quiser). Concluído passa a chamar-se **Produção** e é para onde o promove leva os
+cartões de Staging depois do deploy de produção. O id fica `concluido`: está no qa_tickets.status, nos scripts e em
+dezenas de regras, e mudar o nome não pede migrar nada disso. Staging e Adiado são fixas (a automação usa-as) e de
+fim (contam como feitas num épico e, num ticket de QA, o resolved_at fica posto). Os cartões que já estavam em
+Concluído ficam em Produção: são o histórico, e só daqui para a frente o Aceitar vai a Staging. A migração é a 0032.
+
+**A pílula.** A pílula do dev chama-se «Tickets» e lista todos os cartões que não estão em Produção, por coluna,
+porque quem testa quer ver tudo o que está por acabar e não só os tickets que escreveu. Os cartões dos pedidos das
+pessoas aparecem só com a chave e o título: a pílula abre-se com as contas de teste do /test, e o texto, o nome e o
+email de quem pediu ajuda não são para elas. O filtro faz-se no servidor, não no ecrã.
+
+**A skill qa acabou.** O cartão de um ticket de QA trata-se como os outros, pela skill kanban e pelo
+scripts/kanban.mjs: o comecar, o resolver e o reabrir levam o ticket com o cartão na mesma escrita, o ticket
+primeiro (worker/src/lib/kanban.js:ticketQaNaColuna, a regra que as rotas e o scripts/qa.mjs já usavam), o
+resolver grava a resolução no ticket (a nota, o commit e o que testar, que é o que a pílula mostra) e a fila mostra
+o ticket por extenso (quem, a gravidade, o contexto do ecrã, a captura e a resolução anterior), com a captura a
+descarregar-se pelo anexo. Havia duas maneiras de mexer no mesmo cartão, com regras quase iguais, e a de QA obrigava
+a saber o id do ticket em vez da chave. O scripts/qa.mjs fica como módulo do kanban.mjs (o contexto, o «quem», a
+nota) e como ferramenta de recurso; nenhuma skill o manda usar. A skill ticket fica, porque tem os tickets de
+produção; os pedidos das pessoas continuam a ser dela.
+
+**O promove selectivo.** O promove leva só os commits dos cartões em Staging, por cherry-pick, num ramo
+`promover/AAAA-MM-DD` a partir do main (o scripts/promover.mjs, e a skill promove com o fluxo). Cada commit diz os
+KAN-N na mensagem, e é por eles que se sabe de que cartões é. Um commit que também traz um cartão que não está em
+Staging, um sem KAN-N, um cujos cartões já estão em Produção mas que nunca chegou ao main, ou um de um cartão fora do
+quadro pergunta-se ao Martinho antes do ramo, sempre. O cherry-pick é com `-x`, para o trailer «(cherry picked from
+commit …)» dizer de onde veio cada commit: é por ele (e, sem ele, pelo patch) que o próximo plano sabe o que já foi,
+e que o `publicado --prod` do scripts/ticket.mjs reconhece um commit do dev que chegou à produção sem ser
+antepassado do main. Um cherry-pick que não aplica limpo pára o ramo e pergunta-se: nunca se resolve um conflito às
+cegas. A exceção é o web/versao.json, que não se escreve à mão (um desencontro com o web/avisos.js faz a app
+recarregar em ciclo): gera-se do avisos.js do ramo com o scripts/versao.js, no conflito e no fim, e confere-se a
+versão e a VERSAO_MINIMA contra as do main e do dev. O script nunca faz push nem abre o PR: isso fica com o
+Martinho, e o PR junta-se com merge commit, para os trailers chegarem ao main. Depois do deploy de produção, o
+`promover.mjs fechar` leva a Produção os cartões de Staging cujos commits estão todos na etiqueta `publicado`.
+
+O preço: o main deixa de ser um antepassado do dev. Os commits do dev que já foram por cherry-pick continuam a
+aparecer no `git log origin/main..origin/dev`, e só o plano (pelos trailers e pelo patch) sabe que já lá estão.
+Foi a escolha do Martinho («só os commits desses cartões»), e a alternativa — um ramo por cartão, ou
+reverter no main o que não vai — trocava um log menos limpo por conflitos maiores a cada promove.

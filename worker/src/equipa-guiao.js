@@ -2468,6 +2468,7 @@ var ACOES_RASTO = {
   qaRemoverImagem: 'Remover a imagem', qaNovoTicket: 'Novo ticket', qaCarregarDeNovo: 'Tentar de novo',
   qaDobrar: 'Abrir ou fechar um ticket', qaAbrirTicket: 'Abrir o ticket', qaRemover: 'Remover', qaReabrir: 'Reabrir',
   qaImagemDeNovo: 'Tentar de novo', qaAceitar: 'Aceitar', qaRecusar: 'Recusar', qaAdiar: 'Adiar',
+  qaEnviarProducao: 'Enviar para produção', qaAdiarProducao: 'Adiar a produção',
   qaComentar: 'Comentar', qaComentariosDeNovo: 'Tentar de novo',
   // conta, entrada, termos e documentos
   'CW.showAuth': 'Iniciar sessão', 'CW.submitAuth': 'Entrar ou criar conta', 'CW.modoDaEntrada': 'Entrar ou criar conta',

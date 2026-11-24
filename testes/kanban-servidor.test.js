@@ -125,7 +125,7 @@ describe('as portas do kanban', () => {
       if (comCorpo) assert.equal(request.bodyUsed, false, method + ' ' + path + ' leu o corpo');
     }
     assert.equal(uma(env, 'SELECT COUNT(*) AS n FROM kanban_cartoes').n, 0);
-    assert.equal(uma(env, 'SELECT COUNT(*) AS n FROM kanban_colunas').n, 5, 'as colunas ficam como a migração as semeou');
+    assert.equal(uma(env, 'SELECT COUNT(*) AS n FROM kanban_colunas').n, 7, 'as colunas ficam como as migrações as semearam');
     assert.deepEqual(await auditoria(env), [], 'nada no rasto');
   });
 
@@ -810,7 +810,7 @@ describe('as colunas', () => {
       assert.match(r.error, /Só o master/);
     }
     const r = await ir(env, MASTER, 'POST', K + '/colunas', { nome: '  Em   revisão ' });
-    assert.deepEqual({ ...r.coluna, id: 'x' }, { id: 'x', nome: 'Em revisão', ordem: 6, fim: false, fixa: false, total: 0 });
+    assert.deepEqual({ ...r.coluna, id: 'x' }, { id: 'x', nome: 'Em revisão', ordem: 8, fim: false, fixa: false, total: 0 });
     const col = r.coluna;
     let x = await ir(env, MASTER, 'POST', K + '/colunas', { nome: 'EM REVISÃO' });
     assert.equal(x.status, 409);
@@ -832,7 +832,7 @@ describe('as colunas', () => {
     assert.equal((await ir(env, MASTER, 'PATCH', K + '/colunas/a-fazer', { nome: 'feito' })).status, 409, 'nome repetido');
     assert.equal((await ir(env, MASTER, 'PATCH', K + '/colunas/nao-ha', { nome: 'Z' })).status, 404);
 
-    const ids = ['para-depois', col.id, 'a-fazer', 'auto-tests', 'human-tests', 'concluido'];
+    const ids = ['para-depois', col.id, 'a-fazer', 'auto-tests', 'human-tests', 'staging', 'adiado', 'concluido'];
     for (const mau of [ids.slice(1), ids.concat('a-fazer'), ['a-fazer', ...ids.slice(1).map((i) => (i === 'a-fazer' ? 'nao-ha' : i))], 'x']) {
       const o = await ir(env, MASTER, 'POST', K + '/colunas/ordem', { ids: mau });
       assert.equal(o.status, 400, JSON.stringify(mau));
@@ -856,7 +856,7 @@ describe('as colunas', () => {
 
   test('o quadro tem no máximo 20 colunas', async () => {
     const env = ambiente();
-    for (let i = 6; i <= 20; i++) assert.equal((await ir(env, MASTER, 'POST', K + '/colunas', { nome: 'C' + i })).status, 200);
+    for (let i = 8; i <= 20; i++) assert.equal((await ir(env, MASTER, 'POST', K + '/colunas', { nome: 'C' + i })).status, 200);
     assert.equal((await ir(env, MASTER, 'POST', K + '/colunas', { nome: 'C21' })).status, 409);
   });
 });
@@ -880,7 +880,8 @@ describe('o quadro', () => {
     const q = await quadro(env, SUPORTE);
     assert.deepEqual(q.colunas.map((x) => [x.id, x.nome, x.ordem, x.fim, x.fixa, x.total]), [
       ['a-fazer', 'A fazer', 1, false, true, 2], ['auto-tests', 'Auto Tests', 2, false, true, 1], ['human-tests', 'Human Tests', 3, false, true, 0],
-      ['concluido', 'Concluído', 4, true, true, 1], ['para-depois', 'Para depois', 5, false, false, 0],
+      ['staging', 'Staging', 4, true, true, 0], ['adiado', 'Adiado', 5, true, true, 0],
+      ['concluido', 'Produção', 6, true, true, 1], ['para-depois', 'Para depois', 7, false, false, 0],
     ]);
     assert.deepEqual(q.cartoes.map((x) => x.chave), [kq, a.chave, b.chave, c.chave], 'por coluna e, dentro dela, pela posição (sem o removido)');
     assert.equal(a.chave, 'KAN-91', 'o número segue o maior, mesmo de um removido');

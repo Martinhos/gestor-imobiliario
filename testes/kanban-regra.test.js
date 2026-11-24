@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { baseDeTeste } from './lib/bd.js';
 import {
   chaveDe, numeroDaChave, colunaDaOrigem, estadoDoPedido, prioridadeDaGravidade, tituloDe,
-  cartaoDoTicketQa, cartaoDoPedido, passosDaSincronizacao, sqlEmTexto, COLUNAS_FIXAS,
+  cartaoDoTicketQa, cartaoDoPedido, passosDaSincronizacao, sqlEmTexto, COLUNAS_FIXAS, KAN_STAGING, KAN_ADIADO, KAN_PRODUCAO,
 } from '../worker/src/lib/kanban.js';
 
 let seq = 0;
@@ -47,7 +47,8 @@ describe('as peças da regra', () => {
     assert.deepEqual(['aceite', 'resolucao', 'proposta', 'concluido'].map((e) => colunaDaOrigem('pedido', e)),
       ['a-fazer', 'auto-tests', 'human-tests', 'human-tests']);
     assert.equal(colunaDaOrigem('erro', 'aberto'), null);
-    assert.deepEqual(COLUNAS_FIXAS, ['a-fazer', 'auto-tests', 'human-tests', 'concluido']);
+    assert.deepEqual(COLUNAS_FIXAS, ['a-fazer', 'auto-tests', 'human-tests', 'staging', 'adiado', 'concluido']);
+    assert.deepEqual([KAN_STAGING, KAN_ADIADO, KAN_PRODUCAO], ['staging', 'adiado', 'concluido'], 'as saídas do aceitar e Produção (0032)');
   });
 
   test('o estado de um pedido: só os de pessoas aceites e não recusados', () => {
@@ -190,7 +191,20 @@ for (const via of ['bind', 'texto']) {
       assert.equal(cartaoDe(db, 'pedido', t.id).coluna_id, 'concluido');
     });
 
-    test('um pedido que já chega concluído nasce em Concluído, com a data de feito', async () => {
+    test('um pedido aceite para Staging ou Adiado fica lá quando a resposta é proposta ou o pedido fecha (0032)', async () => {
+      for (const col of ['staging', 'adiado']) {
+        const db = baseDeTeste();
+        const t = { id: 'pppppppp-' + col, subject: 'Exportar em PDF', body: 'Queria.', accepted_changes: null };
+        await correr(db, { tipo: 'pedido', id: t.id, estado: 'resolucao', agora: 1, novo: { uuid: uuid(), ...cartaoDoPedido(t) } }, via);
+        db._db.exec("UPDATE kanban_cartoes SET coluna_id = '" + col + "'");
+        await correr(db, { tipo: 'pedido', id: t.id, estado: 'proposta', agora: 2 }, via);
+        assert.equal(cartaoDe(db, 'pedido', t.id).coluna_id, col, col + ': a resposta proposta não o puxa para Human Tests');
+        await correr(db, { tipo: 'pedido', id: t.id, estado: 'concluido', agora: 3 }, via);
+        assert.equal(cartaoDe(db, 'pedido', t.id).coluna_id, col, col + ': nem o pedido fechado');
+      }
+    });
+
+    test('um pedido que já chega concluído nasce em Produção, com a data de feito', async () => {
       const db = baseDeTeste();
       const t = { id: 'pppppppp-2', subject: 'Antigo', body: 'Já tratado.' };
       await correr(db, { tipo: 'pedido', id: t.id, estado: 'concluido', agora: 7, novo: { uuid: uuid(), ...cartaoDoPedido(t) } }, via);

@@ -328,7 +328,7 @@ describe('o SQL de cada comando, contra o esquema verdadeiro', () => {
     poeCartao(dev, 3, 'a-fazer');
     let r = corre(['mover', 'KAN-1', 'Concluído'], { dev });
     assert.equal(r.codigo, 0, r.err);
-    assert.match(r.out, /KAN-1: «Human Tests» → «Concluído» \(no topo\)/);
+    assert.match(r.out, /KAN-1: «Human Tests» → «Produção» \(no topo\) no dev \(gestor-imobiliario-dev\)\. O ticket de QA q1 foi com ele\./);
     let k = cartaoN(dev, 1);
     assert.deepEqual([k.coluna_id, k.origem_estado], ['concluido', 'concluido']);
     assert.ok(k.concluido_at > 0);
@@ -382,7 +382,7 @@ describe('o SQL de cada comando, contra o esquema verdadeiro', () => {
     assert.equal(dev.prepare('SELECT COUNT(*) AS n FROM kanban_ligacoes').get().n, 3);
     corre(['mover', 'KAN-1', 'concluido'], { dev });
     assert.doesNotMatch(corre(['listar'], { dev }).out, /Cartão 2 \(bloqueado/, 'quem bloqueia acabou: deixa de estar bloqueado');
-    assert.match(corre(['ver', 'KAN-2'], { dev }).out, /Ligações:\n {2}é bloqueado por KAN-1 «Cartão 1» \(Concluído\)\n {2}bloqueia KAN-3 «Cartão 3» \(A fazer\)\n {2}relaciona-se com KAN-1/);
+    assert.match(corre(['ver', 'KAN-2'], { dev }).out, /Ligações:\n {2}é bloqueado por KAN-1 «Cartão 1» \(Produção\)\n {2}bloqueia KAN-3 «Cartão 3» \(A fazer\)\n {2}relaciona-se com KAN-1/);
   });
 
   test('listar: sem as colunas de fim, com --todos, por coluna e por etiqueta, e o --json na forma da rota', () => {
@@ -393,15 +393,15 @@ describe('o SQL de cada comando, contra o esquema verdadeiro', () => {
     dev.exec("INSERT INTO kanban_etiquetas (cartao_id, etiqueta) VALUES ('k1', 'qa'), ('k1', 'design')");
     let r = corre(['listar'], { dev });
     assert.equal(r.codigo, 0, r.err);
-    assert.match(r.out, /^Kanban no dev \(gestor-imobiliario-dev\): 2 cartões\. A coluna Concluído \(1\) fica escondida \(--todos mostra-a\)\./);
+    assert.match(r.out, /^Kanban no dev \(gestor-imobiliario-dev\): 2 cartões\. As colunas Staging \(0\), Adiado \(0\), Produção \(1\) ficam escondidas \(--todos mostra-as\)\./);
     assert.match(r.out, /## A fazer \(2\)\n {2}KAN-1 · Erro · Mais alta · design, qa — Cartão 1 \(ticket de QA\)\n {2}KAN-3 · Subtarefa · Média — Cartão 3 \(pai KAN-2\)/);
     assert.match(r.out, /## Human Tests \(0\)\n {2}\(vazia\)/);
-    assert.doesNotMatch(r.out, /## Concluído/);
-    assert.match(corre(['listar', '--todos'], { dev }).out, /## Concluído \(1\)\n {2}KAN-2 · Tarefa · Média — Cartão 2 \(subtarefas 0\/1\)/);
-    assert.match(corre(['listar', '--coluna', 'concluido'], { dev }).out, /^Kanban no dev \(gestor-imobiliario-dev\): 1 cartão\.\n\n## Concluído \(1\)/);
+    assert.doesNotMatch(r.out, /## (Staging|Adiado|Produção)/);
+    assert.match(corre(['listar', '--todos'], { dev }).out, /## Produção \(1\)\n {2}KAN-2 · Tarefa · Média — Cartão 2 \(subtarefas 0\/1\)/);
+    assert.match(corre(['listar', '--coluna', 'concluido'], { dev }).out, /^Kanban no dev \(gestor-imobiliario-dev\): 1 cartão\.\n\n## Produção \(1\)/);
     assert.match(corre(['listar', '--etiqueta', 'qa', '--local'], { local: dev }).out, /^Kanban na base isolada \(--local\), com a etiqueta «qa»: 1 cartão\.[\s\S]*## A fazer \(1 de 2\)/);
     const j = JSON.parse(corre(['listar', '--json', '--todos'], { dev }).out);
-    assert.deepEqual(j.colunas.map((c) => [c.id, c.total, c.fim]), [['a-fazer', 2, false], ['auto-tests', 0, false], ['human-tests', 0, false], ['concluido', 1, true], ['para-depois', 0, false]]);
+    assert.deepEqual(j.colunas.map((c) => [c.id, c.total, c.fim]), [['a-fazer', 2, false], ['auto-tests', 0, false], ['human-tests', 0, false], ['staging', 0, true], ['adiado', 0, true], ['concluido', 1, true], ['para-depois', 0, false]]);
     assert.deepEqual(Object.keys(j.cartoes[0]).sort(), ['anexos', 'bloqueado', 'chave', 'coluna_id', 'comentarios', 'concluido_at', 'created_at', 'etiquetas', 'id', 'numero',
       'origem', 'pai', 'posicao', 'prazo', 'prioridade', 'responsavel', 'subtarefas', 'tipo', 'titulo', 'updated_at']);
     assert.deepEqual(j.cartoes[0].origem, { tipo: 'qa', id: 'q1', estado: 'aberto' });
@@ -488,7 +488,7 @@ describe('o importar-jira', () => {
     const dev = novaBase();
     const r = corre(['importar-jira', 'jira.json'], { dev }, { lerFicheiro: () => '\uFEFF' + JSON.stringify(JIRA) });
     assert.equal(r.codigo, 0, r.err);
-    assert.match(r.out, /^Importei 6 cartões do Jira no dev \(gestor-imobiliario-dev\): A fazer 1, Auto Tests 1, Human Tests 2, Concluído 1, Para depois 1; 1 comentário\. O contador ficou em KAN-77\./);
+    assert.match(r.out, /^Importei 6 cartões do Jira no dev \(gestor-imobiliario-dev\): A fazer 1, Auto Tests 1, Human Tests 2, Produção 1, Para depois 1; 1 comentário\. O contador ficou em KAN-77\./);
     assert.equal(r.chamadas.filter((c) => c.tipo === 'escrever').length, 1, 'tudo numa escrita só');
     const linhas = dev.prepare('SELECT numero, tipo, coluna_id, prioridade, prazo FROM kanban_cartoes ORDER BY numero').all().map((l) => [l.numero, l.tipo, l.coluna_id, l.prioridade, l.prazo]);
     assert.deepEqual(linhas, [[4, 'tarefa', 'concluido', 3, null], [14, 'tarefa', 'para-depois', 2, null], [71, 'erro', 'human-tests', 5, null],
@@ -861,7 +861,7 @@ describe('a fila', () => {
   test('fila: só A fazer e Auto Tests, pela ordem do quadro, e em cada uma pela prioridade e pela posição', () => {
     const r = corre(['fila'], { dev: comFila() });
     assert.equal(r.codigo, 0, r.err);
-    assert.match(r.out, /^Fila do kanban no dev \(gestor-imobiliario-dev\): A fazer 4, Auto Tests 2 \(6 cartões\); 2 comentários por responder, 1 bloqueado, 3 com origem/);
+    assert.match(r.out, /^Fila do kanban no dev \(gestor-imobiliario-dev\): A fazer 4, Auto Tests 2 \(6 cartões\); 2 comentários por responder, 1 bloqueado, 1 de um ticket de QA, 2 de pedidos \(tratam-se pela skill ticket\)\.\n/);
     const chaves = [...r.out.matchAll(/^### (KAN-\d+)/gm)].map((m) => m[1]);
     assert.deepEqual(chaves, ['KAN-3', 'KAN-2', 'KAN-1', 'KAN-5', 'KAN-4', 'KAN-6']);
     assert.ok(r.out.indexOf('## A fazer (4)') < r.out.indexOf('## Auto Tests (2)'));
@@ -873,7 +873,7 @@ describe('a fila', () => {
     const r = corre(['fila'], { dev: comFila() });
     assert.match(r.out, /### KAN-2 · Erro · Mais alta\nBLOQUEADO por KAN-7 «Cartão 7» \(em «Human Tests»\)\.\n/);
     assert.match(r.out, /### KAN-3 · Tarefa · Mais alta · 1 comentário por responder\nTítulo: Urgente de cima/, 'quem bloqueia acabou: sem destaque');
-    assert.match(r.out, /Ligações:\n {2}é bloqueado por KAN-9 «Já feito» \(Concluído\)/);
+    assert.match(r.out, /Ligações:\n {2}é bloqueado por KAN-9 «Já feito» \(Produção\)/);
     assert.match(r.out, /### KAN-1 · Tarefa · Média · 1 comentário por responder\n/);
     assert.match(r.out, /Descrição:\n {2}Fazer a coisa\.\n {2}Com duas linhas\.\nSubtarefas \(1 de 1 feitas\):\n {2}KAN-11 · Subtarefa/);
     assert.match(r.out, /Anexos \(1; busca-se com node scripts\/kanban\.mjs anexo KAN-1\):\n {2}captura\.png \(image\/png, 2 KB\) — Martinho Santos, .+ — node scripts\/kanban\.mjs anexo KAN-1 anx-1\n/);
@@ -881,16 +881,29 @@ describe('a fila', () => {
     assert.doesNotMatch(r.out, /Primeiro, antes do Claude\.[^\n]*POR RESPONDER|Sincronização · [^\n]*POR RESPONDER/);
   });
 
-  test('fila: um cartão com origem diz o script e o comando, com o id do ticket (QA; pedido do dev; pedido da produção)', () => {
+  test('fila: o cartão de um ticket de QA trata-se aqui e mostra o ticket; o de um pedido diz o comando do ticket.mjs (do dev; da produção)', () => {
     const r = corre(['fila'], { dev: comFila() });
-    assert.match(r.out, /### KAN-4[\s\S]*Origem: ticket de QA q-1 \(último estado visto: auto-tests\):\n {2}O Guardar não responde\n {2}Este cartão trata-se pelo scripts\/qa\.mjs \(a skill qa\), com o id do ticket: node scripts\/qa\.mjs comecar q-1\n/);
+    assert.match(r.out, /### KAN-4[\s\S]*Origem: ticket de QA q-1 \(último estado visto: auto-tests\):\n {2}O Guardar não responde\n {2}Quem: Maria <maria@x\.pt> · .+\n {2}Gravidade: nenhuma escolhida\n {2}Captura: não\n {2}Contexto: nenhum\n {2}Trata-se aqui, pela chave: o comecar, o resolver e o reabrir levam o ticket com o cartão\.\n/);
+    assert.doesNotMatch(r.out, /qa\.mjs|skill qa/, 'a fila já não manda nada para o qa.mjs');
     assert.match(r.out, /Origem: pedido d-pedido \(último estado visto: resolucao\):\n {2}Pedido d-pedido\n {2}Este cartão trata-se pelo scripts\/ticket\.mjs \(a skill ticket\), com o id do pedido: node scripts\/ticket\.mjs comecar d-pedido --dev\n/);
     assert.match(r.out, /Origem: pedido p-da-producao \(último estado visto: aceite\) — não está nesta base \(um pedido da produção\)\n {2}Este cartão trata-se pelo scripts\/ticket\.mjs \(a skill ticket\), com o id do pedido: node scripts\/ticket\.mjs comecar p-da-producao --prod\n/);
     const local = corre(['fila', '--local'], { local: comFila() });
     assert.match(local.out, /^Fila do kanban na base isolada \(--local\)/);
-    assert.match(local.out, /node scripts\/qa\.mjs comecar q-1 --local\n/);
     assert.match(local.out, /node scripts\/ticket\.mjs comecar d-pedido --local\n/);
     assert.match(local.out, /node scripts\/kanban\.mjs anexo KAN-1 anx-1 --local\n/);
+  });
+
+  test('fila: o ticket de QA por extenso — quem (o Discord do /test), a gravidade, a captura com o comando, o contexto e a resolução anterior; removido, diz-se', () => {
+    const dev = comFila();
+    const ctx = { ecra: { tab: 'casas', modal: 'Nova renda' }, janela: { w: 384, h: 785, dpr: 2.8 }, tema: { escolhido: 'auto', escuro: true, forcado: true }, ponteiro: 'touch' };
+    dev.prepare("UPDATE qa_tickets SET severity = 'incomoda', image_key = 'qa/q-1', discord_id = '99', discord_nome = 'Martinho', context = ?, resolution = 'Tentei X.' WHERE id = 'q-1'").run(JSON.stringify(ctx));
+    const r = corre(['fila'], { dev });
+    assert.match(r.out, /\n {2}Quem: Martinho \(Discord 99\), com uma conta de teste · .+\n {2}Gravidade: incomoda\n {2}Captura: sim — node scripts\/kanban\.mjs anexo KAN-4 captura\n {2}Contexto:\n {4}Ecrã: separador «casas», janela aberta «Nova renda»\n {4}Janela: 384×785 px a 2\.8x\n {4}Tema: escolhido «auto», a ver escuro, escurecido à força pelo browser\n {4}Ponteiro: touch\n {2}Resolução anterior \(foi reaberto — o que já se tentou\):\n {4}Tentei X\.\n/);
+    const j = JSON.parse(corre(['fila', '--json'], { dev }).out).cartoes.find((c) => c.chave === 'KAN-4');
+    assert.equal(j.origem.captura, 'node scripts/kanban.mjs anexo KAN-4 captura');
+    assert.equal(j.origem.ticket.severity, 'incomoda');
+    dev.exec("UPDATE qa_tickets SET removed_at = 5 WHERE id = 'q-1'");
+    assert.match(corre(['fila'], { dev }).out, /O TICKET FOI REMOVIDO na app: não se mexe no cartão/);
   });
 
   test('fila: numa só leitura, sejam quantos forem os cartões, e só com SELECT', () => {
@@ -919,7 +932,8 @@ describe('a fila', () => {
     assert.deepEqual(k1.subtarefas_lista.map((s) => s.chave), ['KAN-11']);
     assert.deepEqual(j.cartoes.find((c) => c.chave === 'KAN-2').bloqueadoPor, [{ chave: 'KAN-7', titulo: 'Cartão 7', coluna_id: 'human-tests' }]);
     const k4 = j.cartoes.find((c) => c.chave === 'KAN-4');
-    assert.deepEqual([k4.origem.script, k4.origem.skill, k4.origem.comando], ['scripts/qa.mjs', 'qa', 'node scripts/qa.mjs comecar q-1']);
+    assert.deepEqual([k4.origem.script, k4.origem.skill, k4.origem.comando, k4.origem.captura], ['scripts/kanban.mjs', 'kanban', 'node scripts/kanban.mjs comecar KAN-4', null]);
+    assert.deepEqual([k4.origem.ticket.severity, k4.origem.ticket.removido, k4.origem.ticket.autor.nome], [null, false, 'Maria']);
     assert.equal(j.cartoes.find((c) => c.chave === 'KAN-5').origem.comando, 'node scripts/ticket.mjs comecar p-da-producao --prod');
     assert.ok(!('removed_at' in k1));
   });
@@ -950,7 +964,8 @@ describe('a fila', () => {
 
   test('o ver também conta e marca os por responder, mostra os bloqueios e diz por onde se trata um cartão com origem', () => {
     const r = corre(['ver', 'KAN-4'], { dev: comFila() });
-    assert.match(r.out, /Este cartão trata-se pelo scripts\/qa\.mjs \(a skill qa\), com o id do ticket: node scripts\/qa\.mjs comecar q-1/);
+    assert.match(r.out, /Gravidade: nenhuma escolhida\n[\s\S]*Trata-se aqui, pela chave: o comecar, o resolver e o reabrir levam o ticket com o cartão\./);
+    assert.match(corre(['ver', 'KAN-6'], { dev: comFila() }).out, /Este cartão trata-se pelo scripts\/ticket\.mjs \(a skill ticket\), com o id do pedido: node scripts\/ticket\.mjs comecar d-pedido --dev/);
     assert.match(r.out, /\nHistórico:/);
     const um = corre(['ver', 'KAN-1'], { dev: comFila() });
     assert.match(um.out, /^KAN-1 · Tarefa · Média · «A fazer» \(no dev \(gestor-imobiliario-dev\)\) · 1 comentário por responder\n/);
@@ -988,19 +1003,40 @@ describe('comecar', () => {
     poeCartao(dev, 5, 'a-fazer', { origem_tipo: 'qa', origem_id: 'q-9', origem_estado: 'a-fazer' });
     poeCartao(dev, 6, 'a-fazer', { origem_tipo: 'pedido', origem_id: 'd-1', origem_estado: 'aceite' });
     poeCartao(dev, 7, 'a-fazer', { origem_tipo: 'pedido', origem_id: 'p-prod', origem_estado: 'aceite' });
-    const r = corre(['comecar', 'KAN-1', 'KAN-2', 'KAN-3', 'KAN-4', 'KAN-5', 'KAN-6', 'KAN-7', 'KAN-40'], { dev });
+    poeCartao(dev, 8, 'staging');
+    poeCartao(dev, 9, 'adiado');
+    dev.exec("INSERT INTO qa_tickets (id, user_id, body, status, created_at, updated_at, removed_at) VALUES ('q-fora', 'U1', 'Removido', 'a-fazer', 1, 1, 3)");
+    poeCartao(dev, 10, 'a-fazer', { origem_tipo: 'qa', origem_id: 'q-fora', origem_estado: 'a-fazer' });
+    const r = corre(['comecar', 'KAN-1', 'KAN-2', 'KAN-3', 'KAN-4', 'KAN-5', 'KAN-6', 'KAN-7', 'KAN-8', 'KAN-9', 'KAN-10', 'KAN-40'], { dev });
     assert.equal(r.codigo, 1);
     for (const re of [/^kanban: Não mexi em nenhum cartão:\n/, /- KAN-2 está em «Human Tests»: reabre-o primeiro \(node scripts\/kanban\.mjs reabrir KAN-2\)\./,
-      /- KAN-3 está em «Concluído»: reabre-o primeiro/, /- KAN-4 foi removido a .+ \(repor é do master, no back office\)\./,
-      /- KAN-5 vem do ticket de QA q-9: trata-se pelo scripts\/qa\.mjs \(a skill qa\), com o id do ticket: node scripts\/qa\.mjs comecar q-9\./,
+      /- KAN-3 está em «Produção»: reabre-o primeiro/, /- KAN-4 foi removido a .+ \(repor é do master, no back office\)\./,
       /- KAN-6 vem do pedido d-1: trata-se pelo scripts\/ticket\.mjs \(a skill ticket\), com o id do pedido: node scripts\/ticket\.mjs comecar d-1 --dev\./,
-      /- KAN-7 vem do pedido p-prod: .+node scripts\/ticket\.mjs comecar p-prod --prod\./, /- KAN-40 não existe no dev/]) assert.match(r.err, re);
-    assert.doesNotMatch(r.err, /KAN-1[ :]/, 'o que podia ir não tem razão');
+      /- KAN-7 vem do pedido p-prod: .+node scripts\/ticket\.mjs comecar p-prod --prod\./,
+      /- KAN-8 está em «Staging»: reabre-o primeiro/, /- KAN-9 está em «Adiado»: reabre-o primeiro/,
+      /- KAN-10 vem do ticket de QA q-fora, que foi removido na app: não se mexe/, /- KAN-40 não existe no dev/]) assert.match(r.err, re);
+    assert.doesNotMatch(r.err, /KAN-[15][ :]/, 'o que podia ir (também o de um ticket de QA) não tem razão');
+    assert.doesNotMatch(r.err, /qa\.mjs/);
     assert.ok(!r.chamadas.some((c) => c.tipo === 'escrever'), 'nada escrito');
     assert.equal(cartaoN(dev, 1).coluna_id, 'a-fazer', 'nem o que podia ir');
     assert.equal(r.chamadas.length, 1, 'uma leitura para os conferir todos');
-    const so = corre(['comecar', 'KAN-5', '--local'], { local: dev });
-    assert.match(so.err, /^kanban: KAN-5 vem do ticket de QA q-9: .+node scripts\/qa\.mjs comecar q-9 --local\. Não mexi no cartão\.\n$/);
+  });
+
+  test('comecar de um cartão de QA leva o ticket a Auto Tests na mesma escrita, antes do cartão', () => {
+    const dev = novaBase();
+    dev.exec("INSERT INTO qa_tickets (id, user_id, body, status, created_at, updated_at) VALUES ('q-9', 'U1', 'Falha', 'a-fazer', 1, 1)");
+    poeCartao(dev, 1, 'a-fazer');
+    poeCartao(dev, 5, 'a-fazer', { origem_tipo: 'qa', origem_id: 'q-9', origem_estado: 'a-fazer' });
+    const r = corre(['comecar', 'KAN-5', 'KAN-1', '--local'], { local: dev });
+    assert.equal(r.codigo, 0, r.err);
+    assert.equal(r.out, 'KAN-5: «A fazer» → «Auto Tests» (no topo) na base isolada (--local). O ticket de QA q-9 foi com ele.\nKAN-1: «A fazer» → «Auto Tests» (no topo) na base isolada (--local).\n');
+    assert.deepEqual({ ...dev.prepare("SELECT status, resolved_at FROM qa_tickets WHERE id = 'q-9'").get() }, { status: 'auto-tests', resolved_at: null });
+    assert.deepEqual(ordemDe(dev, 'auto-tests'), [5, 1]);
+    const escrita = r.chamadas.filter((c) => c.tipo === 'escrever');
+    assert.equal(escrita.length, 1, 'uma só escrita, com o ticket e os cartões');
+    const i = escrita[0].instrucoes.findIndex((s) => /^UPDATE qa_tickets/.test(s));
+    const j = escrita[0].instrucoes.findIndex((s) => /^UPDATE kanban_cartoes SET coluna_id/.test(s) && /'k5'/.test(s));
+    assert.ok(i >= 0 && i < j, 'o ticket antes do seu cartão');
   });
 });
 
@@ -1053,20 +1089,23 @@ describe('resolver', () => {
     assert.equal(local.prepare('SELECT texto FROM kanban_comentarios').get().texto, 'Feito.\n\nCommit: abc1234');
   });
 
-  test('resolver: recusa o que não está em A fazer nem em Auto Tests, e os com origem (com o comando certo), antes de ver o CI', () => {
+  test('resolver: recusa o que não está em A fazer nem em Auto Tests, os de pedidos (com o comando certo) e os de um ticket de QA removido, antes de ver o CI', () => {
     const dev = novaBase();
     dev.exec("INSERT INTO qa_tickets (id, user_id, body, status, created_at, updated_at) VALUES ('q-9', 'U1', 'Falha', 'auto-tests', 1, 1)");
+    dev.exec("INSERT INTO qa_tickets (id, user_id, body, status, created_at, updated_at, removed_at) VALUES ('q-fora', 'U1', 'Removido', 'auto-tests', 1, 1, 3)");
     poeCartao(dev, 1, 'human-tests');
     poeCartao(dev, 2, 'para-depois');
-    poeCartao(dev, 3, 'auto-tests', { origem_tipo: 'qa', origem_id: 'q-9', origem_estado: 'auto-tests' });
+    poeCartao(dev, 3, 'auto-tests', { origem_tipo: 'qa', origem_id: 'q-fora', origem_estado: 'auto-tests' });
     poeCartao(dev, 4, 'auto-tests', { origem_tipo: 'pedido', origem_id: 'p-prod', origem_estado: 'resolucao' });
     poeCartao(dev, 5, 'a-fazer', { removed_at: 9 });
+    poeCartao(dev, 6, 'adiado', { origem_tipo: 'qa', origem_id: 'q-9', origem_estado: 'adiado' });
     const casos = [
       ['KAN-1', /^kanban: KAN-1 está em «Human Tests»: o resolver só leva a Human Tests um cartão de A fazer ou de Auto Tests \(este já lá está\)\. Não mexi no cartão\./],
       ['KAN-2', /KAN-2 está em «Para depois»: .+\(se voltou ao trabalho, reabre-o primeiro: node scripts\/kanban\.mjs reabrir KAN-2\)/],
-      ['KAN-3', /KAN-3 vem do ticket de QA q-9: trata-se pelo scripts\/qa\.mjs \(a skill qa\), com o id do ticket: node scripts\/qa\.mjs resolver q-9 --nota "…" \[--commit <sha>\]\./],
+      ['KAN-3', /KAN-3 vem do ticket de QA q-fora, que foi removido na app: não se mexe/],
       ['KAN-4', /KAN-4 vem do pedido p-prod: trata-se pelo scripts\/ticket\.mjs .+node scripts\/ticket\.mjs propor p-prod --resposta "…" --nota "…" \(--commit <sha> \| --sem-commit\) --prod\./],
       ['KAN-5', /KAN-5 foi removido/], ['KAN-50', /KAN-50 não existe no dev/],
+      ['KAN-6', /KAN-6 está em «Adiado»: .+reabre-o primeiro: node scripts\/kanban\.mjs reabrir KAN-6/],
     ];
     for (const [chave, re] of casos) {
       const r = corre(['resolver', chave, '--nota', 'x', '--commit', 'abc1234'], { dev }, { publicadoDev: () => assert.fail('o CI só se vê depois de o cartão poder ir') });
@@ -1074,7 +1113,29 @@ describe('resolver', () => {
       assert.match(r.err, re, chave);
       assert.ok(!r.chamadas.some((c) => c.tipo === 'escrever'), chave);
     }
-    assert.equal(dev.prepare("SELECT status FROM qa_tickets WHERE id = 'q-9'").get().status, 'auto-tests', 'o ticket de QA não se mexeu');
+    assert.equal(dev.prepare("SELECT status FROM qa_tickets WHERE id = 'q-fora'").get().status, 'auto-tests', 'o ticket de QA não se mexeu');
+  });
+
+  test('resolver de um cartão de QA: o ticket vai a Human Tests com a resolução (a nota, o commit e o que testar), na mesma escrita que o cartão', () => {
+    const dev = novaBase();
+    dev.exec("INSERT INTO qa_tickets (id, user_id, body, status, resolution, created_at, updated_at) VALUES ('q-9', 'U1', 'Falha', 'auto-tests', 'Antiga.', 1, 1)");
+    poeCartao(dev, 3, 'auto-tests', { origem_tipo: 'qa', origem_id: 'q-9', origem_estado: 'auto-tests' });
+    const pub = publicadoSim();
+    const r = corre(['resolver', 'KAN-3', '--nota', 'O Guardar já grava.', '--commit', SHA, '--testar', '1. Abre a renda. 2. Guarda.'], { dev }, { publicadoDev: pub });
+    assert.equal(r.codigo, 0, r.err);
+    assert.match(r.out, /^KAN-3: «Auto Tests» → «Human Tests» \(no topo\) no dev .+como comentários do Claude\. O ticket de QA q-9 foi com ele, com a resolução\.\n$/);
+    const q = dev.prepare("SELECT status, resolution, resolved_at FROM qa_tickets WHERE id = 'q-9'").get();
+    assert.equal(q.status, 'human-tests');
+    assert.equal(q.resolution, 'O Guardar já grava.\n\nCommit: ' + SHA + '\n\nO que testar: 1. Abre a renda. 2. Guarda.');
+    assert.ok(q.resolved_at > 0);
+    assert.equal(cartaoN(dev, 3).coluna_id, 'human-tests');
+    assert.equal(r.chamadas.filter((c) => c.tipo === 'escrever').length, 1);
+    // reabrir: o ticket volta a A fazer e guarda a resolução (a pílula mostra-a como «Resolução anterior»)
+    const re = corre(['reabrir', 'KAN-3'], { dev });
+    assert.equal(re.codigo, 0, re.err);
+    assert.match(re.out, /O ticket de QA q-9 foi com ele \(a resolução fica à vista, como «Resolução anterior»\)\.\n$/);
+    assert.deepEqual({ ...dev.prepare("SELECT status, resolution, resolved_at FROM qa_tickets WHERE id = 'q-9'").get() },
+      { status: 'a-fazer', resolution: q.resolution, resolved_at: null });
   });
 });
 
@@ -1085,7 +1146,7 @@ describe('reabrir', () => {
     poeCartao(dev, 2, 'a-fazer', { posicao: -100 });
     let r = corre(['reabrir', 'KAN-1'], { dev });
     assert.equal(r.codigo, 0, r.err);
-    assert.equal(r.out, 'KAN-1 reaberto: «Concluído» → «A fazer» (no topo) no dev (gestor-imobiliario-dev).\n');
+    assert.equal(r.out, 'KAN-1 reaberto: «Produção» → «A fazer» (no topo) no dev (gestor-imobiliario-dev).\n');
     assert.deepEqual([cartaoN(dev, 1).coluna_id, cartaoN(dev, 1).concluido_at], ['a-fazer', null]);
     assert.deepEqual(ordemDe(dev, 'a-fazer'), [1, 2]);
     assert.deepEqual(historicoDe(dev, 1), [{ campo: 'coluna', antes: 'concluido', depois: 'a-fazer', autor_id: 'claude' }]);
@@ -1098,17 +1159,21 @@ describe('reabrir', () => {
     assert.match(corre(['reabrir', 'KAN-3', '--local'], { local: dev }).out, /^KAN-3 reaberto: «Human Tests» → «A fazer» \(no topo\) na base isolada/);
   });
 
-  test('reabrir: os com origem não — o de QA pelo qa.mjs reabrir, o pedido pela equipa ou pelo ticket.mjs reabrir', () => {
+  test('reabrir: o de um pedido não — pela equipa ou pelo ticket.mjs reabrir; o de QA sim, de Staging, com o ticket', () => {
     const dev = novaBase();
     poePedidos(dev, [['d-1', 'resolucao', { accepted_at: 2 }]]);
-    poeCartao(dev, 1, 'human-tests', { origem_tipo: 'qa', origem_id: 'q-1', origem_estado: 'human-tests' });
+    dev.exec("INSERT INTO qa_tickets (id, user_id, body, status, resolved_at, created_at, updated_at) VALUES ('q-1', 'U1', 'Falha', 'staging', 7, 1, 1)");
+    poeCartao(dev, 1, 'staging', { origem_tipo: 'qa', origem_id: 'q-1', origem_estado: 'staging', concluido_at: 7 });
     poeCartao(dev, 2, 'human-tests', { origem_tipo: 'pedido', origem_id: 'd-1', origem_estado: 'proposta' });
-    const q = corre(['reabrir', 'KAN-1'], { dev });
-    assert.equal(q.codigo, 1);
-    assert.match(q.err, /KAN-1 vem do ticket de QA q-1: trata-se pelo scripts\/qa\.mjs \(a skill qa\), com o id do ticket: node scripts\/qa\.mjs reabrir q-1\. Não mexi no cartão\./);
     const p = corre(['reabrir', 'KAN-2'], { dev });
+    assert.equal(p.codigo, 1);
     assert.match(p.err, /KAN-2 vem do pedido d-1: reabrir um pedido é da equipa, no back office, ou, se estiver em resolução, node scripts\/ticket\.mjs reabrir d-1 --dev\./);
-    assert.ok(![q, p].some((r) => r.chamadas.some((c) => c.tipo === 'escrever')));
+    assert.ok(!p.chamadas.some((c) => c.tipo === 'escrever'));
+    const q = corre(['reabrir', 'KAN-1'], { dev });
+    assert.equal(q.codigo, 0, q.err);
+    assert.match(q.out, /^KAN-1 reaberto: «Staging» → «A fazer» \(no topo\) no dev/);
+    assert.deepEqual({ ...dev.prepare("SELECT status, resolved_at FROM qa_tickets WHERE id = 'q-1'").get() }, { status: 'a-fazer', resolved_at: null });
+    assert.equal(cartaoN(dev, 1).concluido_at, null);
   });
 
   test('o mover e o reabrir de um cartão de QA levam o ticket com ele (o gatilho kanban_qa_coluna da 0029); o de um pedido não mexe no pedido', () => {
@@ -1204,6 +1269,25 @@ describe('anexo', () => {
       assert.equal(falta.codigo, 1);
       assert.match(falta.err, /^kanban: 4 anexos do KAN-3 no dev .+:\n.+KAN-3-anx-png\.png[\s\S]*Não consegui descarregar 1 anexo do KAN-3:\n {2}- anx-txt \(«estranho\.png»\): não está no R2/);
       assert.ok(!existsSync(path.join(pasta, 'KAN-3-anx-txt.descarregar')), 'o ficheiro a meio sai');
+    } finally { rmSync(pasta, { recursive: true, force: true }); }
+  });
+
+  test('anexo num cartão de QA: a captura do ticket (qa/<id>) vem como o anexo «captura»; sem captura, ou com o ticket removido, não', () => {
+    const dev = novaBase();
+    const pasta = mkdtempSync(path.join(os.tmpdir(), 'kanban-captura-'));
+    try {
+      dev.exec("INSERT INTO qa_tickets (id, user_id, body, status, image_key, created_at, updated_at) VALUES ('q-1', 'U1', 'Falha', 'a-fazer', 'qa/q-1', 1, 1)");
+      poeCartao(dev, 5, 'a-fazer', { origem_tipo: 'qa', origem_id: 'q-1', origem_estado: 'a-fazer' });
+      const desc = r2({ 'qa/q-1': PNG });
+      const r = corre(['anexo', 'KAN-5', 'captura', '--para', pasta], { dev }, { descarregar: desc });
+      assert.equal(r.codigo, 0, r.err);
+      assert.match(r.out, /^1 anexo do KAN-5 no dev .+:\n {2}.+KAN-5-captura\.png \(png, 1 KB\) — «captura do ticket de QA q-1»/);
+      assert.deepEqual(desc.vezes, [{ alvo: 'dev', chave: 'qa/q-1' }]);
+      dev.exec("UPDATE qa_tickets SET image_key = 'qa/../fora' WHERE id = 'q-1'");
+      assert.match(corre(['anexo', 'KAN-5', '--para', pasta], { dev }, { descarregar: desc }).err, /não é do espaço kanban\/: não descarrego nada/);
+      dev.exec("UPDATE qa_tickets SET image_key = 'qa/q-1', removed_at = 4 WHERE id = 'q-1'");
+      assert.match(corre(['anexo', 'KAN-5'], { dev }, { descarregar: desc }).err, /O KAN-5 não tem anexos no dev/);
+      assert.equal(desc.vezes.length, 1);
     } finally { rmSync(pasta, { recursive: true, force: true }); }
   });
 });

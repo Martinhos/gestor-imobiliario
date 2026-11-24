@@ -19,8 +19,14 @@
      (migrations/0029_qa_no_kanban.sql) leva o ticket com ele.
    - Um pedido: o cartão só se move sozinho quando o estado do pedido MUDA
      (origem_estado guarda o último que se viu), e mover o cartão à mão nunca
-     mexe no pedido. Um cartão numa coluna de fim (Concluído) só sai de lá
-     sozinho para «A fazer».
+     mexe no pedido. Um cartão numa coluna de fim (Staging, Adiado,
+     Produção) só sai de lá sozinho para «A fazer».
+
+   As colunas de depois de Human Tests (migrations/0032_staging_adiado.sql,
+   as decisões do Martinho, 2026-11-24): quem testa aceita com uma de duas
+   saídas — Staging (KAN_STAGING: vai no próximo promove) ou Adiado
+   (KAN_ADIADO: resolvido, fica no dev) — e quem leva a Produção
+   (KAN_PRODUCAO, o id 'concluido' de sempre) é o promove, depois do deploy.
 
    Nada aqui importa nada: é usado pelo worker e pelo Node dos scripts. */
 
@@ -35,8 +41,15 @@ export const NOMES_DOS_TIPOS = { epico: 'Épico', historia: 'História', tarefa:
 export const PRIORIDADES = [1, 2, 3, 4, 5];
 export const NOMES_DAS_PRIORIDADES = { 1: 'Mais alta', 2: 'Alta', 3: 'Média', 4: 'Baixa', 5: 'Mais baixa' };
 
-// As colunas que a sincronização usa (kanban_colunas.fixa = 1): renomeiam-se, não se removem.
-export const COLUNAS_FIXAS = ['a-fazer', 'auto-tests', 'human-tests', 'concluido'];
+// As colunas que a automação usa (kanban_colunas.fixa = 1): renomeiam-se, não se removem.
+export const COLUNAS_FIXAS = ['a-fazer', 'auto-tests', 'human-tests', 'staging', 'adiado', 'concluido'];
+
+// Para onde vai um cartão aceite em Human Tests: Staging, que vai no próximo promove (o
+// scripts/promover.mjs leva só os commits destes cartões), ou Adiado, resolvido mas a ficar no dev.
+export const KAN_STAGING = 'staging';
+export const KAN_ADIADO = 'adiado';
+// Produção: o id de sempre (Concluído até à 0032), para onde o promove leva os de Staging.
+export const KAN_PRODUCAO = 'concluido';
 
 // Quem assina o que a sincronização faz sozinha, no histórico e nos comentários.
 export const AUTOMATICO = { id: 'automatico', nome: 'Sincronização' };
@@ -53,7 +66,7 @@ const ID_DE_COLUNA = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
 
 // A coluna onde um ticket de QA fica quando alguém pega nele (qa.mjs comecar).
 export const QA_EM_CURSO = 'auto-tests';
-// A coluna onde fica quando se resolve: quem testa confirma e passa-o a Concluído.
+// A coluna onde fica quando se resolve: quem testa aceita e passa-o a Staging ou a Adiado.
 export const QA_RESOLVIDO = 'human-tests';
 // A coluna onde nasce e para onde volta ao reabrir.
 export const QA_NOVO = 'a-fazer';
@@ -228,7 +241,7 @@ export function passosDaSincronizacao(ev) {
 
   if (ev.novo && coluna) {
     /* um pedido que já chega concluído (o primeiro sincronizar encontra os
-       antigos) nasce em Concluído: não há nada para testar */
+       antigos) nasce em Produção: não há nada para testar */
     passos.push(...passosDeCriar(tipo, origem, estado, estado === 'concluido' ? 'concluido' : coluna, ev.novo, autor, agora));
   }
 
@@ -414,8 +427,8 @@ export function cartaoVoltaComOTicket(ticketId, removidoEm, autor, agora) {
   ];
 }
 
-/* Os passos de um cartão que muda de coluna pela pílula (um Erro sem ticket
-   de QA: mover, reabrir, Aceitar, Recusar, Adiar): vai para o topo da
+/* Os passos de um cartão que muda de coluna pela pílula (um cartão sem ticket
+   de QA: mover, reabrir, Enviar para produção, Adiar a produção, Recusar): vai para o topo da
    coluna, como o mover do kanban com o índice 0, com o concluido_at posto ao
    entrar numa coluna de fim (mantido se já estava numa) e tirado nas outras,
    e a linha «coluna» no histórico assinada por quem mexeu. Já nessa coluna,

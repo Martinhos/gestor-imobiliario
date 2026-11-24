@@ -539,7 +539,7 @@ function kbAssentarChave(chave, r0) {
    Recebe: chave; coluna — o id de destino; indice — a posição nela (0 =
    topo, sem contar o próprio); r0 (opcional) — o retângulo de onde parte, para assentar;
    aoMover (opcional) — o que avisa quando o servidor aceita, no lugar do aviso
-   de sempre (o Aceitar: equipa-kanban.js:kbAceitar).
+   de sempre (as decisões de Human Tests e de Adiado: equipa-kanban.js:kbDecidir).
    Devolve: nada. */
 function kbMover(chave, coluna, indice, r0, aoMover) {
   var c = kbCartao(chave);

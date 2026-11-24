@@ -11,26 +11,35 @@
 // human-tests, concluido, para-depois…). Mover o ticket aqui move o cartão;
 // mover o cartão no kanban move o ticket (o gatilho da migração 0029).
 //
-// A pílula é uma vista do kanban (pedido do Martinho, 2026-11-12, KAN-115):
-// o GET lista os cartões do tipo Erro, venham de onde vierem, com o ticket
-// junto nos de QA, e as ações valem para todos. Um item com ticket usa o id
-// do ticket; um Erro sem ticket usa a chave do cartão (KAN-N), que estas
-// rotas também aceitam (cartaoDaPilula). Remover e repor andam aos pares:
-// o ticket e o cartão saem e voltam juntos (lib/kanban.js:cartaoSaiComOTicket).
+// A pílula é uma vista do kanban (pedido do Martinho, 2026-11-12, KAN-115) e
+// chama-se «Tickets» desde 2026-11-24 (KAN-155: «Não é só para QA, é para
+// todos os tickets»): o GET lista todos os cartões que não estão em Produção,
+// de todos os tipos, com o ticket junto nos de QA, e as ações valem para
+// todos. Um item com ticket usa o id do ticket; um cartão sem ticket usa a
+// chave (KAN-N), que estas rotas também aceitam (cartaoDaPilula). Os cartões
+// dos pedidos das pessoas vêm só com a chave e o título, e as rotas não lhes
+// chegam: o texto da pessoa nunca sai daqui (DE_PEDIDO). Remover e repor
+// andam aos pares: o ticket e o cartão saem e voltam juntos
+// (lib/kanban.js:cartaoSaiComOTicket).
 import { json, err, body, badId, now, CSP_ANEXO } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
 import { lerAte, tipoDaImagem } from '../lib/imagens.js';
-import { catsDe } from '../lib/papeis.js';
 
 // as duas vivem em lib/imagens.js (o kanban também as usa); ficam exportadas daqui para quem já as lia cá
 export { lerAte, tipoDaImagem };
 import {
   cartaoDoTicketQa, ticketQaNaColuna, eIdDeColuna, passosDoComentarioQa, colunaDoComentarioQa, passosDoComentario, colunaDepoisDoComentario,
-  cartaoSaiComOTicket, cartaoVoltaComOTicket, passosDoCartaoNaColuna, chaveDe, QA_NOVO,
+  cartaoSaiComOTicket, cartaoVoltaComOTicket, passosDoCartaoNaColuna, chaveDe, QA_NOVO, KAN_PRODUCAO,
 } from '../lib/kanban.js';
 
 // A chave de um cartão nas rotas da pílula: KAN-N, sempre com o prefixo (um id de ticket nunca tem esta forma).
 const CHAVE_DO_CARTAO = /^KAN-([1-9]\d{0,8})$/i;
+
+/* O cartão k é de um pedido de uma pessoa (o texto que ela escreveu na
+   Ajuda): o que a sincronização criou (origem 'pedido') ou um com a etiqueta
+   suporte (os que a skill ticket faz à mão). A condição em SQL, sobre o
+   cartão com o nome k. */
+const DE_PEDIDO = "(COALESCE(k.origem_tipo, '') = 'pedido' OR EXISTS (SELECT 1 FROM kanban_etiquetas e WHERE e.cartao_id = k.id AND e.etiqueta = 'suporte'))";
 
 // As gravidades que um ticket pode ter; qualquer outra coisa fica sem nenhuma.
 const GRAVIDADES = ['bloqueia', 'incomoda', 'detalhe'];
@@ -72,14 +81,14 @@ function naoExiste() {
    kanban; PUT e GET …/imagem gravam e servem a captura; POST …/comentarios
    {texto} comenta (e devolve o ticket a A fazer) e GET …/comentarios
    lê os comentários do ticket.
-   O :id é o de um ticket ou a chave de um cartão Erro (KAN-N): a de um
-   cartão com o ticket vivo vale o mesmo que o id dele; a de um Erro sem
-   ticket vai às rotasDoCartao.
+   O :id é o de um ticket ou a chave de um cartão (KAN-N): a de um
+   cartão com o ticket vivo vale o mesmo que o id dele; a de um cartão sem
+   ticket vai às rotasDoCartao; a de um cartão de um pedido é 404.
    O back office do dev chega aqui pelo rotasQaDaEquipa, com a sessão de
    equipa no lugar da conta.
    Recebe: c — o contexto do pedido montado pelo handleApi (env, request,
    ctx, path, method, seg e o utilizador em c.me), ou o do rotasQaDaEquipa
-   (com c.autor já feito, c.vePedidos e sem c.me).
+   (com c.autor já feito e sem c.me).
    Devolve: a Response da rota que casar com o pedido, ou nada (undefined)
    para o encaminhador tentar a seguinte. */
 export async function rotasQa(c) {
@@ -89,14 +98,14 @@ export async function rotasQa(c) {
 
   if (seg.length === 2) {
     if (method === 'POST') return criarTicket(env, request, c.autor || (await autorDaConta(env, me)));
-    if (method === 'GET') return listarTickets(env, !!c.vePedidos);
+    if (method === 'GET') return listarTickets(env);
     return err(404, 'Rota desconhecida.');
   }
 
   let id = seg[2];
   if (badId(id) || seg.length > 4) return naoExiste();
   if (CHAVE_DO_CARTAO.test(id)) {
-    const k = await cartaoDaPilula(env, id, !!c.vePedidos);
+    const k = await cartaoDaPilula(env, id);
     if (!k) return naoExiste();
     if (!k.ticket_vivo) return rotasDoCartao(c, k);
     id = k.origem_id;
@@ -126,10 +135,9 @@ export async function rotasQa(c) {
    que o worker/src/equipa-qa.js lá põe), com a sessão de equipa no lugar
    da conta: o autor é a pessoa da equipa, pelo Discord — user_id
    'equipa:<id do Discord>' (sem chave estrangeira, como os outros),
-   discord_id e discord_nome da sessão. Em produção, 404 como as da app. Um
-   cartão de um pedido mudado para Erro só o vê quem vê os pedidos (a
-   categoria 'user' dos papéis, como a descrição dele no kanban); nas contas
-   da app nunca.
+   discord_id e discord_nome da sessão. Em produção, 404 como as da app. Os
+   cartões dos pedidos vêm só com a chave e o título também aqui, a quem vê
+   os pedidos: o texto vê-se nos Pedidos e no kanban, não na pílula.
    Recebe: c — o contexto do pedido do back office ({env, request, method,
    path, eu}, com eu a sessão de equipa de getEquipa).
    Devolve: a Response, ou nada (undefined) quando o caminho não é do QA. */
@@ -140,8 +148,7 @@ export async function rotasQaDaEquipa(c) {
     try { return decodeURIComponent(s); } catch (e) { return s; }
   }));
   const autor = { id: autorDaEquipa(eu), discordId: String(eu.discordId), discordNome: eu.nome ? String(eu.nome) : null };
-  const vePedidos = catsDe(eu && (eu.papeis || eu.papel)).indexOf('user') > -1;
-  return rotasQa(Object.assign({}, c, { seg, me: null, autor, vePedidos }));
+  return rotasQa(Object.assign({}, c, { seg, me: null, autor }));
 }
 
 /* O user_id de um ticket escrito no back office: 'equipa:' e o id do
@@ -305,31 +312,34 @@ function bytes(s) {
   return new TextEncoder().encode(s).length;
 }
 
-/* GET /api/qa: a pílula é uma vista do kanban — as colunas, pela ordem do
-   quadro, e os cartões do tipo Erro que não estão removidos, venham de onde
-   vierem (de um ticket de QA, criados à mão, os da skill ticket), até 200.
-   Os das colunas que não são de fim primeiro, pela ordem das colunas; em
-   cada coluna, os por resolver pela prioridade do cartão (Mais alta a Mais
-   baixa) com os mais recentes à frente, e os resolvidos (Human Tests e as
-   de fim) com os resolvidos há menos tempo à frente; no fim os das colunas
-   de fim. Ao cartão de um ticket de QA vivo junta-se o ticket (o contexto,
-   a captura, o autor, a resolução). Um cartão de um pedido que alguém
-   tenha mudado para Erro só o vê quem vê os pedidos (a descrição é o texto
-   que a pessoa escreveu na Ajuda, e as contas da app nunca a veem; para os
-   outros não está cá, e as rotas também não lhe chegam: cartaoDaPilula).
-   Leva de passagem os removidos há mais de 24 h, e
-   põe o nome do Discord nos tickets que ficaram só com o id (nomesEmFalta).
-   Um ticket sem cartão (os de antes do kanban) não está no kanban, e por
-   isso não está aqui: continua no scripts/qa.mjs listar.
-   Recebe: env — o ambiente do worker (D1 em env.DB, R2 em env.FILES);
-   vePedidos — se quem pede vê os pedidos.
+/* GET /api/qa: a pílula «Tickets» é uma vista do kanban (KAN-115, KAN-155)
+   — as colunas, pela ordem do quadro, e todos os cartões que não estão
+   removidos nem em Produção (KAN_PRODUCAO), de todos os tipos e venham de
+   onde vierem (de um ticket de QA, criados à mão, os da skill ticket), até
+   200. Os das colunas que não são de fim primeiro, pela ordem das colunas;
+   em cada coluna, os por resolver pela prioridade do cartão (Mais alta a
+   Mais baixa) com os mais recentes à frente, e os resolvidos (Human Tests e
+   as de fim) com os resolvidos há menos tempo à frente; no fim os das
+   colunas de fim (Staging, Adiado). Ao cartão de um ticket de QA vivo
+   junta-se o ticket (o contexto, a captura, o autor, a resolução). Um
+   cartão de um pedido de uma pessoa (DE_PEDIDO) vem só com a chave e o
+   título, para toda a gente: a descrição é o texto que a pessoa escreveu na
+   Ajuda e a pílula abre-se com as contas de teste do /test do Discord — nem
+   se lê da base (o CASE do SELECT), e as rotas também não lhe chegam
+   (cartaoDaPilula). Leva de passagem os removidos há mais de 24 h, e põe o
+   nome do Discord nos tickets que ficaram só com o id (nomesEmFalta). Um
+   ticket sem cartão (os de antes do kanban) não está no kanban, e por isso
+   não está aqui: continua no scripts/qa.mjs listar.
+   Recebe: env — o ambiente do worker (D1 em env.DB, R2 em env.FILES).
    Devolve: promessa da Response {colunas: [{id, nome, fim}], tickets: [Item]}
    (o Item em itemParaFora). */
-async function listarTickets(env, vePedidos) {
+async function listarTickets(env) {
   await limparRemovidos(env);
   const rows = (
     await env.DB.prepare(
-      `SELECT k.numero, k.titulo, k.descricao, k.coluna_id, k.prioridade, k.origem_tipo, k.relator_id, k.relator_nome,
+      `SELECT k.numero, k.tipo, k.titulo, ${DE_PEDIDO} AS de_pedido,
+              CASE WHEN ${DE_PEDIDO} THEN '' ELSE k.descricao END AS descricao,
+              k.coluna_id, k.prioridade, k.origem_tipo, k.relator_id, k.relator_nome,
               k.created_at AS k_criado, k.updated_at AS k_mudado, k.concluido_at, COALESCE(c.fim, 0) AS fim,
               q.id, q.severity, q.context, q.image_key, q.resolution, q.resolved_at, q.created_at, q.updated_at,
               q.user_id, q.discord_id, q.discord_nome, u.name, u.email
@@ -337,37 +347,38 @@ async function listarTickets(env, vePedidos) {
          LEFT JOIN kanban_colunas c ON c.id = k.coluna_id
          LEFT JOIN qa_tickets q ON k.origem_tipo = 'qa' AND q.id = k.origem_id AND q.removed_at IS NULL
          LEFT JOIN users u ON u.id = q.user_id
-        WHERE k.tipo = 'erro' AND k.removed_at IS NULL${vePedidos ? '' : " AND COALESCE(k.origem_tipo, '') <> 'pedido'"}
+        WHERE k.removed_at IS NULL AND k.coluna_id <> ?
         ORDER BY COALESCE(c.fim, 0), COALESCE(c.ordem, 999), k.coluna_id,
                  CASE WHEN k.coluna_id = 'human-tests' OR c.fim = 1 THEN 0 ELSE k.prioridade END,
                  CASE WHEN k.coluna_id = 'human-tests' OR c.fim = 1 THEN COALESCE(q.resolved_at, k.concluido_at, k.updated_at)
                       ELSE COALESCE(q.created_at, k.created_at) END DESC,
                  k.numero DESC
         LIMIT ?`
-    ).bind(TETO_LISTA).all()
+    ).bind(KAN_PRODUCAO, TETO_LISTA).all()
   ).results;
   await nomesEmFalta(env, rows);
   return json({ colunas: await colunasDoKanban(env), tickets: rows.map(itemParaFora) });
 }
 
-/* Um cartão Erro da pílula, pela chave (KAN-N): vivo, do tipo Erro e, se
-   for de um pedido, só para quem vê os pedidos — o mesmo que o GET mostra.
-   Diz se o ticket de QA dele está vivo (então as rotas são as do ticket).
-   Recebe: env; chave — 'KAN-N'; vePedidos — se quem pede vê os pedidos.
+/* Um cartão da pílula, pela chave (KAN-N): vivo e que não seja de um pedido
+   de uma pessoa (DE_PEDIDO: esses a pílula só mostra, e as rotas não lhes
+   chegam, nem a quem vê os pedidos). Diz se o ticket de QA dele está vivo
+   (então as rotas são as do ticket).
+   Recebe: env; chave — 'KAN-N'.
    Devolve: promessa de {id, numero, coluna_id, origem_tipo, origem_id,
    ticket_vivo (0/1)}, ou de null. */
-async function cartaoDaPilula(env, chave, vePedidos) {
+async function cartaoDaPilula(env, chave) {
   const m = CHAVE_DO_CARTAO.exec(String(chave));
   if (!m) return null;
   return env.DB.prepare(
     `SELECT k.id, k.numero, k.coluna_id, k.origem_tipo, k.origem_id,
             (k.origem_tipo = 'qa' AND EXISTS (SELECT 1 FROM qa_tickets q WHERE q.id = k.origem_id AND q.removed_at IS NULL)) AS ticket_vivo
        FROM kanban_cartoes k
-      WHERE k.numero = ? AND k.tipo = 'erro' AND k.removed_at IS NULL` + (vePedidos ? '' : " AND COALESCE(k.origem_tipo, '') <> 'pedido'")
+      WHERE k.numero = ? AND k.removed_at IS NULL AND NOT ${DE_PEDIDO}`
   ).bind(Number(m[1])).first();
 }
 
-/* As rotas de um Erro sem ticket de QA (a chave KAN-N no lugar do id): as
+/* As rotas de um cartão sem ticket de QA (a chave KAN-N no lugar do id): as
    mesmas ações da pílula, escritas no cartão. Mover e reabrir levam-no a
    outra coluna (moverCartao); comentar é o comentário do kanban
    (comentarCartao); remover e repor são do master, no kanban (403); não há
@@ -391,7 +402,7 @@ async function rotasDoCartao(c, k) {
   return err(404, 'Rota desconhecida.');
 }
 
-/* POST /api/qa/KAN-N/mover {coluna} e …/reabrir num Erro sem ticket: o
+/* POST /api/qa/KAN-N/mover {coluna} e …/reabrir num cartão sem ticket: o
    cartão vai para o topo dessa coluna, com a linha «coluna» no histórico
    assinada por quem mexeu (lib/kanban.js:passosDoCartaoNaColuna).
    Recebe: env; k — o cartão; coluna — o id da coluna (do corpo, por
@@ -405,7 +416,7 @@ async function moverCartao(env, k, coluna, quem) {
   return json({ ok: true });
 }
 
-/* POST /api/qa/KAN-N/comentarios {texto} num Erro sem ticket: o comentário
+/* POST /api/qa/KAN-N/comentarios {texto} num cartão sem ticket: o comentário
    do kanban (lib/kanban.js:passosDoComentario) — fica no cartão e, em Human
    Tests, devolve-o a A fazer (recusar é comentar o que está mal); noutra
    coluna fica onde está. O texto e o travão são os do comentário de um
@@ -430,7 +441,7 @@ async function comentarCartao(env, request, k, quem) {
   }, 201);
 }
 
-/* GET /api/qa/KAN-N/comentarios num Erro sem ticket: os comentários do
+/* GET /api/qa/KAN-N/comentarios num cartão sem ticket: os comentários do
    cartão, sem os removidos, do mais antigo para o mais recente, até 500.
    Recebe: env; k — o cartão; quem — {id, nome} de quem pede (para o meu).
    Devolve: promessa da Response {comentarios: [...]}. */
@@ -475,12 +486,13 @@ async function nomesEmFalta(env, rows) {
   } catch (e) {}
 }
 
-/* Um cartão Erro da pílula (com o ticket de QA junto, quando o tem) na
-   forma que a app e a camada do back office leem.
+/* Um cartão da pílula (com o ticket de QA junto, quando o tem) na forma que
+   a app e a camada do back office leem.
    Recebe: r — a linha do SELECT de listarTickets.
    Devolve: o item {id (o do ticket, ou a chave do cartão sem ticket),
-   cartao ('KAN-N'), ticket (bool: tem ticket de QA), titulo, body (a
-   descrição do cartão),
+   cartao ('KAN-N'), ticket (bool: tem ticket de QA), tipo (o do cartão:
+   epico, historia, tarefa, subtarefa, erro), pedido (bool: é de um pedido
+   de uma pessoa), titulo, body (a descrição do cartão; '' num pedido),
    prioridade (1 a 5), status (o id da coluna do cartão), severity (a do
    ticket, ou null), context (objeto ou null), imagem (bool), resolution,
    resolved_at, created_at, updated_at, autor}.
@@ -488,9 +500,10 @@ async function nomesEmFalta(env, rows) {
    Tests, a última alteração; o updated_at é o maior do cartão e do ticket.
    O autor é o do ticket — com discord: {id, nome} quando veio de uma conta
    de teste (a conta do Discord que pediu o /test), null nas outras —, ou,
-   sem ticket, o relator do cartão. */
+   sem ticket, o relator do cartão; num pedido, ninguém (o nome vazio). */
 function itemParaFora(r) {
   const temTicket = !!r.id;
+  const pedido = !temTicket && !!r.de_pedido;
   let contexto = null;
   try { contexto = temTicket && r.context ? JSON.parse(r.context) : null; } catch (e) { contexto = null; }
   const chave = chaveDe(r.numero);
@@ -499,8 +512,10 @@ function itemParaFora(r) {
     id: temTicket ? r.id : chave,
     cartao: chave,
     ticket: temTicket,
+    tipo: r.tipo || 'tarefa',
+    pedido,
     titulo: r.titulo || '',
-    body: r.descricao || '',
+    body: pedido ? '' : r.descricao || '',
     prioridade: Number(r.prioridade) || 3,
     status: r.coluna_id,
     severity: (temTicket && r.severity) || null,
@@ -515,7 +530,8 @@ function itemParaFora(r) {
         id: r.user_id, nome: r.name || '', email: r.email || '',
         discord: r.discord_id ? { id: r.discord_id, nome: r.discord_nome || '' } : null,
       }
-      : { id: r.relator_id || '', nome: r.relator_nome || r.relator_id || '', email: '', discord: null },
+      : pedido ? { id: '', nome: '', email: '', discord: null }
+        : { id: r.relator_id || '', nome: r.relator_nome || r.relator_id || '', email: '', discord: null },
   };
 }
 

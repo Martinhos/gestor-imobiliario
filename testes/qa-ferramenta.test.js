@@ -195,9 +195,9 @@ describe('o SQL, corrido contra o esquema verdadeiro', () => {
   test('as colunas do kanban, pela ordem do quadro', () => {
     const db = base();
     const cs = db.prepare(sqlColunas()).all().map(colunaDaLinha);
-    assert.deepEqual(cs.map((c) => c.id), ['a-fazer', 'auto-tests', 'human-tests', 'concluido', 'para-depois']);
-    assert.deepEqual(cs.map((c) => c.fim), [false, false, false, true, false]);
-    assert.equal(cs[4].nome, 'Para depois');
+    assert.deepEqual(cs.map((c) => c.id), ['a-fazer', 'auto-tests', 'human-tests', 'staging', 'adiado', 'concluido', 'para-depois']);
+    assert.deepEqual(cs.map((c) => c.fim), [false, false, false, true, true, true, false]);
+    assert.deepEqual([cs[5].nome, cs[6].nome], ['Produção', 'Para depois']);
   });
 
   test('resolver (Human Tests) guarda a nota hostil tal e qual, sem partir a instrução', () => {

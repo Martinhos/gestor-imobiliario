@@ -4,7 +4,8 @@
 // (worker/src/lib/relatos.js: categorias client, server, infra e seguranca). O
 // Claude lê-os e trata-os daqui, na produção e no dev, quando o Martinho pede
 // «resolve os tickets» (a skill .claude/skills/ticket/SKILL.md, fora do app/).
-// É o par do scripts/qa.mjs, que faz o mesmo aos tickets de QA do dev.
+// Os tickets de QA do dev tratam-se pelo cartão deles, com o scripts/kanban.mjs
+// (a skill kanban).
 //
 //   node scripts/ticket.mjs listar [--prod|--dev|--local] [--todos] [--json]
 //   node scripts/ticket.mjs comecar <id> [<id>…] --prod|--dev|--local
@@ -31,8 +32,9 @@
 // Fechar (propor e concluir com --commit) só depois de a correção estar
 // publicada no ramo certo: o publicado diz-o — produção pela etiqueta
 // `publicado`, que o deploy de produção só move depois de o worker novo
-// responder; dev pelo CI do ramo dev (Testes e Deploy verdes, e a Interface
-// mais recente verde).
+// responder (o commit dentro dela, ou uma cópia por cherry-pick, que é como o
+// promove o leva desde 2026-11-24: scripts/promover.mjs); dev pelo CI do ramo
+// dev (Testes e Deploy verdes, e a Interface mais recente verde).
 //
 // Os alvos são três, e só estes: a produção (a base remota gestor-imobiliario),
 // o dev (a remota gestor-imobiliario-dev) e a base isolada do servidor 8788
@@ -1067,7 +1069,9 @@ export function avaliaCorridas(corridas, contem) {
 
 /* Se um commit está em produção: dentro da etiqueta publicado, que o deploy
    de produção só move depois de o worker novo responder (deploy.yml, «Marcar
-   o que está em produção»).
+   o que está em produção») — antepassado dela, ou, desde o promove só dos
+   cartões em Staging (2026-11-24), uma cópia por cherry-pick na história
+   dela (copiaNaEtiqueta).
    Recebe: sha — o sha conferido; git — o executor do git (args → { status, stdout, stderr }).
    Devolve: { publicado, razao, sha }; lança ErroTicket se o git fetch falhar. */
 export function publicadoProd(sha, git) {
@@ -1077,8 +1081,41 @@ export function publicadoProd(sha, git) {
   if (!inteiro) return { publicado: false, sha, razao: 'fora do ramo: o commit ' + sha + ' não existe neste repositório, nem depois do git fetch (falta o push?).' };
   const etiqueta = shaInteiro(git, 'refs/tags/publicado');
   if (!etiqueta) return { publicado: false, sha: inteiro, razao: 'a etiqueta publicado não existe: a produção ainda não foi marcada por nenhum deploy.' };
-  if (contido(git, inteiro, etiqueta)) return { publicado: true, sha: inteiro, razao: 'dentro da etiqueta publicado (' + etiqueta.slice(0, 7) + ').' };
-  return { publicado: false, sha: inteiro, razao: 'ainda não está em produção: a etiqueta publicado está em ' + etiqueta.slice(0, 7) + ' e não o contém (falta o «promove», ou o deploy de produção ainda não acabou bem).' };
+  return Object.assign({ sha: inteiro }, naEtiqueta(git, inteiro, etiqueta));
+}
+
+/* Se um commit (já com o sha inteiro) está na produção marcada pela
+   etiqueta: antepassado dela, ou uma cópia por cherry-pick
+   (copiaNaEtiqueta). O publicadoProd e o scripts/promover.mjs fechar (que faz
+   o git fetch uma vez para todos os commits) usam-na.
+   Recebe: git — o executor; inteiro — o sha de 40; etiqueta — o sha de 40 da etiqueta publicado.
+   Devolve: { publicado, razao, copia? }; lança ErroTicket se o git não souber responder. */
+export function naEtiqueta(git, inteiro, etiqueta) {
+  if (contido(git, inteiro, etiqueta)) return { publicado: true, razao: 'dentro da etiqueta publicado (' + etiqueta.slice(0, 7) + ').' };
+  const copia = copiaNaEtiqueta(git, inteiro, etiqueta);
+  if (copia) {
+    return { publicado: true, copia: copia.sha, razao: 'chegou à produção por cherry-pick: ' + (copia.sha ? copia.sha.slice(0, 7) + ', ' : '')
+      + (copia.como === 'trailer' ? 'com «(cherry picked from commit ' + inteiro.slice(0, 7) + '…)»' : 'o mesmo patch') + ', dentro da etiqueta publicado (' + etiqueta.slice(0, 7) + ').' };
+  }
+  return { publicado: false, razao: 'ainda não está em produção: a etiqueta publicado está em ' + etiqueta.slice(0, 7) + ' e não o contém (falta o «promove», ou o deploy de produção ainda não acabou bem).' };
+}
+
+/* Se um commit do dev chegou à produção por cherry-pick (o promove leva só
+   os commits dos cartões em Staging: scripts/promover.mjs ramo, com
+   `git cherry-pick -x`), e por isso já não é antepassado da etiqueta: um
+   commit na história da etiqueta com o trailer «(cherry picked from commit
+   <sha inteiro>)», ou, sem ele, um com o mesmo patch (`git cherry`, pelo
+   patch-id).
+   Recebe: git — o executor; inteiro — o sha de 40; etiqueta — o sha da etiqueta publicado.
+   Devolve: { como: 'trailer' | 'patch', sha (o da cópia, se se souber) }, ou null. */
+export function copiaNaEtiqueta(git, inteiro, etiqueta) {
+  const x = git(['log', '--format=%H', '-n', '1', '-F', '--grep=cherry picked from commit ' + inteiro, etiqueta]);
+  const achado = String(x.stdout || '').trim().toLowerCase();
+  if (x.status === 0 && /^[0-9a-f]{40}$/.test(achado)) return { como: 'trailer', sha: achado };
+  // git cherry <etiqueta> <commit> <commit>~1: «- <sha>» se a etiqueta tem um commit com o mesmo patch
+  const c = git(['cherry', etiqueta, inteiro, inteiro + '~1']);
+  if (c.status === 0 && new RegExp('^-\\s+' + inteiro, 'm').test(String(c.stdout || '').toLowerCase())) return { como: 'patch', sha: null };
+  return null;
 }
 
 /* Se um commit está publicado no dev: no origin/dev (senão falta o push) e

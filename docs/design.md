@@ -8283,18 +8283,22 @@ ordem de carregamento.
 
 ## Os tickets de QA
 
-Fora de produção há uma pílula «QA» que quem testa arrasta para onde estorvar
-menos e que abre «Novo ticket» e «Ver tickets». A pílula é uma vista do
-kanban da equipa: «Ver tickets» mostra os cartões do tipo Erro, venham de
-onde vierem — os dos tickets de QA, os criados à mão no quadro, os que a
-skill ticket cria —, nas colunas e com a prioridade deles, e o que se faz num
-lado vê-se no outro, porque os dados são os mesmos. Um cartão que passa a
-Erro entra na pílula, um que deixa de o ser sai, e um removido no kanban
-também. Os tickets de QA ficam na D1 do ambiente e quem programa lê-os e
-fecha-os com scripts/qa.mjs. Cada ticket tem o seu cartão e está sempre na
-coluna dele: o status é o id da coluna (A fazer, como nasce e como volta ao
-reabrir; Auto Tests, quando quem programa pega nele; Human Tests, resolvido e
-à espera de quem testa; Concluído; Para depois; e as que o master criar).
+Fora de produção há uma pílula «Tickets» que quem testa arrasta para onde
+estorvar menos e que abre «Novo ticket» e «Ver tickets». A pílula é uma vista
+do kanban da equipa: «Ver tickets» mostra todos os cartões que não estão em
+Produção, de todos os tipos e venham de onde vierem — os dos tickets de QA,
+os criados à mão no quadro, os que a skill ticket cria —, nas colunas e com a
+prioridade deles, e o que se faz num lado vê-se no outro, porque os dados são
+os mesmos. Um cartão que chega a Produção sai da pílula, e um removido no
+kanban também. Os cartões dos pedidos das pessoas aparecem só com a chave e o
+título (ver mais abaixo). Os tickets de QA ficam na D1 do ambiente e quem
+programa trata-os pelo kanban, como os outros cartões (scripts/kanban.mjs e a
+skill kanban). Cada ticket tem o seu cartão e está sempre na coluna dele: o
+status é o id da coluna (A fazer, como nasce e como volta ao reabrir; Auto
+Tests, quando quem programa pega nele; Human Tests, resolvido e à espera de
+quem testa; Staging, aceite e a ir no próximo promove; Adiado, aceite mas a
+ficar no dev; Produção, para onde o promove o leva; Para depois; e as que o
+master criar).
 Mover o cartão no kanban move o ticket (o gatilho kanban_qa_coluna da
 migração 0029), e mover o ticket move o cartão
 (worker/src/lib/kanban.js:passosDaSincronizacao). O ticket e o cartão também
@@ -8307,8 +8311,9 @@ corpo).
 
 A pílula vive no body, fora do #view, e aparece no render que traz o ambiente
 do servidor (cloud/qa.js:qaSincronizar). É a pega de pontos, o inseto
-(icones.js:ic, 'inseto'), «QA» e o número por resolver — os novos e os em
-resolução (cloud/qa.js:qaHtmlPilula, cloud/qa.js:qaRotuloDoBotao) —, em --loan para não se confundir com o cobalto das
+(icones.js:ic, 'inseto'), «Tickets» e o número por concluir — todos os que a
+lista mostra, os de Produção de fora (cloud/qa.js:qaHtmlPilula,
+cloud/qa.js:qaRotuloDoBotao, cloud/qa.js:qaColunaPorConcluir) —, em --loan para não se confundir com o cobalto das
 ações, com o contorno na cor da frente para o escurecimento forçado. A pega
 fica do lado da borda onde a pílula encostou: à esquerda à esquerda, e à
 direita depois do número, com o enchimento curto do lado dela (o order de
@@ -8391,19 +8396,28 @@ sempre, em grupos pela prioridade do cartão, com os nomes do kanban (Mais
 alta, Alta, Média, Baixa, Mais baixa), e em cada grupo do mais recente para o
 mais antigo (cloud/qa.js:qaSeccoes, qaHtmlGrupos; a API dá a mesma ordem), e
 as outras só quando têm itens — as por resolver pela mesma ordem numa lista
-só, as resolvidas (Human Tests e as de fim) do resolvido há menos tempo para
-trás. O número da pílula são os Erros em A fazer e em Auto Tests. Cada linha
+só, as resolvidas (Human Tests e as de fim: Staging e Adiado) do resolvido há
+menos tempo para trás. Produção não vem: o servidor não a manda. O número da
+pílula é o tamanho da lista, todos os que não estão em Produção. Cada linha
 tem o selo da prioridade como o do quadro — o ícone e a palavra na cor dela,
 na letra e no contorno, sem fundo, e nenhum na Média (cloud/qa.js:qaSelo,
-estilos.css:.qa-prio) —, a chave do cartão, o sinal da captura, quem e
+estilos.css:.qa-prio) —, o tipo quando não é um Erro (Tarefa, História…:
+cloud/qa.js:qaNomeDoTipo), a chave do cartão, o sinal da captura, quem e
 quando, e o título do cartão. Tocar abre o item para ler, com o selo da
 coluna (cloud/qa.js:qaSeloEstado: Auto Tests em --loan, Human Tests e as de
 fim em --in, as outras neutras), o da prioridade, a chave do cartão (KAN-N),
 o título e a descrição do cartão e a resolução (ou a «Resolução anterior» de
-um reaberto); um ticket de QA traz também a captura e o contexto. Um Erro
-que não veio de um ticket abre como «Erro KAN-N», com quem o criou no kanban
-no lugar do autor, sem captura nem contexto (cloud/qa.js:qaTemTicket,
-cloud/qa.js:qaTituloDaJanela).
+um reaberto); um ticket de QA traz também a captura e o contexto. Um cartão
+que não veio de um ticket abre com o tipo e a chave («Erro KAN-N», «Tarefa
+KAN-N»), com quem o criou no kanban no lugar do autor, sem captura nem
+contexto (cloud/qa.js:qaTemTicket, cloud/qa.js:qaTituloDaJanela).
+O cartão de um pedido de uma pessoa (pedido: true) é só a chave e o título: na
+linha, «Pedido», a chave e o título, sem prioridade nem quem nem quando; a
+janela, «Pedido KAN-N», tem a coluna, a chave, o título e a frase de que o
+texto se lê no back office, nos Pedidos, sem comentários e só com «Fechar»
+(cloud/qa.js:qaEPedido, cloud/qa.js:qaHtmlTopo, cloud/qa.js:qaRodapeTicket).
+A pílula abre-se com as contas de teste do /test do Discord, e o texto que a
+pessoa escreveu na Ajuda não é delas.
 As secções e cada grupo de prioridade de A fazer abrem e
 fecham como as secções da gaveta (cloud/qa.js:qaHtmlDobra, cloud/qa.js:qaDobrar):
 o título é um botão da largura toda, de 44px, com o nome, quantos tem e a
@@ -8411,32 +8425,39 @@ seta, aria-expanded e aria-controls; tocar troca a classe .fechada no nó vivo,
 sem repintar, e a altura anda por grid-template-rows de 1fr a 0fr
 (estilos.css:.qa-dobra-corpo), com o visibility a tirar as linhas do Tab só
 no fim do fecho. O estado é do aparelho (cloud/qa.js:QA_LS_DOBRAS), só com as
-secções que se tocaram; sem nada guardado, ou estragado, os abertos e os
-grupos abrem e as colunas de fim e o Para depois nascem recolhidos (cloud/qa.js:QA_DOBRAS_FECHADAS,
+secções que se tocaram; sem nada guardado, ou estragado, tudo nasce aberto
+— também Staging e Adiado, que são de fim mas não estão concluídas — menos o
+Para depois, que nasce recolhido (cloud/qa.js:QA_DOBRAS_FECHADAS,
 cloud/qa.js:qaDobraAberta). Com o armazenamento vedado, o toque vale nesta
 sessão (cloud/qa.js:qaDobrasAqui). A lista que o servidor repinta
 (cloud/qa.js:qaPintarLista) nasce já no estado guardado, sem transição.
 «Remover» só existe num ticket de QA, leva o cartão com ele e não pergunta:
-o aviso traz o Anular, que repõe os dois (cloud/qa.js:qaRemover). Num Erro
+o aviso traz o Anular, que repõe os dois (cloud/qa.js:qaRemover). Num cartão
 sem ticket não há «Remover»: remover um cartão é do master, no kanban.
 «Mover» passa o item (o ticket e o cartão) a outra coluna, logo no ecrã e
 reposto se o servidor recusar (cloud/qa.js:qaMover, cloud/qa.js:qaPassarDeColuna,
-cloud/qa.js:qaColunaNoEcra).
+cloud/qa.js:qaColunaNoEcra); Produção não está no menu, porque quem leva para
+lá é o promove (cloud/qa.js:qaHtmlMover).
 Em Human Tests o item está à espera de um sim ou de um não, e as três
 decisões de quem testa vêm em vez do «Mover», a seguir ao «Remover»
 (cloud/qa.js:qaRodapeTicket, cloud/qa.js:qaHtmlDecisoes): «Recusar» devolve o
 ticket a A fazer pelo reabrir, e a resolução fica como «Resolução anterior»
-(cloud/qa.js:qaRecusar); «Adiar» passa-o a Para depois, e só aparece quando o
-kanban tem essa coluna (cloud/qa.js:qaAdiar); «Aceitar», o primário, passa-o
-a Concluído (cloud/qa.js:qaAceitar). Todas mudam o ticket logo no ecrã e
-repõem-no se o servidor recusar, como o «Mover». Os quatro ficam numa linha
-quando cabem; quando não cabem, as decisões descem juntas para a linha delas,
-da largura toda (estilos.css:.qa-decisoes). No telemóvel os botões têm menos
-enchimento de lado e, entre 341px e 420px, o «Remover» é só o caixote, com o
-nome para o leitor de ecrã e um alvo de 48px: a 384px, a largura do Samsung
-do Martinho, cabem os quatro. «Reabrir» devolve um ticket de uma coluna de
-fim a A fazer (cloud/qa.js:qaReabrir); nas outras colunas há «Mover» e
-«Fechar».
+(cloud/qa.js:qaRecusar); «Adiar a produção» passa-o a Adiado, resolvido mas a
+ficar no dev (cloud/qa.js:qaAdiarProducao); «Enviar para produção», o
+primário, passa-o a Staging, e vai no próximo promove
+(cloud/qa.js:qaEnviarProducao). Todas mudam o ticket logo no ecrã e
+repõem-no se o servidor recusar, como o «Mover». A caixa das decisões
+desfaz-se (display:contents) e os quatro dobram numa linha só: ficam lado a
+lado quando cabem e, quando não, o «Enviar para produção» desce para a linha
+dele, da largura toda, com o «Remover» (do tamanho dele), o «Recusar» e o
+«Adiar a produção» na de cima (estilos.css:.qa-decisoes) — no computador a
+janela já não os leva aos quatro numa linha. No telemóvel (até 520px) os
+botões têm menos enchimento de lado e o «Enviar para produção» vai sempre
+para a linha dele; entre 341px e 420px o «Remover» é só o caixote, com o
+nome para o leitor de ecrã e um alvo de 48px. Em Adiado o primário é «Enviar para produção», que o
+leva a Staging, com o «Mover» ao lado; «Reabrir» devolve um ticket de outra
+coluna de fim a A fazer (cloud/qa.js:qaReabrir); nas outras colunas há
+«Mover» e «Fechar».
 
 Qualquer item leva comentários, e são os do cartão no kanban
 (kanban_comentarios): a mesma conversa na pílula, no back office e no
@@ -8496,29 +8517,32 @@ apaga-se de vez com a captura, de passagem nas rotas
 (worker/src/rotas/qa.js:limparRemovidos), e o cartão reposto depois disso
 volta como um Erro sem ticket. Reabrir guarda a resolução.
 
-O GET /api/qa não lê os tickets: lê os cartões do tipo Erro que não estão
-removidos, com as colunas do kanban, e junta a cada cartão de um ticket de
-QA vivo o ticket dele (worker/src/rotas/qa.js:listarTickets). Cada item leva
-a chave do cartão, a prioridade, a coluna, o título e a descrição do cartão
+O GET /api/qa não lê os tickets: lê todos os cartões que não estão removidos
+nem em Produção (worker/src/lib/kanban.js:KAN_PRODUCAO), de todos os tipos,
+com as colunas do kanban, e junta a cada cartão de um ticket de QA vivo o
+ticket dele (worker/src/rotas/qa.js:listarTickets). Cada item leva a chave
+do cartão, o tipo, a prioridade, a coluna, o título e a descrição do cartão
 e, num ticket, o contexto, a captura, o autor e a resolução; sem ticket, o
 autor é o relator do cartão (worker/src/rotas/qa.js:itemParaFora). O id é o
-do ticket nos de QA — as rotas da captura e o scripts/qa.mjs continuam a
-usá-lo — e a chave KAN-N nos outros. As rotas /api/qa/:id aceitam as duas:
-a chave de um cartão com o ticket vivo vale o id dele, e a de um Erro sem
-ticket vai às rotas do cartão (worker/src/rotas/qa.js:cartaoDaPilula,
+do ticket nos de QA — as rotas da captura continuam a usá-lo — e a chave
+KAN-N nos outros. As rotas /api/qa/:id aceitam as duas: a chave de um cartão
+com o ticket vivo vale o id dele, e a de um cartão sem ticket vai às rotas
+do cartão (worker/src/rotas/qa.js:cartaoDaPilula,
 worker/src/rotas/qa.js:rotasDoCartao), que movem o cartão para o topo da
 coluna com a linha «coluna» no histórico assinada por quem mexeu
 (worker/src/lib/kanban.js:passosDoCartaoNaColuna), comentam como o kanban
 (worker/src/lib/kanban.js:passosDoComentario), recusam remover e repor com
-403 e não têm captura. A chave de outro tipo, de um removido ou que não
-existe é 404. Um cartão de um pedido que alguém mude para Erro só aparece a
-quem vê os pedidos (o suporte e o master no back office): a descrição dele é
-o texto que a pessoa escreveu na Ajuda, e as contas da app nunca a veem. Um
-ticket sem cartão nenhum (os de antes do kanban) não está no kanban e por
-isso não está na pílula; continua no scripts/qa.mjs listar. A ordem do GET é
-a das colunas do quadro, com as de fim no fim; nas por resolver pela
-prioridade e do mais recente; em Human Tests e nas de fim do resolvido há
-menos tempo.
+403 e não têm captura. A chave de um removido, de um pedido ou que não existe
+é 404. Um cartão de um pedido de uma pessoa — o que a sincronização criou, ou
+um com a etiqueta suporte (worker/src/rotas/qa.js:DE_PEDIDO) — vem só com a
+chave, o tipo e o título, para toda a gente, também para quem vê os pedidos
+no back office: a descrição é o texto que a pessoa escreveu na Ajuda e nem se
+lê da base (o CASE do SELECT), o autor vem vazio, e as rotas não lhe chegam.
+O texto vê-se nos Pedidos e no kanban, a quem vê os pedidos. Um ticket sem
+cartão nenhum (os de antes do kanban) não está no kanban e por isso não está
+na pílula. A ordem do GET é a das colunas do quadro, com as de fim no fim;
+nas por resolver pela prioridade e do mais recente; em Human Tests e nas de
+fim do resolvido há menos tempo.
 
 Um comentário entra por POST /api/qa/:id/comentarios {texto}, na conta e no
 back office (worker/src/rotas/qa.js:comentarTicket): aparado, de 1 a 4000
@@ -8557,28 +8581,22 @@ worker/src/rotas/qa.js:autorDaEquipa). O contexto diz a secção do back office
 página não leva nada disto (worker/src/equipa-vista.js:htmlDoQa) e os dois
 recursos e as rotas respondem 404.
 
-Quem programa lê e fecha os tickets com `node scripts/qa.mjs listar | imagem |
-comecar | resolver | reabrir` (o uso está na cabeça do ficheiro), e a skill qa
-(.claude/skills/qa, na pasta acima do repositório) ensina o fluxo inteiro. O
-script só fala com a base e o bucket do dev, ou com a base isolada do 8788
-(--local), e recusa qualquer outro alvo antes de chamar o wrangler; corre o
-wrangler sem shell e escapa o SQL, porque as notas trazem texto livre. Só
-escreve com comecar (os novos passam a em resolução; recusa um resolvido),
-resolver (a nota e uma linha «Commit: <sha>») e reabrir. Remover
-não existe no script: é de quem testa, na app. O listar mostra, em cada
-ticket, os comentários por responder — no texto, no cabeçalho dele e por
-extenso; no --json, em comentariosPorResponder: os de pessoas escritos
-depois da última resposta do Claude, ou todos quando ele ainda não
-respondeu, sem os da sincronização (scripts/qa.mjs:porResponder). Um ticket
-cujo cartão foi removido no kanban não aparece (scripts/qa.mjs:sqlListar), e
-os Erros sem ticket ficam no scripts/kanban.mjs. A nota do
-resolver entra no cartão como comentário do Claude, e é essa a resposta: o
-ticket volta a Human Tests e os comentários deixam de estar por responder.
+Quem programa trata os tickets de QA pelo kanban, como os outros cartões: o
+`node scripts/kanban.mjs` (fila, comecar, resolver, reabrir, mover e o anexo,
+que traz também a captura do ticket) move o ticket com o cartão, e a skill
+kanban (.claude/skills/kanban, na pasta acima do repositório) ensina o fluxo
+inteiro, com o contexto, a captura e a gravidade do ticket. O script só fala
+com a base e o bucket do dev, ou com a base isolada (--local). Remover não
+existe no script: é de quem testa, na app. A nota do resolver entra no
+cartão como comentário do Claude, e é essa a resposta: o ticket volta a
+Human Tests e os comentários deixam de estar por responder. Quem leva um
+cartão de Human Tests a Staging ou a Adiado é quem testa, e a Produção é o
+promove (a skill promove).
 
 Os pedidos da Ajuda e os erros apanhados (a tabela tickets, de produção e do
 dev) leem-se e fecham-se com `node scripts/ticket.mjs listar | comecar | nota
-| publicado | propor | concluir | reabrir`, e a skill ticket (ao lado da qa)
-junta as três fontes num fluxo só. O script só vai às bases de produção e do
+| publicado | propor | concluir | reabrir`, e a skill ticket junta as fontes
+num fluxo só. O script só vai às bases de produção e do
 dev, ou à isolada, e recusa qualquer outro alvo antes do wrangler
 (scripts/ticket.mjs:confereAlvo); as escritas pedem sempre o alvo
 (scripts/ticket.mjs:lerArgumentos), e cada uma deixa a sua linha no rasto do
@@ -8587,7 +8605,7 @@ back office. Só começa um pedido de uma pessoa que a equipa aceitou
 grava a resposta proposta, que a equipa envia (scripts/ticket.mjs:sqlPropor).
 Fecha só o que está publicado no ambiente do ticket
 (scripts/ticket.mjs:publicadoDev, o CI verde no ramo dev;
-scripts/ticket.mjs:publicadoProd, o commit dentro da etiqueta publicado, que o
+scripts/ticket.mjs:publicadoProd, o commit, ou a cópia dele por cherry-pick, dentro da etiqueta publicado, que o
 deploy de produção move depois de a produção responder): um erro fechado antes
 disso reabria-se sozinho na ocorrência seguinte. Uma base sem a 0024 (a
 produção até ao «promove») lista na mesma, e lá nenhum pedido se implementa.
@@ -8604,15 +8622,19 @@ produção não existe: as rotas respondem 404 sem ENV_NAME, como as do QA
 CSS dele, e a barra lateral e a de baixo não têm a secção. A limpeza do dev
 não lhe toca.
 
-As colunas são as do board — A fazer, Auto Tests, Human Tests, Concluído e
-Para depois — e o master acrescenta, muda de nome, reordena e remove as que
+As colunas são A fazer, Auto Tests, Human Tests, Staging, Adiado, Produção e
+Para depois (migrations/0032_staging_adiado.sql) — e o master acrescenta, muda de nome, reordena e remove as que
 estão vazias (worker/src/equipa-kanban-janela.js:kbColunas): uma linha por
 coluna, com a pega, o nome, os selos e a contagem, e um ⋯ com as ações dela
 (Renomear, Marcar de fim, Remover, e Subir e Descer para o teclado); a ordem
 muda-se a arrastar pela pega, como as tarefas da app, e grava-se ao largar
-(worker/src/equipa-kanban-janela.js:kbColunasGravar). As quatro primeiras
-são fixas: a sincronização usa-as, e mudam de nome mas não saem; o
-Concluído é a coluna de fim (o progresso dos épicos, a data de feito). Um
+(worker/src/equipa-kanban-janela.js:kbColunasGravar). As seis primeiras
+são fixas (worker/src/lib/kanban.js:COLUNAS_FIXAS): a automação usa-as, e
+mudam de nome mas não saem. Staging, Adiado e Produção são de fim (o
+progresso dos épicos, a data de feito): Staging é o que quem testa aceitou e
+vai no próximo promove, Adiado o que aceitou mas fica no dev, e Produção o
+que o promove já levou — o id dela é o concluido de sempre, e quem a enche é
+o promove, depois do deploy de produção. Um
 cartão tem a chave, o tipo (Épico, História, Tarefa, Subtarefa ou Erro), o
 título, a descrição, a prioridade (de Mais alta a Mais baixa), as etiquetas,
 o responsável (uma pessoa da equipa, ou o Claude), o relator, o pai (o
@@ -8622,7 +8644,7 @@ os comentários (cada um muda e remove só os seus) e o histórico de
 cada mudança. Qualquer papel da equipa vê e mexe; remover um cartão é do
 master, e brando, com Anular no aviso; o cartão de um ticket de QA leva o
 ticket com ele, e o Anular repõe os dois (ver «Os tickets de QA»). Os
-cartões do tipo Erro são também a lista da pílula do QA.
+cartões que não estão em Produção são também a lista da pílula «Tickets».
 
 Os anexos de um cartão são uma lista fechada de tipos, cada um reconhecido
 pelos próprios bytes e nunca pelo Content-Type nem pelo nome
@@ -8699,13 +8721,20 @@ pede o Tipo e o Título, com o asterisco; o resto diz «Opcional» ou dá um
 exemplo, e o erro aparece ao lado do campo.
 
 Em Human Tests decide-se: ou se aceita, ou se recusa a explicar o que está
-mal. Um cartão aberto em Human Tests tem no fundo do painel uma barra fixa,
-sempre à vista enquanto o corpo rola, no computador e na folha do telemóvel
-(worker/src/equipa-kanban.js:kbDecidirHtml): a frase «Para recusar, comenta o
-que está mal: o cartão volta a A fazer.», o Comentar, que leva à caixa do
-comentário, e o Aceitar, o botão primário, que põe o cartão no topo de
-Concluído pelo caminho do «Mover para…», com o Anular no aviso
-(worker/src/equipa-kanban.js:kbAceitar). A barra é filha do painel que rola,
+mal. Aceitar tem duas saídas: «Enviar para produção» leva o cartão a
+Staging, e ele vai no próximo promove; «Adiar a produção» leva-o a Adiado,
+resolvido e testado mas a ficar no dev. Um cartão aberto em Human Tests tem
+no fundo do painel uma barra fixa, sempre à vista enquanto o corpo rola, no
+computador e na folha do telemóvel (worker/src/equipa-kanban.js:kbDecidirHtml):
+em cima a frase «Para recusar, comenta o que está mal: o cartão volta a A
+fazer.» com o Comentar ao lado, que leva à caixa do comentário; em baixo
+«Adiar a produção» e «Enviar para produção», o primário e o mais largo, lado
+a lado quando cabem e cada um na sua linha quando não. Os dois põem o cartão
+no topo da coluna pelo caminho do «Mover para…», e o aviso traz o Anular,
+que o devolve à coluna de onde saiu (worker/src/equipa-kanban.js:kbDecidir,
+worker/src/equipa-kanban.js:kbDecisaoAnular). Um cartão em Adiado tem a mesma
+barra com a frase do que isso quer dizer e só «Enviar para produção», que o
+leva a Staging. A barra é filha do painel que rola,
 por baixo do corpo: no fim do scroll fica depois do histórico, sem o tapar.
 Recusar é comentar: o comentário de uma pessoa num cartão em Human Tests
 leva-o ao topo de A fazer, a fila de quem programa, no mesmo lote, com a linha
@@ -8715,11 +8744,12 @@ cartão voltou. Noutra coluna o comentário não move nada, e o do Claude
 também não: a nota dele fica com o cartão já em Human Tests. As duas regras
 valem para todos os cartões, também os dos pedidos (KAN-137 e KAN-138,
 2026-11-16): o cartão de um pedido da produção vai a Human Tests à mão quando
-a correção está no dev, e testa-se no quadro como os outros. Aceitar e
+a correção está no dev, e testa-se no quadro como os outros. Decidir e
 comentar só mexem no cartão; o pedido decide-se e fecha-se nos Pedidos,
 depois do promove, e a sincronização só volta a mover o cartão quando o
-estado do pedido muda, nunca para fora de Concluído. Num cartão por decidir,
-o exemplo da caixa é o de uma recusa.
+estado do pedido muda, nunca para fora de Staging, de Adiado nem de Produção
+(as de fim). Num cartão por decidir em Human Tests, o exemplo da caixa é o de
+uma recusa.
 
 As janelas do kanban (as escolhas, os formulários, o ⋯, as colunas) têm o
 cabeçalho, o corpo que rola sozinho e o pé com os botões sempre à vista
@@ -8787,8 +8817,8 @@ Sem armazenamento, o quadro e o formulário funcionam como se não houvesse
 rascunhos.
 
 Os tickets criam o seu cartão sozinhos, e movem-no quando mudam de estado
-(worker/src/lib/kanban.js:passosDaSincronizacao, a regra única que as rotas,
-o scripts/qa.mjs e o scripts/kanban.mjs correm). Um ticket de QA novo é um
+(worker/src/lib/kanban.js:passosDaSincronizacao, a regra única que as rotas
+e os scripts correm). Um ticket de QA novo é um
 Erro em A fazer, com o texto, a gravidade como prioridade e a etiqueta qa; em
 resolução vai para Auto Tests, resolvido para Human Tests (com a nota como
 comentário) e reaberto volta a A fazer. Um pedido de uma pessoa aceite no
@@ -8796,8 +8826,8 @@ back office é uma História em A fazer, com as alterações da aceitação; em
 resolução vai para Auto Tests, e com a resposta proposta ou concluído para
 Human Tests. Os erros e os tickets de segurança não criam cartão. Um cartão só
 se move sozinho quando o estado da origem muda, e mover um cartão à mão nunca
-mexe no ticket; um cartão em Concluído só sai de lá sozinho se o ticket
-reabrir. Os cartões dos tickets de QA são a exceção: estão sempre na coluna
+mexe no ticket; um cartão numa coluna de fim (Staging, Adiado, Produção) só
+sai de lá sozinho se o ticket reabrir. Os cartões dos tickets de QA são a exceção: estão sempre na coluna
 do ticket, nos dois sentidos (a migração 0029), e um comentário num deles,
 no quadro ou na pílula, passa ticket e cartão a A fazer, de qualquer coluna
 menos da fila (A fazer e Auto Tests, onde ficam)
@@ -8813,7 +8843,9 @@ A descrição de um cartão de um pedido é o texto que a pessoa escreveu, e só
 vê quem vê os pedidos (worker/src/rotas/kanban.js:vePedidos — hoje, o suporte e
 o master): aos outros, o cartão diz que o texto só se mostra a quem vê os
 pedidos, a pesquisa não o procura, o histórico não o mostra e a descrição não
-se muda. O título — o assunto — e os comentários são de todos.
+se muda. O título — o assunto — e os comentários são de todos. Na pílula
+«Tickets» nem quem vê os pedidos lê o texto: lá o cartão de um pedido é só a
+chave e o título (ver «Os tickets de QA»).
 
 O detalhe de um pedido com cartão leva a ele, «Cartão KAN-N»
 (worker/src/equipa-guiao.js:detalhePedido). O Claude lê e escreve o kanban com
@@ -8824,12 +8856,16 @@ produção; cada escrita deixa a linha no histórico do cartão e no rasto da
 equipa. A fila são os cartões de A fazer e de Auto Tests, por coluna e, em
 cada uma, pela prioridade, cada um por extenso, com os bloqueios à cabeça, o
 comando que busca os anexos e os comentários por responder (os de pessoas
-depois do último do Claude). Os cartões que vêm de um ticket de QA ou de um
-pedido tratam-se pelo scripts/qa.mjs e pelo scripts/ticket.mjs: a fila diz o
-comando, e o comecar, o resolver e o reabrir recusam-nos com ele. O resolver
-só leva a Human Tests um cartão de A fazer ou de Auto Tests, com o commit já
-publicado no dev (scripts/ticket.mjs:publicadoDev), e deixa a nota e o que
-testar como comentários do Claude.
+depois do último do Claude). Os cartões dos tickets de QA tratam-se aqui como
+os outros, e o ticket anda com o cartão; os que vêm de um pedido tratam-se
+pelo scripts/ticket.mjs: a fila diz o comando, e o comecar, o resolver e o
+reabrir recusam-nos com ele. O resolver só leva a Human Tests um cartão de A
+fazer ou de Auto Tests, com o commit já publicado no dev
+(scripts/ticket.mjs:publicadoDev), e deixa a nota e o que testar como
+comentários do Claude. Daí em diante as colunas são de pessoas: quem testa
+leva o cartão a Staging ou a Adiado, e o promove leva os de Staging a
+Produção depois do deploy (a skill promove, com o scripts/promover.mjs, que
+leva para o main só os commits dos cartões em Staging).
 
 ## O rasto das pessoas
 Com o sim de quem usa, a app e a montra guardam onde se toca, e nunca o quê,

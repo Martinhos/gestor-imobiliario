@@ -1,8 +1,15 @@
 // Os tickets de QA do ambiente de desenvolvimento, do lado de quem os
 // resolve. Quem testa a app no dev escreve-os no próprio ecrã (web/cloud/qa.js,
 // gravados por worker/src/rotas/qa.js na tabela qa_tickets e, a captura, no R2
-// em qa/<id>); o Claude lê-os e fecha-os daqui, quando o Martinho pede
-// «resolve os tickets de QA» (a skill .claude/skills/qa/SKILL.md, fora do app/).
+// em qa/<id>).
+//
+// Desde 2026-11-24 (KAN-158: «A skill qa deve desaparecer. Fica tudo como
+// kanban») os tickets de QA tratam-se pelo cartão deles, com o
+// scripts/kanban.mjs (a skill kanban): o fila, o anexo (que busca também a
+// captura), o comecar, o resolver e o reabrir movem o ticket com o cartão.
+// Este script fica como módulo desse (porResponder, contextoLegivel,
+// quemDoTicket, notaDaResolucao, ticketDaLinha) e como ferramenta de recurso,
+// pelo id do ticket; nenhuma skill o manda usar.
 //
 //   node scripts/qa.mjs listar [--local] [--todos] [--json]
 //   node scripts/qa.mjs imagem <id> [--local] [--para <pasta>]
@@ -276,11 +283,11 @@ export function cita(v) {
 const FILA = [QA_NOVO, QA_EM_CURSO];
 const ANTIGOS = { aberto: QA_NOVO, em_resolucao: QA_EM_CURSO, resolvido: 'concluido' };
 // os nomes das colunas fixas, para quando a base não as diz
-const NOMES_FIXOS = { 'a-fazer': 'A fazer', 'auto-tests': 'Auto Tests', 'human-tests': 'Human Tests', concluido: 'Concluído', 'para-depois': 'Para depois' };
+const NOMES_FIXOS = { 'a-fazer': 'A fazer', 'auto-tests': 'Auto Tests', 'human-tests': 'Human Tests', staging: 'Staging', adiado: 'Adiado', concluido: 'Produção', 'para-depois': 'Para depois' };
 // as colunas de uma base sem kanban_colunas (a ordem do quadro de origem)
 const COLUNAS_DE_OMISSAO = [
   { id: 'a-fazer', nome: 'A fazer', ordem: 1, fim: false }, { id: 'auto-tests', nome: 'Auto Tests', ordem: 2, fim: false },
-  { id: 'human-tests', nome: 'Human Tests', ordem: 3, fim: false }, { id: 'concluido', nome: 'Concluído', ordem: 4, fim: true },
+  { id: 'human-tests', nome: 'Human Tests', ordem: 3, fim: false }, { id: 'concluido', nome: 'Produção', ordem: 4, fim: true },
   { id: 'para-depois', nome: 'Para depois', ordem: 5, fim: false },
 ];
 
@@ -624,14 +631,7 @@ export function textoDoTicket(t, local, colunas) {
   const grav = t.severity ? t.severity.toUpperCase() : 'sem gravidade';
   const porExtenso = comentariosPorExtenso(Array.isArray(t.comentariosPorResponder) ? t.comentariosPorResponder.length : 0);
   linhas.push('== ' + t.id + ' · ' + grav + ' · ' + estadoLegivel(t.status, colunas) + (t.cartao ? ' · ' + t.cartao : '') + (porExtenso ? ' · ' + porExtenso : ''));
-  // numa conta de teste, o autor é a conta do Discord que pediu o /test; no
-  // back office (user_id 'equipa:…', rotas/qa.js:autorDaEquipa), a pessoa da equipa
-  const d = t.autor && t.autor.discord;
-  const doBackOffice = /^equipa:/.test(String((t.autor && t.autor.id) || ''));
-  const quem = d
-    ? (d.nome ? d.nome + ' (Discord ' + d.id + ')' : 'Discord ' + d.id) + (doBackOffice ? ', no back office' : ', com uma conta de teste')
-    : [t.autor && t.autor.nome, t.autor && t.autor.email ? '<' + t.autor.email + '>' : ''].filter(Boolean).join(' ');
-  linhas.push('Quem: ' + (quem || 'conta desconhecida' + (t.autor && t.autor.id ? ' (' + t.autor.id + ')' : '')));
+  linhas.push('Quem: ' + quemDoTicket(t));
   linhas.push('Quando: ' + (quando(t.created_at) || '?') + (t.updated_at && t.updated_at !== t.created_at ? ' (atualizado a ' + quando(t.updated_at) + ')' : ''));
   linhas.push('Gravidade: ' + (t.severity || 'nenhuma escolhida'));
   linhas.push('Imagem: ' + (t.imagem ? 'sim — node scripts/qa.mjs imagem ' + t.id + (local ? ' --local' : '') : 'não'));
@@ -656,6 +656,21 @@ export function textoDoTicket(t, local, colunas) {
     });
   }
   return linhas.join('\n');
+}
+
+/* Quem escreveu um ticket, dito para quem o resolve: numa conta de teste, a
+   conta do Discord que pediu o /test; no back office (user_id 'equipa:…',
+   rotas/qa.js:autorDaEquipa), a pessoa da equipa; numa conta normal, o nome
+   e o email. O scripts/kanban.mjs usa-o na fila dos cartões de QA.
+   Recebe: t — o ticket (ticketDaLinha: autor {id, nome, email, discord}).
+   Devolve: o texto («Martinho (Discord 1234), com uma conta de teste», …). */
+export function quemDoTicket(t) {
+  const d = t.autor && t.autor.discord;
+  const doBackOffice = /^equipa:/.test(String((t.autor && t.autor.id) || ''));
+  const quem = d
+    ? (d.nome ? d.nome + ' (Discord ' + d.id + ')' : 'Discord ' + d.id) + (doBackOffice ? ', no back office' : ', com uma conta de teste')
+    : [t.autor && t.autor.nome, t.autor && t.autor.email ? '<' + t.autor.email + '>' : ''].filter(Boolean).join(' ');
+  return quem || 'conta desconhecida' + (t.autor && t.autor.id ? ' (' + t.autor.id + ')' : '');
 }
 
 /* Quantos comentários por responder, por extenso, para o cabeçalho de um ticket.
@@ -1002,7 +1017,7 @@ function cmdComecar(o) {
 
 /* resolver: leva o ticket a Human Tests com a nota (e o commit) como
    resolução, e a nota como comentário no cartão; confirma o que ficou. Só
-   depois de o CI estar verde (a regra da skill qa).
+   depois de o CI estar verde (a regra da skill kanban, passo 5).
    Recebe: o — as opções lidas.
    Devolve: o texto com o novo estado. */
 function cmdResolver(o) {

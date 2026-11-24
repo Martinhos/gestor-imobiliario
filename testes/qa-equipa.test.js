@@ -149,7 +149,7 @@ describe('as rotas do QA no back office', () => {
     const { id } = await resp(pedir(env, ana, '/api/qa', 'POST', { body: 'O botão some' }));
     const k = await env.DB.prepare("SELECT numero, id FROM kanban_cartoes WHERE origem_tipo = 'qa' AND origem_id = ?").bind(id).first();
     const chave = 'KAN-' + k.numero;
-    for (const col of ['concluido', 'human-tests', 'para-depois']) {
+    for (const col of ['staging', 'human-tests', 'adiado', 'para-depois']) {
       assert.equal((await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/mover', { coluna_id: col, indice: 0 })).status, 200);
       assert.equal((await resp(pedir(env, ana, '/api/qa'))).tickets[0].status, col, 'o ticket foi com o cartão');
       const r = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/comentarios', { texto: 'Falta o caso ' + col }));
@@ -164,7 +164,12 @@ describe('as rotas do QA no back office', () => {
     }
     // a app lê os mesmos comentários
     const lidos = (await resp(pedir(env, ana, '/api/qa/' + id + '/comentarios'))).comentarios;
-    assert.deepEqual(lidos.map((c) => c.texto), ['Falta o caso concluido', 'Falta o caso human-tests', 'Falta o caso para-depois']);
+    assert.deepEqual(lidos.map((c) => c.texto), ['Falta o caso staging', 'Falta o caso human-tests', 'Falta o caso adiado', 'Falta o caso para-depois']);
+    // em Produção o ticket sai da pílula (KAN-155), mas comentar no kanban devolve-o a A fazer como antes
+    assert.equal((await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/mover', { coluna_id: 'concluido', indice: 0 })).status, 200);
+    assert.deepEqual((await resp(pedir(env, ana, '/api/qa'))).tickets, [], 'o de Produção não está na pílula');
+    assert.equal((await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/comentarios', { texto: 'Voltou a falhar' }))).coluna_id, 'a-fazer');
+    assert.equal((await resp(pedir(env, ana, '/api/qa'))).tickets[0].status, 'a-fazer', 'e volta a estar na pílula');
     // um cartão que não é de QA só sai do sítio em Human Tests, onde comentar é recusar (KAN-116)
     const novo = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes', { tipo: 'tarefa', titulo: 'Outra', coluna_id: 'a-fazer' }));
     const c2 = await corpoDe(await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + novo.cartao.chave + '/comentarios', { texto: 'ok' }));
@@ -174,15 +179,18 @@ describe('as rotas do QA no back office', () => {
     assert.equal((await chamar(env, DEV, 'POST', '/api/equipa/kanban/cartoes/' + chave + '/comentarios', { texto: 'ainda?' })).status, 404);
   });
 
-  test('a pílula do back office mostra um cartão de pedido mudado para Erro só a quem vê os pedidos (KAN-115)', async () => {
+  test('a pílula do back office mostra o cartão de um pedido só com a chave e o título, a toda a gente, e as rotas não lhe chegam (KAN-155)', async () => {
     const env = ambiente();
     const agora = Date.now();
     await env.DB.prepare("INSERT INTO kanban_cartoes (id, numero, tipo, titulo, descricao, coluna_id, posicao, prioridade, relator_id, relator_nome, origem_tipo, origem_id, created_at, updated_at)" +
-      " VALUES ('cp', 600, 'erro', 'Exportar', 'O texto da pessoa.', 'a-fazer', 0, 3, 's1', 'Sofia', 'pedido', 'p1', ?, ?)").bind(agora, agora).run();
-    assert.deepEqual((await listar(env, SUPORTE)).map((t) => [t.cartao, t.body]), [['KAN-600', 'O texto da pessoa.']], 'o suporte vê os pedidos');
-    assert.deepEqual(await listar(env, MARKETING), [], 'o marketing não');
-    assert.equal((await chamar(env, MARKETING, 'GET', '/api/equipa/qa/KAN-600/comentarios')).status, 404);
-    assert.equal((await chamar(env, SUPORTE, 'GET', '/api/equipa/qa/KAN-600/comentarios')).status, 200);
+      " VALUES ('cp', 600, 'historia', 'Exportar', 'O texto da pessoa.', 'a-fazer', 0, 3, 's1', 'Sofia', 'pedido', 'p1', ?, ?)").bind(agora, agora).run();
+    for (const quem of [SUPORTE, MARKETING]) {
+      const lista = await listar(env, quem);
+      assert.deepEqual(lista.map((t) => [t.cartao, t.titulo, t.body, t.pedido, t.autor.nome]), [['KAN-600', 'Exportar', '', true, '']], quem.nome + ': só a chave e o título');
+      assert.doesNotMatch(JSON.stringify(lista), /O texto da pessoa/, quem.nome + ': o texto não sai');
+      assert.equal((await chamar(env, quem, 'GET', '/api/equipa/qa/KAN-600/comentarios')).status, 404, quem.nome + ': as rotas não lhe chegam');
+      assert.equal((await chamar(env, quem, 'POST', '/api/equipa/qa/KAN-600/mover', { coluna: 'staging' })).status, 404);
+    }
   });
 });
 

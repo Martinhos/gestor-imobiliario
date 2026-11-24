@@ -72,8 +72,9 @@ var kbRascQuadro = null;
 var KB_TIPOS = ['epico', 'historia', 'tarefa', 'subtarefa', 'erro'];
 var KB_NOMES_TIPOS = { epico: 'Épico', historia: 'História', tarefa: 'Tarefa', subtarefa: 'Subtarefa', erro: 'Erro' };
 var KB_PRIORIDADES = { 1: 'Mais alta', 2: 'Alta', 3: 'Média', 4: 'Baixa', 5: 'Mais baixa' };
-// Human Tests decide-se: Aceitar leva a Concluído; comentar (recusar) devolve a A fazer (KAN-140). As três são colunas fixas.
-var KB_A_DECIDIR = 'human-tests', KB_ACEITE = 'concluido', KB_RECUSADO = 'a-fazer';
+// Human Tests decide-se (KAN-157): «Enviar para produção» leva a Staging (vai no próximo promove), «Adiar a produção» a
+// Adiado (resolvido, fica no dev; de lá vai a Staging); comentar (recusar) devolve a A fazer (KAN-140). Todas fixas (0032).
+var KB_A_DECIDIR = 'human-tests', KB_STAGING = 'staging', KB_ADIADO = 'adiado', KB_RECUSADO = 'a-fazer';
 var KB_LIGACOES ={ bloqueia: 'Bloqueia', bloqueado: 'É bloqueado por', relaciona: 'Relaciona-se com' };
 var KB_FILTROS = { tipo: 'tipo', etiqueta: 'etiqueta', responsavel: 'responsável', prioridade: 'prioridade', pai: 'épico' };
 // os estados de um pedido e as marcas de um ticket de QA, como a origem os diz (lib/kanban.js); o estado de
@@ -119,6 +120,9 @@ ICONES.kbEditar = '<path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4"/>';
 ICONES.kbFiltro = '<path d="M4 6h16M7 12h10M10 18h4"/>';
 ICONES.kbColunas = '<path d="M4 4h4v16H4zM10 4h4v10h-4zM16 4h4v13h-4z"/>';
 ICONES.kbVisto = '<path d="M5 12l5 5 9-10"/>';
+// as duas saídas do Aceitar: Enviar para produção (a seta a sair da caixa) e Adiar a produção (o relógio)
+ICONES.kbProducao = '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>';
+ICONES.kbAdiar = '<path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2"/>';
 ICONES.kbPrazo = '<path d="M5 5h14v15H5zM5 10h14M9 3v4M15 3v4"/>';
 // as opções do cartão: mover (uma seta a entrar noutra coluna), abrir (o painel ao lado) e remover (o caixote)
 ICONES.kbMover = '<path d="M4 4h6v16H4zM13 12h8M18 9l3 3-3 3"/>';
@@ -633,8 +637,8 @@ function kbPainelCabHtml(c, chave) {
    Copiar a ligação, lado a lado; Editar e Remover vivem no ⋯ do cimo), a
    linha das alterações por enviar (kbPainelRascHtml), os campos, a
    descrição, a origem, as subtarefas, as ligações, os anexos, os
-   comentários e o histórico; em Human Tests, por baixo do corpo, a barra
-   do Aceitar (kbDecidirHtml), fixa no fundo do painel que rola.
+   comentários e o histórico; em Human Tests e em Adiado, por baixo do
+   corpo, a barra de decidir (kbDecidirHtml), fixa no fundo do painel que rola.
    Recebe: d — a resposta do GET do cartão; entra — true para a entrada animada.
    Devolve: o HTML. */
 function kbPainelHtml(d, entra) {
@@ -648,28 +652,38 @@ function kbPainelHtml(d, entra) {
     (c.descricaoOculta ? '<div class="kb-p-sec"><h3 class="lbl">Descrição</h3><p class="sub kb-oculta">O texto deste pedido só se mostra a quem vê os pedidos.</p></div>'
       : c.descricao ? '<div class="kb-p-sec"><h3 class="lbl">Descrição</h3><p class="kb-texto">' + esc(c.descricao) + '</p></div>' : '') +
     kbOrigemHtml(d.origem) + kbSubtarefasHtml(c, d.subtarefas || []) + kbLigacoesHtml(chave, d.ligacoes || []) +
-    kbAnexosHtml(chave, d.anexos || []) + kbComentariosHtml(chave, d.comentarios || [], !!decidir) + kbHistoricoHtml(d.historico || []) + '</div>' +
+    kbAnexosHtml(chave, d.anexos || []) + kbComentariosHtml(chave, d.comentarios || [], c.coluna_id === KB_A_DECIDIR) + kbHistoricoHtml(d.historico || []) + '</div>' +
     decidir + '</section>';
 }
-/* A barra de decidir de um cartão em Human Tests (KAN-117): o Aceitar, que o
-   leva a Concluído, e a frase de como se recusa — comentando o que está mal,
-   o que o devolve a A fazer (o servidor move-o: rotas/kanban.js:comentar) —
-   com o Comentar, que leva à caixa. Vive fora do corpo, filha do painel que
-   rola, fixa no fundo (sticky): está sempre à vista e, no fim do scroll, fica
-   por baixo do último conteúdo em vez de o tapar. Todos os cartões em Human
-   Tests a têm, também os de pedidos desde 2026-11-16 (KAN-138: «Todos os
-   tickets deve ter a opção de aceitar que passa para concluído»): o cartão
-   de um pedido da produção chega a Human Tests à mão com a correção no dev
-   e testa-se no quadro como os outros. Aceitar só mexe no cartão; o pedido
-   fecha-se nos Pedidos, depois do promove.
+/* A barra de decidir de um cartão em Human Tests (KAN-117) e em Adiado. Em
+   Human Tests, o aceitar tem duas saídas (KAN-157): «Enviar para produção»,
+   o primário, que o leva a Staging (vai no próximo promove), e «Adiar a
+   produção», que o leva a Adiado (resolvido, fica no dev); por cima, a frase
+   de como se recusa — comentando o que está mal, o que o devolve a A fazer (o
+   servidor move-o: rotas/kanban.js:comentar) — com o Comentar, que leva à
+   caixa. Em Adiado, a frase do que isso quer dizer e «Enviar para produção»,
+   que o leva a Staging. Vive fora do corpo, filha do painel que rola, fixa no
+   fundo (sticky): está sempre à vista e, no fim do scroll, fica por baixo do
+   último conteúdo em vez de o tapar. Todos os cartões nessas colunas a têm,
+   também os de pedidos desde 2026-11-16 (KAN-138): o cartão de um pedido da
+   produção chega a Human Tests à mão com a correção no dev e testa-se no
+   quadro como os outros. Decidir só mexe no cartão; o pedido fecha-se nos
+   Pedidos, depois do promove.
    Recebe: c — o cartão do detalhe.
-   Devolve: o HTML ('' fora de Human Tests). */
+   Devolve: o HTML ('' fora de Human Tests e de Adiado). */
 function kbDecidirHtml(c) {
-  if (!c || !c.chave || c.coluna_id !== KB_A_DECIDIR) return '';
+  if (!c || !c.chave || (c.coluna_id !== KB_A_DECIDIR && c.coluna_id !== KB_ADIADO)) return '';
+  var enviar = '<button type="button" class="btn primary kb-p-enviar"' + comAcao('kbEnviarProducao', [c.chave]) + '>' + ic('kbProducao', 'i-sm') + 'Enviar para produção</button>';
+  if (c.coluna_id === KB_ADIADO) {
+    return '<div class="kb-p-decidir" role="group" aria-label="Decidir ' + esc(c.chave) + '">' +
+      '<p class="sub kb-p-decidir-txt">Resolvido e testado, mas fica no dev: não vai no próximo promove.</p>' +
+      '<div class="kb-p-decidir-bt">' + enviar + '</div></div>';
+  }
   return '<div class="kb-p-decidir" role="group" aria-label="Decidir ' + esc(c.chave) + '">' +
-    '<p class="sub kb-p-decidir-txt">Para recusar, comenta o que está mal: o cartão volta a ' + esc(kbNomeColuna(KB_RECUSADO)) + '.</p>' +
-    '<div class="kb-p-decidir-bt"><button type="button" class="btn kb-p-comentar"' + comAcao('kbIrComentar') + '>' + ic('kbComentario', 'i-sm') + 'Comentar</button>' +
-    '<button type="button" class="btn primary kb-p-aceitar"' + comAcao('kbAceitar', [c.chave]) + '>' + ic('kbVisto', 'i-sm') + 'Aceitar</button></div></div>';
+    '<div class="kb-p-decidir-linha"><p class="sub kb-p-decidir-txt">Para recusar, comenta o que está mal: o cartão volta a ' + esc(kbNomeColuna(KB_RECUSADO)) + '.</p>' +
+    '<button type="button" class="btn kb-p-comentar"' + comAcao('kbIrComentar') + '>' + ic('kbComentario', 'i-sm') + 'Comentar</button></div>' +
+    '<div class="kb-p-decidir-bt"><button type="button" class="btn kb-p-adiar"' + comAcao('kbAdiarProducao', [c.chave]) + '>' + ic('kbAdiar', 'i-sm') + 'Adiar a produção</button>' +
+    enviar + '</div></div>';
 }
 /* A linha das alterações por enviar no cartão aberto: há um rascunho do
    Editar deste cartão neste aparelho que ainda difere do que o servidor tem.
@@ -717,7 +731,7 @@ function kbCamposHtml(c) {
   if (c.bloqueado) linha('Estado', badge('dg', ic('kbBloqueado', 'i-sm') + 'Bloqueado'));
   linha('Criado', c.created_at ? data(c.created_at) : '');
   linha('Atualizado', c.updated_at && c.updated_at !== c.created_at ? data(c.updated_at) : '');
-  linha('Concluído', c.concluido_at ? data(c.concluido_at) : '');
+  linha('Feito', c.concluido_at ? data(c.concluido_at) : '');
   return '<dl class="kb-campos">' + linhas.join('') + '</dl>';
 }
 /* De onde veio o cartão: um ticket de QA (com o texto dele) ou um pedido de
@@ -970,14 +984,16 @@ function kbRemover(chave) {
 }
 /* O aviso de baixo com o Anular (o avisar do guião só tem o fechar).
    Recebe: texto; chave — o cartão a repor (ou o rascunho); acao (opcional)
-   — a ação do Anular ('kbRepor', a de omissão, ou 'kbRascunhoRepor').
+   — a ação do Anular ('kbRepor', a de omissão, 'kbRascunhoRepor' ou
+   'kbDecisaoAnular'); arg2 (opcional) — o segundo valor da ação (a coluna
+   para onde o Anular de uma decisão devolve o cartão).
    Devolve: nada. */
-function kbAvisarComAnular(texto, chave, acao) {
+function kbAvisarComAnular(texto, chave, acao, arg2) {
   var a = el('aviso');
   if (!a) { avisar(texto); return; }
   var n = typeof avisoN === 'number' ? ++avisoN : 0;
   a.className = 'eq-toast on';
-  a.innerHTML = '<span class="eq-toast-txt">' + esc(texto) + '</span><button type="button" class="kb-anular"' + comAcao(acao || 'kbRepor', [chave]) + '>Anular</button>' +
+  a.innerHTML = '<span class="eq-toast-txt">' + esc(texto) + '</span><button type="button" class="kb-anular"' + comAcao(acao || 'kbRepor', arg2 ? [chave, arg2] : [chave]) + '>Anular</button>' +
     '<button type="button" class="eq-toast-x" aria-label="Fechar o aviso"' + comAcao('fecharAviso') + '>' + ic('fechar', 'i-sm') + '</button>';
   setTimeout(function () { if (typeof avisoN !== 'number' || n === avisoN) a.className = 'eq-toast'; }, 10000);
 }
@@ -1016,28 +1032,46 @@ function kbComentar(chave) {
     kbRecarregar();
   }).catch(function (e) { marcarErro('kbComentario', e.message || 'Não deu para comentar.'); });
 }
-/* Aceita um cartão em Human Tests: vai para o topo de Concluído pelo mesmo
-   caminho do «Mover para…» (kbMover: logo no ecrã, e de volta se o servidor
-   recusar), e o aviso traz o Anular. Sem o cartão no quadro (ainda a
-   carregar), vai direto ao servidor.
-   Recebe: chave.
+/* Decide um cartão: leva-o ao topo de uma coluna pelo mesmo caminho do
+   «Mover para…» (kbMover: logo no ecrã, e de volta se o servidor recusar),
+   e o aviso traz o Anular, que o devolve à coluna de onde saiu. Sem o cartão
+   no quadro (ainda a carregar), vai direto ao servidor.
+   Recebe: chave; para — o id da coluna (KB_STAGING ou KB_ADIADO); frase — o
+   aviso de quando correu bem; falha — o de quando falhou sem frase do servidor.
    Devolve: nada. */
-function kbAceitar(chave) {
-  var feito = function () { kbAvisarComAnular(chave + ' aceite: está em ' + kbNomeColuna(KB_ACEITE) + '.', chave, 'kbAceitarAnular'); };
-  if (kbCartao(chave)) { kbMover(chave, KB_ACEITE, 0, null, feito); return; }
-  enviar(kbRota(chave, '/mover'), { coluna_id: KB_ACEITE, indice: 0 }).then(function () {
+function kbDecidir(chave, para, frase, falha) {
+  var aqui = kbCartao(chave) || (kbDetalhe && kbDetalhe.cartao && kbDetalhe.cartao.chave === chave ? kbDetalhe.cartao : null);
+  var de = aqui && aqui.coluna_id ? aqui.coluna_id : KB_A_DECIDIR;
+  var feito = function () { kbAvisarComAnular(frase, chave, 'kbDecisaoAnular', de); };
+  if (kbCartao(chave)) { kbMover(chave, para, 0, null, feito); return; }
+  enviar(kbRota(chave, '/mover'), { coluna_id: para, indice: 0 }).then(function () {
     feito();
     kbRecarregar();
     if (kbAberto === chave) kbAbrir(chave, false);
-  }, function (e) { avisar((e && e.message) || 'Não deu para aceitar o cartão.', 'erro'); });
+  }, function (e) { avisar((e && e.message) || falha, 'erro'); });
 }
-/* O Anular do Aceitar: o cartão volta ao topo de Human Tests.
+/* «Enviar para produção» (de Human Tests ou de Adiado): o cartão vai a
+   Staging, e vai no próximo promove.
    Recebe: chave.
    Devolve: nada. */
-function kbAceitarAnular(chave) {
+function kbEnviarProducao(chave) {
+  kbDecidir(chave, KB_STAGING, chave + ' vai no próximo promove: está em ' + kbNomeColuna(KB_STAGING) + '.', 'Não deu para enviar o cartão para produção.');
+}
+/* «Adiar a produção» (de Human Tests): o cartão vai a Adiado — resolvido,
+   fica no dev até alguém o enviar para produção.
+   Recebe: chave.
+   Devolve: nada. */
+function kbAdiarProducao(chave) {
+  kbDecidir(chave, KB_ADIADO, chave + ' fica no dev: está em ' + kbNomeColuna(KB_ADIADO) + '.', 'Não deu para adiar a produção do cartão.');
+}
+/* O Anular de uma decisão: o cartão volta ao topo da coluna de onde saiu
+   (Human Tests, ou Adiado no Enviar de um adiado).
+   Recebe: chave; de — o id dessa coluna (Human Tests, se não vier).
+   Devolve: nada. */
+function kbDecisaoAnular(chave, de) {
   var a = el('aviso');
   if (a) a.className = 'eq-toast';
-  kbMover(chave, KB_A_DECIDIR, 0);
+  kbMover(chave, de || KB_A_DECIDIR, 0);
 }
 /* O Comentar da barra de decidir: leva à caixa do comentário (no meio do
    painel) e põe lá o foco, para escrever o que está mal.
@@ -1173,8 +1207,9 @@ ACOES.kbRepor = function (d) { kbRepor(d.arg); };
 ACOES.kbNovoSub = function (d) { kbNovoSub(d.arg); };
 ACOES.kbVerColuna = function (d) { kbVerColuna(d.arg); };
 ACOES.kbComentar = function (d) { kbComentar(d.arg); };
-ACOES.kbAceitar = function (d) { kbAceitar(d.arg); };
-ACOES.kbAceitarAnular = function (d) { kbAceitarAnular(d.arg); };
+ACOES.kbEnviarProducao = function (d) { kbEnviarProducao(d.arg); };
+ACOES.kbAdiarProducao = function (d) { kbAdiarProducao(d.arg); };
+ACOES.kbDecisaoAnular = function (d) { kbDecisaoAnular(d.arg, d.arg2); };
 ACOES.kbIrComentar = function () { kbIrComentar(); };
 ACOES.kbComentarioEditar = function (d) { kbComentarioEditar(d.arg); };
 ACOES.kbComentarioRemover = function (d) { kbComentarioRemover(d.arg); };
@@ -1381,16 +1416,22 @@ a.kb-ficheiro-a:active{background:var(--press)}
 .kb-hist[open]>summary .st-seta{transform:none}
 .kb-hist-lista{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
 .kb-hist-lista li{display:flex;flex-direction:column;gap:2px;padding-left:12px;border-left:2px solid var(--line2);font-size:14px}
-/* a barra de decidir de Human Tests: filha do painel que rola, fixa no fundo
-   (sticky), sempre à vista; no fim do scroll fica por baixo do último
-   conteúdo, sem o tapar; com pouco conteúdo desce ao fundo (margin-top:auto).
-   Sem a barra de baixo do back office (acima dos 900px) respeita a zona segura */
+/* a barra de decidir de Human Tests e de Adiado: filha do painel que rola,
+   fixa no fundo (sticky), sempre à vista; no fim do scroll fica por baixo do
+   último conteúdo, sem o tapar; com pouco conteúdo desce ao fundo
+   (margin-top:auto). Sem a barra de baixo do back office (acima dos 900px)
+   respeita a zona segura. Em cima, a frase do recusar com o Comentar ao lado;
+   em baixo, as duas saídas do aceitar, o «Enviar para produção» (o primário)
+   mais largo; quando não cabem lado a lado, cada uma na sua linha */
 .kb-p-decidir{position:sticky;bottom:0;z-index:3;margin-top:auto;display:flex;flex-direction:column;gap:8px;
   padding:10px 18px calc(12px + env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line)}
+.kb-p-decidir-linha{display:flex;align-items:center;gap:10px}
+.kb-p-decidir-linha .kb-p-decidir-txt{flex:1 1 auto;min-width:0}
+.kb-p-decidir-linha .kb-p-comentar{flex:none;padding:0 12px}
 .kb-p-decidir-txt{margin:0;font-size:13.5px}
-.kb-p-decidir-bt{display:flex;gap:8px}
-.kb-p-decidir-bt .btn{flex:1 1 0;min-width:0;padding:0 12px;white-space:nowrap}
-.kb-p-decidir-bt .kb-p-aceitar{flex-grow:2}
+.kb-p-decidir-bt{display:flex;flex-wrap:wrap;gap:8px}
+.kb-p-decidir-bt .btn{flex:1 1 auto;min-width:0;padding:0 12px;white-space:nowrap}
+.kb-p-decidir-bt .kb-p-enviar{flex-grow:2}
 
 /* ---- o Anular no aviso de baixo ---- */
 .kb-anular{flex:none;min-height:36px;padding:0 12px;border:1px solid currentColor;border-radius:10px;background:transparent;color:inherit;

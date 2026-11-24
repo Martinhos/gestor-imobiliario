@@ -5860,6 +5860,8 @@ body:has(.modal.open.qa-janela) .qa-pilula{z-index:60}
 p.qa-quem{margin:0}
 .qa-tem-img{display:inline-flex;color:var(--muted)}
 .qa-linha-cab .qa-cartao{color:var(--muted);font-variant-numeric:tabular-nums}
+/* o tipo de um cartão que não é um Erro (Tarefa, História, Pedido…: cloud/qa.js:qaNomeDoTipo), discreto como a chave */
+.qa-linha-cab .qa-tipo{color:var(--muted);font-weight:600}
 /* A prioridade do cartão (cloud/qa.js:qaSelo), como o selo do quadro do kanban:
    o ícone e a palavra na cor dela, na letra e no contorno, sem fundo — o
    escurecimento forçado do Samsung apaga um fundo, mas a frente fica. A Média
@@ -5880,20 +5882,24 @@ p.qa-quem{margin:0}
 .qa-janela .foot .qa-mover{flex:1;display:flex}
 .qa-janela .foot .qa-mover>.btn{flex:1;white-space:nowrap}
 /* Em Human Tests, o «Remover» e as três decisões (cloud/qa.js:qaHtmlDecisoes)
-   no lugar do «Mover»: numa linha só quando cabem; quando não cabem, as
-   decisões passam juntas para a linha delas, da largura toda, e o «Remover»
-   fica na de cima. Nenhum botão encolhe abaixo do texto. Os outros rodapés
-   não mudam (o :has só os apanha a eles) */
+   no lugar do «Mover»: a caixa das decisões desfaz-se (display:contents) e os
+   quatro são irmãos numa linha que dobra — numa linha só quando cabem; quando
+   não, o «Enviar para produção» (o primário, o último) desce para a linha
+   dele, da largura toda, e o «Remover», o «Recusar» e o «Adiar a produção»
+   ficam na de cima. O «Remover» fica do tamanho dele; nenhum botão encolhe
+   abaixo do texto. Os outros rodapés não mudam (o :has só os apanha a eles) */
 .qa-janela .foot:has(>.qa-decisoes){flex-wrap:wrap}
-.qa-janela .foot:has(>.qa-decisoes)>.qa-remover{flex:1 0 auto}
-.qa-janela .foot>.qa-decisoes{flex:999 1 auto;display:flex;gap:10px;min-width:0}
+.qa-janela .foot:has(>.qa-decisoes)>.qa-remover{flex:0 0 auto}
+.qa-janela .foot>.qa-decisoes{display:contents}
 .qa-janela .foot>.qa-decisoes>.btn{flex:1 0 auto;white-space:nowrap}
-/* No telemóvel, menos enchimento de lado e, até 420px, o «Remover» só com o
-   caixote (o nome fica para o leitor de ecrã, e o aviso traz o Anular): a
-   384px os quatro cabem numa linha, com o alvo de 48px. Abaixo dos 341px já
-   não cabem — as decisões descem para a linha delas, e o «Remover» volta a
-   dizer o nome */
-@media(max-width:520px){.qa-janela .foot:has(>.qa-decisoes) .btn{padding:0 10px}}
+/* No telemóvel, menos enchimento de lado, o «Enviar para produção» sempre na
+   linha dele e, até 420px, o «Remover» só com o caixote (o nome fica para o
+   leitor de ecrã, e o aviso traz o Anular). Abaixo dos 341px o «Remover»
+   volta a dizer o nome */
+@media(max-width:520px){
+  .qa-janela .foot:has(>.qa-decisoes) .btn{padding:0 10px}
+  .qa-janela .foot>.qa-decisoes>.btn.primary{flex-basis:100%}
+}
 @media(min-width:341px) and (max-width:420px){
   .qa-janela .foot:has(>.qa-decisoes)>.qa-remover{min-width:48px}
   .qa-janela .foot:has(>.qa-decisoes)>.qa-remover>.qa-remover-txt{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
