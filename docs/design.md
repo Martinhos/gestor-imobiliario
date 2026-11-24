@@ -8051,6 +8051,43 @@ conclui-o sem mandar nada a ninguém. A linha da lista e o detalhe dizem
 reabre o ticket, por decidir. A skill ticket só pega num ticket de segurança
 com a resolução proposta.
 
+Na Operação, o Consumo vem à cabeça, logo a seguir ao cabeçalho e antes
+da sessão de teste e das tarefas agendadas: é o que se vem ver
+(equipa-guiao.js:verOperacao; KAN-144). Cada valor do consumo — os seis
+quadrados (as contas, os ativos, as casas, os registos, os pedidos abertos e
+os erros; o «Casas · registos» do resumo parte-se em dois) e cada linha dos
+tectos do plano gratuito — é um botão, com o ícone do gráfico ao lado do
+nome, que abre um cartão na janela do back office
+(equipa-guiao.js:verSerie): o nome da medida, os chips dos horizontes 1d · 7d
+· 14d · 1m · 3m · 1a e o gráfico de linha da evolução. O horizonte é de cada
+gráfico: o escolhido fica lembrado por medida na sessão do browser
+(equipa-guiao.js:horizonteDaMedida, equipa-guiao.js:mudarHorizonte), e
+abre no 7d. O chip escolhido leva o aria-pressed e diz-se pela frente — a
+letra no --accent-text, a borda no --accent e o peso a 700 —, que é o que o
+escurecimento forçado do Samsung Internet deixa ver. O gráfico é um SVG
+escrito no guião, sem o graficos.js da app, mas lê-se como os dela (ver «Um
+gráfico lê-se com o dedo»): a leitura no canto de cima, por cima do desenho,
+com o lugar sempre reservado por um molde com todas as leituras; a guia
+vertical e o ponto no desenho; o gesto horizontal (a caixa com
+touch-action:pan-y, para a rolagem vertical continuar); as setas no
+teclado; e a leitura nasce no valor de agora e volta a ele quando o dedo
+larga (equipa-guiao.js:pintarSerie, equipa-guiao.js:ligarLeitura). O eixo
+começa no 0 e acaba num topo redondo; num tecto, a linha do tecto vai
+tracejada a vermelho, com o valor na legenda; a legenda diz se cada ponto é o
+pico do intervalo (os tectos) ou o valor no fim dele (o resto). Os estados:
+a roda do mesmo tamanho enquanto lê, «Ainda sem dados.» sem amostras, e o
+erro com o Tentar outra vez; quando a série começa a meio do horizonte, a
+nota «Sem dados antes de <dia>» — o gráfico não inventa o que não se mediu.
+Os pontos vêm da rota GET /api/equipa/operacao/serie (a guarda da Operação,
+quem vê a infraestrutura), que junta as amostras por hora (1d, 7d), por 6 h
+(14d), por dia (1m, 3m) ou por semana (1a) e acaba no valor de agora
+(worker/src/lib/consumo-serie.js:serieDe). As amostras grava-as a vigia de
+hora a hora, uma por hora e num só INSERT, cada fonte a falhar sozinha, e
+apaga-as aos 400 dias (worker/src/lib/consumo-serie.js:amostraDaVigia); o
+passado só se reconstrói para as contas, pelas datas da D1
+(worker/src/lib/consumo-serie.js:preencherPassado). As consultas mais pesadas
+são uma lista, e ficam sem gráfico.
+
 Fora de produção, a Operação do back office (master e admin) mostra as
 sessões de teste abertas (equipa-guiao.js:verSessoesTeste): cada browser onde
 uma ligação do /test foi aberta e ainda tem sessão, agrupado pela conta do

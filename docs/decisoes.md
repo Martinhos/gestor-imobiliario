@@ -129,6 +129,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-18 · A vaga 4 da auditoria ao IRS: os quadros raros nos formulários e na Declaração, a renda abaixo e os encargos do inquilino (KAN-129)
 - 2026-11-23 · A ronda 1 das correções da auditoria ao IRS de raiz: o quadro 10, as categorias pelo id, as cópias e as quotas (KAN-147, KAN-148, KAN-149)
 - 2026-11-23 · A ronda 2 das correções da auditoria ao IRS de raiz: rendas, taxas, gastos, textos e o caminho linear (KAN-150 a KAN-154)
+- 2026-11-24 · O consumo à cabeça da Operação, com o gráfico de cada valor (KAN-144)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4814,3 +4815,31 @@ Ficam para o Martinho:
   (N116); o que o Portal faz ao colar um valor (N107); «os imóveis do mesmo país somam-se numa linha» no Anexo J; o
   número do art. 74.º no prazo das substituições; a presunção do arrendamento rural num rústico (N093, parte de
   «Não»); o vermelho do código de uma união extinta (o verificador preferia âmbar, N087).
+
+## 2026-11-24 · O consumo à cabeça da Operação, com o gráfico de cada valor (KAN-144)
+O Martinho, num ticket de QA no back office, no Samsung: «O consumo deve ser a primeira secção. Os valores
+devem abrir cartões com gráficos que mostram a evolução ao longo do tempo. Devo poder selecionar o horizonte
+temporal por gráfico. 1d, 7d, 14d, 1m, 3m, 1a». O consumo era a fotografia do momento, sem histórico nenhum, e a
+tendência não se via.
+
+O Consumo passa a primeira secção, antes da sessão de teste e das tarefas. Para haver gráfico tinha de haver
+histórico, e não havia: a migração 0031 cria a tabela consumo_amostras (medida, instante, valor), e a vigia de
+hora a hora grava lá uma amostra por hora — os números da D1 e os tectos da Cloudflare que vieram com número —
+num só INSERT (o json_each de um texto JSON, um bind só) e apaga o que passar dos 400 dias
+(worker/src/lib/consumo-serie.js:amostraDaVigia). A vigia pede o consumo à Cloudflare uma vez e dá-o aos
+avisos e à amostra (notify.js:watchLimits aceita-o pronto); a amostra corre à parte, e uma falha dela fica no
+op_log como «consumo» sem calar os avisos. A tabela não entra na cópia diária (salvaguarda.js): não são dados
+de ninguém, e um ano dela eram umas duzentas páginas de consultas a mais numa invocação que já as conta.
+
+O passado só se reconstrói onde a D1 o diz com honestidade: as contas, pelo created_at e pelo deleted_at (uma
+conta apagada fica na tabela com a hora). O pedido falava também das casas e dos registos «pelos created_at»,
+mas essas tabelas não têm created_at — só o updated_at e o deleted, que não dizem quando nasceram nem quando se
+apagaram —, por isso começam no deploy, como os ativos, os erros, os pedidos e os tectos. O gráfico diz «Sem
+dados antes de <dia>» em vez de inventar. O passado das contas faz-se uma vez: a vigia vê que a amostra mais
+antiga das contas é mais nova do que a primeira conta e preenche-o, dia a dia, sem marca à parte.
+
+Cada intervalo do gráfico é o pico nos tectos (o que interessa é se passou perto) e o valor no fim nos outros.
+O horizonte é de cada gráfico e lembra-se por medida na sessão do browser, como o Martinho pediu («por
+gráfico»), e abre no 7d. O gráfico é escrito no guião (o back office não tem o graficos.js da app) mas lê-se
+como os da app, com a leitura no canto e o gesto horizontal. O «Casas · registos» do resumo partiu-se em dois
+quadrados para cada número ter o seu gráfico; o resumo diário e o /uso do Discord ficam iguais.

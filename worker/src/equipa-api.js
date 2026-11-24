@@ -800,15 +800,33 @@ export async function rotasEquipaApi(c) {
       } catch (e) {
         estadoCopias = { erro: String((e && e.message) || e), texto: '🔴 Não deu para ler as cópias.' };
       }
+      const { medidasDosCampos } = await import('./lib/consumo-serie.js');
       return json({
         teste: env.ENV_NAME || null,   // fora de produção há botão de sessão de teste
         consumo: await usageFields(env),
+        // o campo do consumo → a medida do gráfico que ele abre (KAN-144)
+        medidas: medidasDosCampos(),
         copias,
         estadoCopias,
         crons,
         historico,
         master: eMaster(eu),
       });
+    }
+
+    /* A série de um valor do consumo, para o cartão com o gráfico (KAN-144):
+       ?medida=<id de lib/consumo-serie.js:MEDIDAS>&horizonte=1d|7d|14d|1m|3m|1a.
+       As amostras da vigia juntas por intervalo e o valor de agora no fim
+       (lib/consumo-serie.js:serieDe). Só lê; não deixa rasto. */
+    if (path === '/api/equipa/operacao/serie' && method === 'GET') {
+      const { MEDIDAS, HORIZONTES, serieDe } = await import('./lib/consumo-serie.js');
+      const medida = url.searchParams.get('medida') || '';
+      const horizonte = url.searchParams.get('horizonte') || '';
+      if (!Object.prototype.hasOwnProperty.call(MEDIDAS, medida)) return err(400, 'Medida desconhecida.');
+      if (!Object.prototype.hasOwnProperty.call(HORIZONTES, horizonte)) {
+        return err(400, 'Horizonte desconhecido: usa 1d, 7d, 14d, 1m, 3m ou 1a.');
+      }
+      return json(await serieDe(env, medida, horizonte, Date.now()));
     }
 
     /* A mesma ligação que o /test do Discord dá, sem sair daqui. Só existe

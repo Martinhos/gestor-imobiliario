@@ -155,6 +155,8 @@ var ICONES = {
   mais: '<path d="M12 5v14M5 12h14"/>',
   fechar: '<path d="M6 6l12 12M18 6 6 18"/>',
   atualizar: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
+  // uma linha que sobe por cima do eixo: o valor do consumo abre o gráfico dele
+  grafico: '<path d="M4 19h16M5 15l4-4 3 3 6-7"/>',
 };
 // um ícone: o desenho de ICONES num <svg> que o leitor de ecrã salta
 var ic = function (nome, classe) {
@@ -1530,17 +1532,22 @@ function mostrarAvisoDesligar(id, servico, nome, caem) {
 var CADENCIA = { copia: 26, vigia: 2, resumo: 26 };   // horas
 var OPS = { copia: 'Cópia diária', vigia: 'Vigia dos limites', resumo: 'Resumo diário' };
 // os números do consumo que vão em quadrados grandes, com o nome que se lê
-var QUADROS = { 'Contas': 'Contas', 'Ativos (24h)': 'Ativos nas últimas 24 h', 'Casas · registos': 'Casas · registos', 'Pedidos abertos': 'Pedidos abertos', 'Erros (24h)': 'Erros nas 24 h' };
+// (o «Casas · registos» do resumo parte-se em dois quadrados: cada um tem o seu gráfico)
+var QUADROS = { 'Contas': 'Contas', 'Ativos (24h)': 'Ativos nas últimas 24 h', 'Casas': 'Casas', 'Registos': 'Registos', 'Pedidos abertos': 'Pedidos abertos', 'Erros (24h)': 'Erros nas 24 h' };
+// o campo do consumo → a medida do gráfico que ele abre, como o painel a manda (consumo-serie.js:medidasDosCampos)
+var medidasDoConsumo = {};
 
-/* O painel de operação inteiro: a sessão de teste (fora de produção), as
-   tarefas agendadas, o consumo com os tectos do plano gratuito, as cópias
-   no R2 com o histórico e os endereços de email. Os endereços chegam à
-   parte, por verEnderecos — o resto do painel não fica à espera do Cloudflare.
+/* O painel de operação inteiro: o consumo à cabeça (KAN-144: é o que se vem
+   ver), com os tectos do plano gratuito e cada valor a abrir o seu gráfico;
+   depois a sessão de teste (fora de produção), as tarefas agendadas, as
+   cópias no R2 com o histórico e os endereços de email. Os endereços chegam
+   à parte, por verEnderecos — o resto do painel não fica à espera do Cloudflare.
    Devolve: nada — redesenha a vista com o painel. */
 function verOperacao() {
   aCarregar('A ler as tarefas, o consumo e as cópias.');
   pedir('/api/equipa/operacao').then(function (d) {
     var agora = Date.now();
+    medidasDoConsumo = d.medidas || {};
     var cab = cabecalho('Operação', '<span class="n">' + (d.teste ? 'Ambiente ' + esc(d.teste) : 'Produção') + ' · atualizado às ' + hora(agora) + ' de ' + dia(agora) + '</span>',
       '<button type="button" class="btn"' + comAcao('ir', ['operacao']) + '>' + ic('atualizar') + 'Atualizar</button>');
 
@@ -1575,11 +1582,14 @@ function verOperacao() {
     var quadros = [], tectos = [], pesadas = null;
     (d.consumo || []).forEach(function (f) {
       var nome = String(f.name || '');
-      if (Object.prototype.hasOwnProperty.call(QUADROS, nome)) quadros.push(f);
+      var duas = nome === 'Casas · registos' ? /^\s*(\d+)\s*·\s*(\d+)\s*$/.exec(limpo(f.value)) : null;
+      if (duas) quadros.push({ name: 'Casas', value: duas[1] }, { name: 'Registos', value: duas[2] });
+      else if (Object.prototype.hasOwnProperty.call(QUADROS, nome)) quadros.push(f);
       else if (/consultas mais pesadas/i.test(nome)) pesadas = f;
       else if (nome !== 'Cópias de segurança') tectos.push(f);   // essa já vai no cartão das cópias
     });
-    var consumo = '<section class="op-consumo" aria-labelledby="titConsumo"><h2 id="titConsumo" class="seccao-tit">Consumo</h2>' +
+    var consumo = '<section class="op-consumo" aria-labelledby="titConsumo"><div class="op-consumo-cab"><h2 id="titConsumo" class="seccao-tit">Consumo</h2>' +
+      '<p class="sub">Toca num valor para veres a evolução.</p></div>' +
       (quadros.length ? '<div class="st-fila">' + quadros.map(quadroDeConsumo).join('') + '</div>' : '') +
       (tectos.length || pesadas ? '<div class="op-duas">' +
         (tectos.length ? '<section class="card op-tectos" aria-labelledby="titTectos"><div class="card-cab"><div class="card-cab-txt">' +
@@ -1589,46 +1599,329 @@ function verOperacao() {
           '<div>' + String(pesadas.value || '').split('\n').map(linhaDeConsulta).join('') + '</div></section>' : '') +
         '</div>' : '') + '</section>';
 
-    el('conteudo').innerHTML = cab + teste + tarefas + consumo + cartaoCopias(d) + cartaoEnderecos();
+    el('conteudo').innerHTML = cab + consumo + teste + tarefas + cartaoCopias(d) + cartaoEnderecos();
     verEnderecos();
     if (d.teste) verSessoesTeste();
   }).catch(falha);
 }
 
+/* O id da medida que um campo do consumo abre, se tiver gráfico.
+   Recebe: nome — o nome do campo (o name do resumo).
+   Devolve: o id (texto) ou '' quando o campo não tem série. */
+function medidaDoCampo(nome) {
+  return Object.prototype.hasOwnProperty.call(medidasDoConsumo, nome) ? String(medidasDoConsumo[nome]) : '';
+}
+
 /* Um quadrado do consumo: o nome e o número grande. As contas trazem o
-   máximo e a percentagem (âmbar a partir dos 70%, vermelho dos 90%); as
-   casas trazem os registos por baixo.
+   máximo e a percentagem (âmbar a partir dos 70%, vermelho dos 90%). Com
+   série, o quadrado é um botão que abre o gráfico dele (verSerie), com o
+   ícone do gráfico ao lado do nome.
    Recebe: f — o campo do consumo ({name, value}, como o resumo do servidor o dá).
    Devolve: string HTML com o quadrado. */
 function quadroDeConsumo(f) {
-  var v = limpo(f.value), nome = String(f.name || '');
+  var v = limpo(f.value), nome = String(f.name || ''), medida = medidaDoCampo(nome);
   var grande = esc(numero(v)), baixo = '';
   var contas = /^(\d+)\s*\/\s*(\d+)\s*\((\d+)%\)/.exec(v);
-  var casas = /^(\d+)\s*·\s*(\d+)$/.exec(v);
   if (contas) {
     var pct = Number(contas[3]), tom = pct >= 90 ? 'dg' : pct >= 70 ? 'wa' : '';
     grande = esc(numero(contas[1])) + ' <small>/ ' + esc(numero(contas[2])) + '</small>';
     baixo = '<span class="sub n ' + tom + '">' + pct + '%' + (pct >= 90 ? ' · passou dos 90%' : pct >= 70 ? ' · passou dos 70%' : '') + '</span>';
-  } else if (casas) {
-    grande = esc(numero(casas[1]));
-    baixo = '<span class="sub n">' + esc(numero(casas[2])) + ' registos</span>';
   }
-  return '<div class="st"><span class="sub">' + esc(QUADROS[nome] || nome) + '</span><b class="st-valor n">' + grande + '</b>' + baixo + '</div>';
+  var lido = esc(QUADROS[nome] || nome);
+  var miolo = '<span class="st-topo"><span class="sub">' + lido + '</span>' + (medida ? ic('grafico', 'i-sm st-ic') : '') + '</span>' +
+    '<b class="st-valor n">' + grande + '</b>' + baixo;
+  if (!medida) return '<div class="st">' + miolo + '</div>';
+  return '<button type="button" class="st st-toque" aria-haspopup="dialog"' + comAcao('verSerie', [medida, QUADROS[nome] || nome]) + '>' + miolo + '</button>';
 }
 
 /* Uma linha dos tectos: o nome, o gasto e o tecto, a percentagem e a barra
    (âmbar a partir dos 70%, vermelha dos 90%). Um tecto sem medida diz porquê.
+   Com série, a linha inteira é um botão que abre o gráfico dela (verSerie),
+   com o tecto marcado — também quando hoje não há número: o histórico pode ter.
    Recebe: f — o campo do consumo ({name, value}).
    Devolve: string HTML com a linha. */
 function linhaDeTecto(f) {
   var v = limpo(f.value), m = /\((\d+)%\)/.exec(v), pct = m ? Number(m[1]) : null;
   var tom = pct == null ? '' : pct >= 90 ? 'dg' : pct >= 70 ? 'wa' : '';
-  var medida = m ? v.slice(0, m.index).trim() : v;
-  return '<div class="lm"><div class="lm-topo"><span class="lm-nome">' + esc(f.name) + '</span>' +
+  var medida = m ? v.slice(0, m.index).trim() : v, serie = medidaDoCampo(String(f.name || ''));
+  var miolo = '<span class="lm-topo"><span class="lm-nome">' + esc(f.name) + '</span>' +
     '<span class="n' + (pct == null ? ' sub' : '') + '">' + esc(medida) + '</span>' +
-    (pct != null ? '<span class="n lm-pct ' + tom + '">' + pct + '%</span>' : '') + '</div>' +
-    (pct != null ? '<progress class="barra ' + tom + '" max="100" value="' + Math.min(pct, 100) + '" aria-label="' + esc(f.name) + '">' + pct + '%</progress>' : '') +
-    '</div>';
+    (pct != null ? '<span class="n lm-pct ' + tom + '">' + pct + '%</span>' : '') +
+    (serie ? ic('grafico', 'i-sm lm-ic') : '') + '</span>' +
+    (pct != null ? '<progress class="barra ' + tom + '" max="100" value="' + Math.min(pct, 100) + '" aria-label="' + esc(f.name) + '">' + pct + '%</progress>' : '');
+  if (!serie) return '<div class="lm">' + miolo + '</div>';
+  return '<button type="button" class="lm lm-toque" aria-haspopup="dialog"' + comAcao('verSerie', [serie, f.name]) + '>' + miolo + '</button>';
+}
+
+/* ------------------------- o gráfico de um valor ------------------------- */
+
+// os horizontes do cartão, pela ordem dos chips, e o que cada um diz por extenso ao leitor de ecrã
+var HORIZONTES_SERIE = ['1d', '7d', '14d', '1m', '3m', '1a'];
+var EXTENSO_HORIZONTE = { '1d': '1 dia', '7d': '7 dias', '14d': '14 dias', '1m': '1 mês', '3m': '3 meses', '1a': '1 ano' };
+// o cartão aberto: {medida, nome, horizonte, vez (a resposta que vale), dados, i (o ponto lido), aLer}
+var serieAberta = null;
+// o desenho do gráfico, em unidades do viewBox (a largura estica com a caixa; a altura é a do CSS)
+var SR_L = 600, SR_A = 200, SR_MARGEM = 10;
+
+/* O horizonte com que uma medida abre: o último escolhido para ela nesta
+   sessão do browser (sessionStorage), ou 7d. O armazenamento pode faltar ou
+   recusar (janela privada): abre no 7d e mais nada.
+   Recebe: medida — o id.
+   Devolve: a chave do horizonte. */
+function horizonteDaMedida(medida) {
+  try {
+    var h = sessionStorage.getItem('eq_serie_h:' + medida);
+    if (HORIZONTES_SERIE.indexOf(h) > -1) return h;
+  } catch (e) { /* sem armazenamento, o de partida */ }
+  return '7d';
+}
+
+/* Abre o cartão de um valor do consumo na janela do back office (o
+   dialog#dialogo, como a janela de confirmação): o nome da medida, os chips
+   dos seis horizontes e o gráfico, que se pede ao servidor. Ao fechar
+   (o Fechar, o Esc ou o véu) a janela esvazia-se e a página solta-se.
+   Recebe: medida — o id da medida; nome — o nome que se lê (texto).
+   Devolve: nada — abre a janela. */
+function verSerie(medida, nome) {
+  var d = el('dialogo');
+  if (!d) return;
+  if (typeof formAberto !== 'undefined') formAberto = null;
+  serieAberta = { medida: String(medida), nome: String(nome || medida), horizonte: horizonteDaMedida(medida), vez: 0, dados: null, i: -1, aLer: false };
+  d.innerHTML = '<div class="janela-corpo sr-janela">' +
+    '<div class="sr-cab"><h2 id="janelaTit">' + esc(serieAberta.nome) + '</h2>' +
+    '<button type="button" class="btn so-icone sr-fecha" aria-label="Fechar"' + comAcao('fecharDialogo') + '>' + ic('fechar') + '</button></div>' +
+    '<div class="chips sr-horizontes" id="serieHorizontes" role="group" aria-label="Horizonte do gráfico"></div>' +
+    '<div class="sr-corpo" id="serieCorpo"></div></div>';
+  d.returnValue = '';
+  d.onclose = function () {
+    if (d.open) return;
+    serieAberta = null;
+    d.innerHTML = '';
+    travarPagina(false);
+  };
+  if (!d.open && d.showModal) d.showModal();
+  travarPagina(true);
+  carregarSerie();
+}
+
+/* Pinta os chips dos horizontes do cartão aberto: o escolhido com
+   aria-pressed e o .on (a letra, a borda e o peso mudam — a cor da frente
+   é o que o escurecimento forçado do Samsung Internet deixa ver).
+   Devolve: nada. */
+function pintarHorizontes() {
+  var s = serieAberta, sitio = el('serieHorizontes');
+  if (!s || !sitio) return;
+  sitio.innerHTML = HORIZONTES_SERIE.map(function (h) {
+    return chip(h + '<span class="so-leitor"> (' + EXTENSO_HORIZONTE[h] + ')</span>', h === s.horizonte, comAcao('mudarHorizonte', [h]));
+  }).join('');
+}
+
+/* Pede a série do cartão aberto no horizonte dele e pinta-a; enquanto
+   espera, a roda no lugar do gráfico (do mesmo tamanho). Uma resposta que
+   chega depois de outra escolha, ou com o cartão fechado, não pinta nada.
+   Devolve: nada. */
+function carregarSerie() {
+  var s = serieAberta;
+  if (!s) return;
+  var vez = ++s.vez;
+  pintarHorizontes();
+  var corpo = el('serieCorpo');
+  if (corpo) corpo.innerHTML = '<div class="sr-estado">' + esperaHtml('A ler a série.') + '</div>';
+  pedir('/api/equipa/operacao/serie?medida=' + encodeURIComponent(s.medida) + '&horizonte=' + encodeURIComponent(s.horizonte))
+    .then(function (r) {
+      if (serieAberta !== s || s.vez !== vez) return;
+      s.dados = r;
+      pintarSerie();
+    }).catch(function (e) {
+      if (serieAberta !== s || s.vez !== vez) return;
+      var sitio = el('serieCorpo');
+      if (sitio) {
+        sitio.innerHTML = '<div class="sr-estado">' + vazioHtml('Não deu para ler a série.', esc(e && e.message ? e.message : 'Erro sem mensagem.'),
+          '<button type="button" class="btn sm"' + comAcao('recarregarSerie') + '>Tentar outra vez</button>') + '</div>';
+      }
+    });
+}
+
+/* Muda o horizonte do cartão aberto, lembra-o para esta medida e pede a série nova.
+   Recebe: h — a chave do horizonte (uma de HORIZONTES_SERIE; outra não faz nada).
+   Devolve: nada. */
+function mudarHorizonte(h) {
+  var s = serieAberta;
+  if (!s || HORIZONTES_SERIE.indexOf(h) < 0) return;
+  s.horizonte = h;
+  try { sessionStorage.setItem('eq_serie_h:' + s.medida, h); } catch (e) { /* lembra-se só enquanto o cartão está aberto */ }
+  carregarSerie();
+}
+
+/* Um valor da série como se lê: os bytes em GB com a vírgula, o resto em
+   número inteiro à portuguesa.
+   Recebe: v — o número; unidade — 'bytes' ou null.
+   Devolve: o texto. */
+function valorDaSerie(v, unidade) {
+  if (unidade === 'bytes') return (v / 1e9).toFixed(2).replace('.', ',') + ' GB';
+  return numero(Math.round(v));
+}
+
+/* O valor de um eixo, curto: 1,2 M, 840 mil, 12. Os bytes em GB.
+   Recebe: v — o número; unidade — 'bytes' ou null.
+   Devolve: o texto. */
+function eixoDaSerie(v, unidade) {
+  if (unidade === 'bytes') return (v / 1e9).toFixed(v >= 1e10 ? 0 : 1).replace('.', ',') + ' GB';
+  if (v >= 1e6) return (v / 1e6).toFixed(v >= 1e7 ? 0 : 1).replace('.', ',').replace(/,0$/, '') + ' M';
+  if (v >= 1e4) return Math.round(v / 1e3) + ' mil';
+  // o meio de um topo pequeno não é inteiro (2,5 · 1,25 · 0,5): uma casa decimal, senão o eixo dizia 1, 1, 0
+  if (v !== Math.round(v)) return v.toFixed(v < 10 ? 2 : 1).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
+  return numero(Math.round(v));
+}
+
+/* O topo redondo do eixo: o primeiro 1, 2, 2,5 ou 5 × 10ⁿ que chega ao valor.
+   Recebe: v — o maior valor a mostrar.
+   Devolve: o número. */
+function topoDoEixo(v) {
+  if (!(v > 0)) return 1;
+  var p = Math.pow(10, Math.floor(Math.log(v) / Math.LN10)), passos = [1, 2, 2.5, 5, 10];
+  for (var i = 0; i < passos.length; i++) if (passos[i] * p >= v) return passos[i] * p;
+  return 10 * p;
+}
+
+/* O que um ponto diz na leitura: quando (pela largura do intervalo) e o valor.
+   Recebe: p — o ponto ({t, v, vivo}); r — a série.
+   Devolve: o texto. */
+function leituraDoPonto(p, r) {
+  var quando, d = new Date(p.t);
+  if (p.vivo) quando = 'Agora';
+  else if (r.passo >= 7 * 86400000) quando = 'Semana de ' + dois(d.getDate()) + '/' + dois(d.getMonth() + 1);
+  else if (r.passo >= 86400000) quando = dia(p.t);
+  else if (r.passo > 3600000) quando = dois(d.getDate()) + '/' + dois(d.getMonth() + 1) + ' ' + hora(p.t) + '–' + hora(p.t + r.passo);
+  else quando = dois(d.getDate()) + '/' + dois(d.getMonth() + 1) + ' ' + hora(p.t);
+  return quando + ' · ' + valorDaSerie(p.v, r.unidade);
+}
+
+/* Pinta o gráfico da série do cartão aberto: a cabeça com o que cada ponto
+   é (o pico ou o fim de cada intervalo; o tecto, quando há) e o lugar da
+   leitura, que existe sempre (o molde com todas as leituras empilhadas dá-lhe
+   a largura e a altura; design.md «Um gráfico lê-se com o dedo»); o desenho
+   em SVG, de 0 ao topo redondo, com o tecto tracejado, a guia e o ponto
+   lido; o eixo do tempo; e o «Sem dados antes de» quando a série começa
+   depois do horizonte. Sem pontos nenhuns, o estado vazio. A leitura nasce
+   no último ponto (o valor de agora).
+   Devolve: nada. */
+function pintarSerie() {
+  var s = serieAberta, corpo = el('serieCorpo');
+  if (!s || !corpo || !s.dados) return;
+  var r = s.dados, pts = (r.pontos || []).filter(function (p) { return isFinite(p.v) && isFinite(p.t); });
+  if (!pts.length) {
+    corpo.innerHTML = '<div class="sr-estado">' + vazioHtml('Ainda sem dados.', 'A vigia de hora a hora guarda uma amostra por hora; o gráfico enche-se a partir daí.') + '</div>';
+    return;
+  }
+  var maior = 0;
+  pts.forEach(function (p) { if (p.v > maior) maior = p.v; });
+  var tecto = r.tecto > 0 ? Number(r.tecto) : null;
+  var topo = topoDoEixo(Math.max(maior, tecto || 0));
+  var span = Math.max(1, r.fim - r.inicio);
+  var x = function (t) { return Math.max(0, Math.min(SR_L, (t - r.inicio) / span * SR_L)); };
+  var y = function (v) { return SR_A - SR_MARGEM - (v / topo) * (SR_A - 2 * SR_MARGEM); };
+  s.xy = pts.map(function (p) { return { x: x(p.t), y: y(p.v), p: p }; });
+  var traco = s.xy.map(function (q, i) { return (i ? 'L' : 'M') + q.x.toFixed(1) + ' ' + q.y.toFixed(1); }).join(' ');
+  var area = traco + ' L' + s.xy[s.xy.length - 1].x.toFixed(1) + ' ' + (SR_A - SR_MARGEM) + ' L' + s.xy[0].x.toFixed(1) + ' ' + (SR_A - SR_MARGEM) + ' Z';
+  var grade = [0, 0.5, 1].map(function (f) {
+    var gy = y(topo * f).toFixed(1);
+    return '<line class="sr-grade" x1="0" x2="' + SR_L + '" y1="' + gy + '" y2="' + gy + '"/>';
+  }).join('');
+  var linhaTecto = tecto ? '<line class="sr-tecto" x1="0" x2="' + SR_L + '" y1="' + y(tecto).toFixed(1) + '" y2="' + y(tecto).toFixed(1) + '"/>' : '';
+  var so = s.xy.length === 1 ? '<line class="sr-so" x1="' + s.xy[0].x.toFixed(1) + '" x2="' + s.xy[0].x.toFixed(1) + '" y1="' + s.xy[0].y.toFixed(1) + '" y2="' + s.xy[0].y.toFixed(1) + '"/>' : '';
+  var svg = '<svg class="sr-svg" viewBox="0 0 ' + SR_L + ' ' + SR_A + '" preserveAspectRatio="none" aria-hidden="true">' + grade + linhaTecto +
+    '<path class="sr-area" d="' + area + '"/><path class="sr-linha" data-pontos="' + s.xy.length + '" d="' + traco + '"/>' + so +
+    '<line id="serieGuia" class="sr-guia off" x1="0" x2="0" y1="0" y2="' + SR_A + '"/>' +
+    '<line id="seriePonto" class="sr-ponto off" x1="0" x2="0" y1="0" y2="0"/></svg>';
+  var juntar = { 3600000: 'hora', 21600000: '6 horas', 86400000: 'dia', 604800000: 'semana' }[r.passo] || 'intervalo';
+  var legenda = '<p class="sub sr-legenda">' + (r.agrega === 'pico' ? 'O pico de cada ' : 'O valor no fim de cada ') + juntar +
+    (tecto ? '<span class="sr-leg-tecto"><span class="sr-amostra" aria-hidden="true"></span>Tecto ' + esc(valorDaSerie(tecto, r.unidade)) + '</span>' : '') + '</p>';
+  var molde = '<span class="sr-molde" aria-hidden="true">' + pts.map(function (p) { return '<span>' + esc(leituraDoPonto(p, r)) + '</span>'; }).join('') + '</span>';
+  var desde = r.desde == null ? r.fim : r.desde;
+  var semAntes = desde > r.inicio + Math.max(r.passo, 3600000)
+    ? '<p class="sub sr-nota">Sem dados antes de ' + esc(dia(desde)) + '.</p>' : '';
+  // o começo do eixo: a hora num dia, o dia e o mês até 3 meses, o dia inteiro (com o ano) no 1a
+  var curtoT = function (t) {
+    if (r.passo < 86400000 && span <= 86400000) return hora(t);
+    return span > 180 * 86400000 ? dia(t) : dois(new Date(t).getDate()) + '/' + dois(new Date(t).getMonth() + 1);
+  };
+  var nomeH = EXTENSO_HORIZONTE[r.horizonte] || r.horizonte;
+  corpo.innerHTML = '<div class="sr-grafico">' +
+    '<div class="sr-cabeca">' + legenda + '<div class="sr-ler">' + molde + '<span class="sr-leitura n" id="serieLeitura" aria-live="polite"></span></div></div>' +
+    '<div class="sr-desenho"><div class="sr-y n" aria-hidden="true"><span>' + esc(eixoDaSerie(topo, r.unidade)) + '</span><span>' +
+      esc(eixoDaSerie(topo / 2, r.unidade)) + '</span><span>0</span></div>' +
+    '<div class="sr-caixa" id="serieCaixa" tabindex="0" role="img" aria-label="' + esc(s.nome + ' · ' + nomeH + '. Percorre com o dedo ou com as setas para ler cada ponto.') + '">' + svg + '</div>' +
+    '<span></span><div class="sr-x sub n" aria-hidden="true"><span>' + esc(curtoT(r.inicio)) + '</span><span>Agora</span></div></div>' +
+    semAntes + '</div>';
+  ligarLeitura();
+  lerSerie(s.xy.length - 1);
+}
+
+/* Acende a leitura num ponto: a guia vertical e o ponto no desenho, e o
+   texto no canto. Sem os elementos (o cartão fechou entretanto), nada.
+   Recebe: i — o índice do ponto (fora dos limites, encosta-se).
+   Devolve: nada. */
+function lerSerie(i) {
+  var s = serieAberta;
+  if (!s || !s.xy || !s.xy.length) return;
+  i = Math.max(0, Math.min(s.xy.length - 1, i));
+  s.i = i;
+  var q = s.xy[i], guia = el('serieGuia'), ponto = el('seriePonto'), leitura = el('serieLeitura');
+  var pos = function (e, a) { if (e && e.setAttribute) for (var k in a) e.setAttribute(k, a[k]); };
+  pos(guia, { x1: q.x.toFixed(1), x2: q.x.toFixed(1), 'class': 'sr-guia' });
+  pos(ponto, { x1: q.x.toFixed(1), x2: q.x.toFixed(1), y1: q.y.toFixed(1), y2: q.y.toFixed(1), 'class': 'sr-ponto' });
+  if (leitura) leitura.textContent = leituraDoPonto(q.p, s.dados);
+}
+
+/* O índice do ponto mais perto de uma fração da largura do desenho.
+   Recebe: f — de 0 (início) a 1 (agora).
+   Devolve: o índice. */
+function pontoMaisPerto(f) {
+  var s = serieAberta, alvo = f * SR_L, melhor = 0, dist = Infinity;
+  if (!s || !s.xy) return 0;
+  s.xy.forEach(function (q, i) { var dd = Math.abs(q.x - alvo); if (dd < dist) { dist = dd; melhor = i; } });
+  return melhor;
+}
+
+/* Liga a leitura ao gesto na caixa do desenho: o dedo (ou o rato, a
+   carregar) percorre-a na horizontal e a leitura segue o ponto mais perto;
+   a caixa tem touch-action:pan-y, por isso um gesto vertical continua a
+   rolar e cancela a leitura. Ao largar, a leitura volta ao último ponto (o
+   valor de agora). No teclado, as setas andam de ponto em ponto. Os
+   ouvintes vivem na caixa e morrem com ela.
+   Devolve: nada. */
+function ligarLeitura() {
+  var caixa = el('serieCaixa');
+  if (!caixa || typeof caixa.addEventListener !== 'function') return;
+  var aqui = function (ev) {
+    var b = caixa.getBoundingClientRect();
+    if (b.width > 0) lerSerie(pontoMaisPerto((ev.clientX - b.left) / b.width));
+  };
+  var largar = function () {
+    var s = serieAberta;
+    if (!s) return;
+    s.aLer = false;
+    lerSerie(s.xy ? s.xy.length - 1 : 0);
+  };
+  caixa.addEventListener('pointerdown', function (ev) {
+    if (!serieAberta) return;
+    serieAberta.aLer = true;
+    try { caixa.setPointerCapture(ev.pointerId); } catch (e) { /* sem captura, segue enquanto estiver por cima */ }
+    aqui(ev);
+  });
+  caixa.addEventListener('pointermove', function (ev) {
+    if (serieAberta && (serieAberta.aLer || ev.pointerType === 'mouse')) aqui(ev);
+  });
+  caixa.addEventListener('pointerup', largar);
+  caixa.addEventListener('pointercancel', largar);
+  caixa.addEventListener('pointerleave', function (ev) { if (ev.pointerType === 'mouse') largar(); });
+  caixa.addEventListener('keydown', function (ev) {
+    var s = serieAberta;
+    if (!s || (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight')) return;
+    if (ev.preventDefault) ev.preventDefault();
+    lerSerie(s.i + (ev.key === 'ArrowLeft' ? -1 : 1));
+  });
 }
 
 /* Uma consulta pesada, como o resumo a escreve ("linhas · vezes× · SQL"):
@@ -2927,6 +3220,9 @@ var ACOES = {
   confirmarServico: function (d) { mudarServico(d.arg, d.arg2, false, true); },
   cancelarServico: function () { var a = el('svAviso'); if (a) a.remove(); },
   copiarAgora: function () { copiarAgora(); },
+  verSerie: function (d) { verSerie(d.arg, d.arg2); },
+  mudarHorizonte: function (d) { mudarHorizonte(d.arg); },
+  recarregarSerie: function () { carregarSerie(); },
   resumoCopia: function (d) { resumoCopia(d.arg); },
   sessaoTeste: function (d) {
     var m = Object.prototype.hasOwnProperty.call(MODOS_TESTE, d.arg) ? MODOS_TESTE[d.arg] : null;

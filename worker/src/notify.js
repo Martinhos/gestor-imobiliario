@@ -207,6 +207,47 @@ export async function avisoDeHoje(env, chave, agora) {
   }
 }
 
+/* Os números que se contam na D1, um por medida, com o id que a série do
+   consumo usa (lib/consumo-serie.js:MEDIDAS). Os que dizem «24 h» levam o
+   instante de há 24 horas por bind; no texto do SQL só vai SQL. */
+export const CONTAGENS = {
+  contas: { sql: 'SELECT COUNT(*) AS n FROM users WHERE deleted_at IS NULL' },
+  ativos: { sql: 'SELECT COUNT(DISTINCT owner_id) AS n FROM houses WHERE updated_at > ?', dia: true },
+  casas: { sql: 'SELECT COUNT(*) AS n FROM houses WHERE deleted = 0' },
+  registos: { sql: 'SELECT COUNT(*) AS n FROM records WHERE deleted = 0' },
+  pedidos: { sql: "SELECT COUNT(*) AS n FROM tickets WHERE status <> 'concluido'" },
+  erros: { sql: "SELECT COUNT(*) AS n FROM tickets WHERE category IN ('client', 'server') AND updated_at > ?", dia: true },
+};
+
+/* Um número da D1 (uma das CONTAGENS). Cada um falha sozinho: uma tabela
+   em baixo dá null nesse número e mais nada.
+   Recebe: env — o ambiente do worker (DB); chave — a chave em CONTAGENS;
+   agora — o instante (ms) de que se contam as 24 horas.
+   Devolve: Promise do número, ou null quando a consulta falhou ou a chave não existe. */
+export async function contarNaBase(env, chave, agora) {
+  const c = Object.prototype.hasOwnProperty.call(CONTAGENS, chave) ? CONTAGENS[chave] : null;
+  if (!c) return null;
+  try {
+    const st = env.DB.prepare(c.sql);
+    const r = await (c.dia ? st.bind(agora - 86400000) : st).first();
+    return r && r.n != null ? Number(r.n) : 0;
+  } catch (e) {
+    return null;
+  }
+}
+
+/* Todos os números da D1 de uma vez, partilhados pelo usageFields (o
+   resumo diário, o /uso e a Operação) e pela amostra da vigia
+   (lib/consumo-serie.js:gravarAmostra).
+   Recebe: env — o ambiente do worker (DB); agora — o instante (ms).
+   Devolve: Promise de { contas, ativos, casas, registos, pedidos, erros },
+   cada um número ou null quando a sua consulta falhou. */
+export async function contagensDaBase(env, agora) {
+  const out = {};
+  for (const k of Object.keys(CONTAGENS)) out[k] = await contarNaBase(env, k, agora);
+  return out;
+}
+
 // Consumo do dia, contra os limites do plano gratuito. Os números da
 // Cloudflare vêm da API de análise; se ela não responder, vai o que
 // conseguimos contar por dentro, que chega para perceber a tendência.
@@ -214,34 +255,20 @@ export async function avisoDeHoje(env, chave, agora) {
 // Recebe: env — o ambiente do worker (DB, MAX_USERS e as credenciais da Cloudflare).
 // Devolve: Promise com a lista de campos { name, value, inline } para um embed.
 export async function usageFields(env) {
-  // os valores vão por bind, como no resto do worker: no texto do SQL só vai SQL
-  const q = async (sql, ...valores) => {
-    try {
-      const st = env.DB.prepare(sql);
-      return (await (valores.length ? st.bind(...valores) : st).first()) || {};
-    } catch (e) { return {}; }
-  };
-  const dia = Date.now() - 86400000;
-  const contas = await q('SELECT COUNT(*) AS n FROM users WHERE deleted_at IS NULL');
-  const ativos = await q('SELECT COUNT(DISTINCT owner_id) AS n FROM houses WHERE updated_at > ?', dia);
-  const casas = await q('SELECT COUNT(*) AS n FROM houses WHERE deleted = 0');
-  const registos = await q('SELECT COUNT(*) AS n FROM records WHERE deleted = 0');
-  const abertos = await q("SELECT COUNT(*) AS n FROM tickets WHERE status <> 'concluido'");
-  const erros = await q(
-    "SELECT COUNT(*) AS n FROM tickets WHERE category IN ('client', 'server') AND updated_at > ?", dia);
-
+  const c = await contagensDaBase(env, Date.now());
+  const contas = c.contas || 0;
   const max = Number(env.MAX_USERS || 0);
-  const pctContas = max ? Math.round(((contas.n || 0) / max) * 100) : null;
+  const pctContas = max ? Math.round((contas / max) * 100) : null;
   const fields = [
     {
       name: 'Contas',
-      value: (contas.n || 0) + (max ? ' / ' + max + '  (' + pctContas + '%)' : ''),
+      value: contas + (max ? ' / ' + max + '  (' + pctContas + '%)' : ''),
       inline: true,
     },
-    { name: 'Ativos (24h)', value: String(ativos.n || 0), inline: true },
-    { name: 'Casas · registos', value: (casas.n || 0) + ' · ' + (registos.n || 0), inline: true },
-    { name: 'Pedidos abertos', value: String(abertos.n || 0), inline: true },
-    { name: 'Erros (24h)', value: String(erros.n || 0), inline: true },
+    { name: 'Ativos (24h)', value: String(c.ativos || 0), inline: true },
+    { name: 'Casas · registos', value: (c.casas || 0) + ' · ' + (c.registos || 0), inline: true },
+    { name: 'Pedidos abertos', value: String(c.pedidos || 0), inline: true },
+    { name: 'Erros (24h)', value: String(c.erros || 0), inline: true },
   ];
 
   // Sem isto, uma cópia que deixasse de correr passava despercebida até ao
@@ -298,14 +325,17 @@ export const LIMIAR_AVISO = 0.8;
 // tectos, avisa o canal de administração quando um passa o limiar — com @here a partir
 // de 95% — e devolve quantos limites motivaram aviso, para o cron poder registar.
 // Recebe: env — o ambiente do worker (canal e webhook de administração, credenciais
-// da Cloudflare); ctx — o contexto do cron, para o waitUntil (pode vir nulo).
+// da Cloudflare); ctx — o contexto do cron, para o waitUntil (pode vir nulo);
+// usoPronto (opcional) — o consumo que a vigia já pediu à Cloudflare (o
+// cloudflareUsage, ou null), para a amostra do histórico e os avisos saírem do
+// mesmo pedido; sem ele (undefined), pede-se aqui.
 // Devolve: Promise de { avisados, limites?, motivo? } — quantos limites motivaram
 // aviso e quais; motivo explica porque não houve avisos quando faltou canal ou dados.
-export async function watchLimits(env, ctx) {
+export async function watchLimits(env, ctx, usoPronto) {
   const canal = env.DISCORD_ADMIN_CHANNEL, url = env.DISCORD_ADMIN_WEBHOOK;
   if (!canal && !url) return { avisados: 0, motivo: 'sem canal de administração' };
 
-  const uso = await cloudflareUsage(env);
+  const uso = usoPronto !== undefined ? usoPronto : await cloudflareUsage(env);
   if (!uso) return { avisados: 0, motivo: 'sem dados de consumo' };
 
   const apertados = [];
@@ -384,7 +414,7 @@ export async function dailyReport(env, ctx) {
 // Devolve: Promise com os valores medidos por nome de tecto (as chaves de
 // LIMITS) — só os que a API devolveu; ou null quando falta configuração ou
 // não veio nada.
-async function cloudflareUsage(env) {
+export async function cloudflareUsage(env) {
   const token = env.CF_ANALYTICS_TOKEN, acc = env.CF_ACCOUNT_ID;
   if (!token || !acc) return null;
   const agora = new Date();

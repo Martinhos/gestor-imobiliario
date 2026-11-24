@@ -30,8 +30,11 @@ export const TIME_TRAVEL_DIAS = 7;
 // sozinhos, e o que é interno do SQLite ou da D1. E o rasto das pessoas
 // (rasto_*, lib/rasto.js), por decisão do Martinho: vive 90 dias e apaga-se
 // logo a quem recusa, e uma cópia guardada no R2 durante um ano guardava-o
-// muito para lá disso.
-const FORA = /^(rate_limits|rasto_|sqlite_|_cf_|d1_)/;
+// muito para lá disso. E as amostras do consumo (consumo_amostras, KAN-144,
+// lib/consumo-serie.js): não são dados de ninguém, e um ano delas são mais de
+// cem mil linhas — umas duzentas páginas a mais numa invocação que já conta as
+// consultas que o plano gratuito deixa fazer.
+const FORA = /^(rate_limits|rasto_|consumo_amostras$|sqlite_|_cf_|d1_)/;
 const NOME_OK = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 // O dia UTC de um instante, como AAAA-MM-DD: é o que dá o nome a cada cópia.

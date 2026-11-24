@@ -8,7 +8,7 @@ import { CSP_ANEXO, CSP_ESTRITA } from './lib/http.js';
 import { CRON_DIARIO } from './lib/auditoria.js';
 import { limparLimites } from './lib/limites.js';
 import { varrerAnexos } from './files.js';
-import { dailyReport, watchLimits } from './notify.js';
+import { cloudflareUsage, dailyReport, watchLimits } from './notify.js';
 import { copiar } from './salvaguarda.js';
 import { recursoDePagina } from './paginas-recursos.js';
 import { CAMINHOS_DE_IDENTIDADE, identidadeDeDev } from './lib/identidade.js';
@@ -141,10 +141,14 @@ export default {
          quando o cron morria de todo. */
       const { registarOp } = await import('./lib/auditoria.js');
       if (!diario) {
+        /* O consumo da Cloudflare pede-se uma vez por hora e serve os dois:
+           os avisos da vigia e a amostra do histórico (cloudflareUsage nunca
+           lança; sem token ou sem resposta, null). */
+        const uso = await cloudflareUsage(env).catch(() => null);
         try {
           // os contadores do travão cuja janela acabou (nunca lança)
           await limparLimites(env);
-          await watchLimits(env, ctx);
+          await watchLimits(env, ctx, uso);
           await registarOp(env, 'vigia', true);
           /* O batimento para fora, e só depois de a vigia ter corrido: o
              alarme da casa é a ausência de linhas no op_log, mas quem deteta
@@ -155,6 +159,18 @@ export default {
           await registarOp(env, 'vigia', false, String((e && e.message) || e));
           await recordReport(env, ctx, 'infra', 'Vigia dos limites falhou',
             String((e && e.stack) || (e && e.message) || e).slice(0, 800));
+        }
+        /* A amostra do consumo para os gráficos da Operação (KAN-144,
+           lib/consumo-serie.js:amostraDaVigia, que nunca lança): depois da
+           vigia e do batimento, à parte deles — um histórico que falha não
+           cala os avisos. Só uma falha deixa linha no op_log; a amostra em si
+           já é a prova de que correu. */
+        try {
+          const { amostraDaVigia } = await import('./lib/consumo-serie.js');
+          const a = await amostraDaVigia(env, uso, event.scheduledTime || Date.now());
+          if (a.erros.length) await registarOp(env, 'consumo', false, a.erros.join(' · '));
+        } catch (e) {
+          await registarOp(env, 'consumo', false, String((e && e.message) || e));
         }
         /* O email dos planeados em atraso (lib/avisos-atraso.js, que nunca
            lança), depois da vigia e do batimento: a partir das 9h em Lisboa,

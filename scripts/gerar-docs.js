@@ -99,7 +99,7 @@ const MAPA = [
   { id: 'infra', titulo: 'Infraestrutura',
     ficheiros: ['worker/src/index.js', 'worker/src/api.js', 'worker/src/landing.js',
       'worker/src/legal-vista.js', 'worker/src/guia-vista.js', 'worker/src/paginas-recursos.js',
-      'worker/src/salvaguarda.js', 'worker/src/lib/http.js', 'worker/src/lib/auditoria.js',
+      'worker/src/salvaguarda.js', 'worker/src/lib/consumo-serie.js', 'worker/src/lib/http.js', 'worker/src/lib/auditoria.js',
       'worker/src/lib/identidade.js',
       'web/sw.js', 'scripts/gerar-docs.js', 'scripts/make-icons.js', 'scripts/restaurar.js', 'scripts/versao.js',
       'scripts/capturas.js', 'scripts/chegada.js', 'scripts/entrega.js'] },

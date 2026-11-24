@@ -624,6 +624,66 @@ html.eq-trava body{position:fixed;left:0;right:0;width:100%}
 .barra.wa::-moz-progress-bar{background:var(--warn)}
 .barra.dg::-webkit-progress-value{background:var(--danger)}
 .barra.dg::-moz-progress-bar{background:var(--danger)}
+/* o consumo à cabeça (KAN-144): cada quadrado e cada linha dos tectos é um
+   botão que abre o gráfico do valor (equipa-guiao.js:verSerie); o ícone do
+   gráfico ao lado do nome diz que se toca. O sinal do dedo é o :active; o
+   :hover só com rato */
+.op-consumo-cab{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px}
+.st-topo{display:flex;align-items:center;gap:6px;min-width:0}
+.st-topo .sub{flex:1;min-width:0}
+.st-ic,.lm-ic{color:var(--faint);flex:none}
+.st-toque{font:inherit;color:inherit;text-align:left;cursor:pointer;
+  transition:background-color var(--rapido) var(--curva),border-color var(--rapido) var(--curva)}
+.st-toque:active{background:var(--press)}
+@media(hover:hover) and (pointer:fine){.st-toque:hover{background:var(--tint);border-color:var(--line2)}.st-toque:hover .st-ic{color:var(--accent)}}
+.lm-toque{width:100%;margin:0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent;font:inherit;color:inherit;
+  text-align:left;cursor:pointer;transition:background-color var(--rapido) var(--curva)}
+.lm-toque:active{background:var(--press)}
+@media(hover:hover) and (pointer:fine){.lm-toque:hover{background:var(--tint)}.lm-toque:hover .lm-ic{color:var(--accent)}}
+.lm-toque:focus-visible,.st-toque:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.lm-ic{align-self:center}
+/* o cartão do gráfico, na janela do back office: o título com o Fechar, os
+   seis horizontes numa grelha (cabem a 390 numa linha só), e o gráfico. O
+   horizonte escolhido muda a letra, a borda e o peso — o escurecimento
+   forçado do Samsung Internet apaga as diferenças de fundo, não as da frente */
+.sr-janela{gap:12px}
+.sr-cab{display:flex;align-items:center;gap:8px;margin:-6px -8px 0 0}
+.sr-cab h2{flex:1;min-width:0;overflow-wrap:anywhere}
+.sr-horizontes{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.sr-horizontes .chip{justify-content:center;padding:0 4px}
+.sr-horizontes .chip.on{font-weight:700}
+.sr-corpo{min-height:262px;display:flex;flex-direction:column}
+.sr-estado{flex:1;display:flex;flex-direction:column;justify-content:center}
+.sr-grafico{display:flex;flex-direction:column;gap:6px}
+/* a cabeça: o que cada ponto é (e o tecto) à esquerda, a leitura no canto
+   direito, por cima do desenho; o lugar dela existe sempre, do tamanho do
+   molde com todas as leituras empilhadas (design.md «Um gráfico lê-se com o dedo») */
+.sr-cabeca{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:6px 8px}
+.sr-legenda{flex:1 1 13em;display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px}
+.sr-leg-tecto{display:inline-flex;align-items:center;gap:6px;color:var(--danger);font-weight:600;white-space:nowrap}
+.sr-amostra{width:16px;height:0;border-top:2px dashed var(--danger)}
+.sr-ler{display:grid;justify-items:end;margin-left:auto;max-width:100%}
+.sr-ler>*,.sr-molde>span{grid-area:1/1}
+.sr-molde{display:grid;justify-items:end;visibility:hidden}
+.sr-molde>span,.sr-leitura{font-size:13.5px;font-weight:600;white-space:nowrap;padding:4px 10px;border-radius:8px;border:1px solid transparent}
+.sr-leitura{background:var(--chip);border-color:var(--line2);color:var(--ink);font-variant-numeric:tabular-nums}
+.sr-desenho{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px}
+.sr-y{display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;font-size:11.5px;color:var(--faint);padding:2px 0}
+.sr-y span{line-height:1}
+/* o gesto é horizontal: o pan-y deixa a rolagem vertical ao browser e dá o resto ao dedo que lê */
+.sr-caixa{position:relative;height:180px;touch-action:pan-y;cursor:crosshair;border-radius:6px;-webkit-user-select:none;user-select:none}
+.sr-caixa:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sr-svg{display:block;width:100%;height:100%;overflow:visible}
+.sr-grade{stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
+.sr-tecto{stroke:var(--danger);stroke-width:1.5;stroke-dasharray:6 4;vector-effect:non-scaling-stroke}
+.sr-area{fill:var(--accent);opacity:.12}
+.sr-linha{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.sr-so{stroke:var(--accent);stroke-width:8;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.sr-guia{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.sr-ponto{stroke:var(--accent);stroke-width:10;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.sr-guia.off,.sr-ponto.off{display:none}
+.sr-x{display:flex;justify-content:space-between;padding-left:0}
+.sr-nota{padding-top:2px}
 .ps{display:flex;gap:10px;align-items:baseline;font-size:14px;padding:8px 0;border-top:1px solid var(--line)}
 .ps:first-of-type{border-top:0}
 .ps code{flex:1;min-width:0;color:var(--muted);font-size:12.5px;overflow-wrap:anywhere}
