@@ -1797,12 +1797,73 @@ function leituraDoPonto(p, r) {
   return quando + ' · ' + valorDaSerie(p.v, r.unidade);
 }
 
+/* O começo do eixo do tempo, curto. Nos horizontes de hora a hora (o 1d e o
+   7d), a hora com o dia, para não se ler como hoje: «ontem 12:00» quando o
+   começo é a véspera do fim (o 1d), «18/11 12:00» mais para trás (o 7d), só a
+   hora no mesmo dia. Até 3 meses, o dia e o mês; no 1a, o dia com o ano.
+   Recebe: r — a série ({inicio, fim, passo}).
+   Devolve: o texto. */
+function comecoDoEixo(r) {
+  var a = new Date(r.inicio), f = new Date(r.fim), span = r.fim - r.inicio;
+  var diaMes = dois(a.getDate()) + '/' + dois(a.getMonth() + 1);
+  if (r.passo < 86400000 && span <= 8 * 86400000) {
+    var vespera = new Date(f.getFullYear(), f.getMonth(), f.getDate() - 1);
+    var igual = function (b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); };
+    if (igual(f)) return hora(r.inicio);
+    return (igual(vespera) ? 'ontem' : diaMes) + ' ' + hora(r.inicio);
+  }
+  return span > 180 * 86400000 ? dia(r.inicio) : diaMes;
+}
+
+/* As meias-noites de um horizonte de hora a hora (o 1d e o 7d), na hora de
+   quem vê (a do browser), para as linhas tracejadas da passagem do dia, como
+   a passagem do ano nos gráficos da app (graficos.js:divisoesSvg). Nos outros
+   horizontes cada ponto já é um dia ou mais, e não há nenhuma.
+   Recebe: r — a série ({inicio, fim, passo}).
+   Devolve: [{t, rotulo}] — cada meia-noite depois do início e antes do fim, e
+   o dia novo que se escreve ao lado: o dia e o mês no 1d (25/11), só o dia no
+   7d (25), que são sete e a 384 px não cabem com o mês. */
+function meiasNoites(r) {
+  var span = r.fim - r.inicio, out = [];
+  if (!(r.passo <= 3600000) || !(span > 0) || span > 8 * 86400000) return out;
+  var soDia = span > 2 * 86400000, d = new Date(r.inicio);
+  d.setHours(24, 0, 0, 0);
+  for (var n = 0; d.getTime() < r.fim && n < 10; n++) {
+    out.push({ t: d.getTime(), rotulo: soDia ? String(d.getDate()) : dois(d.getDate()) + '/' + dois(d.getMonth() + 1) });
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
+/* Põe cada rótulo das meias-noites no sítio da linha dele (a posição vem no
+   data-x, em % da largura do desenho, e entra pelo CSSOM: a CSP não deixa
+   o atributo de estilo no HTML), ao lado direito da linha; o que passava da borda direita
+   vai para o lado esquerdo, e o que ainda assim tocava no anterior esconde-se
+   (a linha fica). Sem DOM de verdade (os testes), nada.
+   Devolve: nada. */
+function arrumarDias() {
+  var caixa = el('serieCaixa');
+  if (!caixa || typeof caixa.querySelectorAll !== 'function') return;
+  var rotulos = Array.prototype.slice.call(caixa.querySelectorAll('.sr-dia'));
+  rotulos.forEach(function (s) { s.style.left = s.getAttribute('data-x') + '%'; });
+  var borda = caixa.getBoundingClientRect().right, fimAnterior = -Infinity;
+  rotulos.forEach(function (s) {
+    var b = s.getBoundingClientRect();
+    if (b.right > borda) { s.classList.add('esq'); b = s.getBoundingClientRect(); }
+    if (b.left < fimAnterior + 4) { s.classList.add('off'); return; }
+    fimAnterior = b.right;
+  });
+}
+
 /* Pinta o gráfico da série do cartão aberto: a cabeça com o que cada ponto
    é (o pico ou o fim de cada intervalo; o tecto, quando há) e o lugar da
    leitura, que existe sempre (o molde com todas as leituras empilhadas dá-lhe
    a largura e a altura; design.md «Um gráfico lê-se com o dedo»); o desenho
    em SVG, de 0 ao topo redondo, com o tecto tracejado, a guia e o ponto
-   lido; o eixo do tempo; e o «Sem dados antes de» quando a série começa
+   lido; no 1d e no 7d, cada meia-noite tracejada por baixo da série, com o
+   dia novo numa faixa por cima do desenho (equipa-guiao.js:meiasNoites); o
+   eixo do tempo, do começo (equipa-guiao.js:comecoDoEixo) a «Agora»; e o
+   «Sem dados antes de» quando a série começa
    depois do horizonte. Sem pontos nenhuns, o estado vazio. A leitura nasce
    no último ponto (o valor de agora).
    Devolve: nada. */
@@ -1830,7 +1891,16 @@ function pintarSerie() {
   }).join('');
   var linhaTecto = tecto ? '<line class="sr-tecto" x1="0" x2="' + SR_L + '" y1="' + y(tecto).toFixed(1) + '" y2="' + y(tecto).toFixed(1) + '"/>' : '';
   var so = s.xy.length === 1 ? '<line class="sr-so" x1="' + s.xy[0].x.toFixed(1) + '" x2="' + s.xy[0].x.toFixed(1) + '" y1="' + s.xy[0].y.toFixed(1) + '" y2="' + s.xy[0].y.toFixed(1) + '"/>' : '';
-  var svg = '<svg class="sr-svg" viewBox="0 0 ' + SR_L + ' ' + SR_A + '" preserveAspectRatio="none" aria-hidden="true">' + grade + linhaTecto +
+  // a passagem de cada dia (1d e 7d): a linha tracejada por baixo da série, e o dia novo na faixa de cima
+  var dias = meiasNoites(r);
+  var divisoes = dias.map(function (m) {
+    var dx = x(m.t).toFixed(1);
+    return '<line class="sr-divisao" x1="' + dx + '" x2="' + dx + '" y1="0" y2="' + SR_A + '"/>';
+  }).join('');
+  var rotulosDias = dias.length ? '<div class="sr-dias" aria-hidden="true">' + dias.map(function (m) {
+    return '<span class="sr-dia" data-x="' + (x(m.t) / SR_L * 100).toFixed(2) + '">' + esc(m.rotulo) + '</span>';
+  }).join('') + '</div>' : '';
+  var svg = '<svg class="sr-svg" viewBox="0 0 ' + SR_L + ' ' + SR_A + '" preserveAspectRatio="none" aria-hidden="true">' + grade + divisoes + linhaTecto +
     '<path class="sr-area" d="' + area + '"/><path class="sr-linha" data-pontos="' + s.xy.length + '" d="' + traco + '"/>' + so +
     '<line id="serieGuia" class="sr-guia off" x1="0" x2="0" y1="0" y2="' + SR_A + '"/>' +
     '<line id="seriePonto" class="sr-ponto off" x1="0" x2="0" y1="0" y2="0"/></svg>';
@@ -1841,19 +1911,15 @@ function pintarSerie() {
   var desde = r.desde == null ? r.fim : r.desde;
   var semAntes = desde > r.inicio + Math.max(r.passo, 3600000)
     ? '<p class="sub sr-nota">Sem dados antes de ' + esc(dia(desde)) + '.</p>' : '';
-  // o começo do eixo: a hora num dia, o dia e o mês até 3 meses, o dia inteiro (com o ano) no 1a
-  var curtoT = function (t) {
-    if (r.passo < 86400000 && span <= 86400000) return hora(t);
-    return span > 180 * 86400000 ? dia(t) : dois(new Date(t).getDate()) + '/' + dois(new Date(t).getMonth() + 1);
-  };
   var nomeH = EXTENSO_HORIZONTE[r.horizonte] || r.horizonte;
   corpo.innerHTML = '<div class="sr-grafico">' +
     '<div class="sr-cabeca">' + legenda + '<div class="sr-ler">' + molde + '<span class="sr-leitura n" id="serieLeitura" aria-live="polite"></span></div></div>' +
-    '<div class="sr-desenho"><div class="sr-y n" aria-hidden="true"><span>' + esc(eixoDaSerie(topo, r.unidade)) + '</span><span>' +
+    '<div class="sr-desenho' + (dias.length ? ' sr-com-dias' : '') + '"><div class="sr-y n" aria-hidden="true"><span>' + esc(eixoDaSerie(topo, r.unidade)) + '</span><span>' +
       esc(eixoDaSerie(topo / 2, r.unidade)) + '</span><span>0</span></div>' +
-    '<div class="sr-caixa" id="serieCaixa" tabindex="0" role="img" aria-label="' + esc(s.nome + ' · ' + nomeH + '. Percorre com o dedo ou com as setas para ler cada ponto.') + '">' + svg + '</div>' +
-    '<span></span><div class="sr-x sub n" aria-hidden="true"><span>' + esc(curtoT(r.inicio)) + '</span><span>Agora</span></div></div>' +
+    '<div class="sr-caixa" id="serieCaixa" tabindex="0" role="img" aria-label="' + esc(s.nome + ' · ' + nomeH + '. Percorre com o dedo ou com as setas para ler cada ponto.') + '">' + rotulosDias + svg + '</div>' +
+    '<span></span><div class="sr-x sub n" aria-hidden="true"><span>' + esc(comecoDoEixo(r)) + '</span><span>Agora</span></div></div>' +
     semAntes + '</div>';
+  arrumarDias();
   ligarLeitura();
   lerSerie(s.xy.length - 1);
 }

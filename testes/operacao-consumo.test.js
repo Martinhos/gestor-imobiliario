@@ -234,6 +234,22 @@ describe('a rota da série', () => {
     assert.ok(Number.isInteger(ontem.v) && ontem.v <= 1000 && ontem.v >= 970, 'um valor de amostra: ' + ontem.v);
   });
 
+  test('o 1d começa ontem à hora em ponto de agora (os intervalos batem com as amostras), e o 7d também', async () => {
+    const env = { DB: baseDeTeste() };
+    await semear(env, 'casas', 30, (i) => 100 - i);
+    for (const [h, horas] of [['1d', 24], ['7d', 168]]) {
+      const { j } = await pedir(env, MASTER, '/api/equipa/operacao/serie?medida=casas&horizonte=' + h);
+      const horaDeAgora = Math.floor(j.fim / HORA) * HORA;
+      assert.equal(j.inicio, horaDeAgora - horas * HORA, h + ': começa à hora em ponto, ' + horas + ' h antes da hora de agora');
+      if (h === '1d') {
+        const guardados = j.pontos.filter((p) => !p.vivo);
+        assert.equal(guardados.length, 25, '1d: de ontem a esta hora até agora, de hora a hora');
+        assert.equal(guardados[0].t, j.inicio, '1d: o primeiro ponto é a amostra de ontem a esta hora, não a seguinte');
+        assert.equal(guardados[0].v, 100 - 24, '1d: e traz o valor dessa amostra');
+      }
+    }
+  });
+
   test('os tectos juntam pelo pico e trazem o tecto; as contas trazem o MAX_USERS', async () => {
     const env = { DB: baseDeTeste(), MAX_USERS: '150' };
     const agoraH = Math.floor(Date.now() / HORA) * HORA, d0 = Math.floor(agoraH / DIA) * DIA - 3 * DIA;
@@ -365,6 +381,43 @@ describe('o guião da Operação', () => {
     g.contexto.verSerie('contas', 'Contas'); await assentar();
     assert.match(g.els.serieHorizontes.innerHTML, /data-arg="1a"/);
     assert.match(g.els.serieHorizontes.innerHTML, /class="chip on" aria-pressed="true" data-acao="mudarHorizonte" data-arg="1a"/, 'as contas voltam no 1a');
+  });
+
+  test('o 1d vai de ontem à hora em ponto até agora, e cada meia-noite é uma linha tracejada com o dia novo (1d e 7d, não o 14d)', async () => {
+    // agora: 25/11/2026 às 12:30, na hora de quem vê (o vm corre no fuso do processo, como o browser)
+    const fim = new Date(2026, 10, 25, 12, 30).getTime();
+    const serieDe = (h, dias, passo) => {
+      const inicio = new Date(2026, 10, 25 - dias, 12, 0).getTime(), pontos = [];
+      for (let t = inicio; t < fim; t += passo) pontos.push({ t, v: 10 });
+      pontos.push({ t: fim, v: 12, vivo: true });
+      return { medida: 'casas', nome: 'Casas', horizonte: h, inicio, fim, passo, agrega: 'fim', unidade: null, tecto: null, desde: inicio - DIA, pontos };
+    };
+    const g = await correrGuiao((rota) => {
+      const m = /horizonte=(\w+)/.exec(rota);
+      if (/\/serie\?/.test(rota)) return { '1d': serieDe('1d', 1, HORA), '7d': serieDe('7d', 7, HORA), '14d': serieDe('14d', 14, 6 * HORA) }[m[1]];
+      return responder(rota);
+    });
+    g.contexto.verSerie('casas', 'Casas'); await assentar();
+    g.contexto.mudarHorizonte('1d'); await assentar();
+    let corpo = g.els.serieCorpo.innerHTML;
+    assert.match(corpo, /<div class="sr-x[^"]*"[^>]*><span>ontem 12:00<\/span><span>Agora<\/span><\/div>/, 'o eixo começa ontem à hora em ponto e acaba em Agora');
+    const divisoes = [...corpo.matchAll(/<line class="sr-divisao" x1="([\d.]+)"/g)].map((m) => Number(m[1]));
+    const meiaNoite = new Date(2026, 10, 25).getTime(), inicio = new Date(2026, 10, 24, 12).getTime();
+    assert.deepEqual(divisoes, [Number(((meiaNoite - inicio) / (fim - inicio) * 600).toFixed(1))], 'uma linha só, na meia-noite');
+    assert.deepEqual([...corpo.matchAll(/<span class="sr-dia"[^>]*>([^<]+)<\/span>/g)].map((m) => m[1]), ['25/11'], 'com o dia novo ao lado');
+    assert.ok(corpo.indexOf('class="sr-divisao"') < corpo.indexOf('class="sr-linha"'), 'por baixo da linha da série');
+    g.contexto.lerSerie(0);
+    assert.equal(g.els.serieLeitura.textContent, '24/11 12:00 · 10', 'a leitura do primeiro ponto diz o dia de ontem');
+
+    g.contexto.mudarHorizonte('7d'); await assentar();
+    corpo = g.els.serieCorpo.innerHTML;
+    assert.match(corpo, /<div class="sr-x[^"]*"[^>]*><span>18\/11 12:00<\/span><span>Agora<\/span><\/div>/, 'o 7d começa no dia e na hora');
+    assert.deepEqual([...corpo.matchAll(/<span class="sr-dia"[^>]*>([^<]+)<\/span>/g)].map((m) => m[1]),
+      ['19', '20', '21', '22', '23', '24', '25'], 'uma por meia-noite, só com o dia (sete rótulos a 384 px não cabem com o mês)');
+    assert.equal((corpo.match(/class="sr-divisao"/g) || []).length, 7);
+
+    g.contexto.mudarHorizonte('14d'); await assentar();
+    assert.doesNotMatch(g.els.serieCorpo.innerHTML, /sr-divisao|sr-dia/, 'o 14d fica como estava');
   });
 
   test('os estados: sem dados e erro (com o Tentar outra vez); uma resposta atrasada não pinta por cima da escolha nova', async () => {

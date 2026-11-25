@@ -683,6 +683,17 @@ html.eq-trava body{position:fixed;left:0;right:0;width:100%}
 .sr-ponto{stroke:var(--accent);stroke-width:10;stroke-linecap:round;vector-effect:non-scaling-stroke}
 .sr-guia.off,.sr-ponto.off{display:none}
 .sr-x{display:flex;justify-content:space-between;padding-left:0}
+/* a passagem do dia (1d e 7d): a linha tracejada na cor da frente das linhas secundárias,
+   por baixo da série (como a passagem do ano nos gráficos da app, graficos.js:divisoesSvg), e o
+   dia novo numa faixa de 14px por cima do desenho, para nunca ficar por cima da linha da série;
+   o eixo dos valores desce o mesmo para continuar alinhado com a grade */
+.sr-divisao{stroke:var(--line2);stroke-width:1;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.sr-com-dias .sr-caixa{padding-top:14px}
+.sr-com-dias .sr-y{padding-top:16px}
+.sr-dias{position:absolute;top:0;left:0;right:0;height:14px;pointer-events:none}
+.sr-dia{position:absolute;top:0;left:0;transform:translateX(3px);font-size:10.5px;line-height:14px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.sr-dia.esq{transform:translateX(calc(-100% - 3px))}
+.sr-dia.off{display:none}
 .sr-nota{padding-top:2px}
 .ps{display:flex;gap:10px;align-items:baseline;font-size:14px;padding:8px 0;border-top:1px solid var(--line)}
 .ps:first-of-type{border-top:0}

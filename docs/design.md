@@ -8078,6 +8078,24 @@ pico do intervalo (os tectos) ou o valor no fim dele (o resto). Os estados:
 a roda do mesmo tamanho enquanto lê, «Ainda sem dados.» sem amostras, e o
 erro com o Tentar outra vez; quando a série começa a meio do horizonte, a
 nota «Sem dados antes de <dia>» — o gráfico não inventa o que não se mediu.
+O 1d é as últimas 24 horas: começa ontem à hora em ponto de agora (às
+12:00, se agora são 12:17) e acaba no valor de agora; o 7d começa da mesma
+maneira, sete dias antes. A hora em ponto faz o primeiro ponto ser a amostra
+dessa hora, e o eixo nunca diz uma hora que nenhum ponto tem
+(worker/src/lib/consumo-serie.js:serieDe, o alinhado em HORIZONTES). O
+começo do eixo diz o dia: «ontem 12:00» no 1d, «18/11 12:00» no 7d; até 3
+meses, o dia e o mês; no 1a, o dia com o ano (equipa-guiao.js:comecoDoEixo).
+No 1d e no 7d, cada meia-noite na hora de quem vê é uma linha vertical
+tracejada na cor da frente das linhas secundárias (var(--line2), 3 3), por
+baixo da linha da série — como a passagem do ano nos gráficos da app —, com o
+dia novo pequeno, no --muted, numa faixa de 14px por cima do desenho, ao lado
+direito da linha: «25/11» no 1d, só «25» no 7d, que são sete rótulos e a
+384 px não cabem com o mês (equipa-guiao.js:meiasNoites). Um rótulo que
+passava da borda direita vai para o lado esquerdo da linha, e um que ainda
+assim tocava no anterior esconde-se, ficando a linha (equipa-guiao.js:arrumarDias).
+Do 14d para cima cada ponto já é 6 horas ou mais e o eixo diz o dia: sem
+linhas. A leitura de cada hora diz o dia e a hora (24/11 22:00), por isso o
+dedo nunca confunde ontem com hoje.
 Os pontos vêm da rota GET /api/equipa/operacao/serie (a guarda da Operação,
 quem vê a infraestrutura), que junta as amostras por hora (1d, 7d), por 6 h
 (14d), por dia (1m, 3m) ou por semana (1a) e acaba no valor de agora

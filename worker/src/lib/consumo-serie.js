@@ -47,10 +47,13 @@ export const MEDIDAS = {
    se junta (1d e 7d por hora, 14d por 6 h, 1m e 3m por dia, 1a por semana),
    para o gráfico ter umas dezenas de pontos e não milhares. Os intervalos
    contam-se em UTC; a semana começa à segunda-feira (origem: segunda,
-   5 de janeiro de 1970). */
+   5 de janeiro de 1970). Os de hora a hora (alinhado) começam à hora em
+   ponto: o 1d vai de ontem a esta hora (às 12:00, se agora são 12:17) até
+   agora, e o primeiro ponto é a amostra dessa hora — começar às 12:17
+   deixava-a de fora e o eixo dizia uma hora que nenhum ponto tem (KAN-144). */
 export const HORIZONTES = {
-  '1d': { ms: DIA, passo: HORA },
-  '7d': { ms: 7 * DIA, passo: HORA },
+  '1d': { ms: DIA, passo: HORA, alinhado: true },
+  '7d': { ms: 7 * DIA, passo: HORA, alinhado: true },
   '14d': { ms: 14 * DIA, passo: 6 * HORA },
   '1m': { ms: 30 * DIA, passo: DIA },
   '3m': { ms: 91 * DIA, passo: DIA },
@@ -192,10 +195,12 @@ export async function valorAgora(env, medida, agora) {
    em MEDIDAS; horizonte — a chave em HORIZONTES; agora — o instante (ms).
    Devolve: Promise de { medida, nome, horizonte, inicio, fim, passo, agrega,
    unidade, tecto, desde, pontos: [{t, v, vivo?}] } — t é o começo do
-   intervalo (nunca antes do início), e o último ponto, vivo, é o de agora. */
+   intervalo (nunca antes do início), e o último ponto, vivo, é o de agora;
+   num horizonte alinhado, o início é a hora em ponto de agora menos o
+   horizonte (o fim continua a ser agora). */
 export async function serieDe(env, medida, horizonte, agora) {
   const m = MEDIDAS[medida], h = HORIZONTES[horizonte];
-  const inicio = agora - h.ms, origem = h.origem || 0;
+  const inicio = (h.alinhado ? Math.floor(agora / h.passo) * h.passo : agora) - h.ms, origem = h.origem || 0;
   const juntar = m.agrega === 'pico'
     ? 'SELECT CAST((at - ?) / ? AS INTEGER) AS b, MAX(valor) AS v FROM consumo_amostras ' +
       'WHERE medida = ? AND at >= ? AND at <= ? GROUP BY b ORDER BY b'
