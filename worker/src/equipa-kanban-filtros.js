@@ -1104,7 +1104,7 @@ function kbRascunhosParaQuadro(agora) {
       var col = kbColunaOuOmissao(typeof x.campos.coluna === 'string' ? x.campos.coluna : '');
       if (!col) return;
       (novos[col] = novos[col] || []).push({ qual: k, campos: x.campos, t: x.t, c: x.c || x.t });
-    } else if (/^KAN-\d+$/.test(k)) edicoes[k] = true;
+    } else if (/^KAN-\d+(?:-\d+)?$/.test(k)) edicoes[k] = true;
   });
   Object.keys(novos).forEach(function (col) { novos[col].sort(function (a, b) { return b.c - a.c || (a.qual < b.qual ? -1 : 1); }); });
   return { novos: novos, edicoes: edicoes };

@@ -32,7 +32,7 @@
 import { json, err, body, badId, now, CSP_ANEXO } from '../lib/http.js';
 import { auditar } from '../lib/auditoria.js';
 import { PAPEIS, comoLista, catsDe } from '../lib/papeis.js';
-import { PREFIXO, TIPOS, PRIORIDADES, AUTOMATICO, chaveDe, numeroDaChave, passosDaSincronizacao, passosDoComentarioQa, colunaDoComentarioQa, passosDoComentario, colunaDepoisDoComentario, ticketSaiComOCartao, ticketVoltaComOCartao } from '../lib/kanban.js';
+import { PREFIXO, TIPOS, PRIORIDADES, AUTOMATICO, chaveDe, numeroDaChave, passosDaSincronizacao, passosDoComentarioQa, colunaDoComentarioQa, passosDoComentario, colunaDepoisDoComentario, ticketSaiComOCartao, ticketVoltaComOCartao, passosDoPaiSegue } from '../lib/kanban.js';
 import { lerAte, tipoDoFicheiro, TIPOS_DOS_ANEXOS, FRASE_DOS_TIPOS, nomePorOmissao, comExtensao, disposicaoDeDescarga } from '../lib/imagens.js';
 
 // O começo de todos os caminhos daqui.
@@ -253,6 +253,16 @@ function naoHaCartao() {
   return err(404, 'Cartão não encontrado.');
 }
 
+/* Os passos de «o pai segue os subtickets» (lib/kanban.js:passosDoPaiSegue)
+   ligados à base, a juntar ao lote de uma escrita que mexeu num subticket;
+   num cartão que não é subticket, nenhum.
+   Recebe: env; k — o cartão (id, numero, sub); eu — a sessão (quem mexeu); agora — ms.
+   Devolve: a lista das instruções preparadas. */
+function paiSegue(env, k, eu, agora) {
+  if (!k || k.sub == null) return [];
+  return passosDoPaiSegue(k.id, { chave: chaveDe(k.numero), nome: quem(eu).nome }, agora).map((p) => env.DB.prepare(p.sql).bind(...p.params));
+}
+
 /* A resposta quando a auditoria não escreveu: sem rasto, o kanban não se mexe.
    Recebe: nada.
    Devolve: a Response 500. */
@@ -406,7 +416,7 @@ async function responsavelValido(env, eu, v) {
    true para trazer também a descrição e o relator (o detalhe de um cartão).
    Devolve: o texto do SQL, por coluna e posição. */
 function sqlDosCartoes(onde, completo) {
-  return 'SELECT k.id, k.numero, k.tipo, k.titulo, k.coluna_id, k.posicao, k.prioridade, k.responsavel_id, k.responsavel_nome,' +
+  return 'SELECT k.id, k.numero, k.sub, k.tipo, k.titulo, k.coluna_id, k.posicao, k.prioridade, k.responsavel_id, k.responsavel_nome,' +
     ' k.prazo, k.origem_tipo, k.origem_id, k.origem_estado, k.created_at, k.updated_at, k.concluido_at,' +
     (completo ? ' k.descricao, k.relator_id, k.relator_nome,' : '') +
     ' p.numero AS pai_numero, p.titulo AS pai_titulo, p.tipo AS pai_tipo,' +
@@ -456,7 +466,7 @@ function descricaoOculta(r, ve) {
 
 /* Uma linha de sqlDosCartoes na forma que sai (o CartaoCurto do contrato).
    Recebe: r — a linha; ve — se a sessão vê os pedidos (vePedidos).
-   Devolve: o cartão {id, chave, numero, tipo, titulo, coluna_id, posicao,
+   Devolve: o cartão {id, chave, numero, sub (o X de um subticket KAN-N-X, ou null), tipo, titulo, coluna_id, posicao,
    prioridade, etiquetas, responsavel, pai, prazo, origem, comentarios,
    anexos, subtarefas, bloqueado, created_at, updated_at, concluido_at}, e
    descricaoOculta: true quando a descrição dele não é para esta sessão. A
@@ -467,6 +477,7 @@ function cartaoCurto(r, ve) {
     id: r.id,
     chave: chaveDe(r.numero),
     numero: r.numero,
+    sub: r.sub == null ? null : r.sub,
     tipo: r.tipo,
     titulo: r.titulo,
     coluna_id: r.coluna_id,
@@ -777,6 +788,9 @@ async function editarCartao(env, request, eu, chave) {
   };
 
   const tipo = tem('tipo') ? tipoValido(b.tipo) : k.tipo;
+  // um subticket é a Subtarefa do seu pai pela chave (KAN-N-X): nem o tipo nem o pai mudam
+  if (k.sub != null && tipo !== k.tipo) throw recusa(400, 'Um subticket é sempre uma subtarefa do pai.', 'tipo');
+  if (k.sub != null && tem('pai') && numeroDaChave(b.pai) !== k.pai_numero) throw recusa(400, 'Um subticket fica com o pai da chave dele.', 'pai');
   if (tipo !== k.tipo) muda('tipo', 'tipo', tipo, k.tipo, tipo);
   if (tem('titulo')) {
     const t = tituloValido(b.titulo);
@@ -868,6 +882,7 @@ function lugarNaColuna(lista, i) {
    de 1024 em 1024 numa instrução (a ordem nova por json_each). Mudar de
    coluna deixa a linha «coluna» no histórico e acerta o concluido_at pela
    coluna de fim; reordenar não deixa linha. O ticket de QA de origem vai com o cartão (o gatilho kanban_qa_coluna da migração 0029); um pedido nunca muda.
+   Um subticket (KAN-N-X) que muda de coluna leva o pai, no mesmo lote (paiSegue).
    Recebe: env; request — o corpo; eu — a sessão; chave — a do cartão.
    Devolve: promessa da Response {cartao}, 404 ou a recusa. */
 async function moverCartao(env, request, eu, chave) {
@@ -907,6 +922,8 @@ async function moverCartao(env, request, eu, chave) {
   if (mudaColuna) {
     passos.push(env.DB.prepare("INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) VALUES (?, ?, ?, ?, 'coluna', ?, ?)")
       .bind(k.id, agora, autor.id, autor.nome, k.coluna_id, col.id));
+    // um subticket que muda de coluna leva o pai atrás (KAN-162)
+    passos.push(...paiSegue(env, k, eu, agora));
   }
   await env.DB.batch(passos);
   return devolverCartao(env, k.id, eu);
@@ -916,7 +933,8 @@ async function moverCartao(env, request, eu, chave) {
    (removed_at), para o Anular; sai do quadro e deixa a linha «removido». O
    cartão de um ticket de QA leva o ticket, no mesmo lote e com o mesmo
    removed_at (lib/kanban.js:ticketSaiComOCartao): sai da pílula e do
-   scripts/qa.mjs listar, e o Anular repõe os dois.
+   scripts/qa.mjs listar, e o Anular repõe os dois. Um subticket que sai
+   deixa de contar para o pai, que segue os que ficam (paiSegue).
    Recebe: env; eu — a sessão; chave — a do cartão.
    Devolve: promessa da Response {ok}, 403 ou 404. */
 async function removerCartao(env, eu, chave) {
@@ -930,7 +948,8 @@ async function removerCartao(env, eu, chave) {
       .bind(agora, autor.id, agora, k.id),
     env.DB.prepare("INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) VALUES (?, ?, ?, ?, 'removido', NULL, NULL)")
       .bind(k.id, agora, autor.id, autor.nome),
-  ].concat(k.origem_tipo === 'qa' && k.origem_id ? [ticketSaiComOCartao(k.origem_id, agora)].map((p) => env.DB.prepare(p.sql).bind(...p.params)) : []));
+  ].concat(k.origem_tipo === 'qa' && k.origem_id ? [ticketSaiComOCartao(k.origem_id, agora)].map((p) => env.DB.prepare(p.sql).bind(...p.params)) : [],
+    paiSegue(env, k, eu, agora)));
   return json({ ok: true });
 }
 
@@ -939,7 +958,8 @@ async function removerCartao(env, eu, chave) {
    dele entretanto saiu) e deixa a linha «reposto». O ticket de QA que saiu
    com ele volta também (lib/kanban.js:ticketVoltaComOCartao: o do mesmo
    removed_at; um que a limpeza das 24 h já apagou não volta). Um que não
-   está removido responde como está, sem escrever.
+   está removido responde como está, sem escrever. Um subticket que volta
+   volta a contar para o pai (paiSegue).
    Recebe: env; eu — a sessão; chave — a do cartão.
    Devolve: promessa da Response {cartao}, 403 ou 404. */
 async function reporCartao(env, eu, chave) {
@@ -955,7 +975,8 @@ async function reporCartao(env, eu, chave) {
       ' WHERE id = ?').bind(agora, k.id),
     env.DB.prepare("INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) VALUES (?, ?, ?, ?, 'reposto', NULL, NULL)")
       .bind(k.id, agora, autor.id, autor.nome),
-  ].concat(k.origem_tipo === 'qa' && k.origem_id ? [ticketVoltaComOCartao(k.origem_id, k.removed_at, agora)].map((p) => env.DB.prepare(p.sql).bind(...p.params)) : []));
+  ].concat(k.origem_tipo === 'qa' && k.origem_id ? [ticketVoltaComOCartao(k.origem_id, k.removed_at, agora)].map((p) => env.DB.prepare(p.sql).bind(...p.params)) : [],
+    paiSegue(env, k, eu, agora)));
   return devolverCartao(env, k.id, eu);
 }
 
@@ -978,7 +999,9 @@ function textoDoComentario(v) {
    responder. Nos outros, o comentário de uma pessoa num cartão em Human
    Tests devolve-o ao topo de A fazer (recusar é comentar o que está mal),
    também o de um pedido desde 2026-11-16 (KAN-137), sem mexer no pedido;
-   noutra coluna fica onde está (lib/kanban.js:passosDoComentario).
+   noutra coluna fica onde está (lib/kanban.js:passosDoComentario). O
+   comentário num subticket (KAN-N-X) em Human Tests devolve-o, e ao pai, a A
+   fazer (paiSegue): há o que responder.
    Recebe: env; request — o corpo {texto*}; eu — a sessão; chave — a do cartão.
    Devolve: promessa da Response {comentario, coluna_id (a do cartão depois)}, 404 ou a recusa. */
 async function comentar(env, request, eu, chave) {
@@ -999,7 +1022,7 @@ async function comentar(env, request, eu, chave) {
     });
   }
   const passos = passosDoComentario({ cartao: { id: k.id, coluna_id: k.coluna_id, origem_tipo: k.origem_tipo }, autor, texto, uuid: id, agora });
-  await env.DB.batch(passos.map((p) => env.DB.prepare(p.sql).bind(...p.params)));
+  await env.DB.batch(passos.map((p) => env.DB.prepare(p.sql).bind(...p.params)).concat(paiSegue(env, k, eu, agora)));
   return json({
     comentario: comentarioParaFora({ id, autor_id: autor.id, autor_nome: autor.nome, texto, created_at: agora, updated_at: agora }, autor.id),
     coluna_id: colunaDepoisDoComentario(k, autor.id),

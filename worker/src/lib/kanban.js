@@ -98,20 +98,90 @@ export function ticketQaNaColuna(id, coluna, agora, extra) {
   };
 }
 
-/* A chave de um cartão a partir do número.
-   Recebe: numero — o N (inteiro positivo).
-   Devolve: o texto 'KAN-N'. */
+/* Os subtickets (KAN-162, as decisões do Martinho, 2026-11-25): um cartão
+   que testa várias coisas diferentes parte-se em cartões próprios, um por
+   teste, com a chave do pai e «-X» no fim (KAN-126-1, KAN-126-2…), cada um
+   aceite ou comentado à parte, e o pai segue-os (passosDoPaiSegue). São
+   Subtarefas do pai (pai_id) com a coluna sub (migrations/0033_subtickets.sql)
+   a guardar o X; o numero, que é NOT NULL UNIQUE desde a 0028, é o do pai e o
+   X codificados num inteiro NEGATIVO, -(N × SUB_BASE + X): nunca colide com
+   uma chave KAN-N (sempre positiva), não mexe no contador (que sobe pelo
+   MAX(numero)) e deixa o chaveDe e o numeroDaChave de sempre servirem os
+   dois — as rotas, o quadro, a pesquisa e os scripts procuram pelo numero. */
+
+// Quantos subtickets cabem num pai: o X vai de 1 a SUB_BASE - 1.
+export const SUB_BASE = 1000;
+
+/* O numero de um subticket.
+   Recebe: pai — o N do pai (inteiro positivo); x — o X (1 a 999).
+   Devolve: o inteiro negativo -(N × 1000 + X). */
+export function numeroDoSubticket(pai, x) {
+  return -(Number(pai) * SUB_BASE + Number(x));
+}
+
+/* A chave de um cartão a partir do número: KAN-N, ou KAN-N-X num subticket
+   (o numero negativo de numeroDoSubticket).
+   Recebe: numero — o N (inteiro positivo) ou o de um subticket (negativo).
+   Devolve: o texto 'KAN-N' ou 'KAN-N-X'. */
 export function chaveDe(numero) {
-  return PREFIXO + Number(numero);
+  const n = Number(numero);
+  if (n < 0) return PREFIXO + Math.floor(-n / SUB_BASE) + '-' + (-n % SUB_BASE);
+  return PREFIXO + n;
 }
 
 /* O número de uma chave, aceite com ou sem o prefixo e em qualquer caixa
-   ('KAN-77', 'kan-77', '77').
+   ('KAN-77', 'kan-77', '77'), e a de um subticket ('KAN-126-1', '126-1').
    Recebe: chave — o texto.
-   Devolve: o inteiro positivo, ou null quando o texto não é uma chave. */
+   Devolve: o inteiro (positivo num cartão, negativo num subticket:
+   numeroDoSubticket), ou null quando o texto não é uma chave. */
 export function numeroDaChave(chave) {
-  const m = /^(?:kan-)?([1-9]\d{0,8})$/i.exec(String(chave == null ? '' : chave).trim());
-  return m ? Number(m[1]) : null;
+  const m = /^(?:kan-)?([1-9]\d{0,8})(?:-([1-9]\d{0,2}))?$/i.exec(String(chave == null ? '' : chave).trim());
+  if (!m) return null;
+  return m[2] ? numeroDoSubticket(m[1], m[2]) : Number(m[1]);
+}
+
+/* O número do pai de uma chave de subticket (KAN-126-1 → 126), ou o da
+   própria chave quando não é de um subticket.
+   Recebe: numero — o de numeroDaChave.
+   Devolve: o inteiro positivo, ou null. */
+export function numeroDoPai(numero) {
+  const n = Number(numero);
+  if (!n) return null;
+  return n < 0 ? Math.floor(-n / SUB_BASE) : n;
+}
+
+/* Os passos de um «O que testar» (KAN-159: «Os passos a seguir para testar
+   devem estar formatados como lista numerada»): parte o texto em blocos (pelas
+   linhas em branco) e, em cada bloco, os passos «1. … 2. … 3. …», numa linha
+   só ou em linhas, numerados de seguida a partir do 1 (também «1)»); o que
+   vem antes do 1 fica como o começo do bloco («O que testar:»). Um bloco com
+   menos de dois passos fica como está. É a regra única da pílula e do back
+   office: a pílula (web/cloud/qa.js) não importa módulos e tem a cópia
+   qaPassosDoTexto, que o testes/kanban-subtickets.test.js obriga a ser esta
+   letra a letra, e o guião do back office tem outra, kbPassosDoTexto
+   (worker/src/equipa-kanban.js), presa pelo mesmo teste. Por isso é ES5,
+   sem nada de fora e sem crases nem cifrões.
+   Recebe: texto — o texto (qualquer valor).
+   Devolve: null quando nenhum bloco tem passos (quem chama mostra o texto
+   como sempre); ou a lista dos blocos, cada um {texto} (sem passos) ou
+   {antes, passos: [texto, …]} (dois ou mais). */
+export function passosDoTexto(texto) {
+  var t = String(texto == null ? '' : texto).replace(/\r\n?/g, '\n');
+  var algum = false;
+  var blocos = t.split(/\n[ \t]*\n/).map(function (b) {
+    var re = /(^|\s)(\d{1,2})[.)](?=\s)/g, marcas = [], m, n = 1;
+    while ((m = re.exec(b))) {
+      if (Number(m[2]) !== n) continue;
+      marcas.push({ i: m.index + m[1].length, fim: re.lastIndex });
+      n++;
+    }
+    if (marcas.length < 2) return { texto: b.trim() };
+    var passos = marcas.map(function (x, j) { return b.slice(x.fim, j + 1 < marcas.length ? marcas[j + 1].i : b.length).replace(/\s+/g, ' ').trim(); });
+    if (passos.some(function (p) { return !p; })) return { texto: b.trim() };
+    algum = true;
+    return { antes: b.slice(0, marcas[0].i).trim(), passos: passos };
+  }).filter(function (x) { return x.passos || x.texto; });
+  return algum ? blocos : null;
 }
 
 /* A coluna para onde vai o cartão de uma origem que chegou a um estado.
@@ -450,6 +520,78 @@ export function passosDoCartaoNaColuna(cartaoId, coluna, autor, agora) {
         ' THEN CASE WHEN coluna_id IN (SELECT id FROM kanban_colunas WHERE fim = 1) THEN COALESCE(concluido_at, ?) ELSE ? END ELSE NULL END,' +
         ' coluna_id = ?, updated_at = ? WHERE ' + muda,
       params: [coluna, coluna, agora, agora, coluna, agora, cartaoId, coluna],
+    },
+  ];
+}
+
+// Quem assina, no histórico e no rasto, o que o pai faz por seguir os subtickets (passosDoPaiSegue).
+export const SUBTICKETS = { id: 'subtickets', nome: 'Subtickets' };
+
+// As colunas onde um pai segue os subtickets: as de quem testa e as de fim. Em A fazer, em Auto Tests
+// (alguém está a trabalhar nele: só o resolver o tira de lá) ou noutra coluna, o pai fica onde está.
+export const COLUNAS_QUE_SEGUEM = [QA_RESOLVIDO, KAN_STAGING, KAN_ADIADO, KAN_PRODUCAO];
+
+/* A coluna para onde o pai vai, pelos subtickets vivos dele, em SQL (as
+   decisões do Martinho, 2026-11-25, e os pressupostos do KAN-162): algum em
+   A fazer ou em Auto Tests (comentado ou reaberto) → A fazer; todos em
+   Produção → Produção; todos em Staging (ou já em Produção) → Staging; todos
+   em Staging ou Adiado, com algum Adiado → Adiado (um commit não se promove
+   aos bocados: o promove lê o KAN-N do pai); senão (algum em Human Tests,
+   em Para depois ou noutra) → Human Tests.
+   Recebe: eu — o nome (ou o alias) da tabela do pai na instrução.
+   Devolve: a expressão (texto). */
+function sqlAlvoDoPai(eu) {
+  const algum = (cond) => 'EXISTS (SELECT 1 FROM kanban_cartoes f WHERE f.pai_id = ' + eu + '.id AND f.sub IS NOT NULL AND f.removed_at IS NULL AND ' + cond + ')';
+  return 'CASE WHEN ' + algum("f.coluna_id IN ('" + QA_NOVO + "', '" + QA_EM_CURSO + "')") + " THEN '" + QA_NOVO + "'" +
+    ' WHEN NOT ' + algum("f.coluna_id <> '" + KAN_PRODUCAO + "'") + " THEN '" + KAN_PRODUCAO + "'" +
+    ' WHEN NOT ' + algum("f.coluna_id NOT IN ('" + KAN_STAGING + "', '" + KAN_PRODUCAO + "')") + " THEN '" + KAN_STAGING + "'" +
+    ' WHEN NOT ' + algum("f.coluna_id NOT IN ('" + KAN_STAGING + "', '" + KAN_ADIADO + "', '" + KAN_PRODUCAO + "')") + " THEN '" + KAN_ADIADO + "'" +
+    " ELSE '" + QA_RESOLVIDO + "' END";
+}
+
+/* Os passos de «o pai segue os subtickets», a juntar ao lote de qualquer
+   escrita que mexa num subticket (mover, aceitar, comentar, remover, repor:
+   as rotas do kanban e da pílula, e os scripts kanban.mjs e promover.mjs):
+   se o cartão é um subticket e o pai dele está numa das COLUNAS_QUE_SEGUEM,
+   o pai vai para a coluna que os subtickets dizem (sqlAlvoDoPai), para o
+   topo dela, com o concluido_at acertado (posto ao entrar numa de fim,
+   mantido entre duas de fim, tirado nas outras), a linha «coluna» no
+   histórico do pai e a kanban.seguir no rasto, as duas assinadas pelos
+   Subtickets (SUBTICKETS) com o subticket e quem mexeu: é assim que se vê que
+   foi por causa dos filhos. O ticket de QA do pai vai com ele (o gatilho
+   kanban_qa_coluna da 0029). Num cartão que não é um subticket, ou com o pai
+   já na coluna certa, nada muda: os passos podem ir sempre.
+   Recebe: filhoId — o id do cartão que mudou; porque — {chave (a do
+   subticket), nome (de quem mexeu; pode faltar)}; agora — ms.
+   Devolve: a lista de {sql, params} (três). */
+export function passosDoPaiSegue(filhoId, porque, agora) {
+  const p = porque || {};
+  const motivo = String(p.chave || 'subticket') + (p.nome ? ', ' + p.nome : '');
+  const doPai = '(SELECT pai_id FROM kanban_cartoes WHERE id = ? AND sub IS NOT NULL)';
+  const segue = (eu) => eu + '.id = ' + doPai + ' AND ' + eu + '.removed_at IS NULL AND ' + eu + ".coluna_id IN ('" + COLUNAS_QUE_SEGUEM.join("', '") + "')" +
+    ' AND EXISTS (SELECT 1 FROM kanban_cartoes f WHERE f.pai_id = ' + eu + '.id AND f.sub IS NOT NULL AND f.removed_at IS NULL)' +
+    ' AND ' + eu + '.coluna_id <> (' + sqlAlvoDoPai(eu) + ')' +
+    ' AND EXISTS (SELECT 1 FROM kanban_colunas c WHERE c.id = (' + sqlAlvoDoPai(eu) + '))';
+  const alvo = sqlAlvoDoPai('kanban_cartoes');
+  const fim = 'SELECT id FROM kanban_colunas WHERE fim = 1';
+  return [
+    {
+      sql: "INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) SELECT p.id, ?, ?, ?, 'coluna', p.coluna_id, " + sqlAlvoDoPai('p') +
+        ' FROM kanban_cartoes p WHERE ' + segue('p'),
+      params: [agora, SUBTICKETS.id, SUBTICKETS.nome + ' (' + motivo + ')', filhoId],
+    },
+    {
+      sql: "INSERT INTO audit_log (at, quem, nome, papel, acao, alvo, detalhe) SELECT ?, ?, ?, 'automatico', 'kanban.seguir', '" + PREFIXO + "' || p.numero," +
+        " p.coluna_id || ' → ' || " + sqlAlvoDoPai('p') + " || ' (' || ? || ')' FROM kanban_cartoes p WHERE " + segue('p'),
+      params: [agora, SUBTICKETS.id, SUBTICKETS.nome, 'pelos subtickets: ' + motivo, filhoId],
+    },
+    {
+      sql: 'UPDATE kanban_cartoes SET' +
+        ' posicao = (SELECT COALESCE(MIN(x.posicao), 1024) - 1024 FROM kanban_cartoes x WHERE x.coluna_id = (' + alvo + ') AND x.removed_at IS NULL),' +
+        ' concluido_at = CASE WHEN (' + alvo + ') IN (' + fim + ')' +
+        ' THEN CASE WHEN coluna_id IN (' + fim + ') THEN COALESCE(concluido_at, ?) ELSE ? END ELSE NULL END,' +
+        ' updated_at = ?, coluna_id = (' + alvo + ') WHERE ' + segue('kanban_cartoes'),
+      params: [agora, agora, agora, filhoId],
     },
   ];
 }

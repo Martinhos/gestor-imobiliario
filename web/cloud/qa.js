@@ -1249,10 +1249,29 @@ function qaSeccoes(ts) {
     }
     porId[id].ts.push(t);
   });
-  seccoes.forEach(function (s) { s.ts.sort(qaColunaResolvida(s.id) ? porResolucao : porPrioridade); });
+  seccoes.forEach(function (s) { s.ts = qaFilhosAoPai(s.ts.sort(qaColunaResolvida(s.id) ? porResolucao : porPrioridade)); });
   var abertos = [];
   seccoes.forEach(function (s) { if (qaColunaPorConcluir(s.id)) abertos = abertos.concat(s.ts); });
   return { seccoes: seccoes, abertos: abertos };
+}
+
+/* Os subtickets de uma secção logo a seguir ao pai, pelo X (KAN-162), quando
+   o pai está na mesma secção; os outros ficam onde a ordem os pôs.
+   Recebe: ts — os itens da secção, já arrumados.
+   Devolve: a lista nova. */
+function qaFilhosAoPai(ts) {
+  var naSeccao = {};
+  ts.forEach(function (t) { if (t.cartao) naSeccao[t.cartao] = true; });
+  var dePai = function (t) { return qaESubticket(t) && naSeccao[t.pai.cartao]; };
+  var out = [];
+  ts.forEach(function (t) {
+    if (dePai(t)) return;
+    out.push(t);
+    ts.filter(function (f) { return dePai(f) && f.pai.cartao === t.cartao; })
+      .sort(function (a, b) { return Number(a.sub) - Number(b.sub); })
+      .forEach(function (f) { out.push(f); });
+  });
+  return out;
 }
 
 /* Abre a janela «Tickets»: logo com o que já se sabe (ou a espera), e
@@ -1410,7 +1429,7 @@ function qaDobrar(chave) {
    Devolve: o HTML (texto). */
 function qaHtmlLinha(t) {
   var tipo = qaNomeDoTipo(t), pedido = qaEPedido(t);
-  return '<button type="button" class="qa-linha" data-toca="camada" data-click="qaAbrirTicket(\'' + jsq(t.id) + '\')">' +
+  return '<button type="button" class="qa-linha' + (qaESubticket(t) ? ' qa-linha-sub' : '') + '" data-toca="camada" data-click="qaAbrirTicket(\'' + jsq(t.id) + '\')">' +
     '<span class="qa-linha-cab">' + (pedido ? '' : qaSelo(qaPrioridade(t))) +
       (tipo ? '<span class="small qa-tipo">' + esc(tipo) + '</span>' : '') +
       (typeof t.cartao === 'string' && t.cartao ? '<span class="small num qa-cartao">' + esc(t.cartao) + '</span>' : '') +
@@ -1422,13 +1441,15 @@ function qaHtmlLinha(t) {
 }
 
 /* O nome do tipo de um cartão, para a linha e para a janela: «Pedido» num
-   pedido de uma pessoa, o do kanban (QA_NOMES_DOS_TIPOS) nos outros tipos,
+   pedido de uma pessoa, «Subticket» num subticket (KAN-N-X), o do kanban
+   (QA_NOMES_DOS_TIPOS) nos outros tipos,
    e nada num Erro (o que a pílula sempre mostrou) nem num item sem tipo (um
    servidor de antes dos tipos).
    Recebe: t — o item.
    Devolve: o texto ('' sem nada a dizer). */
 function qaNomeDoTipo(t) {
   if (qaEPedido(t)) return 'Pedido';
+  if (qaESubticket(t)) return 'Subticket';
   var tipo = t && typeof t.tipo === 'string' ? t.tipo : '';
   return tipo && tipo !== 'erro' && QA_NOMES_DOS_TIPOS[tipo] ? QA_NOMES_DOS_TIPOS[tipo] : '';
 }
@@ -1489,6 +1510,51 @@ function qaAutor(t, comEmail) {
   if (eu) nome += ' (eu)';
   if (comEmail && a.nome && a.email) nome += ' · ' + String(a.email);
   return nome;
+}
+
+/* Os passos de um «O que testar» (KAN-159): a cópia, letra a letra, de
+   worker/src/lib/kanban.js:passosDoTexto (a pílula não importa módulos; o
+   testes/kanban-subtickets.test.js obriga as duas a serem iguais). Parte o
+   texto em blocos pelas linhas em branco e, em cada um, os passos «1. … 2. …»
+   numerados de seguida a partir do 1; um bloco com menos de dois fica como está.
+   Recebe: texto — o texto (qualquer valor).
+   Devolve: null sem passos em nenhum bloco; ou os blocos, cada um {texto} ou
+   {antes, passos: [texto, …]}. */
+function qaPassosDoTexto(texto) {
+  var t = String(texto == null ? '' : texto).replace(/\r\n?/g, '\n');
+  var algum = false;
+  var blocos = t.split(/\n[ \t]*\n/).map(function (b) {
+    var re = /(^|\s)(\d{1,2})[.)](?=\s)/g, marcas = [], m, n = 1;
+    while ((m = re.exec(b))) {
+      if (Number(m[2]) !== n) continue;
+      marcas.push({ i: m.index + m[1].length, fim: re.lastIndex });
+      n++;
+    }
+    if (marcas.length < 2) return { texto: b.trim() };
+    var passos = marcas.map(function (x, j) { return b.slice(x.fim, j + 1 < marcas.length ? marcas[j + 1].i : b.length).replace(/\s+/g, ' ').trim(); });
+    if (passos.some(function (p) { return !p; })) return { texto: b.trim() };
+    algum = true;
+    return { antes: b.slice(0, marcas[0].i).trim(), passos: passos };
+  }).filter(function (x) { return x.passos || x.texto; });
+  return algum ? blocos : null;
+}
+
+/* Um texto da janela de um item (a descrição, a resolução, um comentário)
+   em HTML: como sempre, num parágrafo com as mudanças de linha, quando não
+   tem passos; com passos (qaPassosDoTexto), um parágrafo por bloco e os
+   passos numa lista numerada (.qa-passos), o começo do bloco («O que
+   testar:») por cima dela.
+   Recebe: texto — o texto; cls — a classe dos parágrafos ('qa-ver-txt',
+   'qa-com-txt', ou '' na resolução).
+   Devolve: o HTML (texto). */
+function qaHtmlTexto(texto, cls) {
+  var p = function (t) { return '<p' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(t) + '</p>'; };
+  var blocos = qaPassosDoTexto(texto);
+  if (!blocos) return p(String(texto == null ? '' : texto));
+  return '<div class="qa-texto">' + blocos.map(function (b) {
+    if (!b.passos) return p(b.texto);
+    return (b.antes ? p(b.antes) : '') + '<ol class="qa-passos">' + b.passos.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol>';
+  }).join('') + '</div>';
 }
 
 /* O começo do texto de um ticket, numa linha.
@@ -1618,10 +1684,61 @@ function qaHtmlTopo(t) {
   var texto = String(t.body || '').trim();
   return '<div class="qa-ver-cab">' + qaSeloEstado(t.status) + qaSelo(qaPrioridade(t)) + cartao + '</div>' +
     '<p class="small qa-quem">' + esc(qaAutor(t, true)) + ' · ' + esc(qaQuando(t.created_at)) + '</p>' +
-    titulo + (texto ? '<p class="qa-ver-txt">' + esc(texto) + '</p>' : (titulo ? '' : '<p class="hint">Sem descrição.</p>')) +
+    qaHtmlDoPai(t) + titulo + (texto ? qaHtmlTexto(texto, 'qa-ver-txt') : (titulo ? '' : '<p class="hint">Sem descrição.</p>')) +
     (t.imagem ? '<div class="qa-ver-img a-carregar" aria-busy="true"><span class="qa-so-leitor">A carregar a captura</span></div>' : '') +
     (t.resolution ? '<div class="qa-resolucao' + (resolvido ? '' : ' anterior') + '"><b>' + (resolvido ? 'Resolução' : 'Resolução anterior') + '</b>' +
-      '<p>' + esc(t.resolution) + '</p>' + (resolvido && t.resolved_at ? '<span class="small">' + esc(qaQuando(t.resolved_at)) + '</span>' : '') + '</div>' : '');
+      qaHtmlTexto(t.resolution, '') + (resolvido && t.resolved_at ? '<span class="small">' + esc(qaQuando(t.resolved_at)) + '</span>' : '') + '</div>' : '') +
+    qaHtmlSubtickets(t);
+}
+
+/* Num subticket (KAN-N-X, KAN-162), de quem é: «Subticket do KAN-N», com o
+   título do pai, a tocar para o abrir.
+   Recebe: t — o item.
+   Devolve: o HTML (texto, '' num cartão que não é subticket). */
+function qaHtmlDoPai(t) {
+  if (!qaESubticket(t)) return '';
+  return '<button type="button" class="qa-do-pai" data-toca="camada" data-click="qaAbrirTicket(\'' + jsq(qaIdDoCartao(t.pai.cartao)) + '\')">' +
+    '<span class="small">Subticket do <span class="num">' + esc(t.pai.cartao) + '</span></span><span class="qa-do-pai-tit">' + esc(t.pai.titulo || '') + '</span></button>';
+}
+
+/* Os subtickets de um pai (KAN-162): cada um com a chave, o título e a
+   coluna onde está, a tocar para o abrir; por cima, o que isso quer dizer
+   — cada um aceita-se ou comenta-se à parte, e o cartão segue-os.
+   Recebe: t — o item.
+   Devolve: o HTML (texto, '' sem subtickets). */
+function qaHtmlSubtickets(t) {
+  var subs = qaSubticketsDe(t);
+  if (!subs.length) return '';
+  var porDecidir = subs.filter(function (s) { return s.status === QA_COL_RESOLVIDO; }).length;
+  return '<section class="qa-subs" aria-labelledby="qa_subs_tit"><h3 class="qa-coms-tit" id="qa_subs_tit">Subtickets</h3>' +
+    '<p class="hint">' + (porDecidir ? 'Testa e decide cada um à parte; este cartão segue-os.' : 'Este cartão segue os subtickets.') + '</p>' +
+    '<ul class="qa-subs-lista">' + subs.map(function (s) {
+      return '<li><button type="button" class="qa-sub" data-toca="camada" data-click="qaAbrirTicket(\'' + jsq(qaIdDoCartao(s.cartao)) + '\')">' +
+        '<span class="small num qa-cartao">' + esc(s.cartao) + '</span><span class="qa-sub-tit">' + esc(s.titulo || '') + '</span>' + qaSeloEstado(s.status) + '</button></li>';
+    }).join('') + '</ul></section>';
+}
+
+/* O item é um subticket (KAN-N-X, KAN-162)? O servidor diz-lhe o X e o pai.
+   Recebe: t — o item.
+   Devolve: true ou false. */
+function qaESubticket(t) {
+  return !!t && t.sub != null && !!t.pai && typeof t.pai.cartao === 'string';
+}
+
+/* Os subtickets de um pai, como o servidor os manda ([{cartao, titulo, status}]).
+   Recebe: t — o item.
+   Devolve: a lista (vazia sem subtickets). */
+function qaSubticketsDe(t) {
+  return t && Array.isArray(t.subtickets) ? t.subtickets.filter(function (s) { return s && typeof s.cartao === 'string'; }) : [];
+}
+
+/* O id de um item na lista pela chave do cartão: o do ticket quando o cartão
+   tem um (os de QA), a própria chave nos outros.
+   Recebe: chave — 'KAN-N' ou 'KAN-N-X'.
+   Devolve: o id. */
+function qaIdDoCartao(chave) {
+  var t = (qaLista.tickets || []).filter(function (x) { return x.cartao === chave; })[0];
+  return t ? t.id : chave;
 }
 
 /* --------------------------------------------------------- os comentários */
@@ -1666,7 +1783,7 @@ function qaHtmlListaComentarios(cs) {
     var quem = String(a.nome || a.id || 'Alguém') + (c.meu ? ' (eu)' : '');
     return '<li class="qa-com' + (c.aEnviar ? ' a-enviar' : '') + '">' +
       '<p class="small qa-quem">' + esc(quem) + ' · ' + esc(c.aEnviar ? 'a enviar…' : qaQuando(c.created_at)) + '</p>' +
-      '<p class="qa-com-txt">' + esc(c.texto) + '</p></li>';
+      qaHtmlTexto(c.texto, 'qa-com-txt') + '</li>';
   }).join('') + '</ol>';
 }
 
@@ -1833,7 +1950,9 @@ function qaSeloEstado(status) {
    há, porque remover um cartão é do master, no kanban — e, a seguir:
    - em Human Tests, só as três decisões de quem testa (qaHtmlDecisoes), em
      vez do «Mover» (pedido do Martinho, 2026-11-11: «em vez do mover, não
-     adicionalmente») — o ticket está à espera de um sim ou de um não;
+     adicionalmente») — o ticket está à espera de um sim ou de um não; num
+     pai com subtickets ainda em Human Tests (KAN-162), nenhuma: decide-se em
+     cada subticket e o pai segue-os («Mover» e «Fechar», como nas outras);
    - nas outras colunas, «Mover» (as outras colunas do kanban, num menu de
      ações: qaHtmlMover) e, a acabar, «Enviar para produção» em Adiado (vai
      a Staging: qaEnviarProducao), «Reabrir» numa outra coluna de fim (volta
@@ -1846,7 +1965,10 @@ function qaRodapeTicket(t) {
   var fechar = '<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Fechar</button>';
   if (qaEPedido(t)) return fechar;
   var remover = !qaTemTicket(t) ? '' : '<button type="button" class="btn qa-remover" data-toca="dados" data-risco="destroi" data-click="qaRemover(\'' + id + '\')">' + ic('trash', 16) + '<span class="qa-remover-txt"> Remover</span></button>';
-  if (t.status === QA_COL_RESOLVIDO) return remover + qaHtmlDecisoes(t);
+  // um pai com subtickets por decidir decide-se em cada um (KAN-162): o cartão segue-os
+  var decideNosFilhos = qaSubticketsDe(t).some(function (s) { return s.status === QA_COL_RESOLVIDO; });
+  if (t.status === QA_COL_RESOLVIDO && !decideNosFilhos) return remover + qaHtmlDecisoes(t);
+  if (t.status === QA_COL_RESOLVIDO) return remover + qaHtmlMover(t) + fechar;
   var fim = t.status === QA_COL_ADIADO
     ? '<button type="button" class="btn primary" data-toca="dados" data-click="qaEnviarProducao(\'' + id + '\')">Enviar para produção</button>'
     : qaColunaResolvida(t.status)

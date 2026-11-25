@@ -8671,6 +8671,32 @@ deploy de produção move depois de a produção responder): um erro fechado ant
 disso reabria-se sozinho na ocorrência seguinte. Uma base sem a 0024 (a
 produção até ao «promove») lista na mesma, e lá nenhum pedido se implementa.
 
+**Os passos numerados** (KAN-159). O «O que testar» lê-se como lista numerada: a
+descrição, a resolução e os comentários de um item passam por
+cloud/qa.js:qaHtmlTexto, que parte o texto em blocos (pelas linhas em branco) e,
+num bloco com passos «1. … 2. …» (numa linha só ou em linhas, numerados de
+seguida a partir do 1, também «1)»), escreve o começo do bloco («O que testar:»)
+num parágrafo e os passos numa lista numerada (.qa-passos), com os números na
+cor da frente. Um bloco com menos de dois passos fica como sempre, num parágrafo
+com as mudanças de linha. A regra é uma só, worker/src/lib/kanban.js:passosDoTexto:
+a pílula, que não importa módulos, tem a cópia cloud/qa.js:qaPassosDoTexto, e o
+back office, cujo guião também não importa, tem outra,
+worker/src/equipa-kanban.js:kbPassosDoTexto (e escreve o HTML em
+worker/src/equipa-kanban.js:kbTextoHtml); o testes/kanban-subtickets.test.js
+obriga as três a serem iguais letra a letra.
+
+**Os subtickets na pílula** (KAN-162). Um subticket (KAN-N-X) é um item como os
+outros, com o tipo «Subticket» na linha (cloud/qa.js:qaNomeDoTipo); na lista vem
+logo por baixo do pai quando estão na mesma secção, recolhido para dentro e com
+um fio do lado (cloud/qa.js:qaFilhosAoPai, .qa-linha-sub). A janela dele diz de
+quem é, num botão que abre o pai (cloud/qa.js:qaHtmlDoPai), e mostra o seu «O que
+testar» numerado, os seus comentários e o seu Aceitar. A janela do pai lista os
+subtickets, cada um com a coluna (cloud/qa.js:qaHtmlSubtickets); enquanto algum
+estiver em Human Tests, o pai não tem as decisões no rodapé — decide-se em cada
+subticket e o pai segue-os (cloud/qa.js:qaRodapeTicket) —, só «Mover» e «Fechar».
+O GET /api/qa manda, num subticket, o sub e o pai, e num pai a lista dos
+subtickets que vieram na mesma leitura (worker/src/rotas/qa.js:comSubtickets).
+
 ## O kanban da equipa
 
 As tarefas da equipa vivem num kanban no back office, e só no dev
@@ -8927,6 +8953,48 @@ comentários do Claude. Daí em diante as colunas são de pessoas: quem testa
 leva o cartão a Staging ou a Adiado, e o promove leva os de Staging a
 Produção depois do deploy (a skill promove, com o scripts/promover.mjs, que
 leva para o main só os commits dos cartões em Staging).
+
+**Os subtickets** (KAN-162, as decisões do Martinho, 2026-11-25). Um cartão que
+testa várias coisas diferentes parte-se em subtickets: Subtarefas do pai com a
+chave dele e «-X» (KAN-126-1, KAN-126-2…), uma por **coisa diferente a testar**
+(um teste de vários passos é um subticket só), com o «O que testar» na
+descrição. A chave tem lugar no modelo pela coluna sub (o X;
+migrations/0033_subtickets.sql) e pelo numero, que num subticket é o do pai e o
+X num inteiro negativo, -(N × 1000 + X) (worker/src/lib/kanban.js:numeroDoSubticket):
+nunca bate numa chave KAN-N, não sobe o contador, e o
+worker/src/lib/kanban.js:chaveDe e o worker/src/lib/kanban.js:numeroDaChave
+servem os dois — as rotas, o quadro, a pesquisa pela chave, o endereço
+#kanban/KAN-N-X e os scripts procuram pelo numero sem saber que é um subticket.
+Quem os cria é o scripts/kanban.mjs (o resolver com --teste repetido, e o
+partir); um subticket não muda de tipo nem de pai (worker/src/rotas/kanban.js:editarCartao).
+
+**O pai segue os subtickets** (worker/src/lib/kanban.js:passosDoPaiSegue): cada
+escrita que mexe num subticket — o mover e o Aceitar do quadro, o comentário, o
+remover e o repor, as mesmas da pílula, e o mover dos scripts — leva no mesmo
+lote os passos que põem o pai na coluna que os subtickets dizem: algum em A
+fazer ou Auto Tests → A fazer; todos em Produção → Produção; todos em Staging (ou
+já em Produção) → Staging; todos em Staging ou Adiado com algum Adiado → Adiado;
+senão → Human Tests. Só segue um pai que está em Human Tests, Staging, Adiado ou
+Produção (worker/src/lib/kanban.js:COLUNAS_QUE_SEGUEM): em A fazer e Auto Tests
+alguém está a trabalhar nele, e só o resolver o tira de lá. A mudança vai para o
+topo da coluna, com o concluido_at acertado, a linha «coluna» no histórico do pai
+assinada pelos Subtickets (worker/src/lib/kanban.js:SUBTICKETS, com o subticket e
+quem mexeu, e o back office diz «Seguiu os subtickets: de … para …»:
+worker/src/equipa-kanban.js:kbFrase) e a kanban.seguir no rasto. O ticket de QA
+do pai vai com ele pelo gatilho kanban_qa_coluna, como num mover.
+
+**A janela do pai** lista os subtickets à parte das outras subtarefas, pelo X,
+cada um com a coluna e quantos já foram aceites
+(worker/src/equipa-kanban.js:kbSubticketsHtml), e, com algum em Human Tests, a
+barra de decidir diz que se decide em cada um em vez de mostrar o Aceitar
+(worker/src/equipa-kanban.js:kbDecidirHtml). A descrição e os comentários com
+passos saem em lista numerada (.kb-passos).
+
+Um subticket não tem commits seus: o commit diz o KAN-N do pai, e um «KAN-126-1»
+numa mensagem conta como o KAN-126 (scripts/promover.mjs:chavesDaMensagem). O
+plano não põe os subtickets nos «Em Staging sem commits»
+(scripts/promover.mjs:planoDoPromove), e o fechar julga-os pelos commits do pai e
+move-os antes dele (scripts/promover.mjs:cmdFechar).
 
 ## O rasto das pessoas
 Com o sim de quem usa, a app e a montra guardam onde se toca, e nunca o quê,

@@ -65,6 +65,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { lerQuadro, principal as kanban, ErroKanban } from './kanban.mjs';
+import { numeroDaChave } from '../worker/src/lib/kanban.js';
 import { naEtiqueta, ErroTicket } from './ticket.mjs';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -261,7 +262,8 @@ function eOCommit(dado, sha) {
    mandam sobre a categoria), o que fica por perguntar, os riscos (um commit
    a levar que mexe nos mesmos ficheiros de um que fica antes dele; o
    web/avisos.js à parte, onde o conflito é quase certo; uma migração que fica
-   atrás de outra que vai) e os cartões de Staging sem commits.
+   atrás de outra que vai) e os cartões de Staging sem commits (sem os
+   subtickets KAN-N-X, que vão com os commits do pai: KAN-162).
    Recebe: commits — os do dev que faltam no main, pela ordem do dev ([{sha,
    assunto, mensagem, ficheiros}]); quadro — { colunas, cartoes } (lerQuadro);
    decisoes (opcional) — { levar: [sha], deixar: [sha] }.
@@ -307,7 +309,8 @@ export function planoDoPromove(commits, quadro, decisoes = {}) {
   });
   const staging = cartoes.filter((k) => k.coluna_id === STAGING);
   const citados = new Set(lista.flatMap((c) => c.chaves));
-  const semCommits = staging.filter((k) => !citados.has(k.chave));
+  // um subticket (KAN-N-X) não tem commits seus: vai com os do pai, que o segue (KAN-162)
+  const semCommits = staging.filter((k) => k.sub == null && !citados.has(k.chave));
   return { commits: lista, levar, deixar, perguntas, riscos, semCommits, staging, semStaging, decisoesSemCommit };
 }
 
@@ -678,7 +681,8 @@ function cmdRamo(o, d) {
 
 /* fechar: leva a Produção os cartões de Staging cujos commits estão todos na
    etiqueta publicado (por antepassado ou por cópia), e os de Staging sem
-   commits. Os outros ficam, e diz-se o que lhes falta.
+   commits. Os outros ficam, e diz-se o que lhes falta. Um subticket
+   (KAN-N-X, KAN-162) julga-se pelos commits do pai e vai antes dele.
    Recebe: o — as opções lidas; d — as dependências.
    Devolve: { texto, codigo } (1 se algum mover falhou). */
 function cmdFechar(o, d) {
@@ -693,8 +697,12 @@ function cmdFechar(o, d) {
   const git = (args) => d.git(args);
   const L = ['Fechar o promove: a etiqueta publicado está em ' + curto(etiqueta) + '; ' + conta(staging.length, 'cartão', 'cartões') + ' em ' + nomeDaColuna(STAGING) + '.'];
   const vao = [], ficam = [];
+  // os subtickets (KAN-N-X) primeiro, julgados pelos commits do pai: se o pai fosse antes, o primeiro
+  // subticket a mover-se trazia-o de volta a Staging (o pai segue os subtickets: lib/kanban.js:passosDoPaiSegue)
+  staging.sort((x, y) => (x.sub == null ? 1 : 0) - (y.sub == null ? 1 : 0));
   staging.forEach((k) => {
-    const deles = historia.filter((c) => chavesDaMensagem(c.mensagem).includes(Number(k.numero)));
+    const n = k.sub != null && k.pai ? numeroDaChave(k.pai.chave) : Number(k.numero);
+    const deles = historia.filter((c) => chavesDaMensagem(c.mensagem).includes(n));
     const falta = deles.filter((c) => !naEtiqueta(git, c.sha, etiqueta).publicado);
     if (falta.length) ficam.push({ k, falta });
     else vao.push({ k, deles });

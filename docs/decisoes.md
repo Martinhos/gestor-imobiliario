@@ -132,6 +132,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-24 · O consumo à cabeça da Operação, com o gráfico de cada valor (KAN-144)
 - 2026-11-24 · Staging, Adiado e Produção; a pílula «Tickets»; o promove só do que está em Staging (KAN-155 a KAN-158)
 - 2026-11-25 · A data de celebração à vista, e as explicações do bloco fiscal no «?» (KAN-160, KAN-161)
+- 2026-11-25 · Os subtickets KAN-N-X e o «O que testar» em lista numerada (KAN-159, KAN-162)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4927,3 +4928,47 @@ ele em vez do campo, e o nome dele («Explicar: …») entrava no do campo. Por 
 que diz deste contrato agora, quando o há: as frases partiram-se das que já existiam, sem reescrever a lei.
 Os «Em branco: …» ficaram à vista, por serem a regra dos formulários. Os encargos do inquilino e o imposto,
 fora do bloco fiscal, ficaram como estavam.
+
+## 2026-11-25 · Os subtickets KAN-N-X e o «O que testar» em lista numerada (KAN-159, KAN-162)
+O Martinho, em dois tickets de QA no telemóvel: «Os passos a seguir para testar devem estar formatados como lista
+numerada» e «Um ticket do kanban que tenha várias coisas para testar deve abrir vários subtickets. Devem ficar com o
+número do ticket pai com "-X" no final», com o comentário «Aplica aos tickets em aberto». Até aqui cada cartão
+resolvido chegava a Human Tests com um «O que testar» só, muitas vezes com várias coisas diferentes seguidas num
+parágrafo corrido: ele testava tudo de uma vez, e uma coisa que falhava devolvia o cartão inteiro a A fazer,
+escondendo as que tinham passado.
+
+**Uma coisa a testar, um subticket.** Perguntado, escolheu cartões próprios, com o pai a segui-los, mas não um
+cartão por passo: um subticket é uma coisa diferente a testar, com os seus passos numerados; um teste de vários
+passos é um subticket só. Quem decide as divisões é quem resolve (o Claude, no scripts/kanban.mjs resolver, com um
+`--teste "Título :: passos"` por coisa), porque é quem sabe o que mudou e o que pode falhar sozinho. O `--testar`
+de sempre fica para um teste só. Os cartões que já estavam em Human Tests partem-se com o `partir`, um a um, porque
+separar os passos em coisas diferentes é juízo e não regra.
+
+**A chave no modelo.** O kanban_cartoes.numero é NOT NULL UNIQUE desde a 0028, e as rotas, o quadro, a pesquisa, o
+endereço do cartão e os scripts procuram todos pelo numero e escrevem a chave com o chaveDe. Um subticket podia ter
+um numero do contador e a chave guardada à parte, mas isso queimava números KAN (o KAN-163 passava a ser um
+subticket escondido) e pedia que trinta sítios soubessem ler outra coluna. Ficou o numero do pai e o X num inteiro
+negativo, -(N × 1000 + X), mais a coluna sub com o X (a 0033, só aditiva): o chaveDe e o numeroDaChave conhecem os
+dois, o contador sobe pelo MAX(numero) e um negativo nunca o mexe, e nenhum numero de subticket bate numa chave
+KAN-N. O preço é o teto de 999 subtickets por pai. O X conta de 1 por pai e não se repete (um subticket trocado por
+outro guarda o seu).
+
+**O pai segue os filhos.** As regras que o Martinho não detalhou, e que ficaram: todos os subtickets em Staging → o
+pai vai a Staging; todos em Staging ou Adiado, com algum Adiado → o pai vai a Adiado, porque um commit não se
+promove aos bocados (o promove lê o KAN-N do pai na mensagem, e um subticket adiado deixa o commit no dev); um
+subticket comentado (volta a A fazer) → o pai volta a A fazer; resolver o pai de novo traz para Human Tests os que
+voltaram a A fazer, e, com um `--teste` novo, troca os que ainda não foram aceites pelos novos (os aceites ficam,
+porque o Martinho já os testou). Um desvio do pressuposto, pelo código: o pai só segue quando está em Human Tests,
+Staging, Adiado ou Produção. Em A fazer e em Auto Tests alguém está a trabalhar nele, e um subticket aceite a meio
+não o deve tirar da fila antes de o resolver. Cada mudança automática fica no histórico do pai assinada pelos
+«Subtickets» (com o subticket e quem mexeu) e no rasto como `kanban.seguir`, para se ver que não foi uma pessoa.
+Enquanto algum subticket espera em Human Tests, o pai não tem o Aceitar, nem na pílula nem no quadro: decide-se em
+cada subticket, que é o que ele pediu, e evita um pai aceite com testes por fazer. Um cartão sem subtickets funciona
+como antes.
+
+**A lista numerada.** O texto continua a guardar-se como texto («O que testar: 1. … 2. …»): a lista é só a forma de
+o mostrar, e um texto sem passos fica como sempre. A regra de partir os passos é uma só (lib/kanban.js:passosDoTexto),
+porque a pílula e o back office são código diferente e duas regras parecidas acabavam por divergir; a pílula, que
+não importa módulos, tem uma cópia, e o guião do back office outra (um guião String.raw não leva o texto de outro
+ficheiro sem quebrar a regra de ser o texto dos seus ficheiros tal e qual); um teste obriga as três a serem iguais
+letra a letra.

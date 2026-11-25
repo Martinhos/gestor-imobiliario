@@ -5935,6 +5935,32 @@ p.qa-quem{margin:0}
 /* O campo para comentar (cloud/qa.js:qaHtmlComentar): o botão à direita, por baixo */
 .qa-comentar>.btn{justify-self:end}
 /* === fim: tickets de QA === */
+/* === tickets: os passos numerados e os subtickets (KAN-159, KAN-162) === */
+/* Um texto com passos (cloud/qa.js:qaHtmlTexto): o começo do bloco («O que
+   testar:») e, por baixo, a lista numerada, com os números na cor da frente
+   (o escurecimento forçado do Samsung Internet mexe nos fundos, não nela) */
+.qa-texto{display:grid;gap:6px;min-width:0}
+.qa-passos{margin:0;padding:0 0 0 1.7em;display:grid;gap:4px;min-width:0;overflow-wrap:anywhere;line-height:1.45}
+.qa-passos>li{padding-left:2px}
+.qa-passos>li::marker{font-weight:650;font-variant-numeric:tabular-nums}
+.qa-com .qa-passos{font-size:14.5px}
+/* O subticket diz de quem é (qaHtmlDoPai) e o pai lista os seus (qaHtmlSubtickets):
+   botões da largura toda, de 44px no toque, com a coluna de cada um no selo dela */
+.qa-do-pai,.qa-sub{display:flex;align-items:center;gap:6px 10px;width:100%;min-height:44px;padding:8px 12px;border:1px solid var(--line);
+  border-radius:12px;background:var(--card);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.qa-do-pai{flex-wrap:wrap}
+.qa-do-pai>.small{color:var(--muted)}
+.qa-do-pai-tit,.qa-sub-tit{flex:1 1 0;min-width:0;overflow-wrap:anywhere;font-size:14.5px;line-height:1.35}
+.qa-sub>.qa-cartao{color:var(--muted);font-variant-numeric:tabular-nums}
+.qa-do-pai:active,.qa-sub:active{background:var(--press)}
+@media(hover:hover) and (pointer:fine){.qa-do-pai:hover,.qa-sub:hover{background:var(--chip)}}
+.qa-do-pai:focus-visible,.qa-sub:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.qa-subs{display:grid;gap:8px;min-width:0}
+.qa-subs>.hint{margin:0}
+.qa-subs-lista{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+/* Na lista, os subtickets logo por baixo do pai, recolhidos para dentro e com o fio do lado */
+.qa-linha.qa-linha-sub{margin-left:14px;width:calc(100% - 14px);border-left:3px solid var(--line2)}
+/* === fim: os passos numerados e os subtickets === */
 /* === qa-ronda2: visão geral === */
 /* Os meses previstos das entradas e saídas (graficos.js:cBars, previstoDe): a
    mesma cor da série, esbatida — o que ainda não aconteceu não se lê como

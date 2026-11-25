@@ -29,11 +29,12 @@ import { lerAte, tipoDaImagem } from '../lib/imagens.js';
 export { lerAte, tipoDaImagem };
 import {
   cartaoDoTicketQa, ticketQaNaColuna, eIdDeColuna, passosDoComentarioQa, colunaDoComentarioQa, passosDoComentario, colunaDepoisDoComentario,
-  cartaoSaiComOTicket, cartaoVoltaComOTicket, passosDoCartaoNaColuna, chaveDe, QA_NOVO, KAN_PRODUCAO,
+  cartaoSaiComOTicket, cartaoVoltaComOTicket, passosDoCartaoNaColuna, chaveDe, numeroDaChave, passosDoPaiSegue, QA_NOVO, KAN_PRODUCAO,
 } from '../lib/kanban.js';
 
-// A chave de um cartão nas rotas da pílula: KAN-N, sempre com o prefixo (um id de ticket nunca tem esta forma).
-const CHAVE_DO_CARTAO = /^KAN-([1-9]\d{0,8})$/i;
+// A chave de um cartão nas rotas da pílula: KAN-N, ou KAN-N-X num subticket (KAN-162), sempre com o
+// prefixo (um id de ticket nunca tem esta forma).
+const CHAVE_DO_CARTAO = /^KAN-[1-9]\d{0,8}(?:-[1-9]\d{0,2})?$/i;
 
 /* O cartão k é de um pedido de uma pessoa (o texto que ela escreveu na
    Ajuda): o que a sincronização criou (origem 'pedido') ou um com a etiqueta
@@ -337,7 +338,7 @@ async function listarTickets(env) {
   await limparRemovidos(env);
   const rows = (
     await env.DB.prepare(
-      `SELECT k.numero, k.tipo, k.titulo, ${DE_PEDIDO} AS de_pedido,
+      `SELECT k.id AS k_id, k.numero, k.sub, k.pai_id, p.numero AS pai_numero, p.titulo AS pai_titulo, k.tipo, k.titulo, ${DE_PEDIDO} AS de_pedido,
               CASE WHEN ${DE_PEDIDO} THEN '' ELSE k.descricao END AS descricao,
               k.coluna_id, k.prioridade, k.origem_tipo, k.relator_id, k.relator_nome,
               k.created_at AS k_criado, k.updated_at AS k_mudado, k.concluido_at, COALESCE(c.fim, 0) AS fim,
@@ -345,6 +346,7 @@ async function listarTickets(env) {
               q.user_id, q.discord_id, q.discord_nome, u.name, u.email
          FROM kanban_cartoes k
          LEFT JOIN kanban_colunas c ON c.id = k.coluna_id
+         LEFT JOIN kanban_cartoes p ON k.sub IS NOT NULL AND p.id = k.pai_id
          LEFT JOIN qa_tickets q ON k.origem_tipo = 'qa' AND q.id = k.origem_id AND q.removed_at IS NULL
          LEFT JOIN users u ON u.id = q.user_id
         WHERE k.removed_at IS NULL AND k.coluna_id <> ?
@@ -357,25 +359,50 @@ async function listarTickets(env) {
     ).bind(KAN_PRODUCAO, TETO_LISTA).all()
   ).results;
   await nomesEmFalta(env, rows);
-  return json({ colunas: await colunasDoKanban(env), tickets: rows.map(itemParaFora) });
+  return json({ colunas: await colunasDoKanban(env), tickets: comSubtickets(rows) });
+}
+
+/* Os itens da pílula, com os subtickets (KAN-162) de cada pai que os tem:
+   a lista dos filhos vivos que vieram na mesma leitura (os que não estão em
+   Produção), cada um com a chave, o título e a coluna, pelo X.
+   Recebe: rows — as linhas de listarTickets.
+   Devolve: os itens (itemParaFora), os pais com subtickets: [{cartao, titulo, status}]. */
+function comSubtickets(rows) {
+  const filhos = new Map();
+  rows.filter((r) => r.sub != null && r.pai_id).sort((a, b) => a.sub - b.sub).forEach((r) => {
+    if (!filhos.has(r.pai_id)) filhos.set(r.pai_id, []);
+    filhos.get(r.pai_id).push({ cartao: chaveDe(r.numero), titulo: r.titulo || '', status: r.coluna_id });
+  });
+  return rows.map((r) => {
+    const item = itemParaFora(r);
+    if (filhos.has(r.k_id)) item.subtickets = filhos.get(r.k_id);
+    return item;
+  });
 }
 
 /* Um cartão da pílula, pela chave (KAN-N): vivo e que não seja de um pedido
    de uma pessoa (DE_PEDIDO: esses a pílula só mostra, e as rotas não lhes
    chegam, nem a quem vê os pedidos). Diz se o ticket de QA dele está vivo
    (então as rotas são as do ticket).
-   Recebe: env; chave — 'KAN-N'.
-   Devolve: promessa de {id, numero, coluna_id, origem_tipo, origem_id,
+   Recebe: env; chave — 'KAN-N' (ou 'KAN-N-X', um subticket).
+   Devolve: promessa de {id, numero, sub, coluna_id, origem_tipo, origem_id,
    ticket_vivo (0/1)}, ou de null. */
 async function cartaoDaPilula(env, chave) {
-  const m = CHAVE_DO_CARTAO.exec(String(chave));
-  if (!m) return null;
+  if (!CHAVE_DO_CARTAO.test(String(chave))) return null;
   return env.DB.prepare(
-    `SELECT k.id, k.numero, k.coluna_id, k.origem_tipo, k.origem_id,
+    `SELECT k.id, k.numero, k.sub, k.coluna_id, k.origem_tipo, k.origem_id,
             (k.origem_tipo = 'qa' AND EXISTS (SELECT 1 FROM qa_tickets q WHERE q.id = k.origem_id AND q.removed_at IS NULL)) AS ticket_vivo
        FROM kanban_cartoes k
       WHERE k.numero = ? AND k.removed_at IS NULL AND NOT ${DE_PEDIDO}`
-  ).bind(Number(m[1])).first();
+  ).bind(numeroDaChave(chave)).first();
+}
+
+/* Os passos de «o pai segue os subtickets» (lib/kanban.js:passosDoPaiSegue)
+   para um cartão da pílula que mudou de coluna; num que não é um subticket, nenhum.
+   Recebe: k — o cartão (cartaoDaPilula); quem — {id, nome}; agora — ms.
+   Devolve: a lista de {sql, params}. */
+function paiSegue(k, quem, agora) {
+  return k && k.sub != null ? passosDoPaiSegue(k.id, { chave: chaveDe(k.numero), nome: quem && quem.nome }, agora) : [];
 }
 
 /* As rotas de um cartão sem ticket de QA (a chave KAN-N no lugar do id): as
@@ -404,14 +431,17 @@ async function rotasDoCartao(c, k) {
 
 /* POST /api/qa/KAN-N/mover {coluna} e …/reabrir num cartão sem ticket: o
    cartão vai para o topo dessa coluna, com a linha «coluna» no histórico
-   assinada por quem mexeu (lib/kanban.js:passosDoCartaoNaColuna).
+   assinada por quem mexeu (lib/kanban.js:passosDoCartaoNaColuna). Um
+   subticket (KAN-N-X) leva o pai atrás, no mesmo lote (paiSegue: Enviar
+   para produção no último leva-o a Staging; Adiar, a Adiado).
    Recebe: env; k — o cartão; coluna — o id da coluna (do corpo, por
    validar); quem — {id, nome}.
    Devolve: promessa da Response {ok}, ou 400 com uma coluna que o kanban não tem. */
 async function moverCartao(env, k, coluna, quem) {
   const col = eIdDeColuna(coluna) ? await env.DB.prepare('SELECT id FROM kanban_colunas WHERE id = ?').bind(coluna).first() : null;
   if (!col) return err(400, 'Essa coluna não existe no kanban.');
-  const passos = passosDoCartaoNaColuna(k.id, col.id, quem, now());
+  const agora = now();
+  const passos = passosDoCartaoNaColuna(k.id, col.id, quem, agora).concat(col.id !== k.coluna_id ? paiSegue(k, quem, agora) : []);
   await env.DB.batch(passos.map((p) => env.DB.prepare(p.sql).bind(...p.params)));
   return json({ ok: true });
 }
@@ -420,7 +450,8 @@ async function moverCartao(env, k, coluna, quem) {
    do kanban (lib/kanban.js:passosDoComentario) — fica no cartão e, em Human
    Tests, devolve-o a A fazer (recusar é comentar o que está mal); noutra
    coluna fica onde está. O texto e o travão são os do comentário de um
-   ticket (comentarTicket).
+   ticket (comentarTicket). Num subticket, o pai segue-o (paiSegue): o
+   comentário que devolve o subticket a A fazer devolve-o também.
    Recebe: env; request — com o corpo {texto}; k — o cartão; quem — {id, nome}.
    Devolve: promessa da Response 201 {ok, coluna (a do cartão depois), comentario}, 400 ou 429. */
 async function comentarCartao(env, request, k, quem) {
@@ -433,7 +464,7 @@ async function comentarCartao(env, request, k, quem) {
   if (texto.length > MAX_TEXTO) return err(400, 'O comentário passa dos ' + MAX_TEXTO + ' caracteres. Encurta-o.');
   const uuid = crypto.randomUUID(), agora = now();
   const cartao = { id: k.id, coluna_id: k.coluna_id, origem_tipo: k.origem_tipo };
-  const passos = passosDoComentario({ cartao, autor: quem, texto, uuid, agora });
+  const passos = passosDoComentario({ cartao, autor: quem, texto, uuid, agora }).concat(paiSegue(k, quem, agora));
   await env.DB.batch(passos.map((p) => env.DB.prepare(p.sql).bind(...p.params)));
   return json({
     ok: true, coluna: colunaDepoisDoComentario(cartao, quem.id),
@@ -495,7 +526,8 @@ async function nomesEmFalta(env, rows) {
    de uma pessoa), titulo, body (a descrição do cartão; '' num pedido),
    prioridade (1 a 5), status (o id da coluna do cartão), severity (a do
    ticket, ou null), context (objeto ou null), imagem (bool), resolution,
-   resolved_at, created_at, updated_at, autor}.
+   resolved_at, created_at, updated_at, autor} e, num subticket (KAN-N-X,
+   KAN-162), sub (o X) e pai ({cartao, titulo}).
    O resolved_at de um cartão sem ticket é o concluido_at, ou, em Human
    Tests, a última alteração; o updated_at é o maior do cartão e do ticket.
    O autor é o do ticket — com discord: {id, nome} quando veio de uma conta
@@ -532,6 +564,7 @@ function itemParaFora(r) {
       }
       : pedido ? { id: '', nome: '', email: '', discord: null }
         : { id: r.relator_id || '', nome: r.relator_nome || r.relator_id || '', email: '', discord: null },
+    ...(r.sub != null && r.pai_numero != null ? { sub: r.sub, pai: { cartao: chaveDe(r.pai_numero), titulo: r.pai_titulo || '' } } : {}),
   };
 }
 

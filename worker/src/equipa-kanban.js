@@ -171,12 +171,55 @@ function kbHoje() {
   var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
 }
-// Uma chave de cartão escrita de qualquer maneira (KAN-7, kan-7, 7) na forma certa.
+// Uma chave de cartão escrita de qualquer maneira (KAN-7, kan-7, 7) na forma certa; também a de um
+// subticket (KAN-7-2, KAN-162).
 // Recebe: t — o texto.
-// Devolve: 'KAN-7', ou '' quando não é uma chave.
+// Devolve: 'KAN-7' ou 'KAN-7-2', ou '' quando não é uma chave.
 function kbChave(t) {
-  var m = /^\s*(?:kan-)?(\d{1,7})\s*$/i.exec(String(t == null ? '' : t));
-  return m ? 'KAN-' + Number(m[1]) : '';
+  var m = /^\s*(?:kan-)?(\d{1,7})(?:-([1-9]\d{0,2}))?\s*$/i.exec(String(t == null ? '' : t));
+  return m ? 'KAN-' + Number(m[1]) + (m[2] ? '-' + Number(m[2]) : '') : '';
+}
+/* Os passos de um «O que testar» (KAN-159): a cópia, letra a letra, de
+   lib/kanban.js:passosDoTexto (o guião não importa módulos; o
+   testes/kanban-subtickets.test.js obriga as duas a serem iguais). Parte o
+   texto em blocos pelas linhas em branco e, em cada um, os passos «1. … 2. …»
+   numerados de seguida a partir do 1; um bloco com menos de dois fica como está.
+   Recebe: texto — o texto (qualquer valor).
+   Devolve: null sem passos em nenhum bloco; ou os blocos, cada um {texto} ou
+   {antes, passos: [texto, …]}. */
+function kbPassosDoTexto(texto) {
+  var t = String(texto == null ? '' : texto).replace(/\r\n?/g, '\n');
+  var algum = false;
+  var blocos = t.split(/\n[ \t]*\n/).map(function (b) {
+    var re = /(^|\s)(\d{1,2})[.)](?=\s)/g, marcas = [], m, n = 1;
+    while ((m = re.exec(b))) {
+      if (Number(m[2]) !== n) continue;
+      marcas.push({ i: m.index + m[1].length, fim: re.lastIndex });
+      n++;
+    }
+    if (marcas.length < 2) return { texto: b.trim() };
+    var passos = marcas.map(function (x, j) { return b.slice(x.fim, j + 1 < marcas.length ? marcas[j + 1].i : b.length).replace(/\s+/g, ' ').trim(); });
+    if (passos.some(function (p) { return !p; })) return { texto: b.trim() };
+    algum = true;
+    return { antes: b.slice(0, marcas[0].i).trim(), passos: passos };
+  }).filter(function (x) { return x.passos || x.texto; });
+  return algum ? blocos : null;
+}
+/* Um texto do cartão aberto (a descrição, um comentário) em HTML: como
+   sempre, num parágrafo com as mudanças de linha, quando não tem passos; com
+   passos (KAN-159: kbPassosDoTexto, a regra de lib/kanban.js:passosDoTexto),
+   um parágrafo por bloco e os passos numa lista numerada (.kb-passos), com o
+   começo do bloco («O que testar:») por cima.
+   Recebe: texto — o texto; cls — a classe dos parágrafos ('kb-texto', 'ms-texto').
+   Devolve: o HTML. */
+function kbTextoHtml(texto, cls) {
+  var p = function (t) { return '<p class="' + cls + '">' + esc(t) + '</p>'; };
+  var blocos = kbPassosDoTexto(texto);
+  if (!blocos) return p(String(texto == null ? '' : texto));
+  return '<div class="kb-texto-passos">' + blocos.map(function (b) {
+    if (!b.passos) return p(b.texto);
+    return (b.antes ? p(b.antes) : '') + '<ol class="kb-passos">' + b.passos.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol>';
+  }).join('') + '</div>';
 }
 // O caminho da API de um cartão.
 // Recebe: chave — a chave (KAN-7); resto (opcional) — o que vem a seguir (/mover…).
@@ -642,7 +685,7 @@ function kbPainelCabHtml(c, chave) {
    Recebe: d — a resposta do GET do cartão; entra — true para a entrada animada.
    Devolve: o HTML. */
 function kbPainelHtml(d, entra) {
-  var c = d.cartao || {}, chave = c.chave, decidir = kbDecidirHtml(c);
+  var c = d.cartao || {}, chave = c.chave, decidir = kbDecidirHtml(c, d.subtarefas || []);
   var acoes = '<div class="kb-p-acoes"><button type="button" class="btn sm"' + comAcao('kbMoverPara', [chave]) + '>' + ic('kbMover', 'i-sm') + 'Mover para…</button>' +
     '<button type="button" class="btn sm"' + comAcao('kbCopiar', [chave]) + '>' + ic('kbCopiar', 'i-sm') + 'Copiar a ligação</button></div>';
   return '<section class="kb-painel card' + (entra ? ' kb-entra' : '') + '" aria-labelledby="kbPainelTit">' + kbPainelCabHtml(c, chave) +
@@ -650,7 +693,7 @@ function kbPainelHtml(d, entra) {
     '<div class="kb-p-rasc" id="kbPRasc">' + kbPainelRascHtml(c) + '</div>' +
     kbCamposHtml(c) +
     (c.descricaoOculta ? '<div class="kb-p-sec"><h3 class="lbl">Descrição</h3><p class="sub kb-oculta">O texto deste pedido só se mostra a quem vê os pedidos.</p></div>'
-      : c.descricao ? '<div class="kb-p-sec"><h3 class="lbl">Descrição</h3><p class="kb-texto">' + esc(c.descricao) + '</p></div>' : '') +
+      : c.descricao ? '<div class="kb-p-sec"><h3 class="lbl">Descrição</h3>' + kbTextoHtml(c.descricao, 'kb-texto') + '</div>' : '') +
     kbOrigemHtml(d.origem) + kbSubtarefasHtml(c, d.subtarefas || []) + kbLigacoesHtml(chave, d.ligacoes || []) +
     kbAnexosHtml(chave, d.anexos || []) + kbComentariosHtml(chave, d.comentarios || [], c.coluna_id === KB_A_DECIDIR) + kbHistoricoHtml(d.historico || []) + '</div>' +
     decidir + '</section>';
@@ -669,10 +712,17 @@ function kbPainelHtml(d, entra) {
    produção chega a Human Tests à mão com a correção no dev e testa-se no
    quadro como os outros. Decidir só mexe no cartão; o pedido fecha-se nos
    Pedidos, depois do promove.
-   Recebe: c — o cartão do detalhe.
+   Um pai com subtickets ainda em Human Tests (KAN-162) não se decide aqui:
+   a barra diz que se decide em cada subticket e que o cartão os segue.
+   Recebe: c — o cartão do detalhe; subs (opcional) — os filhos (CartaoCurto).
    Devolve: o HTML ('' fora de Human Tests e de Adiado). */
-function kbDecidirHtml(c) {
+function kbDecidirHtml(c, subs) {
   if (!c || !c.chave || (c.coluna_id !== KB_A_DECIDIR && c.coluna_id !== KB_ADIADO)) return '';
+  var porDecidir = (subs || []).filter(function (s) { return s.sub != null && s.coluna_id === KB_A_DECIDIR; }).length;
+  if (c.coluna_id === KB_A_DECIDIR && porDecidir) {
+    return '<div class="kb-p-decidir" role="group" aria-label="Decidir ' + esc(c.chave) + '">' +
+      '<p class="sub kb-p-decidir-txt">Decide-se em cada subticket (' + kbConta(porDecidir, 'por decidir', 'por decidir') + '): este cartão segue-os.</p></div>';
+  }
   var enviar = '<button type="button" class="btn primary kb-p-enviar"' + comAcao('kbEnviarProducao', [c.chave]) + '>' + ic('kbProducao', 'i-sm') + 'Enviar para produção</button>';
   if (c.coluna_id === KB_ADIADO) {
     return '<div class="kb-p-decidir" role="group" aria-label="Decidir ' + esc(c.chave) + '">' +
@@ -755,10 +805,37 @@ function kbOrigemHtml(o) {
     (o.estado && !qa ? ' ' + badge('', esc(KB_ESTADOS_ORIGEM[o.estado] || o.estado)) : '') + '</p>' +
     (o.resumo ? '<p class="kb-texto' + (qa ? ' kb-texto-qa' : '') + '">' + esc(o.resumo) + '</p>' : '') + abrir + '</div>';
 }
-/* As subtarefas (ou, num épico, os cartões dele), com o progresso e o «Adicionar».
+/* Os filhos do cartão aberto: os subtickets (kbSubticketsHtml) e as outras
+   subtarefas (kbSoSubtarefasHtml).
    Recebe: c — o cartão; subs — os filhos (CartaoCurto).
-   Devolve: o HTML ('' numa subtarefa, que não tem filhos). */
+   Devolve: o HTML. */
 function kbSubtarefasHtml(c, subs) {
+  var subtickets = subs.filter(function (s) { return s.sub != null; }).sort(function (a, b) { return a.sub - b.sub; });
+  subs = subs.filter(function (s) { return s.sub == null; });
+  return kbSubticketsHtml(subtickets) + kbSoSubtarefasHtml(c, subs);
+}
+/* Os subtickets de um cartão (KAN-162): cada um com a chave KAN-N-X, o
+   título e a coluna onde está (a tocar abre-o), quantos já foram aceites
+   (Staging, Adiado ou Produção) e o que isso quer dizer: cada um aceita-se ou
+   comenta-se à parte, e o cartão segue-os.
+   Recebe: subs — os subtickets (CartaoCurto com sub).
+   Devolve: o HTML ('' sem subtickets). */
+function kbSubticketsHtml(subs) {
+  if (!subs.length) return '';
+  var aceites = subs.filter(function (s) { var k = kbColuna(s.coluna_id); return k && k.fim; }).length;
+  return '<div class="kb-p-sec kb-subtickets"><h3 class="lbl">Subtickets <span class="n">' + aceites + '/' + subs.length + '</span></h3>' +
+    '<p class="sub">Cada um aceita-se ou comenta-se à parte; este cartão segue-os.</p>' +
+    '<ul class="kb-lista">' + subs.map(function (s) {
+      var k = kbColuna(s.coluna_id);
+      return '<li><button type="button" class="kb-linha"' + comAcao('kbAbrir', [s.chave]) + '>' + kbTipoHtml(s.tipo) +
+        '<span class="kb-chave n">' + esc(s.chave) + '</span><span class="kb-linha-tit">' + esc(s.titulo) + '</span>' +
+        badge(k && k.fim ? 'ok' : s.coluna_id === KB_A_DECIDIR ? 'ac' : '', esc(kbNomeColuna(s.coluna_id))) + '</button></li>';
+    }).join('') + '</ul></div>';
+}
+/* As subtarefas que não são subtickets (ou, num épico, os cartões dele), com o progresso e o «Adicionar».
+   Recebe: c — o cartão; subs — os filhos (CartaoCurto), sem os subtickets.
+   Devolve: o HTML ('' numa subtarefa, que não tem filhos). */
+function kbSoSubtarefasHtml(c, subs) {
   if (c.tipo === 'subtarefa') return '';
   var epico = c.tipo === 'epico';
   var feitas = subs.filter(function (s) { var k = kbColuna(s.coluna_id); return k && k.fim; }).length;
@@ -849,7 +926,7 @@ function kbComentariosHtml(chave, cs, aDecidir) {
   return '<div class="kb-p-sec"><h3 class="lbl">Comentários' + (cs.length ? ' <span class="n">' + cs.length + '</span>' : '') + '</h3>' +
     cs.map(function (x) {
       return '<div class="ms kb-coment"><p class="ms-quem">' + esc((x.autor && x.autor.nome) || 'Alguém') + ' · ' + data(x.created_at) +
-        (x.updated_at && x.updated_at !== x.created_at ? ' · editado' : '') + '</p><p class="ms-texto">' + esc(x.texto) + '</p>' +
+        (x.updated_at && x.updated_at !== x.created_at ? ' · editado' : '') + '</p>' + kbTextoHtml(x.texto, 'ms-texto') +
         (x.meu ? '<div class="kb-coment-acoes"><button type="button" class="btn sm ghost"' + comAcao('kbComentarioEditar', [x.id]) + '>Editar</button>' +
           '<button type="button" class="btn sm ghost texto-perigo"' + comAcao('kbComentarioRemover', [x.id]) + '>Remover</button></div>' : '') + '</div>';
     }).join('') +
@@ -872,7 +949,9 @@ function kbHistoricoHtml(hs) {
     }).join('') + '</ol></details>';
 }
 /* Uma linha do histórico dita numa frase: «Moveu de A fazer para Auto Tests»,
-   «Mudou a prioridade de Média para Alta».
+   «Mudou a prioridade de Média para Alta»; a coluna que o pai mudou por
+   seguir os subtickets (assinada por eles: lib/kanban.js:passosDoPaiSegue),
+   «Seguiu os subtickets: de Human Tests para Staging».
    Recebe: h — a linha ({campo, antes, depois}).
    Devolve: o HTML (seguro). */
 function kbFrase(h) {
@@ -881,7 +960,7 @@ function kbFrase(h) {
   var lista = function (t) { return t ? t.split(',').map(function (x) { return x.trim(); }).filter(Boolean).join(', ') : ''; };
   switch (h.campo) {
     case 'criado': return 'Criou o cartão' + (d ? ' em ' + esc(kbNomeColuna(d)) : '');
-    case 'coluna': return 'Moveu de ' + esc(kbNomeColuna(a)) + ' para ' + esc(kbNomeColuna(d));
+    case 'coluna': return (h.autor && h.autor.id === 'subtickets' ? 'Seguiu os subtickets: de ' : 'Moveu de ') + esc(kbNomeColuna(a)) + ' para ' + esc(kbNomeColuna(d));
     case 'titulo': return 'Mudou o título de ' + q(a) + ' para ' + q(d);
     case 'descricao': return d ? (a ? 'Editou a descrição' : 'Adicionou a descrição') : 'Removeu a descrição';
     case 'tipo': return 'Mudou o tipo de ' + esc(KB_NOMES_TIPOS[a] || a) + ' para ' + esc(KB_NOMES_TIPOS[d] || d);
@@ -1375,6 +1454,12 @@ const CSS_KB_QUADRO = `/* ---- o segmentado das colunas (só no telemóvel) ----
 .kb-p-sec>div:last-child{align-self:flex-start}
 .kb-texto{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px}
 .kb-texto-qa{padding:12px 14px;border-radius:12px;background:var(--chip);font-size:14px}
+/* Os passos de um «O que testar» (kbTextoHtml, KAN-159): o começo do bloco e a lista numerada por baixo */
+.kb-texto-passos{display:grid;gap:6px;min-width:0}
+.kb-texto-passos>p{margin:0}
+.kb-passos{margin:0;padding:0 0 0 1.7em;display:grid;gap:4px;min-width:0;overflow-wrap:anywhere;font-size:14.5px;line-height:1.45}
+.kb-passos>li{padding-left:2px}
+.kb-passos>li::marker{font-weight:650;font-variant-numeric:tabular-nums}
 .kb-origem-tit{display:flex;flex-wrap:wrap;gap:6px}
 .kb-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .kb-lista>li+li{border-top:1px solid var(--line)}

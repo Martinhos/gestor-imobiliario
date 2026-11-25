@@ -403,7 +403,7 @@ describe('o SQL de cada comando, contra o esquema verdadeiro', () => {
     const j = JSON.parse(corre(['listar', '--json', '--todos'], { dev }).out);
     assert.deepEqual(j.colunas.map((c) => [c.id, c.total, c.fim]), [['a-fazer', 2, false], ['auto-tests', 0, false], ['human-tests', 0, false], ['staging', 0, true], ['adiado', 0, true], ['concluido', 1, true], ['para-depois', 0, false]]);
     assert.deepEqual(Object.keys(j.cartoes[0]).sort(), ['anexos', 'bloqueado', 'chave', 'coluna_id', 'comentarios', 'concluido_at', 'created_at', 'etiquetas', 'id', 'numero',
-      'origem', 'pai', 'posicao', 'prazo', 'prioridade', 'responsavel', 'subtarefas', 'tipo', 'titulo', 'updated_at']);
+      'origem', 'pai', 'posicao', 'prazo', 'prioridade', 'responsavel', 'sub', 'subtarefas', 'tipo', 'titulo', 'updated_at']);
     assert.deepEqual(j.cartoes[0].origem, { tipo: 'qa', id: 'q1', estado: 'aberto' });
     assert.ok(r.chamadas.every((c) => c.tipo === 'ler' && c.instrucoes.every(soLeitura)), 'o listar só lê');
   });
@@ -782,7 +782,8 @@ describe('fila, anexo, comecar, resolver e reabrir: os argumentos', () => {
       assert.ok(COMANDOS.includes(c), c);
       assert.match(USO, new RegExp('node scripts/kanban\\.mjs ' + c + ' '));
     }
-    assert.ok(USO.includes('node scripts/kanban.mjs resolver <KAN-N> --nota "…" (--commit <sha> | --sem-commit) [--testar "…"] [--local]'));
+    assert.ok(USO.includes('node scripts/kanban.mjs resolver <KAN-N> --nota "…" (--commit <sha> | --sem-commit) [--testar "…" | --teste "Título :: 1. … 2. …" --teste "…"] [--local]'));
+    assert.ok(USO.includes('node scripts/kanban.mjs partir <KAN-N> --teste "Título :: 1. … 2. …" --teste "…" [--local]'));
     assert.ok(USO.includes('node scripts/kanban.mjs anexo <KAN-N> [<id-do-anexo>] [--para <pasta>] [--local]'));
   });
 

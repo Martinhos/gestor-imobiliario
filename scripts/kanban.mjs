@@ -20,8 +20,26 @@
 //   node scripts/kanban.mjs fila [--json] [--local]
 //   node scripts/kanban.mjs anexo <KAN-N> [<id-do-anexo>] [--para <pasta>] [--local]
 //   node scripts/kanban.mjs comecar <KAN-N> [<KAN-N>…] [--local]
-//   node scripts/kanban.mjs resolver <KAN-N> --nota "…" (--commit <sha> | --sem-commit) [--testar "…"] [--local]
+//   node scripts/kanban.mjs resolver <KAN-N> --nota "…" (--commit <sha> | --sem-commit)
+//        [--testar "…" | --teste "Título :: 1. … 2. …" --teste "…"] [--local]
 //   node scripts/kanban.mjs reabrir <KAN-N> [--local]
+//   node scripts/kanban.mjs partir <KAN-N> --teste "Título :: 1. … 2. …" --teste "…" [--local]
+//
+// Os subtickets (KAN-162, as decisões do Martinho, 2026-11-25): um cartão que
+// testa várias coisas diferentes parte-se em cartões próprios, um por teste,
+// com a chave do pai e «-X» (KAN-126-1, KAN-126-2…), Subtarefas do pai em
+// Human Tests, cada uma com o seu «O que testar» numerado na descrição, os
+// seus comentários e o seu Aceitar; o pai segue-os
+// (worker/src/lib/kanban.js:passosDoPaiSegue: todos em Staging → Staging;
+// em Staging ou Adiado com algum Adiado → Adiado; um comentado → A fazer).
+// Todos os comandos aceitam a chave KAN-N-X. O resolver com dois ou mais
+// --teste cria-os (com um só, é o --testar de sempre); resolver o pai de novo
+// traz os que voltaram a A fazer para Human Tests, ou, com --teste, troca os
+// que ainda não foram aceites pelos novos (os aceites ficam). partir faz o
+// mesmo a um cartão que já está em Human Tests e ainda não tem subtickets
+// (para os que foram resolvidos antes disto). O comecar, o resolver e o
+// reabrir de um subticket recusam-se: trata-se o pai, que os leva; o reabrir
+// do pai devolve a A fazer os que ainda estavam em Human Tests.
 //
 // listar mostra o quadro por coluna (chave, tipo, prioridade, etiquetas e
 // título de cada cartão), sem as colunas de fim (Staging, Adiado, Produção) a não ser com
@@ -112,7 +130,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   chaveDe, numeroDaChave, estadoDoPedido, cartaoDoPedido, passosDaSincronizacao, sqlEmTexto, ticketQaNaColuna,
-  TIPOS, NOMES_DOS_TIPOS, PRIORIDADES, NOMES_DAS_PRIORIDADES,
+  TIPOS, NOMES_DOS_TIPOS, PRIORIDADES, NOMES_DAS_PRIORIDADES, numeroDoSubticket, numeroDoPai, passosDoPaiSegue, SUB_BASE,
 } from '../worker/src/lib/kanban.js';
 import {
   configDoAlvo, comRepeticao, erroDoWrangler as erroDoWranglerTicket, lerJsonDoWrangler, ErroTicket, publicadoDev,
@@ -153,7 +171,7 @@ function persistDito() {
 }
 
 export const COMANDOS = ['listar', 'ver', 'criar', 'editar', 'mover', 'comentar', 'ligar', 'importar-jira', 'sincronizar',
-  'fila', 'anexo', 'comecar', 'resolver', 'reabrir'];
+  'fila', 'anexo', 'comecar', 'resolver', 'reabrir', 'partir'];
 // os dois sítios onde o script lê e escreve, e só estes
 export const ALVOS = {
   remoto: { nome: 'dev', local: false, base: 'gestor-imobiliario-dev' },
@@ -201,9 +219,13 @@ export const USO = [
   '  node scripts/kanban.mjs fila [--json] [--local]',
   '  node scripts/kanban.mjs anexo <KAN-N> [<id-do-anexo>] [--para <pasta>] [--local]',
   '  node scripts/kanban.mjs comecar <KAN-N> [<KAN-N>…] [--local]',
-  '  node scripts/kanban.mjs resolver <KAN-N> --nota "…" (--commit <sha> | --sem-commit) [--testar "…"] [--local]',
+  '  node scripts/kanban.mjs resolver <KAN-N> --nota "…" (--commit <sha> | --sem-commit) [--testar "…" | --teste "Título :: 1. … 2. …" --teste "…"] [--local]',
   '  node scripts/kanban.mjs reabrir <KAN-N> [--local]',
+  '  node scripts/kanban.mjs partir <KAN-N> --teste "Título :: 1. … 2. …" --teste "…" [--local]',
   '',
+  'As chaves aceitam os subtickets (KAN-N-X). Um --teste é uma coisa diferente a testar: o título curto, «::», e os passos.',
+  'Com dois ou mais, o resolver (e o partir, num cartão já em Human Tests) cria um subticket por teste, KAN-N-1, KAN-N-2…,',
+  'em Human Tests, e o pai segue-os (todos em Staging → Staging; algum em Adiado → Adiado; um comentado → A fazer).',
   'Tipos: ' + TIPOS.join(', ') + '. Prioridades: 1 (Mais alta) a 5 (Mais baixa), 3 é a Média.',
   'Sem --local é o kanban do dev na Cloudflare (gestor-imobiliario-dev); com --local, a base isolada do 8788 (.wrangler/state-revisao;',
   'KANBAN_PERSIST=<pasta> muda-a, para provas numa base própria).',
@@ -414,6 +436,20 @@ export function confereNota(texto, opcao) {
   return t;
 }
 
+/* Um --teste do resolver e do partir: uma coisa diferente a testar, «Título
+   curto :: os passos» (os passos numerados, «1. … 2. …», numa linha ou em
+   várias). O título vai até 120 caracteres; os passos são um texto
+   obrigatório como o --testar (até 4000).
+   Recebe: texto — o que veio.
+   Devolve: { titulo, passos }; lança ErroKanban (código 2) sem o «::», sem
+   título ou sem passos. */
+export function confereTeste(texto) {
+  const t = limpo(texto);
+  const i = t.indexOf('::');
+  if (i < 0) throw new ErroKanban('O --teste escreve-se «Título curto :: 1. … 2. …» (o título, dois pontos duas vezes e os passos): «' + t.slice(0, 80) + '».', 2);
+  return { titulo: confereTitulo(t.slice(0, i), 120), passos: confereNota(t.slice(i + 2), '--teste (os passos)') };
+}
+
 /* O id de um anexo (o uuid que a rota lhe dá, como o ver e a fila o mostram),
    antes de chegar ao SQL.
    Recebe: texto — o que veio.
@@ -434,8 +470,9 @@ const OPCOES = {
   fila: { sinais: ['--local', '--json'], valores: [], soltos: [] },
   anexo: { sinais: ['--local'], valores: ['--para'], soltos: ['a chave do cartão'], opcionais: ['o id do anexo'] },
   comecar: { sinais: ['--local'], valores: [], soltos: ['a chave do cartão'], varios: true },
-  resolver: { sinais: ['--local', '--sem-commit'], valores: ['--nota', '--commit', '--testar'], soltos: ['a chave do cartão'] },
+  resolver: { sinais: ['--local', '--sem-commit'], valores: ['--nota', '--commit', '--testar'], repetidos: ['--teste'], soltos: ['a chave do cartão'] },
   reabrir: { sinais: ['--local'], valores: [], soltos: ['a chave do cartão'] },
+  partir: { sinais: ['--local'], valores: [], repetidos: ['--teste'], soltos: ['a chave do cartão'] },
   listar: { sinais: ['--local', '--todos', '--json'], valores: ['--coluna', '--etiqueta'], soltos: [] },
   ver: { sinais: ['--local', '--json'], valores: [], soltos: ['a chave do cartão'] },
   criar: { sinais: ['--local'], valores: CAMPOS.concat(['--coluna']), soltos: [] },
@@ -473,12 +510,13 @@ export function lerArgumentos(argv) {
   const falha = (porque) => { throw new ErroKanban(porque + '\n\n' + USO, 2); };
   if (!comando) falha('Falta o comando.');
   if (!COMANDOS.includes(comando)) falha('Não conheço o comando «' + comando + '».');
-  const { sinais, valores, soltos: pedidos, opcionais = [], varios = false } = OPCOES[comando];
+  const { sinais, valores, repetidos = [], soltos: pedidos, opcionais = [], varios = false } = OPCOES[comando];
   const r = {
     comando, local: false, todos: false, json: false, numero: null, numeros: null, outro: null, coluna: null, etiqueta: null,
-    ligacao: null, ficheiro: null, texto: null, campos: {}, anexo: null, para: null, nota: null, commit: null, semCommit: false, testar: null,
+    ligacao: null, ficheiro: null, texto: null, campos: {}, anexo: null, para: null, nota: null, commit: null, semCommit: false, testar: null, testes: [],
   };
   const dados = {};
+  const varias = {};
   const soltos = [];
   for (let i = 0; i < lista.length; i++) {
     const a = String(lista[i]);
@@ -488,15 +526,16 @@ export function lerArgumentos(argv) {
     if (sinais.includes(nome)) {
       if (igual > 0) falha('A opção ' + nome + ' não leva valor.');
       r[nome === '--sem-commit' ? 'semCommit' : nome.slice(2)] = true;
-    } else if (valores.includes(nome)) {
+    } else if (valores.includes(nome) || repetidos.includes(nome)) {
       let v;
       if (igual > 0) v = a.slice(igual + 1);
       else {
         v = lista[++i];
         if (v === undefined || String(v).startsWith('--')) falha('A opção ' + nome + ' precisa de um valor (um valor que comece por -- escreve-se ' + nome + '=valor).');
       }
-      if (Object.prototype.hasOwnProperty.call(dados, nome)) falha('A opção ' + nome + ' vem duas vezes.');
-      dados[nome] = String(v);
+      if (repetidos.includes(nome)) (varias[nome] = varias[nome] || []).push(String(v));
+      else if (Object.prototype.hasOwnProperty.call(dados, nome)) falha('A opção ' + nome + ' vem duas vezes.');
+      else dados[nome] = String(v);
     } else falha('O comando ' + comando + ' não aceita a opção ' + nome + '.');
   }
   if (soltos.length < pedidos.length) falha('Falta ' + pedidos[soltos.length] + '.');
@@ -504,7 +543,8 @@ export function lerArgumentos(argv) {
   if (!varios && soltos.length > cabem) falha('Não sei o que fazer com «' + soltos.slice(cabem).join(' ') + '».');
   const tem = (k) => Object.prototype.hasOwnProperty.call(dados, k);
 
-  if (['ver', 'editar', 'mover', 'comentar', 'ligar', 'anexo', 'comecar', 'resolver', 'reabrir'].includes(comando)) r.numero = confereChave(soltos[0]);
+  if (['ver', 'editar', 'mover', 'comentar', 'ligar', 'anexo', 'comecar', 'resolver', 'reabrir', 'partir'].includes(comando)) r.numero = confereChave(soltos[0]);
+  r.testes = (varias['--teste'] || []).map(confereTeste);
   if (comando === 'comecar') r.numeros = soltos.map(confereChave).filter((n, i, todos) => todos.indexOf(n) === i);
   if (comando === 'anexo') {
     if (soltos.length > 1) r.anexo = confereIdDoAnexo(soltos[1]);
@@ -520,7 +560,14 @@ export function lerArgumentos(argv) {
     if (!tem('--commit') && !r.semCommit) falha('O resolver precisa de --commit <sha> (a mudança, publicada no dev) ou de --sem-commit (não houve código a mudar).');
     if (tem('--commit')) r.commit = confereCommit(dados['--commit']);
     if (tem('--testar')) r.testar = confereNota(dados['--testar'], '--testar');
+    if (r.testar && r.testes.length) falha('Ou --testar (um teste só) ou --teste (um por coisa diferente a testar), não os dois.');
+    // um --teste só é um teste só: vai como o --testar de sempre, sem subtickets
+    if (r.testes.length === 1) { r.testar = r.testes[0].titulo + ': ' + r.testes[0].passos; r.testes = []; }
   }
+  if (comando === 'partir' && r.testes.length < 2) {
+    falha('O partir precisa de dois ou mais --teste "Título :: passos" (um subticket por coisa diferente a testar).');
+  }
+  if (r.testes.length > SUB_BASE - 1) falha('Um cartão leva até ' + (SUB_BASE - 1) + ' subtickets.');
   if (comando === 'mover') r.coluna = confereColunaDada(soltos[1]);
   if (comando === 'ligar') {
     const tipo = normal(soltos[1]);
@@ -655,7 +702,7 @@ export function textoDoFicheiro(instrucoes, marca) {
 }
 
 // as colunas de um cartão na forma curta (a CartaoCurto das rotas); c é o cartão, p o pai, k a coluna
-const CURTO = 'c.id, c.numero, c.tipo, c.titulo, c.coluna_id, c.posicao, c.prioridade, c.responsavel_id, c.responsavel_nome, c.prazo,'
+const CURTO = 'c.id, c.numero, c.sub, c.tipo, c.titulo, c.coluna_id, c.posicao, c.prioridade, c.responsavel_id, c.responsavel_nome, c.prazo,'
   + ' c.origem_tipo, c.origem_id, c.origem_estado, c.created_at, c.updated_at, c.concluido_at, c.removed_at,'
   + ' p.numero AS pai_numero, p.titulo AS pai_titulo, p.tipo AS pai_tipo,'
   + " (SELECT GROUP_CONCAT(e.etiqueta, ',') FROM kanban_etiquetas e WHERE e.cartao_id = c.id) AS etiquetas,"
@@ -927,6 +974,77 @@ export function notaDoResolver(nota, commit) {
   return commit ? n + '\n\nCommit: ' + String(commit).slice(0, 7) : n;
 }
 
+/* Os subtickets de um cartão, também os removidos (o X não se repete): o
+   id, o numero, o X, a coluna, o título e se foi removido.
+   Recebe: paiId — o id do pai.
+   Devolve: a instrução (texto). */
+export function sqlSubtickets(paiId) {
+  return instrucao('SELECT id, numero, sub, coluna_id, titulo, removed_at FROM kanban_cartoes WHERE pai_id = ? AND sub IS NOT NULL ORDER BY sub', [paiId]);
+}
+
+/* A descrição de um subticket: o «O que testar» com os passos dele (a
+   pílula e o back office mostram-nos como lista numerada:
+   lib/kanban.js:passosDoTexto).
+   Recebe: passos — o texto dos passos.
+   Devolve: o texto. */
+export function descricaoDoSubticket(passos) {
+  return 'O que testar: ' + String(passos).trim();
+}
+
+/* Os subtickets novos de um pai: um cartão por teste, Subtarefa do pai, com
+   a chave KAN-N-X (o numero de lib/kanban.js:numeroDoSubticket e o X no
+   sub), o título do teste, o «O que testar» na descrição, a prioridade e as
+   etiquetas do pai, na coluna dada (Human Tests), no topo e pela ordem (o 1
+   em cima), com a linha «criado» do histórico e o rasto de cada um.
+   Recebe: pai — o cartão (id, numero, prioridade, etiquetas); testes —
+   [{titulo, passos}]; x0 — o X do primeiro; coluna — {id}; agora — ms;
+   uuids — um id por teste.
+   Devolve: as instruções (array de texto). */
+export function sqlCriarSubtickets(pai, testes, x0, coluna, agora, uuids) {
+  const out = [];
+  testes.map((t, i) => ({ t, x: x0 + i, uuid: uuids[i] })).reverse().forEach(({ t, x, uuid }) => {
+    const numero = numeroDoSubticket(pai.numero, x);
+    out.push(instrucao('INSERT INTO kanban_cartoes (id, numero, sub, tipo, titulo, descricao, coluna_id, posicao, prioridade, relator_id, relator_nome,'
+      + " pai_id, created_at, updated_at) SELECT ?, ?, ?, 'subtarefa', ?, ?, ?,"
+      + ' (SELECT COALESCE(MIN(posicao), 1024) - 1024 FROM kanban_cartoes WHERE coluna_id = ? AND removed_at IS NULL), ?, ?, ?, ?, ?, ?',
+    [uuid, numero, x, t.titulo, descricaoDoSubticket(t.passos), coluna.id, coluna.id, pai.prioridade, CLAUDE.id, CLAUDE.nome, pai.id, agora, agora]));
+    (pai.etiquetas || []).forEach((e) => out.push(instrucao('INSERT OR IGNORE INTO kanban_etiquetas (cartao_id, etiqueta) VALUES (?, ?)', [uuid, e])));
+    out.push(sqlHistorico(uuid, agora, CLAUDE, 'criado', null, coluna.id));
+    out.push(sqlAuditoria('kanban.criar', chaveDe(numero), 'subticket de ' + chaveDe(pai.numero) + ': ' + t.titulo, agora));
+  });
+  return out;
+}
+
+/* Um subticket que sai (remoção branda, como a do master: repõe-se no back
+   office) porque o «O que testar» novo do pai o redefine.
+   Recebe: f — o subticket ({id, numero}); agora — ms.
+   Devolve: as instruções (array de texto). */
+export function sqlRemoverSubticket(f, agora) {
+  return [
+    instrucao('UPDATE kanban_cartoes SET removed_at = ?, removed_by = ?, updated_at = ? WHERE id = ? AND removed_at IS NULL', [agora, CLAUDE.id, agora, f.id]),
+    sqlHistorico(f.id, agora, CLAUDE, 'removido', null, null),
+    sqlAuditoria('kanban.remover', chaveDe(f.numero), 'trocado pelo «O que testar» novo do pai', agora),
+  ];
+}
+
+/* O «O que testar» do pai quando se parte em subtickets: quantos, e a chave
+   e o título de cada um (os passos vivem em cada subticket).
+   Recebe: criados — [{chave, titulo}].
+   Devolve: o texto (sem o «O que testar:» da frente). */
+export function testarDosSubtickets(criados) {
+  return 'em ' + criados.length + ' subtickets, cada um com os seus passos, aceite ou comentado à parte (o cartão segue-os):\n'
+    + criados.map((c) => c.chave + ' — ' + c.titulo).join('\n');
+}
+
+/* Os passos de «o pai segue» de um subticket que mudou, em texto para o
+   wrangler (lib/kanban.js:passosDoPaiSegue).
+   Recebe: k — o cartão que mudou (id, chave, sub); agora — ms.
+   Devolve: as instruções (array de texto; vazio num cartão que não é subticket). */
+function sqlPaiSegue(k, agora) {
+  if (!k || k.sub == null) return [];
+  return passosDoPaiSegue(k.id, { chave: k.chave, nome: CLAUDE.nome }, agora).map((p) => instrucao(p.sql, p.params));
+}
+
 /* O comentar: o comentário, assinado pelo autor, e o updated_at do cartão.
    Recebe: cartao — o cartão (id, chave); texto — o comentário; agora — ms;
    uuid — o id do comentário; autor — {id, nome}.
@@ -971,12 +1089,13 @@ function etiquetasDe(texto) {
   return texto ? String(texto).split(',').filter(Boolean).sort() : [];
 }
 
-/* Uma linha da base na forma curta das rotas (CartaoCurto), com o id.
+/* Uma linha da base na forma curta das rotas (CartaoCurto), com o id e o
+   sub (o X de um subticket, KAN-N-X; null nos outros).
    Recebe: l — a linha (as colunas de CURTO).
    Devolve: o cartão. */
 export function cartaoDaLinha(l) {
   return {
-    id: l.id, chave: chaveDe(l.numero), numero: Number(l.numero), tipo: l.tipo, titulo: l.titulo, coluna_id: l.coluna_id,
+    id: l.id, chave: chaveDe(l.numero), numero: Number(l.numero), sub: l.sub == null ? null : Number(l.sub), tipo: l.tipo, titulo: l.titulo, coluna_id: l.coluna_id,
     posicao: Number(l.posicao), prioridade: Number(l.prioridade), etiquetas: etiquetasDe(l.etiquetas),
     responsavel: l.responsavel_id ? { id: l.responsavel_id, nome: l.responsavel_nome || '' } : null,
     pai: l.pai_numero != null ? { chave: chaveDe(l.pai_numero), titulo: l.pai_titulo, tipo: l.pai_tipo } : null,
@@ -1259,6 +1378,10 @@ export function textoDoCartao(det, local, opcoes = {}) {
   L.push('Responsável: ' + (k.responsavel ? k.responsavel.nome + ' (' + k.responsavel.id + ')' : 'ninguém'));
   L.push('Relator: ' + (k.relator.nome || '?') + ' (' + k.relator.id + ')');
   if (k.pai) L.push('Pai: ' + k.pai.chave + ' «' + k.pai.titulo + '» (' + (NOMES_DOS_TIPOS[k.pai.tipo] || k.pai.tipo) + ')');
+  if (k.sub != null) {
+    L.push('Subticket ' + k.sub + ' do ' + (k.pai ? k.pai.chave : '?') + ': trata-se pelo pai (comecar, resolver e reabrir ' + (k.pai ? k.pai.chave : 'o pai')
+      + '), que o leva com ele; o pai segue os subtickets.');
+  }
   if (k.prazo) L.push('Prazo: ' + k.prazo);
   if (det.origem) {
     const og = det.origem;
@@ -1275,9 +1398,14 @@ export function textoDoCartao(det, local, opcoes = {}) {
   L.push('Criado: ' + quando(k.created_at) + ' · atualizado: ' + quando(k.updated_at) + (k.concluido_at != null ? ' · concluído: ' + quando(k.concluido_at) : ''));
   L.push('Descrição:' + (k.descricao ? '' : ' nenhuma'));
   if (k.descricao) L.push(indenta(k.descricao, '  '));
-  if (det.subtarefas.length) {
+  const subtickets = det.subtarefas.filter((s) => s.sub != null), outras = det.subtarefas.filter((s) => s.sub == null);
+  if (subtickets.length) {
+    L.push('Subtickets (' + subtickets.length + '; o cartão segue-os):');
+    subtickets.forEach((s) => L.push('  ' + linhaDoCartao(s) + ' · «' + nomeDaColuna(s.coluna_id) + '»'));
+  }
+  if (outras.length) {
     L.push('Subtarefas (' + k.subtarefas.feitas + ' de ' + k.subtarefas.total + ' feitas):');
-    det.subtarefas.forEach((s) => L.push('  ' + linhaDoCartao(s) + ' · «' + nomeDaColuna(s.coluna_id) + '»'));
+    outras.forEach((s) => L.push('  ' + linhaDoCartao(s) + ' · «' + nomeDaColuna(s.coluna_id) + '»'));
   }
   if (det.ligacoes.length) {
     L.push('Ligações:');
@@ -1913,7 +2041,8 @@ function cmdEditar(o, d) {
   return k.chave + ' editado ' + ondeFica(a) + ': ' + mudancas.map((m) => NOMES_DOS_CAMPOS[m.campo] || m.campo).join(', ') + '.';
 }
 
-/* mover: o cartão para o topo da coluna (o id ou o nome dela).
+/* mover: o cartão para o topo da coluna (o id ou o nome dela). Num
+   subticket, o pai segue-o na mesma escrita (sqlPaiSegue), e diz-se onde ficou.
    Recebe: o — as opções lidas; d — as dependências.
    Devolve: o texto com de onde para onde. */
 function cmdMover(o, d) {
@@ -1925,13 +2054,23 @@ function cmdMover(o, d) {
   const colunas = cols.map(colunaDaLinha);
   const coluna = colunaPorTexto(colunas, o.coluna);
   const daqui = colunas.find((x) => x.id === k.coluna_id);
-  escrever(d, a, sqlMover(k, coluna, d.agora()));
+  const agora = d.agora();
+  const paiDe = () => { try { return umCartao(d, a, numeroDaChave(k.pai.chave)); } catch (e) { return null; } };
+  const paiAntes = k.sub != null && k.pai ? paiDe() : null;
+  escrever(d, a, sqlMover(k, coluna, agora).concat(sqlPaiSegue(k, agora)));
   const depois = umCartao(d, a, o.numero);
   if (depois.coluna_id !== coluna.id) throw new ErroKanban('O ' + k.chave + ' não ficou em «' + coluna.nome + '»: vê o listar.');
-  return k.coluna_id === coluna.id
+  const nomeDe = (id) => (colunas.find((x) => x.id === id) || { nome: id }).nome;
+  let doPai = '';
+  if (paiAntes) {
+    const pai = paiDe() || paiAntes;
+    doPai = pai.coluna_id !== paiAntes.coluna_id ? ' O pai ' + pai.chave + ' seguiu os subtickets: «' + nomeDe(paiAntes.coluna_id) + '» → «' + nomeDe(pai.coluna_id) + '».'
+      : ' O pai ' + pai.chave + ' fica em «' + nomeDe(pai.coluna_id) + '».';
+  }
+  return (k.coluna_id === coluna.id
     ? k.chave + ' subiu ao topo de «' + coluna.nome + '» ' + ondeFica(a) + '.'
     : k.chave + ': «' + (daqui ? daqui.nome : k.coluna_id) + '» → «' + coluna.nome + '» (no topo) ' + ondeFica(a) + '.'
-      + (k.origem && k.origem.tipo === 'qa' ? ' O ticket de QA ' + k.origem.id + ' foi com ele.' : '');
+      + (k.origem && k.origem.tipo === 'qa' ? ' O ticket de QA ' + k.origem.id + ' foi com ele.' : '')) + doPai;
 }
 
 /* comentar: o comentário do Claude no cartão.
@@ -2109,8 +2248,8 @@ function conferidos(d, a, numeros) {
   return { porNumero, colunas };
 }
 
-/* O que impede um comando do fluxo (comecar, resolver, reabrir) de mexer num
-   cartão: não existe, foi removido, vem de um pedido (trata-se pelo
+/* O que impede um comando do fluxo (comecar, resolver, reabrir, partir) de mexer num
+   cartão: não existe, foi removido, é um subticket (trata-se o pai), vem de um pedido (trata-se pelo
    scripts/ticket.mjs, e diz-se o comando) ou de um ticket de QA que foi
    removido na app. O de um ticket de QA vivo segue (o comando leva o ticket
    com ele). A coluna confere-a cada comando.
@@ -2121,6 +2260,10 @@ function impedimento(det, numero, a, acao) {
   if (!det) return chave + ' não existe ' + ondeFica(a) + ' (confirma com a fila; é --local?)';
   const k = det.cartao;
   if (k.removed_at != null) return chave + ' foi removido a ' + quando(k.removed_at) + ' (repor é do master, no back office)';
+  if (k.sub != null) {
+    const pai = k.pai ? k.pai.chave : chaveDe(numeroDoPai(numero));
+    return chave + ' é um subticket do ' + pai + ': trata-se o pai (node scripts/kanban.mjs ' + acao + ' ' + pai + (a.local ? ' --local' : '') + '), que o leva com ele';
+  }
   const og = det.origem;
   if (!og) return null;
   if (og.tipo === 'qa') {
@@ -2224,6 +2367,13 @@ function comOTicket(det) {
    origin/dev e com o CI verde), e só então escreve, numa transação, o ticket
    de QA com a resolução (resolucaoDoTicketQa), a nota (com o commit) e o que
    testar como comentários do Claude e o mover; confirma no fim.
+   Os subtickets (KAN-162): com dois ou mais --teste, cria um subticket por
+   teste em Human Tests (sqlCriarSubtickets), por baixo do pai, e o «O que
+   testar» do pai (e a resolução do ticket de QA) diz quais são; os
+   subtickets que ainda não tinham sido aceites (em A fazer, Auto Tests ou
+   Human Tests) saem, trocados pelos novos, e os aceites (Staging, Adiado,
+   Produção) ficam. Sem --teste, os que voltaram a A fazer ou a Auto Tests
+   (comentados) vão de novo a Human Tests com o pai.
    Recebe: o — as opções lidas; d — as dependências.
    Devolve: o texto com de onde para onde e o que ficou. */
 function cmdResolver(o, d) {
@@ -2236,7 +2386,8 @@ function cmdResolver(o, d) {
   const nome = (id) => (colunas.find((x) => x.id === id) || { nome: id }).nome;
   if (!FILA.includes(k.coluna_id)) {
     recusaSemMexer([k.chave + ' está em «' + nome(k.coluna_id) + '»: o resolver só leva a Human Tests um cartão de A fazer ou de Auto Tests'
-      + (k.coluna_id === HUMAN_TESTS ? ' (este já lá está)' : ' (se voltou ao trabalho, reabre-o primeiro: node scripts/kanban.mjs reabrir ' + k.chave + (o.local ? ' --local' : '') + ')')], false);
+      + (k.coluna_id === HUMAN_TESTS ? ' (este já lá está' + (o.testes.length ? '; para o partir em subtickets: node scripts/kanban.mjs partir ' + k.chave + ' --teste …' : '') + ')'
+        : ' (se voltou ao trabalho, reabre-o primeiro: node scripts/kanban.mjs reabrir ' + k.chave + (o.local ? ' --local' : '') + ')')], false);
   }
   const destino = colunaPorTexto(colunas, HUMAN_TESTS);
   if (o.commit && !o.local) {
@@ -2245,26 +2396,51 @@ function cmdResolver(o, d) {
       throw new ErroKanban('O commit ' + o.commit + ' ainda não está publicado no dev, e não mexi no ' + k.chave + '. POR PUBLICAR: ' + ((p && p.razao) || 'sem razão'));
     }
   }
-  const nota = notaDoResolver(o.nota, o.commit);
-  const uuids = [d.uuid(), o.testar ? d.uuid() : null];
+  const filhos = ler(d, a, [sqlSubtickets(k.id)])[0];
+  const vivos = filhos.filter((f) => f.removed_at == null);
   const agora = d.agora();
-  escrever(d, a, sqlDoTicketQa(det, destino.id, agora, resolucaoDoTicketQa(o.nota, o.commit, o.testar))
-    .concat(sqlResolver(k, destino, nota, o.testar, agora, uuids)));
-  const [ficou, coms] = ler(d, a, [
+  let testar = o.testar, filhosSql = [], criados = [], trocados = [], repostos = [];
+  if (o.testes.length) {
+    const x0 = filhos.reduce((m, f) => Math.max(m, Number(f.sub) || 0), 0) + 1;
+    if (x0 + o.testes.length - 1 > SUB_BASE - 1) throw new ErroKanban('O ' + k.chave + ' já não leva mais subtickets (até ' + (SUB_BASE - 1) + ').');
+    trocados = vivos.filter((f) => FILA.includes(f.coluna_id) || f.coluna_id === HUMAN_TESTS);
+    criados = o.testes.map((t, i) => ({ chave: chaveDe(numeroDoSubticket(k.numero, x0 + i)), titulo: t.titulo }));
+    filhosSql = trocados.flatMap((f) => sqlRemoverSubticket(f, agora))
+      .concat(sqlCriarSubtickets(k, o.testes, x0, destino, agora, o.testes.map(() => d.uuid())));
+    testar = testarDosSubtickets(criados);
+  } else {
+    repostos = vivos.filter((f) => FILA.includes(f.coluna_id));
+    filhosSql = repostos.flatMap((f) => sqlMover({ id: f.id, chave: chaveDe(f.numero), coluna_id: f.coluna_id }, destino, agora, CLAUDE, 'kanban.resolver'));
+  }
+  const nota = notaDoResolver(o.nota, o.commit);
+  const uuids = [d.uuid(), testar ? d.uuid() : null];
+  escrever(d, a, sqlDoTicketQa(det, destino.id, agora, resolucaoDoTicketQa(o.nota, o.commit, testar))
+    .concat(filhosSql, sqlResolver(k, destino, nota, testar, agora + 1, uuids)));
+  const [ficou, coms, depois] = ler(d, a, [
     instrucao('SELECT coluna_id FROM kanban_cartoes WHERE numero = ?', [o.numero]),
     instrucao('SELECT id FROM kanban_comentarios WHERE id IN (?, ?)', [uuids[0], uuids[1] || uuids[0]]),
+    sqlSubtickets(k.id),
   ]);
-  if (!ficou[0] || ficou[0].coluna_id !== destino.id || coms.length !== (o.testar ? 2 : 1)) {
-    throw new ErroKanban('O ' + k.chave + ' não ficou como devia (em «' + destino.nome + '», com ' + (o.testar ? 'os dois comentários' : 'a nota') + '): vê-o com o ver.');
+  const novosVivos = depois.filter((f) => f.removed_at == null);
+  const faltam = criados.filter((c) => !novosVivos.some((f) => chaveDe(f.numero) === c.chave && f.coluna_id === destino.id))
+    .concat(repostos.filter((f) => !novosVivos.some((x) => x.id === f.id && x.coluna_id === destino.id)).map((f) => ({ chave: chaveDe(f.numero) })));
+  if (!ficou[0] || ficou[0].coluna_id !== destino.id || coms.length !== (testar ? 2 : 1) || faltam.length) {
+    throw new ErroKanban('O ' + k.chave + ' não ficou como devia (em «' + destino.nome + '», com ' + (testar ? 'os dois comentários' : 'a nota')
+      + (faltam.length ? ', e os subtickets ' + faltam.map((c) => c.chave).join(', ') : '') + '): vê-o com o ver.');
   }
   return k.chave + ': «' + nome(k.coluna_id) + '» → «' + destino.nome + '» (no topo) ' + ondeFica(a) + ', com a nota'
-    + (o.commit ? ' (commit ' + o.commit.slice(0, 7) + ')' : ' (sem commit)') + (o.testar ? ' e o que testar, como comentários do Claude.' : ', como comentário do Claude.')
-    + (comOTicket(det) ? comOTicket(det).replace(/\.$/, ', com a resolução.') : '');
+    + (o.commit ? ' (commit ' + o.commit.slice(0, 7) + ')' : ' (sem commit)') + (testar ? ' e o que testar, como comentários do Claude.' : ', como comentário do Claude.')
+    + (comOTicket(det) ? comOTicket(det).replace(/\.$/, ', com a resolução.') : '')
+    + (criados.length ? '\nSubtickets em «' + destino.nome + '»: ' + criados.map((c) => c.chave + ' «' + c.titulo + '»').join(', ') + '.' : '')
+    + (trocados.length ? '\nSaíram (trocados pelos novos): ' + trocados.map((f) => chaveDe(f.numero)).join(', ') + '.' : '')
+    + (repostos.length ? '\nDe volta a «' + destino.nome + '» com o pai: ' + repostos.map((f) => chaveDe(f.numero)).join(', ') + '.' : '');
 }
 
 /* reabrir: devolve um cartão que não vem de um pedido ao topo de A fazer,
    de qualquer coluna (o ticket de QA vai com ele e guarda a resolução); um
-   que já está em A fazer fica, sem se escrever nada.
+   que já está em A fazer fica, sem se escrever nada. Os subtickets dele que
+   ainda estavam à espera em Human Tests voltam com ele a A fazer (o
+   resolver trá-los de volta); os aceites ficam.
    Recebe: o — as opções lidas; d — as dependências.
    Devolve: o texto com de onde para onde. */
 function cmdReabrir(o, d) {
@@ -2278,11 +2454,76 @@ function cmdReabrir(o, d) {
   if (k.coluna_id === destino.id) return k.chave + ' já está em «' + destino.nome + '» ' + ondeFica(a) + ': não mexi.';
   const daqui = (colunas.find((x) => x.id === k.coluna_id) || { nome: k.coluna_id }).nome;
   const agora = d.agora();
-  escrever(d, a, sqlDoTicketQa(det, destino.id, agora).concat(sqlMover(k, destino, agora, CLAUDE, 'kanban.reabrir')));
+  const voltam = ler(d, a, [sqlSubtickets(k.id)])[0].filter((f) => f.removed_at == null && f.coluna_id === HUMAN_TESTS);
+  escrever(d, a, sqlDoTicketQa(det, destino.id, agora).concat(
+    voltam.flatMap((f) => sqlMover({ id: f.id, chave: chaveDe(f.numero), coluna_id: f.coluna_id }, destino, agora, CLAUDE, 'kanban.reabrir')),
+    sqlMover(k, destino, agora + 1, CLAUDE, 'kanban.reabrir')));
   const ficou = ler(d, a, [instrucao('SELECT coluna_id FROM kanban_cartoes WHERE numero = ?', [o.numero])])[0][0];
   if (!ficou || ficou.coluna_id !== destino.id) throw new ErroKanban('O ' + k.chave + ' não ficou em «' + destino.nome + '»: vê-o com o ver.');
   return k.chave + ' reaberto: «' + daqui + '» → «' + destino.nome + '» (no topo) ' + ondeFica(a) + '.'
-    + (comOTicket(det) ? comOTicket(det).replace(/\.$/, ' (a resolução fica à vista, como «Resolução anterior»).') : '');
+    + (comOTicket(det) ? comOTicket(det).replace(/\.$/, ' (a resolução fica à vista, como «Resolução anterior»).') : '')
+    + (voltam.length ? ' Voltaram com ele: ' + voltam.map((f) => chaveDe(f.numero)).join(', ') + '.' : '');
+}
+
+/* A resolução de um ticket de QA com o «O que testar» trocado pelo dos
+   subtickets (o partir): o bloco que começa em «O que testar:» sai e entra o
+   novo; sem ele, junta-se no fim.
+   Recebe: resolucao — a que o ticket tem (ou nada); testar — o texto novo
+   (testarDosSubtickets).
+   Devolve: o texto. */
+export function resolucaoPartida(resolucao, testar) {
+  const r = String(resolucao == null ? '' : resolucao).replace(/(?:^|\n\n)O que testar:[\s\S]*$/, '').trim();
+  return (r ? r + '\n\n' : '') + 'O que testar: ' + testar;
+}
+
+/* partir: parte o «O que testar» de um cartão que já está em Human Tests em
+   subtickets, um por --teste (dois ou mais), para os cartões resolvidos
+   antes dos subtickets (KAN-162: «Aplica aos tickets em aberto»). O cartão
+   fica em Human Tests; os subtickets nascem por baixo dele, com o comentário
+   do Claude no pai a dizer quais são e, num cartão de QA, a resolução do
+   ticket com o «O que testar» trocado (resolucaoPartida). Recusa sem mexer
+   num cartão fora de Human Tests ou que já tem subtickets vivos (para os
+   redefinir, reabre-se e resolve-se de novo com --teste).
+   Recebe: o — as opções lidas (o.testes); d — as dependências.
+   Devolve: o texto com os subtickets criados. */
+function cmdPartir(o, d) {
+  const a = alvoDe(o.local);
+  const { porNumero, colunas } = conferidos(d, a, [o.numero]);
+  const det = porNumero.get(o.numero);
+  const r = impedimento(det, o.numero, a, 'partir');
+  if (r) recusaSemMexer([r], false);
+  const k = det.cartao;
+  const destino = colunaPorTexto(colunas, HUMAN_TESTS);
+  if (k.coluna_id !== destino.id) {
+    const daqui = (colunas.find((x) => x.id === k.coluna_id) || { nome: k.coluna_id }).nome;
+    recusaSemMexer([k.chave + ' está em «' + daqui + '»: o partir é para um cartão em «' + destino.nome + '» (num de A fazer ou Auto Tests, o resolver com --teste já os cria)'], false);
+  }
+  const filhos = ler(d, a, [sqlSubtickets(k.id)])[0];
+  const vivos = filhos.filter((f) => f.removed_at == null);
+  if (vivos.length) {
+    recusaSemMexer([k.chave + ' já tem subtickets (' + vivos.map((f) => chaveDe(f.numero)).join(', ') + '): para os redefinir, reabre-o e resolve-o de novo com --teste'], false);
+  }
+  const x0 = filhos.reduce((m, f) => Math.max(m, Number(f.sub) || 0), 0) + 1;
+  if (x0 + o.testes.length - 1 > SUB_BASE - 1) throw new ErroKanban('O ' + k.chave + ' já não leva mais subtickets (até ' + (SUB_BASE - 1) + ').');
+  const criados = o.testes.map((t, i) => ({ chave: chaveDe(numeroDoSubticket(k.numero, x0 + i)), titulo: t.titulo }));
+  const testar = testarDosSubtickets(criados);
+  const agora = d.agora();
+  const uuid = d.uuid();
+  const og = det.origem;
+  const doTicket = og && og.tipo === 'qa' && og.ticket && !og.ticket.removido
+    ? [instrucao('UPDATE qa_tickets SET resolution = ?, updated_at = ? WHERE id = ? AND removed_at IS NULL', [resolucaoPartida(og.ticket.resolution, testar), agora, og.id])] : [];
+  escrever(d, a, doTicket.concat(
+    sqlCriarSubtickets(k, o.testes, x0, destino, agora, o.testes.map(() => d.uuid())),
+    sqlComentar(k, 'Parti o que testar em subtickets.\n\nO que testar: ' + testar, agora + 1, uuid),
+    // o pai sobe ao topo, por cima dos subtickets
+    [instrucao('UPDATE kanban_cartoes SET posicao = (SELECT COALESCE(MIN(x.posicao), 1024) - 1024 FROM kanban_cartoes x WHERE x.coluna_id = ? AND x.removed_at IS NULL AND x.id <> ?) WHERE id = ?',
+      [destino.id, k.id, k.id]),
+    sqlAuditoria('kanban.partir', k.chave, criados.map((c) => c.chave).join(', '), agora + 1)]));
+  const depois = ler(d, a, [sqlSubtickets(k.id)])[0].filter((f) => f.removed_at == null && f.coluna_id === destino.id);
+  const faltam = criados.filter((c) => !depois.some((f) => chaveDe(f.numero) === c.chave));
+  if (faltam.length) throw new ErroKanban('Os subtickets ' + faltam.map((c) => c.chave).join(', ') + ' não ficaram em «' + destino.nome + '»: vê o ' + k.chave + ' com o ver.');
+  return k.chave + ' partido em ' + criados.length + ' subtickets em «' + destino.nome + '» ' + ondeFica(a) + ': ' + criados.map((c) => c.chave + ' «' + c.titulo + '»').join(', ') + '.'
+    + (doTicket.length ? ' A resolução do ticket de QA ' + og.id + ' diz agora quais são.' : '');
 }
 
 /* anexo: descarrega os anexos de um cartão (todos, ou o dado) do R2 do alvo
@@ -2350,7 +2591,7 @@ export function principal(argv, deps, saida) {
     const fazer = {
       listar: cmdListar, ver: cmdVer, criar: cmdCriar, editar: cmdEditar, mover: cmdMover, comentar: cmdComentar,
       ligar: cmdLigar, 'importar-jira': cmdImportarJira, sincronizar: cmdSincronizar,
-      fila: cmdFila, anexo: cmdAnexo, comecar: cmdComecar, resolver: cmdResolver, reabrir: cmdReabrir,
+      fila: cmdFila, anexo: cmdAnexo, comecar: cmdComecar, resolver: cmdResolver, reabrir: cmdReabrir, partir: cmdPartir,
     }[o.comando];
     out(fazer(o, d) + '\n');
     return 0;
