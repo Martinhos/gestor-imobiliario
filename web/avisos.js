@@ -27,6 +27,22 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 83,
+    data: '2026-11-25',
+    titulo: 'A data de celebração à vista, e um «?» em cada pergunta do IRS no contrato',
+    seccoes: [
+      {
+        titulo: 'O contrato',
+        afeta: ['contratos'],
+        itens: [
+          'A data de celebração escreve-se diretamente, sem «Foi assinado noutro dia». Num contrato novo vem com o dia de hoje; num que já tinhas vem com o início, e gravar sem mexer não muda nada.',
+          'Se a data de celebração ficar depois do início, o contrato avisa logo por baixo, para corrigires se assinaram antes.',
+          'As perguntas do IRS no contrato têm agora um «?» ao lado. Toca nele para leres a explicação; por baixo da pergunta fica só o que diz respeito a este contrato.',
+        ],
+      },
+    ],
+  },
+  {
     v: 82,
     data: '2026-11-23',
     titulo: 'Formulários mais curtos, e a Declaração mais certa nas rendas, nas taxas e nos gastos',

@@ -4060,8 +4060,17 @@ passado quando já passou), Sim, tem n.º, Não vou declarar (que diz que o
 Modelo 2 é do Imposto do Selo e a escolha só diz respeito ao IRS); num imóvel
 fora de Portugal, «Vais declarar estas rendas no IRS?»
 (contrato.js:ctSegmentoAt, contrato.js:ctPorIndicarDica). Num declarado
-ficam à vista o n.º e a finalidade, «Foi assinado noutro dia», que abre a
-celebração (contrato.js:ctCelebracaoOutra), e, nos contratos de habitação
+ficam à vista o n.º, a finalidade e a data de celebração — um campo de data
+sempre à vista, e não um interruptor: num contrato novo vem com hoje, num que
+já existe e não a tem vem com o início (contrato.js:ctCelebracaoNoCampo,
+contrato.js:ctNovo), e o dia do início grava-se em branco, que quer dizer o
+mesmo (contrato.js:ctCelebracaoDoCampo, contrato.js:ctCelebracaoOutra) — um
+contrato antigo aberto e gravado sem mexer não muda de regime. A data que
+veio do início segue-o quando o início muda (contrato.js:ctInicioMudou) até
+ser escrita à mão (contrato.js:ctCelebracaoMudou); uma assinatura depois do
+início diz-se por baixo, na cor de aviso (contrato.js:ctCelebracaoCaso) —
+num contrato antigo registado agora, o hoje que o campo traz não é o dia em
+que assinaram —; e, nos contratos de habitação
 dos anos das rendas moderadas, seja qual for a renda, «O inquilino paga à
 parte móveis, equipamentos ou serviços?», que abre o valor
 (contrato.js:ctExtrasVisivel, contrato.js:ctExtrasDica: os móveis e
@@ -4092,7 +4101,7 @@ sei» as obras ficam fora do Anexo F; e, nos começados antes de 2022, se a
 renda de 2023 subiu mais de 2 % (atualizacao2023,
 contrato.js:ctAtualizacao2023Visivel). A taxa escrita no contrato serve só
 para a renda líquida: quando não é a da lei do ano, uma linha por baixo do
-campo di-lo enquanto se escreve (contrato.js:ctTaxaEscritaAviso). A dica da
+campo di-lo enquanto se escreve (contrato.js:ctTaxaEscritaAviso). O «?» da
 celebração diz para que serve — o regime da redução e o 4.2C — e que no
 Anexo F vai a data de início (contrato.js:ctCelebracaoDica). Num contrato
 começado antes de 1 de abril de 2015, o formulário e a ficha não falam de
@@ -4100,6 +4109,27 @@ Modelo 2: o n.º vem do registo dos elementos mínimos
 (contrato.js:ctAntesDoModelo2, contrato.js:ctNumeroDica,
 contrato.js:ctPorIndicarDica). O liveNet mostra e esconde cada pergunta
 quando a data ou a isenção mudam.
+
+Cada pergunta do bloco fiscal que tem explicação leva um «?» ao lado do
+rótulo: a lei, o que é e onde vai no Anexo F abrem numa janela por cima do
+«Editar contrato», só de leitura, com o nome curto da pergunta no título e um
+«Fechar» (contrato.js:CT_AJUDAS, contrato.js:ctExplicar, pelo empilhar do
+componentes.js:openModal — o formulário fica por baixo, inerte, com o que
+está escrito e a posição onde estava). O texto lê-se no toque, do contrato
+como está escrito (contrato.js:ctEmEdicao, contrato.js:ctAjudaTexto), e não
+do primeiro desenho. Por baixo da pergunta fica só a frase curta do caso
+deste contrato, quando a há, e o liveNet reescreve-a (contrato.js:ctCasoHtml):
+o prazo do Modelo 2 em «Ainda não» (contrato.js:ctPorIndicarCaso), o contrato
+de antes de abril de 2015 no n.º (contrato.js:ctNumeroCaso), a celebração
+depois do início, a isenção que não conta (contrato.js:ctIsencaoCaso), a
+gestão florestal que não conta (contrato.js:ctEgfCaso), o que fica de fora em
+«Não vou declarar» (contrato.js:ctNaoDeclaradoCaso) e a taxa reduzida com o
+quadro 4.2 (contrato.js:ctReduzidaCaso). Um «Em branco: …» fica à vista, como
+a regra dos formulários pede (a renda do contrato anterior, o imposto pago lá
+fora). O «?» da finalidade só existe no DHD; o do segmentado explica a
+resposta escolhida, menos o «Sim, tem n.º» de cá, que se explica pergunta a
+pergunta. Os encargos do inquilino e o imposto vivem fora do bloco fiscal e
+ficam com as dicas deles.
 
 Ao guardar um contrato novo, ou com as rendas antecipadas ou a caução
 mudadas, a app propõe registar o que se pagou na assinatura
@@ -7289,6 +7319,19 @@ todos os formulários:
   com dois decimais, «223,61» e «320,00», ao editar como no «Repor»
   (movimento.js:txMontanteNoCampo).
 
+Uma explicação longa de uma pergunta (a lei, o que é, onde vai) não vive num
+.hint por baixo dela: vai para um «?» ao lado do rótulo, que a abre numa
+janela por cima do formulário (o bloco fiscal do contrato, contrato.js:ctQ).
+O «?» é um botão só de ícone (o ic('ajuda')), com o nome «Explicar:
+<pergunta>», fora do <label>: dentro, o rótulo passava-lhe o toque e o nome
+dele entrava no do campo (o primeiro elemento rotulável de um <label> é o que
+ele rotula). A folha pousa-o à direita da primeira linha, numa coluna que o
+rótulo lhe guarda, e por isso um rótulo curto não parte em duas linhas a
+384px; num interruptor fica entre o texto e o interruptor (estilos.css:.ct-q,
+estilos.css:.ct-ajuda). No rato mede 32px; no dedo 44, sem mexer no desenho.
+Por baixo da pergunta fica só o que diz deste registo agora (o caso), e o «Em
+branco: …» de um valor por omissão.
+
 O ecrã de entrar e criar conta tem rótulos à vista, e não placeholders a
 fazer de rótulo, que desaparecem ao escrever
 (web/cloud/entrada.js:camposDaEntrada), com os ids, os tipos e o
@@ -9366,6 +9409,11 @@ tamanhos compactos continuam certos (estilos.css:@media(pointer:coarse)).
 sem a nuvem abre as opções do cartão —, com vibração,
 e engole o clique que vem a seguir (componentes.js:_lpT e os ouvintes de
 pointer que o usam).
+
+O «?» de uma pergunta do formulário é o próprio botão a crescer para 44×44
+no dedo, posto para fora da coluna que o rótulo lhe guarda com top e right
+negativos (estilos.css:.ct-ajuda): é o tamanho da caixa que o percurso mede,
+e um ::after não contava.
 
 Onde uma folha precisa de mais do que a regra geral dá, sobe-o pelos
 seletores da sua secção, e não mexendo nas regras base (o .tag, o .tagadd).

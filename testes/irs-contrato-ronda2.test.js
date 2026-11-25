@@ -81,7 +81,10 @@ describe('o direito real de habitação duradoura (D120)', () => {
     monta(app, { start: '2022-05-01', end: '', deposit: 30000, fisco: { finalidade: 'dhd' } });
     const h = form(app);
     assert.ok(app.__sel.c_ffin.options.some((o) => o.v === 'dhd' && o.label === 'Direito real de habitação duradoura'), 'a escolha tem o DHD');
-    assert.match(h, /<div class="hint ct-colado" id="c_ffinHint">O direito real de habitação duradoura \(DL 1\/2020\) vai ao quadro 4\.3 do Anexo F, e não ao 4\.1: a prestação mensal paga 5 %\. A data da escritura é o início do contrato, e o valor da caução é a caução do contrato\.<\/div>/);
+    /* KAN-161: a explicação no «?» da finalidade, que só existe no DHD */
+    assert.match(h, /<button type="button" class="ct-ajuda" id="c_aj_fin"[^>]*aria-label="Explicar: Finalidade"[^>]*>/);
+    assert.doesNotMatch(h, /id="c_aj_fin"[^>]* hidden/);
+    assert.equal(app.ctAjudaTexto('fin', app.cForm), 'O direito real de habitação duradoura (DL 1/2020) vai ao quadro 4.3 do Anexo F, e não ao 4.1: a prestação mensal paga 5 %. A data da escritura é o início do contrato, e o valor da caução é a caução do contrato.');
     domCom(app, { c_rent: '600', c_ffin: 'dhd' });
     app.collectCt();
     assert.equal(app.cForm.fisco.finalidade, 'dhd');
@@ -98,21 +101,22 @@ describe('o direito real de habitação duradoura (D120)', () => {
   test('um contrato de habitação sem termo não ganha aviso nenhum do DHD', () => {
     const c = monta(app, { start: '2022-05-01', end: '' });
     const h = form(app);
-    assert.match(h, /<div class="hint ct-colado" id="c_ffinHint" hidden><\/div>/, 'a dica da finalidade fica escondida e vazia');
+    assert.match(h, /id="c_aj_fin"[^>]* hidden>/, 'o «?» da finalidade fica escondido');
+    assert.equal(app.ctAjudaTexto('fin', app.cForm), '', 'e sem explicação');
     assert.doesNotMatch(texto(app.ctAtDaFicha(c)), /habitação duradoura|DHD|4\.3/);
     assert.doesNotMatch(texto(h), /DHD|4\.3/, 'o DHD só como uma das finalidades da escolha');
   });
 
-  test('o liveNet mostra a dica do 4.3 quando se escolhe o DHD, e esconde-a nas outras', () => {
+  test('o liveNet mostra o «?» do 4.3 quando se escolhe o DHD, e esconde-o nas outras; o «?» lê a escolha do momento', () => {
     monta(app, { start: '2022-05-01', end: '' });
     form(app);
-    let els = domCom(app, { c_rent: '600', c_ffin: 'dhd', c_ffinHint: '' });
+    let els = domCom(app, { c_rent: '600', c_ffin: 'dhd', c_aj_fin: '' });
     app.liveNet();
-    assert.equal(els.c_ffinHint.hidden, false);
-    assert.match(els.c_ffinHint.textContent, /quadro 4\.3/);
-    els = domCom(app, { c_rent: '600', c_ffin: 'hp', c_ffinHint: '' });
+    assert.equal(els.c_aj_fin.hidden, false);
+    assert.match(app.ctAjudaTexto('fin', app.ctEmEdicao()), /quadro 4\.3/);
+    els = domCom(app, { c_rent: '600', c_ffin: 'hp', c_aj_fin: '' });
     app.liveNet();
-    assert.equal(els.c_ffinHint.hidden, true);
+    assert.equal(els.c_aj_fin.hidden, true);
   });
 
   test('prazos: a caução do DHD não pede recibo nem conta como renda; a prestação mensal pede', () => {
@@ -171,7 +175,9 @@ describe('o prédio rústico arrendado a uma entidade de gestão florestal (D119
     monta(app, { start: '2019-03-01', end: '2031-02-28', fisco: { finalidade: 'nh', celebracao: '2019-02-20' } }, { tipoPredio: 'R' });
     const h = form(app);
     assert.match(h, /<b>Arrendado a entidade de gestão florestal reconhecida \(EGF\/UGF\)<\/b><\/span><input type="checkbox" role="switch" class="ct-sw" id="c_fegf" data-change="liveNet\(\)">/);
-    assert.match(h, /<div class="hint ct-colado" id="c_fegfHint">Prédio rústico florestal arrendado até 31 de dezembro de 2020 a uma entidade ou unidade de gestão florestal reconhecida: as rendas contam 50 %, durante 12 anos a contar do ano do contrato\. Declara-se no quadro 6C do Anexo F, que aponta para a linha do contrato no quadro 4\.1\.<\/div>/);
+    assert.match(h, /id="c_aj_egf"[^>]*aria-label="Explicar: Entidade de gestão florestal"/);
+    assert.match(h, /<div class="hint ct-colado ct-caso" id="c_fegfCaso" hidden><\/div>/, 'desligada: nenhuma frase do caso');
+    assert.equal(app.ctAjudaTexto('egf', app.cForm), 'Prédio rústico florestal arrendado até 31 de dezembro de 2020 a uma entidade ou unidade de gestão florestal reconhecida: as rendas contam 50 %, durante 12 anos a contar do ano do contrato. Declara-se no quadro 6C do Anexo F, que aponta para a linha do contrato no quadro 4.1.');
     domCom(app, { c_rent: '300', c_fegf: true });
     app.collectCt();
     assert.equal(app.cForm.fisco.egf, true);
@@ -182,8 +188,10 @@ describe('o prédio rústico arrendado a uma entidade de gestão florestal (D119
 
   test('marcado num contrato de 2022, a dica e a ficha dizem porque o 6C não conta', () => {
     const c = monta(app, { start: '2022-03-01', end: '2034-02-28', fisco: { finalidade: 'nh', celebracao: '2022-02-20', egf: true } }, { tipoPredio: 'R' });
-    form(app);
+    const h = form(app);
     assert.match(app.ctEgfDica(app.cForm), /Atenção: em 2026 não conta — só vale para os arrendamentos celebrados até 31 de dezembro de 2020\./);
+    // por baixo do interruptor fica só porque não conta (KAN-161)
+    assert.match(h, /<div class="hint ct-colado ct-caso" id="c_fegfCaso">Atenção: em 2026 não conta — só vale para os arrendamentos celebrados até 31 de dezembro de 2020\.<\/div>/);
     const t = texto(app.ctAtDaFicha(c));
     assert.match(t, /Gestão florestal arrendado a uma EGF ou UGF/);
     assert.match(t, /o quadro 6C não conta em 2026: só vale para os arrendamentos celebrados até 31 de dezembro de 2020\./);
@@ -198,7 +206,8 @@ describe('as rendas tributadas na categoria B (D134)', () => {
     const h = form(app);
     // a pergunta da atividade aberta, dentro da particularidade fiscal (N015, D7)
     assert.match(h, /<b>Tens atividade aberta com estas rendas na categoria B\?<\/b><\/span><input type="checkbox" role="switch" class="ct-sw" id="c_fcatb" data-change="liveNet\(\)">/);
-    assert.match(h, /<div class="hint ct-colado" id="c_fcatbHint">Só com atividade aberta: se optaste por tributar estas rendas na categoria B \(CIRS art\. 4\.º n\.º 1 n\), na declaração de início ou de alterações de atividade\), ou se o imóvel está afeto à tua atividade empresarial ou profissional \(art\. 3\.º n\.º 2 a\)\)\./);
+    assert.match(h, /id="c_aj_catb"[^>]*aria-label="Explicar: Rendas na categoria B"/);
+    assert.match(app.ctAjudaTexto('catb', app.cForm), /^Só com atividade aberta: se optaste por tributar estas rendas na categoria B \(CIRS art\. 4\.º n\.º 1 n\), na declaração de início ou de alterações de atividade\), ou se o imóvel está afeto à tua atividade empresarial ou profissional \(art\. 3\.º n\.º 2 a\)\)\./);
     domCom(app, { c_rent: '800', c_fpart: true, c_fcatb: true });
     app.collectCt();
     assert.equal(app.cForm.fisco.categoriaB, true);
@@ -235,7 +244,11 @@ describe('o imóvel fora de Portugal (D133)', () => {
   test('o bloco fiscal pede o imposto pago lá por ano, sem nada do Modelo 2 nem da taxa especial', () => {
     monta(app, { start: '2024-01-01', end: '2033-12-31', rent: 1500 }, paris);
     const h = form(app);
-    assert.match(h, /Imóvel fora de Portugal: as rendas não vão ao Anexo F, nem há Modelo 2, recibos eletrónicos ou comunicações à AT\. Declaram-se no Anexo J/);
+    assert.match(h, /id="c_aj_at"[^>]*aria-label="Explicar: Vais declarar estas rendas no IRS\?"/);
+    assert.match(app.ctAjudaTexto('at', app.cForm), /Imóvel fora de Portugal: as rendas não vão ao Anexo F, nem há Modelo 2, recibos eletrónicos ou comunicações à AT\. Declaram-se no Anexo J/);
+    assert.match(h, /id="c_aj_ie"/);
+    assert.match(app.ctAjudaTexto('ie', app.cForm), /crédito de imposto \(CIRS art\. 81\.º\)/);
+    assert.match(h, /<div class="hint">Em branco: nada pago lá\.<\/div>/, 'o valor por omissão fica à vista');
     assert.match(h, /<label>Pelas rendas de 2025 \(€\)<input id="c_fie_2025" type="text" inputmode="decimal" class="num" value="" placeholder="Opcional" autocomplete="off"><\/label>/);
     for (const id of ['c_fnum', 'c_fisen', 'c_ffin', 'c_fcatb', 'c_fn23']) assert.doesNotMatch(h, new RegExp('id="' + id + '"'), id);
     domCom(app, { c_rent: '1500', c_fie_2024: '', c_fie_2025: '1200,50', c_fie_2026: '' });
@@ -267,7 +280,7 @@ describe('o imóvel fora de Portugal (D133)', () => {
     const h = form(app);
     // a pergunta no rótulo do grupo, e as respostas que lhe respondem (N061)
     assert.match(h, /<span class="flabel" id="c_fiscoRot">Vais declarar estas rendas no IRS\?<\/span>/);
-    assert.match(h, /Fora de Portugal não há Modelo 2: as rendas vão ao Anexo J/);
+    assert.match(app.ctAjudaTexto('at', app.cForm), /Fora de Portugal não há Modelo 2: as rendas vão ao Anexo J/);
     assert.doesNotMatch(h, /Comunicaste este contrato às Finanças|Já o comunicaste às Finanças/);
   });
 

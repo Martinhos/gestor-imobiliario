@@ -66,7 +66,10 @@ describe('o formulário do contrato: a secção Fisco', () => {
     assert.match(dobra, /role="radio" aria-checked="true" class="on" data-toca="rascunho" data-click="setFiscoEstado\(''\)">Ainda não</);
     assert.match(dobra, /aria-checked="false"[^>]*>Sim, tem n\.º</);
     assert.match(dobra, /aria-checked="false"[^>]*>Não vou declarar</);
-    assert.match(dobra, /Com «Ainda não», as rendas contam no resumo do Anexo F e a app lembra-te o prazo do Modelo 2\./);
+    // a explicação vive no «?» da pergunta (KAN-161) e lê-se do contrato no toque
+    assert.match(dobra, /id="c_aj_at"[^>]*aria-label="Explicar: Já o comunicaste às Finanças\?"/);
+    assert.match(app.ctAjudaTexto('at', app.cForm), /Com «Ainda não», as rendas contam no resumo do Anexo F e a app lembra-te o prazo do Modelo 2\./);
+    assert.doesNotMatch(dobra, /Com «Ainda não», as rendas contam/, 'por baixo fica só o caso');
     assert.doesNotMatch(dobra, /id="c_fnum"/, 'sem estado, nenhum campo do declarado');
     // o grupo vem logo a seguir ao do prazo
     assert.ok(html.indexOf('id="ct_prazo"') < html.indexOf('id="ct_fisco"'));
@@ -83,10 +86,11 @@ describe('o formulário do contrato: a secção Fisco', () => {
     app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800,
       fisco: { estado: 'declarado', numero: '1234567', finalidade: 'hnp', renovacoes: [{ id: 'R1', inicio: '2025-01-01', fim: '2025-12-31' }] } });
     const dobra = dobraFisco(app.ctBody());
-    for (const id of ['c_fnum', 'c_ffin', 'c_fcelOutro', 'c_fcel']) assert.match(dobra, new RegExp('id="' + id + '"'), id);
+    for (const id of ['c_fnum', 'c_ffin', 'c_fcel', 'c_aj_num', 'c_aj_cel']) assert.match(dobra, new RegExp('id="' + id + '"'), id);
+    assert.doesNotMatch(dobra, /c_fcelOutro|Foi assinado noutro dia/, 'o interruptor da celebração saiu (KAN-160)');
     assert.doesNotMatch(dobra, /id="c_fren"/, 'nada no IRS lê o «Renovável» (N060)');
     assert.match(dobra, /id="c_fnum"[^>]*inputmode="numeric"[^>]*value="1234567"/);
-    assert.match(dobra, /Vem no comprovativo do Modelo 2/);
+    assert.match(app.ctAjudaTexto('num', app.cForm), /Vem no comprovativo do Modelo 2/);
     for (const [, rotulo] of app.FISCO_FINALIDADES) assert.match(dobra, new RegExp(rotulo), 'a finalidade «' + rotulo + '»');
     assert.match(dobra, /id="c_ffin" value="hnp"/, 'a finalidade guardada vem escolhida');
     assert.match(dobra, /Não sei/);
@@ -95,7 +99,7 @@ describe('o formulário do contrato: a secção Fisco', () => {
     assert.match(dobra, /delRenov\('R1'\)/);
     assert.match(dobra, /addRenov\(\)/);
     assert.match(dobra, /Adicionar renovação/);
-    assert.match(dobra, /quadro 4\.2A/);
+    assert.match(app.ctAjudaTexto('renov', app.cForm), /quadro 4\.2A/);
     assert.match(dobra, /aria-checked="true" class="on"[^>]*>Sim, tem n\.º</, 'o segmentado diz o estado');
     assert.doesNotMatch(dobra, /id="c_fces"/, 'sem fim nem inatividade não há cessação');
   });
@@ -118,7 +122,8 @@ describe('o formulário do contrato: a secção Fisco', () => {
     const dobra = dobraFisco(app.ctBody());
     assert.doesNotMatch(dobra, /id="c_fnum"/);
     assert.doesNotMatch(dobra, /id="c_ffin"|id="c_fcel"|id="c_fren"|id="c_fces"/);
-    assert.match(dobra, /fica fora do resumo do Anexo F e dos prazos da AT\. Podes mudar isto quando quiseres\./);
+    assert.match(dobra, /fica fora do resumo do Anexo F e dos prazos da AT\./);
+    assert.match(app.ctAjudaTexto('at', app.cForm), /fica fora do resumo do Anexo F e dos prazos da AT\. Podes mudar isto quando quiseres\./);
     assert.doesNotMatch(dobra, /class="[^"]*\b(danger|neg|amber|warn|late)\b/, 'sem cor de perigo nem de aviso');
     assert.doesNotMatch(dobra, /ilegal|obrigat|coima|multa|risco/i, 'sem ameaça');
     assert.match(dobra, /aria-checked="true" class="on"[^>]*>Não vou declarar</);
@@ -128,7 +133,8 @@ describe('o formulário do contrato: a secção Fisco', () => {
     const longo = { propertyId: 'P1', tenantIds: ['T1'], rent: 800, start: ANO + '-01-01', end: (ANO + 6) + '-12-31' };
     assert.ok(app.irsRate(longo) < 25, 'sete anos dão taxa reduzida');
     app.cForm = app.normContract(Object.assign({ fisco: { estado: 'declarado' } }, longo));
-    assert.match(dobraFisco(app.ctBody()), /Taxa reduzida pela duração[^<]*15 de fevereiro/);
+    assert.match(dobraFisco(app.ctBody()), /Taxa reduzida pela duração[^<]*quadro 4\.2 do Anexo F\./);
+    assert.match(app.ctAjudaTexto('reduzida', app.cForm), /Taxa reduzida pela duração[^<]*15 de fevereiro/, 'o resto no «?»');
     app.cForm = app.normContract(Object.assign({ fisco: { estado: 'declarado', finalidade: 'hp' } }, longo));
     assert.match(dobraFisco(app.ctBody()), /Taxa reduzida pela duração/);
     app.cForm = app.normContract(Object.assign({ fisco: { estado: 'declarado', finalidade: 'nh' } }, longo));
@@ -180,7 +186,7 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
     app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800, fisco: { estado: 'declarado' } });
     // a linha por preencher entra como a do addRenov: um contrato guardado não tem renovações sem início
     app.cForm.fisco.renovacoes.push({ id: 'R1', inicio: '', fim: '' });
-    desfazerDom = domCom({ c_fnum: ' 1234567 ', c_ffin: 'hp', c_fcelOutro: true, c_fcel: '2024-03-01', c_fren: '1',
+    desfazerDom = domCom({ c_fnum: ' 1234567 ', c_ffin: 'hp', c_fcel: '2024-03-01', c_fren: '1',
       c_rini_R1: '2025-03-01', c_rfim_R1: '2026-02-28', c_fces: 'fim do prazo', c_cesData: '2026-01-31', c_cesMot: '02', c_rent: '800', c_active: true });
     app.collectCt();
     const f = app.cForm.fisco;
@@ -202,7 +208,7 @@ describe('setFiscoEstado, addRenov, delRenov e collectCt', () => {
 
   test('collectCt: «Não» é false, «Não sei» é null, e o que não é válido cai', () => {
     app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 800, fisco: { estado: 'declarado', renovavel: true, finalidade: 'hp', obrasSemOutroUso: true } });
-    desfazerDom = domCom({ c_fobras: '0', c_ffin: 'inventada', c_fcelOutro: true, c_fcel: 'ontem', c_rent: '800' });
+    desfazerDom = domCom({ c_fobras: '0', c_ffin: 'inventada', c_fcel: 'ontem', c_rent: '800' });
     app.collectCt();
     assert.equal(app.cForm.fisco.obrasSemOutroUso, false);
     assert.equal(app.cForm.fisco.finalidade, '', 'uma finalidade fora de FISCO_FINALIDADES não se guarda');

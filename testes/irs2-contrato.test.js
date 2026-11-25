@@ -362,7 +362,8 @@ describe('N034 — o inquilino empresa: só a identificação de quem lá mora (
     const f = app.fiscoSect();
     assert.match(f, /<label>O contrato identifica pelo nome quem lá mora\?<div class="sel" id="sel_c_femp">/);
     assert.doesNotMatch(f, /sublocação|sublocar/);
-    assert.match(f, /a AT só trata a renda como de habitação se o contrato identifica pelo nome a pessoa que lá mora/);
+    assert.doesNotMatch(app.ctAjudaTexto('emp', app.cForm), /sublocação|sublocar/);
+    assert.match(app.ctAjudaTexto('emp', app.cForm), /a AT só trata a renda como de habitação se o contrato identifica pelo nome a pessoa que lá mora/);
   });
 
   test('a resposta vai a fisco.empresaMorador; um «Não» antigo da pergunta junta volta a «por confirmar»', () => {

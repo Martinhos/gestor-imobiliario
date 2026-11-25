@@ -507,7 +507,8 @@ describe('o inquilino empresa num contrato de habitação (D47, D16)', () => {
     assert.match(f, /<label>O contrato identifica pelo nome quem lá mora\?<div class="sel" id="sel_c_femp">/);
     assert.match(f, /<input type="hidden" id="c_femp" value="">/, 'por responder: «Não sei»');
     assert.deepEqual(opcoes('c_femp'), ['1', '0']);
-    assert.match(f, /a AT só trata a renda como de habitação se o contrato identifica pelo nome a pessoa que lá mora/);
+    assert.match(f, /id="c_aj_emp"/, 'a explicação no «?» (KAN-161)');
+    assert.match(app.ctAjudaTexto('emp', app.cForm), /a AT só trata a renda como de habitação se o contrato identifica pelo nome a pessoa que lá mora/);
     // um particular, ou um contrato não habitacional: escondida, com o valor guardado lá dentro
     comNif('123456789', { empresaMorador: true });
     app.cForm = app.normContract(copia(app.contract('C1')));

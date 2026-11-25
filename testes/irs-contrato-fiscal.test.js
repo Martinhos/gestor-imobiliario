@@ -108,8 +108,9 @@ describe('as isenções da renda antiga (6H) e do ex-alojamento local (6F) (D18)
     h = form(app);
     assert.equal(caixa(h, 'c_fnrauBox'), '');
     assert.match(h, /<label>O contrato é anterior ao RAU \(1990\) e ficou sujeito aos arts\. 35\.º ou 36\.º do NRAU\?<div class="sel" id="sel_c_fnrau">/);
-    assert.match(h, /EBF art\. 46\.º-A/);
-    assert.match(h, /Em «Não sei», a isenção não conta\./);
+    assert.match(h, /id="c_aj_nrau"/, 'a explicação no «?» (KAN-161)');
+    assert.match(app.ctAjudaTexto('nrau', app.cForm), /EBF art\. 46\.º-A/);
+    assert.match(app.ctAjudaTexto('nrau', app.cForm), /Em «Não sei», a isenção não conta\./);
     // Sim: isento no 6H; Não sei: a isenção não conta
     domCom(app, { c_rent: '180', c_fisen: 'prerau', c_fnrau: '1' });
     app.collectCt();
@@ -129,7 +130,7 @@ describe('as isenções da renda antiga (6H) e do ex-alojamento local (6F) (D18)
     assert.equal(caixa(h, 'c_falBox'), '');
     // registado E afeto a esse fim a 31/12/2022, e o contrato entre as datas da versão (N156)
     assert.match(h, /O imóvel ainda estava em alojamento local, registado e afeto a esse fim, a 31\/12\/2022, e este contrato foi celebrado e registado no Portal das Finanças (entre 01\/01\/2023 e|até) 31\/12\/2024\?/);
-    assert.match(h, /vale para as rendas até às de 2029/);
+    assert.match(app.ctAjudaTexto('al', app.cForm), /vale para as rendas até às de 2029/);
     domCom(app, { c_rent: '950', c_fisen: 'al', c_fal: '1' });
     app.collectCt();
     assert.equal(app.cForm.fisco.alRegistado2022, true);
@@ -156,12 +157,13 @@ describe('as isenções da renda antiga (6H) e do ex-alojamento local (6F) (D18)
   test('o liveNet mostra a pergunta da isenção escolhida e esconde as outras', () => {
     monta(app, { start: '1987-01-01', end: '' });
     app.cForm = app.normContract(copia(app.contract('C1')));
-    const els = domCom(app, { c_rent: '180', c_fisen: 'prerau', c_fnrauBox: '', c_falBox: '', c_fihruBox: '', c_fisenHint: '' });
+    const els = domCom(app, { c_rent: '180', c_fisen: 'prerau', c_fnrauBox: '', c_falBox: '', c_fihruBox: '', c_fisenCaso: '' });
     app.liveNet();
     assert.equal(els.c_fnrauBox.hidden, false);
     assert.equal(els.c_falBox.hidden, true);
     assert.equal(els.c_fihruBox.hidden, true);
-    assert.match(els.c_fisenHint.textContent, /quadro 6H/);
+    assert.equal(els.c_fisenCaso.hidden, true, 'a isenção conta: nenhuma frase do caso');
+    assert.match(app.ctAjudaTexto('isen', app.ctEmEdicao()), /quadro 6H/, 'o «?» lê a escolha do momento');
     els.c_fisen.value = 'al';
     app.liveNet();
     assert.equal(els.c_fnrauBox.hidden, true);
@@ -218,7 +220,7 @@ describe('as condições das isenções: o envio ao IHRU e a data do PAA (D46)',
       const h = form(b);
       assert.equal(caixa(h, 'c_fihruBox'), '');
       assert.match(h, /<label>Enviado ao IHRU a<input id="c_fihru" type="date" value="" max="2027-01-20"/);
-      assert.match(h, /plataforma do IHRU até 15\/01\/2027: sem isso, as rendas não ficam isentas de IRS/);
+      assert.match(b.ctAjudaTexto('ihru', b.cForm), /plataforma do IHRU até 15\/01\/2027: sem isso, as rendas não ficam isentas de IRS/);
       assert.equal(b.irsRate(b.cForm, 2026), 10, 'sem o dia, passado o prazo, a isenção não conta');
       domCom(b, { c_rent: '700', c_fisen: 'rsaa', c_fihru: '2027-01-10' });
       b.collectCt();
@@ -272,7 +274,7 @@ describe('as obras antes do início (D28)', () => {
     const h = form(app);
     assert.equal(caixa(h, 'c_fobrasBox'), '', 'o primeiro contrato do imóvel não fica de fora');
     assert.match(h, /Entre setembro de 2025 e 01\/06\/2026, o imóvel esteve só à espera de inquilino, sem uso teu, da família nem alojamento local\?/);
-    assert.match(h, /CIRS art\. 41\.º n\.º 7/);
+    assert.match(app.ctAjudaTexto('obras', app.cForm), /CIRS art\. 41\.º n\.º 7/);
     for (const [v, esperado] of [['1', true], ['0', false], ['', null]]) {
       domCom(app, { c_rent: '1000', c_fobras: v });
       app.collectCt();
@@ -313,8 +315,10 @@ describe('o que se paga à parte e o limite das rendas moderadas (D48)', () => {
     // a pergunta de sim/não (N153) e o valor por baixo, com a letra do DL 97/2026 (N096)
     assert.match(h, /<b>O inquilino paga à parte móveis, equipamentos ou serviços\?<\/b>/);
     assert.match(h, /<label>Valor pago à parte por mês \(€\)<input id="c_fextras" type="text" inputmode="decimal" class="num" value="" placeholder="Opcional"[^>]*autocomplete="off">/);
-    assert.match(h, /ligados ao imóvel com carácter de permanência e pelos serviços que o valorizam, mesmo num contrato separado/);
-    assert.match(h, /Para o limite das rendas moderadas \(10 % até 2[\s.  ]?300[\s  ]€ por mês\) soma-se à renda o que o inquilino paga à parte pelos móveis/);
+    assert.match(h, /id="c_aj_extras"/, 'a explicação no «?» da pergunta (KAN-161)');
+    const ex = app.ctAjudaTexto('extras', app.cForm);
+    assert.match(ex, /ligados ao imóvel com carácter de permanência e pelos serviços que o valorizam, mesmo num contrato separado/);
+    assert.match(ex, /Para o limite das rendas moderadas \(10 % até 2[\s.  ]?300[\s  ]€ por mês\) soma-se à renda o que o inquilino paga à parte pelos móveis/);
     assert.equal(app.irsRate(app.cForm, 2026), 10);
     domCom(app, { c_rent: '2250', c_start: '2024-03-01', c_end: '2029-02-28', c_fextras: '100' });
     app.collectCt();
@@ -356,7 +360,8 @@ describe('a data de celebração (D108)', () => {
     monta(app);
     const h = form(app);
     assert.doesNotMatch(h, /o quadro 4\.2 do Anexo F pede-o/);
-    assert.match(h, /O dia em que assinaram: decide o regime da redução pela duração e se o quadro 4\.2C se aplica \(contratos celebrados desde 2024\)\. No Anexo F vai a data de início, não esta\./);
+    assert.match(h, /id="c_aj_cel"[^>]*aria-label="Explicar: Data de celebração"/);
+    assert.match(app.ctAjudaTexto('cel', app.cForm), /O dia em que assinaram: decide o regime da redução pela duração e se o quadro 4\.2C se aplica \(contratos celebrados desde 2024\)\. No Anexo F vai a data de início, não esta\./);
   });
 });
 
@@ -364,10 +369,14 @@ describe('os contratos anteriores a abril de 2015 não têm Modelo 2 (D85)', () 
   test('declarado: o n.º vem do registo dos elementos mínimos', () => {
     monta(app, { start: '2012-05-01', end: '' });
     const h = form(app);
-    assert.match(h, /<div class="hint ct-colado" id="c_fnumHint">Começou antes de abril de 2015: não tem Modelo 2\. O n\.º vem do registo dos elementos mínimos do contrato no Portal das Finanças/);
-    assert.doesNotMatch(h, /Vem no comprovativo do Modelo 2/);
+    /* KAN-161: por baixo, só o caso; o resto no «?» */
+    assert.match(h, /<div class="hint ct-colado ct-caso" id="c_fnumCaso">Começou antes de abril de 2015: não tem Modelo 2\.<\/div>/);
+    assert.match(app.ctAjudaTexto('num', app.cForm), /^Começou antes de abril de 2015: não tem Modelo 2\. O n\.º vem do registo dos elementos mínimos do contrato no Portal das Finanças/);
+    assert.doesNotMatch(app.ctAjudaTexto('num', app.cForm), /Vem no comprovativo do Modelo 2/);
     monta(app, { start: '2015-04-01', end: '' });
-    assert.match(form(app), /Vem no comprovativo do Modelo 2/, 'desde 1 de abril de 2015, o Modelo 2');
+    const h2 = form(app);
+    assert.match(app.ctAjudaTexto('num', app.cForm), /Vem no comprovativo do Modelo 2/, 'desde 1 de abril de 2015, o Modelo 2');
+    assert.match(h2, /<div class="hint ct-colado ct-caso" id="c_fnumCaso" hidden><\/div>/, 'sem caso, nada por baixo');
   });
 
   test('por indicar: sem o Modelo 2 nem o prazo de 2012, no formulário e na ficha', () => {
@@ -376,7 +385,8 @@ describe('os contratos anteriores a abril de 2015 não têm Modelo 2 (D85)', () 
     assert.doesNotMatch(h, /O prazo é 30\/06\/2012/);
     assert.doesNotMatch(h, /Comunicaste este contrato às Finanças \(Modelo 2\)/);
     // a pergunta está no rótulo do grupo (N061); a dica diz o registo dos elementos mínimos
-    assert.match(h, /Começou antes de abril de 2015: não tem Modelo 2\. Regista-se no Portal das Finanças com os elementos mínimos do contrato/);
+    assert.match(h, /id="c_fporIndicar">Começou antes de abril de 2015: não tem Modelo 2\.<\/div>/);
+    assert.match(app.ctAjudaTexto('at', app.cForm), /Começou antes de abril de 2015: não tem Modelo 2\. Regista-se no Portal das Finanças com os elementos mínimos do contrato/);
     const f = app.ctFicha('C1');
     assert.match(f, /Começou antes de abril de 2015: não tem Modelo 2\. Registaste-o no Portal das Finanças/);
     assert.doesNotMatch(f, /Comunicaste este contrato às Finanças \(Modelo 2\)/);
@@ -467,7 +477,7 @@ describe('a atualização da renda de 2023 (D76)', () => {
     const h = form(app);
     assert.equal(caixa(h, 'c_fat23Box'), '');
     assert.match(h, /<label>A renda de 2023 subiu mais de 2 %\?<div class="sel" id="sel_c_fat23">/);
-    assert.match(h, /coeficiente de 1,02/);
+    assert.match(app.ctAjudaTexto('at23', app.cForm), /coeficiente de 1,02/);
     for (const v of ['sim', 'nao', '']) {
       domCom(app, { c_rent: '1000', c_fat23: v });
       app.collectCt();

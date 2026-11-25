@@ -6109,3 +6109,39 @@ label.fine-lido>input,label.fine-lido .selbtn{border-color:var(--accent);box-sha
 .cp-g::before{content:"\202F"}
 .cp-eur{white-space:nowrap}
 .cp-eur::after{content:"\202F€"}
+/* === g2 kanban-2026-11-25: o «?» das perguntas do bloco fiscal e a data de celebração ===
+   (contrato.js:ctQ, contrato.js:ctAjudaBtn, contrato.js:ctCasoHtml; KAN-160 e
+   KAN-161) Cada pergunta do bloco fiscal leva um «?» ao lado do texto, que abre
+   a explicação numa janela por cima (contrato.js:ctExplicar). O «?» fica FORA do
+   <label> — dentro, o rótulo passava-lhe o toque e o nome dele entrava no do
+   campo —, pousado à direita da primeira linha: o rótulo guarda-lhe uma coluna
+   (a do texto encolhe 32px e o campo ocupa a linha toda), por isso um rótulo
+   curto não parte em duas linhas a 384px. No rato mede 32px; no dedo 44, para
+   fora da coluna (top e right negativos), sem mexer no desenho do ícone. */
+.ct-q{position:relative;min-width:0}
+.ct-q>label{grid-template-columns:minmax(0,1fr) 32px}
+.ct-q>label>:not(span){grid-column:1/-1}
+.ct-ajuda{position:absolute;top:-6px;right:-6px;width:32px;height:32px;display:grid;place-items:center;margin:0;padding:0;border:0;border-radius:50%;
+  background:transparent;color:var(--muted);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.ct-ajuda[hidden]{display:none}
+.ct-ajuda>svg{pointer-events:none}
+.ct-ajuda:active{background:var(--press);color:var(--ink)}
+.ct-ajuda:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@media(hover:hover) and (pointer:fine){.ct-ajuda:hover{background:var(--chip);color:var(--ink)}}
+/* um interruptor: o «?» entre o texto e o interruptor (46px e o espaço de 12) */
+.ct-q-sw>label.ct-sw-linha>.ct-sw-txt{padding-right:36px}
+.ct-q-sw>.ct-ajuda{top:calc(50% - 16px);right:58px}
+/* um título de grupo ou uma nota: o texto deixa o lugar do «?» */
+.ct-q-fl>.flabel,.ct-q-fl>.hint{display:block;padding-right:36px}
+.ct-campo>.ct-q-fl>.flabel{margin:0}
+@media(pointer:coarse){
+  .ct-ajuda{width:44px;height:44px;top:-12px;right:-12px}
+  .ct-q-sw>.ct-ajuda{top:calc(50% - 22px);right:52px}
+  .ct-q-sw>label.ct-sw-linha>.ct-sw-txt{padding-right:40px}
+}
+/* a frase curta do caso deste contrato; o aviso (a celebração depois do
+   início) diz-se pela cor da frente, que o escuro forçado do Samsung mantém */
+.ct-caso-aviso{color:var(--warn)}
+/* a explicação, na janela do «?» */
+.ct-explica{margin:0;font-size:15px;line-height:1.55;color:var(--ink)}
+/* === fim: o «?» das perguntas do bloco fiscal === */

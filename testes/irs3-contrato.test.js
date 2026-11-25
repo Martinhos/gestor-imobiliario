@@ -99,13 +99,14 @@ describe('N060 — depois de «Sim, tem n.º», o n.º e a finalidade; o resto q
   test('um contrato novo de 900 €: à vista o n.º, a finalidade e as três perguntas; nada da lista de antes', () => {
     monta();
     const h = fisco();
-    for (const id of ['c_fnum', 'c_ffin', 'c_fcelOutro', 'c_fextrasQ', 'c_fpart']) assert.equal(aVista(h, id), true, id + ' à vista');
-    for (const id of ['c_fcel', 'c_fisen', 'c_fcatb', 'c_fextras']) assert.equal(aVista(h, id), false, id + ' escondido');
+    for (const id of ['c_fnum', 'c_ffin', 'c_fcel', 'c_fextrasQ', 'c_fpart']) assert.equal(aVista(h, id), true, id + ' à vista');
+    for (const id of ['c_fisen', 'c_fcatb', 'c_fextras']) assert.equal(aVista(h, id), false, id + ' escondido');
     assert.equal(aVista(h, 'c_fren'), null, 'o «Renovável» saiu');
+    assert.equal(aVista(h, 'c_fcelOutro'), null, '«Foi assinado noutro dia» saiu (KAN-160)');
     assert.doesNotMatch(h, /Renovável/);
     assert.doesNotMatch(h, /addRenov\(\)|Adicionar renovação/, 'num contrato novo não há renovações à mão');
     assert.match(h, /<b>Este contrato tem alguma particularidade fiscal\?<\/b>/);
-    assert.match(h, /<b>Foi assinado noutro dia<\/b>/);
+    assert.match(h, /<label>Data de celebração<input id="c_fcel" type="date"/);
   });
 
   test('uma isenção ou a categoria B guardadas abrem a particularidade', () => {
@@ -136,14 +137,59 @@ describe('N060 — depois de «Sim, tem n.º», o n.º e a finalidade; o resto q
     assert.ok(opcoes('c_fisen').includes('pma'), 'com a finalidade em branco, todas');
   });
 
-  test('a celebração escrita noutro dia vem à vista; no dia do início, não', () => {
+  test('KAN-160: a data de celebração sempre à vista — a escrita, o início num antigo sem ela, hoje num novo', () => {
     monta({ fisco: { celebracao: '2026-10-20' } });
     let h = fisco();
-    assert.match(h, /id="c_fcelOutro" checked/);
     assert.equal(aVista(h, 'c_fcel'), true);
-    monta({ fisco: { celebracao: '2026-11-01' } });
+    assert.match(h, /id="c_fcel" type="date" value="2026-10-20" data-change/, 'a escrita, sem seguir o início');
+    monta({ start: '2024-03-01', end: '2029-02-28' });
     h = fisco();
-    assert.equal(aVista(h, 'c_fcel'), false);
+    assert.match(h, /id="c_fcel" type="date" value="2024-03-01" data-segue="inicio"/, 'um antigo sem celebração abre com o início, e segue-o');
+    /* um contrato novo (o ctModal sem id: ainda não está na base) vem com hoje */
+    monta();
+    app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 900, start: '2026-12-01', fisco: { estado: 'declarado' } });
+    h = app.fiscoSect();
+    assert.match(h, /id="c_fcel" type="date" value="2026-11-19" data-change/, 'hoje, sem seguir o início');
+    assert.equal(aVista(h, 'c_fcelCaso'), false, 'antes do início: nenhum aviso');
+    /* um novo de um contrato que já começou: hoje fica, e avisa */
+    app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 900, start: '2026-01-01', fisco: { estado: 'declarado' } });
+    h = app.fiscoSect();
+    assert.equal(aVista(h, 'c_fcelCaso'), true);
+    assert.match(texto(h), /Esta data é depois do início \(01\/01\/2026\)\. Se assinaram antes ou no próprio dia, corrige-a\./);
+    assert.match(h, /class="hint ct-colado ct-caso ct-caso-aviso" id="c_fcelCaso"/, 'o aviso pela cor da frente');
+    /* depois de lida uma vez, em branco é o início (o novo já não volta a hoje) */
+    app._ctAbertas.c_fcel = true;
+    h = app.fiscoSect();
+    assert.match(h, /id="c_fcel" type="date" value="2026-01-01" data-segue="inicio"/);
+    app._ctAbertas = {};
+  });
+
+  test('KAN-160: gravar um contrato antigo sem mexer não muda a celebração nem a taxa', () => {
+    const c = monta({ start: '2024-03-01', end: '2034-02-28' });
+    const taxa = app.irsRate(c);
+    abre();
+    /* o campo abre com o início, e o collectCt lê-o assim */
+    domCom({ c_rent: '900', c_active: true, c_start: '2024-03-01', c_end: '2034-02-28', c_fcel: '2024-03-01' });
+    app.collectCt();
+    assert.equal(app.cForm.fisco.celebracao, '', 'o dia do início grava-se em branco: o mesmo que antes');
+    assert.equal(app.irsRate(app.cForm), taxa, 'a taxa é a mesma');
+    assert.equal(app.ctEmEdicao().fisco.celebracao, '', 'a estimativa ao vivo também');
+    /* outro dia escreve-se */
+    domCom({ c_rent: '900', c_active: true, c_start: '2024-03-01', c_end: '2034-02-28', c_fcel: '2024-02-15' });
+    app.collectCt();
+    assert.equal(app.cForm.fisco.celebracao, '2024-02-15');
+  });
+
+  test('KAN-160: com o início mudado, a celebração que vinha do início segue-o; a escrita à mão fica', () => {
+    monta({ start: '2024-03-01', end: '2029-02-28' });
+    abre();
+    const els = domCom({ c_start: '2024-04-01', c_fcel: '2024-03-01', c_rent: '900' });
+    els.c_fcel = { value: '2024-03-01', getAttribute: (n) => (n === 'data-segue' ? 'inicio' : null), removeAttribute() {}, setAttribute() {}, type: 'date', tagName: 'INPUT' };
+    app.ctInicioMudou();
+    assert.equal(els.c_fcel.value, '2024-04-01', 'segue o início novo');
+    els.c_fcel = { value: '2024-02-10', getAttribute: () => null, removeAttribute() {}, setAttribute() {}, type: 'date', tagName: 'INPUT' };
+    app.ctInicioMudou();
+    assert.equal(els.c_fcel.value, '2024-02-10', 'a escrita à mão não se mexe');
   });
 
   test('as renovações à mão: com renovações, com o fim passado, ou num contrato que começou antes do ano anterior', () => {
@@ -160,17 +206,17 @@ describe('N060 — depois de «Sim, tem n.º», o n.º e a finalidade; o resto q
   test('o collectCt: uma caixa fechada grava-se em branco, e o «Renovável» antigo fica como estava', () => {
     monta({ fisco: { renovavel: true } });
     abre();
-    domCom({ c_rent: '900', c_active: true, c_fpart: false, c_fisen: 'pma', c_fcatb: true,
-      c_fcelOutro: false, c_fcel: '2026-10-20', c_fextrasQ: false, c_fextras: '300', c_fren: '0' });
+    domCom({ c_rent: '900', c_active: true, c_start: '2026-11-01', c_fpart: false, c_fisen: 'pma', c_fcatb: true,
+      c_fcel: '2026-11-01', c_fextrasQ: false, c_fextras: '300', c_fren: '0' });
     app.collectCt();
     const f = app.cForm.fisco;
     assert.equal(f.isencao, '', 'a isenção na particularidade fechada');
     assert.equal(f.categoriaB, false, 'a categoria B na particularidade fechada');
-    assert.equal(f.celebracao, '', 'sem «Foi assinado noutro dia», o início');
+    assert.equal(f.celebracao, '', 'a celebração no dia do início grava-se em branco (KAN-160)');
     assert.equal(f.extrasMensais, 0, 'sem «Sim» à pergunta, nada à parte');
     assert.equal(f.renovavel, true, 'o «Renovável» já não se lê do ecrã');
-    domCom({ c_rent: '900', c_active: true, c_fpart: true, c_fisen: 'pma', c_fcatb: false,
-      c_fcelOutro: true, c_fcel: '2026-10-20', c_fextrasQ: true, c_fextras: '300' });
+    domCom({ c_rent: '900', c_active: true, c_start: '2026-11-01', c_fpart: true, c_fisen: 'pma', c_fcatb: false,
+      c_fcel: '2026-10-20', c_fextrasQ: true, c_fextras: '300' });
     app.collectCt();
     assert.equal(app.cForm.fisco.isencao, 'pma');
     assert.equal(app.cForm.fisco.celebracao, '2026-10-20');
@@ -199,7 +245,9 @@ describe('N061 — os três estados respondem à pergunta do grupo', () => {
   test('«Ainda não» diz que as rendas contam e o prazo do Modelo 2; o prazo passado diz-se no passado', () => {
     monta({ fisco: { estado: '' } });
     let t = texto(fisco());
-    assert.match(t, /Com «Ainda não», as rendas contam no resumo do Anexo F e a app lembra-te o prazo do Modelo 2\. O prazo é 31\/12\/2026, o fim do mês seguinte ao início\./);
+    /* KAN-161: por baixo, só o prazo deste contrato; a explicação inteira no «?» */
+    assert.match(t, /Ainda não Sim, tem n\.º Não vou declarar O prazo é 31\/12\/2026, o fim do mês seguinte ao início\./);
+    assert.match(app.ctAjudaTexto('at', app.cForm), /Com «Ainda não», as rendas contam no resumo do Anexo F e a app lembra-te o prazo do Modelo 2\. O prazo é 31\/12\/2026, o fim do mês seguinte ao início\./);
     assert.doesNotMatch(t, /Comunicaste este contrato/);
     monta({ start: '2025-03-01', end: '2027-02-28', fisco: { estado: '' } });
     t = texto(fisco());
@@ -208,7 +256,8 @@ describe('N061 — os três estados respondem à pergunta do grupo', () => {
 
   test('«Não vou declarar» não diz que o Modelo 2 deixa de ser devido; fora de Portugal a pergunta é outra', () => {
     monta({ fisco: { estado: 'naoDeclarado' } });
-    assert.match(texto(fisco()), /\(o Modelo 2\) é do Imposto do Selo: esta escolha só diz respeito ao IRS\./);
+    fisco();
+    assert.match(app.ctAjudaTexto('at', app.cForm), /\(o Modelo 2\) é do Imposto do Selo: esta escolha só diz respeito ao IRS\./);
     monta({ fisco: { estado: '' } }, { pais: 'França', paisCodigo: '250' });
     const h = fisco();
     assert.match(h, /Vais declarar estas rendas no IRS\?/);
@@ -424,7 +473,8 @@ describe('N092 — a dica do n.º 23 diz as portarias do ano com as datas', () =
     const nota = (app.irsAno(2026).taxas.limiteRendaAlta || {}).nota;
     if (nota) assert.ok(d.includes(nota), 'com a nota da versão');
     monta({ start: '2024-03-01', end: '2034-02-28', rent: 2400 });
-    assert.match(fisco(), /Portaria 454\/2026\/1/, 'no formulário');
+    assert.match(fisco(), /id="c_aj_n23"/, 'no formulário, no «?» da pergunta (KAN-161)');
+    assert.match(app.ctAjudaTexto('n23', app.cForm), /Portaria 454\/2026\/1/);
   });
 });
 
@@ -508,5 +558,84 @@ describe('o caminho para uma pergunta dentro de uma caixa fechada', () => {
     app.ctAbreCaixaDe('c_fnrau');
     assert.equal(app.document.getElementById('c_fpart').checked, true);
     assert.equal(els.c_fpartBox.hidden, false);
+  });
+});
+
+describe('KAN-161 — cada pergunta do bloco fiscal com um «?» que explica; por baixo só o caso', () => {
+  test('o «?» fica fora do rótulo, com o nome «Explicar: …», e as explicações saem de baixo das perguntas', () => {
+    monta({ start: '2024-03-01', end: '2034-02-28', rent: 2400 });
+    const h = fisco();
+    const re = /<button type="button" class="ct-ajuda" id="c_aj_([a-z0-9]+)"[^>]*>/g;
+    let m, n = 0;
+    while ((m = re.exec(h))) {
+      n++;
+      const antes = h.slice(0, m.index);
+      assert.ok(antes.lastIndexOf('<label') < antes.lastIndexOf('</label>'), m[1] + ': o «?» não está dentro de um <label>');
+      assert.match(m[0], /aria-label="Explicar: [^"]+"/, m[1]);
+      assert.match(m[0], new RegExp('data-toca="camada" data-click="ctExplicar\\(\'' + m[1] + '\'\\)"'), m[1]);
+    }
+    assert.ok(n >= 8, 'há «?» em todas as perguntas que explicam: ' + n);
+    for (const k of ['num', 'cel', 'extras', 'isen', 'catb', 'n23', 'n24']) assert.match(h, new RegExp('id="c_aj_' + k + '"'), k);
+    /* o texto à vista já não traz a lei nem os anexos de cada pergunta */
+    const t = texto(h);
+    for (const lei of [/Vem no comprovativo do Modelo 2/, /DL 97\/2026/, /CIRS art\. 4\.º/, /Portaria 176\/2019/, /O dia em que assinaram/, /Há isenções de IRS/])
+      assert.doesNotMatch(t, lei, String(lei));
+  });
+
+  test('o «?» abre uma janela por cima do formulário com o texto do momento do toque', () => {
+    monta({ start: '2024-03-01', end: '2034-02-28', rent: 2400 });
+    abre();
+    const abertas = [];
+    app.openModal = (t, b, f) => { abertas.push({ t, b: String(b), f: String(f) }); return { gatilho: null }; };
+    /* a finalidade escolhida agora no formulário (ainda por gravar) é o DHD */
+    domCom({ c_rent: '2400', c_start: '2024-03-01', c_end: '2034-02-28', c_ffin: 'dhd' });
+    app.ctExplicar('fin');
+    assert.equal(abertas.length, 1);
+    assert.equal(abertas[0].t, 'Finalidade');
+    assert.match(abertas[0].b, /^<p class="ct-explica">O direito real de habitação duradoura \(DL 1\/2020\) vai ao quadro 4\.3/);
+    assert.match(abertas[0].f, /<button type="button" class="btn primary" data-toca="camada" data-click="closeModal\(\)">Fechar<\/button>/, 'só de leitura: um botão, Fechar');
+    /* noutra finalidade não há explicação, e nada abre */
+    domCom({ c_rent: '2400', c_start: '2024-03-01', c_end: '2034-02-28', c_ffin: 'hp' });
+    app.ctExplicar('fin');
+    assert.equal(abertas.length, 1);
+    /* a categoria B ligada agora diz o que muda; desligada, quem a liga */
+    domCom({ c_rent: '2400', c_fpart: true, c_fcatb: true });
+    app.ctExplicar('catb');
+    assert.match(abertas[1].b, /As rendas deste contrato saem do Anexo F/);
+    domCom({ c_rent: '2400', c_fpart: true, c_fcatb: false });
+    app.ctExplicar('catb');
+    assert.match(abertas[2].b, /Só com atividade aberta/);
+    assert.equal(abertas[2].t, 'Rendas na categoria B');
+    app.ctExplicar('inventada');
+    assert.equal(abertas.length, 3, 'uma chave que não existe não abre nada');
+  });
+
+  test('a frase curta só quando há caso', () => {
+    /* o n.º: só num contrato de antes de abril de 2015 */
+    monta({ start: '2012-05-01', end: '' });
+    abre();
+    assert.equal(app.ctNumeroCaso(app.cForm), 'Começou antes de abril de 2015: não tem Modelo 2.');
+    monta();
+    abre();
+    assert.equal(app.ctNumeroCaso(app.cForm), '');
+    /* a isenção: só quando não conta */
+    monta({ start: '2026-11-01', end: '2029-10-31', fisco: { celebracao: '2026-10-20', isencao: 'paa' } });
+    abre();
+    assert.match(app.ctIsencaoCaso('paa', app.cForm), /^Atenção: a isenção só vale para contratos celebrados até 31\/08\/2026\.$/);
+    monta({ start: '2026-01-01', end: '2030-12-31', fisco: { celebracao: '2025-12-20', isencao: 'paa' } });
+    abre();
+    assert.equal(app.ctIsencaoCaso('paa', app.cForm), '', 'a isenção conta: nada por baixo');
+    assert.equal(app.ctIsencaoCaso('', app.cForm), '');
+    /* a celebração: só depois do início */
+    assert.equal(app.ctCelebracaoCaso(app.normContract({ start: '2026-01-01', fisco: { celebracao: '2025-12-20' } })), '');
+    assert.equal(app.ctCelebracaoCaso(app.normContract({ start: '2026-01-01', fisco: { celebracao: '' } })), '');
+    assert.match(app.ctCelebracaoCaso(app.normContract({ start: '2026-01-01', fisco: { celebracao: '2026-02-03' } })), /depois do início \(01\/01\/2026\)/);
+    /* «Ainda não»: o prazo do Modelo 2; fora de Portugal, nada */
+    monta({ fisco: { estado: '' } });
+    abre();
+    assert.equal(app.ctPorIndicarCaso(app.cForm), 'O prazo é 31/12/2026, o fim do mês seguinte ao início.');
+    monta({ fisco: { estado: '' } }, { pais: 'França', paisCodigo: '250' });
+    abre();
+    assert.equal(app.ctPorIndicarCaso(app.cForm), '');
   });
 });

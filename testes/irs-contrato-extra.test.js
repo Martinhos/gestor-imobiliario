@@ -213,7 +213,7 @@ describe('o art. 72.º n.º 24: renda mais baixa do que a do contrato anterior',
     let html = app.fiscoSect();
     assert.match(html, /<div id="c_fn23">/, 'à vista');
     assert.match(html, /Renda acima de 150 % do limite do concelho\?/);
-    assert.match(html, /desde 01\/01\/2024/);
+    assert.match(app.ctAjudaTexto('n23', app.cForm), /desde 01\/01\/2024/, 'no «?» da pergunta (KAN-161)');
     assert.match(html, /id="c_fant"[^>]*value="3000"/);
     assert.ok(app.ctN23Visivel(app.cForm));
     app.cForm = app.normContract({ propertyId: 'P1', tenantIds: ['T1'], rent: 2400, start: '2023-11-01', end: '2033-10-31', fisco: { estado: 'declarado', finalidade: 'hp' } });
@@ -273,7 +273,8 @@ describe('as isenções (quadros 6D, 6F e 6H)', () => {
     const html = app.fiscoSect();
     assert.match(html, /Isenção de IRS/);
     assert.match(html, /id="c_fisen" value="pmae"/);
-    assert.match(html, /alojamento para estudantes[^<]*quadro 6D do Anexo F \(código 03\)/);
+    assert.match(html, /id="c_aj_isen"/, 'a explicação no «?» da escolha (KAN-161)');
+    assert.match(app.ctAjudaTexto('isen', app.cForm), /alojamento para estudantes[^<]*quadro 6D do Anexo F \(código 03\)/);
     assert.match(app.ctIsencaoTexto('rsaa'), /o código ainda não se conhece/);
     assert.match(app.ctIsencaoTexto(''), /taxa estimada passa a 0 %/);
     assert.match(app.ctFicha('C1'), /Isento de IRS: Programa municipal de alojamento estudantil \(PMAE\)\. As rendas declaram-se na linha do quadro 4\.1 do Anexo F, sem imposto, e o quadro 6D aponta para ela \(código 03\)/);

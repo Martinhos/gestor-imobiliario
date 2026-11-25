@@ -131,6 +131,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-23 · A ronda 2 das correções da auditoria ao IRS de raiz: rendas, taxas, gastos, textos e o caminho linear (KAN-150 a KAN-154)
 - 2026-11-24 · O consumo à cabeça da Operação, com o gráfico de cada valor (KAN-144)
 - 2026-11-24 · Staging, Adiado e Produção; a pílula «Tickets»; o promove só do que está em Staging (KAN-155 a KAN-158)
+- 2026-11-25 · A data de celebração à vista, e as explicações do bloco fiscal no «?» (KAN-160, KAN-161)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4894,3 +4895,35 @@ O preço: o main deixa de ser um antepassado do dev. Os commits do dev que já f
 aparecer no `git log origin/main..origin/dev`, e só o plano (pelos trailers e pelo patch) sabe que já lá estão.
 Foi a escolha do Martinho («só os commits desses cartões»), e a alternativa — um ramo por cartão, ou
 reverter no main o que não vai — trocava um log menos limpo por conflitos maiores a cada promove.
+
+## 2026-11-25 · A data de celebração à vista, e as explicações do bloco fiscal no «?» (KAN-160, KAN-161)
+Dois tickets de QA do Martinho, os dois escritos no telemóvel com o «Editar contrato» aberta: «Em vez de uma
+seleção se o contrato foi assinado noutro dia, deve haver um seletor de data pré-preenchido com o dia de
+hoje.» e «As especificidades do IRS têm muito texto. Cada uma deve ter um "?" que abre um modal a explicar.»
+Medido no 8789, a 384×785, num contrato declarado com a particularidade fiscal aberta: 1441 caracteres de
+texto à vista no grupo do contrato perante a AT; depois, 604.
+
+A celebração. O interruptor «Foi assinado noutro dia» obrigava a um passo a mais para a data que decide o
+regime da redução (2019, 2024, setembro de 2026). Fica um campo de data sempre à vista no declarado. Hoje só
+nos novos (decisão do Martinho, às perguntas de 2026-11-25): um contrato novo abre com hoje; um que já existe
+e não tem celebração abre com o início, porque em branco a app sempre contou o início — e o dia do início
+grava-se em branco, que quer dizer o mesmo, para um contrato antigo aberto e gravado sem mexer não mudar de
+regime nem ganhar uma data que ninguém escreveu. Um contrato é novo enquanto o id do formulário não está na
+base (o ctModal sem id cria um id novo que só entra ao guardar). A data que veio do início segue-o quando o
+início muda, até ser escrita à mão: sem isto, corrigir o início de um contrato antigo gravava o início de
+antes como dia da assinatura. O risco do hoje está num contrato antigo registado agora: a assinatura depois
+do início diz-se por baixo, na cor de aviso («Esta data é depois do início (…). Se assinaram antes ou no
+próprio dia, corrige-a.»). Depois de lida uma vez, a data em branco de um novo é o início, e não volta a hoje
+num repaint (quem escreveu o dia do início não o vê trocado).
+
+O «?». A lei, o que é e onde vai no Anexo F saíram de baixo das perguntas para uma janela por cima do
+formulário (decisão do Martinho: explicações no «?»). Já havia janela por cima de janela — o openModal
+empilha, a de baixo fica inerte e sem ids e volta intacta —, por isso não nasceu componente novo: a janela é
+um openModal com o título da pergunta, o texto e um «Fechar». O texto lê-se no toque, do contrato como está
+escrito, porque várias explicações mudam com as respostas (a finalidade DHD, a categoria B ligada, a isenção
+escolhida, o prazo do IHRU pela celebração); e lê-se ANTES de a janela abrir, porque o openModal tira os ids
+à de baixo. O «?» fica fora do <label>: dentro, era o primeiro elemento rotulável e o rótulo rotulava-o a
+ele em vez do campo, e o nome dele («Explicar: …») entrava no do campo. Por baixo de cada pergunta ficou só o
+que diz deste contrato agora, quando o há: as frases partiram-se das que já existiam, sem reescrever a lei.
+Os «Em branco: …» ficaram à vista, por serem a regra dos formulários. Os encargos do inquilino e o imposto,
+fora do bloco fiscal, ficaram como estavam.

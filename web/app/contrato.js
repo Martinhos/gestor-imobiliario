@@ -1,10 +1,11 @@
 /* ================= CONTRATO ================= */
 let cForm={};
 /* As perguntas do formulário do contrato que abrem uma caixa (os ids dos
-   interruptores — c_fpart, c_encQ, c_fcelOutro, c_fextrasQ — e 'taxa', o
-   «Escrever outra taxa»), abertas por quem preenche e ainda sem nada escrito
-   lá dentro: o collectCt lembra-as aqui para um repaint não as fechar. Não
-   se grava; o ctModal esvazia-as. */
+   interruptores — c_fpart, c_encQ, c_fextrasQ — e 'taxa', o «Escrever outra
+   taxa»), abertas por quem preenche e ainda sem nada escrito lá dentro: o
+   collectCt lembra-as aqui para um repaint não as fechar. E c_fcel: a data de
+   celebração já esteve no ecrã e foi lida (ctCelebracaoNoCampo — um contrato
+   novo só abre com hoje até lá). Não se grava; o ctModal esvazia-as. */
 let _ctAbertas={};
 /* O corpo da ficha de um contrato: o que se sabe sobre ele, para ler, como a
    prancheta M-Contrato.
@@ -1281,10 +1282,17 @@ let _ctErroQuarto='';
    (liveNet) e, num imóvel por quartos, as escolhas do quarto, que dependem
    dele (ctQuartosMiolo) — sem largar a escolha feita. Se ela deixar de
    valer, o erro aparece junto dos chips e diz-se também em voz
-   (o toast, como o falhaCampo), uma vez, quando aparece ou muda.
+   (o toast, como o falhaCampo), uma vez, quando aparece ou muda. A data de
+   celebração que mostra o início (data-segue) acompanha-o.
    Recebe: nada — lê o c_start e o c_room.
-   Devolve: nada — reescreve o miolo do campo do quarto. */
+   Devolve: nada — reescreve o miolo do campo do quarto e, se segue o início,
+   a data de celebração. */
 function ctInicioMudou(){
+  /* a data de celebração que veio do início (em branco vale o início) segue-o:
+     sem isto, um contrato antigo com o início corrigido gravava o início de
+     antes como dia da assinatura (ctCelebracaoNoCampo) */
+  const cel=document.getElementById('c_fcel');
+  if(cel&&cel.getAttribute('data-segue')==='inicio'){cel.value=val('c_start');marcarDatasVazias(cel)}
   liveNet();
   const campo=document.getElementById('c_roomCampo');if(!campo||!cForm)return;
   const quarto=document.getElementById('c_room');
@@ -1340,10 +1348,13 @@ function ctEscolheQuarto(rid){
    não um botão, para o collectCt a ler como sempre leu (chk).
    Recebe: id — o id da caixa; on — se está ligada; titulo — o que liga; sub
    — a frase por baixo ('' para nenhuma); muda (opcional) — o código do
-   data-change (o liveNet, quando a estimativa depende dele).
+   data-change (o liveNet, quando a estimativa depende dele); ajuda
+   (opcional) — a chave do «?» da pergunta (CT_AJUDAS), que fica fora do
+   rótulo, entre o texto e o interruptor (ctQ).
    Devolve: o HTML do interruptor. */
-function ctInterruptor(id,on,titulo,sub,muda){
-  return `<label class="ct-sw-linha"><span class="ct-sw-txt"><b>${esc(titulo)}</b>${sub?`<span class="small">${esc(sub)}</span>`:''}</span><input type="checkbox" role="switch" class="ct-sw" id="${esc(id)}"${on?' checked':''}${muda?` data-change="${esc(muda)}"`:''}></label>`;
+function ctInterruptor(id,on,titulo,sub,muda,ajuda){
+  const h=`<label class="ct-sw-linha"><span class="ct-sw-txt"><b>${esc(titulo)}</b>${sub?`<span class="small">${esc(sub)}</span>`:''}</span><input type="checkbox" role="switch" class="ct-sw" id="${esc(id)}"${on?' checked':''}${muda?` data-change="${esc(muda)}"`:''}></label>`;
+  return ajuda?ctQ(h,ajuda,false,'ct-q-sw'):h;
 }
 /* A frase por baixo das datas: quanto dura o contrato e, com fim, até quando
    se avisa o inquilino para ele não renovar (a antecedência que os prazos
@@ -1391,9 +1402,9 @@ function ctOposicaoDias(o){
    perguntas do art. 72.º n.os 23 e 24 dos campos que estão no ecrã — e a
    taxa escrita, as perguntas das isenções, o dia do envio ao IHRU e o que se
    paga à parte —, o resto do cForm. Não grava nada. O que está numa caixa
-   fechada pela pergunta dela (ctAberto: a celebração, o que se paga à
-   parte, a particularidade fiscal) conta como em branco, como o collectCt
-   o grava.
+   fechada pela pergunta dela (ctAberto: o que se paga à parte, a
+   particularidade fiscal) conta como em branco, como o collectCt o grava; a
+   celebração igual ao início conta como em branco (ctCelebracaoDoCampo).
    Devolve: um objeto novo com a forma de um contrato. */
 function ctEmEdicao(){
   const eR=document.getElementById('c_rent'),eT=document.getElementById('c_tax');
@@ -1401,7 +1412,7 @@ function ctEmEdicao(){
   const simNao=id=>{const r=val(id);return r==='1'?true:r==='0'?false:null};
   const part=ctAberto('c_fpart');
   if(document.getElementById('c_ffin'))f.finalidade=val('c_ffin');
-  if(document.getElementById('c_fcel'))f.celebracao=ctAberto('c_fcelOutro')?val('c_fcel'):'';
+  if(document.getElementById('c_fcel'))f.celebracao=ctCelebracaoDoCampo(val('c_start')||cForm.start);
   if(document.getElementById('c_fisen'))f.isencao=part?val('c_fisen'):'';
   if(document.getElementById('c_facima'))f.rendaAcimaDoLimite=simNao('c_facima');
   if(document.getElementById('c_fant'))f.rendaAnterior=num(val('c_fant'))||0;
@@ -1450,18 +1461,18 @@ function netBox(){
 // Recebe: nada — lê os campos do formulário.
 // Devolve: nada — reescreve a caixa #netBox, o placeholder de c_tax, o
 // #c_taxVazio, o #c_taxAviso (a taxa escrita que não é a da lei, D17), o
-// #c_prazoFrase, o #c_fisenHint, as dicas do n.º e do por indicar (D85), o
-// hidden do #c_fn23, o do #c_fempBox (a pergunta do inquilino empresa,
-// ctEmpresaVisivel), os das perguntas das isenções (#c_fnrauBox, #c_falBox,
-// #c_fihruBox), o das obras (#c_fobrasBox, com a pergunta) e o da
-// atualização de 2023 (#c_fat23Box); a dica da taxa (#c_taxDica, sem
-// estimativa fora de Portugal e na categoria B), a da finalidade
-// (#c_ffinHint, o DHD) e a da entidade de gestão florestal (#c_fegfHint); e,
-// quando as datas mudam as isenções que servem ao contrato
-// (ctIsencoesOferecidas), a escolha da isenção. Da ronda 2: o hidden do
-// #c_fn24 (ctN24Visivel), do #c_fisenBox (ctIsencaoVisivel), do #c_fextrasW
-// (ctExtrasVisivel), do #c_taxBox e do #c_taxOutraBox (ctTaxaVisivel), e a
-// dica da categoria B (#c_fcatbHint).
+// #c_prazoFrase, o hidden do #c_fn23, o do #c_fempBox (a pergunta do
+// inquilino empresa, ctEmpresaVisivel), os das perguntas das isenções
+// (#c_fnrauBox, #c_falBox, #c_fihruBox), o das obras (#c_fobrasBox, com a
+// pergunta) e o da atualização de 2023 (#c_fat23Box); a dica da taxa
+// (#c_taxDica, sem estimativa fora de Portugal e na categoria B); o «?» da
+// finalidade (#c_aj_fin, só no DHD); as frases curtas do caso (KAN-161: o
+// n.º, o prazo do Modelo 2, a celebração depois do início, a isenção e a
+// gestão florestal que não contam); e, quando as datas mudam as isenções
+// que servem ao contrato (ctIsencoesOferecidas), a escolha da isenção. Da
+// ronda 2: o hidden do #c_fn24 (ctN24Visivel), do #c_fisenBox
+// (ctIsencaoVisivel), do #c_fextrasW (ctExtrasVisivel), do #c_taxBox e do
+// #c_taxOutraBox (ctTaxaVisivel).
 function liveNet(){
   const b=document.getElementById('netBox');if(b)b.innerHTML=netBox();
   const est=ctEmEdicao(),r=dec(irsRate(est));
@@ -1483,20 +1494,23 @@ function liveNet(){
   caixa('c_fisenBox',ctIsencaoVisivel(est));
   caixa('c_fextrasW',ctExtrasVisivel(est));
   const tv=ctTaxaVisivel(est);caixa('c_taxBox',tv);caixa('c_taxOutraBox',!tv);
-  const cb=document.getElementById('c_fcatbHint');if(cb)cb.textContent=ctCategoriaBDica(fiscoDe(est).categoriaB===true);
   caixa('c_fnrauBox',ctIsencaoPede(est,'nrau3536'));
   caixa('c_falBox',ctIsencaoPede(est,'alRegistado2022'));
   caixa('c_fihruBox',ctIsencaoPede(est,'ihru'));
   caixa('c_fat23Box',ctAtualizacao2023Visivel(est));
   const ob=document.getElementById('c_fobrasBox');
   if(ob){const o=ctObrasAntes(est);ob.hidden=!o;const p=document.getElementById('c_fobrasPerg');if(p)p.textContent=ctObrasPergunta(est,o)}
-  const ih=document.getElementById('c_fihruHint');if(ih)ih.textContent=ctIhruDica(est);
-  const fd=document.getElementById('c_ffinHint');if(fd){const x=ctFinalidadeDica(est);fd.textContent=x;fd.hidden=!x}
-  const eg=document.getElementById('c_fegfHint');if(eg)eg.textContent=ctEgfDica(est);
-  const nh=document.getElementById('c_fnumHint');if(nh)nh.textContent=ctNumeroDica(est);
-  const pi=document.getElementById('c_fporIndicar');if(pi)pi.textContent=ctPorIndicarDica(est);
+  /* KAN-161: as explicações vivem no «?» e leem-se no toque (ctExplicar); aqui
+     só as frases curtas do caso deste contrato (ctCasoHtml) e o «?» da
+     finalidade, que só existe no DHD */
+  caixa('c_aj_fin',!!ctFinalidadeDica(est));
+  const caso=(id,t)=>{const e=document.getElementById(id);if(e){e.textContent=t;e.hidden=!t}};
+  caso('c_fnumCaso',ctNumeroCaso(est));
+  caso('c_fporIndicar',ctPorIndicarCaso(est));
+  caso('c_fcelCaso',ctCelebracaoCaso(est));
+  caso('c_fegfCaso',ctEgfCaso(est));
   ctIsencoesRefaz(est);
-  const h=document.getElementById('c_fisenHint');if(h)h.textContent=ctIsencaoTexto(fiscoDe(est).isencao,est);
+  caso('c_fisenCaso',ctIsencaoCaso(fiscoDe(est).isencao,est));
 }
 /* Refaz a escolha da isenção quando as isenções que servem ao contrato
    mudam (uma data de celebração ou de início nova — ctIsencoesOferecidas),
@@ -1560,13 +1574,15 @@ function collectCt(){
   /* as perguntas que abrem caixas (ctAberto): fechadas, o que está lá dentro
      grava-se em branco — nada conta escondido; e ficam lembradas para o
      repaint (_ctAbertas) */
-  ['c_fpart','c_encQ','c_fcelOutro','c_fextrasQ'].forEach(id=>{const e=document.getElementById(id);if(e)_ctAbertas[id]=!!e.checked});
+  ['c_fpart','c_encQ','c_fextrasQ'].forEach(id=>{const e=document.getElementById(id);if(e)_ctAbertas[id]=!!e.checked});
   const part=ctAberto('c_fpart'),catBNaDobra=ctCategoriaBNaDobra(c);
   if(document.getElementById('c_fnum'))f.numero=val('c_fnum');
   if(document.getElementById('c_ffin'))f.finalidade=val('c_ffin');
-  /* a celebração só com «Foi assinado noutro dia» (em branco vale o início);
-     o «Renovável» já não se pergunta — o valor antigo fica como estava */
-  if(document.getElementById('c_fcel'))f.celebracao=ctAberto('c_fcelOutro')?val('c_fcel'):'';
+  /* a celebração do campo, sempre à vista no declarado (KAN-160): o dia do
+     início grava-se em branco, que quer dizer o mesmo (ctCelebracaoDoCampo) —
+     um contrato antigo sem ela, gravado sem mexer, fica igual. O «Renovável»
+     já não se pergunta — o valor antigo fica como estava */
+  if(document.getElementById('c_fcel')){f.celebracao=ctCelebracaoDoCampo(c.start);_ctAbertas.c_fcel=true}
   /* a pergunta do inquilino empresa vive sempre no ecrã do declarado (escondida
      quando não se aplica), com o valor gravado: lê-la não o apaga. A resposta
      vai a fisco.empresaMorador (D16); a pergunta antiga, junta com a
@@ -1643,24 +1659,25 @@ function repaintCt(){const b=modalBodyEl();if(!b)return;b.innerHTML=ctBody();mar
    declarar» é uma decisão, não um erro) que respondem à pergunta do grupo:
    «Já o comunicaste às Finanças?» — Ainda não, Sim, tem n.º, Não vou
    declarar (ctSegmentoAt); a frase por baixo diz só o que muda.
-   Num declarado ficam à vista o n.º (vai a cada linha do 4.1) e a
-   finalidade (o DHD com a dica do 4.3, D120); «Foi assinado noutro dia», que
-   abre a celebração (sempre ao alcance: perto de 2019, 2024 e setembro de
-   2026 a data muda o regime); e, nos contratos de habitação dos anos das
-   rendas moderadas, «O inquilino paga à parte móveis, equipamentos ou
-   serviços?», que conta para o limite (DL 97/2026, art. 3.º). A isenção
+   Num declarado ficam à vista o n.º (vai a cada linha do 4.1), a finalidade
+   (o DHD com o 4.3, D120) e a data de celebração (KAN-160, sempre à vista:
+   perto de 2019, 2024 e setembro de 2026 a data muda o regime); e, nos
+   contratos de habitação dos anos das rendas moderadas, «O inquilino paga à
+   parte móveis, equipamentos ou serviços?» (DL 97/2026, art. 3.º). A isenção
    (6D, 6F, 6H, com as perguntas que a confirmam e o envio ao IHRU) e a
    categoria B (D134, D7) vivem atrás de «Este contrato tem alguma
    particularidade fiscal?», aberta quando já têm valor
    (ctParticularidadeTem). Só quando contam: o inquilino empresa; a gestão
    florestal (6C, D119) e o arrendamento rural num rústico ou já marcados; as
-   perguntas do n.º 23 e do n.º 24 do art. 72.º, cada uma com a sua data
-   (ctN23Visivel, ctN24Visivel); as obras antes do início (CIRS art. 41.º
-   n.º 7) e a renda de 2023; as renovações (4.2A) quando podem existir
-   (ctRenovacoesVisivel). O dia em que acabou e o motivo do quadro 10 pedem-se
-   ao terminar (ctTerminarFolha) e corrigem-se ao lado do «Contrato em vigor»
-   (ctCessacaoCampos); os consumos vivem nos encargos do inquilino
-   (ctEncargosCampos); o «Renovável» saiu (nada no IRS o lê).
+   perguntas dos n.os 23 e 24 do art. 72.º (ctN23Visivel, ctN24Visivel); as
+   obras antes do início (CIRS art. 41.º n.º 7) e a renda de 2023; as
+   renovações (4.2A) quando podem existir (ctRenovacoesVisivel). O dia em que
+   acabou e o motivo do quadro 10 pedem-se ao terminar e corrigem-se ao lado
+   do «Contrato em vigor» (ctCessacaoCampos); os consumos vivem nos encargos
+   do inquilino (ctEncargosCampos).
+   KAN-161: a explicação de cada pergunta (a lei, o que é, onde vai no Anexo
+   F) abre no «?» dela (ctAjudaBtn, ctExplicar); por baixo fica só a frase
+   curta do caso deste contrato, quando a há (ctCasoHtml).
    As caixas escondidas pelas datas ficam no ecrã com o valor guardado (o
    liveNet mostra-as ou esconde-as); uma caixa fechada pela sua pergunta
    grava-se em branco (collectCt): nada conta escondido. A categoria B ligada
@@ -1675,57 +1692,52 @@ function fiscoSect(){
   const fora=pzForaDePortugal(c.propertyId);
   /* o segmentado da casa (a prancheta): três escolhas curtas, com a mesma
      letra e a mesma cor — «não vou declarar» é uma decisão, não um erro — e
-     que respondem à pergunta do grupo (ctSegmentoAt) */
-  const seg=ctSegmentoAt(f.estado,fora);
+     que respondem à pergunta do grupo (ctSegmentoAt); o «?» explica a
+     escolhida, menos o «Sim, tem n.º» de cá, que se explica pergunta a pergunta */
+  const seg=ctSegmentoAt(f.estado,fora,f.estado!=='declarado'||fora);
   /* a categoria B ligada fora da particularidade fiscal (noutro estado, ou
      fora de Portugal): à vista para se poder desligar — o resumo conta-a em
      qualquer estado (N056) */
   const catBSo=f.categoriaB===true?ctCategoriaBCampo(true):'';
-  if(f.estado==='naoDeclarado')return seg+`<div class="hint ct-colado">${fora?'As rendas deste contrato ficam fora da Declaração.':'Este contrato fica fora do resumo do Anexo F e dos prazos da AT.'} Podes mudar isto quando quiseres.${!fora&&!ctAntesDoModelo2(c)?' A comunicação do contrato às Finanças (o Modelo 2) é do Imposto do Selo: esta escolha só diz respeito ao IRS.':''}</div>${catBSo}`;
+  if(f.estado==='naoDeclarado')return seg+ctCasoHtml('c_fnaoDecl',ctNaoDeclaradoCaso(c))+catBSo;
   /* com «Ainda não», as rendas contam: uma isenção já guardada continua a
      contar, e por isso vê-se e troca-se (ctIsencaoCampos) */
-  if(f.estado!=='declarado')return seg+`<div class="hint ct-colado" id="c_fporIndicar">${esc(ctPorIndicarDica(c))}</div>${catBSo}${f.isencao?ctIsencaoCampos(c):''}`;
+  if(f.estado!=='declarado')return seg+ctCasoHtml('c_fporIndicar',ctPorIndicarCaso(c))+catBSo+(f.isencao?ctIsencaoCampos(c):'');
   const obras=ctObrasAntes(c);
   const obrasBox=`<div id="c_fobrasBox"${obras?'':' hidden'}><div class="form">
-      <label><span id="c_fobrasPerg">${esc(ctObrasPergunta(c,obras))}</span>${sel('c_fobras',sn(f.obrasSemOutroUso,'1','0'),[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'','rascunho')}</label>
-      <div class="hint ct-colado">Há obras de conservação deste imóvel pagas nos 24 meses antes do início do contrato. Só se deduzem se, nesse tempo, o imóvel não teve outro uso (CIRS art. 41.º n.º 7). Em «Não sei», ficam fora do Anexo F até confirmares.</div>
+      ${ctQ(`<label><span id="c_fobrasPerg">${esc(ctObrasPergunta(c,obras))}</span>${sel('c_fobras',sn(f.obrasSemOutroUso,'1','0'),[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'','rascunho')}</label>`,'obras')}
     </div></div>`;
   /* um imóvel fora de Portugal (D133): nada do Modelo 2 nem da taxa
      especial — o Anexo J, o imposto pago lá de cada ano, e as obras antes do
-     início (as despesas contam como no art. 41.º) */
-  if(fora)return seg+`<div class="hint ct-colado">Imóvel fora de Portugal: as rendas não vão ao Anexo F, nem há Modelo 2, recibos eletrónicos ou comunicações à AT. Declaram-se no Anexo J, com as despesas do período arrendado e o imposto pago lá.</div>
+     início (as despesas contam como no art. 41.º); o que é o Anexo J
+     explica-o o «?» do segmentado */
+  if(fora)return seg+`
     ${ctImpostoEstrangeiroCampos(c)}
     ${obrasBox}${catBSo}${f.egf===true?ctEgfCampo(c):''}`;
   /* a redução pela duração é só dos contratos de habitação permanente (irsReducao) */
   const reduzida=irsTaxa(c,YEAR).reducao;
-  /* a maqueta 1 do D8: à vista o n.º e a finalidade; a celebração só com
-     «Foi assinado noutro dia» e o que se paga à parte com a sua pergunta (as
-     duas à vista sempre: a lei precisa delas); a isenção e a categoria B atrás
-     de «Este contrato tem alguma particularidade fiscal?», aberta quando já
-     têm valor; o resto só quando conta. Cada dica logo a seguir ao campo de
-     que fala */
+  /* a maqueta 1 do D8: à vista o n.º, a finalidade e a data de celebração;
+     o que se paga à parte com a sua pergunta (à vista sempre: a lei precisa
+     dela); a isenção e a categoria B atrás de «Este contrato tem alguma
+     particularidade fiscal?», aberta quando já têm valor; o resto só quando
+     conta. Cada frase curta do caso logo a seguir ao campo de que fala */
   const part=ctParticularidadeTem(c)||_ctAbertas.c_fpart===true;
-  const cel=ctCelebracaoOutra(c)||_ctAbertas.c_fcelOutro===true;
   const ext=f.extrasMensais>0||_ctAbertas.c_fextrasQ===true;
+  const cel=ctCelebracaoNoCampo(c);
+  const celEst=Object.assign({},c,{fisco:Object.assign({},f,{celebracao:cel.valor})});
   return seg+`
-    <label>N.º do contrato na AT (opcional)<input id="c_fnum" type="text" inputmode="numeric" class="num" value="${esc(f.numero)}" placeholder="Ex: 1234567" autocomplete="off"></label>
-    <div class="hint ct-colado" id="c_fnumHint">${esc(ctNumeroDica(c))}</div>
-    <label>Finalidade${sel('c_ffin',f.finalidade,[{v:'',label:'—'}].concat(FISCO_FINALIDADES_TODAS.map(x=>({v:x[0],label:x[1]}))),'liveNet','rascunho')}</label>
-    <div class="hint ct-colado" id="c_ffinHint"${ctFinalidadeDica(c)?'':' hidden'}>${esc(ctFinalidadeDica(c))}</div>
+    ${ctQ(`<label>N.º do contrato na AT (opcional)<input id="c_fnum" type="text" inputmode="numeric" class="num" value="${esc(f.numero)}" placeholder="Ex: 1234567" autocomplete="off"></label>`,'num')}
+    ${ctCasoHtml('c_fnumCaso',ctNumeroCaso(c))}
+    ${ctQ(`<label>Finalidade${sel('c_ffin',f.finalidade,[{v:'',label:'—'}].concat(FISCO_FINALIDADES_TODAS.map(x=>({v:x[0],label:x[1]}))),'liveNet','rascunho')}</label>`,'fin',!ctFinalidadeDica(c))}
     <div id="c_fempBox"${ctEmpresaVisivel(c)?'':' hidden'}><div class="form">
-      <label>O contrato identifica pelo nome quem lá mora?${sel('c_femp',ctEmpresaMoradorValor(c),[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'','rascunho')}</label>
-      <div class="hint ct-colado">${esc(ctEmpresaDica())}</div>
+      ${ctQ(`<label>O contrato identifica pelo nome quem lá mora?${sel('c_femp',ctEmpresaMoradorValor(c),[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'','rascunho')}</label>`,'emp')}
     </div></div>
-    ${ctInterruptor('c_fcelOutro',cel,'Foi assinado noutro dia','Por omissão, a assinatura é no dia do início.','ctCelebracaoMudou()')}
-    <div id="c_fcelBox"${cel?'':' hidden'}><div class="form">
-      <label>Data de celebração<input id="c_fcel" type="date" value="${esc(f.celebracao)}" data-change="liveNet()"></label>
-      <div class="hint ct-colado">${esc(ctCelebracaoDica())}</div>
-    </div></div>
+    ${ctQ(`<label>Data de celebração<input id="c_fcel" type="date" value="${esc(cel.valor)}"${cel.segue?' data-segue="inicio"':''} data-change="ctCelebracaoMudou()"></label>`,'cel')}
+    ${ctCasoHtml('c_fcelCaso',ctCelebracaoCaso(celEst),true)}
     ${M?`<div id="c_fextrasW"${ctExtrasVisivel(c)?'':' hidden'}>
-    ${ctInterruptor('c_fextrasQ',ext,'O inquilino paga à parte móveis, equipamentos ou serviços?','Mesmo num contrato separado.','ctExtrasMudou()')}
+    ${ctInterruptor('c_fextrasQ',ext,'O inquilino paga à parte móveis, equipamentos ou serviços?','Mesmo num contrato separado.','ctExtrasMudou()','extras')}
     <div id="c_fextrasBox"${ext?'':' hidden'}><div class="form">
       <label>Valor pago à parte por mês (€)<input id="c_fextras" type="text" inputmode="decimal" class="num" value="${f.extrasMensais?dec(f.extrasMensais):''}" placeholder="Opcional" data-input="liveNet()" autocomplete="off"></label>
-      <div class="hint ct-colado">${esc(ctExtrasDica())}</div>
     </div></div></div>`:''}
     ${ctInterruptor('c_fpart',part,'Este contrato tem alguma particularidade fiscal?','Uma isenção de IRS, ou rendas tributadas na categoria B.','ctParticularidadeMudou()')}
     <div id="c_fpartBox"${part?'':' hidden'}><div class="form">
@@ -1734,31 +1746,151 @@ function fiscoSect(){
     </div></div>
     ${ctEgfVisivel(c)||f.egf===true?ctEgfCampo(c):''}
     ${ctRuralVisivel(c)?`<div id="c_fruralBox"><div class="form">
-      <label>É um arrendamento rural (agrícola, florestal ou de campanha)?${sel('c_frural',f.arrendamentoRural===true?'1':'',[{v:'',label:'Não'},{v:'1',label:'Sim'}],'','rascunho')}</label>
-      <div class="hint ct-colado">${esc(ctRuralDica())}</div>
+      ${ctQ(`<label>É um arrendamento rural (agrícola, florestal ou de campanha)?${sel('c_frural',f.arrendamentoRural===true?'1':'',[{v:'',label:'Não'},{v:'1',label:'Sim'}],'','rascunho')}</label>`,'rural')}
     </div></div>`:''}
     ${L?`<div id="c_fn23"${ctN23Visivel(c)?'':' hidden'}><div class="form">
-      <label>Renda acima de ${dec(L.percentagem)} % do limite do concelho?${sel('c_facima',f.rendaAcimaDoLimite===true?'1':f.rendaAcimaDoLimite===false?'0':'',[{v:'',label:'Não sei'},{v:'0',label:'Não'},{v:'1',label:'Sim'}],'liveNet','rascunho')}</label>
-      <div class="hint ct-colado">${esc(ctN23Dica())}</div>
+      ${ctQ(`<label>Renda acima de ${dec(L.percentagem)} % do limite do concelho?${sel('c_facima',f.rendaAcimaDoLimite===true?'1':f.rendaAcimaDoLimite===false?'0':'',[{v:'',label:'Não sei'},{v:'0',label:'Não'},{v:'1',label:'Sim'}],'liveNet','rascunho')}</label>`,'n23')}
     </div></div>`:''}
     ${B?`<div id="c_fn24"${ctN24Visivel(c)?'':' hidden'}><div class="form">
-      <label>Renda do contrato anterior neste imóvel (€)<input id="c_fant" type="text" inputmode="decimal" value="${f.rendaAnterior?dec(f.rendaAnterior):''}" placeholder="Opcional" data-input="liveNet()" autocomplete="off"></label>
-      <div class="hint ct-colado">Num contrato celebrado desde ${dPT(B.desde)}: se a renda for pelo menos ${dec(B.rendaMenorPct)} % mais baixa do que a do contrato anterior neste imóvel, a taxa desce mais ${dec(B.pontos)} pontos (CIRS art. 72.º n.º 24, quadro 4.2B do Anexo F). Em branco: não se aplica.</div>
+      ${ctQ(`<label>Renda do contrato anterior neste imóvel (€)<input id="c_fant" type="text" inputmode="decimal" value="${f.rendaAnterior?dec(f.rendaAnterior):''}" placeholder="Opcional" data-input="liveNet()" autocomplete="off"></label>`,'n24')}
+      <div class="hint ct-colado">Em branco: não se aplica.</div>
     </div></div>`:''}
     ${obrasBox}
     <div id="c_fat23Box"${ctAtualizacao2023Visivel(c)?'':' hidden'}><div class="form">
-      <label>A renda de 2023 subiu mais de 2 %?${sel('c_fat23',f.atualizacao2023,[{v:'',label:'Não sei'},{v:'sim',label:'Sim'},{v:'nao',label:'Não'}],'','rascunho')}</label>
-      <div class="hint ct-colado">O Anexo F pergunta-o nas linhas dos contratos em vigor antes de 2022: se a atualização da renda de 2023 passou o coeficiente de 1,02 (Lei 19/2022).</div>
+      ${ctQ(`<label>A renda de 2023 subiu mais de 2 %?${sel('c_fat23',f.atualizacao2023,[{v:'',label:'Não sei'},{v:'sim',label:'Sim'},{v:'nao',label:'Não'}],'','rascunho')}</label>`,'at23')}
     </div></div>
-    ${ctRenovacoesVisivel(c)?`<div><div class="flabel">Renovações</div>
+    ${ctRenovacoesVisivel(c)?`<div>${ctQ('<div class="flabel">Renovações</div>','renov','','ct-q-fl')}
       ${renovs.length?`<div class="form u-g-9px">${renovs.map(r=>`<div class="invrow u-gtc-1fr-1fr-auto u-ai-end">
         <label>Início<input id="c_rini_${esc(r.id)}" type="date" value="${esc(r.inicio)}"></label>
         <label>Fim<input id="c_rfim_${esc(r.id)}" type="date" value="${esc(r.fim)}"></label>
         <button type="button" class="btn sm danger" data-toca="rascunho" data-click="delRenov('${jsq(r.id)}')" aria-label="Remover renovação">${ic('trash',14)}</button></div>`).join('')}</div>`:''}
-      <div class="toolbar ${renovs.length?'u-m-4px-0-0':'u-m-0-0-0'}"><button type="button" class="btn sm" data-toca="rascunho" data-click="addRenov()">${ic('plus',14)} Adicionar renovação</button></div>
-      <div class="hint">Início e fim de cada renovação. O quadro 4.2A do Anexo F pede os da última. Uma renovação que vai para lá do fim leva o fim com ela.</div></div>`:''}
-    ${reduzida?`<div class="hint">Taxa reduzida pela duração (${dec(reduzida.taxa)} %): vai ao quadro 4.2 do Anexo F, e a duração comunica-se no Portal das Finanças uma vez, até 15 de fevereiro do ano seguinte ao início do contrato e de cada renovação.</div>`:''}`;
+      <div class="toolbar ${renovs.length?'u-m-4px-0-0':'u-m-0-0-0'}"><button type="button" class="btn sm" data-toca="rascunho" data-click="addRenov()">${ic('plus',14)} Adicionar renovação</button></div></div>`:''}
+    ${reduzida?ctQ(`<div class="hint">${esc(ctReduzidaCaso(reduzida))}</div>`,'reduzida','','ct-q-fl'):''}`;
 }
+/* As explicações do bloco fiscal (KAN-161, decisão do Martinho: explicações
+   no «?»): por chave, o título da janela (o nome curto da pergunta, também o
+   do aria-label do «?») e o texto, lido do contrato como está escrito no
+   momento do toque (ctEmEdicao) — a lei, o que é e onde vai no Anexo F. A
+   frase curta do caso fica por baixo da pergunta (ctCasoHtml). */
+const CT_AJUDAS={
+  at:{titulo:c=>pzForaDePortugal(c.propertyId)?'Vais declarar estas rendas no IRS?':'Já o comunicaste às Finanças?',
+    texto:c=>{const e=fiscoDe(c).estado;return e==='naoDeclarado'?ctNaoDeclaradoDica(c):e!=='declarado'?ctPorIndicarDica(c):pzForaDePortugal(c.propertyId)?ctForaDica():''}},
+  num:{titulo:()=>'N.º do contrato na AT',texto:c=>ctNumeroDica(c)},
+  fin:{titulo:()=>'Finalidade',texto:c=>ctFinalidadeDica(c)},
+  emp:{titulo:()=>'Inquilino com NIF de empresa',texto:()=>ctEmpresaDica()},
+  cel:{titulo:()=>'Data de celebração',texto:()=>ctCelebracaoDica()},
+  extras:{titulo:()=>'Móveis, equipamentos ou serviços pagos à parte',texto:()=>ctExtrasDica()},
+  isen:{titulo:()=>'Isenção de IRS',texto:c=>ctIsencaoTexto(fiscoDe(c).isencao,c)},
+  nrau:{titulo:()=>'Renda antiga anterior ao RAU',texto:()=>ctPedeDica('nrau3536')},
+  al:{titulo:()=>'Ex-alojamento local',texto:()=>ctPedeDica('alRegistado2022')},
+  ihru:{titulo:()=>'Envio ao IHRU',texto:c=>ctIhruDica(c)},
+  catb:{titulo:()=>'Rendas na categoria B',texto:c=>ctCategoriaBDica(fiscoDe(c).categoriaB===true)},
+  egf:{titulo:()=>'Entidade de gestão florestal',texto:c=>ctEgfDica(c)},
+  rural:{titulo:()=>'Arrendamento rural',texto:()=>ctRuralDica()},
+  n23:{titulo:()=>'Renda acima do limite do concelho',texto:()=>ctN23Dica()},
+  n24:{titulo:()=>'Renda do contrato anterior',texto:()=>ctN24Dica()},
+  obras:{titulo:()=>'Obras antes do início',texto:()=>ctObrasDica()},
+  at23:{titulo:()=>'A renda de 2023',texto:()=>ctAtualizacao2023Dica()},
+  renov:{titulo:()=>'Renovações',texto:()=>ctRenovacoesDica()},
+  reduzida:{titulo:()=>'Taxa reduzida pela duração',texto:c=>ctReduzidaDica(c)},
+  ie:{titulo:()=>'Imposto pago no estrangeiro',texto:()=>ctImpostoEstrangeiroDica()},
+};
+/* Uma pergunta do bloco fiscal com o «?» dela (KAN-161): o rótulo (ou o
+   interruptor, ou o título do grupo) como estava, e o «?» a seguir, FORA do
+   <label> — dentro, o rótulo passava-lhe o toque e o nome dele entrava no do
+   campo. A folha pousa-o ao lado do texto (estilos.css:.ct-q).
+   Recebe: html — o rótulo; chave — a de CT_AJUDAS; escondido (opcional) —
+   true para o «?» começar escondido (a finalidade fora do DHD); classe
+   (opcional) — 'ct-q-sw' num interruptor, 'ct-q-fl' num título ou numa nota.
+   Devolve: o HTML. */
+function ctQ(html,chave,escondido,classe){
+  return `<div class="ct-q${classe?' '+classe:''}">${html}${ctAjudaBtn(chave,escondido)}</div>`;
+}
+/* O «?» de uma pergunta: um botão só de ícone (ic ajuda) que abre a
+   explicação numa janela por cima do formulário (ctExplicar), com o nome
+   «Explicar: <pergunta>».
+   Recebe: chave — a de CT_AJUDAS; escondido (opcional) — true para nascer
+   escondido.
+   Devolve: o HTML do botão ('' sem a chave). */
+function ctAjudaBtn(chave,escondido){
+  const a=CT_AJUDAS[chave];if(!a)return '';
+  const t=a.titulo(cForm||{});
+  return `<button type="button" class="ct-ajuda" id="c_aj_${esc(chave)}" data-toca="camada" data-click="ctExplicar('${jsq(chave)}')" aria-label="${esc('Explicar: '+t)}" aria-haspopup="dialog"${escondido?' hidden':''}>${ic('ajuda',18)}</button>`;
+}
+/* A frase curta do caso deste contrato por baixo de uma pergunta (KAN-161):
+   escondida quando não há caso; o liveNet reescreve-a pelo id. Um aviso (a
+   celebração depois do início) diz-se pela cor da frente.
+   Recebe: id — o id da frase; texto — a frase (por escapar, '' para
+   nenhuma); aviso (opcional) — true para a cor de aviso.
+   Devolve: o HTML. */
+function ctCasoHtml(id,texto,aviso){
+  return `<div class="hint ct-colado ct-caso${aviso?' ct-caso-aviso':''}" id="${esc(id)}"${texto?'':' hidden'}>${esc(texto||'')}</div>`;
+}
+/* Abre a explicação de uma pergunta do bloco fiscal numa janela por cima do
+   «Editar contrato» (o empilhar do componentes.js:openModal: o formulário fica
+   por baixo, inerte, com o que está escrito e a posição onde estava). O
+   texto lê-se AGORA, do contrato como está escrito (ctEmEdicao), antes de a
+   janela abrir — o openModal tira os ids à de baixo. Só de leitura: fecha-se
+   no «Fechar», no X, no fundo ou no Escape; o foco volta ao «?» quando lá
+   estava (o teclado).
+   Recebe: chave — a de CT_AJUDAS.
+   Devolve: nada — abre a janela (ou nada, sem explicação). */
+function ctExplicar(chave){
+  const a=CT_AJUDAS[chave];if(!a||!cForm)return;
+  const est=ctEmEdicao(),t=ctAjudaTexto(chave,est);if(!t)return;
+  const L=openModal(a.titulo(est),`<p class="ct-explica">${esc(t)}</p>`,
+    `<button type="button" class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>`);
+  const g=L&&L.gatilho;
+  if(L&&g&&g.classList&&g.classList.contains('ct-ajuda'))
+    L.aoFechar=()=>setTimeout(()=>{try{g.focus({preventScroll:true})}catch(e){}},0);
+}
+/* O texto da explicação de uma pergunta, o que a janela do «?» mostra.
+   Recebe: chave — a de CT_AJUDAS; c — o contrato (o que ctEmEdicao devolve).
+   Devolve: o texto (sem HTML), ou '' sem explicação. */
+function ctAjudaTexto(chave,c){
+  const a=CT_AJUDAS[chave];
+  return a?String(a.texto(c||{})||''):'';
+}
+/* A explicação da pergunta do n.º 24 do art. 72.º (quadro 4.2B), com a data
+   e os números da versão do ano (taxas.bonusRendaMenor).
+   Devolve: o texto (sem HTML); '' sem o n.º 24 na versão. */
+function ctN24Dica(){
+  const B=irsAno(YEAR).taxas.bonusRendaMenor;if(!B)return '';
+  return 'Num contrato celebrado desde '+dPT(B.desde)+': se a renda for pelo menos '+dec(B.rendaMenorPct)+' % mais baixa do que a do contrato anterior neste imóvel, a taxa desce mais '+dec(B.pontos)+' pontos (CIRS art. 72.º n.º 24, quadro 4.2B do Anexo F). Em branco: não se aplica.';
+}
+/* A explicação da pergunta das obras antes do início (CIRS art. 41.º n.º 7).
+   Devolve: o texto (sem HTML). */
+function ctObrasDica(){
+  return 'Há obras de conservação deste imóvel pagas nos 24 meses antes do início do contrato. Só se deduzem se, nesse tempo, o imóvel não teve outro uso (CIRS art. 41.º n.º 7). Em «Não sei», ficam fora do Anexo F até confirmares.';
+}
+/* A explicação da pergunta da atualização da renda de 2023 (Lei 19/2022).
+   Devolve: o texto (sem HTML). */
+function ctAtualizacao2023Dica(){
+  return 'O Anexo F pergunta-o nas linhas dos contratos em vigor antes de 2022: se a atualização da renda de 2023 passou o coeficiente de 1,02 (Lei 19/2022).';
+}
+/* A explicação das renovações escritas à mão (o quadro 4.2A).
+   Devolve: o texto (sem HTML). */
+function ctRenovacoesDica(){
+  return 'Início e fim de cada renovação. O quadro 4.2A do Anexo F pede os da última. Uma renovação que vai para lá do fim leva o fim com ela.';
+}
+/* A redução pela duração deste contrato no ano corrente (irs.js:irsTaxa),
+   do contrato como está escrito e, sem ela, do formulário como abriu.
+   Recebe: c — o contrato (o que ctEmEdicao devolve).
+   Devolve: o objeto da redução ({taxa…}), ou null. */
+function ctReduzidaDe(c){return irsTaxa(c,YEAR).reducao||irsTaxa(cForm,YEAR).reducao||null}
+/* A explicação da taxa reduzida pela duração, para o «?» da nota: o quadro
+   4.2 e a comunicação da duração no Portal das Finanças.
+   Recebe: c — o contrato (o que ctEmEdicao devolve).
+   Devolve: o texto (sem HTML); '' sem redução. */
+function ctReduzidaDica(c){
+  const r=ctReduzidaDe(c);if(!r)return '';
+  return ctReduzidaCaso(r).replace(/\.$/,'')+', e a duração comunica-se no Portal das Finanças uma vez, até 15 de fevereiro do ano seguinte ao início do contrato e de cada renovação.';
+}
+/* A nota curta de um contrato com redução pela duração (KAN-161): a taxa e o
+   quadro (o resto é o «?», ctReduzidaDica).
+   Recebe: r — a redução (irsTaxa(…).reducao).
+   Devolve: o texto (sem HTML). */
+function ctReduzidaCaso(r){return 'Taxa reduzida pela duração ('+dec(r.taxa)+' %): vai ao quadro 4.2 do Anexo F.'}
 /* Muda o estado do contrato perante a AT e repinta, para os campos do
    declarado aparecerem ou sumirem. Colhe antes: o que estava escrito nos
    outros campos não se perde.
@@ -1776,12 +1908,12 @@ function delRenov(rid){collectCt();cForm.fisco.renovacoes=cForm.fisco.renovacoes
    dele? Sem o interruptor no ecrã (um formulário antigo, um teste com só
    alguns campos), sim; com ele, só ligado. É a regra de nunca gravar o que
    não se vê: a caixa fechada grava-se em branco.
-   Recebe: id — o id do interruptor (c_fpart, c_encQ, c_fcelOutro, c_fextrasQ).
+   Recebe: id — o id do interruptor (c_fpart, c_encQ, c_fextrasQ).
    Devolve: true ou false. */
 function ctAberto(id){const e=document.getElementById(id);return !e||!!e.checked}
 /* Abre ou fecha a caixa de um interruptor sem repintar (o foco fica onde
    está), lembra a escolha para um repaint (_ctAbertas) e refaz a estimativa
-   (a celebração, o que se paga à parte e a categoria B mexem na taxa).
+   (o que se paga à parte e a categoria B mexem na taxa).
    Recebe: sw — o id do interruptor; caixa — o id da caixa.
    Devolve: nada. */
 function ctCaixaSegue(sw,caixa){
@@ -1789,10 +1921,14 @@ function ctCaixaSegue(sw,caixa){
   if(s){_ctAbertas[sw]=!!s.checked;if(b)b.hidden=!s.checked}
   liveNet();
 }
-/* O data-change de «Foi assinado noutro dia»: abre ou fecha a data de
-   celebração (ctCaixaSegue).
+/* O data-change da data de celebração (KAN-160): escrita à mão, deixa de
+   seguir o início (ctInicioMudou), e a estimativa e a frase do caso refazem-se
+   (liveNet: a celebração depois do início avisa).
    Devolve: nada. */
-function ctCelebracaoMudou(){ctCaixaSegue('c_fcelOutro','c_fcelBox')}
+function ctCelebracaoMudou(){
+  const e=document.getElementById('c_fcel');if(e)e.removeAttribute('data-segue');
+  liveNet();
+}
 /* O data-change de «O inquilino paga à parte móveis, equipamentos ou
    serviços?»: abre ou fecha o valor (ctCaixaSegue).
    Devolve: nada. */
@@ -1811,13 +1947,16 @@ function ctEncargosMudou(){ctCaixaSegue('c_encQ','c_encBox')}
    dos elementos mínimos dos contratos de antes de abril de 2015) e «Não vou
    declarar» (não declarado). Num imóvel fora de Portugal não há Modelo 2: a
    pergunta é se as rendas vão ao IRS. Os valores gravados não mudam ('',
-   'declarado', 'naoDeclarado').
-   Recebe: estado — o fisco.estado; fora — true num imóvel fora de Portugal.
+   'declarado', 'naoDeclarado'). Com ajuda, o «?» ao lado da pergunta
+   explica a resposta escolhida (CT_AJUDAS.at).
+   Recebe: estado — o fisco.estado; fora — true num imóvel fora de Portugal;
+   ajuda (opcional) — true para o «?».
    Devolve: o HTML do grupo. */
-function ctSegmentoAt(estado,fora){
+function ctSegmentoAt(estado,fora,ajuda){
   const ops=fora?[['','Ainda não sei'],['declarado','Sim'],['naoDeclarado','Não vou declarar']]
     :[['','Ainda não'],['declarado','Sim, tem n.º'],['naoDeclarado','Não vou declarar']];
-  return `<div class="ct-campo"><span class="flabel" id="c_fiscoRot">${fora?'Vais declarar estas rendas no IRS?':'Já o comunicaste às Finanças?'}</span>
+  const rot=`<span class="flabel" id="c_fiscoRot">${fora?'Vais declarar estas rendas no IRS?':'Já o comunicaste às Finanças?'}</span>`;
+  return `<div class="ct-campo">${ajuda?ctQ(rot,'at',false,'ct-q-fl'):rot}
     <div class="segm ct-at-segm" role="radiogroup" aria-labelledby="c_fiscoRot">${ops
       .map(([k,lb])=>`<button type="button" role="radio" aria-checked="${estado===k?'true':'false'}" class="${estado===k?'on':''}" data-toca="rascunho" data-click="setFiscoEstado('${k}')">${lb}</button>`).join('')}</div></div>`;
 }
@@ -1828,13 +1967,12 @@ function ctSegmentoAt(estado,fora){
    Devolve: true ou false. */
 function ctCategoriaBNaDobra(c){return !!c&&fiscoDe(c).estado==='declarado'&&!pzForaDePortugal(c.propertyId)}
 /* O interruptor da categoria B (D7): a pergunta «Tens atividade aberta com
-   estas rendas na categoria B?» e, por baixo, a dica — antes, quem a liga;
-   ligada, o que muda (ctCategoriaBDica; o liveNet troca-a).
+   estas rendas na categoria B?», com o «?» que explica — antes, quem a liga;
+   ligada, o que muda (ctCategoriaBDica, lida no toque).
    Recebe: ligado — se a marca está ligada.
    Devolve: o HTML. */
 function ctCategoriaBCampo(ligado){
-  return `${ctInterruptor('c_fcatb',ligado,'Tens atividade aberta com estas rendas na categoria B?','','liveNet()')}
-    <div class="hint ct-colado" id="c_fcatbHint">${esc(ctCategoriaBDica(ligado))}</div>`;
+  return ctInterruptor('c_fcatb',ligado,'Tens atividade aberta com estas rendas na categoria B?','','liveNet()','catb');
 }
 /* O documento das rendas da categoria B (N029): o contrato continua com o
    Modelo 2 (Imposto do Selo, para todos os contratos), mas não há recibo de
@@ -1849,8 +1987,8 @@ function ctCategoriaBDocumento(){
    Recebe: c — o contrato.
    Devolve: true ou false. */
 function ctParticularidadeTem(c){const f=fiscoDe(c);return !!f.isencao||f.categoriaB===true}
-/* A celebração está escrita e não é o dia do início? Então «Foi assinado
-   noutro dia» vem ligado (em branco, a app conta o início).
+/* A celebração está escrita e não é o dia do início? Em branco, a app conta
+   o início; por isso o dia do início grava-se em branco (ctCelebracaoDoCampo).
    Recebe: c — o contrato.
    Devolve: true ou false. */
 function ctCelebracaoOutra(c){const f=fiscoDe(c);return !!f.celebracao&&f.celebracao!==(c&&c.start)}
@@ -1931,14 +2069,15 @@ function ctRenovacoesVisivel(c){
   const h=today();
   return (dataExiste(c&&c.end)&&c.end<h)||(dataExiste(c&&c.start)&&c.start<(Number(h.slice(0,4))-1)+'-01-01');
 }
-/* O interruptor da entidade de gestão florestal (D119) e a dica dele: num
-   prédio rústico em Portugal, ou sempre que já está ligado (N127), com a
-   dica a dizer porque não conta quando não conta (ctEgfDica).
+/* O interruptor da entidade de gestão florestal (D119), com o «?» da
+   explicação (ctEgfDica): num prédio rústico em Portugal, ou sempre que já
+   está ligado (N127); por baixo, só porque não conta quando não conta
+   (ctEgfCaso).
    Recebe: c — o contrato do formulário.
    Devolve: o HTML. */
 function ctEgfCampo(c){
-  return `${ctInterruptor('c_fegf',fiscoDe(c).egf===true,'Arrendado a entidade de gestão florestal reconhecida (EGF/UGF)','','liveNet()')}
-    <div class="hint ct-colado" id="c_fegfHint">${esc(ctEgfDica(c))}</div>`;
+  return `${ctInterruptor('c_fegf',fiscoDe(c).egf===true,'Arrendado a entidade de gestão florestal reconhecida (EGF/UGF)','','liveNet()','egf')}
+    ${ctCasoHtml('c_fegfCaso',ctEgfCaso(c))}`;
 }
 /* A pergunta do arrendamento rural (N093) faz-se num prédio rústico em
    Portugal, ou sempre que já está marcada: as rendas de um contrato do
@@ -1967,30 +2106,27 @@ function ctRuralDica(){
 function ctIsencaoCampos(c){
   const f=fiscoDe(c),isOpts=ctIsencoesOferecidas(c),sn=(v,sim,nao)=>v===true?sim:v===false?nao:'';
   return `<div id="c_fisenBox"${ctIsencaoVisivel(c)?'':' hidden'}><div class="form">
-    <label>Isenção de IRS${sel('c_fisen',f.isencao,isOpts,'liveNet','rascunho')}</label>
-    <div class="hint ct-colado" id="c_fisenHint">${esc(ctIsencaoTexto(f.isencao,c))}</div>
+    ${ctQ(`<label>Isenção de IRS${sel('c_fisen',f.isencao,isOpts,'liveNet','rascunho')}</label>`,'isen')}
+    ${ctCasoHtml('c_fisenCaso',ctIsencaoCaso(f.isencao,c))}
     <div id="c_fnrauBox"${ctIsencaoPede(c,'nrau3536')?'':' hidden'}><div class="form">
-      <label>O contrato é anterior ao RAU (1990) e ficou sujeito aos arts. 35.º ou 36.º do NRAU?${sel('c_fnrau',sn(f.nrau3536,'1','0'),[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'liveNet','rascunho')}</label>
-      <div class="hint ct-colado">${esc(ctPedeDica('nrau3536'))}</div>
+      ${ctQ(`<label>O contrato é anterior ao RAU (1990) e ficou sujeito aos arts. 35.º ou 36.º do NRAU?${sel('c_fnrau',sn(f.nrau3536,'1','0'),[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'liveNet','rascunho')}</label>`,'nrau')}
     </div></div>
     <div id="c_falBox"${ctIsencaoPede(c,'alRegistado2022')?'':' hidden'}><div class="form">
-      <label>${esc(ctAlPergunta())}${sel('c_fal',sn(f.alRegistado2022,'1','0'),[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'liveNet','rascunho')}</label>
-      <div class="hint ct-colado">${esc(ctPedeDica('alRegistado2022'))}</div>
+      ${ctQ(`<label>${esc(ctAlPergunta())}${sel('c_fal',sn(f.alRegistado2022,'1','0'),[{v:'',label:'Não sei'},{v:'1',label:'Sim'},{v:'0',label:'Não'}],'liveNet','rascunho')}</label>`,'al')}
     </div></div>
     <div id="c_fihruBox"${ctIsencaoPede(c,'ihru')?'':' hidden'}><div class="form">
-      <label>Enviado ao IHRU a<input id="c_fihru" type="date" value="${esc(f.ihru)}" max="${esc(today())}" data-change="liveNet()"></label>
-      <div class="hint ct-colado" id="c_fihruHint">${esc(ctIhruDica(c))}</div>
+      ${ctQ(`<label>Enviado ao IHRU a<input id="c_fihru" type="date" value="${esc(f.ihru)}" max="${esc(today())}" data-change="liveNet()"></label>`,'ihru')}
     </div></div>
     </div></div>`;
 }
-/* A explicação curta da isenção escolhida, para a dica por baixo da escolha:
+/* A explicação da isenção escolhida, para o «?» da escolha (KAN-161):
    o texto da versão do ano e onde se declara (o 6H e o 6F sem código: só
    apontam para a linha do 4.1); sem isenção, para que servem, sem fechar a
    lista (D18), e que um imóvel reabilitado se marca na ficha do imóvel (o
    benefício da versão com a marca do imóvel: o 6A, D118). Com o contrato, e quando uma condição de datas, de finalidade
-   ou do IHRU já a deixa de fora no ano corrente, diz qual (irs.js:
-   irsIsencaoMotivo) — as perguntas que a confirmam têm o seu lugar logo a
-   seguir, e não se repetem aqui.
+   ou do IHRU já a deixa de fora no ano corrente, diz qual (ctIsencaoCaso,
+   que é também a frase curta por baixo) — as perguntas que a confirmam têm o
+   seu lugar logo a seguir, e não se repetem aqui.
    Recebe: id — o valor de fisco.isencao ('' ou o id de uma isenção); c
    (opcional) — o contrato (o do formulário, ou o que ctEmEdicao devolve).
    Devolve: o texto (sem HTML). */
@@ -2005,14 +2141,25 @@ function ctIsencaoTexto(id,c){
   if(!x)return 'Esta isenção não existe nas regras de '+YEAR+'.';
   const onde=x.semCodigo?' Declara-se no quadro '+x.quadro+' do Anexo F, que aponta para a linha do contrato no quadro 4.1.'
     :' Declara-se no quadro '+x.quadro+' do Anexo F'+(x.codigo?' (código '+x.codigo+')':' (o código ainda não se conhece)')+'.';
-  let porque='';
-  if(c){
-    /* as perguntas que a isenção pede contam-se como respondidas: quem diz
-       que faltam é a própria pergunta, logo abaixo */
-    const f=fiscoDe(c),conf={};[].concat(x.pede||[]).forEach(k=>{conf[k]=true});
-    porque=irsIsencaoMotivo(Object.assign({},c,{fisco:Object.assign({},f,conf)}),YEAR);
-  }
-  return x.texto+onde+(porque?' Atenção: '+porque+'.':'');
+  const caso=c?ctIsencaoCaso(id,c):'';
+  return x.texto+onde+(caso?' '+caso:'');
+}
+/* O que a isenção escolhida diz deste contrato agora, para a frase curta por
+   baixo da escolha (KAN-161; a explicação inteira é a do «?»,
+   ctIsencaoTexto): uma isenção que a versão do ano não tem, ou porque não
+   conta no ano corrente — uma condição de datas, de finalidade ou do IHRU
+   (irs.js:irsIsencaoMotivo); as perguntas que a confirmam contam-se como
+   respondidas: quem diz que faltam é a própria pergunta, logo abaixo.
+   Recebe: id — o valor de fisco.isencao; c — o contrato (o do formulário, ou
+   o que ctEmEdicao devolve).
+   Devolve: o texto (sem HTML), ou '' sem isenção ou quando ela conta. */
+function ctIsencaoCaso(id,c){
+  if(!id||!c)return '';
+  const x=(irsAno(YEAR).isencoes||[]).find(i=>i.id===id);
+  if(!x)return 'Esta isenção não existe nas regras de '+YEAR+'.';
+  const f=fiscoDe(c),conf={};[].concat(x.pede||[]).forEach(k=>{conf[k]=true});
+  const porque=irsIsencaoMotivo(Object.assign({},c,{fisco:Object.assign({},f,conf)}),YEAR);
+  return porque?'Atenção: '+porque+'.':'';
 }
 /* A isenção escolhida no contrato, como a versão do ano corrente a escreve.
    Recebe: c — o contrato (o do formulário, ou o da base).
@@ -2099,6 +2246,46 @@ function ctCelebracaoDica(){
   const L=irsAno(YEAR).taxas.limiteRendaAlta,desde=L&&/^\d{4}/.test(String(L.desde||''))?String(L.desde).slice(0,4):'';
   return 'O dia em que assinaram: decide o regime da redução pela duração'+(desde?' e se o quadro 4.2C se aplica (contratos celebrados desde '+desde+')':'')+'. No Anexo F vai a data de início, não esta.';
 }
+/* O contrato do formulário é novo (ainda não está na base)? O ctModal sem id
+   cria um com um id novo (dados.js:normContract), que só entra na base ao
+   guardar.
+   Recebe: c — o contrato do formulário.
+   Devolve: true ou false. */
+function ctNovo(c){return !c||!c.id||!contract(c.id)}
+/* O que a data de celebração mostra (KAN-160, decisão do Martinho: hoje só
+   nos novos): a escrita; senão, num contrato novo que ainda não a mostrou,
+   hoje; senão o início — em branco a app conta o início, e por isso gravar
+   sem mexer não muda o IRS de um contrato antigo. A que vem do início segue-o
+   (ctInicioMudou) até ser escrita à mão (ctCelebracaoMudou).
+   Recebe: c — o contrato do formulário.
+   Devolve: {valor, segue} — 'AAAA-MM-DD' (ou '' sem início), e true quando é
+   o início. */
+function ctCelebracaoNoCampo(c){
+  const f=fiscoDe(c);
+  if(dataExiste(f.celebracao))return {valor:f.celebracao,segue:false};
+  if(ctNovo(c)&&_ctAbertas.c_fcel!==true)return {valor:today(),segue:false};
+  return {valor:dataExiste(c&&c.start)?c.start:'',segue:true};
+}
+/* A data de celebração como se grava, lida do campo (KAN-160): a do campo,
+   ou '' quando é o dia do início (ctCelebracaoOutra), que quer dizer o mesmo —
+   assim um contrato antigo sem ela, aberto e gravado sem mexer, fica igual.
+   Recebe: inicio — o início do contrato como está escrito.
+   Devolve: 'AAAA-MM-DD' ou ''. */
+function ctCelebracaoDoCampo(inicio){
+  const v=String(val('c_fcel')||'');
+  return dataExiste(v)&&ctCelebracaoOutra({start:inicio,fisco:{celebracao:v}})?v:'';
+}
+/* A frase curta por baixo da data de celebração (KAN-160): uma assinatura
+   depois do início avisa — num contrato antigo registado agora, o hoje que o
+   campo traz não é o dia em que assinaram.
+   Recebe: c — o contrato (o do formulário com a data do campo, ou o que
+   ctEmEdicao devolve).
+   Devolve: o texto (sem HTML), ou ''. */
+function ctCelebracaoCaso(c){
+  const cel=String(fiscoDe(c).celebracao||''),ini=String((c&&c.start)||'');
+  if(!dataExiste(cel)||!dataExiste(ini)||cel<=ini)return '';
+  return 'Esta data é depois do início ('+dPT(ini)+'). Se assinaram antes ou no próprio dia, corrige-a.';
+}
 /* A dica do n.º do contrato (D85): nos começados antes de 1 de abril de 2015
    (prazos.js:PZ_MODELO2_DESDE) não há Modelo 2 — o n.º vem do registo dos
    elementos mínimos no Portal das Finanças.
@@ -2107,6 +2294,14 @@ function ctCelebracaoDica(){
 function ctNumeroDica(c){
   if(ctAntesDoModelo2(c))return 'Começou antes de abril de 2015: não tem Modelo 2. O n.º vem do registo dos elementos mínimos do contrato no Portal das Finanças; o Anexo F pede-o em cada linha.';
   return 'Vem no comprovativo do Modelo 2; o Anexo F pede-o em cada linha.';
+}
+/* A frase curta por baixo do n.º (KAN-161): só num contrato começado antes
+   de 1 de abril de 2015, que não tem Modelo 2 (o resto é o «?»,
+   ctNumeroDica).
+   Recebe: c — o contrato (o do formulário, ou o que ctEmEdicao devolve).
+   Devolve: o texto (sem HTML), ou ''. */
+function ctNumeroCaso(c){
+  return ctAntesDoModelo2(c)?'Começou antes de abril de 2015: não tem Modelo 2.':'';
 }
 /* A dica de um contrato por indicar perante a AT (D85): o Modelo 2 e o
    prazo dele; nos começados antes de 1 de abril de 2015, o registo dos
@@ -2120,9 +2315,42 @@ function ctNumeroDica(c){
 function ctPorIndicarDica(c){
   if(c&&pzForaDePortugal(c.propertyId))return 'Fora de Portugal não há Modelo 2: as rendas vão ao Anexo J, com o imposto pago lá. Com «Sim» ou «Ainda não sei», a Declaração conta-as; com «Não vou declarar», ficam de fora.';
   if(ctAntesDoModelo2(c))return 'Começou antes de abril de 2015: não tem Modelo 2. Regista-se no Portal das Finanças com os elementos mínimos do contrato, e é desse registo que vem o n.º que o Anexo F pede. Com «Ainda não», as rendas contam no resumo do Anexo F.';
+  const caso=ctPorIndicarCaso(c);
+  return 'Com «Ainda não», as rendas contam no resumo do Anexo F e a app lembra-te o prazo do Modelo 2.'+(caso?' '+caso:'');
+}
+/* A frase curta por baixo de «Ainda não» (KAN-161; a explicação inteira é a
+   do «?», ctPorIndicarDica): o prazo do Modelo 2 deste contrato — o fim do
+   mês seguinte ao início, no passado quando já passou; num começado antes de
+   abril de 2015, que não tem Modelo 2. Fora de Portugal, nada.
+   Recebe: c — o contrato (o do formulário, ou o que ctEmEdicao devolve).
+   Devolve: o texto (sem HTML), ou ''. */
+function ctPorIndicarCaso(c){
+  if(c&&pzForaDePortugal(c.propertyId))return '';
+  if(ctAntesDoModelo2(c))return 'Começou antes de abril de 2015: não tem Modelo 2.';
   const ini=String((c&&c.start)||''),prazo=/^\d{4}-\d{2}-\d{2}$/.test(ini)?fimDoMesSeguinte(ini):'';
-  return 'Com «Ainda não», as rendas contam no resumo do Anexo F e a app lembra-te o prazo do Modelo 2.'
-    +(!prazo?'':prazo<today()?' O prazo era '+dPT(prazo)+', o fim do mês seguinte ao início: comunica-o quanto antes.':' O prazo é '+dPT(prazo)+', o fim do mês seguinte ao início.');
+  return !prazo?'':prazo<today()?'O prazo era '+dPT(prazo)+', o fim do mês seguinte ao início: comunica-o quanto antes.':'O prazo é '+dPT(prazo)+', o fim do mês seguinte ao início.';
+}
+/* O que «Não vou declarar» quer dizer (D85), para o «?» do segmentado:
+   fica fora do resumo e dos prazos (num imóvel fora de Portugal, fora da
+   Declaração), muda-se quando se quiser, e o Modelo 2 é do Imposto do Selo.
+   Recebe: c — o contrato.
+   Devolve: o texto (sem HTML). */
+function ctNaoDeclaradoDica(c){
+  const fora=!!c&&pzForaDePortugal(c.propertyId);
+  return ctNaoDeclaradoCaso(c)+' Podes mudar isto quando quiseres.'+(!fora&&!ctAntesDoModelo2(c)?' A comunicação do contrato às Finanças (o Modelo 2) é do Imposto do Selo: esta escolha só diz respeito ao IRS.':'');
+}
+/* A frase curta por baixo de «Não vou declarar» (KAN-161): o que fica de
+   fora com esta escolha.
+   Recebe: c — o contrato.
+   Devolve: o texto (sem HTML). */
+function ctNaoDeclaradoCaso(c){
+  return c&&pzForaDePortugal(c.propertyId)?'As rendas deste contrato ficam fora da Declaração.':'Este contrato fica fora do resumo do Anexo F e dos prazos da AT.';
+}
+/* O que «Sim» quer dizer num imóvel fora de Portugal (D133), para o «?» do
+   segmentado: o Anexo J, e nada do Modelo 2 nem dos recibos.
+   Devolve: o texto (sem HTML). */
+function ctForaDica(){
+  return 'Imóvel fora de Portugal: as rendas não vão ao Anexo F, nem há Modelo 2, recibos eletrónicos ou comunicações à AT. Declaram-se no Anexo J, com as despesas do período arrendado e o imposto pago lá.';
 }
 /* O contrato começou antes de haver Modelo 2 (1 de abril de 2015,
    prazos.js:PZ_MODELO2_DESDE)?
@@ -2276,10 +2504,20 @@ function ctEgfVisivel(c){
    Devolve: o texto (sem HTML); '' sem o benefício na versão. */
 function ctEgfDica(c){
   const b=(irsAno(YEAR).beneficios||[]).find(x=>x&&x.marca==='contrato.egf');if(!b)return '';
-  const f=fiscoDe(c);
-  const av=f.egf===true?irsBeneficiosAvaliados(c,YEAR).find(x=>x.beneficio&&x.beneficio.id===b.id):null;
+  const caso=ctEgfCaso(c);
   return b.texto+' Declara-se no quadro '+b.quadro+' do Anexo F, que aponta para a linha do contrato no quadro '+irsAno(YEAR).quadros.semReducao+'.'
-    +(av&&!av.aplica&&av.motivo?' Atenção: em '+YEAR+' não conta — '+av.motivo+'.':'');
+    +(caso?' '+caso:'');
+}
+/* Porque a gestão florestal marcada não conta no ano corrente
+   (irs.js:irsBeneficiosAvaliados), para a frase curta por baixo do
+   interruptor (KAN-161); a explicação inteira é a do «?» (ctEgfDica).
+   Recebe: c — o contrato (o do formulário, ou o que ctEmEdicao devolve).
+   Devolve: o texto (sem HTML), ou '' desligada, a contar, ou sem o benefício. */
+function ctEgfCaso(c){
+  const b=(irsAno(YEAR).beneficios||[]).find(x=>x&&x.marca==='contrato.egf');
+  if(!b||fiscoDe(c).egf!==true)return '';
+  const av=irsBeneficiosAvaliados(c,YEAR).find(x=>x.beneficio&&x.beneficio.id===b.id);
+  return av&&!av.aplica&&av.motivo?'Atenção: em '+YEAR+' não conta — '+av.motivo+'.':'';
 }
 /* A dica da categoria B (D134, D7, N029): desligada, quem responde «Sim» —
    as duas maneiras de as rendas lá irem, sempre com atividade aberta — e o
@@ -2312,9 +2550,14 @@ function ctImpostoEstrangeiroCampos(c){
   const ie=fiscoDe(c).impostoEstrangeiro||{},anos=ctAnosImpostoEstrangeiro(c),linhas=[];
   for(let i=0;i<anos.length;i+=2)linhas.push(anos.slice(i,i+2));
   const campo=a=>`<label>Pelas rendas de ${a} (€)<input id="c_fie_${a}" type="text" inputmode="decimal" class="num" value="${ie[a]!=null?dec(ie[a]):''}" placeholder="Opcional" autocomplete="off"></label>`;
-  return `<div class="ct-campo"><div class="flabel">Imposto pago no estrangeiro</div>
+  return `<div class="ct-campo">${ctQ('<div class="flabel">Imposto pago no estrangeiro</div>','ie',false,'ct-q-fl')}
     ${linhas.map(l=>`<div class="ct-par">${l.map(campo).join('')}</div>`).join('')}
-    <div class="hint ct-colado">O imposto sobre estas rendas pago no país do imóvel, com o comprovativo. O Anexo J pede-o ao lado das rendas, e abate ao IRS daqui pelo crédito de imposto (CIRS art. 81.º). Em branco: nada pago lá.</div></div>`;
+    <div class="hint">Em branco: nada pago lá.</div></div>`;
+}
+/* A explicação do imposto pago no estrangeiro (D133), para o «?» do grupo.
+   Devolve: o texto (sem HTML). */
+function ctImpostoEstrangeiroDica(){
+  return 'O imposto sobre estas rendas pago no país do imóvel, com o comprovativo. O Anexo J pede-o ao lado das rendas, e abate ao IRS daqui pelo crédito de imposto (CIRS art. 81.º). Em branco: nada pago lá.';
 }
 /* O que vale a taxa em branco, para o «Em branco: …» por baixo do campo do
    imposto: a estimativa do ano corrente (irsRate), ou «sem estimativa» fora
@@ -2478,8 +2721,8 @@ function ctResponderEmpresa(id){ctIrParaPergunta(id,'c_femp')}
    envio ao IHRU (c_fihru), as obras antes do início (c_fobras), a
    atualização de 2023 (c_fat23), os consumos (c_fconsumos; o c_fcons antigo
    leva lá), a gestão florestal (c_fegf). Um campo dentro de uma caixa fechada
-   pela pergunta dela (a particularidade fiscal, os encargos, a celebração, o
-   que se paga à parte, o imposto) abre-a primeiro (ctAbreCaixaDe). Quem não
+   pela pergunta dela (a particularidade fiscal, os encargos, o que se paga
+   à parte, o imposto) abre-a primeiro (ctAbreCaixaDe). Quem não
    pode alterar recebe a ficha (ctModal).
    Recebe: id — o id do contrato; campo — o id do campo.
    Devolve: nada — abre o formulário. */
@@ -2499,7 +2742,7 @@ function ctIrParaPergunta(id,campo){
    Devolve: nada. */
 function ctAbreCaixaDe(campo){
   const k=String(campo||''),pares=[[/^c_(fisen|fnrau|fal|fihru|fcatb)$/,'c_fpart','c_fpartBox'],[/^c_(fconsumos|enc_.+)$/,'c_encQ','c_encBox'],
-    [/^c_fcel$/,'c_fcelOutro','c_fcelBox'],[/^c_fextras$/,'c_fextrasQ','c_fextrasBox']];
+    [/^c_fextras$/,'c_fextrasQ','c_fextrasBox']];
   if(k==='c_tax')return ctTaxaOutra();
   const par=pares.find(x=>x[0].test(k));if(!par)return;
   const s=document.getElementById(par[1]);

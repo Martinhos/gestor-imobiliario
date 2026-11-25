@@ -2434,7 +2434,7 @@ var ACOES_RASTO = {
   ctDevolucaoCaucao: 'Registar a devolução da caução', ctDevolucaoCaucaoOk: 'Registar a devolução da caução',
   ctResolverComunicacao: 'Responder se comunicou a duração do contrato', ctComunicadaPergunta: 'Marcar a comunicação da duração como feita',
   imvPropostaForaEConta: 'Confirmar que o dono de fora é esta conta', imvAbrirQuotas: 'Indicar as quotas',
-  ctRegistarRecebimento: 'Registar recebimento', ctTaxaOutra: 'Escrever outra taxa', ctEncargosOutros: 'Outro encargo',
+  ctRegistarRecebimento: 'Registar recebimento', ctTaxaOutra: 'Escrever outra taxa', ctEncargosOutros: 'Outro encargo', ctExplicar: 'Explicar uma pergunta do IRS',
   fiscoSitMudar: 'Mudar a situação fiscal', fiscoSitVerDispensa: 'Ver quem tem dispensa', fiscoSitAbrir: 'Abrir a situação fiscal',
   fiscoAvMarcarRecibos: 'Marcar os recibos como emitidos', pzMarcarRecibos: 'Marcar como emitido',
   recConfirmarComRecibo: 'Confirmar e emiti o recibo', imvAbrirNoCampo: 'Preencher o campo do imóvel',
