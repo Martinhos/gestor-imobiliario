@@ -34,8 +34,9 @@ const app = carregarTudo({ hoje: '2026-11-13' });
 afterEach(() => repor(app));
 
 const guia = await paginaGuia({ raiz: true }).text();
-// Recebe: h — o HTML. Devolve: o texto visível, sem etiquetas e com os espaços (finos incluídos) normais.
-const texto = (h) => String(h).replace(/<[^>]+>/g, ' ').replace(/[\s  ]+/g, ' ');
+// Recebe: h — o HTML. Devolve: o texto visível, sem etiquetas e com os espaços (finos incluídos) normais
+// (as ligações das referências do guia, KAN-164, saem sem espaço à volta: a frase lê-se como no ecrã).
+const texto = (h) => String(h).replace(/<\/?a\b[^>]*>/g, '').replace(/<[^>]+>/g, ' ').replace(/[\s  ]+/g, ' ');
 // Recebe: id — o id de uma secção do guia. Devolve: o HTML dela.
 const parte = (id) => new RegExp('<section class="bloco" id="' + id + '"[\\s\\S]*?\\n {2}</section>').exec(guia)[0];
 // Recebe: h — o HTML; titulo — o subtítulo de um grupo. Devolve: o HTML do grupo.
@@ -306,7 +307,7 @@ describe('o guia diz o que a Declaração faz', () => {
     assert.match(t, /as isenções, a taxa de 10 % das rendas moderadas e os dos quadros 6A a 6C/);
     assert.match(t, /não tiveres dívidas por regularizar às Finanças nem à Segurança Social/);
     assert.match(t, /artigo 14\.º, n\.os 5 a 7, do Estatuto dos Benefícios Fiscais/);
-    assert.match(guia, /href="https:\/\/info\.portaldasfinancas\.gov\.pt\/[^"]*ebf-artigo-14-ordm-\.aspx"/);
+    assert.match(guia, /href="https:\/\/diariodarepublica\.pt\/dr\/legislacao-consolidada\/decreto-lei\/1989-34554075-114472396"/, 'o artigo 14.º do EBF, no DR (KAN-164)');
     // o dinheiro e as percentagens novas com o espaço fino da casa
     assert.doesNotMatch(parte('tens-de-declarar'), /\d [%€]/);
   });

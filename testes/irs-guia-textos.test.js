@@ -29,7 +29,8 @@ import { carregarBase, carregarTudo, limpar, repor } from './arnes.js';
 const guia = await paginaGuia({ raiz: true }).text();
 const montra = await paginaLanding({ raiz: true }).text();
 // Recebe: h — o HTML. Devolve: o texto visível, sem etiquetas e com os espaços (finos incluídos) normais.
-const texto = (h) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+// (as ligações das referências, KAN-164, saem sem espaço à volta: a frase lê-se como no ecrã)
+const texto = (h) => h.replace(/<\/?a\b[^>]*>/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 // Recebe: id — o id de uma secção do guia. Devolve: o HTML dela (um cartão das partes 1 a 3 ou da 4).
 const parte = (id) => new RegExp('<section class="bloco" id="' + id + '"[\\s\\S]*?\\n {2}</section>').exec(guia)[0];
 // Recebe: h — o HTML; titulo — o subtítulo de um grupo. Devolve: o HTML do grupo (do h3/h4 ao fim do div).
@@ -59,7 +60,7 @@ describe('o guia depois da auditoria ao IRS', () => {
     assert.match(t, /A ou B, a posição de cada um no rosto da declaração \(o sujeito passivo A no quadro 3, o B no quadro 5A\)/);
     assert.match(t, /a declaração é uma só, com as rendas de todo o agregado, as tuas e as do teu cônjuge também/);
     assert.match(t, /artigo 59\.º, n\.º 2, alínea a\)/);
-    assert.match(fontes, /cirs_rep\/Pages\/irs59\.aspx/);
+    assert.match(fontes, /diariodarepublica\.pt\/dr\/legislacao-consolidada\/lei\/2014-70048167-121035511/, 'o artigo 59.º, no DR (KAN-164)');
   });
 
   test('D78: os limites do n.º 23 desde 1 de setembro de 2026 são os do RSAA, da Portaria 454/2026/1', () => {
@@ -68,7 +69,7 @@ describe('o guia depois da auditoria ao IRS', () => {
     assert.match(t, /Até 31 de agosto de 2026 esses limites eram os da Portaria n\.º 176\/2019/);
     assert.match(t, /Desde 1 de setembro de 2026 são os limites máximos de renda do Regime Simplificado de Arrendamento Acessível, que a Portaria n\.º 454\/2026\/1 fixou/);
     assert.match(t, /Decreto-Lei n\.º 97\/2026, artigo 14\.º, alínea b\)/);
-    assert.match(fontes, /href="https:\/\/info\.portaldasfinancas\.gov\.pt\/[^"]*portaria-454-2026-1\.pdf"/);
+    assert.match(fontes, /href="https:\/\/diariodarepublica\.pt\/dr\/detalhe\/portaria\/454-2026-1179722108"/, 'a portaria no DR (KAN-164)');
     // a data «Verificado a» é a da verificação contra a portaria, depois de ela sair (13 de outubro de 2026)
     assert.ok(GUIA_REVISTO >= '2026-10-13', GUIA_REVISTO);
     assert.match(texto(guia), new RegExp('Verificado a ' + dataPorExtenso(GUIA_REVISTO)));
@@ -95,7 +96,8 @@ describe('o guia depois da auditoria ao IRS', () => {
     for (const q of ['Quadro 4.4:', 'Quadro 5: a sublocação', 'Quadros 6D, 6F e 6H:', 'Quadro 8:', 'Quadro 9:', 'Quadro 10:']) {
       assert.ok(outros.includes(q), 'falta: ' + q);
     }
-    for (const u of ['bf_rep/Pages/ebf71a.aspx', 'bf_rep/Pages/ebf74a.aspx', 'bf_rep/Pages/ebf46a.aspx', 'Documents/Decreto_Lei_68_2019.pdf']) {
+    // no DR desde o KAN-164: os artigos 71.º-A, 74.º-A e 46.º-A do EBF e o 20.º do DL 68/2019, consolidados
+    for (const u of ['1989-34554075-836602124', '1989-34554075-222582053', '1989-34554075-1124764075', 'decreto-lei/2019-150114015-213702974']) {
       assert.ok(fontes.includes(u), 'a fonte ' + u);
     }
   });
@@ -106,7 +108,7 @@ describe('o guia depois da auditoria ao IRS', () => {
     for (const f of ['a declaração anual das rendas (Modelo 44)', 'o recibo de renda eletrónico de cada renda é obrigatório',
       'só de quem está dispensado dele', 'caixa postal eletrónica', 'duas vezes o IAS', '65 anos ou mais',
       'Portaria n.º 98-A/2015, artigos 5.º e 8.º', 'até ao fim de fevereiro do ano seguinte']) assert.ok(t.includes(f), 'falta: ' + f);
-    assert.match(fontes, /Portaria_98_A-2015\.pdf/);
+    assert.match(fontes, /diariodarepublica\.pt\/dr\/legislacao-consolidada\/portaria\/2015-71124567/, 'a portaria no DR (KAN-164)');
   });
 
   test('D84: o 8B diz até quando se entregam as declarações de substituição', () => {

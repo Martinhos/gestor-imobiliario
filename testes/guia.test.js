@@ -18,7 +18,8 @@ import { CSS_LANDING } from '../worker/src/landing.js';
 const html = await paginaGuia({ raiz: true }).text();
 const previa = await paginaGuia({ raiz: false }).text();
 // Recebe: h — o HTML. Devolve: o texto visível, sem etiquetas.
-const texto = (h) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+// (as ligações das referências, KAN-164, saem sem espaço à volta: a frase lê-se como no ecrã)
+const texto = (h) => h.replace(/<\/?a\b[^>]*>/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 // Recebe: h — o HTML; classe — a classe da lista. Devolve: as linhas dessa lista, todas.
 const linhas = (h, classe) => {
   const listas = h.match(new RegExp('<ul class="lista ' + classe + '">[\\s\\S]*?</ul>', 'g')) || [];
@@ -170,18 +171,22 @@ describe('o guia «Declarar as rendas»', () => {
     for (const frase of ['só se entregam por transmissão eletrónica de dados', 'o teu NIF e a senha de acesso',
       'Chave Móvel Digital', 'registas-te no Portal']) assert.ok(t2.includes(frase), '2, falta: ' + frase);
     // ticket 720b5908: o botão leva à entrega do IRS (a autenticação do Modelo 3), e não à página inicial do Portal
-    assert.match(p2, /<p class="ir"><a class="btn" href="https:\/\/irs\.portaldasfinancas\.gov\.pt\/app\/entrega" rel="noopener"><span>Entregar o IRS no Portal das Finanças<\/span><svg class="i seguir"/);
+    assert.match(p2, /<p class="ir"><a class="btn" href="https:\/\/irs\.portaldasfinancas\.gov\.pt\/app\/entrega" target="_blank" rel="noopener noreferrer"><span>Entregar o IRS no Portal das Finanças<\/span><svg class="i seguir"/);
     assert.doesNotMatch(html, /href="https:\/\/www\.portaldasfinancas\.gov\.pt\/"/, 'nenhuma ligação à página inicial do Portal');
     for (const frase of ['Cada prédio vai numa linha própria', 'código da freguesia, de seis caracteres','pelo valor ilíquido',
       '07 no arrendamento habitacional, 06 no não habitacional', 'retenções na fonte', 'O NIF português do inquilino',
       'nos 24 meses antes do arrendamento', 'Quadro 4.1', 'Quadro 4.2', 'quadro 4.2A', 'Quadro 6G']) {
       assert.ok(t3.includes(frase), '3, falta: ' + frase);
     }
-    // a fonte principal de cada parte, no fim, ligada ao sítio oficial
-    for (const [p, fonte] of [[p1, 'irs72\\.aspx'], [p2, 'portaria-104-2026-1\\.pdf'], [p3, 'Mod_3_anexo_F\\.pdf']]) {
-      assert.match(p, new RegExp('<p class="fonte"><a href="https://info\\.portaldasfinancas\\.gov\\.pt/[^"]*' + fonte +
-        '" rel="noopener">Fonte principal: [^<]+</a></p>\\n {2}</section>$'));
+    // a fonte principal de cada parte, no fim, ligada ao sítio oficial: a lei ao Diário da República (KAN-164), as
+    // instruções do Anexo F à AT
+    for (const [p, fonte] of [[p1, 'diariodarepublica\\.pt/dr/legislacao-consolidada/lei/2014-70048167-1000777570'],
+      [p2, 'diariodarepublica\\.pt/dr/detalhe/portaria/104-2026-1066993467'],
+      [p3, 'info\\.portaldasfinancas\\.gov\\.pt/[^"]*Mod_3_anexo_F\\.pdf']]) {
+      assert.match(p, new RegExp('<p class="fonte"><a href="https://' + fonte +
+        '" target="_blank" rel="noopener noreferrer">Fonte principal: [^<]+</a></p>\\n {2}</section>$'));
     }
+    assert.match(p1, /Fonte principal: artigo 72\.º do Código do IRS, Diário da República\./);
     // os factos soltos levam o ponto, sem o visto nem a cruz do que se deduz
     for (const l of linhas(p1 + p3, 'info')) assert.match(l, /^<li><span class="ponto" aria-hidden="true"><\/span><span>/);
     assert.equal(linhas(p1 + p2 + p3, 'sim').length + linhas(p1 + p2 + p3, 'nao').length, 0);
@@ -225,13 +230,14 @@ describe('o guia «Declarar as rendas»', () => {
     assert.doesNotMatch(p3, /\d €|\d %/, 'nenhum espaço normal antes de € ou %');
     // o que a app dizia sem fonte oficial confirmada não entra
     assert.doesNotMatch(t3, /IRS Automático|sobe para|simula/i);
-    // as fontes novas, cada uma na lista com o endereço da AT
+    // as fontes novas, cada uma na lista, no Diário da República (KAN-164: a lei liga ao DR, o artigo à versão
+    // consolidada)
     const lista = /<ul class="fontes">([\s\S]*?)<\/ul>/.exec(html)[1];
-    for (const u of ['cirs_rep/Pages/irs74.aspx', 'cirs_rep/Pages/irs78.aspx', 'cimi/Pages/cimi135i.aspx', 'cirs_rep/Pages/irs55.aspx',
-      'cirs_rep/Pages/irs128.aspx', 'cirs_rep/Pages/irs101b.aspx', 'civa_rep/Pages/artigo-53-o-do-civa.aspx',
-      'cirs_rep/Pages/irs115.aspx', 'selo/Pages/selo60.aspx', 'Documents/Portaria_106_2025_1.pdf']) {
-      assert.match(lista, new RegExp('href="https://info\\.portaldasfinancas\\.gov\\.pt/pt/informacao_fiscal/[^"]*' +
-        u.replace(/[.]/g, '\\.') + '"'), 'a fonte ' + u);
+    for (const nome of ['Código do IRS, artigo 74.º', 'Código do IRS, artigo 78.º', 'Código do IMI, artigo 135.º-I',
+      'Código do IRS, artigo 55.º', 'Código do IRS, artigo 128.º', 'Código do IRS, artigo 101.º-B', 'Código do IVA, artigo 53.º',
+      'Código do IRS, artigo 115.º', 'Código do Imposto do Selo, artigo 60.º', 'Portaria n.º 106/2025/1']) {
+      assert.match(lista, new RegExp('href="https://diariodarepublica\\.pt/dr/[^"]+"[^>]*>Diário da República, ' +
+        nome.replace(/[.]/g, '\\.') + '[,:]'), 'a fonte ' + nome);
     }
     // as partes 1 a 3 são informação: não falam da app nem prometem fazer o IRS por ti
     const corpo = texto(html.slice(html.indexOf('<section class="bloco" id="tens-de-declarar"'), html.indexOf('<section class="parte" id="deducoes"')));
@@ -245,10 +251,12 @@ describe('o guia «Declarar as rendas»', () => {
     // e as catorze da ronda 2 (KAN-128): os CIRS 3.º, 4.º, 15.º e 81.º, os Anexos B e J, o EBF 71.º de antes de 2023,
     // os processos 28153 e 23119, os EBF 59.º-I e 59.º-G, o CIMI 113.º, a reposição das freguesias e a Lei 25-A/2025
     // e as três da segunda auditoria de raiz (2026-11-23): o EBF 14.º e o OC 20268/2024 nas partes 1 a 3, o processo
-    // 26713 nas deduções
-    assert.equal((fontes.match(/<li>/g) || []).length, 22 + 8 + 14 + 2 + 9 + 1, 'as quarenta e seis das partes 1 a 3 e as dez das deduções');
-    assert.equal(urls.length, 56, 'todas com o endereço confirmado');
+    // 26713 nas deduções. Desde o KAN-164 (2026-11-26) cada referência do texto é uma ligação, e a lista tem todas as
+    // que o texto liga: a lei no Diário da República (55, cada artigo pela versão consolidada), a AT na AT (18)
+    assert.equal((fontes.match(/<li>/g) || []).length, 73, 'as setenta e três fontes');
+    assert.equal(urls.length, 73, 'todas com o endereço confirmado');
     assert.equal(new Set(urls).size, urls.length, 'nenhuma repetida');
+    assert.equal(urls.filter((u) => u.startsWith('https://diariodarepublica.pt/dr/')).length, 55, 'a lei no DR');
     for (const u of urls) {
       assert.match(u, /^https:\/\/(?:info\.portaldasfinancas\.gov\.pt|irs\.portaldasfinancas\.gov\.pt|diariodarepublica\.pt)\//, u);
     }

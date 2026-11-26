@@ -19,7 +19,8 @@ import { paginaLanding } from '../worker/src/landing.js';
 const guia = await paginaGuia({ raiz: true }).text();
 const montra = await paginaLanding({ raiz: true }).text();
 // Recebe: h — o HTML. Devolve: o texto visível, sem etiquetas e com os espaços (finos incluídos) normais.
-const texto = (h) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+// (as ligações das referências, KAN-164, saem sem espaço à volta: a frase lê-se como no ecrã)
+const texto = (h) => h.replace(/<\/?a\b[^>]*>/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 // Recebe: id — o id de uma secção do guia. Devolve: o HTML dela.
 const parte = (id) => new RegExp('<section class="bloco" id="' + id + '"[\\s\\S]*?\\n {2}</section>').exec(guia)[0];
 // Recebe: h — o HTML; titulo — o subtítulo de um grupo. Devolve: o HTML do grupo.
@@ -77,8 +78,9 @@ describe('o guia na ronda 2 da auditoria ao IRS', () => {
     for (const q of ['Quadro 4.4:', 'Quadro 5:', 'Quadros 6D, 6F e 6H:', 'Quadro 8:', 'Quadro 9:', 'Quadro 10:']) {
       assert.ok(texto(outros).includes(q), 'falta: ' + q);
     }
-    for (const u of ['EBF/PIV_28153.pdf', 'cirs/Documents/PIV_23119.pdf', 'bf_rep/ra/Pages/ebf71_ra202310.aspx',
-      'bf_rep/Pages/ebf59g.aspx', 'bf_rep/Pages/ebf59i.aspx']) assert.ok(fontes.includes(u), 'a fonte ' + u);
+    // desde o KAN-164 a lei liga ao Diário da República (o EBF consolidado: o 71.º, com o n.º 7 revogado, o 59.º-G e o 59.º-I)
+    for (const u of ['EBF/PIV_28153.pdf', 'cirs/Documents/PIV_23119.pdf', 'decreto-lei/1989-34554075-222582057',
+      'decreto-lei/1989-34554075-836602138', 'decreto-lei/1989-34554075-836602140']) assert.ok(fontes.includes(u), 'a fonte ' + u);
   });
 
   /* Decisão do Martinho (2026-11-17): a app é só de arrendamento com contratos, e o guia não trata o
@@ -92,7 +94,7 @@ describe('o guia na ronda 2 da auditoria ao IRS', () => {
     const semIsencao = texto(guia).replace(isentas, '');
     assert.doesNotMatch(semIsencao, /alojamento local/i, 'fora da isenção do 6F, nenhuma menção');
     assert.ok(!fontes.includes('cirs_rep/Pages/irs28.aspx'), 'a fonte que só servia o alojamento local saiu');
-    for (const u of ['cirs_rep/Pages/irs4.aspx', 'Mod_3_anexo_B.pdf']) assert.ok(fontes.includes(u), 'a fonte ' + u);
+    for (const u of ['lei/2014-70048167-206093029', 'Mod_3_anexo_B.pdf']) assert.ok(fontes.includes(u), 'a fonte ' + u);
   });
 
   test('D133: o guia é dos imóveis em Portugal; os de fora vão ao Anexo J, quadro 7A', () => {
@@ -101,7 +103,7 @@ describe('o guia na ronda 2 da auditoria ao IRS', () => {
     const fora = linha(grupo(parte('tens-de-declarar'), 'Quando não vão ao Anexo F'), 'As rendas de um imóvel fora de Portugal');
     for (const f of ['Anexo J', 'quadro 7A', 'código F01', 'o imposto que lá pagaste', 'artigo 15.º, n.º 1',
       'artigo 81.º, n.º 1']) assert.ok(fora.includes(f), 'falta: ' + f);
-    for (const u of ['cirs_rep/Pages/irs15.aspx', 'cirs_rep/Pages/irs81.aspx', 'Mod_3_anexo_J.pdf']) assert.ok(fontes.includes(u), 'a fonte ' + u);
+    for (const u of ['lei/2014-70048167-70051812', 'lei/2014-70048167-836602078', 'Mod_3_anexo_J.pdf']) assert.ok(fontes.includes(u), 'a fonte ' + u);
   });
 
   test('D134: os dois casos da categoria B, a opção e o prédio afeto à atividade', () => {
@@ -109,7 +111,7 @@ describe('o guia na ronda 2 da auditoria ao IRS', () => {
     for (const f of ['optaste por tributar o arrendamento na categoria B', 'artigo 4.º, n.º 1, alínea n), e n.º 5',
       'afeto a uma atividade tua', 'artigo 3.º, n.º 2, alínea a)', 'Anexo B', 'campo 410 do quadro 4A', 'Anexo C'])
       assert.ok(b.includes(f), 'falta: ' + f);
-    assert.ok(fontes.includes('cirs_rep/Pages/irs3.aspx'));
+    assert.ok(fontes.includes('lei/2014-70048167-153141040'), 'o artigo 3.º do Código do IRS, no DR');
   });
 
   test('D137: o código e o artigo da caderneta atual, e a reposição das freguesias em outubro de 2025', () => {
@@ -121,8 +123,8 @@ describe('o guia na ronda 2 da auditoria ao IRS', () => {
     for (const f of ['cerca de 300 freguesias', 'Lei n.º 25-A/2025', 'o código e o artigo podem ter mudado',
       'a caderneta da compra', 'artigo 113.º, n.º 1, do Código do IMI']) assert.ok(rep.includes(f), 'falta: ' + f);
     assert.doesNotMatch(rep, /\b30[23]\b/, 'o número exato não: a imprensa disse 302 e a tabela tem 303');
-    for (const u of ['cimi/Pages/cimi113.aspx', 'Reposicao-freguesias-agregadas-2025-tab-correspondencia.aspx',
-      'lei-25-a-2025.pdf']) assert.ok(fontes.includes(u), 'a fonte ' + u);
+    for (const u of ['decreto-lei/2003-34499575-117659213', 'Reposicao-freguesias-agregadas-2025-tab-correspondencia.aspx',
+      'legislacao-consolidada/lei/2025-911088740']) assert.ok(fontes.includes(u), 'a fonte ' + u);
   });
 
   test('as partes 1 a 3 continuam a ser informação: não falam da app', () => {
