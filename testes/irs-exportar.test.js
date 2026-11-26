@@ -203,7 +203,7 @@ describe('o CSV do Anexo F', () => {
     assert.equal(nome, 'anexo-f-2025.csv');
     const c = lerCsv(conteudo);
     // as colunas que já existiam ficam no mesmo sítio
-    assert.deepEqual(c.cab.slice(0, 16), ['ano', 'declarado', 'contrato', 'n_at', 'inicio', 'imovel', 'freguesia', 'tipo_predio', 'artigo', 'fracao', 'natureza', 'inquilinos', 'nif_ou_pais', 'quota_pct', 'rendas_iliquidas', 'retencoes']);
+    assert.deepEqual(c.cab.slice(0, 16), ['ano', 'declarado', 'contrato', 'n_at', 'início', 'imóvel', 'freguesia', 'tipo_predio', 'artigo', 'fração', 'natureza', 'inquilinos', 'nif_ou_pais', 'quota_pct', 'rendas_iliquidas', 'retencoes']);
     assert.deepEqual(c.cab.slice(38, 44), ['campo', 'prejuizo', 'nif', 'pais', 'renda_4_2b', 'n_at_anterior_4_2b'], 'as da vaga 1 ficam no sítio delas');
     assert.equal(c.cab.indexOf('comunicacao_4_2a_resposta'), 44, 'as novas sempre no fim, depois destas');
     assert.ok(conteudo.includes('"6147,00"'), 'as rendas: 12 × 512,25');
@@ -228,8 +228,8 @@ describe('o CSV do Anexo F', () => {
     const c = lerCsv(conteudo);
     assert.equal(c.raw(0, 'contrato'), '"\'=1+1"');
     assert.equal(c.raw(0, 'inquilinos'), '"\'=HYPERLINK(""http://x.example"",""clique"")"');
-    assert.equal(c.raw(0, 'imovel'), '"\'+351 casa"');
-    assert.equal(c.raw(0, 'fracao'), '"\'@A"');
+    assert.equal(c.raw(0, 'imóvel'), '"\'+351 casa"');
+    assert.equal(c.raw(0, 'fração'), '"\'@A"');
     c.cruas.forEach((ls, i) => ls.forEach((x) => {
       if (x.startsWith('="')) assert.match(x, /^="[0-9A-Z.]*"$/, 'linha ' + i + ': um código só com algarismos, maiúsculas e o ponto');
       else if (/^"-\d+(,\d+)?"$/.test(x)) return;   // um valor negativo
@@ -245,7 +245,7 @@ describe('o CSV do Anexo F', () => {
     const c = lerCsv(csvDescarregado().conteudo);
     const sem = c.rows.filter((x) => x.declarado === 'sem contrato');
     assert.equal(sem.length, 1);
-    assert.equal(sem[0].imovel, 'T2 Bragança');
+    assert.equal(sem[0]['imóvel'], 'T2 Bragança');
     assert.equal(sem[0].rendas_iliquidas, '1500,00');
     assert.match(sem[0].faltas, /^2 rendas sem contrato ligado: não estão .*declaram-se na mesma$/);
     // a soma das rendas do CSV é a do ano: as do quadro e as sem contrato

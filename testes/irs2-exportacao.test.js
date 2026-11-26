@@ -182,7 +182,7 @@ describe('N008: o quadro 10 com a matriz, o titular e o NIF do inquilino', () =>
     rendas('C1', 800, 2025);
     const c = csv(), q = c.rows.filter((x) => x.declarado === 'quadro 10');
     assert.equal(q.length, 1);
-    assert.deepEqual([q[0].freguesia, q[0].tipo_predio, q[0].artigo, q[0].fracao, q[0].titular, q[0].inquilinos, q[0].nif_ou_pais, q[0].nif, q[0].pais],
+    assert.deepEqual([q[0].freguesia, q[0].tipo_predio, q[0].artigo, q[0]['fração'], q[0].titular, q[0].inquilinos, q[0].nif_ou_pais, q[0].nif, q[0].pais],
       ['110621', 'U', '7000', 'C', 'A', 'Tiago', '123456789', '123456789', '']);
     const i = c.rows.indexOf(q[0]);
     assert.equal(c.cruas[i + 1][c.cab.indexOf('freguesia')], '="110621"', 'o código da freguesia como código');

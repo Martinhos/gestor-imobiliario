@@ -602,3 +602,12 @@ numa casa. Quem precisa de saber quem entrou lê o JSON que o servidor
 mandou, `CW.state.houses[].data`, depois do pullNow, e não a casa da base
 (cloud/partilha.js:entradasPorResponder): lida da base, a entrada nunca
 abria a janela das quotas.
+
+## Um CSV com o começo só em ASCII estraga-se no Google Sheets
+O Google Sheets adivinha a codificação pelo começo do ficheiro e não lhe
+chega a marca de ordem de bytes: um CSV em UTF-8 cujos primeiros milhares de
+bytes são só ASCII (o cabeçalho de máquina e linhas de "";) é lido como
+Latin-1, e «não» sai «nÃ£o» (KAN-126-5, 2026-11-26). O Excel lê a marca e não
+sofre disto. Um CSV que vai para fora leva um acento logo no cabeçalho
+(fisco-exportar.js:FISCO_CSV_NOMES); o testes/irs-csv-seccoes.test.js obriga o primeiro
+carácter fora do ASCII a vir antes do byte 64.

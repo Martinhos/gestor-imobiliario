@@ -232,7 +232,7 @@ describe('D71 — os prédios do quadro 9', () => {
     assert.ok(r.aimi && r.aimi.predios.length === 1);
     assert.ok(app.fiscoTexto().includes('Prédios do quadro 9: T2 Arroios (quadro / campo ' + r.linhas[0].quadro + ' / ' + campo + ', VPT ' + app.euro2(100000) + ')'));
     const p9 = csv().rows.find((x) => x.declarado === 'quadro 9 · prédio');
-    assert.equal(p9.imovel, 'T2 Arroios');
+    assert.equal(p9['imóvel'], 'T2 Arroios');
     assert.equal(p9.campo, r.linhas[0].quadro + ' / ' + campo);
     assert.equal(p9.vpt, '100000,00');
   });

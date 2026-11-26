@@ -136,6 +136,25 @@ function fiscoPrejuizoTexto(r){
    Recebe: a — o aviso ({nivel}).
    Devolve: 'falta', 'aviso' ou 'nota'. */
 function fiscoNivelNome(a){return a&&a.nivel==='falta'?'falta':a&&a.nivel==='info'?'nota':'aviso'}
+/* Os títulos das duas secções do CSV que não são linhas do Anexo F, cada uma
+   depois de uma linha vazia (fiscoCsvTexto, KAN-126-5): os avisos de «A
+   tratar» e, no fim, a estimativa do imposto com as regras e o aviso (sem
+   regras do ano, só as notas). */
+const FISCO_CSV_SECCAO_AVISOS='AVISOS: o que a app encontrou para tratares antes de entregar. Não são linhas do Anexo F.';
+const FISCO_CSV_SECCAO_NOTAS='ESTIMATIVA E NOTAS: o imposto que a app estima, as regras e o aviso. Não são linhas do Anexo F.';
+const FISCO_CSV_SECCAO_SO_NOTAS='NOTAS: as regras e o aviso. Não são linhas do Anexo F.';
+/* Os nomes do cabeçalho do CSV escritos em português, com os acentos, nas
+   colunas que os têm: «início», «imóvel» e «fração» (as outras ficam como
+   eram). Não é só ortografia (KAN-126-5): o Google Sheets adivinha a
+   codificação de um CSV pelo começo do ficheiro e não chega a marca de ordem
+   de bytes; com o cabeçalho e as primeiras linhas só em ASCII (os primeiros
+   2 KB), lia o ficheiro como Latin-1 e os acentos de mais abaixo saíam
+   estragados («nÃ£o»). Com estes três nos primeiros 80 bytes, o começo já
+   é UTF-8 com acentos. Por dentro, as linhas continuam a usar as chaves sem
+   acento (inicio, imovel, fracao); só o cabeçalho as escreve assim.
+   Recebe: k — a chave da coluna.
+   Devolve: o nome que o cabeçalho escreve. */
+const FISCO_CSV_NOMES={inicio:'início',imovel:'imóvel',fracao:'fração'};
 
 /* Os ajudantes que o texto, o CSV e o PDF partilham para os contratos (vaga 2
    da auditoria ao IRS). Leem os campos do resumo (fisco-resumo.js, plano §1.4
@@ -1279,30 +1298,30 @@ ${IRS_AVISO}
    contrato e titular de um imóvel fora de Portugal («anexo J», D133, sem
    imposto estimado; em conjunta, o anexo_destino diz o Anexo J de que
    titular — N010) e por contrato da categoria B («categoria B», D134); e as
-   de rodapé, com o texto na coluna contrato: o 4.2C («quadro 4.2C», N039),
-   cada ponto de «A tratar» («a tratar (falta|aviso|nota)»), o abate dos
-   prejuízos («reporte»), o caminho do imposto com a ressalva dos Açores e os
-   prejuízos de anos fora da app («imposto»), as regras e o aviso (IRS_AVISO).
-   Todas as linhas têm as colunas do cabeçalho: o texto pelo celulaCsv, os
-   códigos pelo celulaCodigo (="040810") e os valores pelo celulaNumero
-   (6147,00). As colunas que já existem não mudam de sítio; as novas vão
-   sempre no fim, vaga a vaga: as da vaga 1 (titular, 6D, 4.2A, 4.2B, campo,
-   prejuízo, NIF e país), as da vaga 2 (o 4.2A pelo período, as taxas de cada
-   período, o quadro 10, a regularização, o reporte, o 9101 e o 9102), as da
-   vaga 3 (a natureza, a caução, os reembolsos, as devoluções, a atualização
-   de 2023, as quotas e os de fora, o quadro 5, as obras dos 24 meses, o
-   VPT), as da vaga 4 (os quadros 6A, 6B e 6C, o líquido do imposto, os
-   benefícios — D117, D119, D121; o 4.3 de um DHD — D120; o anexo fora do
-   Anexo F, os códigos do rendimento e do país, o imposto pago lá e os gastos
-   — D133; as freguesias repostas e o dia confirmado — D135) e as da 2.ª auditoria:
-   o 4.2C nas linhas do 4.2 celebradas desde a data do n.º 23 (sim ou por
-   confirmar, N039) e os anos que a regularização do n.º 20 não conta, com a
+   de rodapé: o 4.2C («quadro 4.2C», N039). Depois, cada uma após uma linha
+   vazia e com o título na 1.ª coluna (KAN-126-5), as secções que não são do
+   Anexo F: os avisos («a tratar (falta|aviso|nota)», havendo) e a estimativa
+   e as notas («reporte», «imposto» com os Açores e os prejuízos de fora, as
+   regras e o IRS_AVISO, no fim). Todas as linhas, vazias e títulos também,
+   têm as colunas do cabeçalho: o texto pelo celulaCsv, os códigos pelo
+   celulaCodigo (="040810") e os valores pelo celulaNumero (6147,00). As colunas
+   que já existem não mudam de sítio; as novas vão sempre no fim: as da vaga 1
+   (titular, 6D, 4.2A, 4.2B, campo, prejuízo, NIF e país), da vaga 2 (o 4.2A
+   pelo período, as taxas de cada período, o quadro 10, a regularização, o
+   reporte, o 9101 e o 9102), as da vaga 3 (a natureza, a caução, os reembolsos,
+   as devoluções, a atualização de 2023, as quotas e os de fora, o quadro 5, as
+   obras dos 24 meses, o VPT), as da vaga 4 (os quadros 6A, 6B e 6C, o líquido
+   do imposto, os benefícios — D117, D119, D121; o 4.3 de um DHD — D120; o anexo
+   fora do Anexo F, os códigos do rendimento e do país, o imposto pago lá e os
+   gastos — D133; as freguesias repostas e o dia confirmado — D135) e as da 2.ª
+   auditoria: o 4.2C nas linhas do 4.2 celebradas desde a data do n.º 23 (sim ou
+   por confirmar, N039) e os anos que a regularização do n.º 20 não conta, com a
    diferença dos por confirmar (N031, N125). O isencao_6d só leva o código
    (N106); o nif_ou_pais é o NIF português ou o país (D59); o
    comunicacao_4_2a_resposta é 'sim', 'nao', 'a confirmar' ou '' por fazer; o
-   4.2B sempre que o contrato o tem (D36); sem regras do ano, a taxa e o
-   imposto vão vazios (D50). Em conjunta, um contrato dos dois cônjuges dá
-   uma linha por titular.
+   4.2B sempre que o contrato o tem (D36); sem regras do ano, a taxa e o imposto
+   vão vazios (D50). Em conjunta, um contrato dos dois cônjuges dá uma linha por
+   titular.
    Recebe: r — o resumo (resumoFiscal).
    Devolve: o conteúdo do CSV (string, linhas separadas por \n, sem a marca
    de ordem de bytes, que é do download). */
@@ -1332,7 +1351,7 @@ function fiscoCsvTexto(r){
   const linha=o=>cab.map(k=>o[k]==null?'""':o[k]).join(';');
   /* uma lista de valores numa célula: um só como código, vários como texto */
   const codigos=xs=>{xs=xs.filter(Boolean);return xs.length===1?C(xs[0]):T(xs.join(' / '))};
-  const out=[cab.map(k=>T(k)).join(';')];
+  const out=[cab.map(k=>T(FISCO_CSV_NOMES[k]||k)).join(';')];
   r.linhas.forEach(l=>{
     const red=l.quadro===Q.comReducao,com=red?fiscoExpComunicacao(r,l):null,b=red&&fiscoExpElegivel24(r,l),tx=l.isencao?null:fiscoExpTaxa(r,l);
     const escr=!sem&&typeof fiscoTaxaEscritaOutra==='function'?fiscoTaxaEscritaOutra(l):null,pc=fiscoExpPorConhecer(r,l);
@@ -1438,7 +1457,15 @@ function fiscoCsvTexto(r){
   if(c42)out.push(linha({ano:T(ano),declarado:T('quadro '+c42.quadro),quadro:C(c42.quadro),
     contrato:T('Todos os contratos do '+(Q.comReducao||'4.2')+' cumprem o n.º 23 do art. 72.º do CIRS? '+c42.texto.charAt(0).toUpperCase()+c42.texto.slice(1)+'. '+fiscoExpLimite42CNota(r,c42)),
     limite_n23_4_2c:T(c42.resposta||'por confirmar'),faltas:T(c42.porConfirmar.length?'confirmar a renda dentro do limite na ficha do contrato: '+listaE(c42.porConfirmar):'')}));
-  (r.avisos||[]).forEach(a=>out.push(linha({ano:T(ano),declarado:T('a tratar ('+fiscoNivelNome(a)+')'),contrato:T(a.texto)})));
+  /* o que não é uma linha do Anexo F vai em secções à parte, cada uma depois
+     de uma linha vazia e com o seu título na primeira coluna (KAN-126-5): os
+     avisos de «A tratar», e no fim a estimativa e as notas */
+  const vazia=()=>linha({}),seccao=t=>linha({ano:T(t)});
+  if((r.avisos||[]).length){
+    out.push(vazia(),seccao(FISCO_CSV_SECCAO_AVISOS));
+    r.avisos.forEach(a=>out.push(linha({ano:T(ano),declarado:T('a tratar ('+fiscoNivelNome(a)+')'),contrato:T(a.texto)})));
+  }
+  out.push(vazia(),seccao(sem?FISCO_CSV_SECCAO_SO_NOTAS:FISCO_CSV_SECCAO_NOTAS));
   const rep=sem?null:fiscoExpReporte(r);
   if(rep)out.push(linha({ano:T(ano),declarado:T('reporte'),contrato:T(fiscoExpReporteTexto(r)),reporte_abatido:N(rep.usado),imposto_depois_reporte:N(rep.depois)}));
   /* o caminho do imposto, com a ressalva dos Açores (N120) e, sem abate, os

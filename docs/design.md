@@ -3377,8 +3377,11 @@ comunicacao_4_2a_resposta é sim, nao, a confirmar ou vazio; o reducao_4_2b
 diz que o 4.2B se preenche, e a descida da taxa vai no taxa_desceu_4_2b; o
 nif_ou_pais é o NIF português ou, sem ele, o país, nunca o número
 estrangeiro (fisco-exportar.js:fiscoCsvTexto). O cabeçalho do CSV leva os
-ids das colunas, que são chaves de máquina; os nomes do impresso vão no
-texto e no PDF. A app não tem guia
+ids das colunas, que são chaves de máquina, com «início», «imóvel» e «fração»
+escritos com acento (fisco-exportar.js:FISCO_CSV_NOMES): o Google Sheets
+adivinha a codificação pelo começo do ficheiro e não lhe chega a marca de
+ordem de bytes, por isso um acento tem de aparecer logo no cabeçalho; os
+nomes do impresso vão no texto e no PDF. A app não tem guia
 próprio nem faixa das regras do ano: o prazo, o que mudou e os passos vivem
 no guia. Um ano sem versão própria das regras, ou com uma provisória, di-lo
 em «A tratar antes de entregar» (fisco-avisos.js:fiscoAvisos). A página
@@ -9445,7 +9448,11 @@ a plica, e os números vão tal e qual. No CSV do Anexo F, os valores vão com
 vírgula decimal e duas casas (copias.js:celulaNumero), e os códigos como
 ="040810", para o Excel não lhes tirar os zeros (copias.js:celulaCodigo).
 Uma coluna nova vai no fim, e as que existem não mudam de sítio; as linhas de
-rodapé (a tratar, regras, aviso) levam o texto na coluna contrato. O CSV dos
+rodapé levam o texto na coluna contrato, em secções no fim, cada uma depois
+de uma linha vazia e com o título na primeira coluna, para não se
+confundirem com as linhas do Anexo F: «AVISOS: …» com os «a tratar (…)», e
+«ESTIMATIVA E NOTAS: …» (ou «NOTAS: …» num ano sem regras) com o reporte, o
+imposto, as regras e o aviso (fisco-exportar.js:fiscoCsvTexto). O CSV dos
 movimentos fica com os números tal e qual.
 
 ## Toque e acessibilidade

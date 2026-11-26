@@ -360,7 +360,15 @@ describe('a vista, o texto e o CSV', () => {
     assert.match(linhas[1], /;="4\.1";"";"11880,00";"";"";"";"";"A";"";"";"";"";="4001";"0,00";/);
     assert.match(linhas[2], /^"2024";"nao";"Benfica";"";"2023-06-01";"T1 Benfica"/);
     assert.match(linhas[2], /"1200,00";"0,00"/);
-    assert.ok(linhas.slice(3).every((l) => /^"2024";"(a tratar|regras|aviso)/.test(l)), 'depois dos contratos, só as linhas de «A tratar», das regras e do aviso');
+    /* KAN-126-5: depois dos contratos, o que não é linha do Anexo F vem em secções, cada uma
+       depois de uma linha vazia e com o título na primeira coluna: os avisos e as notas */
+    const vazia = linhas[0].replace(/"[^"]*"/g, '""');
+    assert.equal(linhas[3], vazia, 'uma linha vazia separa os contratos dos avisos');
+    assert.match(linhas[4], /^"AVISOS: o que a app encontrou para tratares antes de entregar\. Não são linhas do Anexo F\.";"";/);
+    const fimAvisos = linhas.indexOf(vazia, 5);
+    assert.ok(fimAvisos > 5 && linhas.slice(5, fimAvisos).every((l) => /^"2024";"a tratar \((falta|aviso|nota)\)"/.test(l)), 'na secção dos avisos, só as linhas de «A tratar»');
+    assert.match(linhas[fimAvisos + 1], /^"NOTAS: as regras e o aviso\. Não são linhas do Anexo F\.";"";/, '2024 não tem regras: só as notas');
+    assert.deepEqual(linhas.slice(fimAvisos + 2).map((l) => l.split(';')[1]), ['"regras"', '"aviso"']);
     // as células contam-se entre aspas: o texto de uma linha de «A tratar» pode levar «;»
     const celulas = (l) => (l.match(/=?"(?:[^"]|"")*"/g) || []).length;
     const n = celulas(linhas[0]);
