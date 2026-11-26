@@ -3671,8 +3671,15 @@ button.ava-barra-bloco:focus-visible,.ava-pct-btn:focus-visible{outline:2px soli
 .fis-ob{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 0;border-top:1px solid var(--line)}
 .fis-ob .fis-num{flex:0 0 26px;width:26px;justify-content:center;padding:0}
 .fis-ob p{flex:1 1 200px;min-width:0;font-size:14.5px}
-.fis-ob .btn{flex:0 0 auto;margin-left:auto}
-.fis-ob .fis-ob-acoes{flex:0 0 auto;margin-left:auto}
+/* os botões de um aviso encolhem até à largura da linha, e os dois de um
+   aviso com ação («Marcar as 10 como emitidas» e «Ver as rendas») partem em
+   duas linhas. Com flex:0 0 auto a fila não encolhia: passava a borda do
+   cartão e alargava o documento (407px num ecrã de 384), e no telemóvel a
+   página inteira, cabeçalho incluído, rolava de lado e na vertical — o
+   browser alarga a janela de layout para o documento caber, e a janela
+   visível passa a andar dentro dela (KAN-166) */
+.fis-ob .btn{flex:0 1 auto;max-width:100%;margin-left:auto}
+.fis-ob .fis-ob-acoes{flex:0 1 auto;min-width:0;max-width:100%;margin-left:auto}
 .fis-ob .fis-ob-acoes>.btn{margin-left:0}
 /* a situação fiscal em linhas (M-SituacaoFiscal): interruptores e o A/B */
 .fis-sit{gap:0;padding:0;overflow:hidden}
