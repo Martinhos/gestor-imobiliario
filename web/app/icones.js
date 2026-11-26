@@ -69,6 +69,9 @@ function ic(n,s){s=s||20;const I={
   prio4:'<path d="M6 9l6 6 6-6"/>',prio5:'<path d="M6 5l6 6 6-6M6 11l6 6 6-6"/>',
   /* o inseto da pílula de QA (cloud/qa.js): a cabeça, o corpo e as patas */
   inseto:'<path d="M9 7.2V6a3 3 0 0 1 6 0v1.2"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6z"/><path d="M12 20v-9M6 13H3M21 13h-3M6.3 9.5 4 8M17.7 9.5 20 8M6.3 17 4 18.5M17.7 17l2.3 1.5"/>',
+  /* o frasco do Lab (a pílula do dev, cloud/qa.js, e os modelos de dados,
+     cloud/modelos.js): a boca, o gargalo, o corpo cónico e o nível do líquido */
+  frasco:'<path d="M8.5 3h7M10 3v6.2l-5.5 9.3A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9.2V3"/><path d="M7.1 15.5h9.8"/>',
   filter:'<path d="M22 4H2l8 9.2V19l4 2.4v-8.2z"/>',
   sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/>',
   moon:'<path d="M20 14A8 8 0 0 1 10 4a8 8 0 1 0 10 10z"/>',

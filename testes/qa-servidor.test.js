@@ -298,7 +298,7 @@ describe('listar os tickets', () => {
     assert.equal(t.resolution, null);
     assert.equal(t.resolved_at, null);
     assert.ok(t.created_at > 0 && t.updated_at >= t.created_at);
-    assert.deepEqual(Object.keys(t).sort(), ['autor', 'body', 'cartao', 'context', 'created_at', 'id', 'imagem', 'pedido', 'prioridade', 'resolution', 'resolved_at', 'severity', 'status', 'ticket', 'tipo', 'titulo', 'updated_at']);
+    assert.deepEqual(Object.keys(t).sort(), ['anexos', 'autor', 'body', 'cartao', 'context', 'created_at', 'id', 'imagem', 'pedido', 'prioridade', 'resolution', 'resolved_at', 'severity', 'status', 'ticket', 'tipo', 'titulo', 'updated_at']);
     assert.equal(t.tipo, 'erro');
     assert.equal(t.pedido, false);
     assert.match(t.cartao, /^KAN-\d+$/, 'o cartão que o ticket criou');
@@ -749,7 +749,7 @@ describe('os comentários de um ticket', () => {
     const lidos = await comentarios(env, a, id);
     assert.equal(lidos.status, 200);
     assert.equal(lidos.comentarios.length, 5);
-    assert.deepEqual(Object.keys(lidos.comentarios[0]).sort(), ['autor', 'created_at', 'id', 'meu', 'texto', 'updated_at']);
+    assert.deepEqual(Object.keys(lidos.comentarios[0]).sort(), ['anexos', 'autor', 'created_at', 'id', 'meu', 'texto', 'updated_at']);
     assert.equal(lidos.comentarios[4].texto, 'De novo');
     assert.equal(lidos.comentarios[4].meu, false, 'o Bruno escreveu-o, a Ana lê-o');
     assert.equal((await comentarios(env, b, id)).comentarios[4].meu, true);
@@ -871,7 +871,7 @@ describe('a pílula é a vista dos Erros do kanban (KAN-115)', () => {
     const mao = lista.find((x) => x.cartao === 'KAN-501');
     assert.deepEqual(mao, {
       id: 'KAN-501', cartao: 'KAN-501', ticket: false, tipo: 'erro', pedido: false, titulo: 'Erro à mão', body: 'Descrição 501', prioridade: 2, status: 'a-fazer',
-      severity: null, context: null, imagem: false, resolution: null, resolved_at: null, created_at: mao.created_at, updated_at: mao.updated_at,
+      severity: null, context: null, imagem: false, anexos: 0, resolution: null, resolved_at: null, created_at: mao.created_at, updated_at: mao.updated_at,
       autor: { id: 'm1', nome: 'Mestre', email: '', discord: null },
     });
     assert.equal(lista.find((x) => x.ticket).id, qa, 'o de QA leva o id do ticket');

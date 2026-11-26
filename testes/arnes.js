@@ -22,7 +22,7 @@ export const MODULOS = [
   'painel-geral', 'lista-imoveis', 'lista-contratos', 'lista-pessoas', 'lista-colaboradores', 'lista-movimentos', 'projecoes',
   'imovel', 'fine', 'pessoas', 'contrato', 'tarefas',
   'planeados', 'irs-freguesias-2025', 'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'visitas', 'calendario', 'movimento', 'creditos', 'splitwise', 'contrato-pdf',
-  'avaliacao', 'fisco-titulares', 'fisco-resumo', 'fisco-avisos', 'fisco-quadros', 'fisco', 'fisco-exportar', 'fisco-pdf', 'definicoes', 'copias',
+  'avaliacao', 'fisco-titulares', 'fisco-resumo', 'fisco-avisos', 'fisco-quadros', 'fisco', 'fisco-exportar', 'fisco-pdf', 'definicoes', 'copias', 'modelos-cenarios',
 ];
 
 /* O catálogo dos serviços, lido do próprio ficheiro do cliente
@@ -44,7 +44,7 @@ const DE_SERVICOS = new Set(SERVICOS_FICHEIROS.flatMap((s) => s.ficheiros)
    lista vive no web/sw.js (BASE, com o arranque, que aqui não carrega). */
 export const BASE = ['eventos', 'estilos-calculados', 'dados', 'anexos', 'formato', 'espera', 'registos', 'tipos', 'irs', 'irs-papeis', 'saldos', 'ambito', 'icones', 'tema',
   'lista', 'continuidade', 'graficos', 'credito', 'componentes', 'metricas', 'navegacao', 'servicos', 'acessos', 'vistas',
-  'irs-freguesias-2025', 'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'splitwise', 'definicoes', 'copias'];
+  'irs-freguesias-2025', 'irs-2025', 'irs-2026', 'prazos', 'notificacoes', 'splitwise', 'definicoes', 'copias', 'modelos-cenarios'];
 
 /* Cada módulo é da base ou de um serviço, e só de um; a base vai pela ordem
    do MODULOS. Rebenta ao importar o arnês, com o nome à vista: um ficheiro
@@ -68,7 +68,7 @@ conferirBase();
    testes de lógica que já existem contam com as versões sem nuvem. */
 export const NUVEM = ['nucleo', 'anexos', 'utilizadores', 'partilha', 'colaboradores', 'grupos', 'ajuda', 'painel',
   'filtros', 'entrada', 'novidades', 'selecao', 'selecao-listas', 'guia',
-  'apresentacao', 'apresentacao-casas', 'apresentacao-dinheiro', 'apresentacao-analise', 'avisos-email', 'qa', 'rasto'];
+  'apresentacao', 'apresentacao-casas', 'apresentacao-dinheiro', 'apresentacao-analise', 'avisos-email', 'qa', 'modelos', 'rasto'];
 
 /* Tudo o que o index.html carrega, pela ordem dele, como caminhos relativos a
    web/. É esta a lista que interessa a quem procura colisões de nomes: dois

@@ -972,6 +972,36 @@ describe('a fila', () => {
     assert.match(um.out, /^KAN-1 · Tarefa · Média · «A fazer» \(no dev \(gestor-imobiliario-dev\)\) · 1 comentário por responder\n/);
     assert.match(corre(['ver', 'KAN-2'], { dev: comFila() }).out, /\nBLOQUEADO por KAN-7 «Cartão 7» \(em «Human Tests»\)\./);
   });
+
+  test('os anexos de uma resposta da pílula (KAN-165): a fila e o ver dizem de que comentário vêm, e o --json traz o comentario_id', () => {
+    const dev = comFila();
+    dev.prepare('INSERT INTO kanban_comentarios (id, cartao_id, autor_id, autor_nome, texto, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run('m-resp', 'k4', MARTINHO.id, MARTINHO.nome, 'Anexei 2 ficheiros.', 50, 50);
+    poeAnexo(dev, 4, 'anx-r1', { nome: 'ecra.webp', tipo: 'image/webp', comentario_id: 'm-resp', created_at: 51 });
+    poeAnexo(dev, 4, 'anx-r2', { nome: 'fatura.pdf', tipo: 'application/pdf', comentario_id: 'm-resp', created_at: 52 });
+    poeAnexo(dev, 4, 'anx-orfao', { nome: 'velho.pdf', tipo: 'application/pdf', comentario_id: 'm-que-saiu', created_at: 53 });
+    poeAnexo(dev, 4, 'anx-t', { nome: 'novo.png', created_at: 6 });
+    const r = corre(['fila'], { dev });
+    assert.equal(r.codigo, 0, r.err);
+    assert.match(r.out, /\n {2}ecra\.webp \(image\/webp, 2 KB\) — Martinho Santos, .+ — do comentário de Martinho Santos de .+ — node scripts\/kanban\.mjs anexo KAN-4 anx-r1\n/);
+    assert.match(r.out, /\n {2}velho\.pdf \(application\/pdf, 2 KB\) — Martinho Santos, .+ — de um comentário removido — node scripts\/kanban\.mjs anexo KAN-4 anx-orfao\n/);
+    assert.match(r.out, /\n {2}novo\.png \(image\/png, 2 KB\) — Martinho Santos, [^—\n]+ — node scripts\/kanban\.mjs anexo KAN-4 anx-t\n/, 'o do cartão não diz comentário');
+    assert.match(r.out, /\n {4}Anexei 2 ficheiros\.\n {4}Com 2 anexos: ecra\.webp \(node scripts\/kanban\.mjs anexo KAN-4 anx-r1\), fatura\.pdf \(node scripts\/kanban\.mjs anexo KAN-4 anx-r2\)\n/);
+    assert.match(corre(['ver', 'KAN-4'], { dev }).out, /fatura\.pdf \(application\/pdf, 2 KB\) — .+ — do comentário de Martinho Santos/);
+    const k4 = JSON.parse(corre(['fila', '--json'], { dev }).out).cartoes.find((c) => c.chave === 'KAN-4');
+    assert.deepEqual(k4.anexos.map((a) => [a.id, a.comentario_id]), [['anx-t', null], ['anx-r1', 'm-resp'], ['anx-r2', 'm-resp'], ['anx-orfao', 'm-que-saiu']]);
+    assert.ok(k4.anexos.every((a) => !('chave' in a)), 'a chave do R2 não sai no --json');
+  });
+
+  test('uma base de antes da 0034 (sem o comentario_id) continua a dar a fila e o ver', () => {
+    const dev = comFila();
+    dev.exec('DROP INDEX IF EXISTS idx_kanban_anexos_comentario');
+    dev.exec('ALTER TABLE kanban_anexos DROP COLUMN comentario_id');
+    const r = corre(['fila'], { dev });
+    assert.equal(r.codigo, 0, r.err);
+    assert.match(r.out, /node scripts\/kanban\.mjs anexo KAN-1 anx-1/);
+    assert.equal(corre(['ver', 'KAN-1'], { dev }).codigo, 0);
+  });
 });
 
 describe('comecar', () => {

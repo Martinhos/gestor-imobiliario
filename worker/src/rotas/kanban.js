@@ -662,7 +662,7 @@ async function lerCartao(env, eu, chave) {
     env.DB.prepare('SELECT l.id, l.tipo, l.de_id, o.numero, o.titulo, o.tipo AS cartao_tipo, o.coluna_id FROM kanban_ligacoes l' +
       ' JOIN kanban_cartoes o ON o.id = CASE WHEN l.de_id = ? THEN l.para_id ELSE l.de_id END' +
       ' WHERE (l.de_id = ? OR l.para_id = ?) AND o.removed_at IS NULL ORDER BY l.created_at, o.numero').bind(id, id, id).all(),
-    env.DB.prepare('SELECT id, nome, tipo, tamanho, autor_id, autor_nome, created_at FROM kanban_anexos' +
+    env.DB.prepare('SELECT id, nome, tipo, tamanho, autor_id, autor_nome, created_at, comentario_id FROM kanban_anexos' +
       ' WHERE cartao_id = ? ORDER BY created_at, rowid').bind(id).all(),
     origemSql ? env.DB.prepare(origemSql).bind(r.origem_id).first() : Promise.resolve(null),
   ]);
@@ -705,13 +705,14 @@ function comentarioParaFora(c, eu) {
   };
 }
 
-/* Um anexo na forma que sai, com o endereço de onde se lê.
+/* Um anexo na forma que sai, com o endereço de onde se lê e, num anexo que
+   veio com uma resposta da pílula (KAN-165), o id desse comentário.
    Recebe: a — a linha de kanban_anexos.
-   Devolve: {id, nome, tipo, tamanho, url, autor: {id, nome}, created_at}. */
-function anexoParaFora(a) {
+   Devolve: {id, nome, tipo, tamanho, url, autor: {id, nome}, created_at, comentario_id (ou null)}. */
+export function anexoParaFora(a) {
   return {
     id: a.id, nome: a.nome, tipo: a.tipo, tamanho: a.tamanho, url: BASE + '/anexos/' + a.id,
-    autor: { id: a.autor_id, nome: a.autor_nome || '' }, created_at: a.created_at,
+    autor: { id: a.autor_id, nome: a.autor_nome || '' }, created_at: a.created_at, comentario_id: a.comentario_id || null,
   };
 }
 
@@ -1176,56 +1177,87 @@ const grandeDeMais = () => err(413, 'O ficheiro é grande de mais (máx. 10 MB).
    os bytes no corpo. Só os tipos da lista fechada (lib/imagens.js:TIPOS_DOS_ANEXOS),
    reconhecidos pelos próprios bytes (lib/imagens.js:tipoDoFicheiro) e não
    pelo Content-Type nem pelo nome, até 10 MB (lido aos bocados por
-   lib/imagens.js:lerAte). Vai para o R2 em kanban/<cartao_id>/<anexo_id> e
-   só depois para a base; se a base falhar, o ficheiro sai do R2.
+   lib/imagens.js:lerAte): ficheiroDoPedido. Grava-o o guardarAnexo (o R2 e
+   depois a base), com a linha no audit_log antes.
    Recebe: env; request — o pedido (os bytes, e o nome em X-Nome); eu — a
    sessão; chave — a do cartão.
    Devolve: promessa da Response 201 {anexo}, ou 404, 413, 415 ou 400 (vazia). */
 async function anexar(env, request, eu, chave) {
   const k = await cartaoParaMexer(env, chave);
   if (!k) return naoHaCartao();
-  if (Number(request.headers.get('Content-Length') || 0) > MAX_ANEXO) return grandeDeMais();
+  const lido = await ficheiroDoPedido(request);
+  if (lido.recusa) return lido.recusa;
+  if (!(await auditar(env, eu, 'kanban.anexar', chaveDe(k.numero), lido.nome + ' (' + lido.corpo.byteLength + ' bytes)'))) return semRasto();
+  return json({ anexo: await guardarAnexo(env, k.id, lido, quem(eu), null) }, 201);
+}
+
+/* Os bytes de um anexo que chega num PUT, conferidos: o teto de 10 MB (o
+   Content-Length dito e os bytes lidos, lib/imagens.js:lerAte), não vazio, e
+   um tipo da lista fechada lido dos próprios bytes (lib/imagens.js:tipoDoFicheiro,
+   nunca o Content-Type), com o nome do X-Nome limpo (nomeDoAnexo). A mesma
+   porta para o kanban e para a pílula (rotas/qa.js).
+   Recebe: request — o pedido (os bytes no corpo e o nome em X-Nome, com encodeURIComponent).
+   Devolve: promessa de {corpo (Uint8Array), tipo, nome}, ou de {recusa: a Response 413, 400 ou 415}. */
+export async function ficheiroDoPedido(request) {
+  if (Number(request.headers.get('Content-Length') || 0) > MAX_ANEXO) return { recusa: grandeDeMais() };
   const corpo = await lerAte(request, MAX_ANEXO);
-  if (!corpo) return grandeDeMais();
-  if (!corpo.byteLength) return err(400, 'O ficheiro chegou vazio.');
+  if (!corpo) return { recusa: grandeDeMais() };
+  if (!corpo.byteLength) return { recusa: err(400, 'O ficheiro chegou vazio.') };
   const tipo = tipoDoFicheiro(corpo, nomeLimpo(request.headers.get('X-Nome')));
-  if (!tipo) return err(415, FRASE_DOS_TIPOS);
-  const nome = nomeDoAnexo(request.headers.get('X-Nome'), tipo);
-  if (!(await auditar(env, eu, 'kanban.anexar', chaveDe(k.numero), nome + ' (' + corpo.byteLength + ' bytes)'))) return semRasto();
-  const id = crypto.randomUUID(), agora = now(), autor = quem(eu);
-  const chaveR2 = 'kanban/' + k.id + '/' + id;
-  await env.FILES.put(chaveR2, corpo, { httpMetadata: { contentType: tipo } });
+  if (!tipo) return { recusa: err(415, FRASE_DOS_TIPOS) };
+  return { corpo, tipo, nome: nomeDoAnexo(request.headers.get('X-Nome'), tipo) };
+}
+
+/* Grava um anexo já conferido (ficheiroDoPedido) num cartão: primeiro o R2,
+   em kanban/<cartao_id>/<anexo_id>, e só depois a base (o anexo, a linha
+   «anexo» no histórico e o updated_at do cartão, num lote); se a base
+   falhar, o ficheiro sai do R2. Com comentarioId, o anexo é desse
+   comentário (KAN-165, migrations/0034_anexos_dos_comentarios.sql): a
+   resposta da pílula que o trouxe.
+   Recebe: env; cartaoId — o id do cartão; f — {corpo, tipo, nome}; autor —
+   {id, nome}; comentarioId — o id do comentário, ou null.
+   Devolve: promessa do anexo na forma que sai (anexoParaFora). */
+export async function guardarAnexo(env, cartaoId, f, autor, comentarioId) {
+  const id = crypto.randomUUID(), agora = now();
+  const chaveR2 = 'kanban/' + cartaoId + '/' + id;
+  await env.FILES.put(chaveR2, f.corpo, { httpMetadata: { contentType: f.tipo } });
   try {
     await env.DB.batch([
-      env.DB.prepare('INSERT INTO kanban_anexos (id, cartao_id, chave, nome, tipo, tamanho, autor_id, autor_nome, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .bind(id, k.id, chaveR2, nome, tipo, corpo.byteLength, autor.id, autor.nome, agora),
+      env.DB.prepare('INSERT INTO kanban_anexos (id, cartao_id, chave, nome, tipo, tamanho, autor_id, autor_nome, created_at, comentario_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(id, cartaoId, chaveR2, f.nome, f.tipo, f.corpo.byteLength, autor.id, autor.nome || '', agora, comentarioId || null),
       env.DB.prepare("INSERT INTO kanban_historico (cartao_id, at, autor_id, autor_nome, campo, antes, depois) VALUES (?, ?, ?, ?, 'anexo', NULL, ?)")
-        .bind(k.id, agora, autor.id, autor.nome, nome),
-      env.DB.prepare('UPDATE kanban_cartoes SET updated_at = ? WHERE id = ?').bind(agora, k.id),
+        .bind(cartaoId, agora, autor.id, autor.nome || '', f.nome),
+      env.DB.prepare('UPDATE kanban_cartoes SET updated_at = ? WHERE id = ?').bind(agora, cartaoId),
     ]);
   } catch (e) {
     try { await env.FILES.delete(chaveR2); } catch (e2) { /* fica órfão no R2; a base não o conhece */ }
     throw e;
   }
-  return json({
-    anexo: anexoParaFora({ id, nome, tipo, tamanho: corpo.byteLength, autor_id: autor.id, autor_nome: autor.nome, created_at: agora }),
-  }, 201);
+  return anexoParaFora({ id, nome: f.nome, tipo: f.tipo, tamanho: f.corpo.byteLength, autor_id: autor.id, autor_nome: autor.nome, created_at: agora, comentario_id: comentarioId || null });
 }
 
-/* GET /api/equipa/kanban/anexos/:id: os bytes de um anexo, com o tipo lido
-   outra vez dos próprios bytes (lib/imagens.js:tipoDoFicheiro), sem cache e
-   na caixa de areia dos anexos (CSP_ANEXO, nosniff), como o servirImagem do
-   QA. Só as imagens abrem no sítio. O resto desce como ficheiro (attachment,
-   com o nome e a extensão do tipo: lib/imagens.js:disposicaoDeDescarga) —
-   também o PDF: o visor de PDF do Chrome não abre um documento em caixa de
-   areia (cancela-o com ERR_BLOCKED_BY_CLIENT), e tirar o sandbox a um
-   ficheiro escrito por outros na origem do back office não se faz. O texto
-   vai em UTF-8; um tipo que já não se reconheça, em application/octet-stream.
+/* GET /api/equipa/kanban/anexos/:id: os bytes de um anexo (respostaDoAnexo).
    Recebe: env; id — o do anexo.
    Devolve: promessa da Response com o ficheiro, ou 404. */
 async function servirAnexo(env, id) {
   const a = badId(id) ? null : await env.DB.prepare('SELECT chave, nome FROM kanban_anexos WHERE id = ?').bind(id).first();
   if (!a) return err(404, 'Anexo não encontrado.');
+  return respostaDoAnexo(env, a);
+}
+
+/* Os bytes de um anexo do kanban, com o tipo lido outra vez dos próprios
+   bytes (lib/imagens.js:tipoDoFicheiro), sem cache e na caixa de areia dos
+   anexos (CSP_ANEXO, nosniff), como o servirImagem do QA. Só as imagens
+   abrem no sítio. O resto desce como ficheiro (attachment, com o nome e a
+   extensão do tipo: lib/imagens.js:disposicaoDeDescarga) — também o PDF: o
+   visor de PDF do Chrome não abre um documento em caixa de areia (cancela-o
+   com ERR_BLOCKED_BY_CLIENT), e tirar o sandbox a um ficheiro escrito por
+   outros na origem do back office não se faz. O texto vai em UTF-8; um tipo
+   que já não se reconheça, em application/octet-stream. A mesma resposta
+   para o kanban e para a pílula (rotas/qa.js).
+   Recebe: env; a — a linha do anexo ({chave, nome}).
+   Devolve: promessa da Response com o ficheiro, ou 404 quando o R2 já não o tem. */
+export async function respostaDoAnexo(env, a) {
   const obj = await env.FILES.get(a.chave);
   if (!obj) return err(404, 'Anexo não encontrado.');
   const corpo = new Uint8Array(await new Response(obj.body).arrayBuffer());

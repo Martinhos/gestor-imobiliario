@@ -25,8 +25,8 @@ import { fileURLToPath } from 'node:url';
 import { ambiente, conta, pedir, resp } from './lib/api.js';
 import { chamar, corpoDe, DEV, SUPORTE, MARKETING } from './lib/equipa.js';
 import {
-  CAMADA_QA, FIM_DA_CAMADA, CSS_QA_EQUIPA, FICHEIROS_DO_QA, ACOES_DA_CAMADA, MARCA_CSS_FIM,
-  montarGuiaoDoQa, montarCssDoQa, cortarCssDoQa, funcoesDeTopo, recursoDoQa,
+  CAMADA_QA, FIM_DA_CAMADA, CSS_QA_EQUIPA, FICHEIROS_DO_QA, ACOES_DA_CAMADA, MARCA_CSS_FIM, MARCA_CSS_MODELOS_FIM,
+  montarGuiaoDoQa, montarCssDoQa, cortarCssDoQa, cortarCssDosModelos, funcoesDeTopo, recursoDoQa,
   CAMADA_DAS_PAGINAS, FIM_DAS_PAGINAS, CSS_QA_PAGINAS, pilulaDasPaginas, recursoDoQaDasPaginas,
 } from '../worker/src/equipa-qa.js';
 import { autorDaEquipa } from '../worker/src/rotas/qa.js';
@@ -254,9 +254,11 @@ describe('o /equipa/qa.js e o /equipa/qa.css', () => {
     for (const n of ['qaNovoTicket', 'qaVerTickets', 'qaEnviar', 'qaAbrirTicket', 'qaRemover', 'qaReabrir', 'qaDobrar', 'qaMenuAbriu', ...ACOES_DA_CAMADA]) {
       assert.ok(nomes.includes(n), n + ' na tabela');
     }
-    assert.ok(nomes.every((n) => /^qa/.test(n) || ACOES_DA_CAMADA.includes(n)), 'só as do QA');
-    // todas as ações que o qa.js escreve no HTML estão na tabela
-    const qa = daWeb('/cloud/qa.js');
+    // e as do modelos.js (a janela dos modelos de dados do Lab, KAN-167)
+    for (const n of ['mdlAbrir', 'mdlOrdenar', 'mdlRenomear', 'mdlGuardarNome', 'mdlRemover', 'mdlCarregar']) assert.ok(nomes.includes(n), n + ' na tabela');
+    assert.ok(nomes.every((n) => /^qa/.test(n) || /^mdl/.test(n) || ACOES_DA_CAMADA.includes(n)), 'só as do QA e dos modelos');
+    // todas as ações que o qa.js e o modelos.js escrevem no HTML estão na tabela
+    const qa = daWeb('/cloud/qa.js') + '\n' + daWeb('/cloud/modelos.js');
     for (const m of qa.matchAll(/data-(?:click|input|change)="([^"]*)"/g)) {
       // só os nomes que abrem uma instrução (o jsq(…) de dentro de uma concatenação é do JS que escreve o HTML)
       for (const chamada of m[1].matchAll(/(?:^|;)\s*([A-Za-z_$][\w$]*)\(/g)) {
@@ -266,18 +268,21 @@ describe('o /equipa/qa.js e o /equipa/qa.css', () => {
     new vm.Script(js, { filename: 'equipa-qa.js' });
   });
 
-  test('o CSS leva o da camada e o bloco do QA do estilos.css, sem o resto da folha', async () => {
+  test('o CSS leva o da camada e os blocos do QA e dos modelos de dados do estilos.css, sem o resto da folha', async () => {
     const r = await recursoDoQa({ ASSETS: assetsFalsos(), ENV_NAME: 'dev' }, URL_CSS, 'GET', DEV);
     assert.equal(r.headers.get('Content-Type'), 'text/css; charset=utf-8');
     const css = await r.text();
     const estilos = daWeb('/estilos.css');
     assert.ok(css.startsWith(CSS_QA_EQUIPA));
     assert.ok(css.includes(cortarCssDoQa(estilos)));
+    assert.ok(css.includes(cortarCssDosModelos(estilos)));
     assert.match(css, /\.qa-pilula\{position:fixed/);
-    assert.ok(css.trimEnd().endsWith(MARCA_CSS_FIM));
+    assert.match(css, /\.mdl-linha\{/);
+    assert.ok(css.indexOf(MARCA_CSS_FIM) > 0 && css.trimEnd().endsWith(MARCA_CSS_MODELOS_FIM));
     assert.doesNotMatch(css, /^aside\{/m, 'o resto da folha da app não vem');
     assert.equal(montarCssDoQa(estilos), css);
     assert.throws(() => cortarCssDoQa('.x{}'), /marcadores/);
+    assert.throws(() => cortarCssDosModelos('.x{}'), /marcadores/);
   });
 
   test('a camada vai num String.raw: sem crases nem cifrão com chaveta', () => {
@@ -516,7 +521,7 @@ describe('o /paginas/qa.js e o /paginas/qa.css (recursoDoQaDasPaginas)', () => {
     assert.doesNotMatch(js, /QA_PAGINAS =|Abriu /, 'nada das páginas');
     const estilos = daWeb('/estilos.css');
     assert.equal(montarCssDoQa(estilos, 'equipa'), montarCssDoQa(estilos));
-    assert.equal(montarCssDoQa(estilos), CSS_QA_EQUIPA + '\n' + cortarCssDoQa(estilos) + '\n');
+    assert.equal(montarCssDoQa(estilos), CSS_QA_EQUIPA + '\n' + cortarCssDoQa(estilos) + '\n' + cortarCssDosModelos(estilos) + '\n');
   });
 });
 

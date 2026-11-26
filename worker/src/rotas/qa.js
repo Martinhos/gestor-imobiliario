@@ -21,9 +21,17 @@
 // chegam: o texto da pessoa nunca sai daqui (DE_PEDIDO). Remover e repor
 // andam aos pares: o ticket e o cartão saem e voltam juntos
 // (lib/kanban.js:cartaoSaiComOTicket).
+//
+// Os anexos (KAN-165: «Devo poder anexar imagens ou documentos aos tickets
+// no pill. Responder a tickets com imagens ou ficheiros.») são os anexos do
+// cartão no kanban (kanban_anexos), com a mesma porta do kanban
+// (rotas/kanban.js:ficheiroDoPedido: os tipos lidos dos bytes, até 10 MB) e
+// a mesma resposta (rotas/kanban.js:respostaDoAnexo: caixa de areia,
+// nosniff, os documentos em attachment); o de uma resposta leva o id do
+// comentário (comentario_id, migrations/0034_anexos_dos_comentarios.sql).
 import { json, err, body, badId, now, CSP_ANEXO } from '../lib/http.js';
 import { rateLimit } from '../lib/limites.js';
-import { lerAte, tipoDaImagem } from '../lib/imagens.js';
+import { lerAte, tipoDaImagem, TIPOS_DOS_ANEXOS } from '../lib/imagens.js';
 
 // as duas vivem em lib/imagens.js (o kanban também as usa); ficam exportadas daqui para quem já as lia cá
 export { lerAte, tipoDaImagem };
@@ -62,6 +70,15 @@ const TETO_HORA = 30;
 const TETO_COMENTARIOS_HORA = 60;
 // Os comentários que a leitura de um ticket traz, no máximo (os mais antigos primeiro).
 const TETO_COMENTARIOS = 500;
+// Anexos novos por pessoa e por hora (cada ficheiro conta um).
+const TETO_ANEXOS_HORA = 60;
+// Quantos anexos um cartão leva pela pílula, no máximo (os do kanban contam também).
+export const TETO_ANEXOS_CARTAO = 50;
+// Quantos ficheiros um ticket novo ou uma resposta levam de uma vez (o cliente
+// não deixa escolher mais; o comentário só de anexos diz quantos).
+export const TETO_ANEXOS_ENVIO = 10;
+// O id de um comentário no cabeçalho X-Comentario (o uuid que o POST dos comentários devolve).
+const ID_DO_COMENTARIO = /^[A-Za-z0-9-]{1,64}$/;
 
 // Os tipos de imagem aceites, cada um com a assinatura dos primeiros bytes.
 const TIPOS_IMAGEM = ['image/png', 'image/jpeg', 'image/webp'];
@@ -80,8 +97,10 @@ function naoExiste() {
    para o Anular); POST …/repor desfaz a remoção; POST …/reabrir volta a pôr
    o ticket em A fazer; POST …/mover {coluna} passa-o a outra coluna do
    kanban; PUT e GET …/imagem gravam e servem a captura; POST …/comentarios
-   {texto} comenta (e devolve o ticket a A fazer) e GET …/comentarios
-   lê os comentários do ticket.
+   {texto, anexos?} comenta (e devolve o ticket a A fazer) e GET
+   …/comentarios lê os comentários do ticket, com os anexos; PUT …/anexos
+   anexa um ficheiro ao cartão do ticket (ou ao comentário do cabeçalho
+   X-Comentario) e GET …/anexos/:anexo serve-o (rotasDosAnexos).
    O :id é o de um ticket ou a chave de um cartão (KAN-N): a de um
    cartão com o ticket vivo vale o mesmo que o id dele; a de um cartão sem
    ticket vai às rotasDoCartao; a de um cartão de um pedido é 404.
@@ -104,12 +123,21 @@ export async function rotasQa(c) {
   }
 
   let id = seg[2];
-  if (badId(id) || seg.length > 4) return naoExiste();
+  // só o GET de um anexo tem cinco pedaços (/api/qa/:id/anexos/:anexo)
+  if (badId(id) || seg.length > 5 || (seg.length === 5 && seg[3] !== 'anexos')) return naoExiste();
   if (CHAVE_DO_CARTAO.test(id)) {
     const k = await cartaoDaPilula(env, id);
     if (!k) return naoExiste();
     if (!k.ticket_vivo) return rotasDoCartao(c, k);
     id = k.origem_id;
+  }
+
+  if (seg[3] === 'anexos') {
+    const vivo = await env.DB.prepare('SELECT id FROM qa_tickets WHERE id = ? AND removed_at IS NULL').bind(id).first();
+    if (!vivo) return naoExiste();
+    const k = await cartaoDoTicket(env, id);
+    if (!k) return err(409, 'Este ticket não tem cartão no kanban, e os anexos vivem lá.');
+    return rotasDosAnexos(c, k.id);
   }
 
   if (seg.length === 3 && method === 'DELETE') {
@@ -343,7 +371,8 @@ async function listarTickets(env) {
               k.coluna_id, k.prioridade, k.origem_tipo, k.relator_id, k.relator_nome,
               k.created_at AS k_criado, k.updated_at AS k_mudado, k.concluido_at, COALESCE(c.fim, 0) AS fim,
               q.id, q.severity, q.context, q.image_key, q.resolution, q.resolved_at, q.created_at, q.updated_at,
-              q.user_id, q.discord_id, q.discord_nome, u.name, u.email
+              q.user_id, q.discord_id, q.discord_nome, u.name, u.email,
+              (SELECT COUNT(*) FROM kanban_anexos a WHERE a.cartao_id = k.id) AS n_anexos
          FROM kanban_cartoes k
          LEFT JOIN kanban_colunas c ON c.id = k.coluna_id
          LEFT JOIN kanban_cartoes p ON k.sub IS NOT NULL AND p.id = k.pai_id
@@ -408,8 +437,8 @@ function paiSegue(k, quem, agora) {
 /* As rotas de um cartão sem ticket de QA (a chave KAN-N no lugar do id): as
    mesmas ações da pílula, escritas no cartão. Mover e reabrir levam-no a
    outra coluna (moverCartao); comentar é o comentário do kanban
-   (comentarCartao); remover e repor são do master, no kanban (403); não há
-   captura (404).
+   (comentarCartao); os anexos são os do cartão (rotasDosAnexos); remover e
+   repor são do master, no kanban (403); não há captura (404).
    Recebe: c — o contexto do pedido (como em rotasQa); k — o cartão (cartaoDaPilula).
    Devolve: promessa da Response. */
 async function rotasDoCartao(c, k) {
@@ -424,6 +453,7 @@ async function rotasDoCartao(c, k) {
     return moverCartao(env, k, b && b.coluna, await quem());
   }
   if (seg[3] === 'imagem' && (method === 'GET' || method === 'PUT')) return err(404, 'Este cartão não tem captura.');
+  if (seg[3] === 'anexos') return rotasDosAnexos(c, k.id);
   if (seg[3] === 'comentarios' && method === 'POST') return comentarCartao(env, request, k, await quem());
   if (seg[3] === 'comentarios' && method === 'GET') return lerComentariosDoCartao(env, k, await quem());
   return err(404, 'Rota desconhecida.');
@@ -450,18 +480,17 @@ async function moverCartao(env, k, coluna, quem) {
    do kanban (lib/kanban.js:passosDoComentario) — fica no cartão e, em Human
    Tests, devolve-o a A fazer (recusar é comentar o que está mal); noutra
    coluna fica onde está. O texto e o travão são os do comentário de um
-   ticket (comentarTicket). Num subticket, o pai segue-o (paiSegue): o
-   comentário que devolve o subticket a A fazer devolve-o também.
-   Recebe: env; request — com o corpo {texto}; k — o cartão; quem — {id, nome}.
+   ticket (comentarTicket, textoDoComentario). Num subticket, o pai segue-o
+   (paiSegue): o comentário que devolve o subticket a A fazer devolve-o também.
+   Recebe: env; request — com o corpo {texto, anexos?}; k — o cartão; quem — {id, nome}.
    Devolve: promessa da Response 201 {ok, coluna (a do cartão depois), comentario}, 400 ou 429. */
 async function comentarCartao(env, request, k, quem) {
   if (!(await rateLimit(env, 'qa-comentario:' + quem.id, TETO_COMENTARIOS_HORA, 3600))) {
     return err(429, 'Já comentaste muitas vezes seguidas. Espera um pouco.');
   }
-  const b = await body(request);
-  const texto = b && typeof b.texto === 'string' ? b.texto.replace(/\r\n?/g, '\n').replace(/\u0000/g, '').trim() : '';
-  if (!texto) return err(400, 'Escreve o comentário.');
-  if (texto.length > MAX_TEXTO) return err(400, 'O comentário passa dos ' + MAX_TEXTO + ' caracteres. Encurta-o.');
+  const lido = textoDoComentario(await body(request));
+  if (lido.recusa) return lido.recusa;
+  const texto = lido.texto;
   const uuid = crypto.randomUUID(), agora = now();
   const cartao = { id: k.id, coluna_id: k.coluna_id, origem_tipo: k.origem_tipo };
   const passos = passosDoComentario({ cartao, autor: quem, texto, uuid, agora }).concat(paiSegue(k, quem, agora));
@@ -477,11 +506,136 @@ async function comentarCartao(env, request, k, quem) {
    Recebe: env; k — o cartão; quem — {id, nome} de quem pede (para o meu).
    Devolve: promessa da Response {comentarios: [...]}. */
 async function lerComentariosDoCartao(env, k, quem) {
-  const r = (await env.DB.prepare(
-    `SELECT id, autor_id, autor_nome, texto, created_at, updated_at FROM kanban_comentarios
-      WHERE cartao_id = ? AND removed_at IS NULL ORDER BY created_at, rowid LIMIT ?`
-  ).bind(k.id, TETO_COMENTARIOS).all()).results || [];
-  return json({ comentarios: r.map((c) => comentarioParaFora(c, quem.id)) });
+  return json(await conversaDoCartao(env, k.id, quem));
+}
+
+/* A conversa de um cartão na pílula: os comentários, sem os removidos, do
+   mais antigo para o mais recente, até 500, cada um com os anexos que
+   vieram com ele, e os anexos do próprio cartão (os do «Novo ticket», os do
+   kanban). O anexo de um comentário que já não se vê (removido no kanban)
+   não aparece.
+   Recebe: env; cartaoId — o id do cartão; quem — {id, nome} de quem pede (para o meu).
+   Devolve: promessa de {comentarios: [{…, anexos: [Anexo]}], anexos: [Anexo]} (o Anexo em anexoDaPilula). */
+async function conversaDoCartao(env, cartaoId, quem) {
+  const [cs, as] = await Promise.all([
+    env.DB.prepare(
+      `SELECT id, autor_id, autor_nome, texto, created_at, updated_at FROM kanban_comentarios
+        WHERE cartao_id = ? AND removed_at IS NULL ORDER BY created_at, rowid LIMIT ?`
+    ).bind(cartaoId, TETO_COMENTARIOS).all(),
+    env.DB.prepare(
+      `SELECT id, nome, tipo, tamanho, autor_id, autor_nome, created_at, comentario_id FROM kanban_anexos
+        WHERE cartao_id = ? ORDER BY created_at, rowid`
+    ).bind(cartaoId).all(),
+  ]);
+  const comentarios = (cs.results || []).map((c) => Object.assign(comentarioParaFora(c, quem.id), { anexos: [] }));
+  const porId = new Map(comentarios.map((c) => [c.id, c]));
+  const doCartao = [];
+  for (const a of as.results || []) {
+    if (!a.comentario_id) doCartao.push(anexoDaPilula(a));
+    else if (porId.has(a.comentario_id)) porId.get(a.comentario_id).anexos.push(anexoDaPilula(a));
+  }
+  return { comentarios, anexos: doCartao };
+}
+
+/* Um anexo na forma que a pílula lê: sem o endereço do kanban (que é do
+   back office); o cliente pede-o por /api/qa/:id/anexos/:anexo.
+   Recebe: a — a linha de kanban_anexos (ou o que o guardarAnexo devolve).
+   Devolve: {id, nome, tipo, tamanho, imagem (bool: abre-se no sítio, com
+   miniatura), comentario_id (ou null), autor: {id, nome}, created_at}. */
+export function anexoDaPilula(a) {
+  const autor = a.autor && typeof a.autor === 'object' ? a.autor : { id: a.autor_id, nome: a.autor_nome };
+  return {
+    id: a.id, nome: a.nome || '', tipo: a.tipo, tamanho: Number(a.tamanho) || 0,
+    imagem: !!(TIPOS_DOS_ANEXOS[a.tipo] && TIPOS_DOS_ANEXOS[a.tipo].imagem),
+    comentario_id: a.comentario_id || null, autor: { id: String(autor.id || ''), nome: autor.nome || '' }, created_at: a.created_at,
+  };
+}
+
+/* O cartão vivo de um ticket de QA (há um só por ticket: o índice único da
+   0028), para os anexos e a conversa, que vivem lá.
+   Recebe: env; id — o id do ticket.
+   Devolve: promessa de {id}, ou de null sem cartão vivo. */
+function cartaoDoTicket(env, id) {
+  return env.DB.prepare("SELECT id FROM kanban_cartoes WHERE origem_tipo = 'qa' AND origem_id = ? AND removed_at IS NULL ORDER BY numero LIMIT 1").bind(id).first();
+}
+
+/* As rotas dos anexos de um item da pílula, já no cartão dele:
+   PUT …/anexos anexa (anexarNaPilula) e GET …/anexos/:anexo serve
+   (servirAnexoDaPilula). O resto, 404.
+   Recebe: c — o contexto do pedido (como em rotasQa); cartaoId — o id do cartão.
+   Devolve: promessa da Response. */
+async function rotasDosAnexos(c, cartaoId) {
+  const { env, request, method, seg, me } = c;
+  if (seg.length === 4 && method === 'PUT') {
+    return anexarNaPilula(env, request, cartaoId, autorDoComentario(c.autor || (await autorDaConta(env, me)), me));
+  }
+  if (seg.length === 5 && (method === 'GET' || method === 'HEAD')) return servirAnexoDaPilula(env, cartaoId, seg[4]);
+  return err(404, 'Rota desconhecida.');
+}
+
+/* PUT /api/qa/:id/anexos: um ficheiro no cartão do item (KAN-165), com os
+   bytes no corpo e o nome em X-Nome. Trava aos 60 por hora por pessoa e aos
+   50 anexos por cartão; a porta é a do kanban (rotas/kanban.js:ficheiroDoPedido:
+   só os tipos da lista fechada, lidos dos bytes e nunca do Content-Type nem
+   do nome, até 10 MB), e grava-o o mesmo guardarAnexo (o R2 e depois a
+   base, com a linha «anexo» no histórico). Com o cabeçalho X-Comentario, o
+   anexo é desse comentário: tem de ser um comentário vivo deste cartão, e
+   de quem anexa (só se anexa às próprias respostas).
+   Recebe: env; request; cartaoId — o id do cartão; quem — {id, nome} (autorDoComentario).
+   Devolve: promessa da Response 201 {anexo} (anexoDaPilula), ou 429, 409
+   (cartão cheio), 404 (comentário), 403 (comentário de outra pessoa), 413,
+   415 ou 400. */
+async function anexarNaPilula(env, request, cartaoId, quem) {
+  if (!(await rateLimit(env, 'qa-anexo:' + quem.id, TETO_ANEXOS_HORA, 3600))) {
+    return err(429, 'Já anexaste muitos ficheiros seguidos. Espera um pouco.');
+  }
+  let comentarioId = null;
+  const dito = String(request.headers.get('X-Comentario') || '').trim();
+  if (dito) {
+    const c = ID_DO_COMENTARIO.test(dito) ? await env.DB.prepare(
+      'SELECT id, autor_id FROM kanban_comentarios WHERE id = ? AND cartao_id = ? AND removed_at IS NULL'
+    ).bind(dito, cartaoId).first() : null;
+    if (!c) return err(404, 'Esse comentário já não existe neste ticket.');
+    if (String(c.autor_id) !== String(quem.id)) return err(403, 'Só se anexam ficheiros aos próprios comentários.');
+    comentarioId = c.id;
+  }
+  const n = await env.DB.prepare('SELECT COUNT(*) AS n FROM kanban_anexos WHERE cartao_id = ?').bind(cartaoId).first();
+  if (n && Number(n.n) >= TETO_ANEXOS_CARTAO) return err(409, 'Este ticket já tem ' + TETO_ANEXOS_CARTAO + ' anexos. Remove algum no kanban antes de anexar mais.');
+  const { ficheiroDoPedido, guardarAnexo } = await import('./kanban.js');
+  const lido = await ficheiroDoPedido(request);
+  if (lido.recusa) return lido.recusa;
+  return json({ anexo: anexoDaPilula(await guardarAnexo(env, cartaoId, lido, quem, comentarioId)) }, 201);
+}
+
+/* GET /api/qa/:id/anexos/:anexo: os bytes de um anexo do cartão do item,
+   pela resposta do kanban (rotas/kanban.js:respostaDoAnexo: o tipo lido dos
+   bytes, sem cache, a caixa de areia dos anexos, nosniff, e só as imagens
+   no sítio; os documentos em attachment, com o nome). Um anexo de outro
+   cartão é como se não existisse.
+   Recebe: env; cartaoId — o id do cartão; anexoId — o id do anexo.
+   Devolve: promessa da Response com o ficheiro, ou 404. */
+async function servirAnexoDaPilula(env, cartaoId, anexoId) {
+  const a = badId(anexoId) ? null : await env.DB.prepare('SELECT chave, nome FROM kanban_anexos WHERE id = ? AND cartao_id = ?').bind(anexoId, cartaoId).first();
+  if (!a) return err(404, 'Anexo não encontrado.');
+  const { respostaDoAnexo } = await import('./kanban.js');
+  return respostaDoAnexo(env, a);
+}
+
+/* O texto de um comentário da pílula, do corpo do pedido: aparado, com as
+   mudanças de linha normalizadas e sem nulos, de 1 a 4000 caracteres. Uma
+   resposta só com anexos (anexos: quantos, de 1 a 10, que o cliente sobe a
+   seguir com o id do comentário) leva a frase que o diz — «Anexei um
+   ficheiro.», «Anexei 3 ficheiros.» —, para o kanban, a fila e o Discord
+   lerem uma frase e não um vazio.
+   Recebe: b — o corpo ({texto, anexos?}, ou nada).
+   Devolve: {texto}, ou {recusa: a Response 400}. */
+export function textoDoComentario(b) {
+  let texto = b && typeof b.texto === 'string' ? b.texto.replace(/\r\n?/g, '\n').replace(/\u0000/g, '').trim() : '';
+  const n = b && Number.isInteger(b.anexos) && b.anexos > 0 && b.anexos <= TETO_ANEXOS_ENVIO ? b.anexos : 0;
+  if (!texto && n) texto = n === 1 ? 'Anexei um ficheiro.' : 'Anexei ' + n + ' ficheiros.';
+  if (!texto) return { recusa: err(400, 'Escreve o comentário.') };
+  if (texto.length > MAX_TEXTO) return { recusa: err(400, 'O comentário passa dos ' + MAX_TEXTO + ' caracteres. Encurta-o.') };
+  return { texto };
 }
 
 /* As colunas do kanban pela ordem do quadro, como a pílula as mostra.
@@ -525,7 +679,8 @@ async function nomesEmFalta(env, rows) {
    epico, historia, tarefa, subtarefa, erro), pedido (bool: é de um pedido
    de uma pessoa), titulo, body (a descrição do cartão; '' num pedido),
    prioridade (1 a 5), status (o id da coluna do cartão), severity (a do
-   ticket, ou null), context (objeto ou null), imagem (bool), resolution,
+   ticket, ou null), context (objeto ou null), imagem (bool), anexos (quantos
+   o cartão tem, KAN-165; 0 num pedido), resolution,
    resolved_at, created_at, updated_at, autor} e, num subticket (KAN-N-X,
    KAN-162), sub (o X) e pai ({cartao, titulo}).
    O resolved_at de um cartão sem ticket é o concluido_at, ou, em Human
@@ -553,6 +708,7 @@ function itemParaFora(r) {
     severity: (temTicket && r.severity) || null,
     context: contexto,
     imagem: temTicket && !!r.image_key,
+    anexos: pedido ? 0 : Number(r.n_anexos) || 0,
     resolution: (temTicket && r.resolution) || null,
     resolved_at: temTicket ? r.resolved_at || null : resolvido ? r.concluido_at || r.k_mudado || null : null,
     created_at: temTicket ? r.created_at : r.k_criado,
@@ -698,7 +854,8 @@ function comentarioParaFora(c, eu) {
    removido do kanban o comentário não teria onde ficar: 409, e o ticket fica
    onde está.
    Recebe: env — o ambiente do worker (D1 em env.DB); request — o pedido, com
-   o corpo {texto}; id — o id do ticket; quem — {id, nome} (autorDoComentario).
+   o corpo {texto, anexos?} (textoDoComentario: só com anexos, a frase que o
+   diz); id — o id do ticket; quem — {id, nome} (autorDoComentario).
    Devolve: promessa da Response — 201 {ok, coluna (a do ticket depois), comentario}, 404 sem o
    ticket, 429 com o travão, 400 sem texto ou com texto longo de mais, 409
    com o cartão removido. */
@@ -713,10 +870,9 @@ async function comentarTicket(env, request, id, quem) {
   if (!(await rateLimit(env, 'qa-comentario:' + quem.id, TETO_COMENTARIOS_HORA, 3600))) {
     return err(429, 'Já comentaste muitas vezes seguidas. Espera um pouco.');
   }
-  const b = await body(request);
-  const texto = b && typeof b.texto === 'string' ? b.texto.replace(/\r\n?/g, '\n').replace(/\u0000/g, '').trim() : '';
-  if (!texto) return err(400, 'Escreve o comentário.');
-  if (texto.length > MAX_TEXTO) return err(400, 'O comentário passa dos ' + MAX_TEXTO + ' caracteres. Encurta-o.');
+  const lido = textoDoComentario(await body(request));
+  if (lido.recusa) return lido.recusa;
+  const texto = lido.texto;
   if (q.cartoes > 0 && !q.vivos) return err(409, 'O cartão deste ticket foi removido do kanban. Repõe-o lá para poderes comentar.');
   const uuid = crypto.randomUUID(), agora = now();
   const passos = passosDoComentarioQa({
@@ -729,23 +885,19 @@ async function comentarTicket(env, request, id, quem) {
   }, 201);
 }
 
-/* GET /api/qa/:id/comentarios: os comentários do ticket — os do cartão dele
-   no kanban, sem os removidos, do mais antigo para o mais recente, até 500.
-   Vêm à parte da lista (o GET /api/qa não os traz): só a janela de um ticket
-   os pede. Sem cartão, a lista vazia.
+/* GET /api/qa/:id/comentarios: a conversa do ticket — os comentários do
+   cartão dele no kanban, sem os removidos, do mais antigo para o mais
+   recente, até 500, com os anexos de cada um, e os anexos do cartão
+   (conversaDoCartao). Vêm à parte da lista (o GET /api/qa não os traz): só
+   a janela de um ticket os pede. Sem cartão, as listas vazias.
    Recebe: env — o ambiente do worker (D1 em env.DB); id — o id do ticket;
    quem — {id, nome} de quem pede (para o meu).
-   Devolve: promessa da Response {comentarios: [...]}, ou 404 sem o ticket. */
+   Devolve: promessa da Response {comentarios: [...], anexos: [...]}, ou 404 sem o ticket. */
 async function lerComentarios(env, id, quem) {
   const q = await env.DB.prepare('SELECT id FROM qa_tickets WHERE id = ? AND removed_at IS NULL').bind(id).first();
   if (!q) return naoExiste();
-  const r = (await env.DB.prepare(
-    `SELECT c.id, c.autor_id, c.autor_nome, c.texto, c.created_at, c.updated_at
-       FROM kanban_comentarios c JOIN kanban_cartoes k ON k.id = c.cartao_id
-      WHERE k.origem_tipo = 'qa' AND k.origem_id = ? AND k.removed_at IS NULL AND c.removed_at IS NULL
-      ORDER BY c.created_at, c.rowid LIMIT ?`
-  ).bind(id, TETO_COMENTARIOS).all()).results || [];
-  return json({ comentarios: r.map((c) => comentarioParaFora(c, quem.id)) });
+  const k = await cartaoDoTicket(env, id);
+  return json(k ? await conversaDoCartao(env, k.id, quem) : { comentarios: [], anexos: [] });
 }
 
 /* PUT /api/qa/:id/imagem: a captura de ecrã de um ticket, com o corpo em

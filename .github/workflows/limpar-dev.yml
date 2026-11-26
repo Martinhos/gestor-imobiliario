@@ -14,7 +14,10 @@
 # kanban_anexos não são de nenhuma conta, e uma limpeza não apaga o trabalho.
 # E as consumo_amostras, o histórico do consumo que a vigia grava de hora a
 # hora para os gráficos da Operação (KAN-144): é da infraestrutura, não de uma
-# conta, e apagá-lo deixava os gráficos sem passado.
+# conta, e apagá-lo deixava os gráficos sem passado. E os qa_modelos, os
+# modelos de dados do Lab (KAN-167): são da pessoa por trás das contas de
+# teste (a do Discord), não de uma conta, e sobrevivem a trocar de conta de
+# teste (a decisão do Martinho, 2026-11-26) — uma limpeza não os leva.
 #
 # A lista das tabelas é conferida contra as migrações por um teste
 # (testes/correcao-entrega.test.js): uma tabela nova que não esteja nem na

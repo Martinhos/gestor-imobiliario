@@ -2536,6 +2536,11 @@ var ACOES_RASTO = {
   qaImagemDeNovo: 'Tentar de novo', qaAceitar: 'Aceitar', qaRecusar: 'Recusar', qaAdiar: 'Adiar',
   qaEnviarProducao: 'Enviar para produção', qaAdiarProducao: 'Adiar a produção',
   qaComentar: 'Comentar', qaComentariosDeNovo: 'Tentar de novo',
+  qaRemoverEscolhido: 'Remover um ficheiro a anexar', qaVerAnexo: 'Ver uma imagem anexa', qaAbrirAnexo: 'Descarregar um anexo',
+  // os modelos de dados do Lab (cloud/modelos.js)
+  mdlAbrir: 'Modelos de dados', mdlOrdenar: 'Ordenar os modelos', mdlCarregar: 'Tentar de novo', mdlUsar: 'Usar um modelo',
+  mdlConfirmarUsar: 'Substituir os dados', mdlGuardarNovo: 'Guardar como modelo novo', mdlGravar: 'Guardar modelo',
+  mdlRenomear: 'Renomear um modelo', mdlGuardarNome: 'Guardar o nome', mdlRemover: 'Remover um modelo',
   // conta, entrada, termos e documentos
   'CW.showAuth': 'Iniciar sessão', 'CW.submitAuth': 'Entrar ou criar conta', 'CW.modoDaEntrada': 'Entrar ou criar conta',
   'CW.verPalavraPasse': 'Mostrar a palavra-passe', 'CW.esqueci': 'Esqueci-me da palavra-passe', fecharRepor: 'Cancelar',

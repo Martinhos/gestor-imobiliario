@@ -413,6 +413,13 @@ export default {
             headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
           });
         }
+        // os modelos de dados do Lab no back office do dev (rotas/modelos.js; 404 em produção)
+        if (url.pathname === '/api/equipa/modelos' || url.pathname.startsWith('/api/equipa/modelos/')) {
+          const { rotasModelosDaEquipa } = await import('./rotas/modelos.js');
+          const rm = (await rotasModelosDaEquipa(Object.assign({}, c, { eu }))) || new Response(JSON.stringify({ error: 'Rota desconhecida.' }), { status: 404, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+          rm.headers.set('Cache-Control', 'no-store');
+          return harden(rm);
+        }
         const r2 = await rotasEquipaApi(Object.assign({}, c, { eu }));
         if (r2) { r2.headers.set('Cache-Control', 'no-store'); return harden(r2); }
       } catch (e) {

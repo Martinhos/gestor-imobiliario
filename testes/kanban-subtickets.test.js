@@ -364,7 +364,10 @@ describe('o pai segue os subtickets pelas rotas do kanban e da pílula', () => {
     const filho = (x, r) => ({ id: 'KAN-160-' + x, cartao: 'KAN-160-' + x, ticket: false, tipo: 'subtarefa', sub: x, pai: { cartao: 'KAN-160', titulo: 'O pai' },
       status: 'human-tests', titulo: 'Teste ' + x, body: 'O que testar: 1. a 2. b', created_at: 1, resolved_at: r });
     assert.match(app.qaRodapeTicket(filho(2, 3)), /Enviar para produção/);
-    assert.match(app.qaHtmlTopo(filho(2, 3)), /Subticket do <span class="num">KAN-160<\/span>[\s\S]*<ol class="qa-passos">/);
+    // KAN-163: a ligação ao pai é uma linha discreta logo debaixo do cabeçalho, com o selo do pai (que se toca) e o título
+    const topo = app.qaHtmlTopo(filho(2, 3));
+    assert.match(topo, /<\/div><p class="small qa-do-pai"><span class="qa-do-pai-de">Subticket do<\/span><button type="button" class="num qa-cartao qa-cartao-toca"[^>]*data-click="qaAbrirTicket\('KAN-160'\)"[^>]*>KAN-160<\/button><span class="qa-do-pai-tit"[^>]*>O pai<\/span><\/p>[\s\S]*<ol class="qa-passos">/);
+    assert.doesNotMatch(topo, /<button type="button" class="qa-do-pai"/, 'sem o retângulo grande de antes');
     assert.equal(app.qaNomeDoTipo(filho(2, 3)), 'Subticket');
     const outro = { id: 'KAN-7', cartao: 'KAN-7', ticket: false, tipo: 'tarefa', status: 'human-tests', titulo: 'Outro', created_at: 1, resolved_at: 9 };
     const ordem = Array.from(app.qaFilhosAoPai([filho(2, 5), outro, filho(1, 4), pai]), (t) => t.cartao);

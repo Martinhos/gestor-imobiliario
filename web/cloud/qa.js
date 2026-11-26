@@ -1,6 +1,10 @@
 /* ===== TICKETS DE QA ===== */
-/* A pílula «Tickets» do ambiente de desenvolvimento: arrasta-se para a borda
-   que estorvar menos e abre «Novo ticket» e «Ver tickets». Os tickets de QA
+/* A pílula «Lab» do ambiente de desenvolvimento (chamou-se «QA» e depois
+   «Tickets»; desde 2026-11-26, KAN-167, é o Lab, com o frasco: já não serve
+   só para os tickets). Arrasta-se para a borda que estorvar menos e abre o
+   menu: a secção «Tickets» («Novo ticket» e «Ver tickets»), os «Modelos de
+   dados» (cloud/modelos.js:mdlAbrir) e as idas à montra, à app e ao back
+   office. Os tickets de QA
    vão para a D1 do ambiente (worker/src/rotas/qa.js) com o contexto do ecrã,
    cada um com o seu cartão no kanban da equipa, e o Claude trata-os pelo
    kanban (scripts/kanban.mjs). Em produção nada disto existe: nem a pílula
@@ -37,7 +41,7 @@
    a chave e o título — o servidor nem manda o texto — e abrem só para ler.
 
    O desenho (a opção C que o Martinho escolheu, 2026-10-28): a pega de pontos,
-   o ícone, «Tickets» e o número por concluir, num roxo (--loan) que não se confunde
+   o ícone (o frasco do Lab), «Lab» e o número por concluir, num roxo (--loan) que não se confunde
    com o cobalto das ações da app. A pega fica do lado da borda onde a pílula
    encostou (o data-lado que o qaPor escreve; a troca é da folha), e só muda
    ao largar, nunca a meio do arrasto. Na primeira vez, ao lado, a
@@ -80,6 +84,17 @@ var QA_ENGOLE_MS = 350;
 var QA_IMAGEM_LADO = 1600;
 // o teto do servidor para a captura (bytes): o PUT recusa acima disto
 var QA_IMAGEM_MAX = 3 * 1024 * 1024;
+// Os anexos (KAN-165): o teto de cada ficheiro (o do kanban, rotas/kanban.js:MAX_ANEXO),
+// quantos vão de uma vez (rotas/qa.js:TETO_ANEXOS_ENVIO) e o que o seletor
+// oferece — os tipos que o servidor aceita (lib/imagens.js:TIPOS_DOS_ANEXOS,
+// lidos lá dos bytes), mais o GIF e o HEIC, que se encolhem para WebP aqui
+var QA_ANEXO_MAX = 10 * 1024 * 1024;
+var QA_ANEXOS_ENVIO = 10;
+var QA_ANEXOS_ACEITA = 'image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif,.png,.jpg,.jpeg,.webp,.gif,.heic,.heif,.pdf,.docx,.xlsx,.pptx,.txt,.log,.csv';
+// as extensões de um documento que o servidor aceita, e o nome curto de cada tipo para a linha do anexo
+var QA_EXT_DOCUMENTO = /\.(pdf|docx|xlsx|pptx|txt|log|csv)$/i;
+var QA_NOMES_DOS_FICHEIROS = { pdf: 'PDF', docx: 'Word', xlsx: 'Excel', pptx: 'PowerPoint', txt: 'Texto', log: 'Texto', csv: 'CSV', png: 'PNG', jpg: 'JPEG', jpeg: 'JPEG', webp: 'WebP' };
+var QA_SEQ_ANEXO = 0;         // o contador das chaves locais dos ficheiros escolhidos (qaJuntarAnexos)
 // quantas entradas do rasto vão com o ticket, e com quantos caracteres cada uma
 var QA_RASTO_MAX = 10;
 var QA_RASTO_LETRAS = 120;
@@ -136,7 +151,7 @@ var qaPonteiro = '';         // o ponteiro do último toque na pílula: 'touch',
 var qaContextoGuardado = null;   // o ecrã no momento em que se abriu o menu
 var qaLista = { tickets: null, falhou: false, aPedir: null, colunas: null };   // tickets: null quer dizer «ainda não se sabe»; colunas: as do kanban (null: as de omissão)
 var qaAbertos = null;        // quantos tickets por concluir (todos os da lista: os que não estão em Produção); null enquanto não se sabe
-var qaRascunho = null;       // o ticket a ser escrito: {gravidade, imagem, url, id, aEnviar, contexto, camada}
+var qaRascunho = null;       // o ticket a ser escrito: {gravidade, imagem, url, id, aEnviar, contexto, camada, anexos, imagemSubiu}
 var qaCamadaLista = null;    // a camada da janela «Tickets», enquanto aberta
 var qaCamadaTicket = null;   // a camada da janela de um ticket, enquanto aberta
 var qaOcupado = {};          // id → 1: um pedido de remover, reabrir ou mover esse ticket a caminho
@@ -205,7 +220,7 @@ function qaBotao() {
 
 /* ------------------------------------------------------------ o desenho */
 
-/* O HTML de dentro da pílula: o botão (pega, ícone, «Tickets», número), o menu
+/* O HTML de dentro da pílula: o botão (pega, o frasco, «Lab», número), o menu
    da casa (.menupop, aberto pelo menuOpen — o closePops, o Escape e o
    aria-expanded são os de todos os menus ⋯), a frase para o leitor de ecrã,
    e a etiqueta da primeira vez. O data-menu="acoes" diz ao percurso que é um
@@ -219,8 +234,8 @@ function qaHtmlPilula(n, comEtiqueta) {
       '<button type="button" class="qa-botao" data-toca="camada" data-click="menuOpen(event,\'qa\');qaMenuAbriu(event)" ' +
         'aria-expanded="false" aria-label="' + esc(qaRotuloDoBotao(n)) + '" aria-describedby="qaDica">' +
         '<span class="qa-pega" aria-hidden="true">' + ic('grip', 16) + '</span>' +
-        '<span class="qa-ic" aria-hidden="true">' + ic('inseto', 16) + '</span>' +
-        '<span class="qa-nome" aria-hidden="true">Tickets</span>' +
+        '<span class="qa-ic" aria-hidden="true">' + ic('frasco', 16) + '</span>' +
+        '<span class="qa-nome" aria-hidden="true">Lab</span>' +
         '<span class="qa-n" aria-hidden="true"' + (n > 0 ? '' : ' hidden') + '>' + qaNumeroCurto(n) + '</span>' +
       '</button>' +
       '<div class="menupop qa-menu" id="menu_qa">' + qaHtmlMenu(n) + '</div>' +
@@ -231,7 +246,10 @@ function qaHtmlPilula(n, comEtiqueta) {
 
 /* global QA_EQUIPA -- definido pela camada do back office (worker/src/equipa-qa.js:CABECA_DA_EQUIPA); só se lê depois de o qaLugar dizer 'equipa' */
 
-/* As opções do menu da pílula, conforme o sítio (qaLugar):
+/* As opções do menu da pílula, conforme o sítio (qaLugar). Começa sempre
+   pela secção «Tickets» (o título e «Novo ticket», «Ver tickets») e pelos
+   «Modelos de dados» (cloud/modelos.js:mdlAbrir; KAN-167), separados das idas
+   por um traço:
    - na app: «Novo ticket», «Ver tickets», «Ver a montra» e «Back office»;
    - nas páginas públicas (a montra e o guia): «Novo ticket», «Ver tickets»,
      «Voltar à app» e «Back office»;
@@ -246,17 +264,21 @@ function qaHtmlPilula(n, comEtiqueta) {
    telemóvel. No back office, quem entrou pela sessão de teste
    (equipa.js:entrarPelaSessaoDeTeste) tem o cookie dela e passa a porta do
    dev; quem entrou pelo /entrar do Discord, sem ela, levaria o 404 da
-   porta, e então o menu fica só com os tickets.
+   porta, e então o menu fica só com os tickets e os modelos.
    Recebe: n — quantos tickets por concluir (null se ainda não se sabe).
    Devolve: o HTML (texto). */
 function qaHtmlMenu(n) {
   var lugar = qaLugar();
   var daEquipaComApp = lugar === 'equipa' && !!QA_EQUIPA && QA_EQUIPA.app === true;
-  return '<button type="button" data-toca="camada" data-click="closePops();qaNovoTicket()">' + ic('plus', 17) + ' Novo ticket</button>' +
-    '<button type="button" class="qa-menu-ver" data-toca="camada" data-click="closePops();qaVerTickets()">' + ic('lista', 17) + ' ' + esc(qaRotuloVer(n)) + '</button>' +
-    (lugar === 'app' || daEquipaComApp ? '<button type="button" class="qa-menu-montra" data-toca="camada" data-click="closePops();qaVerMontra()">' + ic('door', 17) + ' Ver a montra</button>' : '') +
+  var idas = (lugar === 'app' || daEquipaComApp ? '<button type="button" class="qa-menu-montra" data-toca="camada" data-click="closePops();qaVerMontra()">' + ic('door', 17) + ' Ver a montra</button>' : '') +
     (lugar === 'paginas' || daEquipaComApp ? '<button type="button" class="qa-menu-app" data-toca="camada" data-click="closePops();qaVoltarApp()">' + ic('home', 17) + ' Voltar à app</button>' : '') +
     (lugar === 'equipa' ? '' : '<button type="button" class="qa-menu-equipa" data-toca="camada" data-click="closePops();qaBackOffice()">' + ic('users', 17) + ' Back office</button>');
+  return '<p class="qa-menu-titulo" aria-hidden="true">Tickets</p>' +
+    '<button type="button" data-toca="camada" data-click="closePops();qaNovoTicket()">' + ic('plus', 17) + ' Novo ticket</button>' +
+    '<button type="button" class="qa-menu-ver" data-toca="camada" data-click="closePops();qaVerTickets()">' + ic('lista', 17) + ' ' + esc(qaRotuloVer(n)) + '</button>' +
+    '<div class="sdiv" aria-hidden="true"></div>' +
+    '<button type="button" class="qa-menu-modelos" data-toca="camada" data-click="closePops();mdlAbrir()">' + ic('frasco', 17) + ' Modelos de dados</button>' +
+    (idas ? '<div class="sdiv" aria-hidden="true"></div>' + idas : '');
 }
 
 /* Onde está a pílula. A camada do worker (worker/src/equipa-qa.js) define,
@@ -308,9 +330,9 @@ function qaNumeroCurto(n) {
    Recebe: n — quantos tickets por concluir (null se ainda não se sabe).
    Devolve: o texto. */
 function qaRotuloDoBotao(n) {
-  if (n == null) return 'Tickets';
-  if (n === 0) return 'Tickets, nenhum por concluir';
-  return 'Tickets, ' + n + ' por concluir';
+  if (n == null) return 'Lab';
+  if (n === 0) return 'Lab, nenhum ticket por concluir';
+  return 'Lab, ' + n + (n === 1 ? ' ticket' : ' tickets') + ' por concluir';
 }
 
 /* O rótulo da segunda opção do menu: «Ver tickets (N)», com N os por concluir.
@@ -798,13 +820,13 @@ function qaQuando(ms) {
 
 /* Abre a janela «Novo ticket de QA» (folha de baixo no telemóvel): a
    descrição obrigatória, a gravidade opcional, a captura de ecrã (escolher,
-   ou colar com Ctrl+V em qualquer sítio da janela) e o que vai junto, já à
-   vista. O contexto é o do ecrã de quando se abriu o menu — com a janela já
+   ou colar com Ctrl+V em qualquer sítio da janela), os anexos (KAN-165:
+   imagens e documentos, até dez) e o que vai junto, já à vista. O contexto é o do ecrã de quando se abriu o menu — com a janela já
    aberta, seria o da própria janela.
    Devolve: nada — abre a janela. */
 function qaNovoTicket() {
   var ctx = qaContextoGuardado || qaContexto();
-  var r = { gravidade: '', imagem: null, url: '', id: '', aEnviar: false, contexto: ctx, camada: null };
+  var r = { gravidade: '', imagem: null, url: '', id: '', aEnviar: false, contexto: ctx, camada: null, anexos: [], imagemSubiu: false };
   qaRascunho = r;
   var L = openModal('Novo ticket de QA', qaHtmlNovo(ctx),
     '<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button>' +
@@ -814,6 +836,7 @@ function qaNovoTicket() {
   qaMarcarJanela(L);
   L.aoFechar = function () {
     if (r.url) { try { URL.revokeObjectURL(r.url); } catch (e) {} r.url = ''; }
+    qaLargarEscolhidos(r.anexos);
     if (qaRascunho === r) qaRascunho = null;
   };
   if (L.el && typeof L.el.addEventListener === 'function') L.el.addEventListener('paste', qaColar);
@@ -830,7 +853,7 @@ function qaHtmlNovo(ctx) {
     '<div class="qa-campo"><label>Descrição <span class="req">*</span>' +
       '<textarea id="qa_desc" class="u-minh-130px" maxlength="4000" data-input="qaDescEscrita(this)" ' +
       'placeholder="Ex: Na lista dos contratos, tocar no filtro do imóvel fecha a janela em vez de a abrir."></textarea></label>' +
-      '<span class="small num qa-conta" id="qa_desc_n" aria-hidden="true">0 / 4000</span>' +
+      '<span class="small qa-conta" id="qa_desc_n" aria-hidden="true">0 / 4000</span>' +
       '<div class="hint">O que fizeste, o que esperavas e o que aconteceu.</div></div>' +
     '<div><div class="flabel" id="qa_grav_rot">Gravidade</div>' +
       '<div class="segm qa-gravidade" role="radiogroup" aria-labelledby="qa_grav_rot">' + opcao('', 'Nenhuma') +
@@ -840,6 +863,7 @@ function qaHtmlNovo(ctx) {
       '<p class="erro-campo" id="qa_img_erro" role="alert"></p>' +
       '<input type="file" id="qa_img_in" accept="image/png,image/jpeg,image/webp,image/gif" class="u-d-none" data-change="qaEscolheuImagem(this)">' +
       '<input type="hidden" id="qa_img_tem" value=""></div>' +
+    qaHtmlCaixaAnexos('novo') +
     fold('qaJunto', 'O que vai junto', '<p class="hint">Vai com o ticket, para quem o for resolver saber onde estavas. Quem o escreveu fica guardado com ele.</p>' + qaHtmlContexto(ctx), { icon: 'info' }) +
     '<div id="qa_e" class="small u-c-v-danger" role="alert"></div>' +
     '</div>';
@@ -892,12 +916,25 @@ function qaEscolheuImagem(input) {
 }
 
 /* Colar (Ctrl+V) na janela «Novo ticket»: se o que se cola traz uma imagem,
-   é a captura; texto cola-se na caixa como sempre.
+   é a captura — ou, com a captura já posta, mais um anexo (qaJuntarAnexos);
+   texto cola-se na caixa como sempre.
    Recebe: e — o ClipboardEvent do paste (ouvido na janela).
    Devolve: true se tinha uma imagem. */
 function qaColar(e) {
   var dados = e && e.clipboardData;
   if (!dados || !qaRascunho) return false;
+  var f = qaImagemColada(dados);
+  if (!f) return false;
+  if (typeof e.preventDefault === 'function') e.preventDefault();
+  if (qaRascunho.imagem) qaJuntarAnexos('novo', [f]);
+  else qaReceberImagem(f);
+  return true;
+}
+
+/* A imagem que vem num colar (Ctrl+V), nos ficheiros ou nos itens.
+   Recebe: dados — o clipboardData.
+   Devolve: o File, ou null sem imagem. */
+function qaImagemColada(dados) {
   var f = null;
   [].slice.call(dados.files || []).some(function (x) { if (x && /^image\//.test(x.type)) { f = x; return true; } return false; });
   if (!f) {
@@ -906,10 +943,7 @@ function qaColar(e) {
       return false;
     });
   }
-  if (!f) return false;
-  if (typeof e.preventDefault === 'function') e.preventDefault();
-  qaReceberImagem(f);
-  return true;
+  return f || null;
 }
 
 /* Uma imagem chegou (escolhida ou colada): encolhe-a (qaEncolherImagem) e
@@ -938,13 +972,15 @@ function qaReceberImagem(f) {
    (JPEG onde o browser não escreve WebP), e abaixo do teto do servidor.
    Nunca amplia. Sem o createImageBitmap, ou com uma imagem que ele não lê,
    sobe a original se for de um tipo aceite e couber.
-   Recebe: f — o File ou Blob da imagem.
+   Recebe: f — o File ou Blob da imagem; teto (opcional) — os bytes que
+   cabem (QA_IMAGEM_MAX na captura, QA_ANEXO_MAX num anexo).
    Devolve: Promise com o Blob pronto; rejeita com um Error de mensagem
    para a pessoa. */
-function qaEncolherImagem(f) {
+function qaEncolherImagem(f, teto) {
+  var max = teto || QA_IMAGEM_MAX;
   var original = function () {
-    if (/^image\/(png|jpeg|webp)$/.test(f.type || '') && f.size <= QA_IMAGEM_MAX) return f;
-    throw new Error(f.size > QA_IMAGEM_MAX ? 'A imagem é grande de mais. Escolhe uma até 3 MB.' : 'Esta imagem não se deixa ler. Experimenta um PNG, um JPEG ou um WebP.');
+    if (/^image\/(png|jpeg|webp)$/.test(f.type || '') && f.size <= max) return f;
+    throw new Error(f.size > max ? 'A imagem é grande de mais. Escolhe uma até ' + Math.round(max / 1048576) + ' MB.' : 'Esta imagem não se deixa ler. Experimenta um PNG, um JPEG ou um WebP.');
   };
   if (typeof createImageBitmap !== 'function') return Promise.resolve().then(original);
   return createImageBitmap(f).then(function (bm) {
@@ -955,7 +991,7 @@ function qaEncolherImagem(f) {
     if (!g || typeof c.toBlob !== 'function') { try { bm.close(); } catch (e) {} return original(); }
     g.drawImage(bm, 0, 0, c.width, c.height);
     try { bm.close(); } catch (e) {}
-    var cabe = function (b, tipo) { return !!b && b.size > 0 && b.size <= QA_IMAGEM_MAX && (!tipo || b.type === tipo); };
+    var cabe = function (b, tipo) { return !!b && b.size > 0 && b.size <= max && (!tipo || b.type === tipo); };
     return qaCanvasBlob(c, 'image/webp', 0.85).then(function (b) {
       if (cabe(b, 'image/webp')) return b;
       return qaCanvasBlob(c, 'image/jpeg', 0.82).then(function (j) {
@@ -1021,7 +1057,7 @@ function qaErroImagem(msg) {
 
 /* O botão de enviar diz o que está a acontecer: «A enviar…» (desligado)
    durante o pedido; depois de o ticket já estar guardado e só a imagem ter
-   falhado, «Enviar a imagem».
+   falhado, «Enviar a imagem»; e só os anexos, «Enviar os anexos».
    Recebe: ocupado — true durante o envio.
    Devolve: nada. */
 function qaBotaoEnviar(ocupado) {
@@ -1029,14 +1065,17 @@ function qaBotaoEnviar(ocupado) {
   if (!b) return;
   b.disabled = !!ocupado;
   if (ocupado) b.setAttribute('aria-busy', 'true'); else b.removeAttribute('aria-busy');
-  b.textContent = ocupado ? 'A enviar…' : (r && r.id ? 'Enviar a imagem' : 'Enviar ticket');
+  b.textContent = ocupado ? 'A enviar…' : (r && r.id ? (r.imagem && !r.imagemSubiu ? 'Enviar a imagem' : 'Enviar os anexos') : 'Enviar ticket');
 }
 
 /* Envia o ticket: a descrição (obrigatória: componentes.js:falhaCampo), a
-   gravidade e o contexto num POST, e depois a captura num PUT. Se o ticket
-   ficou guardado e só a imagem falhou, a janela fica aberta, a dizê-lo, e
-   «Enviar a imagem» tenta outra vez só a imagem (nunca um ticket repetido).
-   Com tudo certo fecha e avisa, e o número por concluir atualiza-se.
+   gravidade e o contexto num POST, depois a captura num PUT e, a seguir, os
+   anexos, um a um (qaSubirEscolhidos). Se o ticket ficou guardado e só a
+   imagem ou algum anexo falhou, a janela fica aberta, a dizê-lo, e «Enviar
+   a imagem» (ou «Enviar os anexos») tenta outra vez só o que falta (nunca
+   um ticket repetido, nem um anexo que já subiu). Com uma imagem ainda a
+   preparar, espera-se por ela. Com tudo certo fecha e avisa, e o número
+   por concluir atualiza-se.
    Devolve: Promise com true se o ticket ficou enviado por inteiro. */
 function qaEnviar() {
   var r = qaRascunho;
@@ -1045,6 +1084,7 @@ function qaEnviar() {
   if (erro) erro.textContent = '';
   var texto = String(val('qa_desc') || '').trim();
   if (!r.id && !texto) { falhaCampo('qa_desc', 'Escreve o que viste.'); return Promise.resolve(false); }
+  if (qaAPreparar(r.anexos)) { qaErroAnexos('novo', 'Espera que as imagens fiquem prontas.'); return Promise.resolve(false); }
   r.aEnviar = true;
   qaBotaoEnviar(true);
   var criar = r.id ? Promise.resolve({ id: r.id }) :
@@ -1054,14 +1094,18 @@ function qaEnviar() {
     r.id = res.id;
     var desc = document.getElementById('qa_desc');
     if (desc) desc.readOnly = true;
-    if (!r.imagem) return true;
-    return qaSubirImagem(r.id, r.imagem).catch(function (e) { e.daImagem = true; throw e; });
+    if (!r.imagem || r.imagemSubiu) return true;
+    return qaSubirImagem(r.id, r.imagem).then(function () { r.imagemSubiu = true; return true; }, function (e) { e.daImagem = true; throw e; });
   }).then(function () {
+    return qaSubirEscolhidos(r.id, r.anexos, null, 'novo');
+  }).then(function (falha) {
+    if (falha) { var e = new Error(falha); e.dosAnexos = true; throw e; }
     r.aEnviar = false;
     var aberta = r.camada && typeof modalStack !== 'undefined' && modalStack.indexOf(r.camada) > -1;
     if (aberta && modalTop() === r.camada) closeModal();
     if (qaRascunho === r) qaRascunho = null;
-    toast(r.imagem ? 'Ticket enviado, com a captura.' : 'Ticket enviado.');
+    var n = r.anexos.length;
+    toast('Ticket enviado' + (r.imagem ? ', com a captura' : '') + (n ? (r.imagem ? ' e ' : ', com ') + (n === 1 ? 'um anexo' : n + ' anexos') : '') + '.');
     qaCarregar();
     return true;
   }).catch(function (e) {
@@ -1070,6 +1114,9 @@ function qaEnviar() {
     var msg = (e && e.message) || 'Não deu para enviar.';
     if (e && e.daImagem) {
       msg = 'O ticket ficou guardado, mas a captura não subiu: ' + msg + ' Toca em «Enviar a imagem» para tentar outra vez.';
+      qaCarregar();
+    } else if (e && e.dosAnexos) {
+      msg = 'O ticket ficou guardado, mas ' + msg + ' Toca em «Enviar os anexos» para tentar outra vez.';
       qaCarregar();
     }
     var el = document.getElementById('qa_e');
@@ -1101,6 +1148,365 @@ function qaSubirImagem(id, blob) {
       if (typeof rastoPoe === 'function') rastoPoe('PUT /api/qa/…/imagem → sem rede');
       throw new Error('Sem ligação ao servidor.');
     });
+}
+
+/* ----------------------------------------------------------- os anexos */
+
+/* Os anexos (KAN-165: «Devo poder anexar imagens ou documentos aos tickets
+   no pill. Responder a tickets com imagens ou ficheiros.»): no «Novo
+   ticket» (onde: 'novo', em qaRascunho.anexos) e na resposta de um ticket
+   aberto (onde: 'com', em qaCamadaTicket.qaEscolhidos) escolhem-se até dez
+   ficheiros — imagens, encolhidas aqui como a captura (qaEncolherImagem), e
+   PDF, Word, Excel, PowerPoint, texto e CSV até 10 MB —, que sobem um a um
+   para o cartão do ticket no kanban (PUT /api/qa/:id/anexos; o servidor lê
+   o tipo dos bytes, rotas/kanban.js:ficheiroDoPedido). Cada escolhido é
+   {chave, ficheiro (o Blob a subir), nome, tamanho, imagem (bool), url (a
+   miniatura, object URL), estado ('a-preparar', 'pronto', 'subiu' ou
+   'falhou'), erro}. */
+
+/* A lista dos escolhidos de um sítio.
+   Recebe: onde — 'novo' ou 'com'.
+   Devolve: a lista (vazia quando o sítio não está aberto). */
+function qaEscolhidosDe(onde) {
+  if (onde === 'novo') return qaRascunho ? qaRascunho.anexos : [];
+  var L = qaCamadaTicket;
+  if (!L) return [];
+  if (!Array.isArray(L.qaEscolhidos)) L.qaEscolhidos = [];
+  return L.qaEscolhidos;
+}
+
+/* A caixa dos anexos de um sítio, nasce com a janela: o rótulo (no «Novo
+   ticket»), os escolhidos (qaHtmlEscolhidos), o erro e o seletor escondido.
+   Recebe: onde — 'novo' ou 'com'.
+   Devolve: o HTML (texto). */
+function qaHtmlCaixaAnexos(onde) {
+  var p = onde === 'novo' ? 'qa_anx' : 'qa_com_anx';
+  return '<div class="qa-anexar' + (onde === 'novo' ? '' : ' qa-anexar-com') + '">' +
+    (onde === 'novo' ? '<div class="flabel" id="qa_anx_rot">Anexos</div>' : '') +
+    '<div id="' + p + '">' + qaHtmlEscolhidos(onde) + '</div>' +
+    '<p class="erro-campo" id="' + p + '_erro" role="alert"></p>' +
+    '<input type="file" id="' + p + '_in" multiple accept="' + QA_ANEXOS_ACEITA + '" class="u-d-none" data-change="qaEscolheuAnexos(this,\'' + onde + '\')">' +
+    '</div>';
+}
+
+/* Os escolhidos de um sítio, cada um com a miniatura (uma imagem) ou o
+   ícone do ficheiro, o nome, o tipo e o tamanho (ou «A preparar…», ou o
+   erro), e «Remover»; no «Novo ticket», por baixo, «Anexar ficheiros» e o
+   que se aceita (na resposta, o «Anexar» vive ao lado do «Comentar»).
+   Recebe: onde — 'novo' ou 'com'.
+   Devolve: o HTML (texto). */
+function qaHtmlEscolhidos(onde) {
+  var lista = qaEscolhidosDe(onde), seletor = onde === 'novo' ? 'qa_anx_in' : 'qa_com_anx_in';
+  var itens = lista.length ? '<ul class="qa-escolhidos" aria-label="Ficheiros a anexar">' + lista.map(function (a) {
+    var meta = a.estado === 'a-preparar' ? 'A preparar…' : a.estado === 'falhou' ? (a.erro || 'Não subiu.') : a.estado === 'subiu' ? 'Anexado' : qaMetaDoAnexo(a.nome, a.tamanho);
+    return '<li class="qa-escolhido' + (a.estado === 'falhou' ? ' falhou' : '') + '">' +
+      (a.imagem && a.url ? '<img class="qa-escolhido-mini" src="' + esc(a.url) + '" alt="">' : '<span class="qa-escolhido-ic" aria-hidden="true">' + (a.estado === 'a-preparar' ? '<span class="roda"></span>' : ic(a.imagem ? 'photo' : 'contract', 18)) + '</span>') +
+      '<span class="qa-escolhido-txt"><span class="qa-escolhido-nome">' + esc(a.nome) + '</span><span class="small">' + esc(meta) + '</span></span>' +
+      (a.estado === 'subiu' ? '' : '<button type="button" class="qa-escolhido-x" data-toca="rascunho" data-click="qaRemoverEscolhido(\'' + onde + '\',\'' + jsq(a.chave) + '\')" aria-label="Remover ' + esc(a.nome) + '">' + ic('x', 16) + '</button>') +
+      '</li>';
+  }).join('') + '</ul>' : '';
+  if (onde !== 'novo') return itens;
+  return itens + '<button type="button" class="btn sm" data-toca="rascunho" data-click="abrirSeletorFicheiros(\'' + seletor + '\')"' +
+    (lista.length >= QA_ANEXOS_ENVIO ? ' disabled' : '') + '>' + ic('clip', 14) + ' Anexar ficheiros</button>' +
+    '<p class="hint">Imagens, PDF, Word, Excel, PowerPoint, texto ou CSV, até 10 MB cada e ' + QA_ANEXOS_ENVIO + ' de uma vez.</p>';
+}
+
+/* O tipo e o tamanho de um anexo, numa linha curta: «PDF · 120 KB».
+   Recebe: nome — o nome do ficheiro; tamanho — em bytes.
+   Devolve: o texto. */
+function qaMetaDoAnexo(nome, tamanho) {
+  var m = /\.([A-Za-z0-9]{1,5})$/.exec(String(nome || ''));
+  var tipo = m && QA_NOMES_DOS_FICHEIROS[m[1].toLowerCase()] ? QA_NOMES_DOS_FICHEIROS[m[1].toLowerCase()] : 'Ficheiro';
+  return tipo + ' · ' + qaTamanhoLegivel(tamanho);
+}
+
+/* Um tamanho em bytes para ler: KB abaixo de 1 MB (pelo menos 1), MB com uma casa.
+   Recebe: n — os bytes.
+   Devolve: o texto («120 KB», «2,4 MB»). */
+function qaTamanhoLegivel(n) {
+  n = Number(n) || 0;
+  if (n < 1024 * 1024) return Math.max(1, Math.round(n / 1024)) + ' KB';
+  return (Math.round(n / 104857.6) / 10).toString().replace('.', ',') + ' MB';
+}
+
+/* O nome de uma imagem depois de encolhida: a extensão passa a ser a do
+   tipo novo (foto.heic que saiu em WebP fica foto.webp).
+   Recebe: nome — o nome original; tipo — o tipo do Blob.
+   Devolve: o nome. */
+function qaNomeComTipo(nome, tipo) {
+  var ext = tipo === 'image/webp' ? 'webp' : tipo === 'image/jpeg' ? 'jpg' : tipo === 'image/png' ? 'png' : '';
+  var base = String(nome || 'imagem').replace(/\.[A-Za-z0-9]{1,5}$/, '') || 'imagem';
+  return ext ? base + '.' + ext : String(nome || 'imagem');
+}
+
+/* Ficheiros escolhidos no seletor.
+   Recebe: input — o <input type="file" multiple> (o this da ação); onde — 'novo' ou 'com'.
+   Devolve: nada. */
+function qaEscolheuAnexos(input, onde) {
+  var fs = input && input.files ? [].slice.call(input.files) : [];
+  try { input.value = ''; } catch (e) {}
+  if (fs.length) qaJuntarAnexos(onde, fs);
+}
+
+/* Junta ficheiros aos escolhidos de um sítio: as imagens encolhem-se (até
+   o lado maior ter QA_IMAGEM_LADO, abaixo de QA_ANEXO_MAX), os documentos
+   vão como estão. Recusa logo, junto da caixa, o que passa das dez de uma
+   vez, o que não é de um tipo aceite (pela extensão; o servidor confirma
+   pelos bytes) e um documento acima de 10 MB.
+   Recebe: onde — 'novo' ou 'com'; fs — os File (ou Blob com nome).
+   Devolve: Promise que acaba quando as imagens estão prontas. */
+function qaJuntarAnexos(onde, fs) {
+  var lista = qaEscolhidosDe(onde), dono = onde === 'novo' ? qaRascunho : qaCamadaTicket;
+  if (!dono) return Promise.resolve(false);
+  var recusas = [], esperas = [];
+  qaErroAnexos(onde, '');
+  (fs || []).forEach(function (f) {
+    if (!f) return;
+    var nome = String(f.name || 'imagem');
+    var imagem = /^image\//.test(f.type || '') || /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(nome);
+    if (lista.filter(function (a) { return a.estado !== 'subiu'; }).length >= QA_ANEXOS_ENVIO) { recusas.push('Vão até ' + QA_ANEXOS_ENVIO + ' ficheiros de cada vez.'); return; }
+    if (!imagem && !QA_EXT_DOCUMENTO.test(nome)) { recusas.push('«' + nome + '» não entra: aceitam-se imagens, PDF, Word, Excel, PowerPoint, texto e CSV.'); return; }
+    if (!imagem && f.size > QA_ANEXO_MAX) { recusas.push('«' + nome + '» é grande de mais (máx. 10 MB).'); return; }
+    var a = { chave: 'a' + (++QA_SEQ_ANEXO), ficheiro: imagem ? null : f, nome: nome, tamanho: f.size || 0, imagem: imagem, url: '', estado: imagem ? 'a-preparar' : 'pronto', erro: '' };
+    lista.push(a);
+    if (!imagem) return;
+    esperas.push(qaEncolherImagem(f, QA_ANEXO_MAX).then(function (blob) {
+      if (lista.indexOf(a) < 0) return;
+      a.ficheiro = blob; a.tamanho = blob.size; a.nome = qaNomeComTipo(nome, blob.type); a.estado = 'pronto';
+      try { a.url = URL.createObjectURL(blob); } catch (e) { a.url = ''; }
+      qaPintarEscolhidos(onde);
+    }, function (err) {
+      var i = lista.indexOf(a);
+      if (i > -1) lista.splice(i, 1);
+      qaPintarEscolhidos(onde);
+      qaErroAnexos(onde, '«' + nome + '»: ' + ((err && err.message) || 'não deu para ler esta imagem.'));
+    }));
+  });
+  if (onde === 'novo' && dono.camada && lista.length) dono.camada.tocado = true;
+  qaPintarEscolhidos(onde);
+  if (recusas.length) qaErroAnexos(onde, recusas.filter(function (x, i) { return recusas.indexOf(x) === i; }).join(' '));
+  return Promise.all(esperas).then(function () { return true; });
+}
+
+/* Tira um escolhido (ainda por subir) de um sítio, e larga a miniatura dele.
+   Recebe: onde — 'novo' ou 'com'; chave — a do escolhido.
+   Devolve: nada. */
+function qaRemoverEscolhido(onde, chave) {
+  var lista = qaEscolhidosDe(onde);
+  for (var i = 0; i < lista.length; i++) {
+    if (lista[i].chave !== chave) continue;
+    qaLargarEscolhidos(lista.splice(i, 1));
+    break;
+  }
+  qaErroAnexos(onde, '');
+  qaPintarEscolhidos(onde);
+  if (onde === 'com') qaBotaoComentar(false);
+}
+
+/* Liberta as miniaturas de uns escolhidos (os object URL).
+   Recebe: lista — os escolhidos.
+   Devolve: nada. */
+function qaLargarEscolhidos(lista) {
+  (lista || []).forEach(function (a) { if (a && a.url) { try { URL.revokeObjectURL(a.url); } catch (e) {} a.url = ''; } });
+}
+
+/* Há uma imagem ainda a encolher?
+   Recebe: lista — os escolhidos.
+   Devolve: true ou false. */
+function qaAPreparar(lista) {
+  return (lista || []).some(function (a) { return a.estado === 'a-preparar'; });
+}
+
+/* Repinta os escolhidos de um sítio, se a caixa estiver no ecrã.
+   Recebe: onde — 'novo' ou 'com'.
+   Devolve: nada. */
+function qaPintarEscolhidos(onde) {
+  var caixa = document.getElementById(onde === 'novo' ? 'qa_anx' : 'qa_com_anx');
+  if (caixa) caixa.innerHTML = qaSemEtiquetas(qaHtmlEscolhidos(onde));
+}
+
+/* Escreve (ou apaga) o erro dos anexos de um sítio, por baixo da caixa.
+   Recebe: onde — 'novo' ou 'com'; msg — a frase ('' apaga).
+   Devolve: nada. */
+function qaErroAnexos(onde, msg) {
+  var p = document.getElementById(onde === 'novo' ? 'qa_anx_erro' : 'qa_com_anx_erro');
+  if (p) p.textContent = msg || '';
+}
+
+/* Sobe os escolhidos que ainda não subiram, um de cada vez, para o cartão
+   do item (qaSubirAnexo), com o id do comentário numa resposta. Cada um
+   fica 'subiu' ou 'falhou' (com a frase do servidor), e a caixa repinta-se.
+   Recebe: id — o id do item; lista — os escolhidos; comentarioId — o do
+   comentário (ou null); onde — 'novo' ou 'com' (para repintar).
+   Devolve: Promise com '' quando subiram todos, ou a frase do que falhou. */
+function qaSubirEscolhidos(id, lista, comentarioId, onde) {
+  var porSubir = (lista || []).filter(function (a) { return a.estado !== 'subiu' && a.ficheiro; });
+  var falhas = [];
+  return porSubir.reduce(function (p, a) {
+    return p.then(function () {
+      return qaSubirAnexo(id, a, comentarioId).then(function () { a.estado = 'subiu'; a.erro = ''; }, function (e) {
+        a.estado = 'falhou'; a.erro = (e && e.message) || 'Não subiu.';
+        falhas.push(a);
+      }).then(function () { qaPintarEscolhidos(onde); });
+    });
+  }, Promise.resolve()).then(function () {
+    if (!falhas.length) return '';
+    return (falhas.length === 1 ? 'o anexo «' + falhas[0].nome + '» não subiu: ' : falhas.length + ' anexos não subiram: ') + falhas[0].erro;
+  });
+}
+
+/* Sobe um anexo para o cartão do item (PUT /api/qa/:id/anexos), com os
+   bytes no corpo, o nome no X-Nome e, numa resposta, o comentário no
+   X-Comentario, como a captura (qaSubirImagem).
+   Recebe: id — o id do item; a — o escolhido; comentarioId — o do comentário (ou null).
+   Devolve: Promise com o anexo que o servidor devolveu; rejeita com um Error
+   com a frase do servidor (ou «Sem ligação ao servidor.»). */
+function qaSubirAnexo(id, a, comentarioId) {
+  var h = typeof cabecalhosDaSessao === 'function' ? cabecalhosDaSessao() : {};
+  h['Content-Type'] = (a.ficheiro && a.ficheiro.type) || 'application/octet-stream';
+  h['X-Nome'] = encodeURIComponent(a.nome);
+  if (comentarioId) h['X-Comentario'] = String(comentarioId);
+  return fetch('/api/qa/' + encodeURIComponent(id) + '/anexos', { method: 'PUT', headers: h, body: a.ficheiro, credentials: 'same-origin' })
+    .then(function (resp) {
+      if (typeof rastoPoe === 'function') rastoPoe('PUT /api/qa/…/anexos → ' + resp.status);
+      return Promise.resolve(typeof resp.json === 'function' ? resp.json() : {}).catch(function () { return {}; }).then(function (j) {
+        if (resp.ok) return (j && j.anexo) || {};
+        var e = new Error((j && j.error) || ('Erro ' + resp.status + '.'));
+        e.status = resp.status;
+        throw e;
+      });
+    }, function () {
+      if (typeof rastoPoe === 'function') rastoPoe('PUT /api/qa/…/anexos → sem rede');
+      throw new Error('Sem ligação ao servidor.');
+    });
+}
+
+/* Os anexos que já estão num item ou num comentário, na janela do ticket:
+   as imagens numa grelha de miniaturas (que se pedem à parte, com a sessão:
+   qaCarregarMiniaturas) que abrem em grande (qaVerAnexo); os documentos
+   numa linha com o ícone, o nome, o tipo e o tamanho, que descarrega
+   (qaAbrirAnexo).
+   Recebe: lista — os anexos (rotas/qa.js:anexoDaPilula); rotulo — o nome da lista para o leitor de ecrã.
+   Devolve: o HTML (texto, '' sem anexos). */
+function qaHtmlAnexos(lista, rotulo) {
+  var as = (Array.isArray(lista) ? lista : []).filter(function (a) { return a && typeof a.id === 'string'; });
+  if (!as.length) return '';
+  var imgs = as.filter(function (a) { return a.imagem; }), docs = as.filter(function (a) { return !a.imagem; });
+  return '<div class="qa-anexos" role="group" aria-label="' + esc(rotulo || 'Anexos') + '">' +
+    (imgs.length ? '<ul class="qa-anexos-imgs">' + imgs.map(function (a) {
+      return '<li><button type="button" class="qa-anexo-img" data-toca="camada" data-click="qaVerAnexo(\'' + jsq(a.id) + '\')" aria-label="Ver a imagem ' + esc(a.nome) + '">' +
+        '<span class="qa-anexo-mini a-carregar" data-anx="' + esc(a.id) + '"></span></button></li>';
+    }).join('') + '</ul>' : '') +
+    (docs.length ? '<ul class="qa-anexos-docs">' + docs.map(function (a) {
+      return '<li><button type="button" class="qa-anexo-doc" data-toca="vista" data-click="qaAbrirAnexo(\'' + jsq(a.id) + '\')">' +
+        '<span class="qa-anexo-ic" aria-hidden="true">' + ic('contract', 18) + '</span>' +
+        '<span class="qa-anexo-txt"><span class="qa-anexo-nome">' + esc(a.nome) + '</span><span class="small">' + esc(qaMetaDoAnexo(a.nome, a.tamanho)) + '</span></span>' +
+        '<span class="qa-so-leitor">Descarregar</span></button></li>';
+    }).join('') + '</ul>' : '') +
+    '</div>';
+}
+
+/* Um anexo da janela de um ticket, pelo id: nos do cartão ou nos dos comentários.
+   Recebe: L — a camada do ticket; id — o id do anexo.
+   Devolve: o anexo, ou null. */
+function qaAnexoDaJanela(L, id) {
+  var todos = (Array.isArray(L && L.qaAnexos) ? L.qaAnexos : []).slice();
+  (Array.isArray(L && L.qaComs) ? L.qaComs : []).forEach(function (c) { if (c && Array.isArray(c.anexos)) todos = todos.concat(c.anexos); });
+  return todos.filter(function (a) { return a && a.id === id; })[0] || null;
+}
+
+/* Pede os bytes de um anexo do ticket aberto (GET /api/qa/:id/anexos/:anexo),
+   com a sessão, uma vez por anexo e por janela (o pedido fica em L.qaPedidosAnx).
+   Recebe: L — a camada do ticket; id — o id do anexo.
+   Devolve: Promise com o Blob; rejeita quando não veio. */
+function qaBytesDoAnexo(L, id) {
+  if (!L.qaPedidosAnx) L.qaPedidosAnx = {};
+  if (L.qaPedidosAnx[id]) return L.qaPedidosAnx[id];
+  var h = typeof cabecalhosDaSessao === 'function' ? cabecalhosDaSessao() : {};
+  var p = fetch('/api/qa/' + encodeURIComponent(L.qaId) + '/anexos/' + encodeURIComponent(id), { headers: h, credentials: 'same-origin' })
+    .then(function (resp) {
+      if (!resp.ok) throw new Error('Erro ' + resp.status);
+      return resp.blob();
+    });
+  L.qaPedidosAnx[id] = p;
+  p.catch(function () { if (L.qaPedidosAnx) delete L.qaPedidosAnx[id]; });
+  return p;
+}
+
+/* O object URL de uma imagem anexa do ticket aberto (feito uma vez e
+   guardado em L.qaUrlsAnx, que o fecho liberta).
+   Recebe: L — a camada; id — o id do anexo.
+   Devolve: Promise com o URL. */
+function qaUrlDoAnexo(L, id) {
+  if (!L.qaUrlsAnx) L.qaUrlsAnx = {};
+  if (L.qaUrlsAnx[id]) return Promise.resolve(L.qaUrlsAnx[id]);
+  return qaBytesDoAnexo(L, id).then(function (blob) {
+    if (!L.qaUrlsAnx[id]) L.qaUrlsAnx[id] = URL.createObjectURL(blob);
+    return L.qaUrlsAnx[id];
+  });
+}
+
+/* Põe as miniaturas nas imagens anexas da janela que ainda não as têm,
+   pedindo as que faltam; a que falha diz-o, discreta, na própria caixa.
+   Recebe: L — a camada do ticket.
+   Devolve: Promise que acaba quando todas chegaram (ou falharam). */
+function qaCarregarMiniaturas(L) {
+  if (!L || !L.el || typeof L.el.querySelectorAll !== 'function') return Promise.resolve();
+  var caixas = [].slice.call(L.el.querySelectorAll('[data-anx]'));
+  return Promise.all(caixas.map(function (cx) {
+    if (cx.querySelector && cx.querySelector('img')) return null;
+    var id = cx.getAttribute('data-anx'), a = qaAnexoDaJanela(L, id);
+    return qaUrlDoAnexo(L, id).then(function (url) {
+      cx.classList.remove('a-carregar');
+      cx.innerHTML = '<img src="' + esc(url) + '" alt="' + esc(a ? a.nome : 'Imagem anexa') + '">';
+    }, function () {
+      cx.classList.remove('a-carregar'); cx.classList.add('falhou');
+      cx.innerHTML = '<span class="small">Não carregou</span>';
+    });
+  }));
+}
+
+/* Abre uma imagem anexa em grande, numa janela por cima do ticket, com
+   «Descarregar» e «Fechar».
+   Recebe: id — o id do anexo.
+   Devolve: Promise que acaba quando a janela abre (ou o aviso diz que não deu). */
+function qaVerAnexo(id) {
+  var L = qaCamadaTicket, a = L ? qaAnexoDaJanela(L, id) : null;
+  if (!L || !a) return Promise.resolve(false);
+  return qaUrlDoAnexo(L, id).then(function (url) {
+    var J = openModal(a.nome || 'Imagem anexa', '<div class="qa-anexo-grande"><img src="' + esc(url) + '" alt="' + esc(a.nome || 'Imagem anexa') + '"></div>',
+      '<button type="button" class="btn" data-toca="vista" data-click="qaAbrirAnexo(\'' + jsq(id) + '\')">' + ic('down', 16) + ' Descarregar</button>' +
+      '<button type="button" class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>');
+    qaMarcarJanela(J);
+    return true;
+  }, function () {
+    toast('Não deu para abrir a imagem.');
+    return false;
+  });
+}
+
+/* Descarrega um anexo do ticket aberto, com o nome dele: pelo
+   descarregarBlob da app quando existe (app/anexos.js), ou por um <a
+   download> temporário (no back office e nas páginas públicas).
+   Recebe: id — o id do anexo.
+   Devolve: Promise com true quando a descarga partiu. */
+function qaAbrirAnexo(id) {
+  var L = qaCamadaTicket, a = L ? qaAnexoDaJanela(L, id) : null;
+  if (!L || !a) return Promise.resolve(false);
+  return qaBytesDoAnexo(L, id).then(function (blob) {
+    if (typeof descarregarBlob === 'function') descarregarBlob(blob, a.nome || 'anexo');
+    else {
+      var url = URL.createObjectURL(blob), el = document.createElement('a');
+      el.href = url; el.download = a.nome || 'anexo';
+      document.body.appendChild(el); el.click(); el.remove();
+      setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 60000);
+    }
+    toast('A descarregar «' + (a.nome || 'anexo') + '».');
+    return true;
+  }, function () {
+    toast('Não deu para descarregar o anexo.');
+    return false;
+  });
 }
 
 /* ------------------------------------------------------------- a lista */
@@ -1305,7 +1711,7 @@ function qaHtmlLista() {
   }
   var aviso = qaLista.falhou ? '<div class="qa-desatual"><span>Não deu para atualizar: isto é o que havia.</span>' + deNovo + '</div>' : '';
   if (!ts.length) {
-    return aviso + '<div class="empty"><b>Não há tickets por concluir.</b>Quando vires alguma coisa que não está bem, toca em Tickets e depois em Novo ticket.</div>';
+    return aviso + '<div class="empty"><b>Não há tickets por concluir.</b>Quando vires alguma coisa que não está bem, toca em Lab e depois em Novo ticket.</div>';
   }
   return '<div class="qa-lista">' + aviso + qaSeccoes(ts).seccoes.map(function (s) {
     var novos = s.id === QA_COL_NOVO;
@@ -1420,8 +1826,8 @@ function qaDobrar(chave) {
 }
 
 /* Uma linha da lista: o selo da prioridade (nenhum na Média), o tipo do
-   cartão quando não é um Erro (qaNomeDoTipo), a chave do cartão, o sinal de
-   que traz captura, quem e quando, e o título do cartão (o começo da
+   cartão quando não é um Erro (qaNomeDoTipo), a chave do cartão no seu
+   selo, os sinais de que traz captura e anexos, quem e quando, e o título do cartão (o começo da
    descrição, sem título). A de um pedido de uma pessoa tem só o tipo, a
    chave e o título (KAN-155): nem prioridade, nem quem, nem quando. Tocar
    abre o item.
@@ -1432,8 +1838,9 @@ function qaHtmlLinha(t) {
   return '<button type="button" class="qa-linha' + (qaESubticket(t) ? ' qa-linha-sub' : '') + '" data-toca="camada" data-click="qaAbrirTicket(\'' + jsq(t.id) + '\')">' +
     '<span class="qa-linha-cab">' + (pedido ? '' : qaSelo(qaPrioridade(t))) +
       (tipo ? '<span class="small qa-tipo">' + esc(tipo) + '</span>' : '') +
-      (typeof t.cartao === 'string' && t.cartao ? '<span class="small num qa-cartao">' + esc(t.cartao) + '</span>' : '') +
+      (typeof t.cartao === 'string' && t.cartao ? '<span class="num qa-cartao">' + esc(t.cartao) + '</span>' : '') +
       (t.imagem ? '<span class="qa-tem-img">' + ic('photo', 15) + '<span class="qa-so-leitor">Com captura</span></span>' : '') +
+      (Number(t.anexos) > 0 ? '<span class="qa-tem-img">' + ic('clip', 15) + '<span class="qa-so-leitor">' + (Number(t.anexos) === 1 ? 'Com um anexo' : 'Com ' + Number(t.anexos) + ' anexos') + '</span></span>' : '') +
       (pedido ? '' : '<span class="small qa-quem">' + esc(qaAutor(t, false)) + ' · ' + esc(qaQuando(t.created_at)) + '</span>') +
     '</span>' +
     '<span class="qa-linha-txt">' + esc(qaResumo(t.titulo || t.body)) + '</span>' +
@@ -1594,8 +2001,8 @@ function qaPintarLista() {
 
 /* Abre um item para ler, por cima da lista: o título e a descrição do
    cartão, a captura (carregada com a sessão), a resolução, os comentários
-   (pedidos à parte: qaCarregarComentarios) com o campo para comentar, e o
-   contexto (os dois últimos e a captura só num ticket de QA); em baixo
+   (pedidos à parte: qaCarregarComentarios, com os anexos do cartão e os de
+   cada comentário) com o campo para comentar e anexar, e o contexto (os dois últimos e a captura só num ticket de QA); em baixo
    «Remover» (só num ticket de QA) e, em Human Tests e em Adiado, as
    decisões; nas outras colunas «Mover» e «Reabrir» (nas de fim) ou
    «Fechar». O cartão de um pedido de uma pessoa abre só para ler: a chave,
@@ -1610,11 +2017,16 @@ function qaAbrirTicket(id) {
   qaMarcarJanela(L);
   qaCamadaTicket = L;
   L.qaId = id; L.qaStatus = t.status; L.qaAtualizado = t.updated_at; L.qaUrl = '';
-  L.qaComs = null; L.qaProvisorio = null;
+  L.qaComs = null; L.qaProvisorio = null; L.qaAnexos = null; L.qaEscolhidos = []; L.qaPendente = null;
+  L.qaUrlsAnx = {}; L.qaPedidosAnx = {};
   L.aoFechar = function () {
     if (L.qaUrl) { try { URL.revokeObjectURL(L.qaUrl); } catch (e) {} L.qaUrl = ''; }
+    Object.keys(L.qaUrlsAnx || {}).forEach(function (k) { try { URL.revokeObjectURL(L.qaUrlsAnx[k]); } catch (e) {} });
+    L.qaUrlsAnx = {};
+    qaLargarEscolhidos(L.qaEscolhidos);
     if (qaCamadaTicket === L) qaCamadaTicket = null;
   };
+  if (!qaEPedido(t) && L.el && typeof L.el.addEventListener === 'function') L.el.addEventListener('paste', qaColarNaResposta);
   if (t.imagem) qaCarregarImagem(L, id);
   if (!qaEPedido(t)) qaCarregarComentarios(L);
 }
@@ -1646,9 +2058,10 @@ function qaPalavra(id) {
   return t && !qaTemTicket(t) ? 'Cartão' : 'Ticket';
 }
 
-/* O corpo da janela de um item: o de cima (qaHtmlTopo), os comentários
-   (qaHtmlComentarios, à espera até chegarem), o campo para comentar
-   (qaHtmlComentar) e, num ticket de QA, o contexto dobrado. O de cima e os
+/* O corpo da janela de um item: o de cima (qaHtmlTopo), os anexos do item
+   (.qa-anx-item, pintados quando a conversa chega: qaPintarComentarios), os
+   comentários (qaHtmlComentarios, à espera até chegarem), o campo para
+   comentar e anexar (qaHtmlComentar) e, num ticket de QA, o contexto dobrado. O de cima e os
    comentários repintam-se sozinhos quando o item muda (qaRepintarTicket); o
    campo fica, com o que lá estiver escrito.
    O de um pedido de uma pessoa é só o de cima, para ler.
@@ -1658,6 +2071,7 @@ function qaHtmlTicket(t) {
   if (qaEPedido(t)) return '<div class="form qa-ver"><div class="qa-ver-topo">' + qaHtmlTopo(t) + '</div></div>';
   return '<div class="form qa-ver">' +
     '<div class="qa-ver-topo">' + qaHtmlTopo(t) + '</div>' +
+    '<div class="qa-anx-item"></div>' +
     '<section class="qa-coms" aria-labelledby="qa_coms_tit"><h3 class="qa-coms-tit" id="qa_coms_tit">Comentários</h3>' +
       '<div class="qa-coms-lista">' + qaHtmlComentarios(null, t) + '</div></section>' +
     qaHtmlComentar() +
@@ -1666,16 +2080,18 @@ function qaHtmlTicket(t) {
 }
 
 /* O de cima da janela de um item: no cabeçalho, a coluna onde está, a
-   prioridade do cartão (qaSelo; nenhuma na Média) e, discreta, a chave do
-   cartão no kanban (KAN-N); quem e quando (o autor do ticket, ou quem criou
-   o cartão), o título e a descrição do cartão, a caixa da captura e a
+   prioridade do cartão (qaSelo; nenhuma na Média) e a chave do cartão no
+   kanban (KAN-N) no seu selo realçado (KAN-163: «O número do ticket está
+   num pill realçado. Gosto assim.»); num subticket, por baixo, a linha de
+   quem é (qaHtmlDoPai); quem e quando (o autor do ticket, ou quem criou o
+   cartão), o título e a descrição do cartão, a caixa da captura e a
    resolução (ou a «Resolução anterior» de um reaberto). O de um pedido de
    uma pessoa: a coluna, a chave e o título, e a frase de onde se lê o resto.
    Recebe: t — o item.
    Devolve: o HTML (texto). */
 function qaHtmlTopo(t) {
   var resolvido = qaColunaResolvida(t.status);
-  var cartao = typeof t.cartao === 'string' && t.cartao ? '<span class="small num qa-cartao" title="O cartão no kanban da equipa">' + esc(t.cartao) + '</span>' : '';
+  var cartao = typeof t.cartao === 'string' && t.cartao ? '<span class="num qa-cartao" title="O cartão no kanban da equipa">' + esc(t.cartao) + '</span>' : '';
   var titulo = typeof t.titulo === 'string' && t.titulo.trim() ? '<p class="qa-ver-tit">' + esc(t.titulo) + '</p>' : '';
   if (qaEPedido(t)) {
     return '<div class="qa-ver-cab">' + qaSeloEstado(t.status) + cartao + '</div>' + titulo +
@@ -1683,22 +2099,29 @@ function qaHtmlTopo(t) {
   }
   var texto = String(t.body || '').trim();
   return '<div class="qa-ver-cab">' + qaSeloEstado(t.status) + qaSelo(qaPrioridade(t)) + cartao + '</div>' +
+    qaHtmlDoPai(t) +
     '<p class="small qa-quem">' + esc(qaAutor(t, true)) + ' · ' + esc(qaQuando(t.created_at)) + '</p>' +
-    qaHtmlDoPai(t) + titulo + (texto ? qaHtmlTexto(texto, 'qa-ver-txt') : (titulo ? '' : '<p class="hint">Sem descrição.</p>')) +
+    titulo + (texto ? qaHtmlTexto(texto, 'qa-ver-txt') : (titulo ? '' : '<p class="hint">Sem descrição.</p>')) +
     (t.imagem ? '<div class="qa-ver-img a-carregar" aria-busy="true"><span class="qa-so-leitor">A carregar a captura</span></div>' : '') +
     (t.resolution ? '<div class="qa-resolucao' + (resolvido ? '' : ' anterior') + '"><b>' + (resolvido ? 'Resolução' : 'Resolução anterior') + '</b>' +
       qaHtmlTexto(t.resolution, '') + (resolvido && t.resolved_at ? '<span class="small">' + esc(qaQuando(t.resolved_at)) + '</span>' : '') + '</div>' : '') +
     qaHtmlSubtickets(t);
 }
 
-/* Num subticket (KAN-N-X, KAN-162), de quem é: «Subticket do KAN-N», com o
-   título do pai, a tocar para o abrir.
+/* Num subticket (KAN-N-X, KAN-162), de quem é, numa linha discreta debaixo
+   do cabeçalho (KAN-163: «Os subtickets têm um retângulo grande a dizer que
+   são subtickets de algum outro. Não gosto.»): «Subticket do», o selo do
+   pai (o mesmo da chave, que se toca para abrir o pai; o alvo do dedo
+   cresce para fora dele) e o título do pai, numa linha só, cortado.
    Recebe: t — o item.
    Devolve: o HTML (texto, '' num cartão que não é subticket). */
 function qaHtmlDoPai(t) {
   if (!qaESubticket(t)) return '';
-  return '<button type="button" class="qa-do-pai" data-toca="camada" data-click="qaAbrirTicket(\'' + jsq(qaIdDoCartao(t.pai.cartao)) + '\')">' +
-    '<span class="small">Subticket do <span class="num">' + esc(t.pai.cartao) + '</span></span><span class="qa-do-pai-tit">' + esc(t.pai.titulo || '') + '</span></button>';
+  var tit = String(t.pai.titulo || '').trim();
+  return '<p class="small qa-do-pai"><span class="qa-do-pai-de">Subticket do</span>' +
+    '<button type="button" class="num qa-cartao qa-cartao-toca" data-toca="camada" data-click="qaAbrirTicket(\'' + jsq(qaIdDoCartao(t.pai.cartao)) + '\')"' +
+    ' aria-label="Abrir o ' + esc(t.pai.cartao) + (tit ? ': ' + esc(tit) : '') + '">' + esc(t.pai.cartao) + '</button>' +
+    (tit ? '<span class="qa-do-pai-tit" aria-hidden="true">' + esc(tit) + '</span>' : '') + '</p>';
 }
 
 /* Os subtickets de um pai (KAN-162): cada um com a chave, o título e a
@@ -1714,7 +2137,7 @@ function qaHtmlSubtickets(t) {
     '<p class="hint">' + (porDecidir ? 'Testa e decide cada um à parte; este cartão segue-os.' : 'Este cartão segue os subtickets.') + '</p>' +
     '<ul class="qa-subs-lista">' + subs.map(function (s) {
       return '<li><button type="button" class="qa-sub" data-toca="camada" data-click="qaAbrirTicket(\'' + jsq(qaIdDoCartao(s.cartao)) + '\')">' +
-        '<span class="small num qa-cartao">' + esc(s.cartao) + '</span><span class="qa-sub-tit">' + esc(s.titulo || '') + '</span>' + qaSeloEstado(s.status) + '</button></li>';
+        '<span class="num qa-cartao">' + esc(s.cartao) + '</span><span class="qa-sub-tit">' + esc(s.titulo || '') + '</span>' + qaSeloEstado(s.status) + '</button></li>';
     }).join('') + '</ul></section>';
 }
 
@@ -1773,33 +2196,56 @@ function qaHtmlComentarios(L, t) {
   return qaHtmlListaComentarios(todos) + dica;
 }
 
-/* A lista dos comentários, um por item.
-   Recebe: cs — os comentários ({autor: {nome}, texto, created_at, meu, aEnviar}).
+/* A lista dos comentários, um por item, cada um com os anexos que vieram
+   com ele (qaHtmlAnexos); o que vai a caminho diz os nomes dos ficheiros
+   que leva.
+   Recebe: cs — os comentários ({autor: {nome}, texto, created_at, meu, aEnviar, anexos?, aAnexar?}).
    Devolve: o HTML (texto, '' sem nenhum). */
 function qaHtmlListaComentarios(cs) {
   if (!cs.length) return '';
   return '<ol class="qa-coms-itens">' + cs.map(function (c) {
     var a = c.autor && typeof c.autor === 'object' ? c.autor : {};
     var quem = String(a.nome || a.id || 'Alguém') + (c.meu ? ' (eu)' : '');
+    var aAnexar = Array.isArray(c.aAnexar) && c.aAnexar.length ? '<p class="small qa-com-a-anexar">' + ic('clip', 14) + ' ' + esc(c.aAnexar.join(', ')) + '</p>' : '';
     return '<li class="qa-com' + (c.aEnviar ? ' a-enviar' : '') + '">' +
       '<p class="small qa-quem">' + esc(quem) + ' · ' + esc(c.aEnviar ? 'a enviar…' : qaQuando(c.created_at)) + '</p>' +
-      qaHtmlTexto(c.texto, 'qa-com-txt') + '</li>';
+      qaHtmlTexto(c.texto, 'qa-com-txt') + qaHtmlAnexos(c.anexos, 'Anexos do comentário') + aAnexar + '</li>';
   }).join('') + '</ol>';
 }
 
-/* O campo para comentar: o comentário (obrigatório; o erro aparece junto
-   dele: qaComentar) e «Comentar». Nasce com a janela e não se repinta.
+/* O campo para comentar: o comentário (obrigatório, a não ser que vá só
+   com anexos; o erro aparece junto dele: qaComentar), os ficheiros a anexar
+   (qaHtmlCaixaAnexos('com'), KAN-165) e, por baixo, «Anexar» e «Comentar».
+   Nasce com a janela e não se repinta (os escolhidos repintam-se sozinhos).
    Devolve: o HTML (texto). */
 function qaHtmlComentar() {
   return '<div class="qa-campo qa-comentar">' +
     '<label>Comentário <span class="req">*</span>' +
       '<textarea id="qa_com" maxlength="4000" rows="2" placeholder="Ex: Continua a acontecer no tema escuro."></textarea></label>' +
-    '<button type="button" class="btn" id="qa_com_btn" data-toca="dados" data-click="qaComentar()">Comentar</button>' +
+    qaHtmlCaixaAnexos('com') +
+    '<div class="qa-comentar-acoes">' +
+      '<button type="button" class="btn" id="qa_com_anexar" data-toca="rascunho" data-click="abrirSeletorFicheiros(\'qa_com_anx_in\')">' + ic('clip', 16) + ' Anexar</button>' +
+      '<button type="button" class="btn" id="qa_com_btn" data-toca="dados" data-click="qaComentar()">Comentar</button>' +
+    '</div>' +
     '</div>';
 }
 
-/* Pede os comentários do ticket aberto (GET /api/qa/:id/comentarios) e
-   pinta-os; falhando, diz que não deu, com «Tentar de novo». Só a janela de
+/* Colar (Ctrl+V) uma imagem na janela de um ticket: vai para os anexos da
+   resposta (qaJuntarAnexos('com')); o texto cola-se como sempre.
+   Recebe: e — o ClipboardEvent do paste (ouvido na janela).
+   Devolve: true se tinha uma imagem. */
+function qaColarNaResposta(e) {
+  var dados = e && e.clipboardData;
+  if (!dados || !qaCamadaTicket) return false;
+  var f = qaImagemColada(dados);
+  if (!f) return false;
+  if (typeof e.preventDefault === 'function') e.preventDefault();
+  qaJuntarAnexos('com', [f]);
+  return true;
+}
+
+/* Pede os comentários do ticket aberto (GET /api/qa/:id/comentarios, com
+   os anexos de cada um e os do cartão) e pinta-os; falhando, diz que não deu, com «Tentar de novo». Só a janela de
    um ticket os pede: a lista não os traz.
    Recebe: L — a camada do ticket.
    Devolve: Promise com true se chegaram. */
@@ -1808,6 +2254,7 @@ function qaCarregarComentarios(L) {
   var id = L.qaId;
   return Promise.resolve().then(function () { return api('GET', '/api/qa/' + encodeURIComponent(id) + '/comentarios'); }).then(function (r) {
     L.qaComs = (r && Array.isArray(r.comentarios) ? r.comentarios : []).filter(function (c) { return c && typeof c === 'object' && c.id; });
+    L.qaAnexos = r && Array.isArray(r.anexos) ? r.anexos : [];
     qaPintarComentarios(L);
     return true;
   }, function () {
@@ -1827,8 +2274,9 @@ function qaComentariosDeNovo() {
   qaCarregarComentarios(L);
 }
 
-/* Repinta só os comentários da janela de um ticket, se ela ainda estiver
-   aberta (o campo de comentar fica como está).
+/* Repinta só os comentários da janela de um ticket, e os anexos do item,
+   se ela ainda estiver aberta (o campo de comentar fica como está), e põe
+   as miniaturas das imagens (qaCarregarMiniaturas).
    Recebe: L — a camada do ticket.
    Devolve: nada. */
 function qaPintarComentarios(L) {
@@ -1838,6 +2286,9 @@ function qaPintarComentarios(L) {
   if (!caixa) return;
   var t = (qaLista.tickets || []).filter(function (x) { return x.id === L.qaId; })[0] || { status: L.qaStatus };
   caixa.innerHTML = qaSemEtiquetas(qaHtmlComentarios(L, t));
+  var anx = L.el.querySelector('.qa-anx-item');
+  if (anx) anx.innerHTML = qaSemEtiquetas(qaHtmlAnexos(L.qaAnexos, 'Anexos do ticket'));
+  qaCarregarMiniaturas(L);
 }
 
 /* O HTML sem etiquetas que correm (a segunda tranca da casa, quando existe).
@@ -1847,34 +2298,46 @@ function qaSemEtiquetas(h) {
   return typeof semEtiquetasQueCorrem === 'function' ? semEtiquetasQueCorrem(h) : h;
 }
 
-/* O botão «Comentar» ocupado (a enviar) ou livre.
+/* O botão «Comentar» ocupado (a enviar) ou livre; com uma resposta já
+   guardada a que faltam anexos (L.qaPendente), «Enviar os anexos».
    Recebe: ocupado — true durante o envio.
    Devolve: nada. */
 function qaBotaoComentar(ocupado) {
-  var b = document.getElementById('qa_com_btn');
+  var b = document.getElementById('qa_com_btn'), L = qaCamadaTicket;
   if (!b) return;
   b.disabled = !!ocupado;
   if (ocupado) b.setAttribute('aria-busy', 'true'); else b.removeAttribute('aria-busy');
-  b.textContent = ocupado ? 'A enviar…' : 'Comentar';
+  var pendente = !!(L && L.qaPendente && qaEscolhidosDe('com').some(function (a) { return a.estado !== 'subiu'; }));
+  b.textContent = ocupado ? 'A enviar…' : pendente ? 'Enviar os anexos' : 'Comentar';
 }
 
-/* «Comentar» no ticket aberto (POST /api/qa/:id/comentarios {texto}). O
-   comentário é obrigatório (o erro junto ao campo, componentes.js:falhaCampo)
-   e até 4000 caracteres. Otimista, como o mover (qaColunaNoEcra): o
-   comentário aparece logo na lista, «a enviar…», o campo esvazia-se e o
-   ticket passa a A fazer (fora da fila) na lista, no número da pílula e no selo; com a
-   resposta, o comentário fica o do servidor e a lista pede-se outra vez.
-   Falhando, tudo volta a como estava — o ticket à coluna de antes, o texto
-   ao campo — e o erro diz porquê, junto ao campo. Um pedido de cada vez por
-   ticket (qaOcupado).
-   Devolve: Promise com true se o servidor guardou o comentário. */
+/* «Comentar» no ticket aberto (POST /api/qa/:id/comentarios {texto,
+   anexos?}). O comentário é obrigatório, a não ser que leve anexos (o
+   servidor escreve então «Anexei 2 ficheiros.»: rotas/qa.js:textoDoComentario;
+   o erro junto ao campo, componentes.js:falhaCampo), e até 4000 caracteres;
+   com uma imagem ainda a preparar, espera-se por ela. Otimista, como o
+   mover (qaColunaNoEcra): o comentário aparece logo na lista, «a enviar…»,
+   com os nomes dos ficheiros, o campo esvazia-se e o ticket passa a A
+   fazer (fora da fila) na lista, no número da pílula e no selo; com a
+   resposta, sobem os anexos, um a um, com o id do comentário
+   (qaSubirEscolhidos), e a conversa pede-se outra vez. Falhando o
+   comentário, tudo volta a como estava — o ticket à coluna de antes, o
+   texto ao campo — e o erro diz porquê, junto ao campo. Falhando só algum
+   anexo, o comentário fica, os que falharam ficam escolhidos com o erro, e
+   o botão passa a «Enviar os anexos», que os tenta outra vez no mesmo
+   comentário (qaEnviarPendentes). Um pedido de cada vez por ticket (qaOcupado).
+   Devolve: Promise com true se o servidor guardou o comentário (e os anexos). */
 function qaComentar() {
   var L = qaCamadaTicket;
   if (!L || !L.qaId) return Promise.resolve(false);
   var id = L.qaId, campo = document.getElementById('qa_com');
   if (qaOcupado[id]) return Promise.resolve(false);
+  var escolhidos = qaEscolhidosDe('com');
+  if (L.qaPendente && escolhidos.some(function (a) { return a.estado !== 'subiu'; })) return qaEnviarPendentes(L);
   var texto = String(campo ? campo.value : '').replace(/\r\n?/g, '\n').trim();
-  if (!texto) { falhaCampo('qa_com', 'Escreve o comentário.'); return Promise.resolve(false); }
+  if (qaAPreparar(escolhidos)) { qaErroAnexos('com', 'Espera que as imagens fiquem prontas.'); return Promise.resolve(false); }
+  var vao = escolhidos.filter(function (a) { return a.estado !== 'subiu'; });
+  if (!texto && !vao.length) { falhaCampo('qa_com', 'Escreve o comentário ou anexa um ficheiro.'); return Promise.resolve(false); }
   if (texto.length > 4000) { falhaCampo('qa_com', 'O comentário passa dos 4000 caracteres. Encurta-o.'); return Promise.resolve(false); }
   qaOcupado[id] = 1;
   var eu = window.CW && CW.user ? CW.user : {};
@@ -1882,21 +2345,31 @@ function qaComentar() {
   var para = qaColunaDepoisDoComentario(t || { status: L.qaStatus });
   var fica = (t ? t.status : L.qaStatus) === para;
   var palavra = t && !qaTemTicket(t) ? 'O cartão' : 'O ticket';
-  L.qaProvisorio = { id: 'a-enviar', autor: { id: eu.id || '', nome: eu.name || eu.email || 'Eu' }, texto: texto, created_at: Date.now(), meu: true, aEnviar: true };
+  var n = vao.length;
+  L.qaProvisorio = {
+    id: 'a-enviar', autor: { id: eu.id || '', nome: eu.name || eu.email || 'Eu' }, created_at: Date.now(), meu: true, aEnviar: true,
+    texto: texto || (n === 1 ? 'Anexei um ficheiro.' : 'Anexei ' + n + ' ficheiros.'), aAnexar: vao.map(function (a) { return a.nome; }),
+  };
   if (campo) campo.value = '';
+  qaErroAnexos('com', '');
   qaBotaoComentar(true);
   qaPintarComentarios(L);
   var repor = fica ? function () {} : qaColunaNoEcra(id, para);
-  return api('POST', '/api/qa/' + encodeURIComponent(id) + '/comentarios', { texto: texto }).then(function (r) {
-    delete qaOcupado[id];
+  var corpo = n ? { texto: texto, anexos: n } : { texto: texto };
+  return api('POST', '/api/qa/' + encodeURIComponent(id) + '/comentarios', corpo).then(function (r) {
     L.qaProvisorio = null;
     if (r && r.comentario && Array.isArray(L.qaComs)) L.qaComs = L.qaComs.concat([r.comentario]);
-    qaBotaoComentar(false);
     if (Array.isArray(L.qaComs)) qaPintarComentarios(L);
-    else qaCarregarComentarios(L);
     toast(fica ? 'Comentário enviado.' : 'Comentário enviado. ' + palavra + ' passou a ' + qaNomeDaColuna(para) + '.');
     qaCarregar();
-    return true;
+    if (!n || !r || !r.comentario || !r.comentario.id) {
+      delete qaOcupado[id];
+      qaBotaoComentar(false);
+      if (!Array.isArray(L.qaComs)) qaCarregarComentarios(L);
+      return true;
+    }
+    L.qaPendente = r.comentario.id;
+    return qaAnexarAoComentario(L, vao);
   }, function (e) {
     delete qaOcupado[id];
     L.qaProvisorio = null;
@@ -1904,11 +2377,52 @@ function qaComentar() {
     qaBotaoComentar(false);
     qaPintarComentarios(L);
     var c = document.getElementById('qa_com');
-    if (c && !String(c.value || '').trim()) c.value = texto;
+    if (c && texto && !String(c.value || '').trim()) c.value = texto;
     falhaCampo('qa_com', (e && e.message) || 'Não deu para enviar o comentário.');
     if (e && e.status === 404) qaCarregar();
     return false;
   });
+}
+
+/* Sobe os anexos de uma resposta já guardada (L.qaPendente: o id do
+   comentário), um a um, e pede a conversa outra vez para os mostrar no
+   comentário. Sobem só os que foram com ela (lista): um ficheiro escolhido
+   entretanto fica na caixa, para a resposta seguinte. Os que subiram saem
+   da caixa; falhando algum, ficam os que falharam, com o erro, e o botão
+   diz «Enviar os anexos». Com a janela já fechada (ou outra aberta), não
+   mexe no ecrã.
+   Recebe: L — a camada do ticket (com qaOcupado[L.qaId] já posto); lista — os escolhidos que vão.
+   Devolve: Promise com true se subiram todos. */
+function qaAnexarAoComentario(L, lista) {
+  var id = L.qaId;
+  return qaSubirEscolhidos(id, lista, L.qaPendente, 'com').then(function (falha) {
+    delete qaOcupado[id];
+    var subiram = lista.filter(function (a) { return a.estado === 'subiu'; });
+    qaLargarEscolhidos(subiram);
+    L.qaEscolhidos = (L.qaEscolhidos || []).filter(function (a) { return subiram.indexOf(a) < 0; });
+    if (!falha) L.qaPendente = null;
+    if (qaCamadaTicket !== L) return !falha;
+    qaPintarEscolhidos('com');
+    if (falha) qaErroAnexos('com', 'O comentário ficou, mas ' + falha + ' Toca em «Enviar os anexos» para tentar outra vez.');
+    qaBotaoComentar(false);
+    qaCarregarComentarios(L);
+    qaCarregar();
+    return !falha;
+  });
+}
+
+/* «Enviar os anexos»: os que faltaram de uma resposta já guardada, outra
+   vez, no mesmo comentário (qaAnexarAoComentario).
+   Recebe: L — a camada do ticket.
+   Devolve: Promise com true se subiram todos. */
+function qaEnviarPendentes(L) {
+  var id = L.qaId;
+  if (qaOcupado[id]) return Promise.resolve(false);
+  if (qaAPreparar(L.qaEscolhidos)) { qaErroAnexos('com', 'Espera que as imagens fiquem prontas.'); return Promise.resolve(false); }
+  qaOcupado[id] = 1;
+  qaErroAnexos('com', '');
+  qaBotaoComentar(true);
+  return qaAnexarAoComentario(L, (L.qaEscolhidos || []).filter(function (a) { return a.estado !== 'subiu'; }));
 }
 
 /* Para onde vai um item quando se comenta nele, como o servidor faz (pedido
@@ -2032,6 +2546,7 @@ function qaRepintarTicket(L, t) {
     topo.innerHTML = qaSemEtiquetas(qaHtmlTopo(t));
     lista.innerHTML = qaSemEtiquetas(qaHtmlComentarios(L, t));
     pe.innerHTML = qaSemEtiquetas(qaRodapeTicket(t));
+    qaCarregarMiniaturas(L);
   } else {
     fillModal(L.el, qaTituloDaJanela(t), qaHtmlTicket(t), qaRodapeTicket(t));
     qaPintarComentarios(L);

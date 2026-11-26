@@ -13,9 +13,34 @@
    A proprietária é uma só, a do exemplo (donoDoExemplo): com sessão, a
    própria conta — na nuvem um proprietário é uma conta, e uma ficha feita à
    mão não sobe nem sobrevive à primeira leitura do servidor.
+   O exemplo é também um dos modelos de dados do Lab, o «Exemplo completo»
+   (modelos-cenarios.js, KAN-167): os dados nascem num só sítio, o
+   dadosDoExemplo, sem tocar na base, e o seed põe-nos nela. Vivem aqui, e não
+   no modelos-cenarios.js, para o «Carregar exemplo» não depender de mais um
+   ficheiro: o arranque é sempre o último a carregar.
    Devolve: nada — enche a base com os dados de exemplo (donos, imóveis,
    contratos, movimentos, modelos e recorrências), sincroniza, grava e redesenha. */
 function seed(){
+  const d=dadosDoExemplo(),o=d.owners[0];
+  /* a proprietária: sem sessão, a do exemplo, sozinha; com sessão, a ficha da
+     conta ganha os campos que o exemplo preenche (no mesmo objeto, como
+     sempre), e as outras fichas que lá estejam ficam */
+  if(!meuId())db.owners=[o];
+  else{const ja=(db.owners||[]).find(x=>x.id===o.id);if(ja)Object.assign(ja,o);else db.owners=(db.owners||[]).concat([o])}
+  db.properties=d.properties;db.tenants=d.tenants;db.contracts=d.contracts;db.transactions=d.transactions;
+  db.templates=d.templates;db.recurring=d.recurring;
+  if(servicoLigado('recurring')){syncAllContractRecs();syncAllLoanRecs();syncAllPropRecs()}   // os planeados automáticos são dos Planeados
+  save();buildNav();render();toast('Dados de exemplo carregados.');
+}
+/* Os dados de exemplo, sem os pôr na base: o que o seed carrega e o cenário
+   «Exemplo completo» do Lab constrói (modelos-cenarios.js). As datas contam-se
+   do ano corrente (YEAR) e de hoje, ao chamar. Os planeados automáticos (as
+   rendas, as prestações, as despesas fixas da ficha) não vêm: são dos
+   Planeados, que os derivam dos contratos e das hipotecas
+   (planeados.js:syncAllContractRecs e as irmãs).
+   Devolve: {owners:[a proprietária (donoDoExemplo)], properties, tenants,
+   contracts, transactions, templates, recurring} — tudo já normalizado. */
+function dadosDoExemplo(){
   const o1=donoDoExemplo();
   const p1=uid(),p2=uid(),p3=uid();
   const r=n=>({id:uid(),name:n});
@@ -23,7 +48,7 @@ function seed(){
   const l1=normLoan({name:'Aquisição',bank:'Millennium',outstanding:152000,years:28,type:'variavel',euribor:2.1,spread:1.0,index:'6m',start:`${YEAR-6}-05-01`,taeg:3.4,mtic:238500});
   const l1b=normLoan({name:'Obras',bank:'Millennium',outstanding:18000,years:8,type:'fixa',rate:4.2,start:`${YEAR-2}-03-01`,taeg:4.6,mtic:22400});
   const l3=normLoan({name:'Aquisição',bank:'CGD',outstanding:98000,years:15,type:'fixa',rate:3.1,start:`${YEAR-9}-01-15`});
-  db.properties=[
+  const properties=[
     normProp({id:p1,name:'T2 Lisboa',address:'Campo de Ourique',use:'investimento',rentalMode:'inteiro',
       /* sem donos fora da app, confirmado (D08: «A tratar» não pede a confirmação) */
       value:280000,purchase:225000,ownerIds:[o1.id],comproprietariosFora:[],loans:[l1,l1b],
@@ -46,7 +71,7 @@ function seed(){
   const t4=normPerson({name:'Diogo Faria',gender:'m'});
   const t5=normPerson({name:'Eva Nunes',gender:'f'});
   const t6=normPerson({name:'Filipa Sousa',phone:'912 000 006',email:'filipa@exemplo.pt',nif:'220000034',gender:'f',marital:'Solteiro(a)'});
-  db.tenants=[t1,t2,t3,t4,t5,t6];
+  const tenants=[t1,t2,t3,t4,t5,t6];
   /* quatro contratos comunicados à AT, cada um com o número que ela devolveu; o
      do casal do quarto 3 (c4) fica por indicar — o senhorio ainda não disse,
      e é isso que faz aparecer o prazo do Modelo 2. Nenhum
@@ -79,13 +104,13 @@ function seed(){
   const c5=normContract({propertyId:p2,roomId:q4.id,tenantIds:[t6.id],rent:380,deposit:380,payDay:15,
     start:`${YEAR}-07-15`,end:`${YEAR+10}-07-14`,tenantEmail:t6.email,tenantPhone:t6.phone,
     fisco:{estado:'declarado',numero:'1191254',finalidade:'hp',celebracao:`${YEAR}-07-08`,renovavel:true,rendaAcimaDoLimite:false}});
-  db.contracts=[c1,c2,c3,c4,c5];
-  db.transactions=[];
+  const contracts=[c1,c2,c3,c4,c5];
+  const transactions=[];
   const k1=loanCalc(l1),k1b=loanCalc(l1b),k3=loanCalc(l3);
   for(let m=1;m<=8;m++){
     const d=n=>`${YEAR}-${String(m).padStart(2,'0')}-${String(n).padStart(2,'0')}`;
     const periodo=`${YEAR}-${String(m).padStart(2,'0')}`;
-    db.transactions.push(
+    transactions.push(
       /* o recibo eletrónico da última renda ainda não foi emitido: é o prazo dos recibos a mostrar-se */
       normTx({kind:'income',label:'Renda T2 Lisboa',amount:1250,date:d(8),propertyId:p1,contractId:c1.id,paidBy:o1.id,category:'Rendas',sub:'Renda mensal',
         periodo,recibo:m<8}),
@@ -99,12 +124,12 @@ function seed(){
       normTx({kind:'loan',label:'Prestação casa de família',amount:Math.round(k3.total*100)/100,date:d(10),propertyId:p3,loanId:l3.id,
         interest:Math.round(k3.interest*100)/100,stamp:Math.round(k3.stamp*100)/100,principal:Math.round(k3.principal*100)/100})
     );
-    if(m>=7)db.transactions.push(normTx({kind:'income',label:'Renda Quarto 3',amount:430,date:d(1),propertyId:p2,contractId:c4.id,
+    if(m>=7)transactions.push(normTx({kind:'income',label:'Renda Quarto 3',amount:430,date:d(1),propertyId:p2,contractId:c4.id,
       category:'Rendas',sub:'Renda mensal',periodo}),
       normTx({kind:'income',label:'Renda Quarto 4',amount:380,date:d(15),propertyId:p2,contractId:c5.id,
         category:'Rendas',sub:'Renda mensal',periodo,recibo:true}));
   }
-  db.transactions.push(
+  transactions.push(
     normTx({kind:'expense',label:'IMI '+YEAR,amount:435,date:`${YEAR}-04-28`,propertyId:p1,category:'Impostos',sub:'IMI',tags:['Dedutível'],paidBy:o1.id}),
     normTx({kind:'expense',label:'IMI '+YEAR,amount:540,date:`${YEAR}-04-28`,propertyId:p3,category:'Impostos',sub:'IMI'}),
     normTx({kind:'expense',label:'Seguro multirriscos',amount:96,date:`${YEAR}-02-11`,propertyId:p1,category:'Seguros',sub:'Multirriscos'}),
@@ -130,13 +155,13 @@ function seed(){
     normTx({kind:'expense',label:'Substituição do esquentador',amount:640,date:`${YEAR}-05-09`,propertyId:p1,category:'Manutenção e reparações',sub:'Caldeira / AVAC',paidBy:o1.id,
       irsCol:'conservacao'})
   );
-  db.templates=[normTpl({name:'Quota do condomínio',tx:{kind:'expense',label:'Quota do condomínio',amount:55,propertyId:p1,category:'Condomínio',sub:'Quota mensal',tags:['Recorrente'],split:{mode:'equal',parts:{}}}})];
-  db.recurring=[normRec({name:'Prestação aquisição · T2 Lisboa',every:'month',next:addDays(today(),3),
+  const templates=[normTpl({name:'Quota do condomínio',tx:{kind:'expense',label:'Quota do condomínio',amount:55,propertyId:p1,category:'Condomínio',sub:'Quota mensal',tags:['Recorrente'],split:{mode:'equal',parts:{}}}})];
+  const recurring=[normRec({name:'Prestação aquisição · T2 Lisboa',every:'month',next:addDays(today(),3),
       tx:{kind:'loan',label:'Prestação aquisição · T2 Lisboa',amount:Math.round(k1.total*100)/100,propertyId:p1,loanId:l1.id,paidBy:o1.id,split:{mode:'equal',parts:{}}}})];
-  if(servicoLigado('recurring')){syncAllContractRecs();syncAllLoanRecs();syncAllPropRecs()}   // os planeados automáticos são dos Planeados
-  save();buildNav();render();toast('Dados de exemplo carregados.');
+  return {owners:[o1],properties,tenants,contracts,transactions,templates,recurring};
 }
-/* A proprietária dos dados de exemplo. Com sessão é a ficha da própria conta
+/* A proprietária dos dados de exemplo — e dos cenários do Lab
+   (modelos-cenarios.js). Com sessão é a ficha da própria conta
    (acessos.js:meuId) — na nuvem os proprietários são as contas
    (cloud/nucleo.js:rebuildDb refaz o db.owners dos perfis do servidor, e só o
    perfil da conta sobe), por isso uma ficha inventada perdia-se na primeira
@@ -144,18 +169,19 @@ function seed(){
    contratos usam. O que a conta já tem fica: o nome e o email são os dela, e
    o exemplo só preenche os campos vazios (o telemóvel, um NIF inventado que
    passa o dígito de controlo, o género, o estado civil, a nacionalidade) —
-   no perfil, que sobe, e é isso que faz o contacto sobreviver. As outras
-   fichas que lá estejam (contas com quem já partilha) ficam. Sem sessão, é a
-   Maria Costa, numa ficha nova.
+   no perfil, que sobe, e é isso que faz o contacto sobreviver. Sem sessão, é a
+   Maria Costa, numa ficha nova. Não mexe na base: devolve uma cópia, e quem a
+   usa põe-na lá (o seed, por cima da ficha da conta, sem tirar as outras —
+   as contas com quem já partilha).
    Recebe: nada.
-   Devolve: a ficha da proprietária (já em db.owners). */
+   Devolve: a ficha da proprietária (objeto novo, com o id da conta quando há sessão). */
 function donoDoExemplo(){
   const ex={name:'Maria Costa',phone:'913 000 001',email:'maria@exemplo.pt',nif:'210000007',gender:'f',marital:'Casado(a)',nationality:'Portuguesa'};
   const eu=meuId();
-  if(!eu){const o=normPerson(ex);db.owners=[o];return o}
-  const conta=window.CW.user;
-  let o=(db.owners||[]).find(x=>x.id===eu);
-  if(!o){o=normPerson({});o.id=eu;db.owners=(db.owners||[]).concat([o])}
+  if(!eu)return normPerson(ex);
+  const conta=(window.CW&&window.CW.user)||{};
+  const ja=(db.owners||[]).find(x=>x.id===eu);
+  const o=ja?Object.assign({},ja):normPerson({});o.id=eu;
   if(!o.name)o.name=conta.name||ex.name;
   if(!o.email)o.email=conta.email||ex.email;
   ['phone','nif','gender','marital','nationality'].forEach(k=>{if(!o[k])o[k]=ex[k]});

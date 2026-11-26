@@ -751,7 +751,8 @@ export function sqlVer(numero) {
       + ' FROM kanban_ligacoes l JOIN (SELECT id FROM kanban_cartoes WHERE numero = ?) x ON l.de_id = x.id OR l.para_id = x.id'
       + ' JOIN kanban_cartoes o ON o.id = CASE WHEN l.de_id = x.id THEN l.para_id ELSE l.de_id END'
       + ' ORDER BY l.created_at, l.id', [numero]),
-    instrucao('SELECT id, nome, tipo, tamanho, autor_id, autor_nome, created_at FROM kanban_anexos WHERE cartao_id = ' + id + ' ORDER BY created_at, id', [numero]),
+    // a.* e não a lista: o comentario_id (a 0034, KAN-165) vem quando a base já o tem, e uma base de antes não rebenta
+    instrucao('SELECT a.* FROM kanban_anexos a WHERE a.cartao_id = ' + id + ' ORDER BY a.created_at, a.id', [numero]),
     sqlOrigens('c.numero = ?', [numero]),
     sqlColunas(),
   ];
@@ -814,7 +815,8 @@ export function sqlFila() {
       + ' FROM kanban_ligacoes l JOIN (SELECT id, numero FROM kanban_cartoes WHERE id IN (' + IDS_DA_FILA + ')) x ON l.de_id = x.id OR l.para_id = x.id'
       + ' JOIN kanban_cartoes o ON o.id = CASE WHEN l.de_id = x.id THEN l.para_id ELSE l.de_id END'
       + ' ORDER BY l.created_at, l.id', FILA),
-    instrucao('SELECT x.numero AS cartao, a.id, a.nome, a.tipo, a.tamanho, a.autor_id, a.autor_nome, a.created_at'
+    // a.*, como no sqlVer: com o comentario_id de um anexo que veio com uma resposta da pílula (a 0034), quando a base o tem
+    instrucao('SELECT x.numero AS cartao, a.*'
       + ' FROM kanban_anexos a JOIN kanban_cartoes x ON x.id = a.cartao_id WHERE a.cartao_id IN (' + IDS_DA_FILA + ') ORDER BY a.created_at, a.id', FILA),
     sqlOrigens(naFila, FILA),
   ];
@@ -1236,6 +1238,7 @@ function detalheDoCartao(l, partes) {
     })),
     anexos: (partes.anexos || []).map((a) => ({
       id: a.id, nome: a.nome, tipo: a.tipo, tamanho: Number(a.tamanho) || 0, url: '/api/equipa/kanban/anexos/' + a.id, autor: pessoa(a.autor_id, a.autor_nome), created_at: a.created_at,
+      comentario_id: a.comentario_id || null,
     })),
     origem: l.origem_tipo ? Object.assign({
       tipo: l.origem_tipo, id: l.origem_id, estado: l.origem_estado == null ? null : l.origem_estado,
@@ -1415,19 +1418,33 @@ export function textoDoCartao(det, local, opcoes = {}) {
   if (det.anexos.length) {
     L.push('Anexos (' + det.anexos.length + '; ' + (det.anexos.length === 1 ? 'busca-se' : 'todos') + ' com ' + comandoDoAnexo(k.chave, null, local) + '):');
     det.anexos.forEach((a) => L.push('  ' + (a.nome || a.id) + ' (' + a.tipo + ', ' + Math.max(1, Math.round(a.tamanho / 1024)) + ' KB) — ' + (a.autor.nome || a.autor.id) + ', ' + quando(a.created_at)
-      + ' — ' + comandoDoAnexo(k.chave, a.id, local)));
+      + deQueComentario(a, det.comentarios) + ' — ' + comandoDoAnexo(k.chave, a.id, local)));
   }
   L.push('Comentários (' + det.comentarios.length + (porResp.length ? ', ' + porResp.length + ' por responder' : '') + '):' + (det.comentarios.length ? '' : ' nenhum'));
   det.comentarios.forEach((m) => {
     L.push('  ' + (m.autor.nome || m.autor.id) + ' · ' + quando(m.created_at) + (m.updated_at !== m.created_at ? ' (editado a ' + quando(m.updated_at) + ')' : '')
       + (marcados.has(m.id) ? ' · POR RESPONDER' : ''));
     L.push(indenta(m.texto, '    '));
+    const comEle = det.anexos.filter((a) => a.comentario_id === m.id);
+    if (comEle.length) L.push('    Com ' + conta(comEle.length, 'anexo', 'anexos') + ': ' + comEle.map((a) => (a.nome || a.id) + ' (' + comandoDoAnexo(k.chave, a.id, local) + ')').join(', '));
   });
   if (!opcoes.fila) {
     L.push('Histórico:');
     det.historico.forEach((h) => L.push('  ' + quando(h.at) + ' · ' + (h.autor.nome || h.autor.id) + ' · ' + textoDoHistorico(h, nomeDaColuna)));
   }
   return L.join('\n');
+}
+
+/* De que comentário vem um anexo, para a linha dele no ver e na fila
+   (KAN-165: o que se anexa a uma resposta na pílula fica ligado a ela): o
+   autor e a hora do comentário, ou que o comentário foi removido; nada num
+   anexo do próprio cartão.
+   Recebe: a — o anexo ({comentario_id}); comentarios — os do cartão (detalheDoCartao).
+   Devolve: o texto a juntar à linha ('' num anexo do cartão). */
+export function deQueComentario(a, comentarios) {
+  if (!a || !a.comentario_id) return '';
+  const m = (comentarios || []).find((c) => c.id === a.comentario_id);
+  return m ? ' — do comentário de ' + (m.autor.nome || m.autor.id) + ' de ' + quando(m.created_at) : ' — de um comentário removido';
 }
 
 /* As colunas da fila (A fazer e Auto Tests), com o nome e pela ordem que têm

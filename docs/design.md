@@ -8352,8 +8352,31 @@ ordem de carregamento.
 
 ## Os tickets de QA
 
-Fora de produção há uma pílula «Tickets» que quem testa arrasta para onde
-estorvar menos e que abre «Novo ticket» e «Ver tickets». A pílula é uma vista
+Fora de produção há uma pílula «Lab», com o frasco (icones.js:ic, 'frasco'),
+que quem testa arrasta para onde estorvar menos. O menu começa pela secção
+«Tickets», com o título (cloud/qa.js:qaHtmlMenu, .qa-menu-titulo), «Novo ticket» e
+«Ver tickets»; um traço separa-a dos «Modelos de dados» (cloud/modelos.js:mdlAbrir),
+e outro separa as idas à montra, à app e ao back office. Chama-se Lab porque já
+não serve só para os tickets (KAN-167).
+
+**Os modelos de dados** (KAN-167). São cenários prontos a carregar na conta de
+teste em que se está. Os de base vêm do código (app/modelos-cenarios.js:MODELOS_CENARIOS),
+geram as datas ao construir, a partir de hoje, e nascem a cada pessoa na
+primeira vez; os que o Claude cria para um ticket (scripts/modelos.mjs criar
+--cenario <id> --para <KAN-N>) vão para quem o escreveu, com o selo «Do ticket
+KAN-N»; os gravados da conta («Guardar como modelo novo») têm o selo «Gravado» e
+guardam as datas como estavam. São da pessoa do Discord e não da conta
+(worker/src/rotas/modelos.js:donoDaConta): sobrevivem a trocar de conta de teste e à
+limpeza do dev. Cada linha tem a pega (só na ordem personalizada), o nome, o
+selo, a linha do que permite testar, «Usar» e o ⋯ com «Renomear» e, fora dos de
+base, «Remover» com o Anular. A ordem é a personalizada (guardada no servidor),
+por nome ou por criação; o arrasto é o das fotos do imóvel. «Usar» só existe numa
+conta de teste: confirma com o que se perde e substitui os dados da conta numa
+transação só, nunca numa conta normal nem em produção; no back office e nas
+páginas públicas a janela só organiza. Quando um ticket precisa de dados que
+nenhum modelo tem, o Claude escreve o cenário e cria-o para quem o pediu.
+
+A pílula abre «Novo ticket» e «Ver tickets». A pílula é uma vista
 do kanban da equipa: «Ver tickets» mostra todos os cartões que não estão em
 Produção, de todos os tipos e venham de onde vierem — os dos tickets de QA,
 os criados à mão no quadro, os que a skill ticket cria —, nas colunas e com a
@@ -8697,13 +8720,41 @@ obriga as três a serem iguais letra a letra.
 outros, com o tipo «Subticket» na linha (cloud/qa.js:qaNomeDoTipo); na lista vem
 logo por baixo do pai quando estão na mesma secção, recolhido para dentro e com
 um fio do lado (cloud/qa.js:qaFilhosAoPai, .qa-linha-sub). A janela dele diz de
-quem é, num botão que abre o pai (cloud/qa.js:qaHtmlDoPai), e mostra o seu «O que
+quem é numa linha discreta logo debaixo do cabeçalho: «Subticket do», o selo do
+pai (que se toca para o abrir; o alvo do dedo cresce para 44px sem a linha
+crescer) e o título do pai, numa linha só, cortado (cloud/qa.js:qaHtmlDoPai,
+KAN-163) — nunca um retângulo grande —, e mostra o seu «O que
 testar» numerado, os seus comentários e o seu Aceitar. A janela do pai lista os
 subtickets, cada um com a coluna (cloud/qa.js:qaHtmlSubtickets); enquanto algum
 estiver em Human Tests, o pai não tem as decisões no rodapé — decide-se em cada
 subticket e o pai segue-os (cloud/qa.js:qaRodapeTicket) —, só «Mover» e «Fechar».
 O GET /api/qa manda, num subticket, o sub e o pai, e num pai a lista dos
 subtickets que vieram na mesma leitura (worker/src/rotas/qa.js:comSubtickets).
+
+**A chave num selo** (KAN-163). A chave do cartão (KAN-N, KAN-N-X) vê-se sempre
+num selo realçado, no fundo e na letra do realce, na janela, nas linhas da lista
+e nos subtickets (.num.qa-cartao, no bloco «tickets de QA» do estilos.css). O
+bloco inteiro, passos e subtickets incluídos, vai também para as páginas
+públicas e para o back office (equipa-qa.js:montarCssDoQa): a janela de um
+ticket vê-se igual nos três sítios, e uma regra dos tickets que fique fora do
+bloco não chega lá.
+
+**Os anexos** (KAN-165). No «Novo ticket», além da captura, escolhem-se até dez
+anexos: imagens, que se encolhem aqui como a captura, e PDF, Word, Excel,
+PowerPoint, texto ou CSV até 10 MB cada (cloud/qa.js:qaJuntarAnexos). Uma imagem
+colada com a captura já posta vai para os anexos. A resposta de um ticket tem
+«Anexar» ao lado de «Comentar»; só com anexos, o comentário diz «Anexei N
+ficheiros.» (worker/src/rotas/qa.js:textoDoComentario). Os anexos são os do cartão no
+kanban (kanban_anexos), com a porta e a resposta do kanban
+(worker/src/rotas/kanban.js:ficheiroDoPedido, worker/src/rotas/kanban.js:respostaDoAnexo: o tipo lido dos bytes, a
+caixa de areia, nosniff, os documentos em attachment); o de uma resposta guarda
+o id do comentário (comentario_id, migrations/0034_anexos_dos_comentarios.sql).
+Na janela, as imagens são miniaturas que abrem em grande (cloud/qa.js:qaVerAnexo)
+e os documentos uma linha com o nome, o tipo e o tamanho, que descarrega
+(cloud/qa.js:qaAbrirAnexo); os de cada comentário vêm por baixo dele. Um anexo que
+falha deixa a janela aberta, com «Enviar os anexos», e nunca repete o ticket nem
+o comentário. O scripts/kanban.mjs fila e ver dizem de que comentário vem cada
+anexo.
 
 ## O kanban da equipa
 

@@ -133,6 +133,7 @@ confere que cada uma aponta para código que existe.
 - 2026-11-24 · Staging, Adiado e Produção; a pílula «Tickets»; o promove só do que está em Staging (KAN-155 a KAN-158)
 - 2026-11-25 · A data de celebração à vista, e as explicações do bloco fiscal no «?» (KAN-160, KAN-161)
 - 2026-11-25 · Os subtickets KAN-N-X e o «O que testar» em lista numerada (KAN-159, KAN-162)
+- 2026-11-26 · O Lab e os modelos de dados (KAN-167)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4972,3 +4973,13 @@ porque a pílula e o back office são código diferente e duas regras parecidas 
 não importa módulos, tem uma cópia, e o guião do back office outra (um guião String.raw não leva o texto de outro
 ficheiro sem quebrar a regra de ser o texto dos seus ficheiros tal e qual); um teste obriga as três a serem iguais
 letra a letra.
+
+## 2026-11-26 · O Lab e os modelos de dados (KAN-167)
+
+O Martinho pediu que os dados de teste deixassem de ser um exemplo fixo: cenários prontos, gravar a conta como
+modelo novo, renomear e ordenar, e um cenário novo sempre que um ticket precise de dados que não há (vários subtickets
+do IRS voltaram com «não há dados para testar»). Decidiu: a pílula passa de «Tickets» a «Lab», com o frasco, porque já
+não é só para bugs; os modelos são de cada pessoa (o dono das contas de teste), e os que o Claude cria para um ticket vão
+para quem o escreveu; usar um modelo substitui os dados da conta de teste em que se está, depois de confirmar; os modelos
+escritos em código geram as datas ao carregar, relativas a hoje, para não envelhecerem, e os gravados da conta guardam as
+datas tal como estavam. O Exemplo completo é o mesmo dadosDoExemplo do «Carregar exemplo».

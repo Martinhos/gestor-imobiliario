@@ -119,7 +119,8 @@ describe('a pílula só fora de produção', () => {
     assert.match(p.innerHTML, /Novo ticket/);
     assert.match(p.innerHTML, /Ver tickets/);
     assert.match(p.innerHTML, /class="qa-pega"/, 'a pega de pontos');
-    assert.match(p.innerHTML, />Tickets</, 'chama-se Tickets (KAN-155)');
+    assert.match(p.innerHTML, /<span class="qa-nome" aria-hidden="true">Lab<\/span>/, 'chama-se Lab (KAN-167)');
+    assert.ok(p.innerHTML.includes(app.ic('frasco', 16)), 'com o frasco');
     app.CW.ambiente = 'producao';
     assert.equal(app.qaSincronizar(), false, 'o ambiente voltou a produção');
     assert.equal(app.qaPil, null, 'e a pílula saiu');
@@ -161,7 +162,10 @@ describe('a pílula só fora de produção', () => {
     // na app
     assert.equal(app.qaLugar(), 'app');
     const naApp = app.qaHtmlMenu(2);
-    assert.deepEqual(rotulos(naApp), ['Novo ticket', 'Ver tickets (2)', 'Ver a montra', 'Back office']);
+    assert.deepEqual(rotulos(naApp), ['Novo ticket', 'Ver tickets (2)', 'Modelos de dados', 'Ver a montra', 'Back office']);
+    // a secção «Tickets» tem o título dela, e os modelos de dados abrem a janela do Lab (KAN-167)
+    assert.match(naApp, /^<p class="qa-menu-titulo" aria-hidden="true">Tickets<\/p>/);
+    assert.match(naApp, /class="qa-menu-modelos" data-toca="camada" data-click="closePops\(\);mdlAbrir\(\)">/);
     assert.ok(naApp.includes(app.ic('door', 17) + ' Ver a montra'), 'a montra com a porta');
     assert.ok(naApp.includes(app.ic('users', 17) + ' Back office'), 'o back office com a equipa');
     assert.match(naApp, /class="qa-menu-equipa" data-toca="camada" data-click="closePops\(\);qaBackOffice\(\)"/);
@@ -179,7 +183,7 @@ describe('a pílula só fora de produção', () => {
       assert.equal(app.qaLugar(), 'paginas');
       assert.equal(app.qaNaEquipa(), false);
       const nasPaginas = app.qaHtmlMenu(null);
-      assert.deepEqual(rotulos(nasPaginas), ['Novo ticket', 'Ver tickets', 'Voltar à app', 'Back office']);
+      assert.deepEqual(rotulos(nasPaginas), ['Novo ticket', 'Ver tickets', 'Modelos de dados', 'Voltar à app', 'Back office']);
       assert.ok(nasPaginas.includes(app.ic('home', 17) + ' Voltar à app'), 'a app com a casa');
       assert.match(nasPaginas, /class="qa-menu-app" data-toca="camada" data-click="closePops\(\);qaVoltarApp\(\)"/);
       assert.doesNotMatch(nasPaginas, /Ver a montra|qaVerMontra/, 'já se está na montra');
@@ -192,19 +196,19 @@ describe('a pílula só fora de produção', () => {
     vm.runInContext('globalThis.QA_EQUIPA = { ambiente: "dev" };', app.__ctx);
     try {
       assert.equal(app.qaLugar(), 'equipa');
-      assert.deepEqual(rotulos(app.qaHtmlMenu(0)), ['Novo ticket', 'Ver tickets (0)']);
+      assert.deepEqual(rotulos(app.qaHtmlMenu(0)), ['Novo ticket', 'Ver tickets (0)', 'Modelos de dados']);
       assert.doesNotMatch(app.qaHtmlMenu(0), /Back office|Voltar à app|Ver a montra/);
     } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
     // dados que não chegaram (QA_EQUIPA nulo) também ficam só com os tickets
     vm.runInContext('globalThis.QA_EQUIPA = null;', app.__ctx);
     try {
-      assert.deepEqual(rotulos(app.qaHtmlMenu(0)), ['Novo ticket', 'Ver tickets (0)']);
+      assert.deepEqual(rotulos(app.qaHtmlMenu(0)), ['Novo ticket', 'Ver tickets (0)', 'Modelos de dados']);
     } finally { vm.runInContext('delete globalThis.QA_EQUIPA;', app.__ctx); }
     // com o app (a sessão de teste abre a app), a montra e a volta à app, sem o Back office
     vm.runInContext('globalThis.QA_EQUIPA = { ambiente: "dev", app: true };', app.__ctx);
     try {
       const naEquipa = app.qaHtmlMenu(0);
-      assert.deepEqual(rotulos(naEquipa), ['Novo ticket', 'Ver tickets (0)', 'Ver a montra', 'Voltar à app']);
+      assert.deepEqual(rotulos(naEquipa), ['Novo ticket', 'Ver tickets (0)', 'Modelos de dados', 'Ver a montra', 'Voltar à app']);
       assert.ok(naEquipa.includes(app.ic('door', 17) + ' Ver a montra'), 'a montra com a porta');
       assert.ok(naEquipa.includes(app.ic('home', 17) + ' Voltar à app'), 'a app com a casa');
       assert.match(naEquipa, /class="qa-menu-app" data-toca="camada" data-click="closePops\(\);qaVoltarApp\(\)"/);
@@ -515,9 +519,10 @@ describe('a lista', () => {
       'pela prioridade do cartão nas por resolver, do resolvido há menos tempo nas resolvidas');
     igual(s.abertos.map((t) => t.id), ['N2', 'N1', 'D1', 'E2', 'E1', 'H2', 'H1', 'X1'], 'por concluir: todos menos os de Produção (KAN-155)');
     assert.equal(app.qaAbertos, 8, 'o número da pílula');
-    assert.equal(app.qaRotuloDoBotao(app.qaAbertos), 'Tickets, 8 por concluir');
-    assert.equal(app.qaRotuloDoBotao(0), 'Tickets, nenhum por concluir');
-    assert.equal(app.qaRotuloDoBotao(null), 'Tickets');
+    assert.equal(app.qaRotuloDoBotao(app.qaAbertos), 'Lab, 8 tickets por concluir');
+    assert.equal(app.qaRotuloDoBotao(1), 'Lab, 1 ticket por concluir');
+    assert.equal(app.qaRotuloDoBotao(0), 'Lab, nenhum ticket por concluir');
+    assert.equal(app.qaRotuloDoBotao(null), 'Lab');
     assert.equal(app.qaRotuloVer(app.qaAbertos), 'Ver tickets (8)');
     const h = app.qaHtmlLista();
     pelaOrdem(h, ['>A fazer<', "qaAbrirTicket('N2')", "qaAbrirTicket('N1')", '>Para depois<', "qaAbrirTicket('D1')",
@@ -567,7 +572,7 @@ describe('a lista', () => {
     assert.equal(app.qaSeloEstado('esquisito'), '<span class="badge grey">esquisito</span>', 'uma que não se conhece diz o id');
     assert.equal(app.qaSeloEstado('b10c'), '<span class="badge grey">&lt;b&gt;Bloqueado&lt;/b&gt;</span>', 'o nome escapado');
     const comCartao = app.qaHtmlTicket(T('K1', { status: 'auto-tests', cartao: 'KAN-12' }));
-    assert.match(comCartao, /<div class="qa-ver-cab"><span class="badge loan">Auto Tests<\/span><span class="small num qa-cartao"[^>]*>KAN-12<\/span><\/div>/);
+    assert.match(comCartao, /<div class="qa-ver-cab"><span class="badge loan">Auto Tests<\/span><span class="num qa-cartao"[^>]*>KAN-12<\/span><\/div>/);
     assert.doesNotMatch(app.qaHtmlTicket(T('K2')), /qa-cartao/, 'sem cartão, nada');
   });
 
@@ -676,7 +681,7 @@ describe('a lista', () => {
     pedidos.length = 0;
     app.document.getElementById('qa_com').value = '  \n ';
     assert.equal(await app.qaComentar(), false);
-    igual(falhas, [['qa_com', 'Escreve o comentário.']]);
+    igual(falhas, [['qa_com', 'Escreve o comentário ou anexa um ficheiro.']]);
     app.document.getElementById('qa_com').value = 'x'.repeat(4001);
     assert.equal(await app.qaComentar(), false);
     igual(falhas[1], ['qa_com', 'O comentário passa dos 4000 caracteres. Encurta-o.']);
@@ -843,7 +848,7 @@ describe('a lista', () => {
     assert.match(app.qaHtmlLista(), /Não deu para carregar os tickets[\s\S]*qaCarregarDeNovo\(\)/);
     apiFalsa({ 'GET /api/qa': { tickets: [] } });
     await app.qaCarregar();
-    assert.match(app.qaHtmlLista(), /Não há tickets por concluir\.[\s\S]*toca em Tickets e depois em Novo ticket/);
+    assert.match(app.qaHtmlLista(), /Não há tickets por concluir\.[\s\S]*toca em Lab e depois em Novo ticket/);
     assert.equal(app.qaAbertos, 0);
   });
 
@@ -1160,7 +1165,7 @@ describe('a pílula é a vista do kanban: todos os cartões fora de Produção (
     app.qaLista.colunas = app.qaColunasDe(COLUNAS);
     const tarefa = K('KAN-8', { tipo: 'tarefa', titulo: 'Arrumar o quadro' });
     assert.equal(app.qaTituloDaJanela(tarefa), 'Tarefa KAN-8');
-    assert.match(app.qaHtmlLinha(tarefa), /<span class="small qa-tipo">Tarefa<\/span><span class="small num qa-cartao">KAN-8<\/span>/);
+    assert.match(app.qaHtmlLinha(tarefa), /<span class="small qa-tipo">Tarefa<\/span><span class="num qa-cartao">KAN-8<\/span>/);
     assert.equal(app.qaNomeDoTipo(K('KAN-9', { tipo: 'erro' })), '');
     assert.equal(app.qaTituloDaJanela(K('KAN-9', { tipo: 'erro' })), 'Erro KAN-9');
     assert.equal(app.qaNomeDoTipo(K('KAN-9', { tipo: 'inventado' })), '', 'um tipo que não se conhece não se diz');
@@ -1175,7 +1180,7 @@ describe('a pílula é a vista do kanban: todos os cartões fora de Produção (
     noDev();
     await app.qaCarregar();
     const linha = app.qaHtmlLinha(P);
-    assert.match(linha, /<span class="qa-linha-cab"><span class="small qa-tipo">Pedido<\/span><span class="small num qa-cartao">KAN-12<\/span><\/span><span class="qa-linha-txt">Quero exportar as rendas<\/span>/);
+    assert.match(linha, /<span class="qa-linha-cab"><span class="small qa-tipo">Pedido<\/span><span class="num qa-cartao">KAN-12<\/span><\/span><span class="qa-linha-txt">Quero exportar as rendas<\/span>/);
     assert.doesNotMatch(linha, /qa-prio|qa-quem|Conta apagada/, 'nem prioridade, nem quem, nem quando');
     pedidos.length = 0;
     app.qaAbrirTicket('KAN-12');

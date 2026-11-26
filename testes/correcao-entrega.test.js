@@ -472,7 +472,7 @@ describe('limpar o dev', () => {
      lista do workflow ou aqui — e, aqui, com a razão no cabeçalho dele. */
   const FICAM = ['audit_log', 'op_log', 'team_links', 'reply_templates', 'qa_tickets',
     'kanban_colunas', 'kanban_contador', 'kanban_cartoes', 'kanban_etiquetas', 'kanban_comentarios',
-    'kanban_historico', 'kanban_ligacoes', 'kanban_anexos', 'consumo_amostras'];
+    'kanban_historico', 'kanban_ligacoes', 'kanban_anexos', 'consumo_amostras', 'qa_modelos'];
 
   // achado A.7-10
   test('a lista de tabelas do limpar-dev é a do esquema menos o que fica, por ordem das chaves estrangeiras', () => {

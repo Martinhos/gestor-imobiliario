@@ -1,25 +1,29 @@
 /* A pílula do QA no back office do dev (/equipa).
    ----------------------------------------------
-   A app tem a pílula «QA» (web/cloud/qa.js) e o Martinho quis a mesma no back
+   A app tem a pílula do Lab (web/cloud/qa.js; chamou-se «QA» e «Tickets»,
+   e desde o KAN-167 é o «Lab», com os modelos de dados do web/cloud/modelos.js
+   no menu) e o Martinho quis a mesma no back
    office, com as mesmas funções, a reaproveitar o próprio qa.js (a decisão
    dele, 2026-10-28). O back office é outra página, com outra sessão, outro
    CSS e o seu guião (equipa-guiao.js), que tem um esc e um ic globais com
    outras assinaturas. Por isso o qa.js não entra solto: o worker serve um
    /equipa/qa.js que embrulha, numa função só, a camada daqui (CAMADA_QA:
    o que o qa.js usa da app — as janelas, o aviso, o menu, a API, o
-   despacho das ações data-click), o web/app/icones.js, o web/app/formato.js
-   e o web/cloud/qa.js, lidos dos assets tal e qual. Os nomes ficam todos
+   despacho das ações data-click), o web/app/icones.js, o web/app/formato.js,
+   o web/cloud/qa.js, o web/app/modelos-cenarios.js (só os nomes e as
+   descrições dos cenários) e o web/cloud/modelos.js, lidos dos assets tal e qual. Os nomes ficam todos
    dentro da função e não chocam com os do guião; para o window só vai o CW,
    que o qa.js lê de lá.
 
    As ações que o qa.js escreve no HTML (data-click="qaEnviar()", …) não
    correm pelo eventos.js da app: a camada lê-as com uma gramática pequena
    (nome(argumentos);…) e só chama as funções da tabela QA_ACOES, que a
-   montagem escreve no fim com as funções do qa.js e as da camada.
+   montagem escreve no fim com as funções do qa.js (qa…), as do modelos.js
+   (mdl…) e as da camada.
 
    O /equipa/qa.css junta o que falta ao back office: os tokens que ele não
-   tem, os componentes que a camada desenha (CSS_QA_EQUIPA) e o bloco do QA
-   do web/estilos.css, cortado pelos seus marcadores.
+   tem, os componentes que a camada desenha (CSS_QA_EQUIPA) e os blocos do QA
+   e dos modelos de dados do web/estilos.css, cortados pelos seus marcadores.
 
    Só existe no dev (env.ENV_NAME) e só para quem tem sessão de equipa; as
    rotas que a pílula chama são as /api/equipa/qa (rotas/qa.js:rotasQaDaEquipa).
@@ -41,10 +45,14 @@ const JS = 'text/javascript; charset=utf-8';
 const CSS = 'text/css; charset=utf-8';
 
 // os ficheiros da app que entram no /equipa/qa.js, pela ordem
-export const FICHEIROS_DO_QA = ['/app/icones.js', '/app/formato.js', '/cloud/qa.js'];
+// (o modelos-cenarios.js só declara: dá os nomes e as descrições dos cenários à janela dos modelos)
+export const FICHEIROS_DO_QA = ['/app/icones.js', '/app/formato.js', '/cloud/qa.js', '/app/modelos-cenarios.js', '/cloud/modelos.js'];
 // os marcadores do bloco do QA no web/estilos.css
 export const MARCA_CSS_INICIO = '/* === tickets de QA:';
 export const MARCA_CSS_FIM = '/* === fim: tickets de QA === */';
+// os marcadores do bloco dos modelos de dados (a janela do Lab, cloud/modelos.js)
+export const MARCA_CSS_MODELOS_INICIO = '/* === modelos de dados:';
+export const MARCA_CSS_MODELOS_FIM = '/* === fim: modelos de dados === */';
 // as funções da camada que as ações do qa.js chamam (as do qa.js juntam-se na montagem)
 export const ACOES_DA_CAMADA = ['closePops', 'closeModal', 'menuOpen', 'abrirSeletorFicheiros', 'toggleFold'];
 
@@ -747,6 +755,17 @@ export function cortarCssDoQa(estilos) {
   return s.slice(i, f + MARCA_CSS_FIM.length);
 }
 
+/* O bloco dos modelos de dados (a janela do Lab) do web/estilos.css, entre
+   os marcadores dele, para a mesma janela no back office e nas páginas.
+   Recebe: estilos — o texto do web/estilos.css.
+   Devolve: o bloco (texto); lança um Error sem os marcadores. */
+export function cortarCssDosModelos(estilos) {
+  const s = String(estilos || '');
+  const i = s.indexOf(MARCA_CSS_MODELOS_INICIO), f = s.indexOf(MARCA_CSS_MODELOS_FIM);
+  if (i < 0 || f < i) throw new Error('O bloco dos modelos de dados não está no web/estilos.css (os marcadores mudaram?).');
+  return s.slice(i, f + MARCA_CSS_MODELOS_FIM.length);
+}
+
 /* Os nomes das funções declaradas no topo de um ficheiro (function nome(),
    ao princípio da linha) — os do qa.js entram na tabela das ações.
    Recebe: src — o código.
@@ -785,10 +804,10 @@ function varianteDe(variante) {
 
 /* O guião da pílula inteiro (o /equipa/qa.js ou o /paginas/qa.js): a camada
    do sítio, os ficheiros da app e o fim, dentro de uma função só, e a
-   tabela QA_ACOES com as funções do qa.js e as da camada (cada entrada
+   tabela QA_ACOES com as funções do qa.js, as do modelos.js e as da camada (cada entrada
    chama o nome no momento: o qa.js troca o openModal e o closeModal por
    embrulhos dele, e é o de agora que tem de correr).
-   Recebe: textos — {'/app/icones.js': …, '/app/formato.js': …, '/cloud/qa.js': …};
+   Recebe: textos — {'/app/icones.js': …, '/app/formato.js': …, '/cloud/qa.js': …, '/cloud/modelos.js': …};
    variante (opcional) — 'equipa' (por omissão) ou 'paginas'.
    Devolve: o JavaScript (texto). */
 export function montarGuiaoDoQa(textos, variante) {
@@ -798,7 +817,8 @@ export function montarGuiaoDoQa(textos, variante) {
     if (typeof t !== 'string' || !t) throw new Error('Falta o ' + f + ' para montar o ' + v.js + '.');
     return '/* ---- ' + f + ' ---- */\n' + t;
   });
-  const nomes = funcoesDeTopo(textos['/cloud/qa.js']).filter((n) => /^qa/.test(n)).concat(ACOES_DA_CAMADA);
+  const nomes = funcoesDeTopo(textos['/cloud/qa.js']).filter((n) => /^qa/.test(n))
+    .concat(funcoesDeTopo(textos['/cloud/modelos.js']).filter((n) => /^mdl/.test(n)), ACOES_DA_CAMADA);
   const tabela = 'var QA_ACOES = {\n' + nomes.map((n) => '  ' + n + ': function () { return ' + n + '.apply(this, arguments); }').join(',\n') + '\n};\n';
   return v.cabeca + '(function () {\n' + v.camada + '\n' + tabela + partes.join('\n') + '\n' + v.fim + '\n})();\n';
 }
@@ -810,7 +830,7 @@ export function montarGuiaoDoQa(textos, variante) {
    'equipa' (por omissão) ou 'paginas'.
    Devolve: o CSS (texto). */
 export function montarCssDoQa(estilos, variante) {
-  const base = CSS_QA_EQUIPA + '\n' + cortarCssDoQa(estilos) + '\n';
+  const base = CSS_QA_EQUIPA + '\n' + cortarCssDoQa(estilos) + '\n' + cortarCssDosModelos(estilos) + '\n';
   return varianteDe(variante) === VARIANTES.paginas ? base + CSS_QA_PAGINAS + '\n' : base;
 }
 
