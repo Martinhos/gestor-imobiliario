@@ -198,7 +198,9 @@ function ctValoresDaFicha(c){
   const pid=c.propertyId,id=jsq(c.id);
   /* a renda planeada é dos Planeados: desligados nesta conta, não há próxima
      renda a mostrar — e a função nem sequer existe para lhe perguntar */
-  const rec=servicoLigado('recurring')?ctRecOf(c):null;
+  const rec0=servicoLigado('recurring')?ctRecOf(c):null;
+  /* num imóvel vendido, a renda depois do dia da venda já não se pede (planeados.js:recAcabouNaVenda) */
+  const rec=rec0&&!recAcabouNaVenda(rec0)?rec0:null;
   const movs=servicoLigado('transactions')&&pode(pid,'tx.view')?(db.transactions||[]).filter(t=>t.contractId===c.id):[];
   const rendas=movs.filter(t=>t.kind==='income'),ultima=rendas.map(t=>t.date).sort().pop();
   /* o bruto engana, e a marca de «estimado» é a mesma que a lista já dá: o

@@ -50,3 +50,22 @@ const scope=()=>visiveis().filter(p=>pode(p.id,'tx.view')||pode(p.id,'report.vie
    Recebe: pid — o id do imóvel.
    Devolve: true/false. */
 const inScope=pid=>!ownerFilter||scope().some(p=>p.id===pid);
+/* O imóvel que o filtro do ecrã à vista tem escolhido, quando é um só: o
+   «Imóvel» dos Movimentos (txProp), o foco da Visão geral (dashProp), o da
+   Avaliação (repProp) e o das Projeções (projProp), e o «Imóvel» das listas
+   que o têm (vistas.js:LFK — o p dos Contratos, dos Planeados e dos
+   Créditos, o pr das Visitas). É o imóvel com que um registo novo nasce
+   (movimento.js:txModal, KAN-127-5): quem está a ver só o T2 e carrega no +
+   quer o registo no T2. Um grupo ('g:ID'), «Sem imóvel», um imóvel que já
+   não está na base ou nenhum filtro não escolhem imóvel nenhum.
+   Devolve: o id do imóvel (texto), ou ''. */
+function imovelDoFiltro(){
+  let v='';
+  if(tab==='transactions')v=txProp;
+  else if(tab==='dashboard')v=dashProp;
+  else if(tab==='reports')v=repProp;
+  else if(tab==='projections')v=typeof projProp==='undefined'?'':projProp;
+  else if(typeof LFK!=='undefined'&&LFK[tab]&&typeof lf==='function'){const s=lf(LFK[tab]);v=s.p||s.pr||''}
+  v=String(v||'');
+  return v&&!v.startsWith('g:')&&prop(v)?v:'';
+}

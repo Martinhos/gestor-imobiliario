@@ -741,6 +741,8 @@ function quotasDaCasaHtml(hid) {
   }
   var myId = CW.user ? CW.user.id : '';
   var prp = ((CW.state && CW.state.proposals) || []).filter(function (x) { return x.houseId === hid; })[0];
+  // a que deixa a divisão como está (o 50/50 → 50/50 de antes do KAN-127-7) não é nova divisão nenhuma
+  if (prp && typeof imvPropostaSemMudanca === 'function' && imvPropostaSemMudanca(p, prp)) prp = null;
   var nome = function (u) { return esc((owner(u) || { name: u }).name || u) + (u === myId ? ' (tu)' : ''); };
   var linhas = parts.map(function (u) {
     var novo = prp ? ' <span class="u-c-v-warn">→ ' + dec(Math.round((Number(prp.shares[u]) || 0) * 100) / 100) + '%</span>' : '';
@@ -854,6 +856,17 @@ function divisaoEscrita(p, peer) {
   return { quem: quem, q: q };
 }
 
+/* Quantas das propostas enviadas ficaram à espera da confirmação dos outros.
+   A de uma casa partilhada a meias com a divisão de hoje (50/50 → 50/50) já
+   não fica: o servidor aplica-a logo (applied, worker/src/rotas/casas.js:
+   propostaSemMudanca, KAN-127-7), e o aviso não pode dizer que falta o sim
+   de ninguém.
+   Recebe: respostas — as respostas da rota ({applied}); as que falharam não entram.
+   Devolve: o número (inteiro). */
+function propostasAEspera(respostas) {
+  return (respostas || []).filter(function (r) { return r && !r.applied; }).length;
+}
+
 /* O modal da partilha com a ligação connId: o que partilho com o outro e o
    que ele partilha comigo. Nas minhas casas, a caixa adiciona ou remove a
    casa da partilha — a nova traz as quotas ao marcá-la, a que deixa de ser
@@ -935,7 +948,7 @@ CW.sharesModal = function (connId) {
       if (diferente) propostas.push({ hid: p.id, nome: p.name || 'Sem nome', shares: d.q.shares });
     }
     var mudou = ids.length !== before.length || ids.some(function (id) { return before.indexOf(id) < 0; });
-    var falhas = [];
+    var falhas = [], respostas = [];
     api('PUT', '/api/connections/' + connId + '/shares', { houseIds: ids })
       .then(function () { closeModal(); return pullNow(true); })
       .then(function () {
@@ -943,6 +956,7 @@ CW.sharesModal = function (connId) {
         return propostas.reduce(function (seq, pr) {
           return seq.then(function () {
             return enviarProposta(pr.hid, pr.shares, pr.desde ? { desde: pr.desde } : undefined)
+              .then(function (r) { respostas.push(r); })
               .catch(function (e) { falhas.push(pr.nome + ': ' + String(e.message || 'não seguiu').replace(/\.$/, '')); });
           });
         }, Promise.resolve());
@@ -950,7 +964,8 @@ CW.sharesModal = function (connId) {
       .then(function () { return propostas.length > falhas.length ? pullNow(true) : null; })
       .then(function () {
         render();
-        var n = propostas.length - falhas.length;
+        // só as que ficaram à espera do outro: a divisão igual à de hoje aplica-se já (KAN-127-7)
+        var n = propostasAEspera(respostas);
         if (falhas.length) {
           toast((mudou ? 'Partilha atualizada, mas a proposta de divisão não seguiu — ' : 'A proposta de divisão não seguiu — ') +
             falhas.join('; ') + '. Podes propô-la na ficha do imóvel.', { ms: 7000 });

@@ -885,6 +885,17 @@ function recDepoisDaVenda(r,d){
   const v=recVendidoEm(r);
   return !!v&&/^\d{4}-\d{2}-\d{2}$/.test(String(d||''))&&String(d)>v;
 }
+/* O planeado acabou com a venda do imóvel? A próxima ocorrência dele já é
+   de depois do dia da venda (recDepoisDaVenda), e por isso não volta a
+   pedir nada: a prestação da hipoteca, a renda do contrato, o IMI e o
+   condomínio de um imóvel vendido. Sai da lista dos Planeados (vRecurring) e
+   da «Próxima renda» da ficha do contrato (contrato.js:ctValoresDaFicha):
+   chegavam lá com a próxima data depois da venda (KAN-127-6). Não se apaga
+   nada — o «Desfazer venda» devolve-os; os de antes da venda continuam até
+   serem confirmados.
+   Recebe: r — o planeado.
+   Devolve: true ou false. */
+function recAcabouNaVenda(r){return !!(r&&r.next&&recDepoisDaVenda(r,r.next))}
 /* O planeado está por confirmar? A data prevista já passou ou é hoje, não é
    de depois da venda do imóvel (recDepoisDaVenda), nem de um encargo que um
    contrato em vigor nesse mês põe a cargo do inquilino
@@ -2139,7 +2150,8 @@ function recGrupoTemPlaneados(g){
 function vRecurring(){
   const K='lrec',s=lf(K);
   const hit=(name,tx)=>lfHit(K,[name,tx.label,tx.category,tx.sub,tx.creditor,propName(tx.propertyId),String(tx.amount||''),(tx.tags||[]).join(' '),tx.notes].join(' '));
-  const base=r=>((!s.k||r.tx.kind===s.k)&&recNoImovel(r.tx,s.p)&&hit(r.name,r.tx));
+  /* os de um imóvel vendido que já só pediam depois da venda não estão (recAcabouNaVenda) */
+  const base=r=>(!recAcabouNaVenda(r)&&(!s.k||r.tx.kind===s.k)&&recNoImovel(r.tx,s.p)&&hit(r.name,r.tx));
   /* um planeado está num estado? (o filtro e as contagens do chip) */
   const noEstado=(r,st)=>{
     if(st==='pend')return !!(recPorConfirmar(r)&&!r.muted);

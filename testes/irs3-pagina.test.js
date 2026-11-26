@@ -150,11 +150,11 @@ describe('N066 · a ordem da Declaração (maqueta 6) e o cartão do quadro', ()
     assert.match(texto(cartao(app.vFisco(), 'Quadro 4.1')), /repartem-se pelas linhas na proporção das rendas de cada uma/);
   });
 
-  test('a situação fiscal fecha numa linha com o resumo e «Mudar»; abre e fecha', () => {
+  test('a situação fiscal fecha no resumo, no porquê e em «Mudar a situação fiscal» (KAN-127-10); abre e fecha', () => {
     contrato({ id: 'C1' }); rendas('C1', 2026, 1000);
     let s = cartao(app.vFisco(), 'A tua situação fiscal em 2026');
-    assert.match(s, /<span class="small">Em separado, titular A · recibos eletrónicos<\/span>/);
-    assert.match(s, /id="fiscoSitMudar"[^>]*data-click="fiscoSitMudar\(true\)" aria-expanded="false" aria-controls="fiscoSitCorpo">Mudar<\/button>/);
+    assert.match(s, /<span class="small">Declaração em separado, és o titular A · passas recibos eletrónicos<\/span>/);
+    assert.match(s, /id="fiscoSitMudar"[^>]*data-click="fiscoSitMudar\(true\)" aria-expanded="false" aria-controls="fiscoSitCorpo">Mudar a situação fiscal<\/button>/);
     assert.match(s, /<div class="fis-sit-corpo" id="fiscoSitCorpo" hidden>/, 'fechado, o corpo escondido');
     assert.match(s, /id="fiscoConjunta"/, 'os interruptores estão lá, escondidos');
     app.fiscoSitMudar(true);
@@ -171,7 +171,7 @@ describe('N066 · a ordem da Declaração (maqueta 6) e o cartão do quadro', ()
     contrato({ id: 'C1' }); rendas('C1', 2026, 1000);
     app.db.settings.irs = app.normIrsDefs({ porAno: { 2026: { conjunta: true, conjugeId: 'rui', minhaLetra: 'B', dispensaRecibos: true } } });
     let s = cartao(app.vFisco(), 'A tua situação fiscal em 2026');
-    assert.match(texto(s), /Em conjunta com Rui, és o titular B · dispensa dos recibos eletrónicos/);
+    assert.match(texto(s), /Declaração conjunta com Rui, és o titular B · tens dispensa dos recibos eletrónicos/);
     assert.match(s, /id="fiscoSitCorpo" hidden/);
     app.db.settings.irs = app.normIrsDefs({ porAno: { 2026: { conjunta: true } } });
     s = cartao(app.vFisco(), 'A tua situação fiscal em 2026');

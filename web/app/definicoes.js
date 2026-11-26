@@ -547,24 +547,21 @@ function colunaDoAnexo(m,chaves,chave,nome,opts,sub){
    Recebe: tk — a árvore; cat — a categoria; sub — a subcategoria ('' para a categoria).
    Devolve: true quando tem id. */
 function catDoIrs(tk,cat,sub){return !!(sub?catIrsId(tk,cat,sub):catIrsId(tk,cat))}
-/* A frase de uma categoria do IRS no lugar do «Remover»: no ⋯ e no aviso do
+/* A frase de uma categoria do IRS que não se remove, no aviso do
    delCat/delSub chamados com uma delas.
    Recebe: sub — true numa subcategoria.
    Devolve: o texto. */
 const notaNaoRemove=sub=>'O IRS usa esta '+(sub?'subcategoria':'categoria')+': podes mudar-lhe o nome.';
-/* O ⋯ de uma linha da tabela das categorias: as ações e, no fim, o «Apagar» —
-   ou, numa categoria do IRS, a nota de que não se remove (notaNaoRemove), sem
-   ação, por baixo das ações (componentes.js:menu só desenha botões; a nota
-   entra no fim do .menupop).
+/* O ⋯ de uma linha da tabela das categorias: as ações e, no fim, o «Apagar»;
+   numa categoria do IRS, só as ações, sem o «Apagar» e sem nota nenhuma
+   (KAN-127-9, decisão do Martinho, 2026-11-26: o texto de ajuda no ⋯ não fazia
+   falta — o «Mudar o nome…» está lá, e o delCat e o delSub dizem-no se forem
+   chamados com uma delas).
    Recebe: id — o id do menu; itens — as ações; apagar — o item do «Apagar»;
-   doIrs — a linha é de uma categoria do IRS (catDoIrs); a nota diz
-   «subcategoria» quando o item é o delSub.
+   doIrs — a linha é de uma categoria do IRS (catDoIrs).
    Devolve: o HTML (texto) do menu. */
 function menuDaCategoria(id,itens,apagar,doIrs){
-  if(!doIrs)return menu(id,itens.concat([apagar]));
-  const h=menu(id,itens),fim=h.lastIndexOf('</div></span>');
-  const nota=`<p class="small def-menu-nota">${esc(notaNaoRemove(/^delSub\(/.test(apagar.act)))}</p>`;
-  return fim<0?h:h.slice(0,fim)+nota+h.slice(fim);
+  return menu(id,doIrs?itens:itens.concat([apagar]));
 }
 /* A coluna do AIMI (Impostos › AIMI, pelo id), fixa: o AIMI não é gasto, abate
    ao imposto no quadro 9, e o irs-papeis.js:irsColunaDe ignora a escolha do
@@ -806,8 +803,8 @@ function itensDoIdIrs(falta,tk,cat,sub){
    uma linha, a nota dela (notaDaCategoria): as regras de origem que pedem
    explicação, e o que o «Fora dos totais» deixa no Anexo F nas categorias que
    o IRS lê (D19). O ⋯ de uma categoria sem id pergunta se é uma das do IRS
-   que a conta perdeu (itensDoIdIrs); o de uma com id não tem «Apagar», e diz
-   que se lhe pode mudar o nome (menuDaCategoria).
+   que a conta perdeu (itensDoIdIrs); o de uma com id não tem «Apagar», só o
+   «Mudar o nome…» e as outras ações (menuDaCategoria).
    Recebe: tk — 'cats' ou 'catsIn'.
    Devolve: o HTML (texto) do cartão. */
 function tabelaDeCategorias(tk){

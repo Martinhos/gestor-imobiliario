@@ -3390,7 +3390,8 @@ começa pelo que se copia: os cinco números do ano, com as retenções na fonte
 «A tratar antes de entregar», sozinho na grelha; os quadros pela ordem do
 Anexo F — 4.1, 4.2, 4.3, 5, 6A a 6C, 6D, 6F e 6H, as obras dos 24 meses,
 8, 9, 10 —, o Anexo J, a categoria B e o que fica fora; depois «A tua
-situação fiscal» numa linha, com o resumo e «Mudar», e os «Prazos da AT» só
+situação fiscal», com o que está escolhido, porque importa e «Mudar a
+situação fiscal», e os «Prazos da AT» só
 com algum prazo na janela de aviso (fisco.js:vFisco, fisco.js:fisPrazosLista).
 Cada quadro tem um cartão, o 4.1 e o 4.2 com tudo o que é desse quadro lá dentro e nada do
 outro (fisco-quadros.js:fiscoQuadroCard): o título diz o quadro e o que lá vai
@@ -4298,9 +4299,13 @@ atualização legal da renda não se comunica; só o aumento combinado (Modelo
 O que só o senhorio sabe vive nas definições, em `db.settings.irs.porAno`,
 ano a ano, e muda-se em «A tua situação fiscal em AAAA»
 (fisco.js:fiscoSituacaoCard, a prancheta M-SituacaoFiscal), depois dos
-quadros. O cartão fecha numa linha com o resumo («Em separado, titular A ·
-recibos eletrónicos», fisco.js:fiscoSituacaoResumo) e «Mudar»
-(fisco.js:fiscoSitMudar), e abre sozinho quando há uma escolha por fazer (a
+quadros. Fechado, o cartão diz em frases o que está escolhido («Declaração
+em separado, és o titular A · passas recibos eletrónicos»,
+fisco.js:fiscoSituacaoResumo), porque importa (o que entra no Anexo F e o
+imposto estimado; a dispensa muda o que fica a tratar,
+fisco.js:fiscoSituacaoPorque) e, por baixo, «Mudar a situação fiscal»
+(fisco.js:fiscoSitMudar), que aberto diz «Fechar» — nunca um «Mudar»
+sozinho no canto. Abre sozinho quando há uma escolha por fazer (a
 conjunta sem cônjuge, havendo quem). Aberto, é um cartão de linhas que gravam ao mexer, no
 ano da página (fisco.js:fiscoSetSituacao) — a tributação conjunta e a
 dispensa dos recibos eletrónicos em interruptores (role=switch); com a
@@ -4497,9 +4502,9 @@ e um reembolso sem subcategoria. Nos pagamentos, o IMI, o selo e as
 devoluções da caução e de renda. Numa categoria de pagamentos fora dos
 totais, a linha diz que as despesas saem também do Anexo F, e a Declaração
 lista-as com a coluna que teriam (irs-papeis.js:irsColunaSemFora). As categorias e subcategorias com id
-não se removem: o ⋯ delas não tem «Apagar» e diz «O IRS usa esta categoria:
-podes mudar-lhe o nome.» (definicoes.js:menuDaCategoria), e o delCat e o
-delSub recusam-nas (definicoes.js:catDoIrs). Uma sem id remove-se como as
+não se removem: o ⋯ delas não tem «Apagar» nem nota (definicoes.js:menuDaCategoria),
+e o delCat e o delSub recusam-nas com «O IRS usa esta categoria: podes
+mudar-lhe o nome.» (definicoes.js:catDoIrs). Uma sem id remove-se como as
 outras.
 
 ## A importação do Splitwise lança o custo dos donos

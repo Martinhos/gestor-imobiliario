@@ -7,7 +7,7 @@ import {
   gravarCasa, comCasaFresca, casaMudou, FRASE_CASA_MUDOU,
   convitesSemCasa, SAIU_DA_CASA,
   aplicarQuotas, acertarQuotas, validarFora, diaValido, diaEmLisboa, estadoDasQuotas, fecharQuotasHoje,
-  DESDE_SEMPRE,
+  DESDE_SEMPRE, fracoesDasQuotas, quotasIguais,
 } from '../lib/acesso.js';
 import { normalizarPerms } from '../lib/permissoes.js';
 import { servicosDesligados, casaDesligada, colabDesligado, FRASE_DESLIGADO } from '../lib/servicos.js';
@@ -220,6 +220,47 @@ async function quotasDeUmDonoUmaVez(env, houseId, parts, p) {
   return null;
 }
 
+/* A proposta deixa as quotas de hoje como estão? As mesmas frações da casa
+   para cada conta (fracoesDasQuotas: 50/50 escrito e as partes iguais sem
+   nada escrito são o mesmo), com a folga do arredondamento que o
+   acertarQuotas aceita (0,05 pontos: 49,99/50,01 é 50/50), e os de fora
+   iguais, ou não trazidos (acesso.js:quotasIguais: «por confirmar» e «não
+   há outros» contam como iguais). É o «50/50 → 50/50» que a partilha de
+   uma casa a meias mandava ao outro confirmar (KAN-127-7).
+   Recebe: data — o JSON da casa; parts — os participantes; p — a proposta
+   validada (propostaDoCorpo).
+   Devolve: true quando não muda nada hoje. */
+export function propostaSemMudanca(data, parts, p) {
+  const antes = estadoDasQuotas(data, parts);
+  const fa = fracoesDasQuotas(parts, antes.ownerShares), fb = fracoesDasQuotas(parts, p.quotas);
+  if (parts.some((u) => Math.abs((fa[u] || 0) - (fb[u] || 0)) > 0.0005)) return false;
+  return p.fora === undefined || quotasIguais({ fora: antes.fora }, { fora: p.fora });
+}
+
+/* Uma passagem da proposta igual à divisão de hoje (a rota repete-a quando
+   outra escrita passou à frente). Quotas iguais não são uma mudança: não há
+   nada para os outros confirmarem nem para o cartão do imóvel mostrar
+   (KAN-127-7, a decisão do Martinho). O que a proposta ainda diz aplica-se
+   já, com as percentagens de hoje (não as escritas, que podem trazer o
+   arredondamento): desde quando quem entrou é dono (o desde — 'sempre' tira
+   o período que a entrada fechou, um dia encurta-o) e os de fora
+   confirmados (null → []), como o aceitar faria (acesso.js:aplicarQuotas).
+   Sem desde e sem fora, a casa não se reescreve. Uma proposta pendente
+   da casa cai, como com qualquer proposta nova (o ON CONFLICT da rota).
+   Recebe: env — o ambiente do worker; houseId — a casa; parts — os
+   participantes; p — a proposta validada (propostaSemMudanca).
+   Devolve: promessa de true quando era igual (e ficou tratada), false
+   quando muda alguma coisa (ou a casa não se lê) e vai a confirmar. */
+async function propostaIgualUmaVez(env, houseId, parts, p) {
+  const casa = await lerCasa(env, houseId);
+  if (!casa.data || !propostaSemMudanca(casa.data, parts, p)) return false;
+  const apagar = env.DB.prepare('DELETE FROM share_proposals WHERE house_id = ?').bind(houseId);
+  if (!p.desde && p.fora === undefined) { await apagar.run(); return true; }
+  aplicarQuotas(casa.data, parts, estadoDasQuotas(casa.data, parts).ownerShares, p.fora, p.desde);
+  await env.DB.batch([gravarCasa(env, houseId, casa.rev, { data: JSON.stringify(casa.data) }, now()), apagar]);
+  return true;
+}
+
 /* Uma passagem do aceitar de uma proposta de divisão (a rota repete-a
    quando outra escrita passou à frente): relê a proposta e os participantes,
    junta a minha aprovação e, com todos, aplica as quotas à casa. Duas
@@ -394,6 +435,12 @@ export async function rotasCasas(c) {
         if (erro) return err(409, erro);
         return json({ ok: true, applied: true }, 201);
       }
+      // a divisão de hoje (o 50/50 → 50/50 de uma partilha a meias): não há
+      // nada a confirmar — o desde e os de fora aplicam-se já (KAN-127-7)
+      let igual;
+      try { igual = await comCasaFresca(() => propostaIgualUmaVez(env, houseId, parts, p)); }
+      catch (e) { if (casaMudou(e)) return err(409, FRASE_CASA_MUDOU); throw e; }
+      if (igual) return json({ ok: true, applied: true, igual: true }, 201);
       await env.DB.prepare(
         `INSERT INTO share_proposals (house_id, proposed_by, shares, approvals, created_at, fora, desde)
          VALUES (?, ?, ?, ?, ?, ?, ?)

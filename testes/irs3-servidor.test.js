@@ -74,7 +74,6 @@ const tirarCasa = (env, quem, gid, hid) => resp(pedir(env, quem, '/api/shared-gr
 const sairOuRemover = (env, quem, gid, uid) => resp(pedir(env, quem, '/api/shared-groups/' + gid + '/members/' + uid, 'DELETE'));
 const apagarGrupo = (env, quem, gid) => resp(pedir(env, quem, '/api/shared-groups/' + gid, 'DELETE'));
 const propor = (env, quem, hid, corpo) => resp(pedir(env, quem, '/api/houses/' + hid + '/proposal', 'POST', corpo));
-const aceitarP = (env, quem, hid) => resp(pedir(env, quem, '/api/houses/' + hid + '/proposal/accept', 'POST', {}));
 
 /* Alguém entra num grupo pelo caminho a sério: a ligação, o pedido e o sim
    do dono do grupo.
@@ -126,8 +125,8 @@ describe('N018 — entrar por um grupo ou por um pedido de partilha fecha o per�
     let p = imovelDoCliente(d, [A.id, R.id]);
     assert.equal(app.quotasFiscais(p, '2026-03-05')[A.id], 1, 'entrar no grupo já não dá metade da casa ao Rui para trás');
     assert.equal(rendasDe(p, 2025, A.id), 12000, 'o ano já entregue não muda');
-    assert.equal((await propor(env, A, 'H1', { shares: { [A.id]: 50, [R.id]: 50 }, desde: '2026-07-01' })).status, 201);
-    assert.equal((await aceitarP(env, R, 'H1')).applied, true);
+    // 50/50 é a divisão de hoje: o dia em que o Rui passou a dono aplica-se já, sem pedido (KAN-127-7)
+    assert.equal((await propor(env, A, 'H1', { shares: { [A.id]: 50, [R.id]: 50 }, desde: '2026-07-01' })).applied, true);
     d = await dadosDa(env, 'H1');
     p = imovelDoCliente(d, [A.id, R.id]);
     assert.equal(rendasDe(p, 2026, A.id), 9000);
@@ -145,8 +144,8 @@ describe('N018 — entrar por um grupo ou por um pedido de partilha fecha o per�
     await casasDoGrupo(env, A, 'G1', ['H1']);
     await entrarNoGrupo(env, A, R, 'G1');
     assert.equal((await dadosDa(env, 'H1')).quotasHist.length, 1);
-    assert.equal((await propor(env, R, 'H1', { shares: { [A.id]: 50, [R.id]: 50 }, desde: 'sempre' })).status, 201);
-    assert.equal((await aceitarP(env, A, 'H1')).applied, true);
+    // 50/50 é a divisão de hoje: o «desde sempre» aplica-se já, sem pedido (KAN-127-7)
+    assert.equal((await propor(env, R, 'H1', { shares: { [A.id]: 50, [R.id]: 50 }, desde: 'sempre' })).applied, true);
     const d = await dadosDa(env, 'H1');
     assert.equal(d.quotasHist, undefined);
     const p = imovelDoCliente(d, [A.id, R.id]);
@@ -378,8 +377,8 @@ describe('N018 no cliente — a entrada por um grupo ou por um pedido abre a jan
     ap.onSave();
     await ate(() => ap.modalStack.length === 0);
     await new Promise((r) => setTimeout(r, 30));
-    assert.deepEqual(await propostas(env), [{ house_id: 'H1', proposed_by: A.id, desde: 'sempre' }]);
-    assert.equal((await aceitarP(env, R, 'H1')).applied, true);
+    // a divisão de hoje com «desde sempre»: aplica-se já, nada fica por confirmar (KAN-127-7)
+    assert.deepEqual(await propostas(env), []);
     assert.equal((await dadosDa(env, 'H1')).quotasHist, undefined, 'o Rui já era dono: a casa é dos dois em todos os anos');
   });
 
@@ -428,6 +427,8 @@ describe('N018 no cliente — a entrada por um grupo ou por um pedido abre a jan
     ap.onSave();
     await ate(() => ap.modalStack.length === 0);
     await new Promise((r) => setTimeout(r, 30));
-    assert.deepEqual(await propostas(env), [{ house_id: 'HB', proposed_by: A.id, desde: 'sempre' }]);
+    // a divisão de hoje com «desde sempre»: aplica-se já, nada fica por confirmar (KAN-127-7)
+    assert.deepEqual(await propostas(env), []);
+    assert.equal((await dadosDa(env, 'HB')).quotasHist, undefined, 'a Ana já era dona: a casa é dos dois em todos os anos');
   });
 });

@@ -1079,11 +1079,14 @@ function fiscoAvQuotasForaDe100(p,ano){
   return null;
 }
 /* As propostas de quotas à espera de confirmação (CW.state.proposals, só com
-   a nuvem — a forma do worker/src/rotas/estado.js), uma por imóvel.
+   a nuvem — a forma do worker/src/rotas/estado.js), uma por imóvel. As que
+   não mudam nada (a divisão de hoje, KAN-127-7: imovel.js:imvPropostaSemMudanca)
+   não contam.
    Devolve: {houseId: proposta}. */
 function fiscoAvPropostas(){
   const st=window.CW&&window.CW.state,ps=st&&Array.isArray(st.proposals)?st.proposals:[],out={};
-  ps.forEach(x=>{if(x&&x.houseId&&!out[x.houseId])out[x.houseId]=x});
+  const igual=x=>typeof imvPropostaSemMudanca==='function'&&typeof prop==='function'&&!!prop(x.houseId)&&imvPropostaSemMudanca(prop(x.houseId),x);
+  ps.forEach(x=>{if(x&&x.houseId&&!out[x.houseId]&&!igual(x))out[x.houseId]=x});
   return out;
 }
 /* O nome de uma conta: a ficha do proprietário ou a pessoa da nuvem

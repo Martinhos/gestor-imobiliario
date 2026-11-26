@@ -110,8 +110,10 @@ describe('N018 — a entrada de um dono fecha o período, e «já era dono?» di
     let p = imovelDoCliente(d, [A.id, B.id]);
     assert.equal(app.quotasFiscais(p, '2026-03-05')[A.id], 1, 'só partilhar já não dá metade da casa ao Bruno para trás');
     assert.equal(rendasDe(p, 2025, A.id), 12000, 'o ano já entregue não muda');
-    assert.equal((await propor(env, A, 'H1', { shares: { [A.id]: 50, [B.id]: 50 }, desde: '2026-07-01' })).status, 201);
-    assert.equal((await aceitarP(env, B, 'H1')).applied, true);
+    // a divisão de hoje (partes iguais) com o dia em que o Bruno passou a dono:
+    // não é uma divisão nova, aplica-se já, sem pedir o sim dele (KAN-127-7)
+    assert.equal((await propor(env, A, 'H1', { shares: { [A.id]: 50, [B.id]: 50 }, desde: '2026-07-01' })).applied, true);
+    assert.equal(await env.DB.prepare('SELECT 1 FROM share_proposals').first(), null, 'nada por confirmar');
     d = await dadosDa(env, 'H1');
     assert.deepEqual(d.quotasHist, [{ ate: '2026-06-30', ownerIds: [A.id], ownerShares: {}, fora: null }], 'encurtado, sem a marca');
     p = imovelDoCliente(d, [A.id, B.id]);
@@ -124,9 +126,9 @@ describe('N018 — a entrada de um dono fecha o período, e «já era dono?» di
     relogio('2026-07-10T10:00:00Z');
     const { env, A, B, cid } = await anaEBruno();
     await partilhar(env, A, cid, ['H1']);
-    assert.equal((await propor(env, A, 'H1', { shares: { [A.id]: 50, [B.id]: 50 }, desde: 'sempre' })).status, 201);
-    assert.equal((await env.DB.prepare('SELECT desde FROM share_proposals').first()).desde, 'sempre');
-    assert.equal((await aceitarP(env, B, 'H1')).applied, true);
+    // 50/50 é a divisão de hoje: o «desde sempre» aplica-se já (KAN-127-7)
+    assert.equal((await propor(env, A, 'H1', { shares: { [A.id]: 50, [B.id]: 50 }, desde: 'sempre' })).applied, true);
+    assert.equal(await env.DB.prepare('SELECT 1 FROM share_proposals').first(), null, 'nada por confirmar');
     const d = await dadosDa(env, 'H1');
     assert.equal(d.quotasHist, undefined);
     const p = imovelDoCliente(d, [A.id, B.id]);

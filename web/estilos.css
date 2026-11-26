@@ -3932,8 +3932,6 @@ button.def-cat-abre:active{background:var(--press)}
 /* as categorias que a Declaração não reconhece (definicoes.js:cartaoDasCategoriasDoIrs) */
 .def-irs-id{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
 .def-irs-id-txt{min-width:0}
-/* a nota «O IRS usa esta categoria…» no fim do ⋯ (definicoes.js:menuDaCategoria) */
-.menupop .def-menu-nota{margin:0;padding:8px 12px;max-width:260px;color:var(--muted);white-space:normal}
 /* A linha parte-se em duas quando a TABELA é estreita, e não o ecrã: dos
    901px para cima a navegação lateral das Definições come 274px, e a 920px a
    tabela ficava com 360 (os nomes com 0px e os títulos uns por cima dos

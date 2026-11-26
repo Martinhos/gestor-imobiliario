@@ -2720,7 +2720,9 @@ function imvQuotasCartao(p,c){
   const linhas=donos.map(u=>linha(esc(nomeDe(u))+(nuvem&&u===meuId()?' (tu)':''),'',imvQuotaTexto(fis[u])))
     .concat((fora||[]).map(f=>linha(esc(f.nome),'fora da app',imvQuotaTexto(f.quota/100)))).join('');
   const hist=quotasPeriodos(p),desde=hist.length?addDays(hist[hist.length-1].ate,1):'';
-  const prp=nuvem&&window.CW.state?(CW.state.proposals||[]).find(x=>x.houseId===p.id):null;
+  const prp0=nuvem&&window.CW.state?(CW.state.proposals||[]).find(x=>x.houseId===p.id):null;
+  /* uma proposta igual à divisão de hoje não é uma nova divisão (KAN-127-7) */
+  const prp=prp0&&!imvPropostaSemMudanca(p,prp0)?prp0:null;
   const notas=[fora===null?`Há outros donos fora da app? Está por confirmar: até responderes, a Declaração conta a casa como só ${donos.length>1?'dos donos da app':'tua'}.`:'',
     prp?'Há uma nova divisão proposta, à espera de confirmação.':''].filter(Boolean);
   /* a resposta: a janela das quotas com mais de uma conta, o formulário num só meu (imvAbrirQuotas, N059);
@@ -2772,6 +2774,8 @@ function imvQuotasSoTeu(live,myId){
    proposta pendente (ou nada); myId — o meu id.
    Devolve: o HTML das linhas. */
 function imvQuotasDaProposta(live,parts,prp,myId){
+  /* «50 % → 50 %» não é uma divisão nova: escreve-se só a de hoje (KAN-127-7) */
+  if(prp&&imvPropostaSemMudanca(live,prp))prp=null;
   const fora=quotasForaLimpos(live.comproprietariosFora),q=imvQuotasDaCasa(live);
   const traz=!!prp&&Object.prototype.hasOwnProperty.call(prp,'fora');
   const prpFora=traz?quotasForaLimpos(prp.fora):fora,prpRel=prp?quotasEntre(parts,prp.shares||{}):{};
@@ -2780,6 +2784,23 @@ function imvQuotasDaProposta(live,parts,prp,myId){
     return `<div class="stat"><span>${esc(o.name)}${u===myId?' (tu)':''}</span><b class="num">${pct(q[u]||0,0)}${prp?` <span class="u-c-v-warn">→ ${imvQuotaTexto((prpRel[u]||0)*fator)}</span>`:''}</b></div>`}).join('')
     +imvForaLinhasNuvem(fora)+(traz?imvForaLinhasNuvem(prpFora,true):'')
     +(prp&&prp.desde?`<div class="hint">${prp.desde==='sempre'?'Valem também para trás: já era assim.':'Valem desde '+dPT(prp.desde)+'.'}</div>`:'');
+}
+/* A proposta pendente deixa as quotas de hoje como estão? As mesmas frações
+   da casa de cada conta, com a folga de arredondamento do servidor (0,05
+   pontos: 49,99/50,01 é 50/50), e os de fora iguais ou não trazidos — a
+   regra do worker/src/rotas/casas.js:propostaSemMudanca, que desde o
+   KAN-127-7 já não guarda uma assim. As que lá ficaram de antes (o «50/50 →
+   50/50» de uma partilha a meias) não se mostram: não há nova divisão nenhuma.
+   Recebe: p — o imóvel; prp — a proposta ({shares, fora?}), ou nada.
+   Devolve: true quando não muda nada; false sem proposta ou quando muda. */
+function imvPropostaSemMudanca(p,prp){
+  if(!p||!prp||!prp.shares)return false;
+  const ids=[...new Set(((p.ownerIds)||[]).filter(x=>typeof x==='string'&&x))];
+  const a=quotasEntre(ids,p.ownerShares||{}),b=quotasEntre(ids,prp.shares||{});
+  if(ids.some(u=>Math.abs((a[u]||0)-(b[u]||0))>0.0005))return false;
+  if(!Object.prototype.hasOwnProperty.call(prp,'fora'))return true;
+  const chave=f=>(quotasForaLimpos(f)||[]).map(x=>x.nome.trim()+'|'+Math.round(x.quota*100)).sort().join(';');
+  return chave(p.comproprietariosFora)===chave(prp.fora);
 }
 /* A janela das quotas aberta (imvPropostaAbrir): a casa, os participantes,
    se veio de uma partilha, as percentagens escritas e o dia escrito — para a

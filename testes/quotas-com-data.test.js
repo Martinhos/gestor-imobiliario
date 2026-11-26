@@ -171,19 +171,23 @@ describe('a proposta com data (D29)', () => {
   test('uma correção da data para trás encurta o período guardado, e voltar ao de antes desfaz o histórico', async () => {
     relogio('2026-11-17T10:00:00Z');
     const { env, A, B } = await doisDonos((a, b) => ({ [a.id]: 50, [b.id]: 50 }));
-    const passa = async (shares, desde) => {
-      assert.equal((await propor(env, A, 'H1', { shares, desde })).status, 201);
-      assert.equal((await aceitarP(env, B, 'H1')).applied, true);
+    // igual — as percentagens são as de hoje: não é uma divisão nova, e o
+    // dia aplica-se já, sem o sim do Bruno (KAN-127-7)
+    const passa = async (shares, desde, igual) => {
+      const r = await propor(env, A, 'H1', { shares, desde });
+      assert.equal(r.status, 201);
+      if (igual) assert.equal(r.applied, true, 'a divisão de hoje não fica por confirmar');
+      else assert.equal((await aceitarP(env, B, 'H1')).applied, true);
       return dadosDa(env, 'H1');
     };
     let d = await passa({ [A.id]: 75, [B.id]: 25 }, '2026-07-01');
     assert.equal(d.quotasHist[0].ate, '2026-06-30');
-    d = await passa({ [A.id]: 75, [B.id]: 25 }, '2026-06-01');
+    d = await passa({ [A.id]: 75, [B.id]: 25 }, '2026-06-01', true);
     assert.deepEqual(d.quotasHist.map((e) => e.ate), ['2026-05-31'], 'a data certa era 1/6: o 50/50 acaba a 31/5');
     assert.deepEqual(d.quotasHist[0].ownerShares, { [A.id]: 50, [B.id]: 50 });
     d = await passa({ [A.id]: 50, [B.id]: 50 }, '2026-06-01');
     assert.equal(d.quotasHist, undefined, 'de 1/6 em diante volta o 50/50 — o mesmo de antes: nada a guardar');
-    d = await passa({ [A.id]: 50, [B.id]: 50 }, '2026-08-01');
+    d = await passa({ [A.id]: 50, [B.id]: 50 }, '2026-08-01', true);
     assert.equal(d.quotasHist, undefined, 'uma proposta que não muda nada não abre período');
   });
 });
@@ -401,7 +405,8 @@ describe('a soma das percentagens (D93)', () => {
   test('50/49,6 é recusada; 33,33 × 3 acerta a última e soma 100', async () => {
     const env = ambiente();
     const A = await conta(env, 'Ana'), B = await conta(env, 'Bruno'), C = await conta(env, 'Carla');
-    await casa(env, A, 'H1');
+    // a casa parte de 50/30/20: os 33,33 × 3 são uma divisão nova, e não a de hoje (KAN-127-7)
+    await casa(env, A, 'H1', { ownerShares: { [A.id]: 50, [B.id]: 30, [C.id]: 20 } });
     await comproprietario(env, A, B, ['H1']);
     await comproprietario(env, A, C, ['H1']);
     assert.deepEqual(await propor(env, A, 'H1', { shares: { [A.id]: 50, [B.id]: 49.6, [C.id]: 0 } }),

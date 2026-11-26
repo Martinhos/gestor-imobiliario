@@ -27,6 +27,37 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 84,
+    data: '2026-11-26',
+    titulo: 'A situação fiscal mais clara, o + no imóvel do filtro e o CSV para o Google Sheets',
+    seccoes: [
+      {
+        titulo: 'A Declaração',
+        afeta: ['app'],
+        itens: [
+          'O cartão da situação fiscal de cada ano diz em frases o que está escolhido e porque importa, com o botão «Mudar a situação fiscal».',
+          'No CSV do Anexo F, os avisos e as notas vêm em secções à parte, depois de uma linha em branco, para não se confundirem com as linhas da declaração; e o ficheiro abre com os acentos certos também no Google Sheets.',
+          'O ⋯ das categorias que o IRS usa já não tem o texto de ajuda: só as ações.',
+        ],
+      },
+      {
+        titulo: 'Movimentos e planeados',
+        afeta: ['movimentos', 'imoveis'],
+        itens: [
+          'Com o filtro num só imóvel, o + já abre a receita ou a despesa nesse imóvel, ligada ao contrato.',
+          'Um imóvel marcado como vendido deixa de mostrar os planeados depois da venda (a prestação do crédito, a renda do contrato e os outros); «Desfazer venda» devolve-os.',
+        ],
+      },
+      {
+        titulo: 'Partilha',
+        afeta: ['partilha'],
+        itens: [
+          'Partilhar uma casa com a mesma divisão que já tinha deixou de pedir confirmação aos outros donos.',
+        ],
+      },
+    ],
+  },
+  {
     v: 83,
     data: '2026-11-25',
     titulo: 'A data de celebração à vista, e um «?» em cada pergunta do IRS no contrato',

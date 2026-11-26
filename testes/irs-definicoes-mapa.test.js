@@ -249,15 +249,15 @@ describe('D19 — as categorias que o IRS lê não se removem', () => {
   /* o ⋯ de uma linha, pelo id do menu */
   const menuDe = (h, id) => { const i = h.indexOf('id="menu_' + id + '"'); return h.slice(i, h.indexOf('</span>', h.indexOf('</div>', i)) + 7); };
 
-  test('o ⋯ das Rendas e da Caução não tem «Apagar»: diz que se lhes pode mudar o nome', () => {
+  test('o ⋯ das Rendas e da Caução não tem «Apagar» nem texto de ajuda (KAN-127-9): só o «Mudar o nome…» e as outras ações', () => {
     const h = pagina('catsIn');
     const ks = Object.keys(app.db.settings.catsIn), i = ks.indexOf('Rendas'), j = app.db.settings.catsIn.Rendas.indexOf('Caução');
     const cat = menuDe(h, 'dc_catsIn_' + i), sub = menuDe(h, 'ds_catsIn_' + i + '_' + j);
     assert.doesNotMatch(cat, /delCat\(/);
-    assert.match(cat, /O IRS usa esta categoria: podes mudar-lhe o nome\./);
+    assert.doesNotMatch(cat, /O IRS usa esta|def-menu-nota/);
     assert.match(cat, /mudarNomeCategoria\(/);
     assert.doesNotMatch(sub, /delSub\(/);
-    assert.match(sub, /O IRS usa esta subcategoria: podes mudar-lhe o nome\./);
+    assert.doesNotMatch(sub, /O IRS usa esta|def-menu-nota/);
     // uma categoria sem id remove-se como antes
     const e = ks.indexOf('Empréstimos recebidos');
     assert.match(menuDe(h, 'dc_catsIn_' + e), /delCat\('catsIn','Empréstimos recebidos'\)/);

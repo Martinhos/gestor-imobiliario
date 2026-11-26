@@ -64,7 +64,8 @@
    AIMI do quadro 9, os contratos que acabaram no quadro 10 (8, 9, 10), o
    Anexo J dos imóveis fora de Portugal (D133), as rendas da categoria B fora
    do Anexo F (D134), o que ficou fora por escolha e as rendas sem contrato;
-   depois «A tua situação fiscal» numa linha com «Mudar» (fiscoSituacaoCard),
+   depois «A tua situação fiscal», fechada no resumo, no porquê e em «Mudar a
+   situação fiscal» (fiscoSituacaoCard),
    os prazos da AT só quando há algum na janela de aviso (fisPrazosCard) e,
    no fim, o aviso de responsabilidade (fiscoAvisoCard). Sem imóveis
    diz-o e aponta a saída; sem rendas no ano (nem nos quadros 4, nem no
@@ -130,7 +131,8 @@ function vFisco(){
   /* A ordem da maqueta 6 (D8): os números, «A tratar», os quadros pela ordem
      do Anexo F (4.1, 4.2, 4.3, 5, o 6 — 6A a 6C e depois 6D, 6F, 6H —, as
      obras dos 24 meses das linhas, 8, 9, 10), o Anexo J, a categoria B e o
-     que fica fora; depois a situação fiscal numa linha com «Mudar», e os
+     que fica fora; depois a situação fiscal fechada, com «Mudar a situação
+     fiscal», e os
      prazos da AT só quando há algum na janela de aviso. */
   const Q=r.versao.quadros,q43=fiscoQuadroDhd(r),prazos=fisPrazosLista();
   return panel+`<div class="ana fis">`+fisBarra()+fiscoKpis(r)
@@ -634,10 +636,13 @@ function fiscoLimiteDispensa(ano){
    separado, numa nota à parte. Grava logo (fiscoSetSituacao, fiscoSetConjuge) em
    settings.irs.porAno, que vai com as definições. Sem saber quem és (por
    inteiro), não há cônjuge a escolher, e diz-se.
-   O cartão vem depois dos quadros e fechado numa linha (D8, maqueta 6): o
-   título, o resumo da situação (fiscoSituacaoResumo — «Em separado, titular
-   A · recibos eletrónicos») e o botão «Mudar» (fiscoSitMudar), que abre o
-   resto no sítio; aberto, o botão diz «Fechar». Abre sozinho quando há uma
+   O cartão vem depois dos quadros e fechado (D8, maqueta 6): o título, o
+   resumo do que está escolhido (fiscoSituacaoResumo — «Declaração em
+   separado, és o titular A · passas recibos eletrónicos»), porque importa
+   (fiscoSituacaoPorque) e o botão «Mudar a situação fiscal» (fiscoSitMudar),
+   por baixo, que abre o resto no sítio; aberto, o botão diz «Fechar»
+   (KAN-127-10: um «Mudar» no canto não dizia o que fazia nem porque
+   importava). Abre sozinho quando há uma
    escolha por fazer — a conjunta ligada sem cônjuge, havendo quem escolher
    —, até a pessoa o fechar; o fiscoSitAbrir abre-o de um aviso. Fechado, o
    corpo fica na página com o atributo hidden (nada se grava escondido: só
@@ -681,36 +686,49 @@ function fiscoSituacaoCard(r,aberto){
     <p class="hint fis-sit-nota">As rendas de um arrendamento rural não pedem recibo eletrónico (art. 5.º n.º 3 a)): isso marca-se no contrato, e não aqui, e não te dispensa dos recibos dos outros contratos; podes declará-las no Modelo 44, se quiseres.</p>`;
   const dispensa=s.dispensaRecibos||fiscoSitDispensaVer?notaDispensa
     :`<p class="fis-sit-nota"><button type="button" class="btn sm" id="fiscoSitQuemDispensa" data-toca="nada" data-click="fiscoSitVerDispensa()" aria-expanded="false" aria-controls="fiscoSitDispensaNota">Quem tem dispensa?</button></p>`;
-  const mudar=`<button type="button" class="btn sm" id="fiscoSitMudar" data-toca="nada" data-click="fiscoSitMudar(${open?'false':'true'})" aria-expanded="${open?'true':'false'}" aria-controls="fiscoSitCorpo">${open?'Fechar':'Mudar'}</button>`;
+  /* KAN-127-10: o porquê à vista, aberto ou fechado, e o botão diz o que faz,
+     por baixo dele, e não um «Mudar» solto no canto */
+  const mudar=`<p class="hint fis-sit-nota">${fiscoSituacaoPorque(ano)}</p><p class="fis-sit-nota"><button type="button" class="btn sm" id="fiscoSitMudar" data-toca="nada" data-click="fiscoSitMudar(${open?'false':'true'})" aria-expanded="${open?'true':'false'}" aria-controls="fiscoSitCorpo">${open?'Fechar':'Mudar a situação fiscal'}</button></p>`;
   /* as linhas dos interruptores são <label>: tocar no texto (a linha inteira,
      60px) chega ao botão, como nas outras listas de interruptores — o botão
      sozinho tem 28px de altura. Dentro de um <label> o texto vai em <span>. */
   return fisCartao('A tua situação fiscal em '+ano,open?'O que só tu sabes e muda o Anexo F de '+ano+'. Grava ao mexer.':fiscoSituacaoResumo(r,s),
-    `<div class="fis-sit-corpo" id="fiscoSitCorpo"${open?'':' hidden'}><label class="fis-linha fis-linha-toque"><span class="fis-linha-txt"><b>Tributação conjunta</b><span class="small">Casados ou unidos de facto</span></span>${interruptor('fiscoConjunta','conjunta',s.conjunta,'Tributação conjunta')}</label>
+    mudar+`<div class="fis-sit-corpo" id="fiscoSitCorpo"${open?'':' hidden'}><label class="fis-linha fis-linha-toque"><span class="fis-linha-txt"><b>Tributação conjunta</b><span class="small">Casados ou unidos de facto</span></span>${interruptor('fiscoConjunta','conjunta',s.conjunta,'Tributação conjunta')}</label>
     <p class="hint fis-sit-nota">Em conjunta há uma só declaração, e cada linha do Anexo F diz de quem é a renda: A ou B. Em separado cada um entrega o seu Anexo F, e é sempre A.</p>${conj}
     <p class="hint fis-sit-nota">As rendas de um dependente declaram-se com a letra dele — D1, AF1 ou DG1, como no quadro 6B do rosto —, em conjunta ou em separado. A app só escreve A e B: essa letra muda-se no Portal das Finanças.</p>
     <label class="fis-linha fis-linha-toque"><span class="fis-linha-txt"><b>Tenho dispensa dos recibos de renda eletrónicos</b></span>${interruptor('fiscoDispensa','dispensaRecibos',s.dispensaRecibos,'Dispensa dos recibos de renda eletrónicos')}</label>
     ${dispensa}
-    <p class="hint fis-sit-nota">Cada ano tem a sua situação, a do último dia do ano (CIRS art. 13.º): o que mudas aqui vale para ${ano} e para os anos seguintes que não tenham a sua, e nunca muda os anteriores.${herdada}</p></div>`,'fis-sit'+(open?' aberta':''),mudar);
+    <p class="hint fis-sit-nota">Cada ano tem a sua situação, a do último dia do ano (CIRS art. 13.º): o que mudas aqui vale para ${ano} e para os anos seguintes que não tenham a sua, e nunca muda os anteriores.${herdada}</p></div>`,'fis-sit'+(open?' aberta':''));
+}
+/* Porque importa a situação fiscal do ano, numa frase por baixo do título do
+   cartão (fiscoSituacaoCard, KAN-127-10: com só «Mudar» não se percebia o que
+   fazia nem a importância): a conjunta junta as rendas do cônjuge que estão
+   na app às minhas, e com elas muda o imposto estimado; a dispensa dos
+   recibos muda o que fica a tratar (as rendas sem recibo deixam de ser falta
+   e entra o Modelo 44, que só se nomeia com a dispensa ligada — N063).
+   Recebe: ano — o ano dos rendimentos.
+   Devolve: o texto (string sem HTML). */
+function fiscoSituacaoPorque(ano){
+  return 'Daqui depende o Anexo F de '+ano+'. Em separado entram só as tuas rendas; em conjunta, as do cônjuge que estão nesta app juntam-se às tuas numa só declaração, e o imposto estimado muda com elas. A dispensa dos recibos eletrónicos muda o que fica a tratar antes de entregar.';
 }
 /* O resumo da situação fiscal de um ano numa linha, para o cartão fechado
    (fiscoSituacaoCard, maqueta 6): em separado ou em conjunta — com quem e a
    minha letra no Rosto, com os bens comuns do casal ou sem cônjuge
    escolhido — e se passo os recibos eletrónicos ou tenho a dispensa deles.
    Recebe: r — o resumo (resumoFiscal); s — a situação do ano (irsSituacao).
-   Devolve: o texto (HTML seguro), ex.: «Em separado, titular A · recibos
-   eletrónicos». */
+   Devolve: o texto (HTML seguro), ex.: «Declaração em separado, és o
+   titular A · passas recibos eletrónicos». */
 function fiscoSituacaoResumo(r,s){
   const eu=r&&!r.porInteiro?String(r.titularId||''):'';
   s=s||{};
   const letra=s.minhaLetra==='B'?'B':'A';
   const cj=s.conjunta&&eu&&s.conjugeId&&s.conjugeId!==eu&&(db.owners||[]).some(o=>o&&o.id===s.conjugeId)?s.conjugeId:'';
-  const quem=!s.conjunta?'Em separado, titular A'
-    :!eu?'Em conjunta'
-    :cj?'Em conjunta com '+esc((owner(cj)||{}).name||'o teu cônjuge')+', és o titular '+letra
-    :fiscoBensComuns(s)?'Em conjunta, com os bens comuns do casal, és o titular '+letra
-    :'Em conjunta, sem o cônjuge escolhido';
-  return quem+' · '+(s.dispensaRecibos?'dispensa dos recibos eletrónicos':'recibos eletrónicos');
+  const quem=!s.conjunta?'Declaração em separado, és o titular A'
+    :!eu?'Declaração conjunta'
+    :cj?'Declaração conjunta com '+esc((owner(cj)||{}).name||'o teu cônjuge')+', és o titular '+letra
+    :fiscoBensComuns(s)?'Declaração conjunta com os bens comuns do casal, és o titular '+letra
+    :'Declaração conjunta, sem o cônjuge escolhido';
+  return quem+' · '+(s.dispensaRecibos?'tens dispensa dos recibos eletrónicos':'passas recibos eletrónicos');
 }
 /* O estado do cartão da situação fiscal na página (fiscoSituacaoCard): null
    enquanto a pessoa não o abriu nem fechou (abre sozinho só com uma escolha
@@ -718,7 +736,7 @@ function fiscoSituacaoResumo(r,s){
    dos recibos foi pedida (fiscoSitVerDispensa). Duram enquanto a janela
    estiver aberta, como as dobras (componentes.js:foldState). */
 let fiscoSitAberta=null,fiscoSitDispensaVer=false;
-/* O «Mudar» e o «Fechar» do cartão da situação fiscal: abre-o ou fecha-o e
+/* O «Mudar a situação fiscal» e o «Fechar» do cartão da situação fiscal: abre-o ou fecha-o e
    redesenha a página, com o foco no mesmo botão (fisRepintar, pelo id).
    Recebe: abrir — true para abrir, false para fechar.
    Devolve: nada — muda o estado e redesenha. */

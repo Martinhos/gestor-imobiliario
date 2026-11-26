@@ -156,6 +156,8 @@ function cwOwnersBlock() {
       '<div class="hint">Para o teres em compropriedade com outra conta, partilha-o com outro utilizador em <b>Pessoas → Proprietários</b>.</div>' + colabHtml);
   }
   var prp = (CW.state.proposals || []).filter(function (x) { return x.houseId === p.id; })[0];
+  // uma proposta igual à divisão de hoje não pede nada (KAN-127-7, imovel.js:imvPropostaSemMudanca)
+  if (prp && typeof imvPropostaSemMudanca === 'function' && imvPropostaSemMudanca(live, prp)) prp = null;
   // as quotas de agora e as da proposta, com os de fora e o dia (imovel.js:imvQuotasDaProposta)
   var rows = servicoLigado('properties') ? imvQuotasDaProposta(live, parts, prp, myId) : '';
   var foot;

@@ -87,7 +87,7 @@ function metrics(y,pid,opts){
    planeados entraram. */
 function despesasPrevistas(pid){
   const porAno={week:52,month:12,quarter:4,year:1},m={};let n=0;
-  const acabou=r=>!!(r.end&&r.end<today())||(typeof recTermina==='function'&&recTermina(r));
+  const acabou=r=>!!(r.end&&r.end<today())||(typeof recTermina==='function'&&recTermina(r))||(typeof recAcabouNaVenda==='function'&&recAcabouNaVenda(r));
   (db.recurring||[]).forEach(r=>{
     const t=r.tx||{},f=porAno[r.every]||0;
     if(t.kind!=='expense'||!f||!countsInTotals(t)||acabou(r))return;

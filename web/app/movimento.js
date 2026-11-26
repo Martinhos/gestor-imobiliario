@@ -48,8 +48,12 @@ function txModal(o){
      é dono de nenhum não tem «Sem imóvel» e fica com o primeiro permitido —
      senão o seletor mostrava o primeiro e o movimento gravava-se sem imóvel */
   const auto=(db.properties.length===1||!podeSemImovel())?((casasComo('tx.add')[0]||{}).id||null):null;
+  /* sem imóvel dado (nem pelo contrato, nem pelo molde), um registo novo nasce
+     no imóvel do filtro do ecrã (KAN-127-5) — e o prefill liga-lhe o contrato */
+  const presetDiz=!!o.preset&&['propertyId','groupId','todos'].some(k=>Object.prototype.hasOwnProperty.call(o.preset,k));
+  const doFiltro=!id&&modo!=='confirmar'&&o.propId==null&&!o.ctId&&!presetDiz?txImovelDoFiltro(o.kind||'income'):null;
   tForm=_t?normTx(JSON.parse(JSON.stringify(_t.lote?movimentoDoLote(_t):_t))):
-    normTx(Object.assign({kind:o.kind||'income',date:today(),amount:'',propertyId:o.propId||auto,contractId:o.ctId||null,split:null},o.preset||{}));
+    normTx(Object.assign({kind:o.kind||'income',date:today(),amount:'',propertyId:o.propId||doFiltro||auto,contractId:o.ctId||null,split:null},o.preset||{}));
   if(tForm.contractId&&!tForm.propertyId){const c=contract(tForm.contractId);if(c)tForm.propertyId=c.propertyId}
   /* um preset sem imóvel (modelo) também; um de «Todos os imóveis» é dos meus
      imóveis, e quem não é dono de nenhum não o tem: fica no primeiro permitido */
@@ -60,6 +64,27 @@ function txModal(o){
   const m=id?menu('tx',[{label:'Apagar movimento',icon:'trash',danger:true,toca:'dados',risco:'destroi',act:`delTx('${jsq(id)}')`}]):'';
   openModal(txTitulo(),txBody(),null,m);
   onSave=()=>txGuardar(id);
+}
+/* O imóvel com que um registo novo nasce quando quem o abre não deu nenhum:
+   o do filtro do ecrã à vista, quando é um só (ambito.js:imovelDoFiltro —
+   os Contratos, os Planeados, os Créditos, as Visitas, a Avaliação e as
+   Projeções; os Movimentos e a Visão geral já o passavam). Com ele, uma
+   receita liga o contrato em vigor e Rendas › Renda mensal (prefill), como
+   quando se escolhe o imóvel à mão (KAN-127-5). Só um imóvel onde posso
+   adicionar o que se abre (o seletor do imóvel: rec.add num planeado,
+   tx.add no resto) e que não estava vendido na data (txVendidoNaData: um
+   registo novo é de hoje). Um pagamento de crédito só onde ele abate a
+   hipoteca (acessos.js:motivoCredito: com «Editar a ficha»), como o
+   navegacao.js:criarMovimento pergunta antes de abrir. Lê o txModo:
+   chama-se depois de ele estar posto.
+   Recebe: kind — o tipo do movimento ('income', 'loan', …).
+   Devolve: o id do imóvel, ou null. */
+function txImovelDoFiltro(kind){
+  const pid=imovelDoFiltro();
+  if(!pid)return null;
+  if(!casasComo(txModo.modo==='rec'?'rec.add':'tx.add').some(p=>p.id===pid))return null;
+  if(kind==='loan'&&motivoCredito(pid))return null;
+  return txVendidoNaData(prop(pid),{date:today()})?null:pid;
 }
 /* O título do formulário do movimento, pelo modo e pelo tipo.
    Devolve: o título (texto). */

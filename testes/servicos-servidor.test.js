@@ -255,7 +255,8 @@ describe('as escritas recusadas num serviço desligado', () => {
     await desligar(env, D, 'properties');
     let foto = await fotografia(env);
     const props = frase('properties');
-    const quotas = { [D.id]: 50, [P.id]: 50 };
+    // uma divisão nova (a casa está a partes iguais): a de hoje aplicava-se já, sem proposta (KAN-127-7)
+    const quotas = { [D.id]: 70, [P.id]: 30 };
     assert.deepEqual(await resp(pedir(env, D, '/api/houses/H9', 'PUT', { data: { name: 'Nova' } })), { status: 403, error: props });
     assert.deepEqual(await resp(pedir(env, D, '/api/houses/H1', 'PUT', { data: { name: 'Mudada' } })), { status: 403, error: props });
     assert.deepEqual(await resp(pedir(env, D, '/api/houses/H1', 'DELETE')), { status: 403, error: props });
