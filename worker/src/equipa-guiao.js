@@ -2534,7 +2534,7 @@ var ACOES_RASTO = {
   qaRemoverImagem: 'Remover a imagem', qaNovoTicket: 'Novo ticket', qaCarregarDeNovo: 'Tentar de novo',
   qaDobrar: 'Abrir ou fechar um ticket', qaAbrirTicket: 'Abrir o ticket', qaRemover: 'Remover', qaReabrir: 'Reabrir',
   qaImagemDeNovo: 'Tentar de novo', qaAceitar: 'Aceitar', qaRecusar: 'Recusar', qaAdiar: 'Adiar',
-  qaEnviarProducao: 'Enviar para produção', qaAdiarProducao: 'Adiar a produção',
+  qaEnviarProducao: 'Enviar para produção', qaAdiarProducao: 'Adiar a produção', qaParaDepois: 'Para depois', qaVoltarATestes: 'Voltar a Human Tests', qaPassarTicket: 'Ticket anterior ou seguinte',
   qaComentar: 'Comentar', qaComentariosDeNovo: 'Tentar de novo',
   qaRemoverEscolhido: 'Remover um ficheiro a anexar', qaVerAnexo: 'Ver uma imagem anexa', qaAbrirAnexo: 'Descarregar um anexo',
   // os modelos de dados do Lab (cloud/modelos.js)

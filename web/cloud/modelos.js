@@ -5,9 +5,9 @@
    pela mdlAbrir, e lista os modelos da pessoa: os de base, escritos em código
    (web/app/modelos-cenarios.js:MODELOS_CENARIOS, que nascem a cada pessoa na
    primeira vez), os que o Claude cria para um ticket (scripts/modelos.mjs) e
-   os que ela gravou da conta («Guardar como modelo novo»). Cada um tem
-   «Usar», e o ⋯ com «Renomear» e, nos que não são de base, «Remover» (com o
-   Anular). A lista ordena-se pela ordem personalizada (arrastando pela pega,
+   os que ela gravou da conta («Guardar como modelo novo»). Tocar num usa-o
+   (KAN-167-2), e o ⋯ tem «Renomear» e, nos que não são de base, «Remover»
+   (com o Anular). A lista ordena-se pela ordem personalizada (arrastando pela pega,
    ou com as setas nela), pelo nome ou pela data de criação; a escolha é do
    aparelho, a ordem personalizada é do servidor.
 
@@ -284,17 +284,27 @@ function mdlHtmlLista() {
 }
 
 /* Uma linha da lista: a pega (na ordem personalizada), o nome, o selo da
-   origem, a linha do que permite testar, «Usar» e o ⋯.
+   origem, a linha do que permite testar e o ⋯. Onde há uma conta (a app),
+   tocar na linha é usar o modelo (KAN-167-2: «o clicar no cartão conta como
+   selecionar o modelo de dados»): o texto é um botão (.mdl-usar) cujo alvo
+   cresce para a linha inteira (estilos.css, o bloco dos modelos de dados),
+   com a pega e o ⋯ por cima, alvos à parte. Num modelo que aqui não se usa
+   (uma conta normal, um cenário que esta versão não tem) o botão fica
+   aria-disabled e o toque diz porquê (mdlUsar). No back office e nas
+   páginas, onde não há conta, o texto é só texto.
    Recebe: m — o modelo; arrasta — true com a pega.
    Devolve: o HTML (texto). */
 function mdlHtmlLinha(m, arrasta) {
   var nome = mdlNome(m), id = String(m.id);
-  var pode = mdlPodeUsar(m);
-  return '<li class="mdl-linha" data-id="' + esc(id) + '">' +
+  var conta = mdlComConta(), pode = mdlPodeUsar(m), descId = 'mdlDesc-' + id;
+  var texto = '<span class="mdl-cima"><b class="mdl-nome">' + esc(nome) + '</b><span class="mdl-selo" data-origem="' + esc(m.origem) + '">' + esc(mdlOrigemLegivel(m)) + '</span></span>' +
+    '<span class="small mdl-desc"' + (conta ? ' id="' + esc(descId) + '"' : '') + '>' + esc(mdlDescricao(m)) + '</span>';
+  return '<li class="mdl-linha' + (conta ? ' mdl-toca' : '') + '" data-id="' + esc(id) + '">' +
     (arrasta ? '<button type="button" class="mdl-pega" data-toca="dados" aria-label="' + esc('Mudar a ordem: ' + nome) + '" aria-describedby="mdlDicaPega">' + ic('grip', 18) + '</button>' : '') +
-    '<div class="mdl-texto"><div class="mdl-cima"><b class="mdl-nome">' + esc(nome) + '</b><span class="mdl-selo" data-origem="' + esc(m.origem) + '">' + esc(mdlOrigemLegivel(m)) + '</span></div>' +
-      '<p class="small mdl-desc">' + esc(mdlDescricao(m)) + '</p></div>' +
-    (mdlComConta() ? '<button type="button" class="btn sm mdl-usar" data-toca="camada"' + (pode ? '' : ' disabled') + ' data-click="mdlUsar(\'' + jsq(id) + '\')">Usar</button>' : '') +
+    (conta
+      ? '<button type="button" class="mdl-texto mdl-usar" data-toca="camada"' + (pode ? '' : ' aria-disabled="true"') +
+        ' aria-label="' + esc('Usar o modelo ' + nome) + '" aria-describedby="' + esc(descId) + '" data-click="mdlUsar(\'' + jsq(id) + '\')">' + texto + '</button>'
+      : '<div class="mdl-texto">' + texto + '</div>') +
     mdlHtmlOpcoes(m) +
     '</li>';
 }
@@ -393,8 +403,8 @@ function mdlOQueSePerde() {
 
 /* Usar um modelo: a janela da confirmação, que diz o nome do modelo e o que
    a conta perde (mdlOQueSePerde), com o botão de perigo «Substituir os
-   dados». Numa conta normal não chega a abrir (o botão está desligado e o
-   servidor recusa na mesma).
+   dados». Numa conta normal não chega a abrir: o toque na linha diz que só
+   se usa numa conta de teste (e o servidor recusa na mesma).
    Recebe: id — o do modelo.
    Devolve: nada. */
 function mdlUsar(id) {

@@ -949,7 +949,7 @@ function semEtiquetasQueCorrem(h){return String(h==null?'':h).replace(ETIQUETAS_
    o Chrome e o Android escrevem o formato sozinhos, o iPhone deixa o campo em
    branco. Corre depois de cada corpo posto no DOM (fillModal, render, os
    repintes dos formulários) e a cada input/change num campo de data
-   (eventos.js:ligarDatasVazias), que é o que tira a marca quando se escolhe
+   (eventos.js:datasVaziasDoEvento), que é o que tira a marca quando se escolhe
    uma data e a repõe quando se apaga.
    Recebe: raiz — o elemento onde procurar os campos, ou o próprio campo de
    data; com null não faz nada.
@@ -1754,7 +1754,8 @@ function avisoQuandoAssentar(){
    sempre; pelo corpo só com ele no topo do scroll e o gesto a começar para
    baixo — a subir, ou com o corpo a meio, é o scroll de sempre (folhaZona).
    Nunca arranca de um campo, de um toque longo, nem de quem já tem o seu
-   gesto (FOLHA_NAO_ARRANCA, e o que rola de lado).
+   gesto (FOLHA_NAO_ARRANCA, o que rola de lado, e o que é arrastável por si:
+   folhaTemArrastoProprio).
    A folha segue o dedo e o véu aclara à proporção (folhaVeu); para cima
    resiste (folhaElastico). Largar passada metade da altura dela, ou com um
    sacudir para baixo — a regra do aviso, avisoFechaAoLargar —, fecha pelo
@@ -1786,11 +1787,30 @@ function folhaZona(alvo,s){
   const cab=s.querySelector('.head'),corpo=s.querySelector('.body');
   const zona=alvo===s||(cab&&cab.contains(alvo))?'cab':(corpo&&corpo.contains(alvo)?'corpo':'');
   if(!zona)return '';
+  if(folhaTemArrastoProprio(alvo,s,cab))return '';
   for(let el=alvo;el&&el!==s;el=el.parentElement){
     if(zona==='corpo'&&el.scrollTop>0)return '';
     if(typeof sepRolaDeLado==='function'&&sepRolaDeLado(el))return '';
   }
   return zona;
+}
+/* O dedo pousou num elemento que é ele próprio arrastável? Quem declara
+   touch-action:none na folha diz que o gesto é dele — a pega de uma lista
+   que se reordena (modelos.js:mdlPousar, tarefas.js:tfArrastar), o puxador
+   das fotos — e o draggable também. A folha não pega nesse gesto, venha a
+   pega de onde vier (KAN-167-3: arrastar um modelo para baixo levava a
+   janela atrás). O cabeçalho da folha tem touch-action:none por ser dela
+   (estilos.css, a região da folha arrastável): a procura acaba nele.
+   Recebe: alvo — o elemento onde o dedo pousou; s — a .sheet; cab — o .head.
+   Devolve: true se o gesto é do elemento, e não da folha. */
+function folhaTemArrastoProprio(alvo,s,cab){
+  for(let el=alvo;el&&el!==s&&el!==cab;el=el.parentElement){
+    if(typeof el.getAttribute==='function'&&el.getAttribute('draggable')==='true')return true;
+    let ta='';
+    try{ta=String((getComputedStyle(el)||{}).touchAction||'')}catch(e){ta=''}
+    if(ta==='none')return true;
+  }
+  return false;
 }
 /* Para cima, a folha resiste: anda cada vez menos quanto mais se puxa, e
    nunca sobe mais de metade de FOLHA_RESISTE (a curva do avisoElastico). Uma

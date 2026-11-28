@@ -5983,8 +5983,38 @@ p.qa-quem{margin:0}
 .qa-subs{display:grid;gap:8px;min-width:0}
 .qa-subs>.hint{margin:0}
 .qa-subs-lista{list-style:none;margin:0;padding:0;display:grid;gap:6px}
-/* Na lista, os subtickets logo por baixo do pai, recolhidos para dentro e com o fio do lado */
-.qa-linha.qa-linha-sub{margin-left:14px;width:calc(100% - 14px);border-left:3px solid var(--line2)}
+/* Na lista, os subtickets de um pai juntos (cloud/qa.js:qaHtmlGrupoDoPai,
+   KAN-174), com as linhas iguais às de um ticket: por cima, de quem são,
+   numa linha discreta como a da janela (.qa-do-pai), com o selo do pai que
+   se toca. Um grupo é sempre de um pai só, esteja o pai onde estiver */
+.qa-subgrupo{display:grid;gap:6px;min-width:0;margin-top:2px}
+.qa-subgrupo-de{min-height:24px}
+/* A janela de um ticket (KAN-168): no cabeçalho, as setas para o anterior e
+   o seguinte (44px, desligadas nas pontas: a cor da frente esbate-se, que o
+   escuro forçado do Samsung mantém) e a posição («3 de 12») no meio; o
+   título encolhe com reticências para lhes dar lugar */
+.qa-janela-ticket .head h2{flex:0 1 auto;min-width:0;margin-right:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qa-nav{display:inline-flex;align-items:center;gap:0;flex:none}
+.qa-janela-ticket .head{gap:4px}
+.qa-nav-seta{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin:0;padding:0;border:0;border-radius:12px;
+  background:transparent;color:var(--ink);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.qa-nav-seta:disabled{color:var(--muted);opacity:.4;cursor:default}
+.qa-nav-seta:not(:disabled):active{background:var(--press)}
+@media(hover:hover) and (pointer:fine){.qa-nav-seta:not(:disabled):hover{background:var(--chip)}}
+.qa-nav-seta:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.qa-nav-pos{min-width:40px;padding:0 2px;text-align:center;font-size:13px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+/* O deslize de lado entre tickets (cloud/qa.js:qaDeslizePousar): o corpo
+   entrega ao browser só o gesto vertical e o zoom (o de lado é da app, como
+   no #view dos separadores) e corta o que passa da largura; o vizinho que
+   entra colado é pintado por cima, inerte, à altura do que se vê. O que se
+   vê segue o dedo sem transição (é manipulação direta); a viagem e o
+   regresso correm pela WAAPI (--lento/--curva-fita nas setas, --medio/
+   --curva-entra ao largar). Sem movimento nada segue o dedo (o qa.js não
+   mexe), e a troca é seca */
+.qa-janela-ticket .body{position:relative;overflow-x:hidden;touch-action:pan-y pinch-zoom}
+.qa-janela-ticket .body.qa-a-deslizar{user-select:none;-webkit-user-select:none}
+.qa-vizinho{position:absolute;overflow:hidden;pointer-events:none;will-change:transform}
+.qa-janela-ticket .body.qa-a-deslizar>.qa-ver{will-change:transform}
 /* Os anexos (KAN-165). No «Novo ticket» e na resposta, os ficheiros
    escolhidos (cloud/qa.js:qaHtmlEscolhidos): uma linha cada, com a
    miniatura (uma imagem) ou o ícone, o nome cortado, o tipo e o tamanho (ou
@@ -6251,8 +6281,11 @@ label.fine-lido>input,label.fine-lido .selbtn{border-color:var(--accent);box-sha
 /* === fim: o «?» das perguntas do bloco fiscal === */
 /* === modelos de dados: a janela do Lab (cloud/modelos.js; KAN-167) ===
    A lista dos modelos da pessoa, cada linha com a pega (só na ordem
-   personalizada), o nome, o selo da origem, a linha do que permite testar,
-   «Usar» e o ⋯. O segmentado da ordem tem alvos de 44px; a escolha acesa vê-se
+   personalizada), o nome, o selo da origem, a linha do que permite testar
+   e o ⋯. Na app tocar na linha usa o modelo (KAN-167-2): o texto é um botão
+   (.mdl-usar) cujo alvo cresce para a linha inteira por um ::after, com a
+   pega e o ⋯ por cima (a pega com z-index; o ⋯ vem depois no documento). O
+   toque acende a linha (--press) e o foco do teclado contorna-a. O segmentado da ordem tem alvos de 44px; a escolha acesa vê-se
    pelo texto e pelo contorno no --accent (a cor da frente, que o escuro forçado
    do Samsung mantém). O arrasto segue o das fotos do imóvel: a linha agarrada
    não tem transição (é manipulação direta) e as outras abrem o lugar no
@@ -6266,26 +6299,32 @@ label.fine-lido>input,label.fine-lido .selbtn{border-color:var(--accent);box-sha
 .mdl-estado{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:8px 0}
 .mdl-estado>.hint{margin:0}
 .mdl-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
-.mdl-linha{display:flex;align-items:center;gap:8px;min-width:0;padding:8px 8px 8px 12px;border:1px solid var(--line);border-radius:14px;
+.mdl-linha{position:relative;display:flex;align-items:center;gap:8px;min-width:0;padding:8px 8px 8px 12px;border:1px solid var(--line);border-radius:14px;
   background:var(--card);transition:transform var(--rapido) var(--curva)}
 .mdl-lista.arrasta>.mdl-linha{padding-left:4px}
 .mdl-linha.a-levar{position:relative;z-index:5;transition:none;will-change:transform;box-shadow:0 10px 26px rgba(0,0,0,.25);border-color:var(--accent)}
 .mdl-lista.pousar>.mdl-linha{transition:none}
 .mdl-lista.a-arrastar{user-select:none;-webkit-user-select:none}
-.mdl-pega{flex:0 0 44px;width:44px;height:44px;display:grid;place-items:center;margin:0;padding:0;border:0;border-radius:10px;
+.mdl-pega{position:relative;z-index:1;flex:0 0 44px;width:44px;height:44px;display:grid;place-items:center;margin:0;padding:0;border:0;border-radius:10px;
   background:transparent;color:var(--muted);cursor:grab;touch-action:none;-webkit-tap-highlight-color:transparent}
 .mdl-pega>svg{pointer-events:none}
 .mdl-pega:active,.mdl-linha.a-levar .mdl-pega{color:var(--accent);cursor:grabbing}
 .mdl-pega:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .mdl-texto{flex:1 1 auto;min-width:0}
+button.mdl-texto{display:block;min-height:44px;margin:0;padding:4px 0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;
+  -webkit-tap-highlight-color:transparent}
+button.mdl-texto::after{content:"";position:absolute;inset:0;border-radius:14px}
+button.mdl-texto[aria-disabled="true"]{cursor:default}
+button.mdl-texto:focus-visible{outline:none}
+.mdl-linha:has(>.mdl-usar:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+.mdl-linha.mdl-toca:has(>.mdl-usar:active){background:var(--press)}
+@media(hover:hover) and (pointer:fine){.mdl-linha.mdl-toca:has(>.mdl-usar:not([aria-disabled="true"]):hover){background:var(--chip)}}
 .mdl-cima{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;min-width:0}
 .mdl-nome{font-weight:650;color:var(--ink);overflow-wrap:anywhere}
 .mdl-selo{font-size:12px;font-weight:600;line-height:18px;padding:0 7px;border:1px solid currentColor;border-radius:999px;color:var(--muted);white-space:nowrap}
 .mdl-selo[data-origem="ticket"]{color:var(--loan)}
 .mdl-selo[data-origem="pessoa"]{color:var(--in)}
-.mdl-desc{margin:2px 0 0;color:var(--muted);overflow-wrap:anywhere}
-/* o «Usar» é um .btn.sm (36px, 40 no dedo): aqui é um alvo de 44 */
-.mdl-linha>.btn.mdl-usar{flex:0 0 auto;min-height:44px}
+.mdl-desc{display:block;margin:2px 0 0;color:var(--muted);overflow-wrap:anywhere}
 .mdl-linha>.menuwrap{flex:0 0 auto}
 /* o ⋯ (o .iconbtn da app), desenhado aqui também para o back office e as páginas */
 .mdl-linha .mdl-opcoes{width:44px;height:44px;display:grid;place-items:center;margin:0;padding:0;border:0;border-radius:10px;
@@ -6298,17 +6337,7 @@ label.fine-lido>input,label.fine-lido .selbtn{border-color:var(--accent);box-sha
 .mdl-form>.hint{margin:0}
 .mdl-so-leitor{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
 @media(hover:hover) and (pointer:fine){.mdl-pega:hover,.mdl-linha .mdl-opcoes:hover{background:var(--chip);color:var(--ink)}}
-/* no telemóvel a linha passa a grelha: a pega à esquerda, de alto a baixo; o
-   texto com a largura toda e o ⋯ no canto; o «Usar» por baixo do texto */
-@media(max-width:520px){
-  .mdl-linha{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:4px;row-gap:6px;align-items:start;padding-right:4px}
-  .mdl-texto{grid-column:1;grid-row:1;padding-top:6px}
-  .mdl-linha>.menuwrap{grid-column:2;grid-row:1}
-  .mdl-linha>.btn.mdl-usar{grid-column:1;grid-row:2;justify-self:start}
-  .mdl-lista.arrasta>.mdl-linha{grid-template-columns:44px minmax(0,1fr) auto}
-  .mdl-lista.arrasta .mdl-pega{grid-column:1;grid-row:1/3;align-self:center}
-  .mdl-lista.arrasta .mdl-texto,.mdl-lista.arrasta>.mdl-linha>.btn.mdl-usar{grid-column:2}
-  .mdl-lista.arrasta>.mdl-linha>.menuwrap{grid-column:3}
-}
+/* no telemóvel a linha encosta mais: o ⋯ no canto, a pega e o texto com a largura que sobra */
+@media(max-width:520px){.mdl-linha{gap:4px;padding-right:4px}}
 @media(prefers-reduced-motion:reduce){.mdl-linha{transition:none}}
 /* === fim: modelos de dados === */

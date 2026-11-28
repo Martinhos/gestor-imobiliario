@@ -182,6 +182,8 @@ const BUCKETS = { dev: 'gestor-imobiliario-dev', local: 'gestor-imobiliario' };
 // a fila de trabalho: as colunas que o fila mostra, pela ordem do quadro
 export const FILA = ['a-fazer', 'auto-tests'];
 const A_FAZER = 'a-fazer', AUTO_TESTS = 'auto-tests', HUMAN_TESTS = 'human-tests';
+// Para depois: o que quem testa tirou da frente (KAN-171); um subticket lá conta como por decidir
+const PARA_DEPOIS = 'para-depois';
 // a produção, só para o sincronizar LER os pedidos aceites (nunca para escrever)
 export const PRODUCAO = { nome: 'prod', local: false, base: 'gestor-imobiliario' };
 // quem assina o que o script escreve, e os comentários que vêm do Jira
@@ -2387,8 +2389,8 @@ function comOTicket(det) {
    Os subtickets (KAN-162): com dois ou mais --teste, cria um subticket por
    teste em Human Tests (sqlCriarSubtickets), por baixo do pai, e o «O que
    testar» do pai (e a resolução do ticket de QA) diz quais são; os
-   subtickets que ainda não tinham sido aceites (em A fazer, Auto Tests ou
-   Human Tests) saem, trocados pelos novos, e os aceites (Staging, Adiado,
+   subtickets que ainda não tinham sido aceites (em A fazer, Auto Tests,
+   Human Tests ou Para depois) saem, trocados pelos novos, e os aceites (Staging, Adiado,
    Produção) ficam. Sem --teste, os que voltaram a A fazer ou a Auto Tests
    (comentados) vão de novo a Human Tests com o pai.
    Recebe: o — as opções lidas; d — as dependências.
@@ -2420,7 +2422,7 @@ function cmdResolver(o, d) {
   if (o.testes.length) {
     const x0 = filhos.reduce((m, f) => Math.max(m, Number(f.sub) || 0), 0) + 1;
     if (x0 + o.testes.length - 1 > SUB_BASE - 1) throw new ErroKanban('O ' + k.chave + ' já não leva mais subtickets (até ' + (SUB_BASE - 1) + ').');
-    trocados = vivos.filter((f) => FILA.includes(f.coluna_id) || f.coluna_id === HUMAN_TESTS);
+    trocados = vivos.filter((f) => FILA.includes(f.coluna_id) || f.coluna_id === HUMAN_TESTS || f.coluna_id === PARA_DEPOIS);
     criados = o.testes.map((t, i) => ({ chave: chaveDe(numeroDoSubticket(k.numero, x0 + i)), titulo: t.titulo }));
     filhosSql = trocados.flatMap((f) => sqlRemoverSubticket(f, agora))
       .concat(sqlCriarSubtickets(k, o.testes, x0, destino, agora, o.testes.map(() => d.uuid())));

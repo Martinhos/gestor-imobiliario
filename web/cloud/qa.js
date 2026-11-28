@@ -24,8 +24,10 @@
    /api/qa traz as colunas pela ordem do quadro, e a lista mostra uma secção
    por coluna. Resolvido é estar em Human Tests ou numa coluna de fim: aí o
    resolved_at está posto, e o ticket reabre-se. Em Human Tests quem testa
-   decide (Recusar, Adiar a produção, Enviar para produção) em vez de mover,
-   e em Adiado envia-o para produção. Qualquer ticket leva comentários, que
+   decide (Recusar, Para depois, Adiar a produção, Enviar para produção) em
+   vez de mover, em Para depois volta-o a Human Tests, e em Adiado envia-o
+   para produção. A janela de um ticket anda pela lista (as setas e o
+   deslize, KAN-168) e, depois de uma decisão, passa ao que ficou no lugar. Qualquer ticket leva comentários, que
    são os do cartão dele no kanban; comentar devolve-o a A fazer, para quem
    programa responder (a nota do resolver é a resposta).
 
@@ -119,6 +121,8 @@ var QA_COL_STAGING = 'staging';
 var QA_COL_ADIADO = 'adiado';
 // Produção (lib/kanban.js:KAN_PRODUCAO, o id de sempre): a pílula não mostra o que lá está, e quem leva para lá é o promove
 var QA_COL_PRODUCAO = 'concluido';
+// Para depois (lib/kanban.js:KAN_PARA_DEPOIS): o «agora não consigo testar isto» de quem testa, a partir de Human Tests (KAN-171)
+var QA_COL_PARA_DEPOIS = 'para-depois';
 // as colunas quando o servidor não as manda (um servidor de antes da 0029), pela ordem do quadro
 var QA_COLUNAS_OMISSAO = [
   { id: 'a-fazer', nome: 'A fazer', fim: false },
@@ -157,6 +161,9 @@ var qaCamadaTicket = null;   // a camada da janela de um ticket, enquanto aberta
 var qaOcupado = {};          // id → 1: um pedido de remover, reabrir ou mover esse ticket a caminho
 var qaTamanhoPedido = 0;     // o requestAnimationFrame do reencaixe ao mudar de tamanho
 var qaDobrasAqui = {};       // o mesmo que QA_LS_DOBRAS, para quando o armazenamento está vedado
+var qaGesto = null;          // o deslize de lado na janela de um ticket, em curso (qaDeslizePousar)
+// o que nunca começa o deslize entre tickets: os campos, o toque longo, os menus e o vizinho pintado
+var QA_DESLIZE_NAO_ROUBA = 'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[data-lp],.menupop,.qa-vizinho';
 
 /* ------------------------------------------------------ existir ou não */
 
@@ -1661,23 +1668,96 @@ function qaSeccoes(ts) {
   return { seccoes: seccoes, abertos: abertos };
 }
 
-/* Os subtickets de uma secção logo a seguir ao pai, pelo X (KAN-162), quando
-   o pai está na mesma secção; os outros ficam onde a ordem os pôs.
+/* Os subtickets de uma secção juntos, pelo X, um grupo por pai (KAN-162,
+   KAN-174): logo a seguir ao pai quando ele está na mesma secção; quando
+   não está (voltou a A fazer, ou seguiu para outra coluna), no lugar do
+   primeiro deles pela ordem da secção. Os de pais diferentes nunca se
+   misturam (qaBlocos dá a cada grupo o nome do pai).
    Recebe: ts — os itens da secção, já arrumados.
    Devolve: a lista nova. */
 function qaFilhosAoPai(ts) {
-  var naSeccao = {};
+  var naSeccao = {}, foi = {}, out = [];
   ts.forEach(function (t) { if (t.cartao) naSeccao[t.cartao] = true; });
-  var dePai = function (t) { return qaESubticket(t) && naSeccao[t.pai.cartao]; };
-  var out = [];
-  ts.forEach(function (t) {
-    if (dePai(t)) return;
-    out.push(t);
-    ts.filter(function (f) { return dePai(f) && f.pai.cartao === t.cartao; })
+  var junta = function (chave) {
+    if (foi[chave]) return;
+    foi[chave] = true;
+    ts.filter(function (f) { return qaESubticket(f) && f.pai.cartao === chave; })
       .sort(function (a, b) { return Number(a.sub) - Number(b.sub); })
       .forEach(function (f) { out.push(f); });
+  };
+  ts.forEach(function (t) {
+    if (qaESubticket(t)) { if (!naSeccao[t.pai.cartao]) junta(t.pai.cartao); return; }
+    out.push(t);
+    if (t.cartao) junta(t.cartao);
   });
   return out;
+}
+
+/* Os blocos de uma secção (KAN-174), pela ordem de qaFilhosAoPai: cada
+   item que não é um subticket é um bloco seu; os subtickets seguidos do
+   mesmo pai, um bloco só, com o pai (a chave e o título). A prioridade de
+   um bloco é a do primeiro item, e a de um grupo logo a seguir ao pai é a
+   do pai: um grupo de prioridade de A fazer nunca parte um pai dos seus.
+   Recebe: ts — os itens da secção, pela ordem de qaFilhosAoPai.
+   Devolve: [{pai: null | {cartao, titulo}, p, ts}]. */
+function qaBlocos(ts) {
+  var bs = [];
+  (ts || []).forEach(function (t) {
+    var ult = bs[bs.length - 1];
+    if (qaESubticket(t)) {
+      if (ult && ult.pai && ult.pai.cartao === t.pai.cartao) { ult.ts.push(t); return; }
+      var logoAposOPai = !!(ult && !ult.pai && ult.ts[0].cartao === t.pai.cartao);
+      bs.push({ pai: { cartao: t.pai.cartao, titulo: String(t.pai.titulo || '') }, p: logoAposOPai ? ult.p : qaPrioridade(t), ts: [t] });
+      return;
+    }
+    bs.push({ pai: null, p: qaPrioridade(t), ts: [t] });
+  });
+  return bs;
+}
+
+/* Os de A fazer em grupos pela prioridade, bloco a bloco (qaBlocos): os
+   blocos seguidos com a mesma prioridade, um grupo.
+   Recebe: ts — os itens de A fazer, pela ordem de qaSeccoes.
+   Devolve: [{p, blocos}]. */
+function qaGruposDePrioridade(ts) {
+  var grupos = [];
+  qaBlocos(ts).forEach(function (b) {
+    if (!grupos.length || grupos[grupos.length - 1].p !== b.p) grupos.push({ p: b.p, blocos: [] });
+    grupos[grupos.length - 1].blocos.push(b);
+  });
+  return grupos;
+}
+
+/* As linhas de uns blocos (qaBlocos): cada item a sua linha (qaHtmlLinha,
+   a mesma num subticket que num ticket, KAN-174), e cada grupo de
+   subtickets junto, com o pai por cima (qaHtmlGrupoDoPai).
+   Recebe: blocos — de qaBlocos.
+   Devolve: o HTML (texto). */
+function qaHtmlBlocos(blocos) {
+  return '<div class="qa-linhas">' + blocos.map(function (b) {
+    return b.pai ? qaHtmlGrupoDoPai(b) : b.ts.map(qaHtmlLinha).join('');
+  }).join('') + '</div>';
+}
+
+/* Um grupo de subtickets do mesmo pai na lista (KAN-174: «devem ficar todos
+   juntos»): por cima, de quem são — «Subtickets do», o selo do pai (que se
+   toca para o abrir, quando ele está na lista) e o título dele, numa linha
+   só, como a linha de quem é na janela (qaHtmlDoPai) —, e as linhas por
+   baixo, iguais às de um ticket.
+   Recebe: b — o bloco ({pai: {cartao, titulo}, ts}).
+   Devolve: o HTML (texto). */
+function qaHtmlGrupoDoPai(b) {
+  var chave = b.pai.cartao, tit = String(b.pai.titulo || '').trim();
+  var naLista = (qaLista.tickets || []).some(function (x) { return x.cartao === chave; });
+  var de = b.ts.length === 1 ? 'Subticket do' : 'Subtickets do';
+  var selo = naLista
+    ? '<button type="button" class="num qa-cartao qa-cartao-toca" data-toca="camada" data-click="qaAbrirTicket(\'' + jsq(qaIdDoCartao(chave)) + '\')"' +
+      ' aria-label="' + esc('Abrir o ' + chave + (tit ? ': ' + tit : '')) + '">' + esc(chave) + '</button>'
+    : '<span class="num qa-cartao">' + esc(chave) + '</span>';
+  return '<div class="qa-subgrupo" role="group" aria-label="' + esc(de + ' ' + chave + (tit ? ': ' + tit : '')) + '">' +
+    '<p class="small qa-do-pai qa-subgrupo-de"><span class="qa-do-pai-de">' + de + '</span>' + selo +
+      (tit ? '<span class="qa-do-pai-tit" aria-hidden="true">' + esc(tit) + '</span>' : '') + '</p>' +
+    '<div class="qa-linhas">' + b.ts.map(qaHtmlLinha).join('') + '</div></div>';
 }
 
 /* Abre a janela «Tickets»: logo com o que já se sabe (ou a espera), e
@@ -1718,7 +1798,7 @@ function qaHtmlLista() {
     if (!novos && !s.ts.length) return '';
     var corpo = novos
       ? (s.ts.length ? qaHtmlGrupos(s.ts) : '<p class="hint">Nenhum ticket novo.</p>')
-      : '<div class="qa-linhas">' + s.ts.map(qaHtmlLinha).join('') + '</div>';
+      : qaHtmlBlocos(qaBlocos(s.ts));
     return qaHtmlDobra(s.id, 'h3', '<span class="qa-dobra-nome">' + esc(s.nome) + '</span><span class="qa-sec-n">' + s.ts.length + '</span>', corpo);
   }).join('') + '</div>';
 }
@@ -1726,21 +1806,52 @@ function qaHtmlLista() {
 /* Os de A fazer em grupos pela prioridade do cartão (Mais alta a Mais
    baixa, os nomes do kanban), cada um com o título e quantos tem, e cada um
    uma secção que abre e fecha (qaHtmlDobra, com a chave 'p-N'; os itens já
-   vêm arrumados por qaSeccoes).
+   vêm arrumados por qaSeccoes, e os subtickets de um pai ficam no grupo
+   dele: qaGruposDePrioridade).
    Recebe: novos — os itens de A fazer, pela ordem de qaSeccoes.
    Devolve: o HTML (texto). */
 function qaHtmlGrupos(novos) {
-  var grupos = [];
-  novos.forEach(function (t) {
-    var p = qaPrioridade(t);
-    if (!grupos.length || grupos[grupos.length - 1].p !== p) grupos.push({ p: p, ts: [] });
-    grupos[grupos.length - 1].ts.push(t);
-  });
-  return grupos.map(function (g) {
+  return qaGruposDePrioridade(novos).map(function (g) {
+    var n = g.blocos.reduce(function (k, b) { return k + b.ts.length; }, 0);
     return qaHtmlDobra('p-' + g.p, 'h4',
-      '<span class="qa-dobra-nome">' + qaNomeDaPrioridade(g.p) + '</span><span class="qa-grupo-n">' + g.ts.length + '</span>',
-      '<div class="qa-linhas">' + g.ts.map(qaHtmlLinha).join('') + '</div>');
+      '<span class="qa-dobra-nome">' + qaNomeDaPrioridade(g.p) + '</span><span class="qa-grupo-n">' + n + '</span>',
+      qaHtmlBlocos(g.blocos));
   }).join('');
+}
+
+/* A ordem da lista «Tickets» tal como se vê (KAN-168): as secções pela
+   ordem do quadro e, em A fazer, os grupos de prioridade — as mesmas de
+   qaHtmlLista —, cada item com a marca de estar à vista (a secção e o grupo
+   dele abertos).
+   Devolve: [{id, visivel}]. */
+function qaOrdemDaLista() {
+  var r = [];
+  qaSeccoes(qaLista.tickets || []).seccoes.forEach(function (s) {
+    if (!s.ts.length) return;
+    var aberta = qaDobraAberta(s.id);
+    if (s.id !== QA_COL_NOVO) { s.ts.forEach(function (t) { r.push({ id: t.id, visivel: aberta }); }); return; }
+    qaGruposDePrioridade(s.ts).forEach(function (g) {
+      var ve = aberta && qaDobraAberta('p-' + g.p);
+      g.blocos.forEach(function (b) { b.ts.forEach(function (t) { r.push({ id: t.id, visivel: ve }); }); });
+    });
+  });
+  return r;
+}
+
+/* Por onde as setas e o deslize andam na janela de um ticket que abre
+   agora (KAN-168): os tickets que se veem na lista, pela ordem dela; se o
+   que abre não está à vista (veio de uma secção recolhida, ou de um
+   subticket dentro de outro ticket), a lista toda. Fica assim enquanto a
+   janela está aberta — a ordem não muda por baixo de quem testa —, e o que
+   sai do sítio por uma decisão sai dela (qaSeguirDepois).
+   Recebe: id — o do ticket que abre.
+   Devolve: a lista dos ids. */
+function qaNavDaLista(id) {
+  var ordem = qaOrdemDaLista();
+  var vis = ordem.filter(function (x) { return x.visivel; }).map(function (x) { return x.id; });
+  if (vis.indexOf(id) > -1) return vis;
+  var todos = ordem.map(function (x) { return x.id; });
+  return todos.indexOf(id) > -1 ? todos : [id];
 }
 
 /* Uma secção da lista que abre e fecha, como as da gaveta
@@ -1829,13 +1940,14 @@ function qaDobrar(chave) {
    cartão quando não é um Erro (qaNomeDoTipo), a chave do cartão no seu
    selo, os sinais de que traz captura e anexos, quem e quando, e o título do cartão (o começo da
    descrição, sem título). A de um pedido de uma pessoa tem só o tipo, a
-   chave e o título (KAN-155): nem prioridade, nem quem, nem quando. Tocar
-   abre o item.
+   chave e o título (KAN-155): nem prioridade, nem quem, nem quando. A de um
+   subticket é igual à de um ticket (KAN-174), e o grupo diz de quem é
+   (qaHtmlGrupoDoPai). Tocar abre o item.
    Recebe: t — o item (um cartão do kanban).
    Devolve: o HTML (texto). */
 function qaHtmlLinha(t) {
   var tipo = qaNomeDoTipo(t), pedido = qaEPedido(t);
-  return '<button type="button" class="qa-linha' + (qaESubticket(t) ? ' qa-linha-sub' : '') + '" data-toca="camada" data-click="qaAbrirTicket(\'' + jsq(t.id) + '\')">' +
+  return '<button type="button" class="qa-linha" data-toca="camada" data-click="qaAbrirTicket(\'' + jsq(t.id) + '\')">' +
     '<span class="qa-linha-cab">' + (pedido ? '' : qaSelo(qaPrioridade(t))) +
       (tipo ? '<span class="small qa-tipo">' + esc(tipo) + '</span>' : '') +
       (typeof t.cartao === 'string' && t.cartao ? '<span class="num qa-cartao">' + esc(t.cartao) + '</span>' : '') +
@@ -2007,6 +2119,10 @@ function qaPintarLista() {
    decisões; nas outras colunas «Mover» e «Reabrir» (nas de fim) ou
    «Fechar». O cartão de um pedido de uma pessoa abre só para ler: a chave,
    a coluna e o título, sem comentários (qaHtmlTicket, qaRodapeTicket).
+   No cabeçalho, as setas para o anterior e o seguinte, pela ordem da lista
+   de onde se abriu (qaNavDaLista, qaHtmlNav; KAN-168), e o deslize de lado
+   no corpo faz o mesmo (qaDeslizePousar). Passar de ticket troca o que a
+   janela mostra, na mesma janela (qaTrocarTicket).
    Recebe: id — o id do item (o do ticket, ou a chave KAN-N de um cartão sem ticket).
    Devolve: nada — abre a janela. */
 function qaAbrirTicket(id) {
@@ -2015,20 +2131,475 @@ function qaAbrirTicket(id) {
   var L = openModal(qaTituloDaJanela(t), qaHtmlTicket(t), qaRodapeTicket(t));
   if (!L) return;
   qaMarcarJanela(L);
+  if (L.el && L.el.classList) L.el.classList.add('qa-janela-ticket');
   qaCamadaTicket = L;
-  L.qaId = id; L.qaStatus = t.status; L.qaAtualizado = t.updated_at; L.qaUrl = '';
+  L.qaNav = qaNavDaLista(id);
+  L.aoFechar = function () {
+    qaDeslizeLargar();
+    if (L.qaCorrida) { try { L.qaCorrida.cancelar(); } catch (e) {} L.qaCorrida = null; }
+    qaLargarTicket(L);
+    if (qaCamadaTicket === L) qaCamadaTicket = qaTicketPorBaixo(L);
+  };
+  if (L.el && typeof L.el.addEventListener === 'function') {
+    L.el.addEventListener('paste', qaColarNaResposta);
+    var corpo = typeof L.el.querySelector === 'function' ? L.el.querySelector('.body') : null;
+    if (corpo && typeof corpo.addEventListener === 'function') corpo.addEventListener('pointerdown', qaDeslizePousar);
+  }
+  qaPorTicket(L, t);
+}
+
+/* A janela de um ticket que fica à frente quando esta fecha: a de um ticket
+   aberto de dentro de outro (o pai, um subticket) fecha e a de baixo volta a
+   ser a do ticket aberto, com as setas e as decisões dela.
+   Recebe: L — a camada que fecha.
+   Devolve: a camada do ticket de baixo, ou null. */
+function qaTicketPorBaixo(L) {
+  var pilha = typeof modalStack !== 'undefined' ? modalStack : [];
+  for (var i = pilha.length - 1; i >= 0; i--) if (pilha[i] !== L && pilha[i] && pilha[i].qaNav) return pilha[i];
+  return null;
+}
+
+/* O que a janela de um ticket guarda do item que mostra, posto de novo
+   (ao abrir e a cada troca de ticket): o id, a coluna, a captura, os
+   comentários, os anexos e os ficheiros escolhidos para a resposta; depois
+   as setas (qaPintarNav), e pedem-se a captura e os comentários dele.
+   Recebe: L — a camada; t — o item.
+   Devolve: nada. */
+function qaPorTicket(L, t) {
+  L.qaId = t.id; L.qaStatus = t.status; L.qaAtualizado = t.updated_at; L.qaUrl = '';
   L.qaComs = null; L.qaProvisorio = null; L.qaAnexos = null; L.qaEscolhidos = []; L.qaPendente = null;
   L.qaUrlsAnx = {}; L.qaPedidosAnx = {};
-  L.aoFechar = function () {
-    if (L.qaUrl) { try { URL.revokeObjectURL(L.qaUrl); } catch (e) {} L.qaUrl = ''; }
-    Object.keys(L.qaUrlsAnx || {}).forEach(function (k) { try { URL.revokeObjectURL(L.qaUrlsAnx[k]); } catch (e) {} });
-    L.qaUrlsAnx = {};
-    qaLargarEscolhidos(L.qaEscolhidos);
-    if (qaCamadaTicket === L) qaCamadaTicket = null;
-  };
-  if (!qaEPedido(t) && L.el && typeof L.el.addEventListener === 'function') L.el.addEventListener('paste', qaColarNaResposta);
-  if (t.imagem) qaCarregarImagem(L, id);
+  qaPintarNav(L);
+  if (t.imagem) qaCarregarImagem(L, t.id);
   if (!qaEPedido(t)) qaCarregarComentarios(L);
+}
+
+/* Solta o que a janela segurava do item que mostrava: os object URLs da
+   captura e dos anexos, e os ficheiros escolhidos para a resposta.
+   Recebe: L — a camada.
+   Devolve: nada. */
+function qaLargarTicket(L) {
+  if (L.qaUrl) { try { URL.revokeObjectURL(L.qaUrl); } catch (e) {} L.qaUrl = ''; }
+  Object.keys(L.qaUrlsAnx || {}).forEach(function (k) { try { URL.revokeObjectURL(L.qaUrlsAnx[k]); } catch (e) {} });
+  L.qaUrlsAnx = {};
+  qaLargarEscolhidos(L.qaEscolhidos || []);
+  L.qaEscolhidos = [];
+}
+
+/* ------------------------------------------- de um ticket ao seguinte (KAN-168) */
+
+/* As setas do cabeçalho da janela de um ticket: «Ticket anterior», a
+   posição («3 de 12», que o leitor de ecrã lê quando muda) e «Ticket
+   seguinte». Botões de 44px, desligados (e não escondidos) nas pontas.
+   Recebe: i — o lugar do ticket (de 0); n — quantos há.
+   Devolve: o HTML (texto). */
+function qaHtmlNav(i, n) {
+  return '<span class="qa-nav" role="group" aria-label="Percorrer os tickets">' +
+    '<button type="button" class="qa-nav-seta" data-nav="-1" data-toca="vista" data-click="qaPassarTicket(-1)" aria-label="Ticket anterior"' + (i > 0 ? '' : ' disabled') + '>' + ic('chev', 20) + '</button>' +
+    '<span class="qa-nav-pos" aria-live="polite">' + (i + 1) + ' de ' + n + '</span>' +
+    '<button type="button" class="qa-nav-seta" data-nav="1" data-toca="vista" data-click="qaPassarTicket(1)" aria-label="Ticket seguinte"' + (i < n - 1 ? '' : ' disabled') + '>' + ic('chevR', 20) + '</button>' +
+    '</span>';
+}
+
+/* Põe (ou acerta) as setas no cabeçalho da janela, no lugar do menu do
+   cabeçalho (o <span> antes do X). Já lá estando, só mudam o desligado e a
+   posição — o foco fica na seta que se tocou. Com um ticket só, nada.
+   Recebe: L — a camada do ticket.
+   Devolve: nada. */
+function qaPintarNav(L) {
+  var sitio = L && L.el && typeof L.el.querySelector === 'function' ? L.el.querySelector('.head > span') : null;
+  if (!sitio) return;
+  var nav = qaNavViva(L), i = nav.indexOf(L.qaId), n = nav.length;
+  if (n < 2 || i < 0) { sitio.innerHTML = ''; return; }
+  var el = typeof sitio.querySelector === 'function' ? sitio.querySelector('.qa-nav') : null;
+  if (!el) { sitio.innerHTML = qaHtmlNav(i, n); return; }
+  [].slice.call(el.querySelectorAll('[data-nav]')).forEach(function (b) {
+    var d = Number(b.getAttribute('data-nav'));
+    b.disabled = d < 0 ? i <= 0 : i >= n - 1;
+  });
+  var pos = el.querySelector('.qa-nav-pos');
+  if (pos) pos.textContent = (i + 1) + ' de ' + n;
+}
+
+/* Os tickets por onde a janela anda, sem os que já não estão na lista
+   (foram para Produção, ou removidos noutro sítio); o que ela mostra fica.
+   Recebe: L — a camada do ticket.
+   Devolve: a lista dos ids (também guardada em L.qaNav). */
+function qaNavViva(L) {
+  var ids = {};
+  (qaLista.tickets || []).forEach(function (x) { ids[x.id] = true; });
+  L.qaNav = (L.qaNav || []).filter(function (id) { return ids[id] || id === L.qaId; });
+  return L.qaNav;
+}
+
+/* O ticket ao lado do que a janela mostra, pela ordem dela.
+   Recebe: L — a camada; d — 1 (o seguinte) ou -1 (o anterior).
+   Devolve: o item, ou null na ponta. */
+function qaVizinho(L, d) {
+  var nav = qaNavViva(L), i = nav.indexOf(L.qaId), j = i + (d > 0 ? 1 : -1);
+  if (i < 0 || j < 0 || j >= nav.length) return null;
+  return (qaLista.tickets || []).filter(function (x) { return x.id === nav[j]; })[0] || null;
+}
+
+/* Há uma resposta por enviar na janela (texto no campo, ficheiros
+   escolhidos) ou um pedido a meio? Passar de ticket perdia-a.
+   Recebe: L — a camada do ticket.
+   Devolve: true se há. */
+function qaRespostaPorEnviar(L) {
+  var campo = L && L.el && typeof L.el.querySelector === 'function' ? L.el.querySelector('#qa_com') : null;
+  return !!(campo && String(campo.value || '').trim()) || !!(L && L.qaEscolhidos && L.qaEscolhidos.length) || !!(L && qaOcupado[L.qaId]);
+}
+
+/* Pode passar-se a outro ticket? Não com uma resposta por enviar: diz-se
+   porquê, e a janela fica.
+   Recebe: L — a camada do ticket.
+   Devolve: true ou false. */
+function qaPodePassar(L) {
+  if (!qaRespostaPorEnviar(L)) return true;
+  toast(L && qaOcupado[L.qaId] ? 'Espera que o pedido acabe.' : 'Tens uma resposta por enviar: envia-a ou apaga-a antes de passar a outro ticket.');
+  return false;
+}
+
+/* As setas do cabeçalho: o ticket anterior ou o seguinte, com a fita
+   (qaCorrer). Uma seta tocada a meio de uma viagem acaba essa primeiro.
+   Recebe: d — 1 (o seguinte) ou -1 (o anterior).
+   Devolve: true se passou. */
+function qaPassarTicket(d) {
+  var L = qaCamadaTicket;
+  if (!L || (typeof modalTop === 'function' && modalTop() !== L)) return false;
+  qaPararCorrida(L);
+  var t = qaVizinho(L, d);
+  if (!t || !qaPodePassar(L)) return false;
+  qaCorrer(L, t, d > 0 ? 1 : -1, 0, false);
+  return true;
+}
+
+/* ← e → passam de ticket na janela de cima, sem fita (um atalho de teclado
+   não anima). Não num campo, nem com uma tecla de modo, nem com um menu aberto.
+   Recebe: e — o keydown (ouvido no documento).
+   Devolve: true se passou. */
+function qaTeclaNaJanela(e) {
+  if (!e || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
+  var L = qaCamadaTicket;
+  if (!L || qaGesto || (typeof modalTop === 'function' && modalTop() !== L)) return false;
+  var alvo = e.target;
+  if (alvo && (/^(INPUT|TEXTAREA|SELECT)$/.test(alvo.tagName || '') || alvo.isContentEditable)) return false;
+  if (typeof document.querySelector === 'function' && document.querySelector('.menupop.on')) return false;
+  var d = e.key === 'ArrowRight' ? 1 : -1, t = qaVizinho(L, d);
+  if (!t) return false;
+  if (typeof e.preventDefault === 'function') e.preventDefault();
+  qaPararCorrida(L);
+  if (!qaPodePassar(L)) return false;
+  qaTrocarTicket(L, t);
+  return true;
+}
+
+/* Troca o ticket que a janela mostra, sem fechar nem abrir janela: o
+   título, o corpo (do topo) e o rodapé passam a ser os dele, e a captura e
+   os comentários pedem-se de novo (qaPorTicket). O foco que estava num nó
+   que saiu volta à janela.
+   Recebe: L — a camada; t — o item que passa a mostrar.
+   Devolve: nada. */
+function qaTrocarTicket(L, t) {
+  if (!L || !L.el || !t) return;
+  qaTirarVizinho(L);
+  qaLargarTicket(L);
+  var q = function (sel) { return typeof L.el.querySelector === 'function' ? L.el.querySelector(sel) : null; };
+  L.title = qaTituloDaJanela(t);
+  var h = q('.head h2'), corpo = q('.body'), pe = q('.foot');
+  if (h) h.textContent = L.title;
+  if (corpo) {
+    corpo.innerHTML = qaSemEtiquetas(qaHtmlTicket(t));
+    corpo.scrollTop = 0;
+    if (typeof tornarFocavel === 'function') tornarFocavel(corpo);
+  }
+  if (pe) pe.innerHTML = qaSemEtiquetas(qaRodapeTicket(t));
+  if (typeof modalSnap === 'function') L.snap = modalSnap(L.el);
+  L.tocado = false;
+  qaPorTicket(L, t);
+  try {
+    var ativo = document.activeElement;
+    if ((!ativo || ativo === document.body || !document.contains(ativo) || ativo.disabled) && typeof focarModal === 'function') focarModal(L.el);
+  } catch (e) {}
+}
+
+/* Depois de uma decisão que tira o ticket do sítio (Enviar para produção,
+   Adiar, Recusar, Para depois, Voltar, Mover, Reabrir, ou um comentário que
+   o devolve a A fazer), a janela passa para o ticket que ficou nesse lugar
+   (KAN-168: «a navegação segue para onde ele estava para poder continuar a
+   testar»): o seguinte; se era o último, o anterior; sem nenhum, volta à
+   lista. O que saiu sai da ordem da janela, e o aviso diz o que lhe
+   aconteceu (com a chave: a janela já mostra outro). Com uma resposta por
+   enviar a janela fica, só com o aviso. Noutra janela (ou com a dele
+   fechada), só o aviso.
+   Recebe: id — o do item que saiu; frase — o aviso ('' para nenhum).
+   Devolve: true se a janela passou a outro ticket (ou fechou). */
+function qaSeguirDepois(id, frase) {
+  var L = qaCamadaTicket;
+  var aqui = !!(L && L.qaId === id && (typeof modalTop !== 'function' || modalTop() === L) && (typeof modalStack === 'undefined' || modalStack.indexOf(L) > -1));
+  if (frase) toast(frase);
+  if (!aqui || qaRespostaPorEnviar(L)) return false;
+  qaPararCorrida(L);
+  var antes = qaNavViva(L), i = antes.indexOf(id);
+  L.qaNav = antes.filter(function (x) { return x !== id; });
+  var nav = L.qaNav;
+  if (!nav.length) { closeModal(); return true; }
+  var j = i < 0 ? 0 : Math.min(i, nav.length - 1);
+  var t = (qaLista.tickets || []).filter(function (x) { return x.id === nav[j]; })[0];
+  if (!t) { closeModal(); return true; }
+  qaCorrer(L, t, j >= i ? 1 : -1, 0, false);
+  return true;
+}
+
+/* As peças do deslize na janela de um ticket: o corpo (o que rola), o que
+   ele mostra (o .qa-ver) e o passo da fita (a largura do corpo).
+   Recebe: L — a camada.
+   Devolve: {corpo, atual, w}, ou null. */
+function qaPecasDoDeslize(L) {
+  var corpo = L && L.el && typeof L.el.querySelector === 'function' ? L.el.querySelector('.body') : null;
+  var atual = corpo && typeof corpo.querySelector === 'function' ? corpo.querySelector('.qa-ver') : null;
+  if (!corpo || !atual || typeof atual.animate !== 'function') return null;
+  return { corpo: corpo, atual: atual, w: corpo.clientWidth || 0 };
+}
+
+/* Pinta o ticket vizinho ao lado do que se vê, para entrar colado a ele
+   (como o vizinho dos separadores, navegacao.js:sepVizinho): o mesmo HTML
+   da janela, inerte e escondido do leitor de ecrã, à altura do que se vê do
+   corpo e com a largura do .qa-ver, a um passo para o lado d. Pinta-se uma
+   vez por lado e por gesto: já pintado para esse ticket, fica.
+   Recebe: L — a camada; t — o item vizinho; d — 1 (à direita) ou -1 (à esquerda); pc — de qaPecasDoDeslize.
+   Devolve: o elemento do vizinho. */
+function qaPintarVizinho(L, t, d, pc) {
+  var v = L.qaViz;
+  if (v && v.getAttribute('data-id') === String(t.id) && Number(v.getAttribute('data-d')) === d) return v;
+  qaTirarVizinho(L);
+  v = document.createElement('div');
+  v.className = 'qa-vizinho';
+  v.setAttribute('aria-hidden', 'true');
+  v.setAttribute('inert', '');
+  v.setAttribute('data-id', String(t.id));
+  v.setAttribute('data-d', String(d));
+  v.innerHTML = qaSemEtiquetas(qaHtmlTicket(t));
+  var topo = 0;
+  try { topo = parseFloat(getComputedStyle(pc.corpo).paddingTop) || 0; } catch (e) {}
+  v.style.top = (pc.corpo.scrollTop + topo) + 'px';
+  v.style.left = pc.atual.offsetLeft + 'px';
+  v.style.width = pc.atual.offsetWidth + 'px';
+  v.style.height = Math.max(0, pc.corpo.clientHeight - topo) + 'px';
+  v.style.transform = 'translateX(' + (d * pc.w) + 'px)';
+  pc.corpo.appendChild(v);
+  L.qaViz = v;
+  return v;
+}
+
+/* Tira o vizinho pintado (largou-se, virou-se, ou a janela fechou).
+   Recebe: L — a camada.
+   Devolve: nada. */
+function qaTirarVizinho(L) {
+  var v = L && L.qaViz;
+  if (L) L.qaViz = null;
+  if (v && v.parentNode) v.parentNode.removeChild(v);
+}
+
+/* Um token de curva da casa (continuidade.js:tokenTexto), ou o de omissão
+   onde ele não existe (o back office e as páginas públicas).
+   Recebe: nome — o token ('--curva-entra'…); omissao — o valor sem ele.
+   Devolve: o texto da curva. */
+function qaCurva(nome, omissao) {
+  return typeof tokenTexto === 'function' ? tokenTexto(nome, omissao) : omissao;
+}
+
+/* A viagem até outro ticket, com o vizinho colado (a fita das fotos,
+   anexos.js:fotoCorrer): o que se vê sai para um lado e o vizinho entra do
+   outro. Pelas setas e depois de uma decisão parte parada, no --lento e na
+   --curva-fita; largada por um dedo já vem a andar, e acaba no --medio e na
+   --curva-entra, à velocidade a que o dedo a deixou. No fim a janela passa
+   a mostrar o ticket de verdade (qaTrocarTicket) no mesmo instante em que o
+   vizinho sai — sem fotograma pelo meio. Sem movimento, troca logo.
+   Recebe: L — a camada; t — o item para onde vai; d — 1 (vem da direita) ou
+   -1 (da esquerda); desde — px de onde o que se vê parte; largado — true
+   se foi um dedo a largar.
+   Devolve: nada. */
+function qaCorrer(L, t, d, desde, largado) {
+  var pc = qaPecasDoDeslize(L);
+  if (!pc || !pc.w || semMovimento()) return qaTrocarTicket(L, t);
+  var v = qaPintarVizinho(L, t, d, pc);
+  pc.atual.style.transform = ''; v.style.transform = '';
+  var dur = largado ? msDoToken('--medio', 200) : msDoToken('--lento', 340);
+  var curva = largado ? qaCurva('--curva-entra', 'cubic-bezier(0,0,.2,1)') : qaCurva('--curva-fita', 'cubic-bezier(.4,0,.2,1)');
+  var de = desde || 0, o = { duration: dur, easing: curva, fill: 'forwards' };
+  var a1 = pc.atual.animate([{ transform: 'translateX(' + de + 'px)' }, { transform: 'translateX(' + (-d * pc.w) + 'px)' }], o);
+  var a2 = v.animate([{ transform: 'translateX(' + (de + d * pc.w) + 'px)' }, { transform: 'translateX(0px)' }], o);
+  var c = {};
+  var solta = function () { try { a1.cancel(); } catch (e) {} try { a2.cancel(); } catch (e) {} };
+  c.acabar = function () { if (L.qaCorrida !== c) return; L.qaCorrida = null; solta(); qaTrocarTicket(L, t); };
+  c.cancelar = function () { if (L.qaCorrida === c) L.qaCorrida = null; solta(); qaTirarVizinho(L); };
+  L.qaCorrida = c;
+  a1.onfinish = c.acabar;
+  // a rede de sempre: num separador escondido o onfinish não chega
+  setTimeout(c.acabar, dur + 120);
+}
+
+/* O que se vê volta ao sítio, de onde o dedo o deixou (--medio,
+   --curva-entra, como o regresso dos separadores e das fotos), e o vizinho
+   volta para fora com ele.
+   Recebe: L — a camada; desl — px a que estava; d — o lado do vizinho (0 sem nenhum).
+   Devolve: nada. */
+function qaAssentar(L, desl, d) {
+  var pc = qaPecasDoDeslize(L), v = L.qaViz;
+  if (pc) pc.atual.style.transform = '';
+  if (v) v.style.transform = 'translateX(' + (d * (pc ? pc.w : 0)) + 'px)';
+  if (!pc || !desl || semMovimento()) { qaTirarVizinho(L); return; }
+  var dur = msDoToken('--medio', 200), o = { duration: dur, easing: qaCurva('--curva-entra', 'cubic-bezier(0,0,.2,1)') };
+  var a1 = pc.atual.animate([{ transform: 'translateX(' + desl + 'px)' }, { transform: 'none' }], o);
+  var a2 = v && d ? v.animate([{ transform: 'translateX(' + (desl + d * pc.w) + 'px)' }, { transform: 'translateX(' + (d * pc.w) + 'px)' }], o) : null;
+  var c = {};
+  var solta = function () { try { a1.cancel(); } catch (e) {} try { if (a2) a2.cancel(); } catch (e) {} };
+  c.acabar = function () { if (L.qaCorrida !== c) return; L.qaCorrida = null; solta(); qaTirarVizinho(L); };
+  c.cancelar = c.acabar;
+  L.qaCorrida = c;
+  a1.onfinish = c.acabar;
+  setTimeout(c.acabar, dur + 120);
+}
+
+/* Acaba já a viagem (ou o regresso) em curso: uma seta tocada, ou um dedo
+   que pousa, a meio dela — a viagem chega ao fim de uma vez.
+   Recebe: L — a camada.
+   Devolve: nada. */
+function qaPararCorrida(L) {
+  var c = L && L.qaCorrida;
+  if (c) c.acabar();
+}
+
+/* Vira para o vizinho? Passado um quarto da largura, ou um sacudir para o
+   mesmo lado (a regra das fotos, anexos.js:fotoDecide).
+   Recebe: desl — px que o dedo levou (negativo para a esquerda); w — a
+   largura; vx — a velocidade (px/ms).
+   Devolve: 1 (o seguinte), -1 (o anterior) ou 0 (volta ao sítio). */
+function qaDecideDeslize(desl, w, vx) {
+  var vira = Math.abs(desl) > w / 4 || (Math.abs(desl) > 30 && Math.abs(vx) > 0.4 && (vx < 0) === (desl < 0));
+  return vira ? (desl < 0 ? 1 : -1) : 0;
+}
+
+/* Nas pontas, a página resiste: anda cada vez menos, nunca mais de meia
+   largura (como navegacao.js:sepElastico).
+   Recebe: dx — px que o dedo andou; w — a largura.
+   Devolve: px a que fica. */
+function qaElastico(dx, w) {
+  var m = Math.max(1, w / 2), a = Math.abs(dx);
+  return (dx < 0 ? -1 : 1) * m * (1 - 1 / (a / m * 0.55 + 1));
+}
+
+/* Alguma caixa entre o dedo e o corpo rola de lado (uma tabela, uma fila)?
+   Esse gesto é dela (navegacao.js:sepRolaDeLado, pela medida).
+   Recebe: el — onde o dedo pousou; corpo — o .body.
+   Devolve: true ou false. */
+function qaRolaDeLado(el, corpo) {
+  for (var x = el; x && x !== corpo; x = x.parentElement) {
+    if (typeof sepRolaDeLado === 'function') { if (sepRolaDeLado(x)) return true; continue; }
+    try {
+      var o = getComputedStyle(x).overflowX;
+      if ((o === 'auto' || o === 'scroll') && x.scrollWidth > x.clientWidth + 1) return true;
+    } catch (e) {}
+  }
+  return false;
+}
+
+/* O dedo (ou a caneta) pousou no corpo da janela de um ticket: talvez seja
+   um deslize de lado entre tickets. O gesto decide-se aos 10px
+   (qaDeslizeMove); um que começa num campo, num menu, no que tem toque
+   longo ou no que rola de lado nunca é dele. O rato não arrasta (seleciona
+   texto). Um dedo que pousa a meio de uma viagem acaba-a.
+   Recebe: e — o pointerdown no .body.
+   Devolve: nada — liga os ouvintes do documento. */
+function qaDeslizePousar(e) {
+  var L = qaCamadaTicket;
+  if (qaGesto || !L || !e || e.button > 0 || e.isPrimary === false || (e.pointerType !== 'touch' && e.pointerType !== 'pen')) return;
+  if (typeof modalTop === 'function' && modalTop() !== L) return;
+  var corpo = e.currentTarget, alvo = e.target;
+  if (!corpo || !alvo || typeof alvo.closest !== 'function' || alvo.closest(QA_DESLIZE_NAO_ROUBA) || qaRolaDeLado(alvo, corpo)) return;
+  qaPararCorrida(L);
+  if (qaNavViva(L).length < 2) return;
+  var t0 = Date.now();
+  qaGesto = { L: L, corpo: corpo, id: e.pointerId, x0: e.clientX, y0: e.clientY, ativo: false, desl: 0, d: 0, alvo: null, w: 0, vx: 0, xa: e.clientX, ta: t0, mexe: false };
+  document.addEventListener('pointermove', qaDeslizeMove);
+  document.addEventListener('pointerup', qaDeslizeFim);
+  document.addEventListener('pointercancel', qaDeslizeFim);
+}
+
+/* O dedo andou: aos 10px decide-se o eixo — na vertical é a rolagem do
+   corpo (ou a folha a fechar), e o gesto larga-se; na horizontal é dele, e
+   a folga de decidir não conta (arranca colado ao dedo). O que se vê segue o
+   dedo e o vizinho desse lado entra colado (qaPintarVizinho); na ponta não
+   há vizinho e resiste (qaElastico). Com uma resposta por enviar, não
+   arranca (qaPodePassar). Sem movimento não segue o dedo.
+   Recebe: e — o pointermove.
+   Devolve: nada. */
+function qaDeslizeMove(e) {
+  var g = qaGesto;
+  if (!g || e.pointerId !== g.id) return;
+  if (typeof modalTop === 'function' && modalTop() !== g.L) return qaDeslizeFim({ type: 'pointercancel', pointerId: g.id });
+  var dx = e.clientX - g.x0, dy = e.clientY - g.y0;
+  if (!g.ativo) {
+    if (Math.abs(dx) <= 10 && Math.abs(dy) <= 10) return;
+    if (Math.abs(dy) >= Math.abs(dx)) return qaDeslizeLargar();
+    if (!qaPodePassar(g.L)) return qaDeslizeLargar();
+    var pc0 = qaPecasDoDeslize(g.L);
+    if (!pc0 || !pc0.w) return qaDeslizeLargar();
+    g.ativo = true;
+    g.x0 += dx < 0 ? -10 : 10;
+    dx = e.clientX - g.x0;
+    g.w = pc0.w;
+    g.mexe = !semMovimento();
+    try { g.corpo.setPointerCapture(g.id); } catch (x) {}
+    if (typeof closePops === 'function') closePops();
+    if (g.corpo.classList) g.corpo.classList.add('qa-a-deslizar');
+  }
+  var agora = Date.now(), dt = agora - g.ta;
+  // a velocidade dos últimos instantes, alisada: é ela que diz se foi um sacudir
+  if (dt > 0) g.vx = 0.6 * ((e.clientX - g.xa) / dt) + 0.4 * g.vx;
+  g.xa = e.clientX; g.ta = agora;
+  var d = dx < 0 ? 1 : -1, alvo = dx ? qaVizinho(g.L, d) : null;
+  g.alvo = alvo; g.d = alvo ? d : 0;
+  g.desl = alvo ? dx : qaElastico(dx, g.w);
+  if (!g.mexe) return;
+  var pc = qaPecasDoDeslize(g.L);
+  if (!pc) return;
+  if (alvo) {
+    var v = qaPintarVizinho(g.L, alvo, d, pc);
+    v.style.transform = 'translateX(' + (g.desl + d * pc.w) + 'px)';
+  } else qaTirarVizinho(g.L);
+  pc.atual.style.transform = 'translateX(' + g.desl + 'px)';
+}
+
+/* Tira os ouvintes do deslize e esquece-o.
+   Devolve: o gesto que estava em curso (ou null). */
+function qaDeslizeLargar() {
+  var g = qaGesto;
+  document.removeEventListener('pointermove', qaDeslizeMove);
+  document.removeEventListener('pointerup', qaDeslizeFim);
+  document.removeEventListener('pointercancel', qaDeslizeFim);
+  qaGesto = null;
+  if (g && g.corpo && g.corpo.classList) g.corpo.classList.remove('qa-a-deslizar');
+  return g;
+}
+
+/* O dedo saiu: passado um quarto da largura, ou com um sacudir, vira para
+   o vizinho (qaCorrer, a partir de onde o dedo o deixou); antes disso, ou
+   com um pointercancel, volta ao sítio (qaAssentar). O clique que o browser
+   dá a seguir a um deslize engole-se (qaEngoleClique).
+   Recebe: e — o pointerup ou o pointercancel.
+   Devolve: nada. */
+function qaDeslizeFim(e) {
+  var g = qaGesto;
+  if (!g || (e && e.pointerId !== g.id)) return;
+  qaDeslizeLargar();
+  if (!g.ativo) return;
+  qaEngoleAte = Date.now() + QA_ENGOLE_MS;
+  var vira = !!(e && e.type !== 'pointercancel' && g.alvo && qaDecideDeslize(g.desl, g.w, g.vx) === g.d);
+  if (!vira) return qaAssentar(g.L, g.mexe ? g.desl : 0, g.d);
+  if (!g.mexe) return qaTrocarTicket(g.L, g.alvo);
+  qaCorrer(g.L, g.alvo, g.d, g.desl, true);
 }
 
 /* O título da janela de um item: «Ticket de QA» quando veio de um ticket, e
@@ -2056,6 +2627,26 @@ function qaTemTicket(t) {
 function qaPalavra(id) {
   var t = (qaLista.tickets || []).filter(function (x) { return x.id === id; })[0];
   return t && !qaTemTicket(t) ? 'Cartão' : 'Ticket';
+}
+
+/* O item nos avisos de uma decisão, com a chave do cartão: «Ticket KAN-12»,
+   «Cartão KAN-40» (KAN-168: depois de decidir a janela passa ao seguinte, e
+   o aviso tem de dizer de qual se fala); sem chave, só a palavra.
+   Recebe: id — o id do item.
+   Devolve: o texto. */
+function qaItemDoAviso(id) {
+  var t = (qaLista.tickets || []).filter(function (x) { return x.id === id; })[0];
+  return qaPalavra(id) + (t && typeof t.cartao === 'string' && t.cartao ? ' ' + t.cartao : '');
+}
+
+/* O item está em Para depois e veio de Human Tests (a última mudança de
+   coluna, que o servidor diz em veioDe: rotas/qa.js:itemParaFora)? Então
+   volta-se lá com «Voltar a Human Tests» (KAN-171), e a resolução continua
+   a ser a de agora.
+   Recebe: t — o item.
+   Devolve: true ou false. */
+function qaParaDepoisDeTestes(t) {
+  return !!t && t.status === QA_COL_PARA_DEPOIS && t.veioDe === QA_COL_RESOLVIDO;
 }
 
 /* O corpo da janela de um item: o de cima (qaHtmlTopo), os anexos do item
@@ -2090,7 +2681,7 @@ function qaHtmlTicket(t) {
    Recebe: t — o item.
    Devolve: o HTML (texto). */
 function qaHtmlTopo(t) {
-  var resolvido = qaColunaResolvida(t.status);
+  var resolvido = qaColunaResolvida(t.status) || qaParaDepoisDeTestes(t);
   var cartao = typeof t.cartao === 'string' && t.cartao ? '<span class="num qa-cartao" title="O cartão no kanban da equipa">' + esc(t.cartao) + '</span>' : '';
   var titulo = typeof t.titulo === 'string' && t.titulo.trim() ? '<p class="qa-ver-tit">' + esc(t.titulo) + '</p>' : '';
   if (qaEPedido(t)) {
@@ -2236,7 +2827,7 @@ function qaHtmlComentar() {
    Devolve: true se tinha uma imagem. */
 function qaColarNaResposta(e) {
   var dados = e && e.clipboardData;
-  if (!dados || !qaCamadaTicket) return false;
+  if (!dados || !qaCamadaTicket || !document.getElementById('qa_com')) return false;
   var f = qaImagemColada(dados);
   if (!f) return false;
   if (typeof e.preventDefault === 'function') e.preventDefault();
@@ -2253,11 +2844,14 @@ function qaCarregarComentarios(L) {
   if (!L || !L.qaId) return Promise.resolve(false);
   var id = L.qaId;
   return Promise.resolve().then(function () { return api('GET', '/api/qa/' + encodeURIComponent(id) + '/comentarios'); }).then(function (r) {
+    // a janela passou a outro ticket entretanto: esta conversa já não é a dela
+    if (L.qaId !== id) return false;
     L.qaComs = (r && Array.isArray(r.comentarios) ? r.comentarios : []).filter(function (c) { return c && typeof c === 'object' && c.id; });
     L.qaAnexos = r && Array.isArray(r.anexos) ? r.anexos : [];
     qaPintarComentarios(L);
     return true;
   }, function () {
+    if (L.qaId !== id) return false;
     L.qaComs = 'falhou';
     qaPintarComentarios(L);
     return false;
@@ -2344,7 +2938,7 @@ function qaComentar() {
   var t = (qaLista.tickets || []).filter(function (x) { return x.id === id; })[0];
   var para = qaColunaDepoisDoComentario(t || { status: L.qaStatus });
   var fica = (t ? t.status : L.qaStatus) === para;
-  var palavra = t && !qaTemTicket(t) ? 'O cartão' : 'O ticket';
+  var palavra = (t && !qaTemTicket(t) ? 'O cartão' : 'O ticket') + (t && t.cartao ? ' ' + t.cartao : '');
   var n = vao.length;
   L.qaProvisorio = {
     id: 'a-enviar', autor: { id: eu.id || '', nome: eu.name || eu.email || 'Eu' }, created_at: Date.now(), meu: true, aEnviar: true,
@@ -2360,16 +2954,23 @@ function qaComentar() {
     L.qaProvisorio = null;
     if (r && r.comentario && Array.isArray(L.qaComs)) L.qaComs = L.qaComs.concat([r.comentario]);
     if (Array.isArray(L.qaComs)) qaPintarComentarios(L);
-    toast(fica ? 'Comentário enviado.' : 'Comentário enviado. ' + palavra + ' passou a ' + qaNomeDaColuna(para) + '.');
+    var frase = fica ? 'Comentário enviado.' : 'Comentário enviado. ' + palavra + ' passou a ' + qaNomeDaColuna(para) + '.';
     qaCarregar();
     if (!n || !r || !r.comentario || !r.comentario.id) {
       delete qaOcupado[id];
       qaBotaoComentar(false);
       if (!Array.isArray(L.qaComs)) qaCarregarComentarios(L);
+      // devolvido a A fazer, sai do sítio: a janela passa ao seguinte (KAN-168)
+      if (fica) toast(frase); else qaSeguirDepois(id, frase);
       return true;
     }
+    toast(frase);
     L.qaPendente = r.comentario.id;
-    return qaAnexarAoComentario(L, vao);
+    return qaAnexarAoComentario(L, vao).then(function (subiram) {
+      // com os anexos todos em cima, sai do sítio como sem eles; falhando algum, fica para os tentar outra vez
+      if (subiram && !fica) qaSeguirDepois(id, '');
+      return subiram;
+    });
   }, function (e) {
     delete qaOcupado[id];
     L.qaProvisorio = null;
@@ -2467,6 +3068,8 @@ function qaSeloEstado(status) {
      adicionalmente») — o ticket está à espera de um sim ou de um não; num
      pai com subtickets ainda em Human Tests (KAN-162), nenhuma: decide-se em
      cada subticket e o pai segue-os («Mover» e «Fechar», como nas outras);
+   - em Para depois, vindo de Human Tests, «Mover» e «Voltar a Human Tests»
+     (qaVoltarATestes, KAN-171);
    - nas outras colunas, «Mover» (as outras colunas do kanban, num menu de
      ações: qaHtmlMover) e, a acabar, «Enviar para produção» em Adiado (vai
      a Staging: qaEnviarProducao), «Reabrir» numa outra coluna de fim (volta
@@ -2483,6 +3086,9 @@ function qaRodapeTicket(t) {
   var decideNosFilhos = qaSubticketsDe(t).some(function (s) { return s.status === QA_COL_RESOLVIDO; });
   if (t.status === QA_COL_RESOLVIDO && !decideNosFilhos) return remover + qaHtmlDecisoes(t);
   if (t.status === QA_COL_RESOLVIDO) return remover + qaHtmlMover(t) + fechar;
+  if (qaParaDepoisDeTestes(t) && qaColuna(QA_COL_RESOLVIDO)) {
+    return remover + qaHtmlMover(t) + '<button type="button" class="btn primary" data-toca="dados" data-click="qaVoltarATestes(\'' + id + '\')">Voltar a Human Tests</button>';
+  }
   var fim = t.status === QA_COL_ADIADO
     ? '<button type="button" class="btn primary" data-toca="dados" data-click="qaEnviarProducao(\'' + id + '\')">Enviar para produção</button>'
     : qaColunaResolvida(t.status)
@@ -2495,15 +3101,17 @@ function qaRodapeTicket(t) {
    «Remover» (.qa-decisoes: na mesma linha quando cabem, numa linha só delas
    quando não, e partidas em duas quando nem assim): «Recusar» (volta a A
    fazer, pelo reabrir, que guarda a resolução como anterior: qaRecusar),
-   «Adiar a produção» (para Adiado, resolvido mas a ficar no dev:
-   qaAdiarProducao) e «Enviar para produção» (para Staging, vai no próximo
-   promove: qaEnviarProducao), o primário, no fim (KAN-157).
+   «Para depois» (o «agora não consigo testar isto», KAN-171: qaParaDepois;
+   só com a coluna no quadro), «Adiar a produção» (para Adiado, resolvido
+   mas a ficar no dev: qaAdiarProducao) e «Enviar para produção» (para
+   Staging, vai no próximo promove: qaEnviarProducao), o primário, no fim (KAN-157).
    Recebe: t — o ticket.
    Devolve: o HTML (texto). */
 function qaHtmlDecisoes(t) {
   var id = jsq(t.id);
   return '<div class="qa-decisoes">' +
     '<button type="button" class="btn" data-toca="dados" data-click="qaRecusar(\'' + id + '\')">Recusar</button>' +
+    (qaColuna(QA_COL_PARA_DEPOIS) ? '<button type="button" class="btn" data-toca="dados" data-click="qaParaDepois(\'' + id + '\')">Para depois</button>' : '') +
     '<button type="button" class="btn" data-toca="dados" data-click="qaAdiarProducao(\'' + id + '\')">Adiar a produção</button>' +
     '<button type="button" class="btn primary" data-toca="dados" data-click="qaEnviarProducao(\'' + id + '\')">Enviar para produção</button>' +
     '</div>';
@@ -2550,6 +3158,8 @@ function qaRepintarTicket(L, t) {
   } else {
     fillModal(L.el, qaTituloDaJanela(t), qaHtmlTicket(t), qaRodapeTicket(t));
     qaPintarComentarios(L);
+    // o fillModal esvazia o sítio do menu do cabeçalho, que é o das setas
+    qaPintarNav(L);
   }
   if (L.qaUrl) qaMostrarImagem(L, L.qaUrl);
   else if (t.imagem) qaCarregarImagem(L, t.id);
@@ -2567,13 +3177,14 @@ function qaCarregarImagem(L, id) {
       return resp.blob();
     })
     .then(function (blob) {
-      if (typeof modalStack === 'undefined' || modalStack.indexOf(L) < 0) return false;
+      if (typeof modalStack === 'undefined' || modalStack.indexOf(L) < 0 || L.qaId !== id) return false;
       if (L.qaUrl) { try { URL.revokeObjectURL(L.qaUrl); } catch (e) {} }
       L.qaUrl = URL.createObjectURL(blob);
       qaMostrarImagem(L, L.qaUrl);
       return true;
     })
     .catch(function () {
+      if (L.qaId !== id) return false;
       var caixa = L.el && typeof L.el.querySelector === 'function' ? L.el.querySelector('.qa-ver-img') : null;
       if (!caixa) return false;
       caixa.classList.remove('a-carregar'); caixa.classList.add('falhou'); caixa.removeAttribute('aria-busy');
@@ -2653,7 +3264,7 @@ function qaRepor(id) {
    Devolve: Promise com true se ficou reaberto. */
 function qaReabrir(id) {
   var p = qaPalavra(id);
-  return qaPassarDeColuna(id, QA_COL_NOVO, '/reabrir', undefined, p + ' reaberto.', 'Não deu para reabrir o ' + p.toLowerCase() + '.');
+  return qaPassarDeColuna(id, QA_COL_NOVO, '/reabrir', undefined, qaItemDoAviso(id) + ' reaberto.', 'Não deu para reabrir o ' + p.toLowerCase() + '.');
 }
 
 /* «Enviar para produção» um ticket em Human Tests ou em Adiado: passa a
@@ -2664,7 +3275,7 @@ function qaReabrir(id) {
 function qaEnviarProducao(id) {
   var p = qaPalavra(id);
   return qaPassarDeColuna(id, QA_COL_STAGING, '/mover', { coluna: QA_COL_STAGING },
-    p + ' em ' + qaNomeDaColuna(QA_COL_STAGING) + ': vai no próximo promove.', 'Não deu para enviar o ' + p.toLowerCase() + ' para produção.');
+    qaItemDoAviso(id) + ' em ' + qaNomeDaColuna(QA_COL_STAGING) + ': vai no próximo promove.', 'Não deu para enviar o ' + p.toLowerCase() + ' para produção.');
 }
 
 /* «Adiar a produção» de um ticket em Human Tests: passa a Adiado —
@@ -2675,7 +3286,32 @@ function qaEnviarProducao(id) {
 function qaAdiarProducao(id) {
   var p = qaPalavra(id);
   return qaPassarDeColuna(id, QA_COL_ADIADO, '/mover', { coluna: QA_COL_ADIADO },
-    p + ' em ' + qaNomeDaColuna(QA_COL_ADIADO) + ': fica no dev.', 'Não deu para adiar a produção do ' + p.toLowerCase() + '.');
+    qaItemDoAviso(id) + ' em ' + qaNomeDaColuna(QA_COL_ADIADO) + ': fica no dev.', 'Não deu para adiar a produção do ' + p.toLowerCase() + '.');
+}
+
+/* «Para depois» um ticket em Human Tests (KAN-171: «Devo poder mover um
+   ticket de Human tests para Depois»): o «agora não consigo testar isto».
+   Passa a Para depois (POST /api/qa/:id/para-depois, que só aceita a partir
+   de Human Tests e só leva para lá), sai da frente, e a janela passa ao
+   seguinte (qaSeguirDepois). Num subticket, o pai fica em Human Tests. O
+   Claude não pega no que está em Para depois. Otimista (qaPassarDeColuna).
+   Recebe: id — o id do item.
+   Devolve: Promise com true se ficou em Para depois. */
+function qaParaDepois(id) {
+  var p = qaPalavra(id);
+  return qaPassarDeColuna(id, QA_COL_PARA_DEPOIS, '/para-depois', undefined,
+    qaItemDoAviso(id) + ' em ' + qaNomeDaColuna(QA_COL_PARA_DEPOIS) + ': volta a Human Tests quando o puderes testar.', 'Não deu para passar o ' + p.toLowerCase() + ' para depois.');
+}
+
+/* «Voltar a Human Tests» um ticket que foi para Para depois a partir de lá
+   (KAN-171; POST /api/qa/:id/voltar, que confere de onde veio). Otimista
+   (qaPassarDeColuna).
+   Recebe: id — o id do item.
+   Devolve: Promise com true se voltou. */
+function qaVoltarATestes(id) {
+  var p = qaPalavra(id);
+  return qaPassarDeColuna(id, QA_COL_RESOLVIDO, '/voltar', undefined,
+    qaItemDoAviso(id) + ' de volta a ' + qaNomeDaColuna(QA_COL_RESOLVIDO) + '.', 'Não deu para voltar o ' + p.toLowerCase() + ' a ' + qaNomeDaColuna(QA_COL_RESOLVIDO) + '.');
 }
 
 /* «Recusar» um ticket em Human Tests: volta a A fazer pelo reabrir (POST
@@ -2685,7 +3321,7 @@ function qaAdiarProducao(id) {
    Devolve: Promise com true se ficou recusado. */
 function qaRecusar(id) {
   var p = qaPalavra(id);
-  return qaPassarDeColuna(id, QA_COL_NOVO, '/reabrir', undefined, p + ' recusado.', 'Não deu para recusar o ' + p.toLowerCase() + '.');
+  return qaPassarDeColuna(id, QA_COL_NOVO, '/reabrir', undefined, qaItemDoAviso(id) + ' recusado.', 'Não deu para recusar o ' + p.toLowerCase() + '.');
 }
 
 /* «Mover» uma coluna do kanban (POST /api/qa/:id/mover {coluna}): o
@@ -2696,17 +3332,18 @@ function qaMover(id, coluna) {
   if (typeof coluna !== 'string' || !QA_ID_COLUNA.test(coluna)) return Promise.resolve(false);
   var p = qaPalavra(id);
   return qaPassarDeColuna(id, coluna, '/mover', { coluna: coluna },
-    p + ' movido para ' + qaNomeDaColuna(coluna) + '.', 'Não deu para mover o ' + p.toLowerCase() + '.');
+    qaItemDoAviso(id) + ' movido para ' + qaNomeDaColuna(coluna) + '.', 'Não deu para mover o ' + p.toLowerCase() + '.');
 }
 
 /* Passa um ticket para outra coluna, à maneira otimista: a lista, o número
    da pílula e o ticket aberto mudam logo (o resolved_at como o servidor o
    põe: posto ao chegar a uma coluna resolvida, null nas outras), o pedido
-   segue, e no fim pede-se a lista outra vez. Falhando, o ticket volta a
-   como estava e o aviso diz porquê (num 404, o ticket já não existe: pede-se
-   a lista). Um pedido de cada vez por ticket (qaOcupado).
+   segue, e no fim pede-se a lista outra vez. Aceite, a janela do ticket
+   passa ao que ficou no lugar dele (qaSeguirDepois, KAN-168). Falhando, o
+   ticket volta a como estava e o aviso diz porquê (num 404, o ticket já não
+   existe: pede-se a lista). Um pedido de cada vez por ticket (qaOcupado).
    Recebe: id — o id do ticket; coluna — o id da coluna; fim — o fim do
-   caminho ('/reabrir' ou '/mover'); corpo — o corpo do POST (ou
+   caminho ('/reabrir', '/mover', '/para-depois' ou '/voltar'); corpo — o corpo do POST (ou
    undefined); frase — o aviso de quando correu bem; falha — o aviso de
    quando falhou sem frase do servidor.
    Devolve: Promise com true se o servidor aceitou. */
@@ -2718,7 +3355,7 @@ function qaPassarDeColuna(id, coluna, fim, corpo, frase, falha) {
   var pedido = corpo === undefined ? api('POST', caminho) : api('POST', caminho, corpo);
   return pedido.then(function () {
     delete qaOcupado[id];
-    toast(frase);
+    qaSeguirDepois(id, frase);
     qaCarregar();
     return true;
   }, function (e) {
@@ -2732,8 +3369,9 @@ function qaPassarDeColuna(id, coluna, fim, corpo, frase, falha) {
 
 /* Passa já, no ecrã, um ticket para outra coluna — a lista, o número da
    pílula e o ticket aberto —, com o resolved_at como o servidor o põe
-   (posto ao chegar a uma coluna resolvida, null nas outras), antes de o
-   servidor responder (qaPassarDeColuna, qaComentar).
+   (posto ao chegar a uma coluna resolvida, null nas outras) e, em Para
+   depois, de onde veio (veioDe), antes de o servidor responder
+   (qaPassarDeColuna, qaComentar).
    Recebe: id — o id do ticket; coluna — o id da coluna.
    Devolve: a função que o põe como estava (nada faz sem o ticket na lista). */
 function qaColunaNoEcra(id, coluna) {
@@ -2745,13 +3383,16 @@ function qaColunaNoEcra(id, coluna) {
     qaPintarLista();
   };
   if (!t) return function () {};
-  var antes = { status: t.status, resolved_at: t.resolved_at, updated_at: t.updated_at };
+  var antes = { status: t.status, resolved_at: t.resolved_at, updated_at: t.updated_at, veioDe: t.veioDe };
+  // em Para depois, o servidor diz de onde veio (veioDe): aqui já se sabe
+  if (coluna === QA_COL_PARA_DEPOIS) t.veioDe = antes.status; else delete t.veioDe;
   t.status = coluna;
   t.resolved_at = qaColunaResolvida(coluna) ? (t.resolved_at || Date.now()) : null;
   t.updated_at = Date.now();
   repintar();
   return function () {
     t.status = antes.status; t.resolved_at = antes.resolved_at; t.updated_at = antes.updated_at;
+    if (antes.veioDe === undefined) delete t.veioDe; else t.veioDe = antes.veioDe;
     repintar();
   };
 }
@@ -2800,8 +3441,10 @@ closeAllModals = function () {
   return r;
 };
 
-// o clique que vem a seguir a um arrasto da pílula engole-se na captura, antes da ação do botão
+// o clique que vem a seguir a um arrasto da pílula (ou a um deslize entre tickets) engole-se na captura, antes da ação do botão
 document.addEventListener('click', qaEngoleClique, true);
+// ← e → passam de ticket na janela de um ticket (KAN-168)
+document.addEventListener('keydown', qaTeclaNaJanela);
 // rodar o telemóvel ou mudar a janela de tamanho reencaixa a pílula
 window.addEventListener('resize', qaAoMudarTamanho);
 window.addEventListener('orientationchange', qaAoMudarTamanho);

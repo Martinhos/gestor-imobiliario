@@ -37,7 +37,8 @@ import { lerAte, tipoDaImagem, TIPOS_DOS_ANEXOS } from '../lib/imagens.js';
 export { lerAte, tipoDaImagem };
 import {
   cartaoDoTicketQa, ticketQaNaColuna, eIdDeColuna, passosDoComentarioQa, colunaDoComentarioQa, passosDoComentario, colunaDepoisDoComentario,
-  cartaoSaiComOTicket, cartaoVoltaComOTicket, passosDoCartaoNaColuna, chaveDe, numeroDaChave, passosDoPaiSegue, QA_NOVO, KAN_PRODUCAO,
+  cartaoSaiComOTicket, cartaoVoltaComOTicket, passosDoCartaoNaColuna, chaveDe, numeroDaChave, passosDoPaiSegue, QA_NOVO, QA_RESOLVIDO, KAN_PRODUCAO,
+  KAN_PARA_DEPOIS, IDAS_DE_QUEM_TESTA, passosDeQuemTesta, sqlVeioDe,
 } from '../lib/kanban.js';
 
 // A chave de um cartão nas rotas da pílula: KAN-N, ou KAN-N-X num subticket (KAN-162), sempre com o
@@ -96,7 +97,8 @@ function naoExiste() {
    POST /api/qa cria; GET /api/qa lista; DELETE /api/qa/:id remove (brando,
    para o Anular); POST …/repor desfaz a remoção; POST …/reabrir volta a pôr
    o ticket em A fazer; POST …/mover {coluna} passa-o a outra coluna do
-   kanban; PUT e GET …/imagem gravam e servem a captura; POST …/comentarios
+   kanban; POST …/para-depois e …/voltar são as idas de quem testa entre
+   Human Tests e Para depois (moverQuemTesta, KAN-171); PUT e GET …/imagem gravam e servem a captura; POST …/comentarios
    {texto, anexos?} comenta (e devolve o ticket a A fazer) e GET
    …/comentarios lê os comentários do ticket, com os anexos; PUT …/anexos
    anexa um ficheiro ao cartão do ticket (ou ao comentário do cabeçalho
@@ -150,6 +152,13 @@ export async function rotasQa(c) {
   if (seg[3] === 'mover' && method === 'POST') {
     const b = await body(request);
     return moverTicket(env, id, b && b.coluna);
+  }
+  if (seg.length === 4 && eIdaDeQuemTesta(seg[3]) && method === 'POST') {
+    const vivo = await env.DB.prepare('SELECT id FROM qa_tickets WHERE id = ? AND removed_at IS NULL').bind(id).first();
+    if (!vivo) return naoExiste();
+    const k = await env.DB.prepare("SELECT id, numero, sub FROM kanban_cartoes WHERE origem_tipo = 'qa' AND origem_id = ? AND removed_at IS NULL ORDER BY numero LIMIT 1").bind(id).first();
+    if (!k) return err(409, 'Este ticket não tem cartão no kanban: move-o pelo «Mover».');
+    return moverQuemTesta(env, k, seg[3], autorDoComentario(c.autor || (await autorDaConta(env, me)), me), papelDoRasto(c));
   }
   if (seg[3] === 'imagem' && method === 'PUT') return gravarImagem(env, request, id);
   if (seg[3] === 'imagem' && method === 'GET') return servirImagem(env, id);
@@ -372,7 +381,8 @@ async function listarTickets(env) {
               k.created_at AS k_criado, k.updated_at AS k_mudado, k.concluido_at, COALESCE(c.fim, 0) AS fim,
               q.id, q.severity, q.context, q.image_key, q.resolution, q.resolved_at, q.created_at, q.updated_at,
               q.user_id, q.discord_id, q.discord_nome, u.name, u.email,
-              (SELECT COUNT(*) FROM kanban_anexos a WHERE a.cartao_id = k.id) AS n_anexos
+              (SELECT COUNT(*) FROM kanban_anexos a WHERE a.cartao_id = k.id) AS n_anexos,
+              CASE WHEN k.coluna_id = '${KAN_PARA_DEPOIS}' THEN ${sqlVeioDe('k')} END AS veio_de
          FROM kanban_cartoes k
          LEFT JOIN kanban_colunas c ON c.id = k.coluna_id
          LEFT JOIN kanban_cartoes p ON k.sub IS NOT NULL AND p.id = k.pai_id
@@ -452,6 +462,7 @@ async function rotasDoCartao(c, k) {
     const b = await body(request);
     return moverCartao(env, k, b && b.coluna, await quem());
   }
+  if (seg.length === 4 && eIdaDeQuemTesta(seg[3]) && method === 'POST') return moverQuemTesta(env, k, seg[3], await quem(), papelDoRasto(c));
   if (seg[3] === 'imagem' && (method === 'GET' || method === 'PUT')) return err(404, 'Este cartão não tem captura.');
   if (seg[3] === 'anexos') return rotasDosAnexos(c, k.id);
   if (seg[3] === 'comentarios' && method === 'POST') return comentarCartao(env, request, k, await quem());
@@ -474,6 +485,58 @@ async function moverCartao(env, k, coluna, quem) {
   const passos = passosDoCartaoNaColuna(k.id, col.id, quem, agora).concat(col.id !== k.coluna_id ? paiSegue(k, quem, agora) : []);
   await env.DB.batch(passos.map((p) => env.DB.prepare(p.sql).bind(...p.params)));
   return json({ ok: true });
+}
+
+/* O último pedaço do caminho é uma ida de quem testa (lib/kanban.js:IDAS_DE_QUEM_TESTA)?
+   Recebe: s — o pedaço ('para-depois', 'voltar', …).
+   Devolve: true ou false. */
+function eIdaDeQuemTesta(s) {
+  return typeof s === 'string' && Object.prototype.hasOwnProperty.call(IDAS_DE_QUEM_TESTA, s);
+}
+
+/* O papel de quem mexe, para o rasto (audit_log.papel): os da sessão de
+   equipa no back office (c.eu), 'utilizador' numa conta da app — como as
+   outras rotas das contas (rotas/casas.js) escrevem.
+   Recebe: c — o contexto do pedido.
+   Devolve: o texto. */
+function papelDoRasto(c) {
+  const eu = c && c.eu;
+  const p = eu ? ((eu.papeis && eu.papeis.length ? eu.papeis : [eu.papel]).filter(Boolean).join('+')) : '';
+  return p || 'utilizador';
+}
+
+/* POST /api/qa/:id/para-depois e …/voltar (KAN-171), com ou sem ticket de
+   QA: «Para depois» tira da frente um cartão em Human Tests que quem testa
+   não consegue testar agora; «Voltar a Human Tests» devolve-o, só se foi de
+   lá que veio (a última mudança de coluna no histórico: lib/kanban.js:sqlVeioDe).
+   O servidor confere: o cartão tem de estar na coluna de partida, a coluna
+   de chegada tem de existir (Para depois não é fixa: o master pode
+   removê-la), e o destino é sempre o da ida — nunca Staging, Adiado nem
+   Produção. A linha vai ao histórico e ao rasto (passosDeQuemTesta), o
+   ticket de QA segue o cartão (o gatilho da 0029), e um subticket leva o pai
+   (paiSegue: em Para depois conta como por decidir, e o pai fica em Human
+   Tests).
+   Recebe: env; k — o cartão ({id, numero, sub}); acao — 'para-depois' ou
+   'voltar'; quem — {id, nome}; papel — o do rasto.
+   Devolve: promessa da Response {ok, coluna}, 404, ou 409 com a frase do que falta. */
+async function moverQuemTesta(env, k, acao, quem, papel) {
+  const ida = IDAS_DE_QUEM_TESTA[acao];
+  const agora = await env.DB.prepare(
+    'SELECT k.coluna_id, ' + sqlVeioDe('k') + ' AS veio_de, (SELECT nome FROM kanban_colunas WHERE id = ?) AS destino' +
+    ' FROM kanban_cartoes k WHERE k.id = ? AND k.removed_at IS NULL'
+  ).bind(ida.para, k.id).first();
+  if (!agora) return naoExiste();
+  if (agora.coluna_id !== ida.de) {
+    return err(409, acao === 'voltar' ? 'Este ticket já não está em Para depois.' : 'Só um ticket em Human Tests passa a Para depois.');
+  }
+  if (acao === 'voltar' && agora.veio_de !== QA_RESOLVIDO) return err(409, 'Este ticket não veio de Human Tests: move-o pelo «Mover».');
+  if (!agora.destino) return err(409, 'O quadro já não tem a coluna ' + (acao === 'voltar' ? 'Human Tests' : 'Para depois') + '.');
+  const t = now();
+  const passos = passosDeQuemTesta(acao, { id: k.id, chave: chaveDe(k.numero) }, quem, papel, t).concat(paiSegue(k, quem, t));
+  await env.DB.batch(passos.map((p) => env.DB.prepare(p.sql).bind(...p.params)));
+  const depois = await env.DB.prepare('SELECT coluna_id FROM kanban_cartoes WHERE id = ?').bind(k.id).first();
+  if (!depois || depois.coluna_id !== ida.para) return err(409, 'O ticket mudou entretanto. Atualiza a lista e tenta de novo.');
+  return json({ ok: true, coluna: ida.para });
 }
 
 /* POST /api/qa/KAN-N/comentarios {texto} num cartão sem ticket: o comentário
@@ -682,7 +745,9 @@ async function nomesEmFalta(env, rows) {
    ticket, ou null), context (objeto ou null), imagem (bool), anexos (quantos
    o cartão tem, KAN-165; 0 num pedido), resolution,
    resolved_at, created_at, updated_at, autor} e, num subticket (KAN-N-X,
-   KAN-162), sub (o X) e pai ({cartao, titulo}).
+   KAN-162), sub (o X) e pai ({cartao, titulo}); em Para depois, veioDe (a
+   coluna de onde veio da última vez: de Human Tests, quem testa devolve-o
+   lá, KAN-171).
    O resolved_at de um cartão sem ticket é o concluido_at, ou, em Human
    Tests, a última alteração; o updated_at é o maior do cartão e do ticket.
    O autor é o do ticket — com discord: {id, nome} quando veio de uma conta
@@ -721,6 +786,7 @@ function itemParaFora(r) {
       : pedido ? { id: '', nome: '', email: '', discord: null }
         : { id: r.relator_id || '', nome: r.relator_nome || r.relator_id || '', email: '', discord: null },
     ...(r.sub != null && r.pai_numero != null ? { sub: r.sub, pai: { cartao: chaveDe(r.pai_numero), titulo: r.pai_titulo || '' } } : {}),
+    ...(r.veio_de ? { veioDe: r.veio_de } : {}),
   };
 }
 

@@ -524,6 +524,52 @@ export function passosDoCartaoNaColuna(cartaoId, coluna, autor, agora) {
   ];
 }
 
+// Para depois (a coluna da 0028, que não é fixa): o que fica de lado, que o Claude não pega (a fila é A fazer e Auto Tests).
+export const KAN_PARA_DEPOIS = 'para-depois';
+
+/* As idas de quem testa entre Human Tests e Para depois (KAN-171: «Devo
+   poder mover um ticket de Human tests para Depois»): «Para depois» é o
+   «agora não consigo testar isto», que tira o ticket da frente, e «Voltar a
+   Human Tests» desfaz-o. Cada uma só parte da sua coluna (de) e só vai para
+   a outra (para): nunca leva a Staging, a Adiado nem a Produção. */
+export const IDAS_DE_QUEM_TESTA = {
+  'para-depois': { de: QA_RESOLVIDO, para: KAN_PARA_DEPOIS },
+  voltar: { de: KAN_PARA_DEPOIS, para: QA_RESOLVIDO },
+};
+
+/* A coluna de onde um cartão veio da última vez que mudou de coluna (a
+   linha «coluna» mais recente do histórico), em SQL: é por ela que um
+   cartão em Para depois sabe se volta a Human Tests (IDAS_DE_QUEM_TESTA.voltar).
+   Recebe: eu — o nome (ou o alias) da tabela do cartão na instrução.
+   Devolve: a subconsulta (texto). */
+export function sqlVeioDe(eu) {
+  return "(SELECT h.antes FROM kanban_historico h WHERE h.cartao_id = " + eu + ".id AND h.campo = 'coluna' ORDER BY h.at DESC, h.id DESC LIMIT 1)";
+}
+
+/* Os passos de uma ida de quem testa (IDAS_DE_QUEM_TESTA), para qualquer
+   cartão da pílula, com ou sem ticket de QA (o gatilho kanban_qa_coluna da
+   0029 leva o ticket com o cartão): a linha no rasto (audit_log,
+   kanban.mover, com o papel de quem mexeu) e os passos de
+   passosDoCartaoNaColuna (a linha «coluna» no histórico, o topo da coluna),
+   todos só com o cartão ainda na coluna de partida — se outra mão o mexeu
+   entretanto, nada muda. Os passos do pai que segue (passosDoPaiSegue)
+   juntam-se à parte, num subticket.
+   Recebe: acao — 'para-depois' ou 'voltar'; k — {id, chave}; autor — {id,
+   nome}; papel — o do rasto ('utilizador' numa conta, os da sessão de
+   equipa no back office); agora — ms.
+   Devolve: a lista de {sql, params} (vazia com uma ação que não existe). */
+export function passosDeQuemTesta(acao, k, autor, papel, agora) {
+  const ida = Object.prototype.hasOwnProperty.call(IDAS_DE_QUEM_TESTA, acao) ? IDAS_DE_QUEM_TESTA[acao] : null;
+  if (!ida || !k || !k.id) return [];
+  const a = autor && autor.id ? autor : AUTOMATICO;
+  const rasto = {
+    sql: "INSERT INTO audit_log (at, quem, nome, papel, acao, alvo, detalhe) SELECT ?, ?, ?, ?, 'kanban.mover', ?, ? FROM kanban_cartoes" +
+      ' WHERE id = ? AND removed_at IS NULL AND coluna_id = ?',
+    params: [agora, String(a.id), String(a.nome || ''), String(papel || 'utilizador'), String(k.chave || ''), ida.de + ' → ' + ida.para + ' (pílula)', k.id, ida.de],
+  };
+  return [rasto].concat(passosDoCartaoNaColuna(k.id, ida.para, a, agora).map((p) => ({ sql: p.sql + ' AND coluna_id = ?', params: p.params.concat([ida.de]) })));
+}
+
 // Quem assina, no histórico e no rasto, o que o pai faz por seguir os subtickets (passosDoPaiSegue).
 export const SUBTICKETS = { id: 'subtickets', nome: 'Subtickets' };
 

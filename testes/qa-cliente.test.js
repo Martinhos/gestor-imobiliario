@@ -589,14 +589,15 @@ describe('a lista', () => {
     assert.match(ht, /^<button type="button" class="btn qa-remover"[^>]*data-click="qaRemover\('Q1'\)">[\s\S]*?<\/svg><span class="qa-remover-txt"> Remover<\/span><\/button><div class="qa-decisoes">/, 'o «Remover» e logo as decisões');
     assert.doesNotMatch(ht, /qa-mover|qaMover|menuOpen|data-menu=|Mover/, 'sem o «Mover»: as decisões são em vez dele');
     assert.match(ht, /<div class="qa-decisoes"><button type="button" class="btn" data-toca="dados" data-click="qaRecusar\('Q1'\)">Recusar<\/button>/);
+    assert.match(ht, /Recusar<\/button><button type="button" class="btn" data-toca="dados" data-click="qaParaDepois\('Q1'\)">Para depois<\/button>/, '«Para depois» a seguir ao Recusar (KAN-171)');
     assert.match(ht, /<button type="button" class="btn" data-toca="dados" data-click="qaAdiarProducao\('Q1'\)">Adiar a produção<\/button>/);
     assert.match(ht, /<button type="button" class="btn primary" data-toca="dados" data-click="qaEnviarProducao\('Q1'\)">Enviar para produção<\/button><\/div>$/, '«Enviar para produção», o primário, no fim');
-    assert.equal((ht.match(/<button /g) || []).length, 4, 'quatro botões: Remover, Recusar, Adiar a produção e Enviar para produção');
-    assert.doesNotMatch(ht, /qaAceitar|>Aceitar<|>Adiar</, 'já não há o Aceitar só nem o Adiar para Para depois');
+    assert.equal((ht.match(/<button /g) || []).length, 5, 'cinco botões: Remover, Recusar, Para depois, Adiar a produção e Enviar para produção');
+    assert.doesNotMatch(ht, /qaAceitar|>Aceitar<|>Adiar</, 'já não há o Aceitar só nem o Adiar de antes');
     assert.doesNotMatch(ht, SEM_EM_LINHA);
-    // sem a coluna Para depois (o master apagou-a), as decisões são as mesmas: Staging e Adiado são fixas
+    // sem a coluna Para depois (o master apagou-a), sai o «Para depois»; o resto é igual: Staging e Adiado são fixas
     app.qaLista.colunas = app.qaColunasDe(COLUNAS.filter((c) => c.id !== 'para-depois'));
-    assert.equal(app.qaRodapeTicket(T('Q1', { status: 'human-tests' })), ht);
+    assert.equal(app.qaRodapeTicket(T('Q1', { status: 'human-tests' })), ht.replace(/<button type="button" class="btn" data-toca="dados" data-click="qaParaDepois\('Q1'\)">Para depois<\/button>/, ''));
     // em Adiado: «Mover» e «Enviar para produção», o primário, no lugar do «Reabrir»
     const ad = app.qaRodapeTicket(T('Q1', { status: 'adiado', resolved_at: 3 }));
     assert.match(ad, /qaRemover\('Q1'\)[\s\S]*Mover<\/button>[\s\S]*<button type="button" class="btn primary" data-toca="dados" data-click="qaEnviarProducao\('Q1'\)">Enviar para produção<\/button>$/);
@@ -1223,7 +1224,7 @@ describe('a pílula é a vista do kanban: todos os cartões fora de Produção (
     const ida2 = app.qaComentar();
     assert.equal(app.qaLista.tickets[0].status, 'a-fazer', 'otimista');
     await ida2;
-    assert.equal(avisos[avisos.length - 1], 'Comentário enviado. O cartão passou a A fazer.');
+    assert.equal(avisos[avisos.length - 1], 'Comentário enviado. O cartão KAN-9 passou a A fazer.');
     // num ticket de QA, de fora da fila para A fazer; na fila fica
     assert.equal(app.qaColunaDepoisDoComentario(T('Q', { status: 'concluido' })), 'a-fazer');
     assert.equal(app.qaColunaDepoisDoComentario(T('Q', { status: 'auto-tests' })), 'auto-tests');
@@ -1239,7 +1240,7 @@ describe('a pílula é a vista do kanban: todos os cartões fora de Produção (
     await app.qaCarregar();
     assert.equal(await app.qaEnviarProducao('KAN-5'), true);
     igual(pedidos.find((p) => p[0] === 'POST'), ['POST', '/api/qa/KAN-5/mover', { coluna: 'staging' }]);
-    igual(avisos, ['Cartão em Staging: vai no próximo promove.']);
+    igual(avisos, ['Cartão KAN-5 em Staging: vai no próximo promove.']);
   });
 });
 

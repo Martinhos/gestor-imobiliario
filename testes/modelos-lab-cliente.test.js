@@ -133,15 +133,20 @@ describe('a lista', () => {
     assert.equal((html.match(/data-risco="destroi"/g) || []).length, 2);
     assert.doesNotMatch(html, /\sstyle=|\son[a-z]+=/);
     assert.doesNotMatch(html, /mdl-usar"[^>]*disabled/);
+    // KAN-167-2: tocar na linha usa o modelo — o texto é o botão, e já não há um «Usar» à parte
+    assert.match(html, /<button type="button" class="mdl-texto mdl-usar" data-toca="camada" aria-label="Usar o modelo Teste do Lab" aria-describedby="mdlDesc-m1" data-click="mdlUsar\('m1'\)"><span class="mdl-cima"><b class="mdl-nome">Teste do Lab<\/b>/);
+    assert.doesNotMatch(html, />Usar</, 'sem o botão «Usar»');
+    assert.match(html, /<span class="small mdl-desc" id="mdlDesc-m1">/);
     app.mdlOrdenar('nome');
     assert.doesNotMatch(app.mdlHtmlLista(), /mdl-pega/, 'sem pega fora da ordem personalizada');
   });
 
-  test('numa conta normal o «Usar» está desligado e a janela diz porquê', async () => {
+  test('numa conta normal tocar no modelo não o usa: a linha diz porquê, e a janela também', async () => {
     noDev(false);
     await abrir();
     assert.match(app.mdlHtmlJanela(), /Esta conta não é de teste/);
-    assert.match(app.mdlHtmlLista(), /mdl-usar" data-toca="camada" disabled/);
+    assert.match(app.mdlHtmlLista(), /mdl-usar" data-toca="camada" aria-disabled="true"/);
+    assert.doesNotMatch(app.mdlHtmlLista(), /mdl-usar"[^>]*\sdisabled/, 'aria-disabled, e não disabled: o toque chega e diz porquê');
     const toasts = [];
     app.toast = (t) => toasts.push(t);
     app.mdlUsar('m1');
