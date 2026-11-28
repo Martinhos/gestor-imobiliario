@@ -344,7 +344,8 @@ describe('N020 · os bens comuns do casal (D5)', () => {
     assert.match(t, /Os bens são comuns do casal/);
     assert.ok(h.includes('id="fiscoBensComuns" aria-checked="false" aria-label="Os bens são comuns do casal" data-toca="dados" data-click="fiscoSetSituacao(2026,\'bensComuns\',true)"'));
     assert.doesNotMatch(t, /só entra quando ele for proprietário/);
-    assert.match(t, /Os imóveis só dele inserem-se à mão no Portal das Finanças/);
+    assert.match(h, /data-click="fisExplicar\('bens',2026\)"/, 'a explicação no «?» (KAN-127-17)');
+    assert.match(app.fisAjudaTexto('bens', 2026).join(' '), /Os imóveis só do cônjuge, que não estão nesta app, inserem-se à mão no Portal das Finanças/);
     assert.doesNotMatch(h, /style=|onclick=/);
   });
 

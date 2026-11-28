@@ -1030,6 +1030,28 @@ todas as listas com seleção — o visto sozinho lia-se como «concluir» —, 
 roda dentada (icones.js:roda) abre as opções de uma análise (as Projeções e
 a Avaliação), que não é a engrenagem das Definições.
 
+Uma escolha de sim/não numa janela ou num formulário é sempre o interruptor,
+nunca uma caixa de visto. O input type="checkbox" com role="switch" dentro de
+um label.check desenha-se como o .interruptor (46×28, os mesmos fundos e a
+mesma transição), com o botão num gradiente do fundo — um ::after num input
+não se pinta em todos os browsers —, o texto à esquerda, o interruptor à
+direita e a linha inteira a tocar, com 44px; o contorno de 2px da cor do
+fundo é a frente que o escuro forçado não apaga. O checked e os data-change
+ficam como numa caixa. Ficam caixas só as listas de seleção (escolher vários
+itens), a marca das tarefas na lista e os termos da entrada; um teste percorre
+web/app e web/cloud e falha qualquer caixa nova fora disto
+(testes/formularios-11-27.test.js).
+
+Uma folha que se arrasta para fechar não pega num gesto que começa num
+elemento que se arrasta por si — com touch-action:none ou draggable, como a
+pega de uma lista ordenável (componentes.js:folhaTemArrastoProprio): arrastar
+uma linha nunca leva a janela. Puxar o cabeçalho para baixo continua a
+fechar.
+
+Um número da página que tem um porquê (o kpi com janela) abre-o numa janela,
+como os da Visão geral: o rótulo no título, o valor em grande, as linhas do
+cartão e o porquê (vistas.js:kpiJanela); o cartão nunca cresce para baixo.
+
 ## O motor das listas
 A app pinta trocando o innerHTML: a vista é gerada em texto e o browser
 volta a construir tudo. Medido com 500 movimentos, são 6 110 nós e ~48ms
@@ -2417,7 +2439,7 @@ ontem — o IRS dos outros conta com elas nos dias em que quem sai era dono
 (ver «As quotas com data», em «Grupos partilhados») — e os saldos passam a
 contar com as novas, também nos movimentos já registados. O imóvel deixa de
 entrar na Declaração de quem sai, também nos anos em que foi dono: a
-confirmação oferece o PDF e o CSV de cada ano por entregar com movimentos
+confirmação oferece o PDF e a folha de cálculo de cada ano por entregar com movimentos
 dele (imovel.js:imvFraseSaida, imovel.js:imvExportarAno). E
 para voltar quem o criou
 tem de o partilhar outra vez. Não há Anular: a saída é no servidor
@@ -3235,10 +3257,13 @@ contrato identificável repartem-se pelas rendas do imóvel no ano, e as rendas
 sem linha (não declaradas, da categoria B, sem contrato) pesam na repartição
 sem que a parte delas vá a linha nenhuma (fisco-resumo.js:fiscoAlvoDoGasto,
 fisco-resumo.js:fiscoReparte). Num imóvel por quartos os gastos da casa
-contam só na parte arrendada: a da ficha (a parte da área), ou os quartos
-com contrato em vigor no dia do gasto sobre o total — no IMI e no selo, os
-quartos com contrato algum dia do ano (fisco-resumo.js:fiscoParteArrendada);
-a Declaração diz a parte que usou. E o imposto à cabeça é a estimativa sem
+contam só na parte arrendada: a soma das partes da casa dos quartos com
+contrato em vigor no dia do gasto — no IMI e no selo, os quartos com contrato
+algum dia do ano (fisco-resumo.js:fiscoParteArrendada). A parte de cada
+quarto é a da ficha do imóvel (rooms[].parte: a área dele com a sua quota das
+zonas comuns, em %); os quartos sem parte dividem em partes iguais o que
+sobra até 100 %, e sem nenhuma indicada cada quarto pesa o mesmo
+(fisco-resumo.js:fiscoPartesDosQuartos). A Declaração diz a parte que usou. E o imposto à cabeça é a estimativa sem
 englobamento; a página chama a cada uma
 estimativa, porque é. Quem declara é a pessoa, no Portal das Finanças; a app
 poupa-lhe a soma e a procura, não a assinatura. Os Termos dizem-no na
@@ -3268,17 +3293,25 @@ dois .btn.sm (36px no rato, 44 no dedo): «Guia», com o livro (icones.js:ic, o
 diz no aria-label e no title «Guia de preenchimento do Anexo F»; e o botão de
 partilha, só de ícone, no feitio do da Avaliação (avaliacao.js:avaPartilha),
 que abre a janela de escolha da casa (componentes.js:pickModal,
-fisco.js:fiscoPartilha) com «Exportar CSV» e «Exportar PDF»
-(fisco-pdf.js:fiscoPdf; a Declaração requer os Contratos, e a janela leva
-sempre o CSV e o PDF), cada uma com o ícone e uma linha do que leva. Não há
-partilha do resumo em texto: o CSV e o PDF já levam os números. O CSV, o PDF
+fisco.js:fiscoPartilha) com «Exportar folha de cálculo» e «Exportar PDF»
+(fisco-exportar.js:fiscoXlsx, fisco-pdf.js:fiscoPdf; a Declaração requer os
+Contratos, e a janela leva sempre os dois), cada uma com o ícone e uma linha
+do que leva. Não há partilha do resumo em texto: a folha de cálculo e o PDF
+já levam os números. A folha de cálculo é um .xlsx, e não um CSV: a app do
+Google Sheets no Android lê um CSV como Latin-1, com ou sem a marca de ordem
+de bytes. Escreve-se no próprio aparelho, sem bibliotecas (um zip sem
+compressão), com três folhas — «Anexo F» (as linhas dos quadros), «A tratar»
+e «Estimativa e notas» —, os euros como números com duas casas, para se
+somarem, e os códigos (freguesia, natureza, n.º do contrato, quadro) como
+texto, com os zeros. O fiscoCsvTexto é a mesma tabela em texto, que os
+testes leem. A folha de cálculo, o PDF
 e o texto do resumo (fisco-exportar.js:fiscoTexto, que os testes leem) levam
 o campo de cada linha e o dos subquadros que se ligam a ela, as rendas sem
 contrato com o valor, o que há a tratar, a linha das regras
 (fisco-exportar.js:fiscoRegrasTexto: o ano, oficiais ou provisórias,
 revistas a, a versão da app) e o IRS_AVISO no fim. O imposto de uma linha
 nunca é negativo; o prejuízo a reportar é de cada titular
-(fisco-exportar.js:fiscoPrejuizos). O texto, o CSV e o PDF dizem o mesmo que
+(fisco-exportar.js:fiscoPrejuizos). O texto, a folha de cálculo e o PDF dizem o mesmo que
 os cartões: o 4.2A pelo período em que as rendas assentam, «Sim» só com a
 comunicação feita até ao prazo dele, e «a confirmar», nunca NÃO, quando falta
 o dia do período e a migração deixou por confirmar a marca da app antiga
@@ -3376,12 +3409,10 @@ que titular; o
 comunicacao_4_2a_resposta é sim, nao, a confirmar ou vazio; o reducao_4_2b
 diz que o 4.2B se preenche, e a descida da taxa vai no taxa_desceu_4_2b; o
 nif_ou_pais é o NIF português ou, sem ele, o país, nunca o número
-estrangeiro (fisco-exportar.js:fiscoCsvTexto). O cabeçalho do CSV leva os
-ids das colunas, que são chaves de máquina, com «início», «imóvel» e «fração»
-escritos com acento (fisco-exportar.js:FISCO_CSV_NOMES): o Google Sheets
-adivinha a codificação pelo começo do ficheiro e não lhe chega a marca de
-ordem de bytes, por isso um acento tem de aparecer logo no cabeçalho; os
-nomes do impresso vão no texto e no PDF. A app não tem guia
+estrangeiro (fisco-exportar.js:fiscoCsvTexto). O cabeçalho da folha «Anexo F»
+leva os ids das colunas, que são chaves de máquina, com «início», «imóvel» e
+«fração» escritos com acento (fisco-exportar.js:FISCO_CSV_NOMES), a negrito e
+fixo no topo; os nomes do impresso vão no texto e no PDF. A app não tem guia
 próprio nem faixa das regras do ano: o prazo, o que mudou e os passos vivem
 no guia. Um ano sem versão própria das regras, ou com uma provisória, di-lo
 em «A tratar antes de entregar» (fisco-avisos.js:fiscoAvisos). A página
@@ -3477,9 +3508,13 @@ de descontos, e que a comissão de uma gestora é um gasto (Outros).
 Os cartões abrem
 sempre a ficha: a Declaração requer os Contratos e os Movimentos. No fim da
 página, um cartão discreto com o aviso aprovado (irs.js:IRS_AVISO,
-fisco.js:fiscoAvisoCard) e o botão do CSV e do PDF. Sem
+fisco.js:fiscoAvisoCard) e o botão da folha de cálculo e do PDF. Sem
 rendas no ano, o vazio nomeia os contratos em vigor nele sem rendas
-registadas (fisco.js:fiscoContratosSemRendas). Um ano sem rendas mas com um
+registadas (fisco.js:fiscoContratosSemRendas), os que só começam mais à
+frente e os de um imóvel lá fora, e diz o que aparece com a primeira renda (a
+linha do quadro e o que houver a tratar, como os donos do imóvel); um imóvel
+lá fora com um contrato sem rendas no ano tem o cartão do Anexo J a dizê-lo
+(fisco.js:fiscoContratosAindaSemRendas). Um ano sem rendas mas com um
 contrato no quadro 10, ou com a regularização do n.º 20, não é «Sem rendas»:
 a página mostra-se, e o cartão do quadro 10 diz que vai na declaração desse
 ano (fisco.js:vFisco). O PDF leva os mesmos
@@ -3491,7 +3526,12 @@ declaração» diz-se também quando não há nada fora
 .u-ws-nowrap; o fmtNIF continua com espaços normais). Um valor que se copia
 para o Portal lê-se com o formato da app e copia-se limpo — o NIF com os nove
 algarismos, os euros sem milhares nem € —, porque os separadores são do CSS
-e o browser não os copia (formato.js:fmtCopiavel).
+e o browser não os copia (formato.js:fmtCopiavel). Os valores dos cartões
+também se selecionam com o dedo (o .tap da casa traz o user-select:none, e a
+página devolve-o aos valores), e um copiar dentro da página limpa um valor
+em euros e um NIF da mesma forma, venha de onde vier na página; outro texto
+copia como está (formato.js:copiaLimpa, fisco.js:fisCopiaLimpa). O valor de
+uma linha não encolhe: quem parte em linhas é o texto ao lado.
 
 «A tratar antes de entregar» (fisco.js:fiscoObrigacoesCard) é numerado, e
 cada aviso leva o selo do seu nível — vermelho o que falta à AT, âmbar o que
@@ -4298,14 +4338,18 @@ atualização legal da renda não se comunica; só o aumento combinado (Modelo
 ## A Declaração sabe a tua situação
 O que só o senhorio sabe vive nas definições, em `db.settings.irs.porAno`,
 ano a ano, e muda-se em «A tua situação fiscal em AAAA»
-(fisco.js:fiscoSituacaoCard, a prancheta M-SituacaoFiscal), depois dos
-quadros. Fechado, o cartão diz em frases o que está escolhido («Declaração
+(fisco.js:fiscoSituacaoCard, a prancheta M-SituacaoFiscal), o primeiro
+cartão da página, antes dos números, porque decide o que entra neles.
+Fechado, o cartão diz numa ou duas linhas o que está escolhido («Declaração
 em separado, és o titular A · passas recibos eletrónicos»,
-fisco.js:fiscoSituacaoResumo), porque importa (o que entra no Anexo F e o
-imposto estimado; a dispensa muda o que fica a tratar,
-fisco.js:fiscoSituacaoPorque) e, por baixo, «Mudar a situação fiscal»
+fisco.js:fiscoSituacaoResumo) e, por baixo, «Mudar a situação fiscal»
 (fisco.js:fiscoSitMudar), que aberto diz «Fechar» — nunca um «Mudar»
-sozinho no canto. Abre sozinho quando há uma escolha por fazer (a
+sozinho no canto. Porque importa (o que entra no Anexo F e o imposto
+estimado; a dispensa muda o que fica a tratar, fisco.js:fiscoSituacaoPorque)
+vive atrás de um «?» ao lado do título, e, aberto, cada escolha tem o seu
+«?» (fisco.js:fisAjudaBtn), que abre uma janela só de leitura
+(fisco.js:fisExplicar), com o mesmo desenho que os «?» do contrato. À vista
+ficam só as frases curtas do caso de agora. Abre sozinho quando há uma escolha por fazer (a
 conjunta sem cônjuge, havendo quem). Aberto, é um cartão de linhas que gravam ao mexer, no
 ano da página (fisco.js:fiscoSetSituacao) — a tributação conjunta e a
 dispensa dos recibos eletrónicos em interruptores (role=switch); com a
@@ -4326,8 +4370,7 @@ o cônjuge, e a parte dele vai numa linha do titular dele
 fora, a app não adivinha e diz-o; sem nenhum, a linha fica inteira na minha
 letra. A dispensa diz o limite com o
 IAS do ano anterior, da versão das regras (fisco.js:fiscoLimiteDispensa), e
-a nota dela só aparece ligada ou a pedido («Quem tem dispensa?»,
-fisco.js:fiscoSitVerDispensa), com o arrendamento rural à parte: marca-se no
+quem tem dispensa diz-se no «?» dela, com o arrendamento rural à parte: marca-se no
 contrato, não dispensa os outros contratos, e o Modelo 44 dessas rendas é
 opcional. A categoria B diz-se no contrato e no cartão dela, não aqui.
 Uma situação herdada diz de que ano vem. A linha de um interruptor é o
@@ -5142,6 +5185,22 @@ páginas têm o rodapé «Feito com o Rendorium» e «Página N de M», escrito 
 fim, quando já se sabe o M. O escritor é o mesmo para o Anexo F
 (fisco-pdf.js:fiscoPdf), com os quadros num cartão por contrato.
 
+Os botões que abrem um campo dentro do formulário do contrato («Escrever outra
+taxa», «Outro encargo») são botões pequenos com contorno e letra de ação
+(estilos.css:.ct-abre); o imposto abre no lugar do botão, por baixo da renda
+líquida, com o campo e a dica dentro de um .form (contrato.js:ctTaxaOutra),
+sem nada por cima do campo.
+
+Por baixo de «Este contrato tem alguma particularidade fiscal?», quando as
+datas abrem uma isenção com confirmação (a renda antiga do 6H, o
+ex-alojamento local do 6F) e nenhuma está escolhida, uma frase nomeia-a, mesmo
+com o interruptor desligado (contrato.js:ctParticularidadeCaso).
+
+A comunicação da duração vive à cabeça do cartão «Perante a AT», num bloco
+com a borda de aviso enquanto está por marcar, com o botão para a marcar
+(que pede o dia, sem nenhum proposto); marcada, diz «feita»
+(contrato.js:ctComunicacaoBloco).
+
 ## As Pessoas e as Visitas
 «Pessoas» é a porta da casca para os Inquilinos, os Proprietários e os
 Colaboradores (navegacao.js:PESSOAS): o segmentado dos três, com quantos há
@@ -5531,7 +5590,7 @@ repõe os teus.». Nos meus com outros donos, a frase diz quem mais os perde
 — também nos meses em que foi dono — e oferece «Transferir o controlo»
 (cloud/selecao-listas.js:selLAvisoPartilhados); sair de vários diz o mesmo
 que sair de um: a quota a partir de hoje, as de antes guardadas até ontem, e
-o PDF e o CSV dos anos por entregar. Os meus apagam-se na base, com o Anular
+o PDF e a folha de cálculo dos anos por entregar. Os meus apagam-se na base, com o Anular
 (cloud/selecao-listas.js:selLApagarImoveisLocal); dos outros saio no
 servidor. Os pedidos vão todos, um que falhe não trava os outros, e o aviso,
 um só, espera pelas respostas e diz o que ficou como estava
@@ -5824,6 +5883,21 @@ overflow-y:clip, que deixa os lados à vista), porque um vizinho de seis
 semanas tem mais uma fila do que um mês de cinco, e ela ficaria por cima da
 legenda. A fila a mais só aparece depois de largar, quando a fita abre o
 espaço (continuidade.js:aFitaAbreEspaco).
+
+Um planeado de um encargo que um contrato em vigor põe a cargo do inquilino
+está suspenso: sai da lista, do «Por confirmar» e do calendário, e fica numa
+secção «Suspensos» que diz de quem é o encargo e até quando
+(planeados.js:recSuspenso, planeados.js:recSuspensosHtml). O primeiro dia
+passado à frente fica em r.saltadoDesde; desligado o encargo, ou acabado o
+contrato mais cedo, as ocorrências desde esse dia que já não são do
+inquilino e não têm movimento voltam a pedir-se.
+
+Uma renda com o mês pago só em parte pede o resto: a linha e o total do «Por
+confirmar» (nos Planeados, na Agenda, no sino e na Visão geral) mostram-no,
+com «Em dívida: 300,00 € da renda de setembro (pagos 500,00 € de 800,00 €)»
+(planeados.js:recEmDivida, planeados.js:recMontanteAPedir); a faixa «vem de
+trás» di-lo à parte, e a ficha do contrato e a do inquilino listam as rendas
+por receber, cada uma com o seu valor (planeados.js:ctRendasEmDivida).
 
 ### A hipoteca lê-se da FINE ou do contrato
 No topo do formulário da hipoteca, antes de qualquer campo, está o «Ler a
@@ -7359,13 +7433,21 @@ O formulário do imóvel vai em grupos .sect, como a prancheta M-NovoImovel
 fica fora de Portugal», que ligado pede o país e o código da tabela X
 (imovel.js:imvForaPTHtml); o destino e o tipo de arrendamento — dois
 segmentados, com a frase da escolha por baixo (imovel.js:imvSegmentado) —,
-os quartos e, num imóvel por quartos, a parte da casa que se arrenda
-(imovel.js:imvParteArrendadaHtml); e, só para donos, «Não sou dono: arrendo-o
+os quartos e, num imóvel por quartos, a parte da casa de cada quarto (em %,
+«Opcional», com o «?» da regra da área, imovel.js:imvExplicarParte), com «Os
+quartos somam X % da casa» por baixo; uma soma acima de 100 recusa-se junto
+do campo (imovel.js:imvPartesErro); e, só para donos, «Não sou dono: arrendo-o
 ao senhorio e subarrendo-o», com o NIF do senhorio, a renda paga, se é a casa
 toda ou só uma parte e, sendo parte, a renda dessa parte, todos obrigatórios
 — o que o quadro 5 pede (imovel.js:imvSubSect, imovel.js:imvSubErro). Depois,
 sempre aberto, o grupo «Para o Anexo F · da caderneta predial»
-(imovel.js:imvAnexoFSect); os proprietários e as quotas-partes
+(imovel.js:imvAnexoFSect), em que o código da freguesia preenche o
+distrito, o concelho e, quando a app sabe o nome, a freguesia dos Dados
+registais — só nos campos vazios ou que foram preenchidos por ele, nunca por
+cima do que a pessoa escreveu —, com a linha do que preencheu por baixo
+(freguesias.js:freguesiaLugar, imovel.js:imvLugarPreencher; os distritos e os
+concelhos do INE, revisão de 2025; os nomes das freguesias só das repostas em
+2025); os proprietários e as quotas-partes
 (imovel.js:donosSect); os valores; as hipotecas, sempre abertas, para o
 capital, que é obrigatório, não ficar atrás de uma dobra; e as despesas
 fixas, com a frase das prestações do IMI escrita enquanto se escreve
@@ -8756,6 +8838,41 @@ falha deixa a janela aberta, com «Enviar os anexos», e nunca repete o ticket n
 o comentário. O scripts/kanban.mjs fila e ver dizem de que comentário vem cada
 anexo.
 
+A janela de um ticket anda pela lista: no cabeçalho há ‹ «k de N» › (botões
+de 44px, desligados nas pontas), pela ordem da lista à vista quando a janela
+abriu — as secções e os grupos abertos; aberta de uma secção recolhida ou de
+dentro de outro ticket, a lista toda —, que fica igual até fechar
+(cloud/qa.js:qaNavDaLista). Deslizar o corpo para o lado faz o mesmo, com as
+regras do carrossel das fotos: o eixo decide-se aos 10px, vira passado um
+quarto da largura ou com um sacudir, o vizinho entra colado e nas pontas
+resiste; só com o dedo e a caneta, nunca a partir de campos, menus, de um
+toque longo ou do que rola de lado. As setas do teclado trocam sem animação.
+Depois de uma decisão que tira o ticket do sítio (Enviar para produção,
+Adiar, Recusar, Para depois, mover, reabrir, ou um comentário que o devolve a
+A fazer), a janela passa ao que ficou no lugar dele — no último, ao anterior;
+sem nenhum, volta à lista —, e o aviso diz a chave do que saiu; com uma
+resposta por enviar, a janela fica e diz porquê (cloud/qa.js:qaSeguirDepois).
+
+Em Human Tests há também «Para depois»: o «agora não consigo testar isto».
+Em Para depois, um ticket que veio de Human Tests (a última mudança de coluna
+no histórico) mostra «Voltar a Human Tests». O servidor só deixa partir da
+coluna certa e só para a outra (lib/kanban.js:IDAS_DE_QUEM_TESTA), com a
+linha no histórico e no rasto; um subticket em Para depois conta como por
+decidir, e o pai fica em Human Tests. O Claude não pega no que está em Para
+depois.
+
+Na lista, um subticket tem a linha de um ticket, e os de um pai ficam juntos
+debaixo de «Subtickets do KAN-N» com o título do pai: logo a seguir a ele
+quando o pai está na secção, senão no lugar do primeiro deles. Cada grupo é
+de um pai só. Em A fazer ficam no grupo de prioridade do pai
+(cloud/qa.js:qaBlocos).
+
+Nos «Modelos de dados», tocar na linha é usar o modelo, com a confirmação de
+sempre; a pega e o ⋯ são alvos à parte, por cima, e nunca o usam
+(cloud/modelos.js:mdlUsar). Um modelo do IRS traz a situação fiscal do ano
+(as definições do IRS): quem o usa fica com ela, e a conjunta de um modelo
+não passa ao seguinte.
+
 ## O kanban da equipa
 
 As tarefas da equipa vivem num kanban no back office, e só no dev
@@ -9500,16 +9617,10 @@ Um CSV sai com a marca de ordem de bytes à frente, para o Excel em Windows ler
 os acentos (copias.js:download), e uma célula de texto que comece por =, +,
 -, @, uma tabulação ou um retorno leva uma plica à frente, para não ser lida
 como fórmula (copias.js:celulaCsv); os sinais de largura inteira também levam
-a plica, e os números vão tal e qual. No CSV do Anexo F, os valores vão com
-vírgula decimal e duas casas (copias.js:celulaNumero), e os códigos como
-="040810", para o Excel não lhes tirar os zeros (copias.js:celulaCodigo).
-Uma coluna nova vai no fim, e as que existem não mudam de sítio; as linhas de
-rodapé levam o texto na coluna contrato, em secções no fim, cada uma depois
-de uma linha vazia e com o título na primeira coluna, para não se
-confundirem com as linhas do Anexo F: «AVISOS: …» com os «a tratar (…)», e
-«ESTIMATIVA E NOTAS: …» (ou «NOTAS: …» num ano sem regras) com o reporte, o
-imposto, as regras e o aviso (fisco-exportar.js:fiscoCsvTexto). O CSV dos
-movimentos fica com os números tal e qual.
+a plica, e os números vão tal e qual. O Anexo F não sai em CSV: sai numa
+folha de cálculo (fisco-exportar.js:fiscoXlsx), com os números como números e
+os códigos como texto, e uma coluna nova vai no fim, sem as que existem
+mudarem de sítio. O CSV dos movimentos fica com os números tal e qual.
 
 ## Toque e acessibilidade
 A app não amplia no telemóvel: nem o zoom automático do iPhone ao tocar num

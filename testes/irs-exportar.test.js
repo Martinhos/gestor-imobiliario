@@ -83,14 +83,14 @@ function lerCsv(csv) {
     raw: (i, k) => ls[i + 1][cab.indexOf(k)],
   };
 }
-/* O CSV que o fiscoCsv descarrega.
-   Devolve: {nome, mime, conteudo}. */
+/* A tabela do Anexo F em texto (fisco-exportar.js:fiscoCsvTexto), a mesma que a
+   folha de cálculo leva (fiscoXlsx), com o nome do ficheiro que se descarrega.
+   Devolve: {nome, conteudo}. */
 function csvDescarregado() {
-  let g = null;
-  app.download = (nome, mime, conteudo) => { g = { nome, mime, conteudo }; };
-  app.fiscoCsv();
-  assert.ok(g, 'descarregou');
-  return g;
+  let nome = '';
+  app.download = (n) => { nome = n; };
+  app.fiscoXlsx();
+  return { nome, conteudo: app.fiscoCsvTexto(app.resumoFiscal(app.fiscoAnoAtual())) };
 }
 /* Muda o resumo que as saídas leem, depois de o resumoFiscal o fazer: é o «r
    feito à mão com a forma do contrato» para os campos da folha do resumo.
@@ -200,7 +200,7 @@ describe('as células do CSV (copias.js)', () => {
 describe('o CSV do Anexo F', () => {
   test('D74: os valores com vírgula e duas casas, e os códigos que o Excel lê como texto', () => {
     const { nome, conteudo } = csvDescarregado();
-    assert.equal(nome, 'anexo-f-2025.csv');
+    assert.equal(nome, 'anexo-f-2025.xlsx', 'descarrega-se a folha de cálculo (KAN-126-8)');
     const c = lerCsv(conteudo);
     // as colunas que já existiam ficam no mesmo sítio
     assert.deepEqual(c.cab.slice(0, 16), ['ano', 'declarado', 'contrato', 'n_at', 'início', 'imóvel', 'freguesia', 'tipo_predio', 'artigo', 'fração', 'natureza', 'inquilinos', 'nif_ou_pais', 'quota_pct', 'rendas_iliquidas', 'retencoes']);

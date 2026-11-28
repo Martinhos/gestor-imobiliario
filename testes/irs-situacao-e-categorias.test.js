@@ -7,7 +7,9 @@
 //   fechava numa linha com um «Mudar» no canto, que não dizia o que fazia nem
 //   porque importava. Agora diz o que está escolhido em frases inteiras
 //   (fiscoSituacaoResumo), porque importa (fiscoSituacaoPorque) e o botão
-//   chama-se «Mudar a situação fiscal».
+//   chama-se «Mudar a situação fiscal». Desde o KAN-127-17 (2026-11-27) o
+//   porquê está atrás do «?» do título (fisco.js:fisAjudaTexto), e à vista
+//   fica só o resumo e o botão.
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -74,24 +76,26 @@ describe('KAN-127-10 · a situação fiscal diz o que está escolhido, porque im
   const cartao = () => app.fiscoSituacaoCard(app.resumoFiscal(2025, 'ana'));
   const PORQUE = 'Daqui depende o Anexo F de 2025. Em separado entram só as tuas rendas; em conjunta, as do cônjuge que estão nesta app juntam-se às tuas numa só declaração, e o imposto estimado muda com elas. A dispensa dos recibos eletrónicos muda o que fica a tratar antes de entregar.';
 
-  test('fechado: o que está escolhido, o porquê e «Mudar a situação fiscal» por baixo, não no canto', () => {
+  test('fechado: o que está escolhido, o porquê no «?» e «Mudar a situação fiscal» por baixo', () => {
     const h = cartao(), t = texto(h);
-    assert.match(h, /<h2 class="ana-tit">A tua situação fiscal em 2025<\/h2><span class="small">Declaração em separado, és o titular A · passas recibos eletrónicos<\/span><\/div>/,
-      'o resumo em frases, logo por baixo do título, e nada no canto do cabeçalho');
-    assert.doesNotMatch(h, /ana-extra/);
-    assert.ok(t.includes(PORQUE), 'o porquê à vista');
-    assert.match(h, /<p class="fis-sit-nota"><button type="button" class="btn sm" id="fiscoSitMudar" data-toca="nada" data-click="fiscoSitMudar\(true\)" aria-expanded="false" aria-controls="fiscoSitCorpo">Mudar a situação fiscal<\/button><\/p><div class="fis-sit-corpo" id="fiscoSitCorpo" hidden>/);
+    assert.match(h, /<h2 class="ana-tit">A tua situação fiscal em 2025<\/h2><span class="small">Declaração em separado, és o titular A · passas recibos eletrónicos<\/span><span class="ana-extra"><button type="button" class="ct-ajuda fis-ajuda" id="fis_aj_situacao"[^>]*data-click="fisExplicar\('situacao',2025\)" aria-label="Explicar: A tua situação fiscal"/,
+      'o resumo em frases, logo por baixo do título, e o «?» no canto do cabeçalho (KAN-127-17)');
+    assert.ok(!t.includes(PORQUE), 'o porquê já não está à vista');
+    assert.equal(app.fisAjudaTexto('situacao', 2025)[0], PORQUE, 'está no «?»');
+    assert.match(h, /<p class="fis-sit-nota fis-sit-mudar"><button type="button" class="btn sm" id="fiscoSitMudar" data-toca="nada" data-click="fiscoSitMudar\(true\)" aria-expanded="false" aria-controls="fiscoSitCorpo">Mudar a situação fiscal<\/button><\/p><div class="fis-sit-corpo" id="fiscoSitCorpo" hidden>/);
     assert.doesNotMatch(h, />Mudar<\/button>/, 'nunca um «Mudar» sozinho');
     assert.doesNotMatch(t, /Modelo 44/, 'o Modelo 44 só se nomeia com a dispensa (N063)');
     assert.doesNotMatch(h, /style=|onclick=/);
   });
 
-  test('aberto: o mesmo porquê, «Fechar» no mesmo sítio, e os interruptores por baixo', () => {
+  test('aberto: «Fechar» no mesmo sítio, e os interruptores por baixo, cada um com o seu «?»', () => {
     app.fiscoSitMudar(true);
     const h = cartao(), t = texto(h);
-    assert.ok(t.includes(PORQUE));
+    assert.ok(!t.includes(PORQUE));
     assert.match(h, /aria-expanded="true" aria-controls="fiscoSitCorpo">Fechar<\/button><\/p><div class="fis-sit-corpo" id="fiscoSitCorpo">/);
-    assert.match(t, /O que só tu sabes e muda o Anexo F de 2025\. Grava ao mexer\./);
+    assert.match(t, /^A tua situação fiscal em 2025 Grava ao mexer\./);
+    assert.match(h, /data-click="fisExplicar\('conjunta',2025\)"/);
+    assert.match(h, /data-click="fisExplicar\('dispensa',2025\)"/);
     assert.match(h, /id="fiscoConjunta"/);
     app.fiscoSitMudar(false);
     assert.match(cartao(), /id="fiscoSitCorpo" hidden/);
@@ -110,7 +114,7 @@ describe('KAN-127-10 · a situação fiscal diz o que está escolhido, porque im
     app.db.settings.irs = app.normIrsDefs({ porAno: { 2026: { conjunta: true, conjugeId: 'rui', minhaLetra: 'A' } } });
     const h26 = app.fiscoSituacaoCard(Object.assign(app.resumoFiscal(2026, 'ana'), { ano: 2026 }), false);
     assert.match(h26, /A tua situação fiscal em 2026<\/h2><span class="small">Declaração conjunta com Rui, és o titular A/);
-    assert.match(texto(h26), /Daqui depende o Anexo F de 2026\./);
+    assert.match(app.fisAjudaTexto('situacao', 2026)[0], /^Daqui depende o Anexo F de 2026\./);
     assert.match(cartao(), /Declaração em separado, és o titular A/, '2025 continua em separado');
   });
 });

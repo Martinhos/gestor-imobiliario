@@ -91,7 +91,8 @@ function abrirPartilha() {
 describe('a barra', () => {
   test('só as ações, juntas: o guia (pequeno, com o livro) e o botão de partilha', () => {
     const html = app.vFisco();
-    const barra = html.slice(html.indexOf('<div class="ana-barra">'), html.indexOf('<div class="grid fis-kpis">'));
+    // a barra acaba onde começa o primeiro cartão, a situação fiscal (KAN-127-17)
+    const barra = html.slice(html.indexOf('<div class="ana-barra">'), html.indexOf('<section class="card ana-cartao fis-sit'));
     assert.equal(barra,
       '<div class="ana-barra"><div class="ana-acoes fis-acoes">'
       + '<a class="btn sm fis-guia" href="/guias/declarar-rendas" target="_blank" rel="noopener" data-toca="nada" aria-label="Guia de preenchimento do Anexo F" title="Guia de preenchimento do Anexo F">'
@@ -122,21 +123,21 @@ describe('a barra', () => {
     assert.doesNotMatch(html, /ana-barra|fiscoPartilha|Guia/, 'sem rendas, sem a barra das ações');
   });
 
-  test('a partilha abre a janela com o CSV e o PDF, cada um com o ícone e o que leva', () => {
+  test('a partilha abre a janela com a folha de cálculo e o PDF, cada um com o ícone e o que leva (KAN-126-8)', () => {
     const j = abrirPartilha();
     assert.equal(j.titulo, 'Partilhar');
-    assert.deepEqual(JSON.parse(JSON.stringify(j.opcoes.map((o) => [o.v, o.label, o.icon]))), [['csv', 'Exportar CSV', 'down'], ['pdf', 'Exportar PDF', 'contract']]);
-    assert.ok(j.opcoes.every((o) => o.sub && o.sub.length < 60), 'uma linha curta a dizer o que leva');
+    assert.deepEqual(JSON.parse(JSON.stringify(j.opcoes.map((o) => [o.v, o.label, o.icon]))), [['xlsx', 'Exportar folha de cálculo', 'down'], ['pdf', 'Exportar PDF', 'contract']]);
+    assert.ok(j.opcoes.every((o) => o.sub && o.sub.length < 80), 'uma linha curta a dizer o que leva');
     // escolher fecha a janela e exporta
-    const feito = [], antes = { closeModal: app.closeModal, fiscoCsv: app.fiscoCsv, fiscoPdf: app.fiscoPdf };
+    const feito = [], antes = { closeModal: app.closeModal, fiscoXlsx: app.fiscoXlsx, fiscoPdf: app.fiscoPdf };
     app.closeModal = () => feito.push('fechar');
-    app.fiscoCsv = () => feito.push('csv');
+    app.fiscoXlsx = () => feito.push('xlsx');
     app.fiscoPdf = () => feito.push('pdf');
     try {
       j.escolher(j.opcoes[0]);
       j.escolher(j.opcoes[1]);
     } finally { Object.assign(app, antes); }
-    assert.deepEqual(feito, ['fechar', 'csv', 'fechar', 'pdf']);
+    assert.deepEqual(feito, ['fechar', 'xlsx', 'fechar', 'pdf']);
   });
 
   test('os estilos: as ações juntas à direita, numa linha, e nada do ano nem do titular na barra', () => {
@@ -160,7 +161,7 @@ describe('a barra', () => {
     app.definirServicosDesligados(['transactions']);
     assert.equal(app.servicoLigado('fisco'), false, 'sem os Movimentos');
     app.definirServicosDesligados([]);
-    assert.deepEqual(JSON.parse(JSON.stringify(abrirPartilha().opcoes.map((o) => o.v))), ['csv', 'pdf']);
+    assert.deepEqual(JSON.parse(JSON.stringify(abrirPartilha().opcoes.map((o) => o.v))), ['xlsx', 'pdf']);
   });
 });
 

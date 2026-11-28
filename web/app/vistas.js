@@ -812,7 +812,10 @@ function kpiPorque(id){document.getElementById(id).classList.toggle('open')}
    bolinha antes do rótulo — vem do tema.js:COR_SERIE, nunca um hex à mão),
    serie (a cor das linhas da janela, quando não é a da bolinha — o Cashflow
    tem a bolinha do tema escuro, por o cartão ser escuro) e extra (HTML de uma
-   linha a mais, entre a série e o rodapé).
+   linha a mais, entre a série e o rodapé) e janela (verdadeiro: o porquê
+   abre numa janela, como os da Visão geral, e o cartão não cresce — os
+   números da Declaração, KAN-170; o porquê fica no cartão, escondido, e a
+   janela lê-o de lá, kpiJanela).
    Devolve: string HTML do cartão KPI. */
 const kpi=(l,v,c,f,why,evo,acao,o)=>{
   const id='k'+(++kpiN);
@@ -828,6 +831,11 @@ const kpi=(l,v,c,f,why,evo,acao,o)=>{
        precisamente a queixa dos «quadrados que aparecem desalinhados». */
     return `<div class="card kpi evo${cls}" id="${id}" data-toca="camada" data-click="kpiModal('${jsq(id)}')"><span class="kic">${ic('trend',11)}</span>
       <div class="label">${bola}${l}</div><div class="value ${c||''}">${v}</div>${(evo.anual&&haAnoAnterior())?`<div class="kserie" data-kpi="${id}"></div>`:''}${o.extra||''}${f?`<div class="foot">${f}</div>`:''}</div>`}
+  /* registado como os de série (o embrulho da nuvem, web/cloud/painel.js, só
+     abre os registados), mas sem série: abre o porquê (kpiJanela) */
+  if(why&&o.janela){KPI_REG[id]={title:l,why:why,evo:null,acao:null,janela:true};return `<div class="card kpi why janela${cls}" id="${id}" data-toca="camada" data-click="kpiModal('${jsq(id)}')" aria-haspopup="dialog">
+    <div class="label">${bola}${l}</div><div class="value ${c||''}">${v}</div>${o.extra||''}${f?`<div class="foot">${f}</div>`:''}
+    <div class="expl">${why}</div></div>`}
   return `<div class="card kpi ${why?'why':''}${cls}" id="${id}" ${why?`data-toca="nada" data-click="kpiPorque('${jsq(id)}')"`:''}>
     <div class="label">${bola}${l}</div><div class="value ${c||''}">${v}</div>${o.extra||''}${f?`<div class="foot">${f}</div>`:''}
     ${why?`<div class="expl">${why}</div>`:''}</div>`;
@@ -866,10 +874,13 @@ function tabelaDoKpi(k,d,fmt){
    janela (meses, divisoes e mesTitulo, como o evoMoney: os últimos 12
    meses, ou os de um ano) desenha-os tal e qual, com o título e a divisão da
    passagem de ano — são os mesmos meses que a silhueta do cartão mostra.
+   Um cartão sem série que explica numa janela (o kpi com o.janela) abre o
+   porquê (kpiJanela).
    Recebe: id — o id do cartão KPI ('k1', 'k2', …) registado em KPI_REG.
    Devolve: nada — abre a janela de evolução (ou nada, se o evo falhar). */
 function kpiModal(id){
   const k=KPI_REG[id];if(!k)return;
+  if(k.janela){const el=document.getElementById(id);if(el)kpiJanela(el);return}
   let d;try{d=k.evo()}catch(e){d=null}
   if(!d)return;
   const fmt=d.fmt||euro,cor=k.cor||COR_SERIE.cashflow;
@@ -886,6 +897,25 @@ function kpiModal(id){
     ${d.note?`<div class="hint">${d.note}</div>`:''}</div>`;
   openModal(k.title,body,`<button class="btn${k.acao?'':' primary'}" data-toca="camada" data-click="closeModal()">Fechar</button>`+
     (k.acao?`<button class="btn primary" data-toca="vista" data-click="closeModal();${k.acao.act}">${esc(k.acao.label)}</button>`:''));
+}
+/* A janela de um cartão de indicador sem série que explica numa janela (o kpi
+   com o.janela — os números da Declaração, KAN-170, «como os KPIs da vista
+   geral»): o rótulo no título, o valor em grande, as linhas do cartão (o
+   rodapé e as linhas a mais: o já retido e a falta, o reporte, o AIMI, as
+   rendas fora do Anexo F) e o porquê, lidos do próprio cartão. O cartão não
+   muda: não cresce nem fecha, e tem sempre o mesmo tamanho.
+   Recebe: el — o elemento do cartão (.kpi.janela).
+   Devolve: nada — abre a janela. */
+function kpiJanela(el){
+  const q=s=>el.querySelector(s),lab=q('.label'),val=q('.value'),expl=q('.expl');
+  const titulo=lab?String(lab.textContent||'').trim():'';
+  const cls=val?String(val.className||'').replace(/\bvalue\b/,'').trim():'';
+  const linhas=[...el.querySelectorAll('.foot')].map(x=>x.innerHTML).filter(x=>String(x).trim());
+  const body=`<div class="form kpi-janela">
+    <div class="value kpi-janela-valor${cls?' '+cls:''}">${val?val.innerHTML:''}</div>
+    ${linhas.length?`<ul class="kpi-janela-linhas">${linhas.map(x=>`<li>${x}</li>`).join('')}</ul>`:''}
+    ${expl?`<p class="kpi-janela-porque">${expl.innerHTML}</p>`:''}</div>`;
+  openModal(titulo,body,`<button type="button" class="btn primary" data-toca="camada" data-click="closeModal()">Fechar</button>`);
 }
 /* anos com movimentos que contam nesta vista (o mesmo peso das métricas: imóvel,
    grupo ou âmbito todo), mais o corrente

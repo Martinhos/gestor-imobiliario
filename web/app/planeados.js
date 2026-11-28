@@ -182,6 +182,33 @@ function ctRendasPorRegistar(c){
   const d=r&&!(r.tx||{}).loanId?datasEmFalta(r):[];
   return d.length>=2?{datas:d,recId:r.id}:{datas:[],recId:''};
 }
+/* As rendas de um contrato que estão por receber, cada uma com o seu valor
+   (KAN-129-4: com várias em falta, o resto de uma renda paga só em parte
+   ficava escondido, e só se via a renda inteira). Os meses com rendas pagas
+   só em parte (t.parcial, D115) cuja soma fica abaixo da renda desse mês —
+   a do contrato nesse mês (recRendaDoContrato), senão a de hoje —, com o
+   resto e divida:true; e os meses sem renda nenhuma, do planeado da renda
+   (datasEmFalta) ou, num terminado, do plano dele (ctRendasEmFalta), com a
+   renda do mês. Pela ordem dos meses.
+   Recebe: c — o contrato.
+   Devolve: [{mes:'AAAA-MM', nome, valor, divida}] — nome é o mês por
+   extenso (recMesPorExtenso) —, vazio sem nada por receber. */
+function ctRendasEmDivida(c){
+  if(!c)return [];
+  const renda=mes=>recRendaDoContrato(c,mes)||r2(Number(c.rent)||0),porMes={};
+  (db.transactions||[]).forEach(t=>{
+    if(!t||t.contractId!==c.id||!ehRenda(t))return;
+    const m=mesDaRenda(t);if(!m)return;
+    const x=porMes[m]||(porMes[m]={pago:0,parcial:false});
+    x.pago=r2(x.pago+rendaBruta(t));if(t.parcial)x.parcial=true;
+  });
+  const out=Object.keys(porMes).filter(m=>porMes[m].parcial&&porMes[m].pago<renda(m)-0.005)
+    .map(m=>({mes:m,valor:r2(renda(m)-porMes[m].pago),divida:true}));
+  const r=servicoLigado('recurring')&&(ctEstado(c)!=='terminado'||ctRendaDepoisDoTermo(c))?ctRecOf(c):null;
+  const datas=r?datasEmFalta(r):ctRendasEmFalta(c);
+  datas.forEach(d=>{const m=String(d).slice(0,7);if(!porMes[m]&&!out.some(o=>o.mes===m))out.push({mes:m,valor:renda(m),divida:false})});
+  return out.sort((a,b)=>a.mes.localeCompare(b.mes)).map(x=>Object.assign(x,{nome:recMesPorExtenso(x.mes)}));
+}
 /* Mantém a recorrência automática da renda de um contrato: cria-a, atualiza-a
    ou remove-a conforme o contrato esteja ativo, com renda e com o automático
    ligado (autoRec). A janela payDay..payDayTo dá as datas; rendas antecipadas
@@ -604,6 +631,27 @@ function recSuspensaPeloInquilino(r,d){
   const enc=recEncargoDoInquilino(r),mes=String(d).slice(0,7);
   return enc?cs.find(c=>c.encargosInquilino.indexOf(enc)>-1&&ctEmVigorNoMes(c,mes))||null:null;
 }
+/* O planeado está suspenso pelo inquilino? A próxima ocorrência dele é de um
+   encargo que um contrato em vigor nesse mês põe a cargo do inquilino
+   (recSuspensaPeloInquilino). As vencidas já passaram à frente
+   (recSaltarEncargosDoInquilino), e a próxima é a que diz se o planeado está
+   parado: a lista dos Planeados põe-no à parte, em «Suspensos», e o
+   calendário não o mostra (KAN-129-3: marcar o condomínio no contrato
+   deixava o planeado na lista, como se continuasse a pedir-se). Volta sozinho
+   quando o contrato acaba ou o encargo se desliga.
+   Recebe: r — o planeado.
+   Devolve: o contrato que o suspende, ou null. */
+function recSuspenso(r){
+  return r&&r.next?recSuspensaPeloInquilino(r,r.next):null;
+}
+/* A frase curta de um planeado suspenso, na linha da lista: de quem é o
+   encargo e até quando.
+   Recebe: c — o contrato que o suspende (recSuspenso).
+   Devolve: o texto. */
+function recSuspensoTexto(c){
+  const fim=String(irsFimReal(c)||'');
+  return 'A cargo do inquilino ('+ctName(c)+')'+(fim&&!ctRendaDepoisDoTermo(c)?' até '+dPT(fim):' enquanto o contrato estiver em vigor');
+}
 /* O que o Confirmar diz de um planeado de um encargo que o inquilino paga
    (recSuspensaPeloInquilino): de quem é, e até quando, sem o registar.
    Recebe: c — o contrato que o põe a cargo do inquilino.
@@ -630,20 +678,40 @@ function recPassarUma(r){
    (recSuspensaPeloInquilino). Sem isto o planeado ficava parado no primeiro
    mês do contrato e, quando ele acabasse, pedia de uma vez todos os meses
    que o inquilino pagou. As de hoje em diante esperam pelo dia delas: o
-   contrato pode acabar antes. Só a quem é dono da casa, como o syncPropRecs:
+   contrato pode acabar antes. O primeiro dia passado à frente fica no
+   planeado (r.saltadoDesde): quando o encargo se desliga no contrato, ou o
+   contrato acaba mais cedo, as ocorrências desde esse dia que já não são do
+   inquilino voltam a pedir-se. Só a quem é dono da casa, como o syncPropRecs:
    quem colabora não mexe nos planeados do dono, e o recPorConfirmar já não
    lhos pede.
    Recebe: pid — o id do imóvel.
    Devolve: nada — mexe em db.recurring; quem chama grava. */
 function recSaltarEncargosDoInquilino(pid){
   if(!pid||!cargoDe(pid).dono)return;
-  const hoje=today();
+  const hoje=today(),iso=/^\d{4}-\d{2}-\d{2}$/;
   (db.recurring||[]).slice().forEach(r=>{
     if(!r||!r.tx||r.tx.propertyId!==pid||!recEncargoDoInquilino(r))return;
+    /* o encargo desligou-se (ou o contrato acabou mais cedo): as ocorrências
+       passadas à frente que já não são do inquilino voltam a pedir-se, desde
+       a primeira (r.saltadoDesde) — sem isto, marcar e desmarcar o condomínio
+       perdia a quota deste mês (KAN-129-3) */
+    const sd=String(r.saltadoDesde||'');
+    if(iso.test(sd)&&iso.test(String(r.next||''))&&sd<r.next){
+      let d=sd,g=0;
+      while(g++<1200&&d<r.next&&(recSuspensaPeloInquilino(r,d)||jaRegistado(r,d))){const s=nextDate(d,r.every);if(!(s>d))break;d=s}
+      if(d<r.next){
+        const gap=r.until&&r.until>r.next?Math.round((new Date(r.until+'T00:00:00')-new Date(r.next+'T00:00:00'))/864e5):0;
+        r.next=d;r.until=gap?addDays(d,gap):'';
+      }
+    }
+    if(r.saltadoDesde&&!(iso.test(String(r.next||''))&&recSuspensaPeloInquilino(r,r.next)))delete r.saltadoDesde;
+    const antes=String(r.next||'');
     let guarda=0;
-    while(guarda++<1200&&/^\d{4}-\d{2}-\d{2}$/.test(String(r.next||''))&&r.next<=hoje&&recSuspensaPeloInquilino(r,r.next)){
+    while(guarda++<1200&&iso.test(String(r.next||''))&&r.next<=hoje&&recSuspensaPeloInquilino(r,r.next)){
       if(!recPassarUma(r))break;
     }
+    /* o primeiro dia passado à frente fica guardado, para voltar ao desligar */
+    if(r.next!==antes&&!r.saltadoDesde&&(db.recurring||[]).indexOf(r)>-1)r.saltadoDesde=antes;
   });
 }
 /* O planeado de um encargo do imóvel com a ocorrência neste mês: o que a
@@ -701,6 +769,46 @@ function recRestoDaRenda(r){
   if(!(resto>0.005))return null;
   const ret=Math.min(resto,Math.max(0,r2((Number(t.retencao)||0)-sum(ja.map(x=>Number(x.retencao)||0)))));
   return {amount:r2(resto-ret),retencao:ret};
+}
+/* O que um planeado da renda pede agora quando o mês dele foi pago só em
+   parte (KAN-129-4: o cartão «Por confirmar» dizia a renda inteira, e o
+   resto em dívida não se via): o resto (recRestoDaRenda), com a renda do mês
+   e o que já entrou. Só numa renda de contrato com algum pagamento nesse mês.
+   Recebe: r — o planeado.
+   Devolve: {amount, retencao, renda, pago, mes} — o resto que entra, a
+   retenção dele, a renda do mês (bruta), o que já entrou (bruto) e o mês —,
+   ou null. */
+function recEmDivida(r){
+  const resto=recRestoDaRenda(r);if(!resto)return null;
+  const t=r.tx||{},mes=recPeriodo(r),c=contract(t.contractId);
+  const renda=Math.max(r2((Number(t.amount)||0)+(Number(t.retencao)||0)),c?recRendaDoContrato(c,mes):0);
+  return {amount:resto.amount,retencao:resto.retencao,renda,pago:r2(renda-resto.amount-resto.retencao),mes};
+}
+/* O nome de um mês por extenso, com o ano quando não é o corrente:
+   «setembro», «dezembro de 2025».
+   Recebe: mes — 'AAAA-MM'.
+   Devolve: o texto ('' com um mês inválido). */
+function recMesPorExtenso(mes){
+  const s=String(mes||'');if(!/^\d{4}-\d{2}$/.test(s))return '';
+  const nome=new Date(Number(s.slice(0,4)),Number(s.slice(5,7))-1,1).toLocaleDateString('pt-PT',{month:'long'});
+  return nome+(s.slice(0,4)!==today().slice(0,4)?' de '+s.slice(0,4):'');
+}
+/* A frase do resto em dívida de uma renda paga só em parte: «Em dívida:
+   300,00 € da renda de setembro (pagos 500,00 € de 800,00 €)».
+   Recebe: r — o planeado; d — o que recEmDivida devolveu.
+   Devolve: o texto. */
+function recEmDividaTexto(r,d){
+  const nome=recMesPorExtenso(d.mes);
+  return 'Em dívida: '+euro2(r2(d.amount+d.retencao))+' da renda de '+nome+' (pagos '+euro2(d.pago)+' de '+euro2(d.renda)+')';
+}
+/* O montante que um planeado pede agora: o resto de uma renda paga só em
+   parte (recEmDivida), senão o do planeado. É o valor das linhas por
+   confirmar e do total delas (pendLinha, pendTotal).
+   Recebe: r — o planeado.
+   Devolve: euros (número). */
+function recMontanteAPedir(r){
+  const d=recPorConfirmar(r)?recEmDivida(r):null;
+  return d?d.amount:(Number(((r||{}).tx||{}).amount)||0);
 }
 /* Este planeado é mesmo a prestação mensal da hipoteca l? Um pagamento de
    crédito mensal, que não é amortização antecipada, com um montante da ordem
@@ -1906,13 +2014,15 @@ function pendMenuItens(r,ok,podeConf){
    paga não se confirma às cegas — fica o Rever, que abre o formulário. O
    texto e o valor vão juntos (.plan-pend-topo): num cartão estreito só as
    ações descem, e um valor largo («1 250,00 €») já não arrasta o valor e o
-   selo para baixo dos botões.
+   selo para baixo dos botões. A renda de um mês pago só em parte mostra o
+   resto, que é o que o Confirmar regista, e diz «Em dívida» com o que já
+   entrou (recEmDivida, KAN-129-4).
    Recebe: r — o planeado por confirmar.
    Devolve: o HTML da linha (texto). */
 function pendLinha(r){
   const t=r.tx||{},semCred=recSemCredito(r),pago=!semCred&&recCreditoPago(r);
   const ok=podeEditar(t.propertyId,'rec.add',r,'confirmar'),recusa=recusaConfirmar(r),conf=!recusa&&!semCred&&!pago;
-  const id=jsq(r.id),onde=imovelDoMolde(t),itens=pendMenuItens(r,ok,!recusa);
+  const id=jsq(r.id),onde=imovelDoMolde(t),itens=pendMenuItens(r,ok,!recusa),div=recEmDivida(r);
   const acoes=(conf?`<button type="button" class="btn sm primary" data-toca="dados" data-click="quickConfirmRec('${id}')">${ic('check',16)} Confirmar</button>`:'')
     /* a renda de um contrato que pede o recibo eletrónico: o segundo botão (D8, maqueta 4) */
     +(conf&&recPedeRecibo(r)?`<button type="button" class="btn sm" data-toca="dados" data-click="recConfirmarComRecibo('${id}')">Confirmar e emiti o recibo</button>`:'')
@@ -1922,20 +2032,22 @@ function pendLinha(r){
     <div class="plan-pend-topo"><div class="plan-txt tap" data-toca="camada" data-click="recView('${id}')">
       <p class="title">${esc(r.name)}</p>
       <p class="small num">${[onde?esc(onde):'',esc(recQuando(r))].filter(Boolean).join(' · ')}</p>
+      ${div?`<p class="small"><b class="amber">${esc(recEmDividaTexto(r,div))}</b></p>`:''}
       ${semCred?'<p class="small"><b class="amber">Sem crédito associado — abre para escolher</b></p>':''}
       ${pago?'<p class="small"><b class="amber">Hipoteca já paga — abre para rever</b></p>':''}</div>
-    <div class="plan-valor">${recValor(t)}${recSelo(r)}</div></div>
+    <div class="plan-valor">${recValor(div?Object.assign({},t,{amount:div.amount}):t)}${recSelo(r)}</div></div>
     ${acoes?`<div class="plan-acoes">${acoes}</div>`:''}</div>`;
 }
 /* O total do cabeçalho do cartão «Por confirmar», com o sinal das linhas por
    baixo (planeados.js:recValor): o que entra soma, o que sai (a prestação
    incluída) subtrai, a transferência conta zero. Somava os montantes todos
    como positivos — com uma renda de 425 € e um condomínio de 85 € dizia
-   510 €, e as linhas diziam +425 e −85.
+   510 €, e as linhas diziam +425 e −85. Uma renda paga só em parte conta o
+   resto (recMontanteAPedir), como a linha dela.
    Recebe: pend — os planeados por confirmar (array).
    Devolve: euros com sinal (número, arredondado ao cêntimo). */
 function pendTotal(pend){
-  return r2(sum((pend||[]).map(r=>{const t=r.tx||{},v=Number(t.amount)||0;return isIn(t.kind)?v:isOut(t.kind)?-v:0})));
+  return r2(sum((pend||[]).map(r=>{const t=r.tx||{},v=recMontanteAPedir(r);return isIn(t.kind)?v:isOut(t.kind)?-v:0})));
 }
 /* HTML do cartão «Por confirmar». Com all mostra também as silenciadas (é
    assim que a página Planeados o usa); sem all, só as que avisam (vista
@@ -2049,16 +2161,21 @@ function recRetroMeses(datas,every){
 }
 /* A faixa de quem vem de trás, por cima dos por confirmar: um planeado de cada
    vez (o primeiro dos recRetroCandidatos), a dizer desde quando, o que falta,
-   quanto se regista e com que etiqueta. Só com a nuvem, que é quem regista
-   (CW.fillMissed).
+   quanto se regista e com que etiqueta — e, numa renda com o mês do planeado
+   pago só em parte, o resto em dívida (recEmDivida). Só com a nuvem, que é
+   quem regista (CW.fillMissed).
    Devolve: o HTML da faixa (texto), ou '' sem nada a dizer. */
 function recRetroFaixa(){
   if(!(typeof window!=='undefined'&&window.CW&&typeof window.CW.fillMissed==='function'))return '';
   const cs=recRetroCandidatos();if(!cs.length)return '';
   const {r,datas}=cs[0],n=datas.length,v=Number((r.tx||{}).amount)||0,mais=cs.length-1;
+  /* o resto de uma renda paga só em parte não é um mês em falta: diz-se à
+     parte, para não ficar escondido atrás dos que faltam (KAN-129-4) */
+  const div=recPorConfirmar(r)?recEmDivida(r):null;
   return `<section class="plan-retro" aria-labelledby="planRetroTit">
     <h2 id="planRetroTit">«${esc(r.name)}» vem de trás</h2>
     <p class="num">Começa a ${dPT(origemDoPlano(r))}: ${esc(recRetroMeses(datas,r.every))}. Registamos ${n} movimentos de ${euro2(v)} (${euro2(r2(v*n))}), com a etiqueta «Estimativa»?</p>
+    ${div?`<p class="small num"><b class="amber">${esc(recEmDividaTexto(r,div))}</b>: fica no «Por confirmar», com o valor do resto.</p>`:''}
     ${mais?`<p class="small plan-retro-mais">Há mais ${mais} ${mais===1?'planeado':'planeados'} assim; aparecem a seguir.</p>`:''}
     <div class="plan-retro-acoes">
       <button type="button" class="btn sm primary" data-toca="camada" data-click="CW.fillMissed('${jsq(r.id)}')">Registar os ${n}</button>
@@ -2097,19 +2214,24 @@ function recChip(v){
    (ou, chegada a data, quando pede confirmação), o tipo e o imóvel, o selo da
    origem e o do estado, e o valor com a cor do dinheiro. Tocar abre a ficha,
    com as opções no ⋯; o toque longo entra na seleção de vários com ela
-   marcada (cloud/selecao-listas.js:lpLongo).
+   marcada (cloud/selecao-listas.js:lpLongo). Suspenso pelo inquilino
+   (recSuspenso), diz de quem é o encargo e até quando, com o selo
+   «Suspenso» no lugar do estado; a renda de um mês pago só em parte
+   (recEmDivida) mostra o resto, com «em dívida».
    Recebe: r — o planeado.
    Devolve: o HTML da linha (texto). */
 function recLinha(r){
-  const t=r.tx||{},pend=recPorConfirmar(r),onde=imovelDoMolde(t);
+  const t=r.tx||{},pend=recPorConfirmar(r),onde=imovelDoMolde(t),sus=recSuspenso(r),div=pend?recEmDivida(r):null;
   return `<div class="plan-linha tap" data-lp="rec:${esc(r.id)}" data-fk="recl:${esc(r.id)}" data-toca="camada" data-click="recView('${jsq(r.id)}')">
     <div class="plan-txt">
       <p class="title">${esc(r.name)}</p>
-      <p class="small num">${esc(recRepete(r))}${r.next?' · '+(pend?esc(recQuando(r)):'próxima '+recDiaCurto(r.next)):''}${r.end?' · termina '+dPT(r.end):''}</p>
+      <p class="small num">${esc(recRepete(r))}${r.next&&!sus?' · '+(pend?esc(recQuando(r)):'próxima '+recDiaCurto(r.next)):''}${r.end?' · termina '+dPT(r.end):''}</p>
       <p class="small">${esc((KIND[t.kind]||{}).short||'')}${onde?' · '+esc(onde):''}${t.category?' · '+esc(t.category):''}</p>
+      ${sus?`<p class="small">${esc(recSuspensoTexto(sus))}</p>`:''}
+      ${div?`<p class="small"><b class="amber">${esc(recEmDividaTexto(r,div))}</b></p>`:''}
       ${recSemCredito(r)?'<p class="small"><b class="amber">Sem crédito associado — abre para escolher</b></p>':''}
-      <div class="plan-selos">${recOrigem(r)}${recSelo(r)}</div></div>
-    ${recValor(t)}</div>`;
+      <div class="plan-selos">${recOrigem(r)}${sus?'<span class="badge grey">Suspenso</span>':recSelo(r)}</div></div>
+    ${recValor(div?Object.assign({},t,{amount:div.amount}):t)}</div>`;
 }
 /* Um planeado (ou um modelo) passa no filtro «Imóvel» da lista? Vazio, todos;
    um id, esse imóvel; 'g:ID' (um grupo de imóveis,
@@ -2139,8 +2261,9 @@ function recGrupoTemPlaneados(g){
    Movimentos (vistas.js:lfCabeca) — a pesquisa à vista com o funil do painel
    completo e os chips do estado (Automáticos, Personalizados, Silenciados,
    Por confirmar, Em dia, cada um com quantos há: planeados.js:recChip), do
-   tipo e, no ecrã largo, do imóvel —; depois a lista dos planeados num cartão
-   e os modelos em chips com o valor. O «Novo recorrente» vive no cabeçalho
+   tipo e, no ecrã largo, do imóvel —; depois a lista dos planeados num cartão,
+   os suspensos pelo inquilino à parte (recSuspensosHtml), e os modelos em
+   chips com o valor. O «Novo recorrente» vive no cabeçalho
    (navegacao.js:#hdrAcao) e no +, e o modelo novo no + (à cabeça, aqui:
    acessos.js:outrasDoSeparador) — a secção dos Modelos já não tem botão ao
    lado do título; os vazios têm o seu botão, e com filtros são o vazio dos
@@ -2155,7 +2278,7 @@ function vRecurring(){
   /* um planeado está num estado? (o filtro e as contagens do chip) */
   const noEstado=(r,st)=>{
     if(st==='pend')return !!(recPorConfirmar(r)&&!r.muted);
-    if(st==='ok')return !!(r.next&&r.next>today());
+    if(st==='ok')return !!(r.next&&r.next>today()&&!recSuspenso(r));
     if(st==='muted')return !!r.muted;
     if(st==='auto')return !!r.auto;
     if(st==='manual')return !r.auto;
@@ -2181,8 +2304,13 @@ function vRecurring(){
   const adiciona=podeSemImovel()||casasComo('rec.add').length;
   /* com filtros, o vazio é o dos filtros, com «Limpar filtros» (vistas.js:vazioFiltro) */
   const filtrado=lfCount('lrec')>0;
-  const recs=rcS.length?`<div class="card plan-lista">${listaViva('recorrentes',rcS.map(r=>({chave:'rec:'+r.id,html:recLinha(r)})),'plan-linhas')}</div>`
-    :filtrado?vazioFiltro():`<div class="empty u-p-24px"><b>Sem movimentos recorrentes</b>Repete-se sozinho e pede confirmação todos os meses.${recOrigensFrase()}${adiciona?saida('Novo movimento recorrente','newRec()','camada'):''}</div>`;
+  /* os suspensos pelo inquilino (recSuspenso, KAN-129-3) saem da lista e
+     ficam à parte, por baixo, a dizer porquê */
+  const ativos=rcS.filter(r=>!recSuspenso(r)),susp=rcS.filter(r=>recSuspenso(r));
+  const recs=(ativos.length?`<div class="card plan-lista">${listaViva('recorrentes',ativos.map(r=>({chave:'rec:'+r.id,html:recLinha(r)})),'plan-linhas')}</div>`
+    :susp.length?''
+    :filtrado?vazioFiltro():`<div class="empty u-p-24px"><b>Sem movimentos recorrentes</b>Repete-se sozinho e pede confirmação todos os meses.${recOrigensFrase()}${adiciona?saida('Novo movimento recorrente','newRec()','camada'):''}</div>`)
+    +recSuspensosHtml(susp);
   /* um modelo não tem data nem origem: com um estado escolhido (Automáticos,
      Silenciados, Por confirmar, Em dia) a secção sai, em vez de dizer sempre
      que não há nada; «Personalizados» deixa-os, que são todos da pessoa */
@@ -2191,6 +2319,19 @@ function vRecurring(){
     :filtrado?vazioFiltro():`<div class="empty u-p-24px"><b>Sem modelos</b>Um modelo é um movimento guardado para copiar à mão quando precisares.${adiciona?saida('Novo modelo','newTpl()','camada'):''}</div>`;
   return recRetroFaixa()+pendingCard(true)+head+recs
     +`<div class="plan-cab"><h2>Modelos</h2></div>${tpls}`;
+}
+/* A secção «Suspensos» dos Planeados, por baixo da lista (KAN-129-3): os
+   planeados de um encargo que um contrato em vigor põe a cargo do inquilino
+   (recSuspenso) — o condomínio, o IMI, o seguro da ficha —, que não se pedem
+   nem se confirmam enquanto isso durar. Continuam a abrir a ficha (editar,
+   apagar), e voltam à lista quando o contrato acaba ou o encargo se desliga.
+   Recebe: susp — os planeados suspensos (array).
+   Devolve: o HTML (texto), ou '' sem nenhum. */
+function recSuspensosHtml(susp){
+  if(!susp||!susp.length)return '';
+  return `<div class="plan-cab" id="planSuspensos"><h2>Suspensos</h2></div>
+    <div class="card plan-lista">${listaViva('suspensos',susp.map(r=>({chave:'sus:'+r.id,html:recLinha(r)})),'plan-linhas')}</div>
+    <p class="hint">Encargos que o contrato põe a cargo do inquilino: não se pedem nem se confirmam enquanto ele estiver em vigor, e voltam quando acabar ou quando os desligares no contrato.</p>`;
 }
 /* secção do formulário de um planeado: a periodicidade, a janela e o fim — os
    campos do planeado, que vivem no modo do formulário (movimento.js:txModo) e

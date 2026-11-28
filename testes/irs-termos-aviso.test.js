@@ -145,12 +145,12 @@ describe('o aviso em cada saída da Declaração, igual, à letra (depois de a v
     assert.ok(app.fiscoTexto().replace(/\s+/g, ' ').includes(AVISO), 'o texto escreve o aviso à letra');
   });
 
-  test('o CSV (fisco-exportar.js:fiscoCsv)', () => {
-    let csv = null;
-    app.download = (nome, mime, conteudo) => { csv = conteudo; };
-    app.fiscoCsv();
-    assert.ok(csv, 'descarregou');
-    assert.ok(csv.includes(AVISO), 'o CSV escreve o aviso à letra');
+  test('a folha de cálculo (fisco-exportar.js:fiscoXlsx)', () => {
+    let xlsx = null;
+    app.download = (nome, mime, conteudo) => { xlsx = conteudo; };
+    app.fiscoXlsx();
+    assert.ok(xlsx, 'descarregou');
+    assert.ok(Buffer.from(xlsx).toString('utf8').includes(AVISO.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')), 'a folha de cálculo escreve o aviso à letra');
   });
 
   /* O escritor do PDF parte as linhas: lê-se o que a Declaração lhe passa, e

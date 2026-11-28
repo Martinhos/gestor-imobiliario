@@ -139,9 +139,8 @@ describe('o titular A ou B', () => {
     const html = app.vFisco();
     assert.match(html, /<dt>Titular<\/dt><dd>B<\/dd>/);
     assert.match(app.fiscoTexto(), /· titular B\n/);
-    let guardado = null;
-    app.download = (nome, mime, conteudo) => { guardado = conteudo; };
-    app.fiscoCsv();
+    /* a tabela que a folha de cálculo leva, em texto (fisco-exportar.js:fiscoCsvTexto) */
+    const guardado = app.fiscoCsvTexto(app.resumoFiscal(app.fiscoAnoAtual()));
     const { cab, quadros, larguras } = lerCsv(guardado);
     // as colunas antigas no mesmo sítio, as da vaga 1 do IRS a seguir, e as novas sempre no fim
     assert.deepEqual(cab.slice(32, 38), ['ultima_renovacao', 'titular', 'isencao_6d', 'comunicacao_4_2a', 'reducao_4_2b', 'renda_anterior_4_2b']);
@@ -154,8 +153,8 @@ describe('o titular A ou B', () => {
   test('o cartão «A tua situação fiscal» vem em linhas, ao lado dos prazos, com interruptores e o segmentado A/B só em conjunta', () => {
     let html = app.vFisco();
     const sit = html.indexOf('A tua situação fiscal');
-    // a ordem da Declaração (D8, maqueta 6): A tratar e os quadros primeiro, a situação fiscal depois dos quadros e antes do aviso
-    assert.ok(sit > html.indexOf('A tratar antes de entregar') && sit > html.indexOf('fiscoPilha') && sit < html.indexOf('fis-aviso'), 'depois dos quadros, antes do aviso');
+    // a ordem da Declaração (KAN-127-17, decisão de 2026-11-27): a situação fiscal é o primeiro cartão, antes dos números, de «A tratar» e dos quadros
+    assert.ok(sit > -1 && sit < html.indexOf('fis-kpis') && sit < html.indexOf('A tratar antes de entregar') && sit < html.indexOf('fiscoPilha'), 'à cabeça, antes dos números');
     assert.ok(html.includes('class="interruptor" role="switch" id="fiscoConjunta" aria-checked="false" aria-label="Tributação conjunta" data-toca="dados" data-click="fiscoSetSituacao(2025,\'conjunta\',true)"'));
     assert.match(html, /id="fiscoDispensa" aria-checked="false"[^>]*data-click="fiscoSetSituacao\(2025,'dispensaRecibos',true\)"/);
     assert.doesNotMatch(html, /id="fiscoMinhaLetra"/, 'sem conjunta, nem a letra nem o cônjuge');
@@ -212,9 +211,8 @@ describe('a Declaração é a de quem tem a sessão (KAN-73)', () => {
     assert.match(html, /A declaração é a tua: rendas, retenções e gastos entram pela tua quota-parte de cada imóvel\./);
     // o texto e o CSV são os mesmos
     assert.match(app.fiscoTexto(), /^ANEXO F · QUADROS 4\.1 E 4\.2 — 2025 · Ana \(quota-parte\)\n/);
-    let csv = null;
-    app.download = (nome, mime, conteudo) => { csv = conteudo; };
-    app.fiscoCsv();
+    /* a tabela que a folha de cálculo leva, em texto (fisco-exportar.js:fiscoCsvTexto) */
+    const csv = app.fiscoCsvTexto(app.resumoFiscal(app.fiscoAnoAtual()));
     const q = lerCsv(csv).quadros;
     assert.equal(q.length, 1, 'só o Arroios');
     assert.deepEqual([q[0].quota_pct, q[0].rendas_iliquidas, q[0].retencoes], ['50', '6500,00', '125,00'], 'a quota e os valores com vírgula e duas casas');
@@ -261,9 +259,8 @@ describe('a Declaração é a de quem tem a sessão (KAN-73)', () => {
     assert.match(html, /<span id="lab_fiscoConjuge">Bruno<\/span>/, 'na situação fiscal, o cônjuge escolhido');
     // o texto e o CSV também
     assert.match(app.fiscoTexto(), /— 2025 · Ana \(A\) e Bruno \(B\) \(quota-parte\)\n/);
-    let csv = null;
-    app.download = (nome, mime, conteudo) => { csv = conteudo; };
-    app.fiscoCsv();
+    /* a tabela que a folha de cálculo leva, em texto (fisco-exportar.js:fiscoCsvTexto) */
+    const csv = app.fiscoCsvTexto(app.resumoFiscal(app.fiscoAnoAtual()));
     assert.deepEqual(lerCsv(csv).quadros.map((x) => x.contrato + ' ' + x.titular), ['Benfica B', 'Arroios A', 'Arroios B']);
   });
 

@@ -245,7 +245,7 @@ describe('a vista, o texto e o CSV', () => {
     assert.match(html, /A tratar antes de entregar/);
     assert.match(html, /Obras antes do arrendamento/);
     /* os cinco números da prancheta: rendas, retenções, gastos, líquido e imposto */
-    assert.equal((html.match(/class="card kpi why"/g) || []).length, 5, 'cinco indicadores com explicação');
+    assert.equal((html.match(/class="card kpi why janela"/g) || []).length, 5, 'cinco indicadores com explicação numa janela (KAN-170)');
     assert.ok(html.includes('class="label">Rendas ilíquidas</div><div class="value ">' + app.euro(12500)));
     assert.ok(html.includes('class="label">Retenções na fonte</div><div class="value ">' + app.euro(500)), 'as retenções que já iam no quadro, à cabeça');
     assert.match(html, /id="fiscoSel"/);
@@ -341,13 +341,13 @@ describe('a vista, o texto e o CSV', () => {
     assert.match(t, /Com obras de conservação e manutenção: .*Data de início dos gastos \(ano, mês\) 07\/2023/, 'os nomes e as datas do impresso (D90)');
   });
 
-  test('o CSV tem um cabeçalho e uma linha por contrato, com o não declarado marcado', () => {
-    let guardado = null;
-    app.download = (nome, mime, conteudo) => { guardado = { nome, mime, conteudo }; };
-    app.fiscoCsv();
-    assert.ok(guardado, 'descarregou');
-    assert.equal(guardado.nome, 'anexo-f-2024.csv');
-    const linhas = guardado.conteudo.split('\n');
+  test('a tabela do Anexo F tem um cabeçalho e uma linha por contrato, com o não declarado marcado', () => {
+    let nome = '';
+    app.download = (n) => { nome = n; };
+    app.fiscoXlsx();
+    assert.equal(nome, 'anexo-f-2024.xlsx', 'descarrega-se a folha de cálculo (KAN-126-8)');
+    /* a tabela que a folha leva, em texto (fisco-exportar.js:fiscoCsvTexto) */
+    const linhas = app.fiscoCsvTexto(app.resumoFiscal(app.fiscoAnoAtual())).split('\n');
     /* o formato do CSV é da folha 2.1.8 (D74: vírgula decimal e os códigos como texto; D34: as
        linhas de «A tratar», a das regras e o aviso no fim); aqui fica o que o resumo põe nele */
     assert.match(linhas[0], /^"ano";"declarado";"contrato";"n_at"/);

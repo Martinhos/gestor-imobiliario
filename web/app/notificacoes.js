@@ -757,9 +757,11 @@ function atencaoCorpo(){
     const podeEd=servicoLigado('recurring')&&podeEditar(t.propertyId,'rec.add',r,'confirmar');
     const onde=servicoLigado('recurring')?imovelDoMolde(t):'';
     const sai=flowOf(t.kind)==='out',cor=t.kind==='loan'?'prest':isIn(t.kind)?'pos':sai?'neg':'';
+    /* o que se pede agora: numa renda paga só em parte, o resto (planeados.js:recMontanteAPedir, KAN-129-4) */
+    const valor=servicoLigado('recurring')?recMontanteAPedir(r):(Number(t.amount)||0);
     return `<div class="atencao-linha"><div class="atencao-txt"><p class="title">${esc(r.name)}</p>
       <p class="small">${onde?esc(onde)+' · ':''}${r.until&&r.until!==r.next?'entre '+dPT(r.next)+' e '+dPT(r.until):dPT(r.next)}</p></div>
-      <div class="atencao-valor"><b class="num${cor?' '+cor:''}">${t.amount?(sai?'−':'')+euro2(t.amount):''}</b><span class="badge ${late?'red':''}">${late?'Em atraso':'Por confirmar'}</span></div>
+      <div class="atencao-valor"><b class="num${cor?' '+cor:''}">${valor?(sai?'−':'')+euro2(valor):''}</b><span class="badge ${late?'red':''}">${late?'Em atraso':'Por confirmar'}</span></div>
       <div class="chips-fila atencao-acoes">${podeConf?`<button class="btn sm primary" data-toca="dados" data-click="quickConfirmRec('${jsq(r.id)}');notifModal('${jsq(f)}')">Confirmar</button>`:''}
       ${podeConf&&servicoLigado('recurring')&&recPedeRecibo(r)?`<button class="btn sm" data-toca="dados" data-click="recConfirmarComRecibo('${jsq(r.id)}');notifModal('${jsq(f)}')">Confirmar e emiti o recibo</button>`:''}
       <button class="btn sm" data-toca="camada" data-click="closeModal();confirmRec('${jsq(r.id)}')">Rever</button>
@@ -805,7 +807,7 @@ function atencaoCorpo(){
       <p class="small">${esc(notifTransfEspera(t))}</p></div>
       <button class="btn sm" data-toca="camada" aria-label="Ver o pedido de ${esc(notifTransfNome(t.from))}" data-click="notifTransfVer('${jsq(t.lote)}')">Ver</button></div>`;
   const enviadas=notifTransfEnviadas(),aEspera=notifTransfAEspera();
-  const total=conf.reduce((s,r)=>s+(Number((r.tx||{}).amount)||0),0),nl=servicoLigado('recurring')?conf.filter(recIsLate).length:0;
+  const total=conf.reduce((s,r)=>s+(servicoLigado('recurring')?recMontanteAPedir(r):(Number((r.tx||{}).amount)||0)),0),nl=servicoLigado('recurring')?conf.filter(recIsLate).length:0;
   const partes=[];
   if(ve('pedidos')&&pedidos.length)partes.push(cab('Pedidos por responder',String(pedidos.length))+pedidos.map(pedido).join(''));
   if(ve('pedidos')&&enviadas.length)partes.push(cab('À espera de resposta',String(enviadas.length))+`<div class="card atencao-lista">${enviadas.map(enviada).join('')}</div>`);

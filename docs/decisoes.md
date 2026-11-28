@@ -134,6 +134,9 @@ confere que cada uma aponta para código que existe.
 - 2026-11-25 · A data de celebração à vista, e as explicações do bloco fiscal no «?» (KAN-160, KAN-161)
 - 2026-11-25 · Os subtickets KAN-N-X e o «O que testar» em lista numerada (KAN-159, KAN-162)
 - 2026-11-26 · O Lab e os modelos de dados (KAN-167)
+- 2026-11-27 · O IRS que o Martinho testou no telemóvel: a situação fiscal à cabeça, a folha de cálculo e a parte de cada quarto (KAN-126, KAN-127, KAN-128, KAN-129, KAN-152, KAN-153, KAN-154, KAN-170)
+- 2026-11-27 · O contrato e os planeados como o Martinho os testou: a taxa, a comunicação, os encargos do inquilino e a renda paga em parte (KAN-169, KAN-126-10, KAN-127-18, KAN-129-3, KAN-129-4)
+- 2026-11-27 · O Lab para uma sessão de testes seguida: tocar no modelo, setas entre tickets, Para depois e os subtickets por pai (KAN-165, KAN-167, KAN-168, KAN-171, KAN-172, KAN-173, KAN-174, KAN-164)
 
 ## 2026-09-08 · As formas dos gráficos deixam de ser paragens do Tab
 A lista das dívidas tinha como «média» uma coisa que se via a usar o teclado:
@@ -4983,3 +4986,86 @@ não é só para bugs; os modelos são de cada pessoa (o dono das contas de test
 para quem o escreveu; usar um modelo substitui os dados da conta de teste em que se está, depois de confirmar; os modelos
 escritos em código geram as datas ao carregar, relativas a hoje, para não envelhecerem, e os gravados da conta guardam as
 datas tal como estavam. O Exemplo completo é o mesmo dadosDoExemplo do «Carregar exemplo».
+
+## 2026-11-27 · O IRS que o Martinho testou no telemóvel: a situação fiscal à cabeça, a folha de cálculo e a parte de cada quarto (KAN-126, KAN-127, KAN-128, KAN-129, KAN-152, KAN-153, KAN-154, KAN-170)
+
+A situação fiscal passou para a cabeça da Declaração (KAN-127-17). O Martinho pediu-a «logo no início», com os textos
+de ajuda num «?» e só uma ou duas linhas para se saber se o botão interessa. Troca a maqueta 6 da vaga V8 (D8), que a
+tinha posto no fim: o cartão é o primeiro, antes dos números, porque é a situação que decide o que entra neles (a
+conjunta junta as rendas do cônjuge e o imposto muda). As explicações foram para trás de um «?» por escolha, e o «Quem
+tem dispensa?» saiu (a explicação está no «?» da dispensa).
+
+Os números da Declaração abrem numa janela, como os da Visão geral (KAN-170): o porquê a abrir por baixo deixava a
+página «muito comprida».
+
+O Anexo F exporta-se numa folha de cálculo .xlsx, e não em CSV (KAN-126-8). A captura do Martinho mostrava «ï»¿"ano"»
+na primeira célula: a app do Google Sheets no Android lê o CSV como Latin-1 e ignora a marca de ordem de bytes, por
+isso a correção de 2026-11-26 (os acentos no cabeçalho, para o Sheets da web adivinhar a codificação) não chegava ao
+telemóvel. Das três saídas (juntar o .xlsx, o CSV em Latin-1, trocar), o Martinho escolheu trocar. O .xlsx escreve-se
+no aparelho, sem bibliotecas (a CSP não deixa carregar de fora): um zip sem compressão, com o CRC32 calculado. O CSV
+dos Movimentos não foi pedido e fica.
+
+A parte arrendada de um imóvel por quartos passou a ser uma parte por quarto (KAN-152-1). O Martinho perguntou «Onde
+escrevo a parte arrendada? Devo fazê-lo nos quartos? Cada quarto tem uma parte atribuída?», e escolheu, entre manter
+o campo único da casa e uma parte por quarto, a parte por quarto: fica certo com quartos de tamanhos diferentes e
+quando mudam a meio do ano, porque a app soma, dia a dia, as partes dos quartos com contrato. Os quartos sem parte
+dividem em partes iguais o que sobra até 100 %. O campo único (de 2026-11-23, nunca em produção) saiu.
+
+Copiar um valor da Declaração levava o espaço dos milhares (KAN-153-2): os valores estavam dentro de cartões que se
+tocam (o .tap traz o user-select:none), e as linhas levam o espaço no próprio texto. Um copiar dentro da página passou
+a limpar os euros e o NIF, venha de onde vier.
+
+Os cartões que «não apareciam» (o Anexo J de um imóvel em França, KAN-129-2; o aviso dos donos num imóvel novo,
+KAN-154-4) tinham a regra certa: só aparecem com rendas no ano. O que faltava era a página dizer porque não havia
+nada; o vazio e o cartão do Anexo J passaram a dizê-lo. O corte do valor no cartão «Fora do Anexo F» (KAN-129-5) era
+o min-width:0 das linhas a deixar o valor encolher.
+
+## 2026-11-27 · O contrato e os planeados como o Martinho os testou: a taxa, a comunicação, os encargos do inquilino e a renda paga em parte (KAN-169, KAN-126-10, KAN-127-18, KAN-129-3, KAN-129-4)
+
+O «Escrever outra taxa» era um botão fantasma, que se lia como texto solto, e a dica do imposto, posta fora do
+.form, ficava por cima do campo (a margem negativa do .ct-colado conta com o espaço da grelha) (KAN-169).
+
+As isenções 6H e 6F no contrato (KAN-126-10) estavam certas no motor: o teste estava mal escrito (um contrato sem
+isenção mostra a particularidade desligada e «Nenhuma»; e «aparece só X» é falso, porque os programas do 6D também se
+oferecem). Ficou a frase que nomeia a isenção que as datas abrem, para se saber que ela existe sem ligar nada, e o
+modelo «Isenções 6H e 6F» passou a trazer também um contrato com cada uma já escolhida.
+
+A comunicação da duração (KAN-127-18) tinha a condição certa, mas vivia no fim das notas do «Perante a AT», depois de
+um parágrafo longo: o Martinho não a viu. Passou para a cabeça do cartão.
+
+O encargo a cargo do inquilino (KAN-129-3) só passava à frente as ocorrências vencidas, e o planeado continuava na
+lista com a próxima do mês seguinte; desmarcar perdia a quota do mês. Passou a suspender o planeado (fora da lista, do
+«Por confirmar» e do calendário) e a devolver as ocorrências desde r.saltadoDesde ao desligar. O contrato não guarda
+desde quando o encargo é do inquilino, por isso vale para o contrato todo, como o datasEmFalta já fazia.
+
+A renda paga em parte (KAN-129-4) deixava o resto em dívida (D115), mas o «Por confirmar», o sino e a Visão geral
+mostravam a renda inteira. Passaram a mostrar o resto, e as fichas do contrato e do inquilino as rendas por receber.
+
+## 2026-11-27 · O Lab para uma sessão de testes seguida: tocar no modelo, setas entre tickets, Para depois e os subtickets por pai (KAN-165, KAN-167, KAN-168, KAN-171, KAN-172, KAN-173, KAN-174, KAN-164)
+
+Pedidos do Martinho escritos no Samsung enquanto testava. «O clicar no cartão conta como selecionar o modelo de dados»:
+tocar na linha usa o modelo, e o botão «Usar» saiu. Arrastar um modelo levava a janela: a folha pegava em qualquer
+gesto que começasse no corpo, também no da pega; passou a não pegar num gesto que começa num elemento que se arrasta
+por si, em todas as folhas. As setas e o deslize no topo dos tickets, e a janela a seguir para o que ficou no lugar
+depois de uma decisão, para continuar a testar sem voltar à lista. «Devo poder mover um ticket de Human Tests para
+Depois»: o Para depois, com o Voltar a Human Tests, e o pai de um subticket em Para depois a ficar em Human Tests (os
+pormenores ficaram como pressupostos, para ele corrigir). Os subtickets com a aparência de um ticket, juntos e cada
+grupo de um pai só: quando o pai voltava a A fazer, os subtickets de pais diferentes apareciam juntos como se fossem do
+mesmo.
+
+O KAN-165 (os anexos nos tickets) ficou preso em A fazer sem nada por fazer: o comentário de teste do Martinho devolveu
+o subticket, e o pai com ele; aceite o subticket, o pai já estava em A fazer, onde não segue os subtickets. É o
+comportamento escrito (em A fazer o cartão é de quem o trata), e resolveu-se de novo.
+
+Uma escolha de sim/não é sempre o interruptor, nunca uma caixa de visto (KAN-172: «Quero o pill»): o input desenha-se
+como o .interruptor pelo CSS, para não mexer em nove ficheiros; ficam caixas as listas de seleção, a marca das tarefas
+na lista e os termos. O código da freguesia preenche o distrito e o concelho (KAN-173), com os códigos do INE (revisão
+de 2025), conferidos com a tabela da AT de 2025; os nomes das freguesias só das repostas em 2025, porque a lista
+completa do INE é um ficheiro por descarregar, e descarregar pede o sim do Martinho.
+
+As ligações do guia a um artigo de lei (KAN-164, reaberto: «O link deve ser para o documento no Diário da República, e
+não para o artigo em si») vão ao documento consolidado do DR, com um fragmento de texto (#:~:text=Artigo N.º-,epígrafe)
+para o browser saltar para o artigo. A página do artigo tem o texto, mas no telemóvel abre com o «Relacionados» e o
+«Em vigor» por cima. O DR não tem âncoras nem um parâmetro para o artigo, e desenha o diploma depois de a página
+carregar: o salto só acontece quando o texto chega a tempo (nos códigos grandes, o CIRS, o EBF, muitas vezes não), e
+sem ele o documento abre no topo.

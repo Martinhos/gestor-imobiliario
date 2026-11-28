@@ -428,7 +428,7 @@ describe('D75 e D34 — o cartão Exportar', () => {
     const n = r.avisos.filter((a) => a.nivel !== 'info').length;
     assert.ok(n > 0);
     const h = app.vImport();
-    assert.match(h, new RegExp('O CSV leva no fim ' + (n === 1 ? 'o ponto' : 'os ' + n + ' pontos') + ' de «A tratar antes de entregar» de 2026'));
+    assert.match(h, new RegExp('A folha de cálculo leva, na folha «A tratar», ' + (n === 1 ? 'o ponto' : 'os ' + n + ' pontos') + ' de «A tratar antes de entregar» de 2026'));
     assert.match(h, /Ver o que falta tratar/);
   });
 

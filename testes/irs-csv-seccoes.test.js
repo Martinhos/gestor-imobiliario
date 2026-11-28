@@ -3,10 +3,9 @@
 // vinham colados às linhas dos quadros, sem se perceber que eram outra coisa.
 // Agora vêm numa secção própria, depois de uma linha vazia e com um título que
 // diz que são avisos, e a estimativa e as notas noutra
-// (fisco-exportar.js:fiscoCsvTexto). O ficheiro sai com a marca de ordem de
-// bytes do UTF-8 (copias.js:download), para o Excel, e com um acento logo no
-// cabeçalho (fisco-exportar.js:FISCO_CSV_NOMES), para o Google Sheets, que
-// adivinha a codificação pelo começo do ficheiro.
+// (fisco-exportar.js:fiscoCsvTexto, a tabela em texto). O que se descarrega
+// passou a ser a folha de cálculo .xlsx (KAN-126-8, fisco-exportar.js:fiscoXlsx),
+// com os nomes do cabeçalho acentuados (fisco-exportar.js:FISCO_CSV_NOMES).
 
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -61,14 +60,8 @@ beforeEach(() => {
 });
 
 describe('KAN-126-5 · o CSV do Anexo F: os avisos numa secção à parte', () => {
-  /* o CSV que o fiscoCsv entrega ao download */
-  const csv = () => {
-    let g = null;
-    app.download = (nome, mime, conteudo) => { g = { nome, mime, conteudo }; };
-    app.fiscoCsv();
-    assert.ok(g, 'descarregou');
-    return g;
-  };
+  /* a tabela do Anexo F em texto (fisco-exportar.js:fiscoCsvTexto) */
+  const csv = () => ({ conteudo: app.fiscoCsvTexto(app.resumoFiscal(app.fiscoAnoAtual())) });
 
   test('as linhas do quadro, uma vazia, a secção dos avisos, outra vazia e a da estimativa e das notas', () => {
     const r = app.resumoFiscal(2025);
@@ -112,35 +105,28 @@ describe('KAN-126-5 · o CSV do Anexo F: os avisos numa secção à parte', () =
     assert.deepEqual(t.slice(-2).map((l) => valor(cruas(l)[1])), ['regras', 'aviso']);
   });
 
-  test('o ficheiro sai com a marca de ordem de bytes do UTF-8, e os acentos e o € em UTF-8', async () => {
+  /* KAN-126-8: a app do Google Sheets no Android lia o CSV como Latin-1 e
+     ignorava a marca de ordem de bytes («ï»¿"ano"» na primeira célula); a
+     exportação passou a ser a folha de cálculo .xlsx (fisco-exportar.js:fiscoXlsx),
+     com o texto em UTF-8 dentro do XML. */
+  test('descarrega-se a folha de cálculo .xlsx, com os acentos e o € em UTF-8 lá dentro', async () => {
     let blob = null, nome = '';
     app.descarregarBlob = (b, n) => { blob = b; nome = n; };
-    app.fiscoCsv();
-    assert.equal(nome, 'anexo-f-2025.csv');
-    assert.match(blob.type, /^text\/csv;charset=utf-8$/);
+    app.fiscoXlsx();
+    assert.equal(nome, 'anexo-f-2025.xlsx');
+    assert.equal(blob.type, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     const bytes = new Uint8Array(await blob.arrayBuffer());
-    assert.deepEqual(Array.from(bytes.slice(0, 3)), [0xef, 0xbb, 0xbf], 'a marca à cabeça: o Excel lê o ficheiro como UTF-8');
-    const txt = new TextDecoder('utf-8').decode(bytes.slice(3));
-    assert.equal(txt, app.fiscoCsvTexto(app.resumoFiscal(2025)), 'o resto é o CSV tal e qual');
+    assert.deepEqual(Array.from(bytes.slice(0, 4)), [0x50, 0x4b, 0x03, 0x04], 'um zip, sem a marca de ordem de bytes à frente');
+    const tudo = new TextDecoder('utf-8').decode(bytes), txt = tudo.slice(tudo.indexOf('<sst'), tudo.indexOf('</sst>'));
     assert.match(txt, /Inquilino Tiago: sem NIF nem país de residência/, 'os acentos inteiros');
-    assert.ok(!txt.includes('�'), 'nenhum carácter de substituição');
+    assert.ok(!txt.includes('\ufffd'), 'nenhum carácter de substituição');
   });
 
-  /* O Google Sheets (no telemóvel do Martinho) adivinha a codificação pelo
-     começo do ficheiro e não lhe chega a marca: com os primeiros 2 KB só em
-     ASCII, lia o CSV como Latin-1 e estragava os acentos de mais abaixo. */
-  test('o começo do ficheiro já é UTF-8 com acentos: o cabeçalho diz «início», «imóvel» e «fração»', async () => {
-    let blob = null;
-    app.descarregarBlob = (b) => { blob = b; };
-    app.fiscoCsv();
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    const primeiro = bytes.findIndex((b, i) => i > 2 && b > 0x7f);
-    assert.ok(primeiro > 2 && primeiro < 64, 'o primeiro carácter fora do ASCII, depois da marca, está no byte ' + primeiro);
-    const txt = new TextDecoder('utf-8').decode(bytes.slice(3));
-    const cab = cruas(txt.split('\n')[0]).map(valor);
+  test('o cabeçalho da folha diz «início», «imóvel» e «fração», e cada valor fica debaixo do seu nome', () => {
+    const [anexo] = app.fiscoXlsxFolhas(app.resumoFiscal(2025));
+    const cab = JSON.parse(JSON.stringify(anexo.linhas[0].map((c) => c && c.v)));
     assert.deepEqual(cab.slice(0, 11), ['ano', 'declarado', 'contrato', 'n_at', 'início', 'imóvel', 'freguesia', 'tipo_predio', 'artigo', 'fração', 'natureza']);
-    // as linhas continuam a pôr cada valor debaixo do seu nome
-    const l = cruas(txt.split('\n')[1]).map(valor);
+    const l = anexo.linhas[1].map((c) => c && c.v);
     assert.equal(l[cab.indexOf('imóvel')], 'T2 Lumiar');
     assert.equal(l[cab.indexOf('início')], '2024-01-01');
     assert.equal(l[cab.indexOf('fração')], 'C');

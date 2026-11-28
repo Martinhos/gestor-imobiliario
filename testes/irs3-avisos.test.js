@@ -451,15 +451,15 @@ describe('os gastos (N047, N048, N111, N115, N012, N024)', () => {
     const a = avisosMao(r, /por quartos/);
     assert.equal(a.length, 1);
     assert.equal(a[0].nivel, 'info');
-    assert.match(a[0].texto, /^Imóvel T3 Graça \(por quartos\): os gastos da casa contam só na parte arrendada, 33,33 % — os quartos com contrato sobre o total \(3 quartos\), dia a dia: 656,67 € dos 1 970 € de gastos do ano\. /);
-    assert.match(a[0].texto, /CIRS art\. 41\.º n\.º 4/);
-    assert.equal(a[0].abrir, "imvAbrirNoCampo('v1','p_parteArrendada')");
-    assert.equal(a[0].abrirTexto, 'Indicar a parte');
-    // com a parte da ficha
-    r.parteArrendada[0].origem = 'ficha'; r.parteArrendada[0].parte = 0.4;
+    assert.match(a[0].texto, /^Imóvel T3 Graça \(por quartos\): os gastos da casa contam só na parte arrendada, 33,33 % — sem a parte de cada quarto, cada um conta por igual \(3 quartos\): 656,67 € dos 1 970 € de gastos do ano\. /);
+    assert.match(a[0].texto, /CIRS art\. 41\.º n\.º 4\): indica na ficha do imóvel a parte da casa de cada quarto, com a sua parte das zonas comuns$/);
+    assert.match(a[0].abrir, /^imvAbrirNoCampo\('v1','(p_room_parte_[\w-]+)?'\)$/, 'o atalho para o primeiro quarto sem parte (KAN-152-1)');
+    assert.equal(a[0].abrirTexto, 'Indicar as partes');
+    // com as partes dos quartos todas indicadas (KAN-152-1: uma parte por quarto)
+    r.parteArrendada[0].origem = 'partes'; r.parteArrendada[0].parte = 0.4; r.parteArrendada[0].semParte = [];
     const b = avisosMao(r, /por quartos/);
-    assert.match(b[0].texto, /40 %, a que indicaste na ficha/);
-    assert.equal(b[0].abrirTexto, 'Corrigir a parte');
+    assert.match(b[0].texto, /40 %, pelas partes que indicaste para cada quarto/);
+    assert.equal(b[0].abrirTexto, 'Corrigir as partes');
   });
 });
 

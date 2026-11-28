@@ -218,9 +218,14 @@ function ctValoresDaFicha(c){
       <div><span class="small">Imposto</span><b class="disp">${dec(taxRateOf(c))}%</b><span class="small">${escrita?'escrita no contrato':esc(irsTaxaPorque(c))+' · estim.'}</span></div>
       <div><span class="small">Líquida</span><b class="disp">${euro2(liq)}</b><span class="small">${euro(liq*12)}/ano</span></div></div>`
     :`<p class="hint ct-sem-renda">Este contrato ainda não tem renda.</p>`;
+  /* as rendas por receber, cada uma com o seu valor, e o resto de uma paga só
+     em parte com «em dívida» (planeados.js:ctRendasEmDivida, KAN-129-4): com
+     o resto em dívida, ou com duas ou mais em falta */
+  const dividas=servicoLigado('recurring')&&servicoLigado('transactions')&&pode(pid,'tx.view')?ctRendasEmDivida(c):[];
   const kv=[
     ctKv('Pagamento',c.payDay?((c.payDayTo&&c.payDayTo>c.payDay)?'entre o dia '+c.payDay+' e o dia '+c.payDayTo:'no dia '+c.payDay):''),
     isActive(c)&&rec&&rec.next&&pode(pid,'rec.view')?ctRendaPlaneada(rec):'',
+    dividas.length>1||dividas.some(x=>x.divida)?ctKv('Rendas por receber',ctDividasHtml(dividas)):'',
     rendas.length?ctKv('Rendas registadas',rendas.length+(ultima?' · última a '+dPT(ultima):'')):'',
     c.increase!=null&&c.increase!==''?ctKv('Aumento anual',dec(c.increase)+'%'+(c.start?' · próximo a '+dPT(pzAniversario(c.start)):'')):'',
     ctKv('Encargos do inquilino',esc(ctEncargosNomes(c)))].join('');
@@ -240,6 +245,14 @@ function ctValoresDaFicha(c){
     emFalta?`<button type="button" class="btn sm primary" data-toca="camada" data-click="CW.fillContrato('${id}')">Registar ${emFalta===1?'a renda em falta':'as '+emFalta+' rendas em falta'}</button>`:'',
     movs.length?`<button type="button" class="btn sm" data-toca="camada" data-click="ctVerMovimentos('${id}')">Ver movimentos</button>`:''].join('');
   return `<div class="card ct-sec ct-valores">${tres}${kv}${botoes?`<div class="ct-botoes">${botoes}</div>`:''}</div>`;
+}
+/* As rendas por receber de um contrato na linha do cartão dos valores, uma
+   por linha: o mês e o valor dela, e o resto de uma renda paga só em parte
+   com «em dívida» (KAN-129-4).
+   Recebe: xs — o que planeados.js:ctRendasEmDivida devolve.
+   Devolve: o HTML (escapado). */
+function ctDividasHtml(xs){
+  return `<span class="ct-dividas">${xs.map(x=>`<span>${esc(x.nome||x.mes)} · ${euro2(x.valor)}${x.divida?' em dívida':''}</span>`).join('')}</span>`;
 }
 /* A linha da renda planeada no cartão dos valores, nos três estados que os
    Planeados distinguem (planeados.js:recSelo): ainda não chegou — «Próxima
@@ -272,8 +285,7 @@ function ctVerMovimentos(id){
    aviso), e o que se sabe do declarado — o número que a AT deu, a finalidade,
    a celebração, as renovações, a cessação (o dia e o motivo do quadro 10) e
    o quadro do Anexo F —, com as notas do IRS: a isenção, a taxa reduzida
-   pela duração, a comunicação da duração de cada período (com o botão de a
-   marcar), o que a cessação leva ao quadro 10 (e, por motivo do senhorio, a
+   pela duração, o que a cessação leva ao quadro 10 (e, por motivo do senhorio, a
    regularização do art. 72.º n.º 20), e a taxa das rendas moderadas. Um
    direito real de habitação duradoura diz o quadro dele (o 4.3,
    ctQuadroDaFicha). Da ronda 2: um imóvel fora de Portugal não tem Anexo F
@@ -281,6 +293,8 @@ function ctVerMovimentos(id){
    as rendas da categoria B dizem o Anexo B ou C, sem as notas da taxa
    especial (D134); e o arrendamento a uma entidade de gestão florestal diz
    o quadro do benefício, e porque não conta quando não conta (D119).
+   A comunicação da duração de cada período, com o botão de a marcar, vai à
+   cabeça do cartão, num bloco seu (ctComunicacaoBloco, KAN-127-18).
    Da ronda 2 das correções: a categoria B diz-se em qualquer estado em que a
    marca conta (também «Por indicar» e fora de Portugal, como o resumo:
    ctSemEstimativa), e nunca com recibos de renda — o documento é a fatura da
@@ -304,8 +318,9 @@ function ctAtDaFicha(c){
      isenção, nem rendas moderadas, nem comunicação de fevereiro */
   const taxaReduzida=!semEst&&fisc.estado==='declarado'&&!!irsDoAno.reducao&&Number(irsDoAno.reducao.taxa)<Number(irsAno(YEAR).taxas.habitacional);
   const isento=!semEst&&irsDoAno.motivo==='isento'?irsDoAno.isencao:null,bonusRM=irsAno(YEAR).taxas.bonusRendaMenor;
-  /* a comunicação da duração de cada período em causa, com o botão de a marcar */
-  const comunicacao=fisc.estado==='declarado'&&!semEst?ctComunicacaoNota(c):'';
+  /* a comunicação da duração de cada período em causa, com o botão de a
+     marcar, à cabeça do cartão (KAN-127-18: no meio das notas não se via) */
+  const comunicacao=fisc.estado==='declarado'&&!semEst?ctComunicacaoBloco(c):'';
   /* o dia em que acabou e o motivo (o «Terminar contrato»), e o texto livre
      antigo do motivo, que já não se escreve, como nota */
   const ces=irsCessacao(c),cessacao=ces.data?ctCessacaoTexto(c):'';
@@ -391,13 +406,12 @@ function ctAtDaFicha(c){
       +(irsDoAno.reducao.bonus&&bonusRM?', já com os '+dec(bonusRM.pontos)+' pontos a menos de uma renda mais baixa do que a do contrato anterior (quadro 4.2B)':'')
       +'. Isso pede duas coisas: o quadro 4.2 do Anexo F preenchido, e a duração comunicada no Portal das Finanças — uma vez, até 15 de fevereiro do ano seguinte ao início do contrato e de cada renovação.'
       +(!escrita&&irsDoAno.motivo==='moderada'?' Em '+YEAR+' a renda dá-lhe ainda os '+dec(irsDoAno.taxa)+' % das rendas moderadas, que ficam por serem mais baixos.':''):'',
-    comunicacao,
     empresa?empresa.nota:'',
     regulariza?esc(regulariza):'',
     cesAntiga?esc(cesAntiga):'',
     !semEst&&!taxaReduzida&&c.rent>0&&!escrita&&irsDoAno.motivo==='moderada'?'Com a renda até '+euro(irsAno(YEAR).taxas.rendaModerada.limiteMensal)+' por mês, as rendas de '+YEAR+' pagam a taxa de '+dec(irsDoAno.taxa)+' % das rendas moderadas (EBF art. 45.º-C), em vez de '+dec(irsAno(YEAR).taxas.habitacional)+' %.':''
   ].filter(Boolean).map(t=>`<div class="ct-nota">${t}</div>`).join('');
-  return ctSecao('Perante a AT',corpo+notas,selo,'ct-sec-at');
+  return ctSecao('Perante a AT',comunicacao+corpo+notas,selo,'ct-sec-at');
 }
 /* «Ver na ficha» dos avisos do Modelo 2 e da comunicação de fevereiro
    (ctPrazoDaFicha): rola o corpo da janela até ao cartão «Perante a AT», que
@@ -953,8 +967,9 @@ function ctAntecipadasOk(id){
 }
 /* HTML do formulário do contrato, montado a partir de cForm, como a prancheta
    M-NovoContrato: os campos em grupos (.sect) — o que se arrenda (o imóvel, o
-   quarto em chips, os inquilinos e o nome), a renda (o imposto e a líquida, o
-   dia do pagamento e o aumento), o prazo (as datas com a frase da duração e
+   quarto em chips, os inquilinos e o nome), a renda (a líquida e, por baixo
+   dela, o «Escrever outra taxa», que abre o imposto no mesmo sítio — a caixa
+   da líquida não salta —; o dia do pagamento e o aumento), o prazo (as datas com a frase da duração e
    da oposição, a caução, as rendas antecipadas e o IBAN), a renda recorrente
    e o estado do contrato em interruptores (num terminado, com o dia em que
    acabou e o motivo — ctCessacaoCampos) com a situação perante a AT num
@@ -985,12 +1000,12 @@ function ctBody(){
     </div>
     <div class="sect ct-gf" id="ct_renda"><h3 class="ct-gf-tit">Renda</h3>
       <label>Renda mensal (€) <span class="req">*</span><input id="c_rent" type="text" inputmode="decimal" class="num" value="${c.rent||''}" placeholder="Ex: 450" data-input="liveNet()" autocomplete="off"></label>
-      <div id="c_taxBox"${ctTaxaVisivel(c)?'':' hidden'}>
+      <div class="ct-net" id="netBox">${netBox()}</div>
+      <div id="c_taxOutraBox"${ctTaxaVisivel(c)?' hidden':''}><button type="button" class="btn sm ct-abre" data-toca="rascunho" data-click="ctTaxaOutra()">Escrever outra taxa</button></div>
+      <div id="c_taxBox"${ctTaxaVisivel(c)?'':' hidden'}><div class="form">
       <label>Imposto sobre a renda (%, opcional)<input id="c_tax" type="text" inputmode="decimal" class="num" value="${c.taxRate?dec(c.taxRate):''}" placeholder="Ex: ${dec(irsRate(c))}" data-input="liveNet()" autocomplete="off"></label>
       <div class="hint ct-colado" id="c_taxDica">${ctTaxaDica(c)}</div>
-      <p class="hint ct-colado" id="c_taxAviso"${ctTaxaEscritaAviso(c)?'':' hidden'}><b>${esc(ctTaxaEscritaAviso(c))}</b></p></div>
-      <div class="ct-net" id="netBox">${netBox()}</div>
-      <div id="c_taxOutraBox"${ctTaxaVisivel(c)?' hidden':''}><button type="button" class="btn sm ghost" data-toca="rascunho" data-click="ctTaxaOutra()">Escrever outra taxa</button></div>
+      <p class="hint ct-colado" id="c_taxAviso"${ctTaxaEscritaAviso(c)?'':' hidden'}><b>${esc(ctTaxaEscritaAviso(c))}</b></p></div></div>
       <div class="ct-campo"><span class="flabel" id="c_diasRot">A renda paga-se</span>
         <div class="ct-par ct-dias" role="group" aria-labelledby="c_diasRot">
           <label>entre o dia<input id="c_day" type="text" inputmode="numeric" class="num" value="${c.payDay||''}" placeholder="Opcional" autocomplete="off"></label>
@@ -1511,6 +1526,7 @@ function liveNet(){
   caso('c_fporIndicar',ctPorIndicarCaso(est));
   caso('c_fcelCaso',ctCelebracaoCaso(est));
   caso('c_fegfCaso',ctEgfCaso(est));
+  caso('c_fpartCaso',ctParticularidadeCaso(est));
   ctIsencoesRefaz(est);
   caso('c_fisenCaso',ctIsencaoCaso(fiscoDe(est).isencao,est));
 }
@@ -1742,6 +1758,7 @@ function fiscoSect(){
       <label>Valor pago à parte por mês (€)<input id="c_fextras" type="text" inputmode="decimal" class="num" value="${f.extrasMensais?dec(f.extrasMensais):''}" placeholder="Opcional" data-input="liveNet()" autocomplete="off"></label>
     </div></div></div>`:''}
     ${ctInterruptor('c_fpart',part,'Este contrato tem alguma particularidade fiscal?','Uma isenção de IRS, ou rendas tributadas na categoria B.','ctParticularidadeMudou()')}
+    ${ctCasoHtml('c_fpartCaso',ctParticularidadeCaso(c))}
     <div id="c_fpartBox"${part?'':' hidden'}><div class="form">
     ${ctIsencaoCampos(c)}
     ${ctCategoriaBCampo(f.categoriaB===true)}
@@ -1989,6 +2006,23 @@ function ctCategoriaBDocumento(){
    Recebe: c — o contrato.
    Devolve: true ou false. */
 function ctParticularidadeTem(c){const f=fiscoDe(c);return !!f.isencao||f.categoriaB===true}
+/* A frase curta por baixo de «Este contrato tem alguma particularidade
+   fiscal?» quando as datas do contrato lhe abrem uma isenção que só certos
+   contratos têm — as que pedem uma confirmação (o `pede` da versão: a renda
+   antiga do 6H, o ex-alojamento local do 6F) — e ainda nenhuma está
+   escolhida (KAN-126-10: com o interruptor desligado, nada dizia que o
+   contrato de 1985 podia ter a do 6H). As dos programas (6D) servem a
+   quase todos os contratos e não se anunciam.
+   Recebe: c — o contrato (o do formulário, ou o que ctEmEdicao devolve).
+   Devolve: o texto (sem HTML), ou ''. */
+function ctParticularidadeCaso(c){
+  const f=fiscoDe(c);if(f.isencao)return '';
+  const isens=irsAno(YEAR).isencoes||[];
+  const xs=ctIsencoesOferecidas(c).map(o=>o.v&&isens.find(x=>x&&x.id===o.v)).filter(x=>x&&[].concat(x.pede||[]).length);
+  if(!xs.length)return '';
+  if(xs.length>1)return 'Pelas datas, este contrato pode ter uma isenção dos quadros '+listaE(xs.map(x=>x.quadro))+'. Escolhe em «Isenção de IRS» a que se aplicar.';
+  return 'Pelas datas, este contrato pode ter a isenção do quadro '+xs[0].quadro+', '+(xs[0].curto||xs[0].nome)+'. Escolhe-a em «Isenção de IRS», se se aplicar.';
+}
 /* A celebração está escrita e não é o dia do início? Em branco, a app conta
    o início; por isso o dia do início grava-se em branco (ctCelebracaoDoCampo).
    Recebe: c — o contrato.
@@ -2018,7 +2052,12 @@ function ctIsencaoVisivel(c){return !!fiscoDe(c).isencao||ctIsencoesOferecidas(c
    Recebe: c — o contrato (o do formulário, ou o que ctEmEdicao devolve).
    Devolve: true ou false. */
 function ctTaxaVisivel(c){return Number(c&&c.taxRate)>0||!!ctSemEstimativa(c)||_ctAbertas.taxa===true}
-/* O «Escrever outra taxa»: abre o campo do imposto e põe lá o foco.
+/* O «Escrever outra taxa» (KAN-169): um botão com contorno e a letra de ação
+   (estilos.css:.ct-abre — o fantasma de antes lia-se como texto solto), por
+   baixo da renda líquida. Abre o campo do imposto no lugar dele, com a dica
+   dentro de um .form como as outras caixas que abrem (a margem negativa do
+   .ct-colado conta com o espaço da grelha; sem ela, a dica subia para cima do
+   campo), e põe lá o foco.
    Devolve: nada. */
 function ctTaxaOutra(){
   _ctAbertas.taxa=true;
@@ -2614,7 +2653,7 @@ function ctEncargosCampos(c){
     <div id="c_encBox"${aberto?'':' hidden'}><div class="form">
     <div class="ct-campo" role="group" aria-labelledby="c_encRot"><div class="flabel" id="c_encRot">Encargos a cargo do inquilino</div>
     ${doImovel.map(e=>`<div id="c_encW_${e.id}"${mostra(e)?'':' hidden'}>${ctInterruptor('c_enc_'+e.id,ids.indexOf(e.id)>-1,e.nome,'')}</div>`).join('')}
-    ${outros?`<div id="c_encOutros"><button type="button" class="btn sm ghost" data-toca="rascunho" data-click="ctEncargosOutros()">Outro encargo</button></div>`:''}
+    ${outros?`<div id="c_encOutros"><button type="button" class="btn sm ct-abre" data-toca="rascunho" data-click="ctEncargosOutros()">Outro encargo</button></div>`:''}
     <div class="hint ct-colado">Os que o contrato põe a pagar ao inquilino. Enquanto o contrato estiver em vigor, os planeados do IMI e do condomínio deste imóvel, e o do seguro da ficha do imóvel, ficam suspensos: não se pedem nem se confirmam. Os da água, da luz e do gás, e um seguro adicionado à mão, continuam a pedir-se: não os confirmes nos meses em que o inquilino os paga.</div></div>
     <label>Água, luz e gás${sel('c_fconsumos',cons,[{v:'',label:'Não se aplica'},{v:'inquilino',label:'O inquilino paga-os à parte'},{v:'incluidos',label:'Incluídos na renda'}],'ctConsumosMudou','rascunho')}</label>
     <div class="hint ct-colado" id="c_fconsumosHint">${esc(ctConsumosDica(cons))}</div>
@@ -2849,6 +2888,20 @@ function ctComunicacaoNota(c){
     const btn=pode?`<div class="toolbar u-m-9px-0-0"><button type="button" class="btn sm" data-toca="${x.data?'dados':'camada'}" data-click="${x.data?`ctMarcarComunicada('${id}',${k},0)`:`ctComunicadaPergunta('${id}',${k})`}">${x.data?'Desmarcar':'Marcar como comunicada'}</button></div>`:'';
     return `<div>${esc(txt)}${btn}</div>`;
   }).join('');
+}
+/* O bloco da comunicação da duração à cabeça do cartão «Perante a AT»
+   (KAN-127-18: «Não vejo nada para comunicar a duração» — a frase e o botão
+   viviam no fim das notas, depois do parágrafo da taxa reduzida). Uma linha
+   à vista, «Comunicação da duração às Finanças · por marcar» (ou «· feita»),
+   com a borda de aviso enquanto há algum período por marcar, e por baixo as
+   linhas de cada período com o botão (ctComunicacaoNota).
+   Recebe: c — o contrato.
+   Devolve: o HTML, ou '' sem nada a comunicar. */
+function ctComunicacaoBloco(c){
+  const xs=ctComunicacoesDaFicha(c,today());if(!xs.length)return '';
+  const falta=xs.some(x=>!x.data);
+  return `<div class="ct-com${falta?'':' ct-com-feita'}" id="ct_com"><p class="ct-com-tit">Comunicação da duração às Finanças · <span>${falta?'por marcar':'feita'}</span></p>
+    <div class="ct-com-txt">${ctComunicacaoNota(c)}</div></div>`;
 }
 /* A janela pequena de «Marcar como comunicada» de um período: o dia em que a
    comunicação foi feita no Portal, em branco e obrigatório — um dia proposto

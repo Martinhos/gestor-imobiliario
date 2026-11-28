@@ -102,7 +102,8 @@ function calPlaneados(de,ate){
     // o «Até» do planeado (r.end) também fecha a série: depois dele já não se repete;
     // e a venda do imóvel também (planeados.js:recDepoisDaVenda)
     while(d&&d<=ate&&n<40&&!(r.end&&d>r.end)&&!recDepoisDaVenda(r,d)){
-      if(d>=de)out.push({date:d,rec:r});
+      /* uma ocorrência de um encargo que o inquilino paga não se pede (planeados.js:recSuspensaPeloInquilino, KAN-129-3) */
+      if(d>=de&&!(servicoLigado('recurring')&&recSuspensaPeloInquilino(r,d)))out.push({date:d,rec:r});
       if(r.every==='once')break;
       d=nextDate(d,r.every);n++;
     }

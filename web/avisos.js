@@ -27,6 +27,52 @@ var FUNCIONALIDADES = {
 
 var AVISOS = [
   {
+    v: 85,
+    data: '2026-11-28',
+    titulo: 'A situação fiscal no topo, a folha de cálculo do Anexo F e a parte de cada quarto',
+    seccoes: [
+      {
+        titulo: 'A Declaração',
+        afeta: ['app'],
+        itens: [
+          'A tua situação fiscal está no topo da página do IRS, numa ou duas linhas; as explicações estão num «?».',
+          'Os números do topo abrem numa janela, com o que contam, em vez de esticarem a página.',
+          'Copiar um valor dá-o sem espaços nem €, pronto a colar no Portal, e o NIF com os nove algarismos seguidos.',
+          'O Anexo F exporta-se numa folha de cálculo (.xlsx), que abre certa também no Google Sheets do telemóvel: as linhas dos quadros, o que fica a tratar e a estimativa, cada um na sua folha.',
+          'Sem rendas no ano, a página diz que contratos ainda não as têm e o que aparece com a primeira; um imóvel lá fora sem rendas tem o cartão do Anexo J a dizê-lo.',
+          'Os valores dos cartões já não ficam cortados no telemóvel.',
+        ],
+      },
+      {
+        titulo: 'Imóveis',
+        afeta: ['imoveis'],
+        itens: [
+          'Num imóvel por quartos, cada quarto tem a sua parte da casa (%), e a Declaração conta os gastos da casa pela soma dos quartos arrendados em cada dia.',
+          'O código da freguesia preenche o distrito e o concelho (e a freguesia, quando a app sabe o nome) sem mexer no que escreveste.',
+          'As escolhas de sim ou não dos formulários são todas interruptores.',
+        ],
+      },
+      {
+        titulo: 'Contratos e planeados',
+        afeta: ['contratos', 'movimentos'],
+        itens: [
+          'Na ficha do contrato, a comunicação da duração às Finanças aparece à cabeça do «Perante a AT», com o botão para a marcar.',
+          'Por baixo de «Este contrato tem alguma particularidade fiscal?», a app diz que isenção as datas do contrato permitem.',
+          '«Escrever outra taxa» tem a forma de um botão, e o campo do imposto abre no lugar dele.',
+          'Um encargo a cargo do inquilino suspende o planeado dele (fica em «Suspensos»), e volta quando o desligas.',
+          'Uma renda paga em parte mostra o que fica em dívida, no «Por confirmar», no sino, na vista geral e nas fichas do contrato e do inquilino.',
+        ],
+      },
+      {
+        titulo: 'O guia do IRS',
+        afeta: ['app'],
+        itens: [
+          'No guia de declarar as rendas, cada artigo abre o texto da lei no Diário da República.',
+        ],
+      },
+    ],
+  },
+  {
     v: 84,
     data: '2026-11-26',
     titulo: 'A situação fiscal mais clara, o + no imóvel do filtro e o CSV para o Google Sheets',

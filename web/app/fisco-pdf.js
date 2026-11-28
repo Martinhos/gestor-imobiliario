@@ -8,7 +8,7 @@
    cada linha e o que há a tratar antes de entregar. Cada linha leva o campo do
    quadro (4001…, 4501…), pela ordem em que se preenche, e os subquadros (4.2A,
    4.2B, 6D, 8, 9) dizem o campo a que se ligam. Os números são os do
-   resumoFiscal — os mesmos da página, do texto e do CSV — e nada se inventa:
+   resumoFiscal — os mesmos da página, do texto e da folha de cálculo — e nada se inventa:
    o que não está nos dados diz «—», ou «falta» quando a AT o pede.
 
    O escritor é o do contrato (contrato-pdf.js:PDF, com as cores PDF_COR do
@@ -24,7 +24,7 @@
 
 /* Descarrega o PDF do Anexo F do ano e de quem declara, como a página: o
    ano do fiscoAnoAtual e o resumoFiscal de quem tem a sessão (com o titular
-   B em conjunta), o mesmo do fiscoTexto e do CSV; o nome do ficheiro leva o
+   B em conjunta), o mesmo do fiscoTexto e da folha de cálculo; o nome do ficheiro leva o
    meu nome, e nenhum quando os valores vão por inteiro. No Android entrega o ficheiro
    ao seletor nativo, como o contrato em PDF. Sem o escritor (o contrato-pdf.js
    não carregou: a Declaração requer os Contratos, por isso não é o serviço
@@ -399,7 +399,7 @@ function fiscoPdfQuadro(pdf,r,q){
   if(!red)return;
   /* a comunicação é uma por período, não uma por ano (D01) */
   pdf.gap(4);fiscoPdfNota(pdf,'No '+v.quadros.datas+', «Sim» na comunicação quer dizer que a duração do contrato, ou da renovação em que estas rendas assentam, foi comunicada no Portal até '+(v.prazos&&v.prazos.comunicacaoDuracao?irsDiaMes(v.prazos.comunicacaoDuracao):'15 de fevereiro')+' do ano seguinte ao início dela (Portaria 110/2019). Comunica-se uma vez por período, e não todos os anos; feita depois do prazo, a resposta é «Não».');
-  /* o 4.2C com a conta do texto e do CSV (fiscoExpLimite42C, N039): um
+  /* o 4.2C com a conta do texto e da folha de cálculo (fiscoExpLimite42C, N039): um
      contrato dos dois cônjuges conta uma vez */
   const x=fiscoExpLimite42C(r);
   if(!x)return;

@@ -1,6 +1,6 @@
 /* ================= FISCO · RESUMO =================
    O resumo do Anexo F de um ano (resumoFiscal), a função pura por trás da
-   página, do texto, do CSV e do PDF: o ano que a página mostra, as linhas
+   página, do texto, da folha de cálculo e do PDF: o ano que a página mostra, as linhas
    por contrato e por titular, a repartição dos gastos, as obras dos 24
    meses, os prazos que dependem do ano. Os avisos que daí saem são do
    fisco-avisos.js; a página é o fisco.js. Partiu-se do fisco.js (KAN-125). */
@@ -204,25 +204,48 @@ function fiscoIntervaloSemContrato(pid,d){
   });
   return {de:de,ate:ate};
 }
-/* A parte de um imóvel por quartos que está arrendada (D4, N012): os gastos da
-   casa contam só nessa parte (CIRS art. 41.º n.º 1 e n.º 4 — o que serve as
-   rendas; a parte onde o dono mora, ou os quartos vazios, não). A da ficha
-   (p.parteArrendada, a parte da área em %, que a folha do imóvel pergunta só
-   num imóvel por quartos); sem ela, os quartos com contrato em vigor sobre o
-   total — no dia da despesa, ou, num gasto sem período (o IMI, o selo), os
-   quartos com contrato algum dia do ano, como a casa inteira conta o IMI todo
-   no ano em que deu rendas. Conta qualquer contrato, declarado ou não; um
-   contrato sem quarto (ou de um quarto que já não existe) arrenda a casa
-   inteira. Num imóvel que não é por quartos, ou sem quartos, a casa inteira.
+/* A parte de cada quarto de um imóvel por quartos (KAN-152-1, decisão do
+   Martinho de 2026-11-27: uma parte por quarto): a parte da casa que o quarto
+   é, já com a sua quota das zonas comuns (p.rooms[i].parte, em % — a área do
+   quarto com a parte dele das zonas comuns, sobre a área da casa: CIRS art.
+   41.º n.º 4). Os quartos sem parte dividem em partes iguais o que sobra até
+   100 % (100 menos a soma das indicadas); sem nenhuma indicada, cada quarto
+   vale 1/n. Uma soma acima de 100 (que o formulário recusa) deixa os sem
+   parte a zero.
+   Recebe: p — o imóvel.
+   Devolve: {partes: {idDoQuarto: fração 0 a 1}, ids: [os ids dos quartos],
+   indicadas: true quando algum quarto tem a parte indicada, semParte: [os
+   ids dos quartos sem parte indicada]}. */
+function fiscoPartesDosQuartos(p){
+  const rs=(p&&Array.isArray(p.rooms)?p.rooms:[]).filter(x=>x&&x.id);
+  const val=x=>{const v=x&&x.parte;return typeof v==='number'&&isFinite(v)&&v>0&&v<=100?v:null};
+  const ind=rs.filter(x=>val(x)!=null),sem=rs.filter(x=>val(x)==null);
+  const partes={};
+  if(!ind.length)rs.forEach(x=>{partes[x.id]=rs.length?1/rs.length:0});
+  else{
+    const resto=Math.max(0,100-sum(ind.map(val)));
+    ind.forEach(x=>{partes[x.id]=val(x)/100});
+    sem.forEach(x=>{partes[x.id]=resto/sem.length/100});
+  }
+  return {partes:partes,ids:rs.map(x=>x.id),indicadas:ind.length>0,semParte:sem.map(x=>x.id)};
+}
+/* A parte de um imóvel por quartos que está arrendada (D4, N012, KAN-152-1):
+   os gastos da casa contam só nessa parte (CIRS art. 41.º n.º 1 e n.º 4 — o
+   que serve as rendas; a parte onde o dono mora, ou os quartos vazios, não).
+   É a soma das partes dos quartos com contrato (fiscoPartesDosQuartos) — no
+   dia da despesa, ou, num gasto sem período (o IMI, o selo), dos quartos com
+   contrato algum dia do ano, como a casa inteira conta o IMI todo no ano em
+   que deu rendas. Conta qualquer contrato, declarado ou não; um contrato sem
+   quarto (ou de um quarto que já não existe) arrenda a casa inteira. Num
+   imóvel que não é por quartos, ou sem quartos, a casa inteira.
    Recebe: p — o imóvel; d — a data 'AAAA-MM-DD' (vazia: o ano inteiro); ano —
    o ano (número).
-   Devolve: {parte (0 a 1), origem: 'ficha' | 'quartos' | ''} — '' quando é a
+   Devolve: {parte (0 a 1), origem: 'partes' (com alguma parte indicada nos
+   quartos) | 'quartos' (sem nenhuma: cada quarto 1/n) | ''} — '' quando é a
    casa inteira por não ser por quartos. */
 function fiscoParteArrendada(p,d,ano){
   if(!p||p.rentalMode!=='quartos')return {parte:1,origem:''};
-  const pa=Number(p.parteArrendada);
-  if(p.parteArrendada!=null&&p.parteArrendada!==''&&pa>0&&pa<=100)return {parte:pa/100,origem:'ficha'};
-  const qs=(Array.isArray(p.rooms)?p.rooms:[]).map(x=>x&&x.id).filter(Boolean);
+  const P=fiscoPartesDosQuartos(p),qs=P.ids;
   if(!qs.length)return {parte:1,origem:''};
   const A=String(ano),ini=d||A+'-01-01',fim=d||A+'-12-31',vistos={};
   let inteira=false;
@@ -231,20 +254,23 @@ function fiscoParteArrendada(p,d,ano){
     const f=fiscoFimDaVida(c);if(f===null||(f&&f<ini))return;
     if(c.roomId&&qs.indexOf(c.roomId)>-1)vistos[c.roomId]=1;else inteira=true;
   });
-  return {parte:inteira?1:Object.keys(vistos).length/qs.length,origem:'quartos'};
+  return {parte:inteira?1:Math.min(1,sum(Object.keys(vistos).map(k=>P.partes[k]||0))),origem:P.indicadas?'partes':'quartos'};
 }
 /* A parte arrendada de um imóvel por quartos num ano, para a ficha do imóvel
-   dizer o número que a Declaração usa (N012): a da ficha, ou a média do ano —
-   os dias × quarto com contrato em vigor sobre os dias × quartos do ano (um
-   contrato sem quarto arrenda a casa inteira nesses dias).
+   dizer o número que a Declaração usa (N012, KAN-152-1): a média do ano —
+   em cada dia, a soma das partes dos quartos com contrato em vigor
+   (fiscoPartesDosQuartos; um contrato sem quarto arrenda a casa inteira
+   nesses dias), sobre os dias do ano.
    Recebe: p — o imóvel; ano — o ano (número ou texto).
-   Devolve: {parte (0 a 1), porOmissao (true sem p.parteArrendada), quartos (o
-   n.º de quartos), arrendados (os quartos com contrato algum dia do ano)} —
-   num imóvel que não é por quartos, {parte:1, porOmissao:true, quartos:0, arrendados:0}. */
+   Devolve: {parte (0 a 1), porOmissao (true quando nenhum quarto tem a parte
+   indicada), quartos (o n.º de quartos), arrendados (os quartos com contrato
+   algum dia do ano), semParte (os ids dos quartos sem parte indicada)} — num
+   imóvel que não é por quartos, {parte:1, porOmissao:true, quartos:0,
+   arrendados:0, semParte:[]}. */
 function fiscoParteArrendadaDoAno(p,ano){
-  const A=String(anoIrs(ano)),fora={parte:1,porOmissao:true,quartos:0,arrendados:0};
+  const A=String(anoIrs(ano)),fora={parte:1,porOmissao:true,quartos:0,arrendados:0,semParte:[]};
   if(!p||p.rentalMode!=='quartos')return fora;
-  const qs=(Array.isArray(p.rooms)?p.rooms:[]).map(x=>x&&x.id).filter(Boolean);
+  const P=fiscoPartesDosQuartos(p),qs=P.ids;
   if(!qs.length)return fora;
   /* os dias do ano (números de dia), e em cada um os quartos com contrato
      ('*' quando um contrato sem quarto arrenda a casa inteira) */
@@ -258,10 +284,8 @@ function fiscoParteArrendadaDoAno(p,ano){
     for(let x=n(de);x<=n(ate);x++)(porDia[x]||(porDia[x]={}))[q]=1;
   });
   const arrendados=algum['*']?qs.length:Object.keys(algum).length;
-  const ficha=fiscoParteArrendada(p,'',A);
-  if(ficha.origem==='ficha')return {parte:ficha.parte,porOmissao:false,quartos:qs.length,arrendados:arrendados};
-  const soma=sum(Object.keys(porDia).map(x=>porDia[x]['*']?qs.length:Object.keys(porDia[x]).length));
-  return {parte:Math.min(1,soma/(qs.length*dias)),porOmissao:true,quartos:qs.length,arrendados:arrendados};
+  const soma=sum(Object.keys(porDia).map(x=>porDia[x]['*']?1:Math.min(1,sum(Object.keys(porDia[x]).map(k=>P.partes[k]||0)))));
+  return {parte:Math.min(1,soma/dias),porOmissao:!P.indicadas,quartos:qs.length,arrendados:arrendados,semParte:P.semParte};
 }
 /* Os meses de um ano em que um contrato esteve em vigor e os que têm renda,
    pelo mês a que cada renda respeita (D04): de max(início, compra do imóvel,
@@ -1686,8 +1710,9 @@ function resumoFiscal(ano,eu,opcoes){
    [{contratoId, nome, propertyId, imovel, encargo, encargoNome, n, valor,
    nosGastos, txIds}] (N111); divisoesProprias [{txId, nome, data, valor,
    propertyId, imovel, divisao, quota, conta}] (N115); parteArrendada
-   [{propertyId, imovel, origem, parte, quartos, arrendados, gastos,
-   contados}] (N012); despesasForaDosTotais [{txId, nome, valor, propertyId,
+   [{propertyId, imovel, origem ('partes' ou 'quartos'), semParte (os ids dos
+   quartos sem parte indicada), parte, quartos, arrendados, gastos,
+   contados}] (N012, KAN-152-1); despesasForaDosTotais [{txId, nome, valor, propertyId,
    data, col}] (N042); quadro5[i] com taxa e motivoTaxa da regra única
    (N053), parteSub, semParte (N023), recibosPorEmitir (N077) e
    anosAnteriores (N140), e totais.quadro5.anosAnteriores; categoriaB[i] com
@@ -2159,7 +2184,7 @@ function fiscoResumoDoAno(ano,eu,opcoes){
       /* a parte arrendada do dia; num gasto que conta pela coluna escolhida
          com todos os quartos vazios nesse dia, a do ano */
       let pa=fiscoParteArrendada(p,semPeriodo?'':d,ano);
-      if(pa.origem==='quartos'&&!(pa.parte>0))pa=fiscoParteArrendada(p,'',ano);
+      if((pa.origem==='quartos'||pa.origem==='partes')&&!(pa.parte>0))pa=fiscoParteArrendada(p,'',ano);
       if(pa.origem&&ls.length){const x=parteDe[pid]||(parteDe[pid]={antes:0,depois:0});x.antes+=V;x.depois+=V*pa.parte}
       /* os consumos só nos contratos cuja renda os inclui (D26) */
       const alvo=fiscoAlvoDoGasto(t,d,pid,ls,restoC[k],semPeriodo,r.origem==='consumos'?(c=>fiscoDe(c).consumosIncluidos===true):null);
@@ -2248,7 +2273,7 @@ function fiscoResumoDoAno(ano,eu,opcoes){
      inteira (N012) */
   const parteArrendada=Object.keys(parteDe).map(pid=>{
     const p=props[pid],x=parteDe[pid],pa=fiscoParteArrendadaDoAno(p,ano);
-    return {propertyId:pid,imovel:p.name||'',origem:pa.porOmissao?'quartos':'ficha',parte:Math.round(pa.parte*1e4)/1e4,quartos:pa.quartos,
+    return {propertyId:pid,imovel:p.name||'',origem:pa.porOmissao?'quartos':'partes',semParte:pa.semParte||[],parte:Math.round(pa.parte*1e4)/1e4,quartos:pa.quartos,
       arrendados:pa.arrendados,gastos:r2(x.antes),contados:r2(x.depois)};
   }).filter(x=>x.parte<1-1e-9||x.contados<x.gastos-0.004).sort((a,b)=>String(a.imovel).localeCompare(String(b.imovel),'pt'));
   const encargosDoInq=Object.keys(encargosDoInquilino).map(k=>encargosDoInquilino[k])

@@ -120,7 +120,7 @@ function fiscoTaxaTexto(r,l,cartao){
    Lê l.comunicacao ({periodoInicio, chave, prazo, data, foraDePrazo}, do
    resumo); um resumo sem ela dá só a data em l.comunicado. Sem data, um
    período com a marca da app antiga por confirmar (a migração das
-   comunicações, N003) lê-se como no PDF e no CSV
+   comunicações, N003) lê-se como no PDF e na folha de cálculo
    (fisco-exportar.js:fiscoExpComPorConfirmar), e nunca é NÃO.
    Recebe: l — a linha do resumo.
    Devolve: {estado ('feita'|'fora'|'confirmar'|'porFazer'), valor, sub,
@@ -1499,11 +1499,24 @@ function fiscoCampoHtml(c){
    totais só com mais de uma entrada. Sem imposto estimado (Q12: o crédito do
    art. 81.º depende do país, da convenção e do englobamento): o cartão di-lo,
    e estas rendas não estão nos totais nem no imposto da página. Tocar abre a
-   ficha do contrato. Sem imóveis lá fora, não se escreve.
+   ficha do contrato. Um contrato de um imóvel lá fora sem nenhuma renda no
+   ano não tem entrada no resumo, e o cartão nomeia-o, com o que falta — a
+   primeira renda, ligada ao contrato (fisco.js:fiscoContratosAindaSemRendas,
+   KAN-129-2: com um imóvel em França e um contrato sem rendas, a página não
+   dizia nada); só com esses, o cartão diz só isso. Sem imóveis lá fora, não
+   se escreve.
    Recebe: r — o resumo (resumoFiscal).
    Devolve: o HTML do cartão (string), ou '' — em conjunta, um por titular. */
 function fiscoAnexoJCard(r){
-  const xs=Array.isArray(r&&r.anexoJ)?r.anexoJ.filter(Boolean):[];if(!xs.length)return '';
+  const xs=Array.isArray(r&&r.anexoJ)?r.anexoJ.filter(Boolean):[];
+  const J0=(r&&r.versao&&r.versao.anexoJ)||{},Q0=String(J0.quadro||'7A');
+  const semR=typeof fiscoContratosAindaSemRendas==='function'?fiscoContratosAindaSemRendas(r).anexoJ:[];
+  const semTxt=!semR.length?'':(semR.length===1
+    ?'O contrato '+esc(semR[0].nome)+' ('+esc(semR[0].imovel)+(semR[0].pais?', '+esc(semR[0].pais):'')+') não tem nenhuma renda registada em '+esc(r.ano)+': o quadro '+esc(Q0)+' enche-se quando registares a primeira, ligada ao contrato.'
+    :'Os contratos '+esc(listaE(semR.map(x=>x.nome+' ('+x.imovel+(x.pais?', '+x.pais:'')+')')))+' não têm nenhuma renda registada em '+esc(r.ano)+': o quadro '+esc(Q0)+' enche-se quando registares a primeira de cada um, ligada ao contrato.');
+  const semHtml=semTxt?`<p class="fis-ctc-nota">${semTxt}</p>`:'';
+  if(!xs.length)return semHtml?fisCartao('Anexo J · quadro '+esc(Q0),'Sem rendas em '+esc(r.ano),semHtml
+    +`<div class="hint">As rendas de um imóvel fora de Portugal não vão ao Anexo F: declaram-se no quadro ${esc(Q0)} do Anexo J, com o país da fonte, o rendimento líquido e o imposto pago lá.</div>`,'fis-quadro'):'';
   const J=(r.versao&&r.versao.anexoJ)||{},Q=String(J.quadro||'7A'),F01=String(J.codigo||'F01');
   /* em conjunta (a mesma regra das exportações: há outro titular na
      declaração), um Anexo J por titular */
@@ -1545,7 +1558,7 @@ function fiscoAnexoJCard(r){
     return fisCartao((g.letra?'Anexo J'+doTit:'Anexo J')+' · quadro '+esc(Q),r.ano+(parte?' · '+parte:''),
       `<p class="fis-onde">${onde}</p>
     <div class="fis-cts">${ys.map(cartao).join('')}${totHtml}</div>
-    ${i===grupos.length-1?`<div class="hint">${hint}</div>`:''}`,'fis-quadro');
+    ${i===grupos.length-1?semHtml+`<div class="hint">${hint}</div>`:''}`,'fis-quadro');
   }).join('');
 }
 /* O cartão «Fora do Anexo F · categoria B» (D134): os contratos com as rendas

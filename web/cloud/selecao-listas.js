@@ -712,7 +712,7 @@ function selLSaidaFrase(ps) {
       return (db.transactions || []).some(function (t) { return cids.indexOf(t.propertyId) > -1 && String(t.date || '').indexOf(String(a)) === 0; });
     }) : [];
     f += ' ' + (um ? nomeCo + ' deixa' : 'Deixam') + ' de entrar na tua Declaração do IRS, também nos anos em que foste dono' +
-      (anos.length ? ': antes de saíres, guarda o PDF ou o CSV ' + listaE(anos.map(function (a) { return 'de ' + a; })) : '') + '.';
+      (anos.length ? ': antes de saíres, guarda o PDF ou a folha de cálculo ' + listaE(anos.map(function (a) { return 'de ' + a; })) : '') + '.';
     if (anos.length) exportar = '<div class="imv-botoes u-mt-12px">' + anos.map(function (a) {
       return '<button type="button" class="btn" data-toca="nada" data-click="imvExportarAno(\'pdf\',' + a + ')">PDF de ' + a + '</button>' +
         '<button type="button" class="btn" data-toca="nada" data-click="imvExportarAno(\'csv\',' + a + ')">CSV de ' + a + '</button>';

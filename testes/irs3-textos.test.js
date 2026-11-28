@@ -535,7 +535,7 @@ describe('N067 · apagar imóveis partilhados pela seleção, e sair de vários'
     const txt = perguntas[0].txt;
     assert.doesNotMatch(txt, /e os saldos e o IRS passam a contar com as quotas novas/, 'a frase de antes, que mudava o IRS para trás, saiu');
     assert.match(txt, /a partir de hoje\. As quotas de antes ficam guardadas até ontem: o IRS dos outros conta com elas nos dias em que eras dono/);
-    assert.match(txt, /Deixam de entrar na tua Declaração do IRS, também nos anos em que foste dono: antes de saíres, guarda o PDF ou o CSV de 2026\./);
+    assert.match(txt, /Deixam de entrar na tua Declaração do IRS, também nos anos em que foste dono: antes de saíres, guarda o PDF ou a folha de cálculo de 2026./);
     assert.match(txt, /data-click="imvExportarAno\('pdf',2026\)">PDF de 2026<\/button>/);
   });
 });

@@ -234,8 +234,12 @@ function pesLinhaContrato(c,modo){
   const datas=modo==='futuro'?(c.start?'a partir de '+dPT(c.start):''):modo==='findo'?(c.end?'terminou a '+dPT(c.end):''):
     [c.start?'desde '+dPT(c.start):'',c.end?'até '+dPT(c.end):''].filter(Boolean).join(' · ');
   const r=modo==='ativo'?pesRenda(c):null;
+  /* as rendas por receber, cada uma com o seu valor — o resto de uma paga só
+     em parte diz «em dívida» (planeados.js:ctRendasEmDivida, KAN-129-4) */
+  const falta=r&&r.cls!=='in'&&servicoLigado('recurring')?ctRendasEmDivida(c):[];
+  const porReceber=falta.length?'Por receber: '+falta.map(x=>x.nome+' '+euro2(x.valor)+(x.divida?' em dívida':'')).join(' · '):'';
   return `<div class="pes-linha-f${ver?' tap':''}"${ver?` data-toca="camada" data-click="ctView('${jsq(c.id)}')"`:''}>
-    <span class="pes-linha-txt"><b>${esc(ctLabel(c))}</b>${datas?`<span class="small num">${datas}</span>`:''}${r?`<span class="badge${r.cls?' '+r.cls:''}">${r.txt}</span>`:''}</span>
+    <span class="pes-linha-txt"><b>${esc(ctLabel(c))}</b>${datas?`<span class="small num">${datas}</span>`:''}${r?`<span class="badge${r.cls?' '+r.cls:''}">${r.txt}</span>`:''}${porReceber?`<span class="small num">${esc(porReceber)}</span>`:''}</span>
     ${Number(c.rent)>0?`<b class="num pes-renda">${euro2(c.rent)}<span class="small">/mês</span></b>`:''}
     ${ver?`<span class="seta">${ic('chevR',18)}</span>`:''}</div>`;
 }

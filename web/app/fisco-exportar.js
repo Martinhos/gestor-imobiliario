@@ -1,6 +1,7 @@
 /* ================= FISCO · EXPORTAR =================
-   O resumo do Anexo F fora da página: em texto simples (fiscoTexto) e em CSV
-   (fiscoCsv, com o conteúdo no fiscoCsvTexto). Os mesmos números da página,
+   O resumo do Anexo F fora da página: em texto simples (fiscoTexto) e numa
+   folha de cálculo .xlsx (fiscoXlsx, com a tabela no fiscoFolha — KAN-126-8:
+   tomou o lugar do CSV, que a app do Google Sheets no telemóvel lia mal). Os mesmos números da página,
    de quem declara. O PDF é o fisco-pdf.js, que usa os ajudantes de cá (a linha
    das regras, o prazo das substituições do quadro 8, o NIF ou o país de cada
    inquilino, o imposto e o prejuízo de cada linha). Partiu-se do fisco.js
@@ -1286,8 +1287,8 @@ Resumo feito pela app com o que tem registado. As rendas ilíquidas são ${FISCO
 ${IRS_AVISO}
 `;
 }
-/* O CSV do Anexo F do ano (ponto e vírgula, para o Excel português): o
-   cabeçalho e uma linha por linha do quadro (4.1, 4.2, 4.3), pela ordem em
+/* A tabela do Anexo F do ano, que a folha de cálculo (fiscoXlsx, KAN-126-8)
+   e o texto (fiscoCsvTexto) escrevem: o cabeçalho e uma linha por linha do quadro (4.1, 4.2, 4.3), pela ordem em
    que se preenche; as dos contratos não declarados («nao»); uma por imóvel
    com rendas sem contrato («sem contrato», D34); uma por contrato de
    sublocação («quadro 5», D52), por contrato com obras dos 24 meses por
@@ -1323,10 +1324,10 @@ ${IRS_AVISO}
    vão vazios (D50). Em conjunta, um contrato dos dois cônjuges dá uma linha por
    titular.
    Recebe: r — o resumo (resumoFiscal).
-   Devolve: o conteúdo do CSV (string, linhas separadas por \n, sem a marca
-   de ordem de bytes, que é do download). */
-function fiscoCsvTexto(r){
-  const ano=String(r.ano),cols=r.colunas,T=celulaCsv,C=celulaCodigo,N=v=>celulaNumero(v),P=v=>celulaNumero(v,null);
+   Devolve: {cab (as chaves), linhas, avisos, notas — cada linha [células
+   com o tipo, fiscoCelTexto/Codigo/Numero, ou null] —, sem (sem regras)}. */
+function fiscoFolha(r){
+  const ano=String(r.ano),cols=r.colunas,T=fiscoCelTexto,C=fiscoCelCodigo,N=(v,casas)=>fiscoCelNumero(v,casas),P=v=>fiscoCelNumero(v,null);
   const sem=fiscoExpSemRegras(r),Q=(r.versao||{}).quadros||{};
   const cab=['ano','declarado','contrato','n_at','inicio','imovel','freguesia','tipo_predio','artigo','fracao','natureza','inquilinos','nif_ou_pais','quota_pct','rendas_iliquidas','retencoes']
     .concat(cols).concat(['obras24','obras24_desde','recibos_por_emitir','faltas','quadro','taxa_pct','liquido','imposto_estimado','anos_anteriores','termo','ultima_renovacao',
@@ -1348,10 +1349,10 @@ function fiscoCsvTexto(r){
     regularizacao_por_confirmar:fx.totalPorConfirmar>0?N(fx.totalPorConfirmar):'""'}:{};
   const c42=fiscoExpLimite42C(r);
   /* uma linha a partir das células por nome; as que faltam vão vazias */
-  const linha=o=>cab.map(k=>o[k]==null?'""':o[k]).join(';');
+  const linha=o=>cab.map(k=>o[k]==null||o[k]==='""'?null:o[k]);
   /* uma lista de valores numa célula: um só como código, vários como texto */
   const codigos=xs=>{xs=xs.filter(Boolean);return xs.length===1?C(xs[0]):T(xs.join(' / '))};
-  const out=[cab.map(k=>T(FISCO_CSV_NOMES[k]||k)).join(';')];
+  const out=[];
   r.linhas.forEach(l=>{
     const red=l.quadro===Q.comReducao,com=red?fiscoExpComunicacao(r,l):null,b=red&&fiscoExpElegivel24(r,l),tx=l.isencao?null:fiscoExpTaxa(r,l);
     const escr=!sem&&typeof fiscoTaxaEscritaOutra==='function'?fiscoTaxaEscritaOutra(l):null,pc=fiscoExpPorConhecer(r,l);
@@ -1364,7 +1365,7 @@ function fiscoCsvTexto(r){
       atualizacao_1_02:T(at?at.resposta||'por responder':''),quotas_no_ano:T(qx.periodos),comproprietarios_fora:T(qx.foraTexto),
       obras24_inicio_contrato:T(l.obras24.valor?fiscoExpMesAno(l.inicio):''),obras24_condicao:T(l.obras24.valor?FISCO_EXP_OBRAS_CONDICAO:''),
       quota_pct:P(l.quota*100),rendas_iliquidas:N(l.rendas),retencoes:N(l.retencoes),
-      obras24:N(l.obras24.valor),obras24_desde:T(l.obras24.inicioGastos),recibos_por_emitir:celulaNumero(l.recibosPorEmitir,0),faltas:T(l.faltas.join('; ')),
+      obras24:N(l.obras24.valor),obras24_desde:T(l.obras24.inicioGastos),recibos_por_emitir:N(l.recibosPorEmitir,0),faltas:T(l.faltas.join('; ')),
       quadro:C(l.quadro),taxa_pct:sem?'""':P(l.taxa),liquido:N(l.liquido),imposto_estimado:sem?'""':N(fiscoImpostoLinha(l)),
       anos_anteriores:T(l.anosAnteriores.map(a=>a.ano+':'+r2(a.valor).toFixed(2).replace('.',',')).join(' ')),termo:T(l.datas.fim),
       ultima_renovacao:T(l.datas.renovacaoInicio?l.datas.renovacaoInicio+'/'+l.datas.renovacaoFim:''),
@@ -1460,30 +1461,199 @@ function fiscoCsvTexto(r){
   /* o que não é uma linha do Anexo F vai em secções à parte, cada uma depois
      de uma linha vazia e com o seu título na primeira coluna (KAN-126-5): os
      avisos de «A tratar», e no fim a estimativa e as notas */
-  const vazia=()=>linha({}),seccao=t=>linha({ano:T(t)});
+  const avisos=[],notas=[];
   if((r.avisos||[]).length){
-    out.push(vazia(),seccao(FISCO_CSV_SECCAO_AVISOS));
-    r.avisos.forEach(a=>out.push(linha({ano:T(ano),declarado:T('a tratar ('+fiscoNivelNome(a)+')'),contrato:T(a.texto)})));
+    r.avisos.forEach(a=>avisos.push(linha({ano:T(ano),declarado:T('a tratar ('+fiscoNivelNome(a)+')'),contrato:T(a.texto)})));
   }
-  out.push(vazia(),seccao(sem?FISCO_CSV_SECCAO_SO_NOTAS:FISCO_CSV_SECCAO_NOTAS));
   const rep=sem?null:fiscoExpReporte(r);
-  if(rep)out.push(linha({ano:T(ano),declarado:T('reporte'),contrato:T(fiscoExpReporteTexto(r)),reporte_abatido:N(rep.usado),imposto_depois_reporte:N(rep.depois)}));
+  if(rep)notas.push(linha({ano:T(ano),declarado:T('reporte'),contrato:T(fiscoExpReporteTexto(r)),reporte_abatido:N(rep.usado),imposto_depois_reporte:N(rep.depois)}));
   /* o caminho do imposto, com a ressalva dos Açores (N120) e, sem abate, os
      prejuízos de anos que não estão na app (N124) */
-  if(!sem){const I=fiscoExpImpostos(r),lt=fiscoExpLiquidoTributavel(r),pf=fiscoExpPrejuizosForaTexto(r);out.push(linha({ano:T(ano),declarado:T('imposto'),
+  if(!sem){const I=fiscoExpImpostos(r),lt=fiscoExpLiquidoTributavel(r),pf=fiscoExpPrejuizosForaTexto(r);notas.push(linha({ano:T(ano),declarado:T('imposto'),
     contrato:T(fiscoExpImpostoTexto(r)+'. Estimativa sem englobamento, com as '+FISCO_EXP_ACORES+'.'+(pf?' '+pf:'')),
     liquido:N(r.totais.liquido),liquido_tributavel:N(lt?lt.valor:r.totais.liquido),
     imposto_estimado:N(I.imposto),imposto_final:N(I.comRegularizacao),falta_pagar:N(I.aPagar),regularizacao_estimada:I.regularizacao?N(I.regularizacao):'""',
     reporte_abatido:I.reporte?N(I.reporte.usado):'""',imposto_depois_reporte:I.reporte?N(I.depoisReporte):'""'}))}
-  out.push(linha({ano:T(ano),declarado:T('regras'),contrato:T(fiscoRegrasTexto(r))}));
-  out.push(linha({ano:T(ano),declarado:T('aviso'),contrato:T(IRS_AVISO)}));
+  notas.push(linha({ano:T(ano),declarado:T('regras'),contrato:T(fiscoRegrasTexto(r))}));
+  notas.push(linha({ano:T(ano),declarado:T('aviso'),contrato:T(IRS_AVISO)}));
+  return {cab:cab,linhas:out,avisos:avisos,notas:notas,sem:sem};
+}
+/* Uma célula de texto da tabela do Anexo F (fiscoFolha).
+   Recebe: x — o valor (nulo vale vazio).
+   Devolve: {t:'s', v} — o texto. */
+function fiscoCelTexto(x){return {t:'s',v:String(x==null?'':x)}}
+/* Uma célula com um código que tem de chegar tal e qual (a freguesia 040810,
+   a natureza 07, o quadro 4.1 — com os zeros à esquerda): na folha de
+   cálculo vai como texto.
+   Recebe: x — o código (nulo vale vazio).
+   Devolve: {t:'c', v} — o código, aparado. */
+function fiscoCelCodigo(x){return {t:'c',v:String(x==null?'':x).trim()}}
+/* Uma célula com um número: os euros com duas casas por omissão; casas null
+   para as percentagens (as que tiverem) e 0 para as contagens. Um valor que
+   não é número fica vazio.
+   Recebe: v — o valor; casas (opcional) — as casas decimais.
+   Devolve: {t:'n', v (ao cêntimo), casas}, ou null. */
+function fiscoCelNumero(v,casas){
+  if(v==null||v===''||!isFinite(Number(v)))return null;
+  return {t:'n',v:Math.round(Number(v)*100)/100,casas:casas};
+}
+/* Uma célula da tabela no CSV (fiscoCsvTexto): o texto pelo celulaCsv, o
+   código pelo celulaCodigo (="040810") e o número pelo celulaNumero
+   (6147,00); vazia, «""».
+   Recebe: c — a célula (fiscoCelTexto, fiscoCelCodigo, fiscoCelNumero) ou null.
+   Devolve: o texto da célula (string). */
+function fiscoCelCsv(c){
+  if(!c)return '""';
+  return c.t==='n'?celulaNumero(c.v,c.casas):c.t==='c'?celulaCodigo(c.v):celulaCsv(c.v);
+}
+/* A tabela do Anexo F do ano em texto CSV (ponto e vírgula): o cabeçalho
+   (com os acentos de FISCO_CSV_NOMES), as linhas do Anexo F e, cada uma
+   depois de uma linha vazia e com o título na primeira coluna (KAN-126-5),
+   os avisos de «A tratar» (havendo) e a estimativa e as notas. Já não se
+   descarrega (KAN-126-8: a app do Google Sheets no telemóvel lia-o como
+   Latin-1, e a exportação passou a ser a folha de cálculo, fiscoXlsx); fica
+   como a forma em texto da mesma tabela, que os testes leem linha a linha.
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: o conteúdo (string, linhas separadas por \n, sem a marca de ordem
+   de bytes). */
+function fiscoCsvTexto(r){
+  const F=fiscoFolha(r),linha=cs=>cs.map(fiscoCelCsv).join(';'),vazia=F.cab.map(()=>'""').join(';');
+  const seccao=t=>linha([fiscoCelTexto(t)].concat(F.cab.slice(1).map(()=>null)));
+  const out=[F.cab.map(k=>celulaCsv(FISCO_CSV_NOMES[k]||k)).join(';')].concat(F.linhas.map(linha));
+  if(F.avisos.length)out.push(vazia,seccao(FISCO_CSV_SECCAO_AVISOS),...F.avisos.map(linha));
+  out.push(vazia,seccao(F.sem?FISCO_CSV_SECCAO_SO_NOTAS:FISCO_CSV_SECCAO_NOTAS),...F.notas.map(linha));
   return out.join('\n');
 }
-/* Exporta os quadros do ano da página para CSV (fiscoCsvTexto), pelo download
-   da app (copias.js:download, que lhe põe a marca de ordem de bytes).
-   Devolve: nada — dispara a descarga do CSV. */
-function fiscoCsv(){
-  const ano=fiscoAnoAtual();
-  download('anexo-f-'+ano+'.csv','text/csv;charset=utf-8',fiscoCsvTexto(resumoFiscal(ano)));
-  toast('CSV exportado.');
+/* As três folhas do .xlsx do Anexo F (KAN-126-8), da tabela do ano
+   (fiscoFolha): «Anexo F» com o cabeçalho e as linhas dos quadros; «A
+   tratar» com o ano, o nível (falta, aviso, nota) e o que há a tratar; e
+   «Estimativa e notas» com o reporte, o imposto, as regras e o aviso, e os
+   números de cada um nas colunas do imposto. Os títulos das colunas são os
+   da tabela, com os acentos (FISCO_CSV_NOMES).
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: [{nome, linhas: [[células]], larguras: [n.º de caracteres por
+   coluna]}] — a 1.ª linha de cada folha é o cabeçalho. */
+function fiscoXlsxFolhas(r){
+  const F=fiscoFolha(r),T=fiscoCelTexto,col=k=>F.cab.indexOf(k);
+  const de=(ls,ks)=>ls.map(l=>ks.map(k=>l[col(k)]||null));
+  const kNotas=['ano','declarado','contrato','liquido','liquido_tributavel','imposto_estimado','imposto_final','falta_pagar','regularizacao_estimada','reporte_abatido','imposto_depois_reporte'];
+  const avisos=(r.avisos||[]).map(a=>[T(String(r.ano)),T(fiscoNivelNome(a)),T(a.texto)]);
+  return [
+    {nome:'Anexo F',linhas:[F.cab.map(k=>T(FISCO_CSV_NOMES[k]||k))].concat(F.linhas),larguras:F.cab.map(k=>k==='contrato'||k==='imovel'||k==='faltas'?28:Math.max(10,String(k).length+2))},
+    {nome:'A tratar',linhas:[[T('ano'),T('nível'),T('o que tratar antes de entregar')]].concat(avisos),larguras:[8,10,110]},
+    {nome:'Estimativa e notas',linhas:[['ano','o quê','texto'].map(T).concat(kNotas.slice(3).map(T))].concat(de(F.notas,kNotas)),larguras:[8,10,90].concat(kNotas.slice(3).map(k=>Math.max(14,k.length+2)))}
+  ];
 }
+/* O texto que vai dentro de um XML: escapa & < > " e tira os caracteres de
+   controlo que o XML não aceita.
+   Recebe: s — o texto.
+   Devolve: o texto escapado (string). */
+function fiscoXml(s){
+  return String(s==null?'':s).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+}
+/* O nome de uma coluna da folha de cálculo: 0 → A, 25 → Z, 26 → AA.
+   Recebe: i — o índice da coluna (a partir de 0).
+   Devolve: as letras (string). */
+function fiscoXlsxColuna(i){let s='';i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s}
+/* Os ficheiros de dentro do .xlsx (SpreadsheetML, ECMA-376), das folhas do
+   fiscoXlsxFolhas: os textos e os códigos na tabela de textos partilhados
+   (sharedStrings), como texto — os códigos guardam os zeros à esquerda —, e
+   os euros como números, com o formato de duas casas (o 4 da norma,
+   «#,##0.00», que cada programa mostra com os separadores da sua língua);
+   as percentagens e as contagens como números, no formato geral. O
+   cabeçalho de cada folha vai a negrito, fixo no topo.
+   Recebe: folhas — o que o fiscoXlsxFolhas devolve.
+   Devolve: [{nome, texto}] — o caminho dentro do zip e o XML (string). */
+function fiscoXlsxFicheiros(folhas){
+  const X='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n',NS='http://schemas.openxmlformats.org/';
+  const textos=[],idx=new Map();
+  const sst=v=>{if(!idx.has(v)){idx.set(v,textos.length);textos.push(v)}return idx.get(v)};
+  const cel=(c,ref,cab)=>{
+    if(!c)return '';
+    if(c.t==='n')return `<c r="${ref}" s="${c.casas===undefined||c.casas===2?2:0}"><v>${c.v}</v></c>`;
+    if(c.v==='')return '';
+    return `<c r="${ref}" t="s"${cab?' s="1"':''}><v>${sst(c.v)}</v></c>`;
+  };
+  const folhaXml=f=>{
+    const linhas=f.linhas.map((l,i)=>`<row r="${i+1}">${l.map((c,j)=>cel(c,fiscoXlsxColuna(j)+(i+1),i===0)).join('')}</row>`).join('');
+    const cols=(f.larguras||[]).map((w,j)=>`<col min="${j+1}" max="${j+1}" width="${w}" customWidth="1"/>`).join('');
+    return X+`<worksheet xmlns="${NS}spreadsheetml/2006/main" xmlns:r="${NS}officeDocument/2006/relationships">`
+      +`<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`
+      +(cols?`<cols>${cols}</cols>`:'')+`<sheetData>${linhas}</sheetData></worksheet>`;
+  };
+  const sheets=folhas.map((f,i)=>({nome:'xl/worksheets/sheet'+(i+1)+'.xml',texto:folhaXml(f)}));
+  const ct='application/vnd.openxmlformats-officedocument.spreadsheetml';
+  return [
+    {nome:'[Content_Types].xml',texto:X+`<Types xmlns="${NS}package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>`
+      +`<Override PartName="/xl/workbook.xml" ContentType="${ct}.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="${ct}.styles+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="${ct}.sharedStrings+xml"/>`
+      +folhas.map((f,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="${ct}.worksheet+xml"/>`).join('')+`</Types>`},
+    {nome:'_rels/.rels',texto:X+`<Relationships xmlns="${NS}package/2006/relationships"><Relationship Id="rId1" Type="${NS}officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {nome:'xl/workbook.xml',texto:X+`<workbook xmlns="${NS}spreadsheetml/2006/main" xmlns:r="${NS}officeDocument/2006/relationships"><sheets>`
+      +folhas.map((f,i)=>`<sheet name="${fiscoXml(f.nome)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')+`</sheets></workbook>`},
+    {nome:'xl/_rels/workbook.xml.rels',texto:X+`<Relationships xmlns="${NS}package/2006/relationships">`
+      +folhas.map((f,i)=>`<Relationship Id="rId${i+1}" Type="${NS}officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')
+      +`<Relationship Id="rId${folhas.length+1}" Type="${NS}officeDocument/2006/relationships/styles" Target="styles.xml"/>`
+      +`<Relationship Id="rId${folhas.length+2}" Type="${NS}officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>`},
+    {nome:'xl/styles.xml',texto:X+`<styleSheet xmlns="${NS}spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>`
+      +`<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>`
+      +`<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>`
+      +`<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>`
+      +`<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`},
+    ...sheets,
+    /* os textos partilhados no fim: só depois das folhas se sabem todos */
+    {nome:'xl/sharedStrings.xml',get texto(){return X+`<sst xmlns="${NS}spreadsheetml/2006/main" count="${textos.length}" uniqueCount="${textos.length}">`
+      +textos.map(t=>`<si><t xml:space="preserve">${fiscoXml(t)}</t></si>`).join('')+`</sst>`}}
+  ];
+}
+/* O CRC-32 de uma sequência de bytes (o do zip, polinómio 0xEDB88320).
+   Recebe: b — os bytes (Uint8Array).
+   Devolve: o CRC (número sem sinal, 32 bits). */
+function fiscoCrc32(b){
+  let t=fiscoCrc32.t;
+  if(!t){t=fiscoCrc32.t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}}
+  let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=t[(c^b[i])&255]^(c>>>8);
+  return (c^0xFFFFFFFF)>>>0;
+}
+/* Um zip sem compressão (o método 0, STORE), com o CRC de cada ficheiro: o
+   que o .xlsx é por fora. A app não tem bibliotecas nem as carrega de fora
+   (a CSP), e para uma folha destas não é preciso comprimir.
+   Recebe: ficheiros — [{nome, texto}] (o texto vai em UTF-8).
+   Devolve: os bytes do zip (Uint8Array). */
+function fiscoZip(ficheiros){
+  const enc=new TextEncoder(),partes=[],centrais=[];let pos=0;
+  const u16=n=>[n&255,(n>>>8)&255],u32=n=>[n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255];
+  /* a data e a hora de DOS de 1 de janeiro de 2026, 00:00 (o zip pede uma) */
+  const hora=0,dia=((2026-1980)<<9)|(1<<5)|1;
+  ficheiros.forEach(f=>{
+    const nome=enc.encode(f.nome),dados=enc.encode(f.texto),crc=fiscoCrc32(dados);
+    const cab=Uint8Array.from([...u32(0x04034b50),...u16(20),...u16(0x0800),...u16(0),...u16(hora),...u16(dia),...u32(crc),...u32(dados.length),...u32(dados.length),...u16(nome.length),...u16(0)]);
+    centrais.push(Uint8Array.from([...u32(0x02014b50),...u16(20),...u16(20),...u16(0x0800),...u16(0),...u16(hora),...u16(dia),...u32(crc),...u32(dados.length),...u32(dados.length),...u16(nome.length),...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(pos)]),nome);
+    partes.push(cab,nome,dados);pos+=cab.length+nome.length+dados.length;
+  });
+  const tamC=centrais.reduce((s,x)=>s+x.length,0);
+  const fim=Uint8Array.from([...u32(0x06054b50),...u16(0),...u16(0),...u16(ficheiros.length),...u16(ficheiros.length),...u32(tamC),...u32(pos),...u16(0)]);
+  const tudo=partes.concat(centrais,[fim]),out=new Uint8Array(tudo.reduce((s,x)=>s+x.length,0));
+  let k=0;tudo.forEach(x=>{out.set(x,k);k+=x.length});
+  return out;
+}
+/* Os bytes do .xlsx do Anexo F de um resumo (fiscoXlsxFolhas, fiscoXlsxFicheiros, fiscoZip).
+   Recebe: r — o resumo (resumoFiscal).
+   Devolve: os bytes (Uint8Array). */
+function fiscoXlsxBytes(r){return fiscoZip(fiscoXlsxFicheiros(fiscoXlsxFolhas(r)))}
+/* Exporta o Anexo F do ano da página numa folha de cálculo .xlsx
+   (anexo-f-AAAA.xlsx, KAN-126-8): abre no Excel, no Numbers e no Google
+   Sheets do telemóvel com os acentos certos — o CSV, que a app do Sheets no
+   Android lia como Latin-1 sem ligar à marca de ordem de bytes, saiu —, com
+   os euros como números, que se somam, e os códigos com os zeros à
+   esquerda. Pelo download da app (copias.js:download).
+   Devolve: nada — dispara a descarga. */
+function fiscoXlsx(){
+  const ano=fiscoAnoAtual();
+  download('anexo-f-'+ano+'.xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',fiscoXlsxBytes(resumoFiscal(ano)));
+  toast('Folha de cálculo exportada.');
+}
+/* O nome antigo da exportação do Anexo F, que outros ecrãs ainda chamam (o
+   cartão Exportar das definições, definicoes.js, e a saída de um imóvel,
+   imovel.js:imvExportarAno): exporta a folha de cálculo (fiscoXlsx).
+   Devolve: o que o fiscoXlsx devolve. */
+function fiscoCsv(){return fiscoXlsx()}

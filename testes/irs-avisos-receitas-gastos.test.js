@@ -191,7 +191,7 @@ describe('D31 — a conjunta com o cônjuge escolhido', () => {
   test('diz que entram só os imóveis do cônjuge partilhados com esta conta (informativo: não há nada a corrigir na app)', () => {
     const r = resumoMao({ titulares: ['ana', 'bruno'], linhas: [linhaMao()] });
     assert.deepEqual(avisosMao(r, /conjunta/), [{ texto: 'Tributação conjunta com Bruno: entram só os imóveis do cônjuge partilhados com esta conta. '
-      + 'Os que estão só na conta de Bruno não chegam aqui: junta-os no Portal das Finanças, a partir do PDF ou do CSV da Declaração dessa conta',
+      + 'Os que estão só na conta de Bruno não chegam aqui: junta-os no Portal das Finanças, a partir do PDF ou da folha de cálculo da Declaração dessa conta',
       abrir: '', toca: '', nivel: 'info' }]);
     assert.equal(avisosMao(resumoMao({ titularId: undefined, titulares: ['ana'], linhas: [linhaMao()] }), /conjunta/).length, 0, 'só um titular: sem conjunta');
   });

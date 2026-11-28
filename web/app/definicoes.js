@@ -41,7 +41,7 @@ function ultimaImportacao(){
    dados. Com sessão iniciada, apagar aqui apagava também na conta e nos
    outros aparelhos: o cartão diz porquê e dá as duas saídas certas (terminar
    a sessão, apagar a conta) em vez do botão. As cópias e as exportações levam
-   só o que é teu (exportarSoMeu) — salvo o CSV do Anexo F, que é o da
+   só o que é teu (exportarSoMeu) — salvo a folha de cálculo do Anexo F, que é a da
    Declaração: o resumoFiscal já escolhe os imóveis dos titulares, e o
    exportarSoMeu tirava-lhe o imóvel do cônjuge partilhado como colaboração
    (D75). Por baixo dele, o que fica por tratar na Declaração (notaDoCsvDoAnexo, D34).
@@ -65,9 +65,9 @@ function vImport(){
       ?'Repor traz de volta o que a cópia tem e mostra antes o que muda; o que outros registaram e o que é mais recente do que a cópia fica.'
       :'Repor substitui os dados deste aparelho pelos da cópia e mostra antes o que sai.'}</p></section>`;
   const exportar=`<section class="card def-bloco"><h3>Exportar</h3>
-    <p class="small">CSV que abre no Excel com os acentos certos.</p>
+    <p class="small">Os movimentos num CSV que abre no Excel com os acentos certos${anexo?'; o Anexo F numa folha de cálculo (.xlsx), que abre certa também no Google Sheets do telemóvel':''}.</p>
     <div class="def-botoes"><button class="btn" data-toca="nada" data-click="exportarSoMeu(downloadCsv)">Movimentos (CSV)</button>
-      ${anexo?`<button class="btn" data-toca="nada" data-click="fiscoCsv()">Anexo F${esc(ano)} (CSV)</button>`:''}</div>
+      ${anexo?`<button class="btn" data-toca="nada" data-click="fiscoCsv()">Anexo F${esc(ano)} (folha de cálculo)</button>`:''}</div>
     ${anexo?notaDoCsvDoAnexo():''}
     ${fora?`<p class="small">Imóveis onde só colaboras ficam de fora da cópia e do CSV dos movimentos${anexo?'; o do Anexo F é o mesmo da Declaração, com os imóveis de quem declara contigo':''}.</p>`:''}</section>`;
   const splitwise=`<section class="card def-bloco"><div class="def-bloco-cab"><h3>Importar do Splitwise</h3>
@@ -88,19 +88,20 @@ function vImport(){
   return `<div class="def-par">${copia}${exportar}</div>${splitwise}${apagar}`;
 }
 
-/* A nota do CSV do Anexo F no cartão Exportar: o CSV leva no fim os pontos de
-   «A tratar antes de entregar», mas quem trabalha pelo CSV não os vê como na
+/* A nota da folha de cálculo do Anexo F no cartão Exportar: ela leva, na folha
+   «A tratar», os pontos de «A tratar antes de entregar», mas quem trabalha pela
+   folha de cálculo não os vê como na
    Declaração — a nota diz quantos há no ano e leva lá (D34). Conta como o
    cartão da Declaração (fisco.js:fiscoObrigacoesCard): sem os «só se diz».
    Um resumo que rebente não tira a página: fica a nota sem o número.
-   Recebe: nada (o ano é o da Declaração, fiscoAnoAtual, o mesmo do CSV).
+   Recebe: nada (o ano é o da Declaração, fiscoAnoAtual, o mesmo da folha de cálculo).
    Devolve: o HTML (texto) da nota com o botão. */
 function notaDoCsvDoAnexo(){
   let n=-1,ano='';
   try{if(servicoLigado('fisco')&&typeof resumoFiscal==='function'&&typeof fiscoAnoAtual==='function'){ano=String(fiscoAnoAtual());const r=resumoFiscal(Number(ano));n=(r.avisos||[]).filter(a=>a&&a.nivel!=='info').length}}catch(e){n=-1}
   const txt=n>0
-    ?`O CSV leva no fim ${n===1?'o ponto':'os '+n+' pontos'} de «A tratar antes de entregar» de ${esc(ano)}. Trata-${n===1?'o':'os'} na Declaração antes de entregares.`
-    :`O CSV leva no fim o que a Declaração tem em «A tratar antes de entregar». Vê-a antes de entregares.`;
+    ?`A folha de cálculo leva, na folha «A tratar», ${n===1?'o ponto':'os '+n+' pontos'} de «A tratar antes de entregar» de ${esc(ano)}. Trata-${n===1?'o':'os'} na Declaração antes de entregares.`
+    :`A folha de cálculo leva, na folha «A tratar», o que a Declaração tem em «A tratar antes de entregar». Vê-a antes de entregares.`;
   return `<p class="small">${txt}</p>
     <div class="def-botoes"><button type="button" class="btn sm" data-toca="ecra" data-click="go('fisco')">${n>0?'Ver o que falta tratar':'Abrir a Declaração'}</button></div>`;
 }

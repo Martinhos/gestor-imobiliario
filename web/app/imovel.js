@@ -2672,11 +2672,11 @@ function imvDesfazerVenda(id){
   const x=prop(id);if(!x||!souDono(id))return;
   x.vendido='';save();render();toast('Venda desfeita: o imóvel volta às listas.');
 }
-/* O PDF ou o CSV da Declaração de um ano, a partir da saída de um imóvel
+/* O PDF ou a folha de cálculo (.xlsx) da Declaração de um ano, a partir da saída de um imóvel
    (imvFraseSaida): o mesmo da página (fisco-pdf.js:fiscoPdf,
    fisco-exportar.js:fiscoCsv) com o ano pedido, sem mudar o ano escolhido na
    página. Só com a Declaração ligada nesta conta.
-   Recebe: tipo — 'pdf' ou 'csv'; ano — o ano dos rendimentos.
+   Recebe: tipo — 'pdf' ou 'csv' (o nome antigo da folha de cálculo); ano — o ano dos rendimentos.
    Devolve: nada — descarrega o ficheiro (ou diz porque não). */
 function imvExportarAno(tipo,ano){
   if(!servicoLigado('fisco'))return toast(hintServicoDesligado('fisco'));
@@ -3281,9 +3281,9 @@ function imvFraseSaida(p){
   const quota=imvFraseDaQuota(p);
   const anos=servicoLigado('fisco')?imvAnosPorEntregar().filter(a=>(db.transactions||[]).some(t=>t.propertyId===p.id&&String(t.date||'').startsWith(String(a)))):[];
   const exportar=anos.length?`<div class="imv-botoes u-mt-12px">${anos.map(a=>
-    `<button type="button" class="btn" data-toca="nada" data-click="imvExportarAno('pdf',${a})">PDF de ${a}</button><button type="button" class="btn" data-toca="nada" data-click="imvExportarAno('csv',${a})">CSV de ${a}</button>`).join('')}</div>`:'';
+    `<button type="button" class="btn" data-toca="nada" data-click="imvExportarAno('pdf',${a})">PDF de ${a}</button><button type="button" class="btn" data-toca="nada" data-click="imvExportarAno('csv',${a})">Folha de cálculo de ${a}</button>`).join('')}</div>`:'';
   return `Sais da compropriedade de ${nome}: as tuas permissões são retiradas e ele sai da tua lista.${quota?' '+quota:''} As quotas de antes ficam guardadas até ontem: o IRS dos outros conta com elas nos dias em que eras dono, e os saldos passam a contar com as novas, também nos movimentos já registados. `
-    +`O imóvel deixa de entrar na tua Declaração do IRS, também nos anos em que foste dono${anos.length?': antes de saíres, guarda o PDF ou o CSV '+listaE(anos.map(a=>'de '+a)):''}. O que registaste fica. Não se desfaz: para voltares, ${dono||'quem o criou'} tem de voltar a partilhá-lo contigo.${exportar}`;
+    +`O imóvel deixa de entrar na tua Declaração do IRS, também nos anos em que foste dono${anos.length?': antes de saíres, guarda o PDF ou a folha de cálculo '+listaE(anos.map(a=>'de '+a)):''}. O que registaste fica. Não se desfaz: para voltares, ${dono||'quem o criou'} tem de voltar a partilhá-lo contigo.${exportar}`;
 }
 /* Sair de um imóvel que não criei — o «Apagar imóvel» do ⋯ da ficha, do
    formulário e do toque longo de quem não o criou (delProp encaminha para

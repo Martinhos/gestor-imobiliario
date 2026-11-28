@@ -93,6 +93,22 @@ function fmtCopiavel(texto){
   if(n)return n[1]+g(n[2])+g(n[3]);
   return esc(s);
 }
+/* O texto copiado de um valor, limpo para colar num campo do Portal
+   (KAN-153-2): um valor em euros como a app o escreve, com os espaços dos
+   milhares (o fino, o normal ou o rígido, no texto ou desenhados pelo CSS e
+   apanhados pelo browser) e o «€» ou sem eles, sai só com os algarismos, a
+   vírgula e o hífen-menos de teclado («12 450,00 €» → «12450,00»); um NIF em
+   três grupos sai com os nove algarismos seguidos. Qualquer outro texto não
+   é um valor: null, e copia-se como está.
+   Recebe: texto — o que a seleção tem (string; nulo vale vazio).
+   Devolve: o texto limpo (string), ou null. */
+function copiaLimpa(texto){
+  const s=String(texto??'').replace(/[​﻿]/g,'').trim(),E='[\\s\\u00A0\\u202F\\u2009]';
+  const e=new RegExp('^([−-]?)(\\d{1,3}(?:'+E+'?\\d{3})*)(,\\d{1,2})?(?:'+E+'*€)?$').exec(s);
+  if(e)return (e[1]?'-':'')+e[2].replace(new RegExp(E,'g'),'')+(e[3]||'');
+  if(new RegExp('^\\d{3}'+E+'\\d{3}'+E+'\\d{3}$').test(s))return s.replace(/\D/g,'');
+  return null;
+}
 /* O número do cartão de cidadão legível: os oito dígitos, um espaço e o resto
    (controlo e letras) em maiúsculas; o que não tiver essa forma fica como foi
    escrito.

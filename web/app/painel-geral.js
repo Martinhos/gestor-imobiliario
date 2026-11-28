@@ -301,7 +301,7 @@ function pedeAtencao(){
      disso é o notifPartilha que a marca (e grava), e não a vista */
   const ativ=db.settings.notifLidoAte==null?[]:notifAtividade();
   if(!conf.length&&!pz.length&&!ped.length&&!ativ.length)return '';
-  const nl=rec?conf.filter(recIsLate).length:0,total=sum(conf.map(r=>Number((r.tx||{}).amount)||0));
+  const nl=rec?conf.filter(recIsLate).length:0,total=sum(conf.map(r=>servicoLigado('recurring')?recMontanteAPedir(r):(Number((r.tx||{}).amount)||0)));
   /* a frase da linha da atividade: «Maria Costa · Movimento — Obra»; uma
      saída já começa por quem saiu («Rui deixou de colaborar em …»), e vai sozinha */
   const passou=pz.filter(p=>p.dias<0),resumo=n=>n.tipo==='saida'?n.titulo:notifQuem(n)+' · '+n.titulo;

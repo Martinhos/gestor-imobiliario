@@ -98,20 +98,19 @@ beforeEach(() => {
   app.CW = { user: { id: 'ana' }, _esperaFim: true };   // com sessão, e o estado da nuvem já chegou (os prazos mostram-se)
   app.fiscoAno = '2026';
   app.fiscoSitAberta = null;
-  app.fiscoSitDispensaVer = false;
   app.render = () => {};
 });
 
 describe('N066 · a ordem da Declaração (maqueta 6) e o cartão do quadro', () => {
-  test('números, «A tratar», os quadros, a situação numa linha e o aviso — sem os prazos vazios', () => {
+  test('a situação à cabeça, os números, «A tratar», os quadros e o aviso — sem os prazos vazios (KAN-127-17)', () => {
     contrato({ id: 'C1' }); rendas('C1', 2026, 1000, 1, 10);
     const AT = { modelo2: 1, cessacao: 1, recibos: 1, irs: 1, fev15: 1, rsaa: 1, modelo44: 1, elementos: 1 };
     assert.equal(app.prazosAtivos().filter((p) => AT[p.tipo]).length, 0, 'controlo: nenhum prazo da AT na janela de aviso');
     const html = app.vFisco();
     const kpis = html.indexOf('fis-kpis'), tratar = html.indexOf('A tratar antes de entregar'), q41 = html.indexOf('Quadro 4.1 · sem redução');
     const sit = html.indexOf('A tua situação fiscal em 2026'), aviso = html.indexOf('fis-aviso');
-    assert.ok(kpis > -1 && tratar > kpis && q41 > tratar && sit > q41 && aviso > sit, 'kpis < A tratar < 4.1 < situação < aviso');
-    assert.ok(sit > html.indexOf('fiscoPilha'), 'a situação depois da pilha dos quadros');
+    assert.ok(sit > -1 && kpis > sit && tratar > kpis && q41 > tratar && aviso > q41, 'situação < kpis < A tratar < 4.1 < aviso');
+    assert.ok(sit < html.indexOf('fiscoPilha'), 'a situação antes da pilha dos quadros');
     assert.doesNotMatch(html, /Prazos da AT|Nada para já/, 'sem prazos, sem o cartão');
     assert.doesNotMatch(html, /Os prazos com data estão nos Prazos da AT/, 'nem a frase que aponta para ele');
   });
@@ -193,31 +192,35 @@ describe('N066 · a ordem da Declaração (maqueta 6) e o cartão do quadro', ()
 
 describe('N063 e N030 · «A tua situação fiscal», aberta', () => {
   const sit = (extra) => app.fiscoSituacaoCard(Object.assign({ ano: 2026, titularId: 'ana', titulares: ['ana'], porInteiro: false }, extra || {}), true);
+  /* as notas estão nos «?» (KAN-127-17): o texto de cada um */
+  const ajuda = (chave) => app.fisAjudaTexto(chave, 2026).join(' ').replace(/\s+/g, ' ');
 
-  test('por omissão: sem o óbito, sem a categoria B e sem a caixa postal; os dependentes e «Quem tem dispensa?» à vista', () => {
+  test('por omissão: sem o óbito, sem a categoria B e sem a caixa postal; os dependentes e quem tem dispensa nos «?»', () => {
     const h = sit(), t = texto(h);
     assert.doesNotMatch(t, /óbito|categoria B|caixa postal|Modelo 44/);
-    assert.match(t, /As rendas de um dependente declaram-se com a letra dele — D1, AF1 ou DG1, como no quadro 6B do rosto —, em conjunta ou em separado\./);
-    assert.match(h, /id="fiscoSitQuemDispensa"[^>]*data-click="fiscoSitVerDispensa\(\)"[^>]*>Quem tem dispensa\?<\/button>/);
+    assert.doesNotMatch(ajuda('conjunta'), /óbito/, 'sem a conjunta, sem a F do óbito');
+    assert.match(ajuda('conjunta'), /As rendas de um dependente declaram-se com a letra dele — D1, AF1 ou DG1, como no quadro 6B do rosto —, em conjunta ou em separado\./);
+    assert.match(h, /id="fis_aj_dispensa"[^>]*data-click="fisExplicar\('dispensa',2026\)"[^>]*aria-label="Explicar: Dispensa dos recibos eletrónicos"/);
   });
 
   test('com a conjunta ligada, a letra F do ano do óbito', () => {
     app.db.settings.irs = app.normIrsDefs({ porAno: { 2026: { conjunta: true } } });
-    assert.match(texto(sit()), /No ano do óbito do cônjuge, com a opção pela conjunta, as rendas que eram só dele levam a letra F/);
+    assert.match(ajuda('conjunta'), /No ano do óbito do cônjuge, com a opção pela conjunta, as rendas que eram só dele levam a letra F/);
   });
 
-  test('com a dispensa ligada, quem a tem e o Modelo 44 — e o arrendamento rural à parte (N030)', () => {
+  test('com a dispensa ligada, o Modelo 44 à vista; quem a tem e o arrendamento rural à parte no «?» (N030)', () => {
     app.db.settings.irs = app.normIrsDefs({ porAno: { 2026: { dispensaRecibos: true } } });
-    const t = texto(sit());
+    assert.match(texto(sit()), /Entregas o Modelo 44 das rendas de 2026 até ao fim de fevereiro de 2027\./);
+    const t = ajuda('dispensa');
     assert.match(t, /Em 2026 tem dispensa quem a 31 de dezembro de 2025 tinha 65 anos ou mais, ou quem não tem nem é obrigado a ter caixa postal eletrónica e recebeu rendas de 2025 até [^(]+\(duas vezes o IAS de 2025\) — ou não as recebeu e não conta passar esse valor em 2026 \(Portaria 98-A\/2015, art\. 5\.º\)\./);
     assert.doesNotMatch(t, /e o arrendamento rural/, 'o rural não está entre quem tem dispensa');
     assert.match(t, /As rendas de um arrendamento rural não pedem recibo eletrónico \(art\. 5\.º n\.º 3 a\)\): isso marca-se no contrato, e não aqui, e não te dispensa dos recibos dos outros contratos; podes declará-las no Modelo 44, se quiseres\./);
     assert.match(t, /o Modelo 44, a declaração anual das rendas de 2026, até ao fim de fevereiro de 2027/);
   });
 
-  test('«Quem tem dispensa?» mostra a nota sem ligar a dispensa', () => {
-    app.fiscoSitVerDispensa();
-    assert.match(texto(sit()), /tem dispensa quem/);
+  test('o «?» da dispensa diz quem a tem sem a ligar', () => {
+    assert.match(ajuda('dispensa'), /tem dispensa quem/);
+    assert.doesNotMatch(texto(sit()), /Modelo 44/, 'desligada, o Modelo 44 não está à vista');
     assert.equal(app.irsSituacao(2026, 'ana').dispensaRecibos, false, 'a dispensa continua desligada');
   });
 });

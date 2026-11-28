@@ -89,15 +89,28 @@ describe('N012 — num imóvel por quartos os gastos contam só na parte arrenda
     assert.equal(d.porOmissao, true);
   });
 
-  test('com a parte da ficha (50 %), é ela que conta, e a origem di-lo', () => {
-    quartos({ parteArrendada: 50 });
+  /* KAN-152-1 (decisão do Martinho de 2026-11-27): uma parte por quarto, já com a sua quota das
+     zonas comuns; os quartos sem parte dividem o que sobra até 100 % em partes iguais */
+  test('com a parte de cada quarto (o arrendado com 50 %), é a dele que conta, e a origem di-lo', () => {
+    quartos({ rooms: [{ id: 'q1', name: 'Quarto 1', parte: 50 }, { id: 'q2', name: 'Quarto 2', parte: 20 }, { id: 'q3', name: 'Quarto 3', parte: 20 }] });
     contrato({ start: '2026-01-01', rent: 350, roomId: 'q1' });
     rendas('C1', 2026, 350);
     gastos();
     const r = app.resumoFiscal(2026, 'ana');
     perto(linha(r, 'C1').gastos.imi, 225, 1e-6);
-    assert.equal(r.parteArrendada[0].origem, 'ficha');
-    assert.deepEqual(json(app.fiscoParteArrendadaDoAno(app.prop('v1'), 2026)), { parte: 0.5, porOmissao: false, quartos: 3, arrendados: 1 });
+    assert.equal(r.parteArrendada[0].origem, 'partes');
+    assert.deepEqual(json(app.fiscoParteArrendadaDoAno(app.prop('v1'), 2026)), { parte: 0.5, porOmissao: false, quartos: 3, arrendados: 1, semParte: [] });
+  });
+
+  test('um quarto sem parte fica com o que sobra até 100 %, a dividir pelos que faltam', () => {
+    quartos({ rooms: [{ id: 'q1', name: 'Quarto 1' }, { id: 'q2', name: 'Quarto 2', parte: 30 }, { id: 'q3', name: 'Quarto 3', parte: 30 }] });
+    contrato({ start: '2026-01-01', rent: 350, roomId: 'q1' });
+    rendas('C1', 2026, 350);
+    gastos();
+    const r = app.resumoFiscal(2026, 'ana');
+    perto(linha(r, 'C1').gastos.imi, 180, 1e-6);
+    assert.deepEqual(json(r.parteArrendada[0].semParte), ['q1']);
+    assert.match(r.avisos.find((a) => /por quartos/.test(a.texto)).abrir, /p_room_parte_q1/, 'o atalho vai ao quarto sem parte');
   });
 
   test('os três quartos arrendados, ou uma casa inteira: os gastos todos, sem aviso', () => {

@@ -6393,3 +6393,70 @@ label.check:has(>input[type=checkbox][role=switch]:disabled){cursor:not-allowed}
 @media(pointer:coarse){.imv-ajuda{flex-basis:44px;width:44px;height:44px;margin:-6px -6px -6px -4px}}
 .imv-soma-erro{color:var(--danger)}
 /* === fim: kanban-11-27 formularios === */
+/* === kanban-11-27 contrato: os botões que abrem um campo, a comunicação da duração, a renda em dívida === */
+/* «Escrever outra taxa» e «Outro encargo» (contrato.js:ctTaxaOutra,
+   contrato.js:ctEncargosOutros): o botão pequeno da casa, com o contorno e a
+   letra de ação — o fantasma de antes lia-se como texto solto (KAN-169). A
+   cor da frente fica no escuro forçado do Samsung. */
+.ct-form .btn.ct-abre{color:var(--accent-text);border-color:var(--accent)}
+/* A comunicação da duração à cabeça do cartão «Perante a AT»
+   (contrato.js:ctComunicacaoBloco, KAN-127-18): por marcar, com a borda de
+   aviso; feita, com a borda das linhas. */
+.ct-com{display:flex;flex-direction:column;gap:6px;margin:4px 14px 12px;padding:12px 14px;border:1.5px solid var(--warn);border-radius:12px;font-size:14px;line-height:1.45}
+.ct-com.ct-com-feita{border-color:var(--line2)}
+.ct-com-tit{margin:0;font-weight:600;color:var(--ink)}
+.ct-com-tit>span{font-weight:500;color:var(--warn)}
+.ct-com.ct-com-feita .ct-com-tit>span{color:var(--muted)}
+.ct-com-txt{color:var(--muted)}
+.ct-com .toolbar{margin:4px 0 0}
+/* As rendas em falta de um contrato na ficha (planeados.js:ctRendasEmDivida,
+   KAN-129-4): uma por linha, com o valor dela; o resto de uma renda paga em
+   parte diz «em dívida». */
+.ct-kv>b:has(>.ct-dividas){min-width:0}
+.ct-dividas{display:flex;flex-direction:column;gap:2px;text-align:right}
+.ct-dividas>span{overflow-wrap:anywhere}
+/* === fim: kanban-11-27 contrato === */
+/* === kanban-11-27 declaracao: a situação fiscal à cabeça com os «?», os números em janela, os valores inteiros e o copiar === */
+/* o «?» ao lado do título da situação fiscal (fisco.js:fisAjudaBtn): o
+   desenho do das perguntas do contrato (.ct-ajuda), mas no fluxo, à direita
+   do título (no .ana-extra), e não pousado por cima */
+.fis-sit .ana-extra>.fis-ajuda{position:static}
+/* uma escolha com o «?» (fisco.js:fiscoSituacaoCard): o «?» fica FORA do
+   <label> — dentro, o rótulo passava-lhe o toque e o nome dele entrava no do
+   campo —, entre o texto e o interruptor (46px, o espaço de 12 e os 16 da
+   margem), e o texto guarda-lhe o lugar; no dedo mede 44px */
+.fis-q{position:relative;min-width:0}
+.fis-q-sw>.fis-linha .fis-linha-txt{padding-right:36px}
+.fis-q-sw>.fis-ajuda{top:calc(50% - 16px);right:74px}
+.fis-q-ab>.fis-ajuda{right:122px}
+.fis-q-ab>.fis-linha .fis-linha-txt{padding-right:36px}
+.fis-q-campo>.fis-ajuda{top:2px;right:10px}
+.fis-q-campo>.fis-sit-campo{padding-right:52px}
+@media(pointer:coarse){
+  .fis-q-sw>.fis-ajuda{top:calc(50% - 22px);right:68px}
+  .fis-q-ab>.fis-ajuda{right:116px}
+  .fis-q-sw>.fis-linha .fis-linha-txt{padding-right:44px}
+  .fis-q-campo>.fis-ajuda{top:-4px;right:4px}
+}
+.fis-sit-mudar{padding-top:0}
+.fis-explica{gap:12px}
+/* os números da Declaração abrem o porquê numa janela (vistas.js:kpiJanela,
+   KAN-170): o cartão não abre por baixo nem muda o «?» do canto */
+.kpi.janela .expl{display:none}
+.kpi-janela{gap:12px}
+.kpi-janela-valor{font-family:var(--letra-titulo);font-size:28px;font-weight:650;letter-spacing:-.015em;line-height:1.2;font-variant-numeric:tabular-nums;color:var(--ink)}
+.kpi-janela-valor.neg{color:var(--out)}
+.kpi-janela-linhas{margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--ink)}
+.kpi-janela-porque{margin:0;font-size:15px;line-height:1.55;color:var(--muted)}
+/* o valor de uma linha de um cartão da Declaração cabe sempre inteiro
+   (KAN-129-5): o .row-between põe min-width:0 em todos os filhos, e o valor
+   («12 450,00 €», com espaços que não partem) encolhia até ficar cortado. O
+   valor não encolhe; quem encolhe e parte em linhas é o texto ao lado */
+.fis .row-between>b:last-child,.fis .stat>b:last-child{flex:0 0 auto;min-width:max-content;white-space:nowrap;text-align:right}
+.fis .stat>span:first-child{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.fis .row-between>.u-minw-0{flex:1 1 auto;overflow-wrap:anywhere}
+/* os valores dos campos e das linhas selecionam-se com o dedo também dentro de um cartão
+   que se toca (o .tap tira a seleção), para se copiarem para o Portal
+   (fisco.js:fisCopiaLimpa, KAN-153-2) */
+.fis .fis-campo dd,.fis .cp-eur,.fis .row-between>b:last-child,.fis .stat>b:last-child{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+/* === fim: kanban-11-27 declaracao === */

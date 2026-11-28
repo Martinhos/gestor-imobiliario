@@ -177,16 +177,17 @@ describe('D12: sem avisos, não se diz que não falta nada', () => {
 
 describe('D70: as letras que a app não escreve', () => {
   /* N063 (D8): a F do óbito só com a conjunta; as D1, AF1 e DG1 dos dependentes também em
-     separado, numa nota à parte — no cartão aberto (fecha numa linha com «Mudar») */
-  test('«A tua situação fiscal» diz as D1, AF1 e DG1 também sem a conjunta; a F só com ela', () => {
+     separado — no «?» da tributação conjunta (KAN-127-17: as explicações saíram da vista) */
+  test('o «?» da tributação conjunta diz as D1, AF1 e DG1 também sem a conjunta; a F só com ela', () => {
     rendas('C1', 1000);
     assert.equal(app.fiscoIrsDefs().conjunta, false);
-    let t = textoDe(app.fiscoSituacaoCard(app.resumoFiscal(ANO), true));
+    assert.match(app.fiscoSituacaoCard(app.resumoFiscal(ANO), true), /data-click="fisExplicar\('conjunta',2025\)"/);
+    let t = app.fisAjudaTexto('conjunta', ANO).join(' ');
     assert.match(t, /D1, AF1 ou DG1/);
     assert.match(t, /essa letra muda-se no Portal das Finanças/);
     assert.doesNotMatch(t, /letra F/, 'sem a conjunta, sem a F');
     app.db.settings.irs = app.normIrsDefs({ porAno: { [ANO]: { conjunta: true } } });
-    t = textoDe(app.fiscoSituacaoCard(app.resumoFiscal(ANO), true));
+    t = app.fisAjudaTexto('conjunta', ANO).join(' ');
     assert.match(t, /levam a letra F/);
   });
 });
@@ -318,17 +319,17 @@ describe('o aviso de responsabilidade, no fim, perto do CSV e do PDF', () => {
     assert.ok(i > html.indexOf('fiscoPilha'), 'depois dos cartões dos quadros');
     const card = html.slice(i, html.indexOf('</section>', i));
     assert.match(card, /<p class="hint">A app resume; quem declara és tu/);
-    assert.match(card, /data-click="fiscoPartilha\(\)" aria-haspopup="dialog">.*<span>Exportar CSV ou PDF<\/span><\/button>/);
+    assert.match(card, /data-click="fiscoPartilha\(\)" aria-haspopup="dialog">.*<span>Exportar folha de cálculo ou PDF<\/span><\/button>/);
     assert.doesNotMatch(card, /style=|onclick=/, 'sem estilos nem eventos no HTML (CSP)');
   });
 });
 
 describe('a Declaração requer os Contratos (D57): o que perguntava por eles saiu', () => {
-  test('a janela da partilha leva sempre o CSV e o PDF', () => {
+  test('a janela da partilha leva sempre a folha de cálculo e o PDF', () => {
     let visto = null;
     app.pickModal = (titulo, opcoes) => { visto = opcoes; };
     app.fiscoPartilha();
-    assert.deepEqual(JSON.parse(JSON.stringify(visto.map((o) => o.v))), ['csv', 'pdf']);
+    assert.deepEqual(JSON.parse(JSON.stringify(visto.map((o) => o.v))), ['xlsx', 'pdf']);
     assert.doesNotMatch(String(app.fiscoPartilha), /servicoLigado/);
     // a razão: sem os Contratos, a Declaração cai com eles
     app.definirServicosDesligados(['contracts']);

@@ -85,6 +85,8 @@ function montaAnaERui() {
    Recebe: ano — o ano; extra (opcional) — o que muda no resumo.
    Devolve: o HTML do cartão. */
 const cartao = (ano, extra) => app.fiscoSituacaoCard(Object.assign({ ano, titularId: 'ana', titulares: ['ana'], porInteiro: false }, extra || {}), true);
+/* a explicação de um «?» do cartão (KAN-127-17: as notas saíram da vista para o «?»), num texto só */
+const ajuda = (chave, ano) => app.fisAjudaTexto(chave, ano).join(' ').replace(/\s+/g, ' ');
 
 describe('D91: a situação é de cada ano', () => {
   beforeEach(montaAnaERui);
@@ -116,16 +118,16 @@ describe('D91: a situação é de cada ano', () => {
   test('o cartão diz o ano, e cada interruptor grava nesse ano', () => {
     const h = cartao(2025);
     assert.match(h, /<h2 class="ana-tit">A tua situação fiscal em 2025<\/h2>/);
-    assert.match(textoDe(h), /O que só tu sabes e muda o Anexo F de 2025\./);
+    assert.match(textoDe(h), /^A tua situação fiscal em 2025 Grava ao mexer\./);
     assert.ok(h.includes('id="fiscoConjunta" aria-checked="false" aria-label="Tributação conjunta" data-toca="dados" data-click="fiscoSetSituacao(2025,\'conjunta\',true)"'));
     assert.match(h, /id="fiscoDispensa" aria-checked="false"[^>]*data-click="fiscoSetSituacao\(2025,'dispensaRecibos',true\)"/);
-    assert.match(textoDe(h), /Cada ano tem a sua situação, a do último dia do ano \(CIRS art\. 13\.º\): o que mudas aqui vale para 2025 e para os anos seguintes que não tenham a sua, e nunca muda os anteriores\./);
+    assert.match(ajuda('situacao', 2025), /Cada ano tem a sua situação, a do último dia do ano \(CIRS art\. 13\.º\): o que mudas aqui vale para 2025 e para os anos seguintes que não tenham a sua, e nunca muda os anteriores\./);
     assert.doesNotMatch(h, /fiscoSetIrs|fiscoSetTitular|style=|onclick=/);
   });
 
   test('a primeira escrita copia o ano anterior mais perto, sem o AIMI; a seguinte não volta a copiar', () => {
     app.db.settings.irs = app.normIrsDefs({ porAno: { 2024: { conjunta: true, conjugeId: 'rui', minhaLetra: 'B', dispensaRecibos: true, aimi: { total: 100, valorTributavel: 200 } } } });
-    assert.match(textoDe(cartao(2026)), /A de 2026 vem de 2024\./);
+    assert.match(textoDe(cartao(2026)), /A situação de 2026 vem de 2024: o que mudares aqui vale a partir de 2026\./);
     app.fiscoSetSituacao(2026, 'dispensaRecibos', false);
     assert.deepEqual(copia(app.db.settings.irs.porAno[2026]), { conjunta: true, conjugeId: 'rui', minhaLetra: 'B', dispensaRecibos: false, bensComuns: false, aimi: { total: null, valorTributavel: null } });
     app.db.settings.irs.porAno[2024].conjunta = false;
@@ -170,7 +172,8 @@ describe('D30: o cônjuge escolhe-se; a letra é a posição no Rosto', () => {
     assert.match(h, /<div class="segm fis-ab" role="group" id="fiscoMinhaLetra" aria-label="A tua letra no Rosto">/);
     assert.ok(h.includes('<button type="button" class="on" aria-pressed="true" data-toca="dados" data-click="fiscoSetSituacao(2025,\'minhaLetra\',\'A\')">A</button>'));
     assert.ok(h.includes('data-click="fiscoSetSituacao(2025,\'minhaLetra\',\'B\')">B</button>'));
-    const t = textoDe(h);
+    const t = textoDe(h) + ' ' + ajuda('letra', 2025);
+    assert.match(h, /data-click="fisExplicar\('letra',2025\)"/, 'o «?» da letra');
     assert.match(t, /A e B são a posição de cada um no Rosto da declaração: sujeito passivo A e sujeito passivo B\. A letra não muda as rendas que entram/);
     assert.doesNotMatch(t, /Marca o cônjuge como B|Titular de cada proprietário/);
     assert.doesNotMatch(h, /fiscoTit_/);
@@ -214,11 +217,12 @@ describe('D31 e D70: as notas da conjunta', () => {
 
   test('com cônjuge: só entram os imóveis dele que estão nesta app; sem cônjuge: só as minhas rendas', () => {
     let t = textoDe(cartao(2025));
-    assert.match(t, /Sem cônjuge escolhido, a Declaração tem só as tuas rendas\./);
+    assert.match(t, /Sem cônjuge escolhido, entram só as tuas rendas\./, 'o caso de agora, à vista');
+    assert.match(ajuda('conjuge', 2025), /Sem cônjuge escolhido, a Declaração tem só as tuas rendas\./);
     assert.doesNotMatch(t, /Entram só os imóveis do cônjuge/);
     app.fiscoSetSituacao(2025, 'conjugeId', 'rui');
     t = textoDe(cartao(2025));
-    assert.match(t, /Entram só os imóveis do cônjuge que vês nesta app, os partilhados contigo\. Os que estão só na conta do cônjuge não chegam aqui: junta-os no Portal das Finanças, a partir do PDF ou do CSV da Declaração dessa conta\./);
+    assert.match(ajuda('conjuge', 2025), /Entram só os imóveis do cônjuge que vês nesta app, os partilhados contigo\. Os que estão só na conta do cônjuge não chegam aqui: junta-os no Portal das Finanças, a partir do PDF ou da folha de cálculo da Declaração dessa conta\./);
     assert.doesNotMatch(t, /Sem cônjuge escolhido/);
   });
 
@@ -235,7 +239,7 @@ describe('D31 e D70: as notas da conjunta', () => {
   test('a nota das letras: a F só com a conjunta, as D1/AF1/DG1 com e sem ela', () => {
     for (const conj of [true, false]) {
       app.db.settings.irs = app.normIrsDefs({ porAno: { 2025: { conjunta: conj } } });
-      const t = textoDe(cartao(2025));
+      const t = ajuda('conjunta', 2025);
       assert.match(t, /D1, AF1 ou DG1/);
       assert.match(t, /A app só escreve A e B: essa letra muda-se no Portal das Finanças\./);
       if (conj) assert.match(t, /levam a letra F/); else assert.doesNotMatch(t, /óbito|letra F/);
@@ -248,11 +252,10 @@ describe('D111: o limite da dispensa dos recibos', () => {
   /* um valor em euros como o texto o lê (os espaços do formato juntos num) */
   const eur = (n) => app.euro2(n).replace(/\s+/g, ' ');
 
-  /* a nota de quem tem dispensa mostra-se a pedido (N063): o «Quem tem dispensa?» */
-  beforeEach(() => { app.fiscoSitDispensaVer = true; });
+  /* a nota de quem tem dispensa está no «?» da dispensa (N063, KAN-127-17) */
 
   test('em 2026: as rendas de 2025 até 1 045,00 € (duas vezes o IAS de 2025), e não o de 2026', () => {
-    const t = textoDe(cartao(2026));
+    const t = ajuda('dispensa', 2026);
     assert.ok(t.includes('Em 2026 tem dispensa quem a 31 de dezembro de 2025 tinha 65 anos ou mais'), t);
     assert.ok(t.includes('recebeu rendas de 2025 até ' + eur(1045) + ' (duas vezes o IAS de 2025)'), t);
     assert.ok(t.includes('o Modelo 44, a declaração anual das rendas de 2026, até ao fim de fevereiro de 2027'), t);
@@ -260,8 +263,8 @@ describe('D111: o limite da dispensa dos recibos', () => {
   });
 
   test('em 2027: as rendas de 2026 até 1 074,26 €; sem a versão do ano anterior, sem número', () => {
-    assert.ok(textoDe(cartao(2027)).includes('recebeu rendas de 2026 até ' + eur(1074.26) + ' (duas vezes o IAS de 2026)'));
-    const t = textoDe(cartao(2025));
+    assert.ok(ajuda('dispensa', 2027).includes('recebeu rendas de 2026 até ' + eur(1074.26) + ' (duas vezes o IAS de 2026)'));
+    const t = ajuda('dispensa', 2025);
     assert.ok(t.includes('recebeu rendas de 2024 até duas vezes o IAS de 2024 —'), t);
     assert.ok(!t.includes(eur(1074.26)) && !t.includes(eur(1045)));
   });

@@ -1463,23 +1463,34 @@ function fiscoAvDivisoes(r){
       fiscoAvToque('transactions',`txView('${jsq(x.txId)}')`,'camada'),menos?'aviso':'info');
   });
 }
-/* A parte arrendada de um imóvel por quartos (D4, N012 — r.parteArrendada):
-   os gastos da casa contam só na parte arrendada — a da ficha
-   (p.parteArrendada), ou, por omissão, os quartos com contrato sobre o
-   total, dia a dia. A lei manda imputá-los pela área ou pelo VPT da parte
-   arrendada (CIRS art. 41.º n.º 4): só se diz (cinzento), com o atalho para
-   a indicar na ficha (imovel.js:imvAbrirNoCampo).
+/* A parte arrendada de um imóvel por quartos (D4, N012, KAN-152-1 —
+   r.parteArrendada): os gastos da casa contam só na parte arrendada — a soma
+   das partes dos quartos com contrato, dia a dia (fisco-resumo.js:
+   fiscoParteArrendada). A parte de cada quarto indica-se na ficha do imóvel
+   (a área do quarto com a sua quota das zonas comuns, sobre a área da casa:
+   CIRS art. 41.º n.º 4); sem ela, os quartos sem parte dividem o resto em
+   partes iguais. Só se diz (cinzento), com o atalho para a ficha no primeiro
+   quarto sem parte (imovel.js:imvAbrirNoCampo, o campo p_room_parte_<id>);
+   com todas indicadas, no primeiro quarto.
    Recebe: r — o resumo.
    Devolve: [{texto, abrir, toca, nivel, abrirTexto}]. */
 function fiscoAvParteArrendada(r){
   return (Array.isArray(r.parteArrendada)?r.parteArrendada:[]).filter(x=>x&&x.propertyId&&Number(x.parte)>=0&&Number(x.parte)<1).map(x=>{
     const p=prop(x.propertyId),nome=String(x.imovel||(p&&p.name)||''),g=Number(x.gastos)||0,ct=Number(x.contados);
-    const ficha=x.origem==='ficha';
+    const rooms=(p&&Array.isArray(p.rooms)?p.rooms:[]).filter(q=>q&&q.id);
+    const sem=Array.isArray(x.semParte)?x.semParte.filter(id=>rooms.some(q=>q.id===id)):[];
+    const todas=!sem.length&&x.origem==='partes';
+    const alvo=sem[0]||(rooms[0]&&rooms[0].id)||'';
     const valores=g>0?': '+euroS(isFinite(ct)&&ct>=0?ct:g*Number(x.parte))+' dos '+euroS(g)+' de gastos do ano':'';
-    return fiscoAvNovo('Imóvel '+nome+' (por quartos): os gastos da casa contam só na parte arrendada, '+fiscoAvPct(Number(x.parte))
-      +(ficha?', a que indicaste na ficha':' — os quartos com contrato sobre o total'+(Number(x.quartos)>0?' ('+fiscoN(Number(x.quartos),'quarto','quartos')+')':'')+', dia a dia')+valores
-      +'. A lei manda contá-los pela área da parte arrendada, ou pelo valor patrimonial dela (CIRS art. 41.º n.º 4): '+(ficha?'se mudou, corrige-a na ficha do imóvel':'se a parte arrendada é outra, indica-a na ficha do imóvel'),
-      Object.assign(fiscoAvToque('properties',`imvAbrirNoCampo('${jsq(x.propertyId)}','p_parteArrendada')`,'camada'),{abrirTexto:ficha?'Corrigir a parte':'Indicar a parte'}),'info');
+    const nq=Number(x.quartos)>0?fiscoN(Number(x.quartos),'quarto','quartos'):'';
+    const como=todas?', pelas partes que indicaste para cada quarto'
+      :x.origem==='partes'?', pelas partes indicadas e, '+(sem.length===1?'no quarto sem parte, o que sobra':'nos '+sem.length+' quartos sem parte, o que sobra em partes iguais')
+      :' — sem a parte de cada quarto, cada um conta por igual'+(nq?' ('+nq+')':'');
+    const fazer=todas?'se a parte de algum quarto mudou, corrige-a na ficha do imóvel'
+      :'indica na ficha do imóvel a parte da casa de cada quarto, com a sua parte das zonas comuns';
+    return fiscoAvNovo('Imóvel '+nome+' (por quartos): os gastos da casa contam só na parte arrendada, '+fiscoAvPct(Number(x.parte))+como+valores
+      +'. A lei manda contá-los pela área da parte arrendada, ou pelo valor patrimonial dela (CIRS art. 41.º n.º 4): '+fazer,
+      Object.assign(fiscoAvToque('properties',`imvAbrirNoCampo('${jsq(x.propertyId)}','${jsq(alvo?'p_room_parte_'+alvo:'')}')`,'camada'),{abrirTexto:todas?'Corrigir as partes':'Indicar as partes'}),'info');
   });
 }
 
@@ -1566,7 +1577,7 @@ function fiscoAvisos(r){
   if(conjuge&&!semConjuge){
     const cj=(db.owners||[]).find(o=>o&&o.id===conjuge),nomeCj=String((cj&&cj.name)||'').trim();
     add('Tributação conjunta'+(nomeCj?' com '+nomeCj:'')+': entram só os imóveis do cônjuge partilhados com esta conta. Os que estão só na conta '
-      +(nomeCj?'de '+nomeCj:'do cônjuge')+' não chegam aqui: junta-os no Portal das Finanças, a partir do PDF ou do CSV da Declaração dessa conta','','','info');
+      +(nomeCj?'de '+nomeCj:'do cônjuge')+' não chegam aqui: junta-os no Portal das Finanças, a partir do PDF ou da folha de cálculo da Declaração dessa conta','','','info');
   }
   /* os avisos de um contrato contam-no uma vez: em conjunta, um imóvel dos
      dois tem uma linha por titular, e um contrato com indemnizações (05) ou
