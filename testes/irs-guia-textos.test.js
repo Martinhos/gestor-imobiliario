@@ -60,7 +60,7 @@ describe('o guia depois da auditoria ao IRS', () => {
     assert.match(t, /A ou B, a posição de cada um no rosto da declaração \(o sujeito passivo A no quadro 3, o B no quadro 5A\)/);
     assert.match(t, /a declaração é uma só, com as rendas de todo o agregado, as tuas e as do teu cônjuge também/);
     assert.match(t, /artigo 59\.º, n\.º 2, alínea a\)/);
-    assert.match(fontes, /diariodarepublica\.pt\/dr\/legislacao-consolidada\/lei\/2014-70048167-121035511/, 'o artigo 59.º, no DR (KAN-164)');
+    assert.match(fontes, /diariodarepublica\.pt\/dr\/legislacao-consolidada\/lei\/2014-70048167#:~:text=Artigo%2059\.%C2%BA-,/, 'o artigo 59.º, no DR (KAN-164)');
   });
 
   test('D78: os limites do n.º 23 desde 1 de setembro de 2026 são os do RSAA, da Portaria 454/2026/1', () => {
@@ -97,7 +97,7 @@ describe('o guia depois da auditoria ao IRS', () => {
       assert.ok(outros.includes(q), 'falta: ' + q);
     }
     // no DR desde o KAN-164: os artigos 71.º-A, 74.º-A e 46.º-A do EBF e o 20.º do DL 68/2019, consolidados
-    for (const u of ['1989-34554075-836602124', '1989-34554075-222582053', '1989-34554075-1124764075', 'decreto-lei/2019-150114015-213702974']) {
+    for (const u of ['1989-34554075#:~:text=Artigo%2071.%C2%BA%2DA-,', '1989-34554075#:~:text=Artigo%2074.%C2%BA%2DA-,', '1989-34554075#:~:text=Artigo%2046.%C2%BA%2DA-,', 'decreto-lei/2019-150114015#:~:text=Artigo%2020.%C2%BA-,']) {
       assert.ok(fontes.includes(u), 'a fonte ' + u);
     }
   });

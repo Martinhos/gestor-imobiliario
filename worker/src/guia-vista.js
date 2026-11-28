@@ -119,18 +119,21 @@ const SEGUIR = 'M9 6l6 6-6 6';
    devem estar inline… se for legislação, deve ser sempre no Diário da
    República») cada referência do texto é uma ligação para a fonte, escrita
    {o que se lê|chave} (comLigacoes). A legislação liga ao Diário da
-   República: a versão consolidada quando existe, com o artigo (o endereço
-   da consolidada, um hífen e o id da versão do artigo em vigor nesse dia:
-   quando o DR consolidar uma alteração, o endereço continua a abrir, na
-   versão de antes); senão, o diploma publicado. Os códigos, que antes
-   ligavam às páginas da AT, ligam agora ao DR. O que é da AT (os
-   ofícios-circulados, as informações vinculativas, as instruções dos
-   anexos, o folheto, a tabela das freguesias, a entrega) continua na AT.
-   Os 73 endereços abriram-se um a um nesse dia (os do DR no headless, à
-   espera do diploma, do artigo e de uma frase do que se cita; os da AT com
-   fetch e os PDF lidos): .unlazy/kanban-11-26/guia/ligacoes.md. O artigo
-   71.º do EBF liga à página do artigo, com o n.º 7 revogado: o DR não tem
-   página para a redação de antes da Lei n.º 56/2023.
+   República: a versão consolidada quando existe, senão o diploma
+   publicado. Os códigos, que antes ligavam às páginas da AT, ligam agora ao
+   DR. O que é da AT (os ofícios-circulados, as informações vinculativas, as
+   instruções dos anexos, o folheto, a tabela das freguesias, a entrega)
+   continua na AT.
+
+   Um artigo abre o documento, no artigo (noArtigo), e não a página do
+   artigo: no telemóvel, essa página só mostra se ele está em vigor (KAN-164
+   reaberto, 2026-11-27: «Devo poder ler o artigo (no documento)»). O
+   documento consolidado é sempre a versão em vigor, por isso o endereço não
+   envelhece. O artigo 71.º do EBF abre na redação em vigor, com o n.º 7
+   revogado pela Lei n.º 56/2023 (o DR não tem a de antes). Os 75 endereços
+   abriram-se um a um a 2026-11-27 com um toque na ligação, num telemóvel
+   (os do DR à espera do texto, com o artigo, a epígrafe e uma frase dele
+   no documento): .unlazy/kanban-11-27/guia/ligacoes.md.
 
    As das partes 1 a 3 abriram-se a 2026-11-09: as páginas do Código do IRS
    e do EBF na AT pelo texto em vigor; os PDF da AT (as instruções do Anexo
@@ -159,7 +162,7 @@ const SEGUIR = 'M9 6l6 6-6 6';
      janeiro de 2026;
    - dl139: art. 3.º, a retribuição mínima mensal de 2026 é 920 € (art. 2.º:
      no continente);
-   - portaria104: art. 2.º n.º 1, a Modelo 3 e os anexos entregam-se por
+   - portaria104 (e portaria104a2, no artigo): art. 2.º n.º 1, a Modelo 3 e os anexos entregam-se por
      transmissão eletrónica de dados; art. 1.º n.º 3 a), o Anexo F e as
      instruções da Portaria 72-B/2025/1 mantêm-se em vigor;
    - entrega: a entrega do IRS no Portal das Finanças (ticket 720b5908; a
@@ -205,7 +208,7 @@ const SEGUIR = 'M9 6l6 6-6 6';
    As que entraram a 2026-11-17 (auditoria ao IRS, KAN-126), abertas nesse
    dia: as páginas da AT pelo texto em vigor e os PDF da AT lidos por
    inteiro (pdftotext), com o que se cita de cada uma:
-   - portaria454: a Portaria 454/2026/1, de 13 de outubro (DR n.º 198/2026),
+   - portaria454 (e portaria454a7, no art. 7.º): a Portaria 454/2026/1, de 13 de outubro (DR n.º 198/2026),
      fixa os limites máximos de renda do RSAA por tipologia e concelho; art.
      6.º b), revoga a Portaria 176/2019, com efeitos a 1 de setembro de 2026
      (art. 7.º n.º 2); art. 7.º n.º 3, entre 1 de setembro de 2026 e a
@@ -306,83 +309,114 @@ const SEGUIR = 'M9 6l6 6-6 6';
      processos 1115/2017 e 4074/2017 (a cozinha e a casa de banho — N045).
    As da parte 4, do texto do Martinho, verificadas a 2026-11-08. */
 const DR = 'https://diariodarepublica.pt/dr/';
-// as legislações consolidadas do DR de onde saem os artigos: o endereço de um artigo é o da
-// consolidada, um hífen e o id da versão do artigo em vigor quando se abriu (o fim de cada `url`)
-const CIRS = DR + 'legislacao-consolidada/lei/2014-70048167-';
-const EBF = DR + 'legislacao-consolidada/decreto-lei/1989-34554075-';
-const CIMI = DR + 'legislacao-consolidada/decreto-lei/2003-34499575-';
-const DL97 = DR + 'legislacao-consolidada/decreto-lei/2026-1124729375-';
+// os documentos consolidados do DR de onde saem os artigos (o texto inteiro, sempre na versão em vigor)
+const CIRS = DR + 'legislacao-consolidada/lei/2014-70048167';
+const EBF = DR + 'legislacao-consolidada/decreto-lei/1989-34554075';
+const CIMI = DR + 'legislacao-consolidada/decreto-lei/2003-34499575';
+const DL97 = DR + 'legislacao-consolidada/decreto-lei/2026-1124729375';
+const NRAU = DR + 'legislacao-consolidada/lei/2006-34578375';
+const DL68 = DR + 'legislacao-consolidada/decreto-lei/2019-150114015';
+const LEI56_CONS = DR + 'legislacao-consolidada/lei/2023-222471959';
+const PORTARIA98A = DR + 'legislacao-consolidada/portaria/2015-71124567';
+const CIS = DR + 'legislacao-consolidada/lei/1999-34540175';
+const CIVA = DR + 'legislacao-consolidada/decreto-lei/2008-34500675';
+// os diplomas publicados (sem versão consolidada) de que o guia cita um artigo
+const P454 = DR + 'detalhe/portaria/454-2026-1179722108';
+const P104 = DR + 'detalhe/portaria/104-2026-1066993467';
+
+/* Um pedaço de texto para um fragmento de texto (#:~:text=): em URL, e o
+   hífen, a vírgula e o «&», que separam as partes do fragmento, também.
+   Recebe: t — o texto. Devolve: o texto codificado. */
+const noFragmento = (t) => encodeURIComponent(t).replace(/-/g, '%2D');
+
+/* O endereço de um documento do DR aberto num artigo: o documento inteiro,
+   com um fragmento de texto (o título do artigo seguido da epígrafe) que o
+   browser procura e põe à vista, realçado. Não é garantido: o browser só o
+   procura uns segundos depois de a página carregar, e o DR desenha o texto
+   do diploma depois (num código grande, já tarde de mais); aí, e nos
+   browsers que não conhecem o fragmento, o documento abre no topo. Não há
+   melhor: a página do próprio artigo, no telemóvel, só mostra se ele está
+   em vigor (KAN-164), e o DR não tem âncoras nem parâmetro para o artigo
+   (os ids no documento mudam a cada carga, o índice leva à página do
+   artigo, a pesquisa no texto não muda o endereço).
+   Recebe: doc — o endereço do documento; titulo — «Artigo 8.º» (ou «Anexo
+   III»), como o DR o escreve; epigrafe — a epígrafe, idem.
+   Devolve: o endereço. */
+function noArtigo(doc, titulo, epigrafe) {
+  return doc + '#:~:text=' + noFragmento(titulo) + '-,' + noFragmento(epigrafe);
+}
 const AT_DOC = 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/';
 const PIV = AT_DOC + 'informacoes_vinculativas/rendimento/cirs/Documents/';
-const FONTES = [
-  { id: 'cirs8', nome: 'Diário da República, Código do IRS, artigo 8.º, versão consolidada', url: CIRS + '131546759' },
-  { id: 'cirs57', nome: 'Diário da República, Código do IRS, artigo 57.º, versão consolidada', url: CIRS + '909467226' },
+export const FONTES = [
+  { id: 'cirs8', nome: 'Diário da República, Código do IRS, artigo 8.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 8.º', 'Rendimentos da categoria F') },
+  { id: 'cirs57', nome: 'Diário da República, Código do IRS, artigo 57.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 57.º', 'Declaração de rendimentos') },
   { id: 'anexoF', nome: 'AT, Anexo F da declaração Modelo 3 e instruções de preenchimento, modelo em vigor desde janeiro de 2025', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_contribuinte/modelos_formularios/irs/Documents/Mod_3_anexo_F.pdf' },
-  { id: 'cirs4', nome: 'Diário da República, Código do IRS, artigo 4.º, versão consolidada', url: CIRS + '206093029' },
-  { id: 'cirs3', nome: 'Diário da República, Código do IRS, artigo 3.º, versão consolidada', url: CIRS + '153141040' },
+  { id: 'cirs4', nome: 'Diário da República, Código do IRS, artigo 4.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 4.º', 'Atividades comerciais e industriais, agrícolas, silvícolas e pecuárias') },
+  { id: 'cirs3', nome: 'Diário da República, Código do IRS, artigo 3.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 3.º', 'Rendimentos da categoria B') },
   { id: 'anexoB', nome: 'AT, Anexo B da declaração Modelo 3 e instruções de preenchimento, modelo em vigor desde janeiro de 2026', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_contribuinte/modelos_formularios/irs/Documents/Mod_3_anexo_B.pdf' },
-  { id: 'cirs15', nome: 'Diário da República, Código do IRS, artigo 15.º, versão consolidada', url: CIRS + '70051812' },
+  { id: 'cirs15', nome: 'Diário da República, Código do IRS, artigo 15.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 15.º', 'Âmbito da sujeição') },
   { id: 'anexoJ', nome: 'AT, Anexo J da declaração Modelo 3 e instruções de preenchimento, modelo em vigor desde janeiro de 2026', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_contribuinte/modelos_formularios/irs/Documents/Mod_3_anexo_J.pdf' },
-  { id: 'cirs81', nome: 'Diário da República, Código do IRS, artigo 81.º, versão consolidada', url: CIRS + '836602078' },
-  { id: 'cirs60', nome: 'Diário da República, Código do IRS, artigo 60.º, versão consolidada', url: CIRS + '185585809' },
-  { id: 'cirs22', nome: 'Diário da República, Código do IRS, artigo 22.º, versão consolidada', url: CIRS + '912821421' },
-  { id: 'cirs72', nome: 'Diário da República, Código do IRS, artigo 72.º, versão consolidada', url: CIRS + '1000777570' },
-  { id: 'ebf45c', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 45.º-C, versão consolidada', url: EBF + '1124763775' },
-  { id: 'dl97a2', nome: 'Diário da República, Decreto-Lei n.º 97/2026, de 20 de maio, artigo 2.º, versão consolidada', url: DL97 + '1124730175' },
+  { id: 'cirs81', nome: 'Diário da República, Código do IRS, artigo 81.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 81.º', 'Eliminação da dupla tributação jurídica internacional') },
+  { id: 'cirs60', nome: 'Diário da República, Código do IRS, artigo 60.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 60.º', 'Prazo de entrega da declaração') },
+  { id: 'cirs22', nome: 'Diário da República, Código do IRS, artigo 22.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 22.º', 'Englobamento') },
+  { id: 'cirs72', nome: 'Diário da República, Código do IRS, artigo 72.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 72.º', 'Taxas especiais') },
+  { id: 'ebf45c', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 45.º-C, versão consolidada', url: noArtigo(EBF, 'Artigo 45.º-C', 'Rendimentos prediais no âmbito do arrendamento para habitação') },
+  { id: 'dl97a2', nome: 'Diário da República, Decreto-Lei n.º 97/2026, de 20 de maio, artigo 2.º, versão consolidada', url: noArtigo(DL97, 'Artigo 2.º', 'Âmbito de aplicação') },
   { id: 'dl139', nome: 'Diário da República, Decreto-Lei n.º 139/2025, de 29 de dezembro', url: DR + 'detalhe/decreto-lei/139-2025-992879809' },
-  // o n.º 7 foi revogado pela Lei n.º 56/2023: o DR não tem página para a redação de antes (o endereço dessa versão
-  // abre o EBF inteiro), e a do artigo mostra-o revogado, com as leis que o mudaram
-  { id: 'ebf71', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 71.º, versão consolidada (o n.º 7, revogado pela Lei n.º 56/2023)', url: EBF + '222582057' },
+  // o n.º 7 foi revogado pela Lei n.º 56/2023: o DR não tem a redação de antes, e o documento mostra-o revogado
+  { id: 'ebf71', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 71.º, versão consolidada (o n.º 7, revogado pela Lei n.º 56/2023)', url: noArtigo(EBF, 'Artigo 71.º', 'Incentivos à reabilitação urbana') },
   { id: 'lei56', nome: 'Diário da República, Lei n.º 56/2023, de 6 de outubro', url: DR + 'detalhe/lei/56-2023-222477692' },
-  { id: 'nrau', nome: 'Diário da República, Novo Regime do Arrendamento Urbano (Lei n.º 6/2006, de 27 de fevereiro), versão consolidada', url: DR + 'legislacao-consolidada/lei/2006-34578375' },
+  { id: 'nrau', nome: 'Diário da República, Novo Regime do Arrendamento Urbano (Lei n.º 6/2006, de 27 de fevereiro), versão consolidada', url: NRAU },
   { id: 'piv28153', nome: 'AT, Informação Vinculativa, processo 28153: a taxa de 5 % dos imóveis reabilitados depois da Lei n.º 56/2023', url: AT_DOC + 'informacoes_vinculativas/EBF/PIV_28153.pdf' },
   { id: 'piv23119', nome: 'AT, Informação Vinculativa, processo 23119: a posição anterior da AT sobre a mesma taxa', url: PIV + 'PIV_23119.pdf' },
-  { id: 'dl68a20', nome: 'Diário da República, Decreto-Lei n.º 68/2019, de 22 de maio, artigo 20.º, versão consolidada', url: DR + 'legislacao-consolidada/decreto-lei/2019-150114015-213702974' },
-  { id: 'ebf71a', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 71.º-A, versão consolidada', url: EBF + '836602124' },
-  { id: 'dl97a15', nome: 'Diário da República, Decreto-Lei n.º 97/2026, artigo 15.º, versão consolidada', url: DL97 + '1124733375' },
-  { id: 'portaria454', nome: 'Diário da República, Portaria n.º 454/2026/1, de 13 de outubro: os limites de renda do Regime Simplificado de Arrendamento Acessível', url: DR + 'detalhe/portaria/454-2026-1179722108' },
-  { id: 'dl97x3', nome: 'Diário da República, Decreto-Lei n.º 97/2026, anexo III: o Regime Simplificado de Arrendamento Acessível, versão consolidada', url: DL97 + '1124739375' },
-  { id: 'ebf74a', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 74.º-A, versão consolidada', url: EBF + '222582053' },
+  { id: 'dl68a20', nome: 'Diário da República, Decreto-Lei n.º 68/2019, de 22 de maio, artigo 20.º, versão consolidada', url: noArtigo(DL68, 'Artigo 20.º', 'Regime fiscal') },
+  { id: 'ebf71a', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 71.º-A, versão consolidada', url: noArtigo(EBF, 'Artigo 71.º-A', 'Incentivos ao arrendamento habitacional a custos acessíveis e à venda de imóveis ao Estado') },
+  { id: 'dl97a15', nome: 'Diário da República, Decreto-Lei n.º 97/2026, artigo 15.º, versão consolidada', url: noArtigo(DL97, 'Artigo 15.º', 'Norma transitória') },
+  { id: 'portaria454', nome: 'Diário da República, Portaria n.º 454/2026/1, de 13 de outubro: os limites de renda do Regime Simplificado de Arrendamento Acessível', url: P454 },
+  { id: 'portaria454a7', nome: 'Diário da República, Portaria n.º 454/2026/1, artigo 7.º', url: noArtigo(P454, 'Artigo 7.º', 'Entrada em vigor e produção de efeitos') },
+  { id: 'dl97x3', nome: 'Diário da República, Decreto-Lei n.º 97/2026, anexo III: o Regime Simplificado de Arrendamento Acessível, versão consolidada', url: noArtigo(DL97, 'Anexo III', 'Regime simplificado de arrendamento acessível') },
+  { id: 'ebf74a', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 74.º-A, versão consolidada', url: noArtigo(EBF, 'Artigo 74.º-A', 'Transferência de imóveis de alojamento local para arrendamento') },
   { id: 'dl321b', nome: 'Diário da República, Decreto-Lei n.º 321-B/90, de 15 de outubro: o Regime do Arrendamento Urbano', url: DR + 'detalhe/decreto-lei/321-b-1990-667147' },
-  { id: 'nrau35', nome: 'Diário da República, Novo Regime do Arrendamento Urbano (Lei n.º 6/2006), artigo 35.º, versão consolidada', url: DR + 'legislacao-consolidada/lei/2006-34578375-222587902' },
-  { id: 'nrau36', nome: 'Diário da República, Novo Regime do Arrendamento Urbano (Lei n.º 6/2006), artigo 36.º, versão consolidada', url: DR + 'legislacao-consolidada/lei/2006-34578375-222587903' },
-  { id: 'ebf46a', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 46.º-A, versão consolidada', url: EBF + '1124764075' },
-  { id: 'ebf14', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 14.º, versão consolidada', url: EBF + '114472396' },
-  { id: 'lei56a50', nome: 'Diário da República, Lei n.º 56/2023, artigo 50.º, versão consolidada', url: DR + 'legislacao-consolidada/lei/2023-222471959-838758723' },
+  { id: 'nrau35', nome: 'Diário da República, Novo Regime do Arrendamento Urbano (Lei n.º 6/2006), artigo 35.º, versão consolidada', url: noArtigo(NRAU, 'Artigo 35.º', 'Arrendatário com RABC inferior a cinco RMNA') },
+  { id: 'nrau36', nome: 'Diário da República, Novo Regime do Arrendamento Urbano (Lei n.º 6/2006), artigo 36.º, versão consolidada', url: noArtigo(NRAU, 'Artigo 36.º', 'Arrendatário com idade igual ou superior a 65 anos ou com deficiência com grau de incapacidade superior a 60 %') },
+  { id: 'ebf46a', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 46.º-A, versão consolidada', url: noArtigo(EBF, 'Artigo 46.º-A', 'Arrendamentos para habitação celebrados antes do Regime do Arrendamento Urbano') },
+  { id: 'ebf14', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 14.º, versão consolidada', url: noArtigo(EBF, 'Artigo 14.º', 'Extinção dos benefícios fiscais') },
+  { id: 'lei56a50', nome: 'Diário da República, Lei n.º 56/2023, artigo 50.º, versão consolidada', url: noArtigo(LEI56_CONS, 'Artigo 50.º', 'Norma transitória em matéria fiscal') },
   { id: 'oc20268', nome: 'AT, Ofício-Circulado n.º 20268, de 12 de março de 2024: a Lei n.º 56/2023 e as rendas', url: AT_DOC + 'legislacao/instrucoes_administrativas/Documents/Oficio_circulado_20268_2024.pdf' },
   { id: 'portaria176', nome: 'Diário da República, Portaria n.º 176/2019, de 6 de junho, versão consolidada', url: DR + 'legislacao-consolidada/portaria/2019-853115784' },
-  { id: 'dl97a14', nome: 'Diário da República, Decreto-Lei n.º 97/2026, artigo 14.º, versão consolidada', url: DL97 + '1124733175' },
+  { id: 'dl97a14', nome: 'Diário da República, Decreto-Lei n.º 97/2026, artigo 14.º, versão consolidada', url: noArtigo(DL97, 'Artigo 14.º', 'Referências legais') },
   { id: 'portaria110', nome: 'Diário da República, Portaria n.º 110/2019, de 12 de abril', url: DR + 'detalhe/portaria/110-2019-122086336' },
-  { id: 'cirs68', nome: 'Diário da República, Código do IRS, artigo 68.º, versão consolidada', url: CIRS + '1191281775' },
-  { id: 'portaria104', nome: 'Diário da República, Portaria n.º 104/2026/1, de 5 de março: os modelos da declaração Modelo 3', url: DR + 'detalhe/portaria/104-2026-1066993467' },
+  { id: 'cirs68', nome: 'Diário da República, Código do IRS, artigo 68.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 68.º', 'Taxas gerais') },
+  { id: 'portaria104', nome: 'Diário da República, Portaria n.º 104/2026/1, de 5 de março: os modelos da declaração Modelo 3', url: P104 },
+  { id: 'portaria104a2', nome: 'Diário da República, Portaria n.º 104/2026/1, artigos 2.º e 3.º', url: noArtigo(P104, 'Artigo 2.º', 'Cumprimento da obrigação') },
   { id: 'entrega', nome: 'Portal das Finanças, entrega da declaração de IRS', url: 'https://irs.portaldasfinancas.gov.pt/app/entrega' },
   { id: 'senhas', nome: 'AT, folheto «Acesso ao Portal das Finanças: autenticação e senhas»', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_contribuinte/Folhetos_informativos/Documents/senhas.pdf' },
   { id: 'lei25a', nome: 'Diário da República, Lei n.º 25-A/2025, de 13 de março: a reposição das freguesias agregadas, versão consolidada', url: DR + 'legislacao-consolidada/lei/2025-911088740' },
   { id: 'reposicao', nome: 'AT, «Reposição de freguesias agregadas 2025»: a tabela de correspondência', url: 'https://info.portaldasfinancas.gov.pt/pt/destaques/Paginas/Reposicao-freguesias-agregadas-2025-tab-correspondencia.aspx' },
-  { id: 'cimi113', nome: 'Diário da República, Código do IMI, artigo 113.º, versão consolidada', url: CIMI + '117659213' },
-  { id: 'cirs59', nome: 'Diário da República, Código do IRS, artigo 59.º, versão consolidada', url: CIRS + '121035511' },
-  { id: 'cirs41', nome: 'Diário da República, Código do IRS, artigo 41.º, versão consolidada', url: CIRS + '887423292' },
+  { id: 'cimi113', nome: 'Diário da República, Código do IMI, artigo 113.º, versão consolidada', url: noArtigo(CIMI, 'Artigo 113.º', 'Competência e prazo da liquidação') },
+  { id: 'cirs59', nome: 'Diário da República, Código do IRS, artigo 59.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 59.º', 'Tributação de casados e de unidos de facto') },
+  { id: 'cirs41', nome: 'Diário da República, Código do IRS, artigo 41.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 41.º', 'Deduções') },
   { id: 'piv615', nome: 'AT, Informação Vinculativa, processo 615/2016: mediação e gestão imobiliária', url: PIV + 'PIV_10049_Cat_F_despesas_com_agencia_imobiliaria_intermediacao_e_gestao_do_arrendamento.pdf' },
   { id: 'oc20256', nome: 'AT, Ofício-Circulado n.º 20256, de 7 de junho de 2023: a tributação da caução', url: AT_DOC + 'legislacao/instrucoes_administrativas/Documents/Oficio_Circulado_20256_2023.pdf' },
-  { id: 'portaria98a5', nome: 'Diário da República, Portaria n.º 98-A/2015, de 31 de março, artigo 5.º, versão consolidada', url: DR + 'legislacao-consolidada/portaria/2015-71124567-71135111' },
-  { id: 'portaria98a', nome: 'Diário da República, Portaria n.º 98-A/2015: o recibo de renda eletrónico e a declaração Modelo 44, versão consolidada', url: DR + 'legislacao-consolidada/portaria/2015-71124567' },
-  { id: 'portaria98a8', nome: 'Diário da República, Portaria n.º 98-A/2015, artigo 8.º, versão consolidada', url: DR + 'legislacao-consolidada/portaria/2015-71124567-71135115' },
+  { id: 'portaria98a5', nome: 'Diário da República, Portaria n.º 98-A/2015, de 31 de março, artigo 5.º, versão consolidada', url: noArtigo(PORTARIA98A, 'Artigo 5.º', 'Âmbito de aplicação') },
+  { id: 'portaria98a', nome: 'Diário da República, Portaria n.º 98-A/2015: o recibo de renda eletrónico e a declaração Modelo 44, versão consolidada', url: PORTARIA98A },
+  { id: 'portaria98a8', nome: 'Diário da República, Portaria n.º 98-A/2015, artigo 8.º, versão consolidada', url: noArtigo(PORTARIA98A, 'Artigo 8.º', 'Declaração de rendas') },
   { id: 'dl1', nome: 'Diário da República, Decreto-Lei n.º 1/2020, de 9 de janeiro: o direito real de habitação duradoura', url: DR + 'detalhe/decreto-lei/1-2020-127899795' },
   { id: 'lei42', nome: 'Diário da República, Lei n.º 42/2017, de 14 de junho: os estabelecimentos de interesse histórico, versão consolidada', url: DR + 'legislacao-consolidada/lei/2017-107516777' },
-  { id: 'ebf59i', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 59.º-I, versão consolidada', url: EBF + '836602140' },
-  { id: 'ebf59g', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 59.º-G, versão consolidada', url: EBF + '836602138' },
-  { id: 'cirs74', nome: 'Diário da República, Código do IRS, artigo 74.º, versão consolidada', url: CIRS + '876123054' },
-  { id: 'cirs78', nome: 'Diário da República, Código do IRS, artigo 78.º, versão consolidada', url: CIRS + '912821424' },
-  { id: 'cimi135i', nome: 'Diário da República, Código do IMI, artigo 135.º-I, versão consolidada', url: CIMI + '106384572' },
-  { id: 'dl68', nome: 'Diário da República, Decreto-Lei n.º 68/2019, de 22 de maio: o Programa de Arrendamento Acessível, hoje Programa de Apoio ao Arrendamento, versão consolidada', url: DR + 'legislacao-consolidada/decreto-lei/2019-150114015' },
-  { id: 'cirs55', nome: 'Diário da República, Código do IRS, artigo 55.º, versão consolidada', url: CIRS + '836492859' },
-  { id: 'cirs128', nome: 'Diário da República, Código do IRS, artigo 128.º, versão consolidada', url: CIRS + '206093024' },
-  { id: 'cirs101b', nome: 'Diário da República, Código do IRS, artigo 101.º-B, versão consolidada', url: CIRS + '912821429' },
+  { id: 'ebf59i', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 59.º-I, versão consolidada', url: noArtigo(EBF, 'Artigo 59.º-I', 'Prédios ou parte de prédios afetos a lojas com história') },
+  { id: 'ebf59g', nome: 'Diário da República, Estatuto dos Benefícios Fiscais, artigo 59.º-G, versão consolidada', url: noArtigo(EBF, 'Artigo 59.º-G', 'Entidades de gestão florestal e unidades de gestão florestal') },
+  { id: 'cirs74', nome: 'Diário da República, Código do IRS, artigo 74.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 74.º', 'Rendimentos produzidos em anos anteriores') },
+  { id: 'cirs78', nome: 'Diário da República, Código do IRS, artigo 78.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 78.º', 'Deduções à coleta') },
+  { id: 'cimi135i', nome: 'Diário da República, Código do IMI, artigo 135.º-I, versão consolidada', url: noArtigo(CIMI, 'Artigo 135.º-I', 'Dedução em IRS') },
+  { id: 'dl68', nome: 'Diário da República, Decreto-Lei n.º 68/2019, de 22 de maio: o Programa de Arrendamento Acessível, hoje Programa de Apoio ao Arrendamento, versão consolidada', url: DL68 },
+  { id: 'cirs55', nome: 'Diário da República, Código do IRS, artigo 55.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 55.º', 'Dedução de perdas') },
+  { id: 'cirs128', nome: 'Diário da República, Código do IRS, artigo 128.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 128.º', 'Obrigação de comprovar os elementos das declarações') },
+  { id: 'cirs101b', nome: 'Diário da República, Código do IRS, artigo 101.º-B, versão consolidada', url: noArtigo(CIRS, 'Artigo 101.º-B', 'Dispensa de retenção na fonte') },
   { id: 'dl49', nome: 'Diário da República, Decreto-Lei n.º 49/2025, de 27 de março', url: DR + 'detalhe/decreto-lei/49-2025-912653926' },
-  { id: 'cirs115', nome: 'Diário da República, Código do IRS, artigo 115.º, versão consolidada', url: CIRS + '912821430' },
-  { id: 'cis60', nome: 'Diário da República, Código do Imposto do Selo, artigo 60.º, versão consolidada', url: DR + 'legislacao-consolidada/lei/1999-34540175-222582033' },
+  { id: 'cirs115', nome: 'Diário da República, Código do IRS, artigo 115.º, versão consolidada', url: noArtigo(CIRS, 'Artigo 115.º', 'Emissão de recibos e faturas') },
+  { id: 'cis60', nome: 'Diário da República, Código do Imposto do Selo, artigo 60.º, versão consolidada', url: noArtigo(CIS, 'Artigo 60.º', 'Contratos de arrendamento') },
   { id: 'portaria106', nome: 'Diário da República, Portaria n.º 106/2025/1, de 13 de março: a comunicação do contrato pelo inquilino', url: DR + 'detalhe/portaria/106-2025-910702650' },
-  { id: 'civa53', nome: 'Diário da República, Código do IVA, artigo 53.º, versão consolidada', url: DR + 'legislacao-consolidada/decreto-lei/2008-34500675-912255006' },
+  { id: 'civa53', nome: 'Diário da República, Código do IVA, artigo 53.º, versão consolidada', url: noArtigo(CIVA, 'Artigo 53.º', 'Âmbito de aplicação no território nacional') },
   { id: 'apoio', nome: 'AT, página de apoio sobre rendimentos prediais', url: 'https://info.portaldasfinancas.gov.pt/pt/apoio_ao_contribuinte/Cidadaos/Rendimentos/Prediais/Paginas/default.aspx' },
   { id: 'piv1115', nome: 'AT, Informação Vinculativa, processo 1115/2017: certificado energético, seguro, IMI, condomínio e reparações', url: PIV + 'PIV_11676_Cat_F_Despesas_elegiveis_certificado_energetico_pintura_proporcionalidade_mensal_IMI.pdf' },
   { id: 'piv4074', nome: 'AT, Informação Vinculativa, processo 4074/2017: instalações, sanita e eletrodomésticos', url: PIV + 'PIV_12846.pdf' },
@@ -681,7 +715,7 @@ const GUIA = [
         'setembro de 2026 são os limites máximos de renda do Regime Simplificado de Arrendamento Acessível, que a ' +
         '{Portaria n.º 454/2026/1|portaria454} fixou ({Decreto-Lei n.º 97/2026, artigo 14.º, alínea b)|dl97a14}); até ela ' +
         'entrar em vigor, a 14 de outubro de 2026, valeram ainda os valores da {Portaria n.º 176/2019|portaria176} ' +
-        '({Portaria n.º 454/2026/1, artigo 7.º, n.º 3|portaria454}). No Anexo F, confirmas isto no quadro 4.2C, para os contratos que declaras no 4.2.' },
+        '({Portaria n.º 454/2026/1, artigo 7.º, n.º 3|portaria454a7}). No Anexo F, confirmas isto no quadro 4.2C, para os contratos que declaras no 4.2.' },
       { p: 'Se o contrato acabar antes do prazo por causa tua, senhorio, perdes as reduções desde o início do contrato ' +
         'ou da renovação. No ano em que acabou, declaras isso, para pagares a diferença com juros compensatórios ' +
         '({artigo 72.º, n.º 20|cirs72}).' },
@@ -702,12 +736,12 @@ const GUIA = [
 
   { id: 'onde-declarar', titulo: 'Onde declaras', blocos: [
     { p: 'É tudo pela Internet, no Portal das Finanças: a declaração Modelo 3 e os anexos, como o Anexo F, só se ' +
-      'entregam por transmissão eletrónica de dados ({Portaria n.º 104/2026/1, artigos 2.º e 3.º|portaria104}).' },
+      'entregam por transmissão eletrónica de dados ({Portaria n.º 104/2026/1, artigos 2.º e 3.º|portaria104a2}).' },
     { ir: 'Entregar o IRS no Portal das Finanças', fonte: 'entrega' },
     { p: 'Para entrar, usas o teu NIF e a senha de acesso, ou a Autenticação.gov, com a Chave Móvel Digital ou o ' +
       'Cartão de Cidadão. Se ainda não tens senha, registas-te no Portal e pedes uma ({folheto da AT sobre o acesso ' +
       'ao Portal|senhas}).' },
-    { fonte: 'portaria104', texto: 'Fonte principal: Portaria n.º 104/2026/1, artigos 2.º e 3.º, Diário da República.' },
+    { fonte: 'portaria104a2', texto: 'Fonte principal: Portaria n.º 104/2026/1, artigos 2.º e 3.º, Diário da República.' },
   ] },
 
   { id: 'como-preencher', titulo: 'Como preenches', blocos: [

@@ -307,7 +307,7 @@ describe('o guia diz o que a Declaração faz', () => {
     assert.match(t, /as isenções, a taxa de 10 % das rendas moderadas e os dos quadros 6A a 6C/);
     assert.match(t, /não tiveres dívidas por regularizar às Finanças nem à Segurança Social/);
     assert.match(t, /artigo 14\.º, n\.os 5 a 7, do Estatuto dos Benefícios Fiscais/);
-    assert.match(guia, /href="https:\/\/diariodarepublica\.pt\/dr\/legislacao-consolidada\/decreto-lei\/1989-34554075-114472396"/, 'o artigo 14.º do EBF, no DR (KAN-164)');
+    assert.match(guia, /href="https:\/\/diariodarepublica\.pt\/dr\/legislacao-consolidada\/decreto-lei\/1989-34554075#:~:text=Artigo%2014\.%C2%BA-,Extin%C3%A7%C3%A3o%20dos%20benef%C3%ADcios%20fiscais"/, 'o artigo 14.º do EBF, no DR (KAN-164)');
     // o dinheiro e as percentagens novas com o espaço fino da casa
     assert.doesNotMatch(parte('tens-de-declarar'), /\d [%€]/);
   });

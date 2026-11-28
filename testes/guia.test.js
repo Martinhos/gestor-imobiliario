@@ -180,8 +180,8 @@ describe('o guia «Declarar as rendas»', () => {
     }
     // a fonte principal de cada parte, no fim, ligada ao sítio oficial: a lei ao Diário da República (KAN-164), as
     // instruções do Anexo F à AT
-    for (const [p, fonte] of [[p1, 'diariodarepublica\\.pt/dr/legislacao-consolidada/lei/2014-70048167-1000777570'],
-      [p2, 'diariodarepublica\\.pt/dr/detalhe/portaria/104-2026-1066993467'],
+    for (const [p, fonte] of [[p1, 'diariodarepublica\\.pt/dr/legislacao-consolidada/lei/2014-70048167#:~:text=Artigo%2072\\.%C2%BA-,Taxas%20especiais'],
+      [p2, 'diariodarepublica\\.pt/dr/detalhe/portaria/104-2026-1066993467#:~:text=Artigo%202\\.%C2%BA-,Cumprimento%20da%20obriga%C3%A7%C3%A3o'],
       [p3, 'info\\.portaldasfinancas\\.gov\\.pt/[^"]*Mod_3_anexo_F\\.pdf']]) {
       assert.match(p, new RegExp('<p class="fonte"><a href="https://' + fonte +
         '" target="_blank" rel="noopener noreferrer">Fonte principal: [^<]+</a></p>\\n {2}</section>$'));
@@ -252,11 +252,13 @@ describe('o guia «Declarar as rendas»', () => {
     // os processos 28153 e 23119, os EBF 59.º-I e 59.º-G, o CIMI 113.º, a reposição das freguesias e a Lei 25-A/2025
     // e as três da segunda auditoria de raiz (2026-11-23): o EBF 14.º e o OC 20268/2024 nas partes 1 a 3, o processo
     // 26713 nas deduções. Desde o KAN-164 (2026-11-26) cada referência do texto é uma ligação, e a lista tem todas as
-    // que o texto liga: a lei no Diário da República (55, cada artigo pela versão consolidada), a AT na AT (18)
-    assert.equal((fontes.match(/<li>/g) || []).length, 73, 'as setenta e três fontes');
-    assert.equal(urls.length, 73, 'todas com o endereço confirmado');
+    // que o texto liga: a lei no Diário da República (55, cada artigo pela versão consolidada), a AT na AT (18). Desde o
+    // KAN-164 reaberto (2026-11-27) cada artigo abre o documento no artigo, e os dois artigos citados das Portarias
+    // 454/2026/1 e 104/2026/1 têm a fonte deles: a lei no DR passa a 57
+    assert.equal((fontes.match(/<li>/g) || []).length, 75, 'as setenta e cinco fontes');
+    assert.equal(urls.length, 75, 'todas com o endereço confirmado');
     assert.equal(new Set(urls).size, urls.length, 'nenhuma repetida');
-    assert.equal(urls.filter((u) => u.startsWith('https://diariodarepublica.pt/dr/')).length, 55, 'a lei no DR');
+    assert.equal(urls.filter((u) => u.startsWith('https://diariodarepublica.pt/dr/')).length, 57, 'a lei no DR');
     for (const u of urls) {
       assert.match(u, /^https:\/\/(?:info\.portaldasfinancas\.gov\.pt|irs\.portaldasfinancas\.gov\.pt|diariodarepublica\.pt)\//, u);
     }

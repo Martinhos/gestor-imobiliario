@@ -26,12 +26,13 @@ describe('as referências do guia, cada uma com a ligação à fonte', () => {
   test('a lei liga ao Diário da República, o da AT à AT, e todas abrem noutra aba', () => {
     assert.deepEqual(problemasDasLigacoes(html), []);
     for (const l of noTexto) assert.ok(tipoDaLigacao(l.texto), 'a ligação diz o que é: «' + l.texto + '»');
-    // os artigos dos códigos levam ao artigo na versão consolidada do DR, e não à AT
+    // os artigos dos códigos levam ao documento consolidado no DR, aberto no artigo (o fragmento de texto com o título
+    // e a epígrafe, testes/guia-11-27.test.js), e não à AT
     for (const t of ['artigo 8.º, n.º 1, do Código do IRS', 'artigo 45.º-C do Estatuto dos Benefícios Fiscais',
       'artigo 113.º, n.º 1, do Código do IMI', 'artigo 53.º do Código do IVA', 'artigo 60.º, n.os 1 e 4, do Código do Imposto do Selo']) {
       const l = noTexto.find((x) => x.texto === t);
       assert.ok(l, 'em ligação: ' + t);
-      assert.match(l.href, /^https:\/\/diariodarepublica\.pt\/dr\/legislacao-consolidada\/[a-z-]+\/\d{4}-\d+-\d+$/, t);
+      assert.match(l.href, /^https:\/\/diariodarepublica\.pt\/dr\/legislacao-consolidada\/[a-z-]+\/\d{4}-\d+#:~:text=[^,&]+-,[^,&]+$/, t);
     }
     // os ofícios-circulados e as informações vinculativas na AT
     for (const t of ['Ofício-Circulado n.º 20256, de 7 de junho de 2023, ponto 4', 'informação vinculativa, processo 615/2016']) {
