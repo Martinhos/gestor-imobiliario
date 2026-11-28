@@ -467,8 +467,10 @@ function normTarefas(t){
    ({ativo, nifSenhorio, rendaMensal, parte, rendaParte}: «arrendo este imóvel e
    subarrendo-o», o quadro 5 — D52; parte 'toda', 'parte' ou '' e rendaParte, a renda
    paga ao senhorio pela parte subarrendada, € ≥ 0 — N023), afetacao (a da caderneta,
-   que decide o AIMI — D71) e parteArrendada (a parte da casa arrendada, em %, 0 a 100
-   ao centésimo, ou null por indicar — N012). Cada um com lixo volta à omissão. E as
+   que decide o AIMI — D71). Cada um com lixo volta à omissão. Cada quarto (rooms) tem
+   id, name e parte (a parte da casa dele, com a sua parte das zonas comuns, em %:
+   ]0, 100] ao centésimo, ou null por indicar — KAN-152; o parteArrendada da casa
+   inteira, de antes, já não existe e não sobrevive à normalização). E as
    linhas do Splitwise apagadas de propósito nele (swIgnoradas, normSwIgnoradasDaCasa —
    N102), só quando as tem.
    Os da ronda 2: reabilitacao ({tipo: '' | 'aru' | 'nrau', inicio, conclusao,
@@ -486,7 +488,7 @@ function normProp(p){
     parish:'',concelho:'',freguesia:'',fraction:'',floor:'',street:'',doorNumber:'',postalCode:'',locality:'',registry:'',matrix:'',licence:'',energyCert:'',energyClass:'',energyValid:'',
     distrito:'',freguesiaCodigo:'',tipoPredio:'',tipologia:'',vpt:0,purchaseDate:'',imi:0,condominio:0,seguro:0,seguroMes:0,
     comproprietariosFora:null,quotasHist:[],vendido:'',subarrendamento:null,afetacao:'',
-    reabilitacao:null,lojaComHistoria:false,pais:'',paisCodigo:'',matrizConfirmada:'',parteArrendada:null},p||{});
+    reabilitacao:null,lojaComHistoria:false,pais:'',paisCodigo:'',matrizConfirmada:''},p||{});
   o.id=idSeguro(o.id);o.ownerIds=idsSeguros(o.ownerIds);
   ['imi','condominio','seguro'].forEach(k=>{o[k]=Math.max(0,Math.round((Number(o[k])||0)*100)/100)});
   o.seguroMes=Math.min(12,Math.max(0,Math.round(Number(o.seguroMes)||0)));
@@ -507,7 +509,9 @@ function normProp(p){
   o.tipologia=/^T\d$/.test(String(o.tipologia||''))?String(o.tipologia):'';
   o.vpt=Math.max(0,Number(o.vpt)||0);
   o.purchaseDate=dataExiste(o.purchaseDate)?o.purchaseDate:'';
-  o.rooms=(o.rooms||[]).map(r=>{const q=typeof r==='string'?{id:uid(),name:r}:Object.assign({id:uid(),name:''},r);q.id=idSeguro(q.id);return q});
+  /* a parte da casa de cada quarto, em % (KAN-152): 0 < x ≤ 100, ao centésimo; o resto é null */
+  o.rooms=(o.rooms||[]).map(r=>{const q=typeof r==='string'?{id:uid(),name:r}:Object.assign({id:uid(),name:''},r);q.id=idSeguro(q.id);
+    const v=q.parte;q.parte=typeof v==='number'&&isFinite(v)&&v>0&&v<=100?Math.round(v*100)/100:null;if(q.parte===0)q.parte=null;return q});
   o.photos=(o.photos||[]).map(normFile);
   /* as quotas são por dono: as chaves passam pela mesma troca dos ownerIds */
   const osh=chavesSeguras(o.ownerShares),sh={};
@@ -524,10 +528,7 @@ function normProp(p){
     rendaMensal:typeof sub.rendaMensal!=='boolean'&&isFinite(rm)&&rm>0?Math.round(rm*100)/100:0,
     parte:sub.parte==='toda'||sub.parte==='parte'?sub.parte:'',
     rendaParte:typeof sub.rendaParte!=='boolean'&&isFinite(rp)&&rp>0?Math.round(rp*100)/100:0};
-  /* a parte da casa que está arrendada, em % (N012): 0 < x ≤ 100, ao centésimo; o resto é null */
-  const pa=o.parteArrendada;
-  o.parteArrendada=typeof pa==='number'&&isFinite(pa)&&pa>0&&pa<=100?Math.round(pa*100)/100:null;
-  if(o.parteArrendada===0)o.parteArrendada=null;
+  delete o.parteArrendada;   /* a parte da casa inteira deu lugar à de cada quarto (KAN-152) */
   o.afetacao=['habitacao','comercio','servicos','industria','outros'].indexOf(o.afetacao)>-1?o.afetacao:'';
   const re=o.reabilitacao&&typeof o.reabilitacao==='object'&&!Array.isArray(o.reabilitacao)?o.reabilitacao:{};
   o.reabilitacao={tipo:['aru','nrau'].indexOf(re.tipo)>-1?re.tipo:'',inicio:dataExiste(re.inicio)?re.inicio:'',

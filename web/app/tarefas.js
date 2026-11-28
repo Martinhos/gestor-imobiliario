@@ -644,7 +644,7 @@ function tfFormTarefa(x,sid){
     <label>Tarefa <span class="req">*</span><input id="tf_nome" value="${esc(x?x.nome:'')}" placeholder="Ex: Trocar o esquentador" autocomplete="off" data-keydown="tfTeclaNome(event)"></label>
     <label>Secção${tfSelSeccao(t,tfSecAntes)}</label>
     <label>Notas<textarea id="tf_notas" placeholder="Opcional">${esc(x?x.notas||'':'')}</textarea></label>
-    ${x?`<label class="check"><input type="checkbox" id="tf_feita" ${x.feita?'checked':''}> Cumprida</label>`:''}
+    ${x?`<label class="check"><input type="checkbox" role="switch" id="tf_feita" ${x.feita?'checked':''}> Cumprida</label>`:''}
   </div>`,`<button type="button" class="btn" data-toca="camada" data-click="closeModal()">Cancelar</button><button type="button" class="btn primary" data-toca="rascunho" data-click="onSave&&onSave()">${x?TF_BOTAO_EDITAR:TF_BOTAO_NOVA}</button>`,m);
   onSave=tfGuardarTarefa;
   if(!x)setTimeout(()=>{const e=document.getElementById('tf_nome');if(e)try{e.focus()}catch(z){}},50);

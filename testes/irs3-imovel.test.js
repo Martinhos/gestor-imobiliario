@@ -3,8 +3,8 @@
 // cada campo só quando as respostas de cima o fazem contar (fora de
 // Portugal, uso próprio sem rendas, rústico, subarrendado), sem nunca
 // esconder o que já tem valor; o «Uso próprio» com contratos por acabar; o
-// «É só meu» dos donos fora da app; a parte arrendada de um imóvel por
-// quartos; a parte subarrendada e a renda dela; o fundo de reserva do
+// «É só meu» dos donos fora da app; a parte da casa de cada quarto de um
+// imóvel por quartos; a parte subarrendada e a renda dela; o fundo de reserva do
 // condomínio; o código do país com 1 a 3 algarismos; e a permilagem das
 // frações do mesmo prédio numa despesa de grupo.
 
@@ -381,31 +381,15 @@ describe('a janela das quotas a quem acabou de entrar na casa', () => {
   });
 });
 
-describe('N012 · a parte da casa que se arrenda, num imóvel por quartos', () => {
-  test('pergunta-se só num imóvel por quartos, com a regra da área e a omissão dos quartos com contrato', () => {
+describe('a parte da casa de um imóvel por quartos é a de cada quarto', () => {
+  test('o campo único da casa saiu: cada quarto tem o seu, e num imóvel inteiro não há nenhum', () => {
     local();
-    const q = app.normProp({ id: 'N1', name: 'T3', rentalMode: 'quartos', rooms: [{ id: 'r1', name: 'Quarto 1' }, { id: 'r2', name: 'Quarto 2' }, { id: 'r3', name: 'Quarto 3' }] });
+    const q = app.normProp({ id: 'N1', name: 'T3', rentalMode: 'quartos', rooms: [{ id: 'r1', name: 'Quarto 1' }, { id: 'r2', name: 'Quarto 2' }] });
     const html = corpo(q);
-    assert.match(html, /<label>Parte da casa que se arrenda \(%\)<input id="p_parteArrendada" type="text" inputmode="decimal" value="" placeholder="Opcional"/);
-    assert.match(html, /só contam na parte arrendada \(CIRS art\. 41\.º\)\. A lei manda repartir pela área/);
-    assert.match(html, /Em branco, a app conta os quartos com contrato, dia a dia/);
-    assert.doesNotMatch(corpo(app.normProp({ id: 'N2', name: 'T2' })), /p_parteArrendada/, 'num imóvel inteiro, não');
-  });
-
-  test('grava a percentagem (o que a Declaração lê em p.parteArrendada), recusa fora de (0, 100], e em branco fica a omissão', () => {
-    const { avisos } = local();
-    casa({ rentalMode: 'quartos', rooms: [{ id: 'r1', name: 'Quarto 1' }, { id: 'r2', name: 'Quarto 2' }] });
-    let p = guardar({ p_name: 'T2 Arroios', p_parteArrendada: '40' }, 'P1');
-    assert.equal(p.parteArrendada, 40);
-    app.modalStack.length = 0;
-    guardar({ p_name: 'T2 Arroios', p_parteArrendada: '150' }, 'P1');
-    assert.equal(avisos.at(-1), 'A parte arrendada é uma percentagem acima de 0 e até 100.');
-    assert.equal(app.prop('P1').parteArrendada, 40, 'nada gravado');
-    app.modalStack.length = 0;
-    p = guardar({ p_name: 'T2 Arroios', p_parteArrendada: '' }, 'P1');
-    assert.equal(p.parteArrendada, null);
-    app.prop('P1').parteArrendada = 37.5;
-    assert.match(app.propFicha('P1'), /parte arrendada: 37,5 % da casa/);
+    assert.doesNotMatch(html, /p_parteArrendada/);
+    assert.match(html, /id="p_room_parte_r1"/);
+    assert.match(html, /id="p_room_parte_r2"/);
+    assert.doesNotMatch(corpo(app.normProp({ id: 'N2', name: 'T2' })), /p_room_parte_/, 'num imóvel inteiro, não');
   });
 });
 

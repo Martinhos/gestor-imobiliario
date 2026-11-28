@@ -234,7 +234,7 @@ describe('as ações da nuvem falam com a API do contrato', () => {
     app.CW.cargoModal();
     const b = esp.modais[0].corpo;
     assert.ok(!b.includes('u-fs-13px'), 'sem a letra miúda');
-    assert.match(b, /<div class="stat u-ai-center colab-perm-linha"><span>Visitas<\/span><span class="colab-perm-caixas"><label class="check colab-perm-caixa"><input type="checkbox" data-perm="visit\.view" id="cg_visit_view"/);
+    assert.match(b, /<div class="stat u-ai-center colab-perm-linha"><span>Visitas<\/span><span class="colab-perm-caixas"><label class="check colab-perm-caixa"><input type="checkbox" role="switch" data-perm="visit\.view" id="cg_visit_view"/);
   });
 
   test('guardar cargo envia PUT /api/roles/:id com o nome e o fecho das permissões', async () => {

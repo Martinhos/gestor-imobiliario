@@ -65,7 +65,7 @@ describe('os formulários do imóvel e das pessoas, para lá do básico', () => 
     const html = abertas[0].b;
     const cs = conferir('imóvel por quartos', html, { obrigatorios: ['p_name'], exemplos: { p_freguesiaCodigo: true, p_fraction: true, p_floor: true,
       p_registry: true, p_postalCode: true, p_matrix: true, p_licence: true, p_energyCert: true, p_energyClass: true }, deixados: ['p_share_', 'p_room_', 'fn_'] });
-    const quartos = cs.filter((c) => c.id.startsWith('p_room_'));
+    const quartos = cs.filter((c) => c.id.startsWith('p_room_') && !c.id.startsWith('p_room_parte_'));
     assert.equal(quartos.length, 2, 'os dois quartos');
     for (const q of quartos) { assert.ok(q.placeholder.startsWith(EX), q.id + ': ' + q.placeholder); assert.ok(!q.obrig, q.id); }
     assert.match(html, /<div class="flabel">Quartos \(nome opcional\)<\/div>/);

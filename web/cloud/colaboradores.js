@@ -133,7 +133,7 @@ function nomesDeCasas(casas) {
 // Recebe: perm — a chave; rotulo — o texto ao lado; on — se começa marcada.
 // Devolve: o HTML do <label class="check">.
 function caixaPerm(perm, rotulo, on) {
-  return '<label class="check colab-perm-caixa"><input type="checkbox" data-perm="' + perm + '" id="cg_' + perm.replace('.', '_') + '"' +
+  return '<label class="check colab-perm-caixa"><input type="checkbox" role="switch" data-perm="' + perm + '" id="cg_' + perm.replace('.', '_') + '"' +
     (on ? ' checked' : '') + ' data-toca="rascunho" data-change="CW.cargoImplica()"><span>' + esc(rotulo) + '</span></label>';
 }
 

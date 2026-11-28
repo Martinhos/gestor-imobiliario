@@ -432,11 +432,13 @@ describe('as formas que outras partes da app pediram ao dados.js', () => {
     for (const k of ['pagadorNif', 'pagadorNome', 'cedenciaNumero']) assert.ok(app.TX_TPL_KEYS.includes(k), k);
   });
 
-  test('a parte arrendada (N012), a parte subarrendada (N023) e o código do país sem os zeros (N105)', () => {
-    assert.equal(app.normProp({}).parteArrendada, null);
-    assert.equal(app.normProp({ parteArrendada: 37.555 }).parteArrendada, 37.56);
-    assert.equal(app.normProp({ parteArrendada: 100 }).parteArrendada, 100);
-    for (const lixo of [0, -5, 100.01, '50', true, 0.001]) assert.equal(app.normProp({ parteArrendada: lixo }).parteArrendada, null, JSON.stringify(lixo));
+  test('a parte de cada quarto (KAN-152), a parte subarrendada (N023) e o código do país sem os zeros (N105)', () => {
+    const parte = (v) => app.normProp({ rooms: [{ id: 'r1', name: 'Q', parte: v }] }).rooms[0].parte;
+    assert.equal(parte(undefined), null);
+    assert.equal(parte(37.555), 37.56);
+    assert.equal(parte(100), 100);
+    for (const lixo of [0, -5, 100.01, '50', true, 0.001]) assert.equal(parte(lixo), null, JSON.stringify(lixo));
+    assert.equal('parteArrendada' in app.normProp({ parteArrendada: 40 }), false, 'o campo único da casa já não existe');
     igual(app.normProp({ subarrendamento: { ativo: true, parte: 'toda', rendaParte: 450 } }).subarrendamento,
       { ativo: true, nifSenhorio: '', rendaMensal: 0, parte: 'toda', rendaParte: 450 });
     assert.equal(app.codigoDoPais('76'), '076');

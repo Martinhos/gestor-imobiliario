@@ -6341,3 +6341,55 @@ button.mdl-texto:focus-visible{outline:none}
 @media(max-width:520px){.mdl-linha{gap:4px;padding-right:4px}}
 @media(prefers-reduced-motion:reduce){.mdl-linha{transition:none}}
 /* === fim: modelos de dados === */
+/* === kanban-11-27 formularios: as escolhas de sim/não são o interruptor (KAN-172), o lugar pelo código da freguesia (KAN-173) e a parte de cada quarto (KAN-152) === */
+/* Uma escolha de sim/não numa janela é sempre o interruptor da casa (o
+   .interruptor: 46×28, desligado --line2, ligado --accent, o botão do --card
+   a deslizar 18px), nunca uma caixa de visto. É o próprio input type=checkbox
+   com role=switch que se desenha assim: o checked, o data-change e o código
+   que lê .checked não mudam. O botão é um gradiente no fundo, e não um
+   ::after (num input, o ::after não vale em todos os browsers); desliza pelo
+   background-position, na transição do .interruptor (--rapido, --curva), e a
+   regra geral do prefers-reduced-motion tira-a. O contorno de 2px tem a cor do
+   fundo (não se vê nos temas da app), mas é cor da frente: no escuro forçado
+   do Samsung Internet, que escurece os fundos, fica um anel azul no ligado e
+   cinzento no desligado, e o estado lê-se por ele. A linha (label.check) passa
+   a linha de interruptor: o texto à esquerda, o interruptor à direita
+   (order), a linha inteira a tocar, 44px. As caixas das listas de seleção,
+   da marca das tarefas e dos termos da entrada não levam role=switch e ficam
+   caixas; o .ct-sw do contrato e do movimento já era interruptor e tem as
+   regras dele. */
+input[type=checkbox][role=switch]:not(.ct-sw){appearance:none;-webkit-appearance:none;position:relative;flex:0 0 46px;order:2;box-sizing:border-box;width:46px;height:28px;min-height:0;margin:0;padding:0;border:2px solid var(--line2);border-radius:999px;
+  background:radial-gradient(circle closest-side,var(--card) calc(100% - 1px),transparent) 3px 3px/22px 22px no-repeat border-box,
+    radial-gradient(circle closest-side,rgba(16,24,40,.22),transparent) 3px 4px/22px 22px no-repeat border-box var(--line2);
+  box-shadow:none;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  transition:background-color var(--rapido) var(--curva),background-position var(--rapido) var(--curva),border-color var(--rapido) var(--curva)}
+input[type=checkbox][role=switch]:not(.ct-sw):checked{background-color:var(--accent);border-color:var(--accent);background-position:21px 3px,21px 4px}
+input[type=checkbox][role=switch]:not(.ct-sw):disabled{opacity:.45;cursor:not-allowed}
+input[type=checkbox][role=switch]:not(.ct-sw):focus{outline:none}
+input[type=checkbox][role=switch]:not(.ct-sw):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+label.check:has(>input[type=checkbox][role=switch]){justify-content:space-between;gap:12px;min-height:44px;-webkit-tap-highlight-color:transparent}
+label.check:has(>input[type=checkbox][role=switch]:disabled){cursor:not-allowed}
+/* As linhas que se repintam enquanto se escreve — o lugar pelo código da
+   freguesia, a nota «Preenchido pelo código da freguesia» nos Dados
+   registais e a soma das partes dos quartos — só ocupam lugar quando dizem
+   alguma coisa. */
+.imv-lugar:empty{display:none}
+.imv-lugar-desconhecido{color:var(--warn)}
+/* A parte da casa de cada quarto: o «%» dentro do campo (o .imv-pct das
+   quotas, com menos folga por dentro para o «Opcional» caber a 384px), o título da coluna com o «?» por cima, à direita, e
+   a soma por baixo da lista; acima de 100, a soma diz-se na cor do perigo. */
+.imv-quartos-cab{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 8px;margin-bottom:7px}
+.imv-quartos-cab>.flabel{margin-bottom:0}
+.imv-quartos-parte{display:inline-flex;align-items:center;gap:2px;font-size:14px;font-weight:600;color:var(--ink)}
+.roomrow>.imv-pct{flex:0 0 104px;width:104px}
+.roomrow>.imv-pct input{padding-left:8px;padding-right:26px}
+.roomrow>.imv-pct>span{right:10px}
+.imv-ajuda{flex:0 0 32px;width:32px;height:32px;display:grid;place-items:center;margin:0;padding:0;border:0;border-radius:50%;background:transparent;color:var(--muted);cursor:pointer;
+  transition:background-color var(--rapido) var(--curva),color var(--rapido) var(--curva)}
+.imv-ajuda>svg{pointer-events:none}
+.imv-ajuda:active{background:var(--press);color:var(--ink)}
+.imv-ajuda:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@media(hover:hover) and (pointer:fine){.imv-ajuda:hover{background:var(--chip);color:var(--ink)}}
+@media(pointer:coarse){.imv-ajuda{flex-basis:44px;width:44px;height:44px;margin:-6px -6px -6px -4px}}
+.imv-soma-erro{color:var(--danger)}
+/* === fim: kanban-11-27 formularios === */

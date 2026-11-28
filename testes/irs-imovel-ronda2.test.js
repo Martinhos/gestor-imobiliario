@@ -208,7 +208,7 @@ describe('D133 · o país do imóvel', () => {
     const { abertas } = base();
     app.propModal();
     const html = abertas[0].b;
-    assert.match(html, /<input type="checkbox" id="p_foraPT" data-change="imvForaPTMudou\(\)"> O imóvel fica fora de Portugal<\/label>/);
+    assert.match(html, /<input type="checkbox" role="switch" id="p_foraPT" data-change="imvForaPTMudou\(\)"> O imóvel fica fora de Portugal<\/label>/);
     assert.doesNotMatch(html, /id="p_pais"/, 'desligado, sem o país');
     assert.doesNotMatch(html, /p_paisCodigo/);
     escrever({ p_foraPT: true });
@@ -258,7 +258,7 @@ describe('D117 · o imóvel reabilitado (quadro 6A)', () => {
     html = app.propBody();
     assert.match(html, /Início da reabilitação <span class="req">\*<\/span><input id="p_reabInicio" type="date"/);
     assert.match(html, /Conclusão <span class="req">\*<\/span><input id="p_reabConclusao" type="date"/);
-    assert.match(html, /<input type="checkbox" id="p_reabCertificado"> Tenho o certificado da câmara do início e da conclusão/);
+    assert.match(html, /<input type="checkbox" role="switch" id="p_reabCertificado"> Tenho o certificado da câmara do início e da conclusão/);
     assert.match(html, /Data de aquisição <span class="req">\*<\/span><input id="p_purchaseDate"/);
     assert.match(html, /as rendas pagam 5 %/, 'o texto da versão do ano');
     assert.match(html, /diz se já eras dono a 6 de outubro de 2023/);
@@ -307,7 +307,7 @@ describe('D121 · a Loja com História (quadro 6B)', () => {
     assert.equal(app.__sel.p_afetacao.onchange, 'imvAfetacaoMudou', 'mudar a afetação mostra-a');
     app.pForm.afetacao = 'comercio';
     const html = app.propBody();
-    assert.match(html, /<input type="checkbox" id="p_lojaHistoria"> Reconhecido como Loja com História \(Lei 42\/2017\)/);
+    assert.match(html, /<input type="checkbox" role="switch" id="p_lojaHistoria"> Reconhecido como Loja com História \(Lei 42\/2017\)/);
     assert.match(html, /as obras de conservação dos 24 meses antes do arrendamento contam 110 %\. Quadro 6B\./);
     app.pForm.afetacao = 'habitacao'; app.pForm.lojaComHistoria = true;
     assert.match(app.propBody(), /id="p_lojaHistoria" checked>/, 'marcada, fica à vista para se desmarcar');

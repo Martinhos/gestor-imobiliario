@@ -150,7 +150,7 @@ describe('o formulário dá chave às peças do primeiro grupo', () => {
     app.pForm = app.normProp({ id: 'p1', name: 'T3', use: 'investimento', rentalMode: 'quartos', rooms: [{ id: 'r1', name: 'Quarto 1' }, { id: 'r2', name: 'Quarto 2' }] });
     let html = app.propBody();
     const chaves = (h) => [...h.matchAll(/data-parte="([^"]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(chaves(html), ['nome', 'morada', 'fora-pt', 'seg-setUse', 'seg-setMode', 'quartos', 'q-r1', 'q-r2', 'q-mais', 'parte', 'sub']);
+    assert.deepEqual(chaves(html), ['nome', 'morada', 'fora-pt', 'seg-setUse', 'seg-setMode', 'quartos', 'q-r1', 'q-r2', 'q-mais', 'sub']);
     app.pForm.use = 'proprio';
     html = app.propBody();
     assert.deepEqual(chaves(html), ['nome', 'morada', 'fora-pt', 'seg-setUse'], 'em uso próprio, sem rendas, sai o tipo, os quartos, a parte arrendada e o subarrendamento');
